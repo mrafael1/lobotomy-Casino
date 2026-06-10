@@ -35,8 +35,5 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Register project with EAS (first run only)
-        run: eas init --non-interactive --force
-
       - name: Build Android APK
         run: eas build --platform android --profile ${{ inputs.profile }} --non-interactive
