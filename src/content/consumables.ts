@@ -1,5 +1,5 @@
 export type ConsumableEffect =
-  | { type: 'restoreNeurons';             amount: number }
+  | { type: 'skipDecay';                  spins: number }
   | { type: 'grantFreeSpins';             amount: number }
   | { type: 'lucidityMultiplierNextSpin'; multiplier: number }
   | { type: 'lockReelNextSpin' };  // player chooses which reel at use-time
@@ -8,17 +8,19 @@ export interface Consumable {
   readonly id: string;
   readonly name: string;
   readonly description: string;
-  readonly cost: number;
+  readonly cost: number; // paid with THIS-RUN Lucidity, not the wallet
   readonly effect: ConsumableEffect;
 }
 
+// Note: no consumable may ever ADD neurons — Sacred Rule 1 says neurons only
+// go down during a run. Stasis prevents future loss; it never restores.
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
-    id: 'cons_neuron_restore',
-    name: 'Neural Patch',
-    description: 'Restore 20 neurons immediately.',
+    id: 'cons_stasis',
+    name: 'Stasis Patch',
+    description: 'Your next 3 spins consume no neurons.',
     cost: 50,
-    effect: { type: 'restoreNeurons', amount: 20 },
+    effect: { type: 'skipDecay', spins: 3 },
   },
   {
     id: 'cons_free_spin',

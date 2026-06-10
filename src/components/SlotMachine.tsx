@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Image, Pressable, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Reel } from './Reel';
 import { SYMBOL_SIZE } from './SymbolCanvas';
 import { useRunStore } from '../state/runState';
@@ -19,13 +19,17 @@ const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 interface Props {
   onAllReelsDone: () => void;
+  // When set, reels are tappable (ability/lock targeting) and highlight on press.
+  onReelPress?: (reelIndex: number) => void;
+  selectedReels?: ReadonlyArray<number>;
 }
 
-export function SlotMachine({ onAllReelsDone }: Props) {
+export function SlotMachine({ onAllReelsDone, onReelPress, selectedReels = [] }: Props) {
   const { width: screenWidth } = useWindowDimensions();
 
   const isSpinning  = useRunStore(s => s.isSpinning);
   const lastResult  = useRunStore(s => s.lastResult);
+  const lockedReels = useRunStore(s => s.lockedReels);
   const neurons     = useRunStore(s => s.neurons);
   const startingN   = useRunStore(s => s.startingNeurons);
   const runPhase    = useRunStore(s => s.runPhase);
@@ -95,7 +99,16 @@ export function SlotMachine({ onAllReelsDone }: Props) {
         ]}
       >
         {([0, 1, 2] as const).map(i => (
-          <View key={i} style={[styles.reelSlot, { width: winW / 3, height: winH }]}>
+          <Pressable
+            key={i}
+            style={[
+              styles.reelSlot,
+              { width: winW / 3, height: winH },
+              selectedReels.includes(i) && styles.reelSelected,
+            ]}
+            onPress={onReelPress ? () => onReelPress(i) : undefined}
+            disabled={!onReelPress || isSpinning}
+          >
             <Reel
               finalSymbol={reels[i]}
               spinning={isSpinning}
@@ -103,7 +116,8 @@ export function SlotMachine({ onAllReelsDone }: Props) {
               onComplete={handleReelComplete}
               size={symbolSize}
             />
-          </View>
+            {lockedReels[i] && <Text style={styles.lockBadge}>LOCKED</Text>}
+          </Pressable>
         ))}
       </View>
     </View>
@@ -127,5 +141,18 @@ const styles = StyleSheet.create({
   reelSlot: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  reelSelected: {
+    borderWidth: 2,
+    borderColor: '#00e5ff',
+    borderRadius: 8,
+  },
+  lockBadge: {
+    position: 'absolute',
+    bottom: 2,
+    color: '#fbbf24',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });
