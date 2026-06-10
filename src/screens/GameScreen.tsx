@@ -22,45 +22,45 @@ export function GameScreen() {
   const lastResult    = useRunStore(s => s.lastResult);
   const spin          = useRunStore(s => s.spin);
   const setSpinning   = useRunStore(s => s.setSpinning);
+  const endRun        = useRunStore(s => s.endRun);
   const startNewRun   = useRunStore(s => s.startNewRun);
 
   const lucidityWallet = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents = useMetaStore(s => s.ownedPermanents);
   const bankRun        = useMetaStore(s => s.bankRun);
 
-  // Auto-start first run
+  // Auto-start first run once meta has hydrated from MMKV.
+  // Hydration is synchronous with MMKV, so ownedPermanents is ready on mount.
   useEffect(() => {
     if (runPhase === 'idle') {
       startNewRun(ownedPermanents);
     }
-  }, []);
-
-  // Bank Lucidity when run ends
-  useEffect(() => {
-    if (runPhase === 'over') {
-      const runSnapshot = {
-        ...useRunStore.getState(),
-      };
-      bankRun(runSnapshot, 'flatline');
-    }
-  }, [runPhase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSpin = useCallback(() => {
     spin();
   }, [spin]);
 
+  // Fix 2 + 3: run-over transition AND banking both happen here, explicitly,
+  // after the last reel animation settles. Single-fire — impossible to double-bank.
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
-  }, [setSpinning]);
+    const { neurons: n } = useRunStore.getState();
+    if (n <= 0) {
+      bankRun(useRunStore.getState(), 'flatline');
+      endRun();
+    }
+  }, [setSpinning, bankRun, endRun]);
 
   const handleNewRun = useCallback(() => {
     startNewRun(ownedPermanents);
   }, [startNewRun, ownedPermanents]);
 
+  // Fix 1: free spins bypass the neuron minimum
   const canSpin =
     runPhase === 'running' &&
     !isSpinning &&
-    neurons >= ECONOMY.MIN_NEURONS_TO_SPIN;
+    (freeSpins > 0 || neurons >= ECONOMY.MIN_NEURONS_TO_SPIN);
 
   const winLabel = lastResult
     ? lastResult.winType === 'jackpot'

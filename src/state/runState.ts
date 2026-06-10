@@ -46,18 +46,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
   spin(): SpinResult | null {
     const state = get();
 
-    if (
-      state.runPhase !== 'running' ||
-      state.isSpinning ||
-      state.neurons < ECONOMY.MIN_NEURONS_TO_SPIN
-    ) {
-      return null;
-    }
+    // Fix 1: free spins bypass the neuron minimum — they cost nothing
+    const isFreeSpin = state.freeSpinsRemaining > 0;
+    if (state.runPhase !== 'running' || state.isSpinning) return null;
+    if (!isFreeSpin && state.neurons < ECONOMY.MIN_NEURONS_TO_SPIN) return null;
 
     const seed = ((Date.now() ^ (state.spinCount * 0x9e3779b9)) >>> 0);
     const rng = createRNG(seed);
 
-    const isFreeSpin = state.freeSpinsRemaining > 0;
     const neuronDecayAmount = computeNeuronDecay(state.ownedUpgrades);
     const effectiveMultiplier =
       state.lucidityMultiplier * state.nextSpinLucidityMultiplier;
@@ -74,9 +70,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
       rng,
     });
 
-    const nextPhase: RunPhase =
-      result.neuronsAfter <= 0 ? 'over' : 'running';
-
+    // Fix 2: runPhase stays 'running' during the animation.
+    // GameScreen transitions to 'over' in handleAllReelsDone, after the
+    // last reel settles — never mid-animation.
     set({
       neurons:                    result.neuronsAfter,
       lucidityEarned:             state.lucidityEarned + result.lucidityEarned,
@@ -86,7 +82,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
       lastResult:                 result,
       spinCount:                  state.spinCount + 1,
       nextSpinLucidityMultiplier: 1.0,
-      runPhase:                   nextPhase,
     });
 
     return result;
