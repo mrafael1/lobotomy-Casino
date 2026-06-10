@@ -1,5 +1,5 @@
 import { scoreReels } from './evaluate';
-import type { ReelResult, SymbolId } from './types';
+import type { ReelResult, SymbolId, WinType } from './types';
 
 // Pure ability transforms. Each returns the new reels plus the Lucidity DELTA
 // the player gains (or loses — rearranging a win away is the player's choice).
@@ -18,6 +18,7 @@ export interface AbilityOutcome {
   readonly reels: ReelResult;
   readonly lucidityDelta: number; // newScore - oldScore, may be negative
   readonly isJackpot: boolean;
+  readonly winType: WinType;
 }
 
 function rescore(
@@ -31,6 +32,7 @@ function rescore(
     reels: after,
     lucidityDelta: newScore.lucidityEarned - oldScore.lucidityEarned,
     isJackpot: newScore.winType === 'jackpot',
+    winType: newScore.winType,
   };
 }
 

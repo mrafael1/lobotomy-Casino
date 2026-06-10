@@ -53,6 +53,7 @@ export const useMetaStore = create<MetaStore>()(
 
         if (!upgrade) return;
         if (state.ownedPermanents.includes(upgradeId)) return;
+        if (upgrade.requiresId && !state.ownedPermanents.includes(upgrade.requiresId)) return;
         if (state.lucidityWallet < upgrade.cost) return;
 
         set({

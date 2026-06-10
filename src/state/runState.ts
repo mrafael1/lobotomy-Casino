@@ -21,7 +21,8 @@ export type ConsumablePurchase = 'applied' | 'needsReelPick' | 'rejected';
 export interface RunStore extends RunState {
   runPhase: RunPhase;
   lastEnding: EndingType | null;
-  decaySkips: number; // Stasis Patch: spins remaining that cost 0 neurons
+  decaySkips: number;        // Stasis Patch: spins remaining that cost 0 neurons
+  pendingLockPayment: number; // cons_reel_lock cost held until lockReel() confirms
 
   spin: () => SpinResult | null;
   setSpinning: (v: boolean) => void;
@@ -69,6 +70,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   runPhase: 'idle',
   lastEnding: null,
   decaySkips: 0,
+  pendingLockPayment: 0,
 
   spin(): SpinResult | null {
     const state = get();
@@ -116,6 +118,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       nextSpinLucidityMultiplier: 1.0,
       lockedReels:                [false, false, false], // reel locks are single-use
       decaySkips:                 stasisActive ? state.decaySkips - 1 : state.decaySkips,
+      pendingLockPayment:         0, // abandoned lock pick — no charge
     });
 
     return result;
@@ -136,10 +139,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
       startingNeurons:  startingNeurons,
       lucidityMultiplier,
       maxFreeSpins,
-      ownedUpgrades:    ownedPermanents,
-      runPhase:         'running',
-      lastEnding:       null,
-      decaySkips:       0,
+      ownedUpgrades:      ownedPermanents,
+      runPhase:           'running',
+      lastEnding:         null,
+      decaySkips:         0,
+      pendingLockPayment: 0,
     });
   },
 
@@ -178,18 +182,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
         return 'applied';
 
       case 'lockReelNextSpin':
-        // Payment happens now; UI must follow up with lockReel(index).
-        // Locking requires a previous result to lock onto.
+        // Payment is deferred until lockReel(index) confirms the pick,
+        // so a cancellation never silently consumes Lucidity.
         if (!state.lastResult) return 'rejected';
-        set({ lucidityEarned: paid });
+        set({ pendingLockPayment: consumable.cost });
         return 'needsReelPick';
     }
   },
 
   lockReel(reelIndex: number): void {
+    const state = get();
     const locks: [boolean, boolean, boolean] = [false, false, false];
     locks[reelIndex] = true;
-    set({ lockedReels: locks });
+    set({
+      lockedReels: locks,
+      lucidityEarned: Math.max(0, state.lucidityEarned - state.pendingLockPayment),
+      pendingLockPayment: 0,
+    });
   },
 
   swapReels(i: number, j: number): boolean {
@@ -204,6 +213,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
         ...state.lastResult,
         reels: outcome.reels,
         isJackpot: outcome.isJackpot,
+        winType: outcome.winType,
+        lucidityEarned: Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
       },
     });
     return true;
@@ -223,6 +234,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
         ...state.lastResult,
         reels: outcome.reels,
         isJackpot: outcome.isJackpot,
+        winType: outcome.winType,
+        lucidityEarned: Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
       },
     });
     return true;
