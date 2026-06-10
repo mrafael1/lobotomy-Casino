@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "LOBOTOMY",
+    "slug": "lobotomy-casino",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/machine_normal.png",
+    "scheme": "lobotomy",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/images/background_healthy.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#1a0a2e"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.lobotomy.casino"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/machine_normal.png",
+        "backgroundColor": "#1a0a2e"
+      },
+      "package": "com.lobotomy.casino"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/machine_normal.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-mmkv",
+        {
+          "ios": {
+            "enableEncryption": false
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
