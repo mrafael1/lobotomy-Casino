@@ -1,18 +1,71 @@
-// Phase 1: Wire this to Zustand + MMKV persistence.
-// MetaState is the only state that survives across runs.
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { MetaState, RunState, EndingType, UpgradeId } from '../game/types';
+import { bankRunToMeta } from '../game/endings';
+import { UPGRADE_MAP } from '../content/upgrades';
+import { storage } from '../persistence/storage';
 
-import type { MetaState } from '../game/types';
+export interface MetaStore extends MetaState {
+  bankRun: (run: RunState, ending: EndingType) => void;
+  buyUpgrade: (upgradeId: UpgradeId) => void;
+}
 
-export const INITIAL_META_STATE: MetaState = {
-  schemaVersion:    1,
-  lucidityWallet:   0,
-  ownedPermanents:  [],
+const INITIAL_META_STATE: MetaState = {
+  schemaVersion:      1,
+  lucidityWallet:     0,
+  ownedPermanents:    [],
   corruptionEverUsed: false,
-  endingsReached:   [],
+  endingsReached:     [],
   history: {
-    runsPlayed:       0,
-    bestLucidityRun:  0,
+    runsPlayed:      0,
+    bestLucidityRun: 0,
   },
 };
 
-// TODO (Phase 1): create(set => ({ ...INITIAL_META_STATE, spendLucidity, buyUpgrade, ... }))
+const mmkvStorage = createJSONStorage(() => ({
+  getItem:    (name: string) => storage.getString(name) ?? null,
+  setItem:    (name: string, value: string) => storage.set(name, value),
+  removeItem: (name: string) => storage.delete(name),
+}));
+
+export const useMetaStore = create<MetaStore>()(
+  persist(
+    (set, get) => ({
+      ...INITIAL_META_STATE,
+
+      bankRun(run: RunState, ending: EndingType): void {
+        const state = get();
+        const metaSnapshot: MetaState = {
+          schemaVersion:      state.schemaVersion,
+          lucidityWallet:     state.lucidityWallet,
+          ownedPermanents:    state.ownedPermanents,
+          corruptionEverUsed: state.corruptionEverUsed,
+          endingsReached:     state.endingsReached,
+          history:            state.history,
+        };
+        const next = bankRunToMeta(run, metaSnapshot, ending);
+        set(next);
+      },
+
+      buyUpgrade(upgradeId: UpgradeId): void {
+        const state = get();
+        const upgrade = UPGRADE_MAP[upgradeId];
+
+        if (!upgrade) return;
+        if (state.ownedPermanents.includes(upgradeId)) return;
+        if (state.lucidityWallet < upgrade.cost) return;
+
+        set({
+          lucidityWallet:     state.lucidityWallet - upgrade.cost,
+          ownedPermanents:    [...state.ownedPermanents, upgradeId],
+          corruptionEverUsed:
+            upgrade.category === 'corrupted' ? true : state.corruptionEverUsed,
+        });
+      },
+    }),
+    {
+      name:    'lobotomy-meta',
+      storage: mmkvStorage,
+    },
+  ),
+);
