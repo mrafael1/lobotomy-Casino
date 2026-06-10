@@ -1,13 +1,10 @@
-// Phase 1: Implement MMKV read/write here.
-// Every write should be atomic (serialize entire record at once).
-// Keep a last-good backup key per record for crash recovery.
+import { MMKV } from 'react-native-mmkv';
 
-// TODO (Phase 1):
-// import { MMKV } from 'react-native-mmkv';
-// export const storage = new MMKV({ id: 'lobotomy' });
+export const storage = new MMKV({ id: 'lobotomy' });
 
 export const STORAGE_KEYS = {
-  GLOBAL_STATE:  'global',
-  SAVE_SLOT:     (id: string) => `slot:${id}`,
-  SLOT_BACKUP:   (id: string) => `slot:${id}:backup`,
+  GLOBAL_STATE: 'global',
+  META_STATE:   'meta',
+  SAVE_SLOT:    (id: string) => `slot:${id}`,
+  SLOT_BACKUP:  (id: string) => `slot:${id}:backup`,
 } as const;
