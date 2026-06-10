@@ -29,15 +29,7 @@
       "favicon": "./assets/images/machine_normal.png"
     },
     "plugins": [
-      "expo-router",
-      [
-        "react-native-mmkv",
-        {
-          "ios": {
-            "enableEncryption": false
-          }
-        }
-      ]
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
