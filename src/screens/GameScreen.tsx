@@ -15,8 +15,6 @@ import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
-import { MOVE_ORDER } from '../game/abilities';
-import { SYMBOLS } from '../content/symbols';
 
 // Reel-targeting state for abilities.
 type Selection =
@@ -177,6 +175,8 @@ export function GameScreen() {
             onAllReelsDone={handleAllReelsDone}
             onReelPress={reelsTappable ? handleReelPress : undefined}
             selectedReels={selectedReels}
+            shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
+            onShiftDirection={handleMoveDirection}
           />
         </View>
 
@@ -209,45 +209,9 @@ export function GameScreen() {
           )}
         </View>
 
-        {/* ── Move direction picker ── */}
-        {selection.mode === 'move' && selection.reel !== null ? (
-          <View style={styles.moveDirRow}>
-            {(() => {
-              const curSym = lastResult?.reels[selection.reel] ?? null;
-              const curIdx = curSym ? MOVE_ORDER.indexOf(curSym) : -1;
-              const upSym = curIdx >= 0
-                ? MOVE_ORDER[(curIdx - 1 + MOVE_ORDER.length) % MOVE_ORDER.length]
-                : null;
-              const downSym = curIdx >= 0
-                ? MOVE_ORDER[(curIdx + 1) % MOVE_ORDER.length]
-                : null;
-              return (
-                <>
-                  <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(-1)}>
-                    <Text style={styles.moveDirText}>▲</Text>
-                    {upSym && (
-                      <Text style={styles.moveDirSymbol}>
-                        {SYMBOLS[upSym].name.toUpperCase()}
-                      </Text>
-                    )}
-                  </Pressable>
-                  <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(1)}>
-                    <Text style={styles.moveDirText}>▼</Text>
-                    {downSym && (
-                      <Text style={styles.moveDirSymbol}>
-                        {SYMBOLS[downSym].name.toUpperCase()}
-                      </Text>
-                    )}
-                  </Pressable>
-                </>
-              );
-            })()}
-            <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
-              <Text style={styles.cancelText}>CANCEL</Text>
-            </Pressable>
-          </View>
-        ) : selection.mode !== 'none' ? (
-          <View style={styles.moveDirRow}>
+        {/* ── Cancel / ability+consumable area ── */}
+        {selection.mode !== 'none' ? (
+          <View style={styles.cancelRow}>
             <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
               <Text style={styles.cancelText}>CANCEL</Text>
             </Pressable>
@@ -513,34 +477,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Move direction picker
-  moveDirRow: {
+  // Cancel row shown during any active selection
+  cancelRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
-    paddingTop: 6,
-    minHeight: 64,
+    minHeight: 40,
     alignItems: 'center',
-  },
-  moveDirBtn: {
-    backgroundColor: 'rgba(0,229,255,0.15)',
-    borderColor: '#00e5ff',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 22,
-  },
-  moveDirText: {
-    color: '#00e5ff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  moveDirSymbol: {
-    color: '#00e5ff',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
-    opacity: 0.8,
   },
   cancelBtn: {
     paddingVertical: 10,
