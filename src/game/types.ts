@@ -55,9 +55,9 @@ export interface RunState {
   readonly isFreeSpin: boolean;
   readonly betMultiplier: 1 | 2 | 3;
   // Dealer state
-  readonly dealerPhase: 0 | 1 | 2;    // 0=neither threshold hit, 1=65% hit, 2=35% hit
-  readonly dealerPending: boolean;     // dealer modal should be shown
-  readonly dealerOfferId: string | null; // id of the InRunItem being offered
+  readonly dealerPhase: 0 | 1 | 2;                          // 0=neither threshold hit, 1=65% hit, 2=35% hit
+  readonly dealerPending: boolean;                           // dealer modal should be shown
+  readonly dealerOfferIds: [string, string] | null;          // two items offered simultaneously
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
   readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet

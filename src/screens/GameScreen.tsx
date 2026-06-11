@@ -47,7 +47,7 @@ export function GameScreen() {
   const forcedRandomBetSpins = useRunStore(s => s.forcedRandomBetSpins);
   const guaranteedWinSpins  = useRunStore(s => s.guaranteedWinSpins);
   const dealerPending       = useRunStore(s => s.dealerPending);
-  const dealerOfferId       = useRunStore(s => s.dealerOfferId);
+  const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -185,7 +185,9 @@ export function GameScreen() {
 
   const reelsTappable = selection.mode !== 'none';
 
-  const dealerItem = dealerOfferId ? IN_RUN_ITEM_MAP[dealerOfferId] : null;
+  const dealerItems = dealerOfferIds
+    ? dealerOfferIds.map(id => IN_RUN_ITEM_MAP[id]).filter(Boolean)
+    : [];
 
   return (
     <Background>
@@ -370,22 +372,27 @@ export function GameScreen() {
       </SafeAreaView>
 
       {/* ── Dealer modal ── */}
-      {dealerPending && dealerItem && (
+      {dealerPending && dealerItems.length > 0 && (
         <View style={styles.overlay}>
           <Text style={styles.dealerTitle}>THE DEALER</Text>
-          <Text style={styles.dealerSubtitle}>He slides something across the table.</Text>
-          <View style={styles.dealerCard}>
-            <Text style={styles.dealerItemName}>{dealerItem.name}</Text>
-            <Text style={styles.dealerItemDesc}>{dealerItem.description}</Text>
+          <Text style={styles.dealerSubtitle}>He lays two things on the table.</Text>
+          <View style={styles.dealerOffers}>
+            {dealerItems.map(item => item && (
+              <View key={item.id} style={styles.dealerCard}>
+                <Text style={styles.dealerItemName}>{item.name}</Text>
+                <Text style={styles.dealerItemDesc}>{item.description}</Text>
+                <Pressable
+                  style={styles.dealerAcceptBtn}
+                  onPress={() => acceptDealerOffer(item.id)}
+                >
+                  <Text style={styles.dealerAcceptText}>TAKE IT</Text>
+                </Pressable>
+              </View>
+            ))}
           </View>
-          <View style={styles.dealerButtons}>
-            <Pressable style={styles.dealerAcceptBtn} onPress={acceptDealerOffer}>
-              <Text style={styles.dealerAcceptText}>TAKE IT</Text>
-            </Pressable>
-            <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
-              <Text style={styles.dealerDeclineText}>REFUSE</Text>
-            </Pressable>
-          </View>
+          <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
+            <Text style={styles.dealerDeclineText}>REFUSE BOTH</Text>
+          </Pressable>
         </View>
       )}
 
@@ -673,47 +680,51 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
   },
+  dealerOffers: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
   dealerCard: {
+    flex: 1,
     backgroundColor: 'rgba(168,85,247,0.12)',
     borderColor: 'rgba(168,85,247,0.45)',
     borderWidth: 1,
     borderRadius: 12,
-    padding: 20,
-    width: '100%',
+    padding: 14,
     gap: 8,
     alignItems: 'center',
   },
   dealerItemName: {
     color: '#e2e8f0',
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1,
+    textAlign: 'center',
   },
   dealerItemDesc: {
     color: '#94a3b8',
-    fontSize: 13,
+    fontSize: 11,
     textAlign: 'center',
-    lineHeight: 20,
-  },
-  dealerButtons: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 8,
+    lineHeight: 16,
+    flex: 1,
   },
   dealerAcceptBtn: {
     backgroundColor: '#a855f7',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
   },
   dealerAcceptText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 3,
+    letterSpacing: 2,
   },
   dealerDeclineBtn: {
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     borderWidth: 1,
@@ -721,7 +732,7 @@ const styles = StyleSheet.create({
   },
   dealerDeclineText: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 2,
   },

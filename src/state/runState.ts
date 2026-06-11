@@ -56,7 +56,7 @@ export interface RunStore extends RunState {
 
   // Dealer interactions
   checkDealerTrigger: () => void;
-  acceptDealerOffer: () => void;
+  acceptDealerOffer: (itemId: string) => void; // player picks one of the two offered items
   declineDealerOffer: () => void;
 }
 
@@ -79,7 +79,7 @@ const INITIAL_RUN_STATE: RunState = {
   betMultiplier:              1,
   dealerPhase:                0,
   dealerPending:              false,
-  dealerOfferId:              null,
+  dealerOfferIds:             null,
   brainBoostSpins:            0,
   forcedRandomBetSpins:       0,
   guaranteedWinSpins:         0,
@@ -95,9 +95,11 @@ function canUseAbility(state: RunStore): boolean {
   return canAct(state) && state.lastResult !== null && state.blockPowersSpins <= 0;
 }
 
-function pickDealerItem(spinCount: number): string {
-  const idx = ((Date.now() ^ (spinCount * 0x6b43c7f)) >>> 0) % DEALER_ITEM_IDS.length;
-  return DEALER_ITEM_IDS[idx];
+function pickDealerItems(spinCount: number): [string, string] {
+  const rng = createRNG(((Date.now() ^ (spinCount * 0x6b43c7f)) >>> 0));
+  // Shuffle and take the first two — guarantees two distinct offers
+  const shuffled = [...DEALER_ITEM_IDS].sort(() => rng() - 0.5);
+  return [shuffled[0], shuffled[1]];
 }
 
 export const useRunStore = create<RunStore>((set, get) => ({
@@ -422,22 +424,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const shouldTriggerPhase2 = state.dealerPhase === 1 && ratio <= DEALER_THRESHOLD_LOW;
 
     if (shouldTriggerPhase1 || shouldTriggerPhase2) {
-      const offerId = pickDealerItem(state.spinCount);
+      const offerIds = pickDealerItems(state.spinCount);
       set({
-        dealerPhase:   state.dealerPhase + 1 as 1 | 2,
-        dealerPending: true,
-        dealerOfferId: offerId,
+        dealerPhase:    state.dealerPhase + 1 as 1 | 2,
+        dealerPending:  true,
+        dealerOfferIds: offerIds,
       });
     }
   },
 
-  acceptDealerOffer(): void {
+  acceptDealerOffer(itemId: string): void {
     const state = get();
-    if (!state.dealerPending || !state.dealerOfferId) return;
+    if (!state.dealerPending || !state.dealerOfferIds) return;
+    if (!state.dealerOfferIds.includes(itemId)) return;
 
-    const item = IN_RUN_ITEM_MAP[state.dealerOfferId];
+    const item = IN_RUN_ITEM_MAP[itemId];
     if (!item) {
-      set({ dealerPending: false, dealerOfferId: null });
+      set({ dealerPending: false, dealerOfferIds: null });
       return;
     }
 
@@ -447,7 +450,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       case 'addNeurons':
         set({
           dealerPending: false,
-          dealerOfferId: null,
+          dealerOfferIds: null,
           neurons: Math.min(state.neurons + effect.amount, ECONOMY.MAX_NEURONS),
           forcedRandomBetSpins: state.forcedRandomBetSpins + effect.forcedRandomBetSpins,
         });
@@ -456,7 +459,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       case 'addLucidity':
         set({
           dealerPending: false,
-          dealerOfferId: null,
+          dealerOfferIds: null,
           lucidityEarned: state.lucidityEarned + effect.amount,
         });
         break;
@@ -467,7 +470,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
           : 0;
         set({
           dealerPending: false,
-          dealerOfferId: null,
+          dealerOfferIds: null,
           lucidityEarned: state.lucidityEarned + raritySum * 3,
         });
         break;
@@ -476,18 +479,18 @@ export const useRunStore = create<RunStore>((set, get) => ({
       case 'guaranteedWin':
         set({
           dealerPending: false,
-          dealerOfferId: null,
+          dealerOfferIds: null,
           guaranteedWinSpins: state.guaranteedWinSpins + effect.spins,
           blockPowersSpins: state.blockPowersSpins + effect.blockPowersSpins,
         });
         break;
 
       default:
-        set({ dealerPending: false, dealerOfferId: null });
+        set({ dealerPending: false, dealerOfferIds: null });
     }
   },
 
   declineDealerOffer(): void {
-    set({ dealerPending: false, dealerOfferId: null });
+    set({ dealerPending: false, dealerOfferIds: null });
   },
 }));

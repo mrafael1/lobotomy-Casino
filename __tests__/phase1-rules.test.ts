@@ -112,20 +112,13 @@ function freshRun(runConsumables: Partial<Record<string, number>> = {}): void {
   useRunStore.getState().startNewRun([], runConsumables);
 }
 
-test('store: Stasis Patch — spins cost 0 neurons while skips remain', () => {
-  freshRun({ cons_stasis: 1 });
-  expect(useRunStore.getState().runConsumables['cons_stasis']).toBe(1);
+test('store: Focus Serum — sets nextSpinLucidityMultiplier to 3', () => {
+  freshRun({ cons_focus: 1 });
+  expect(useRunStore.getState().runConsumables['cons_focus']).toBe(1);
 
-  useRunStore.getState().useConsumable('cons_stasis');
-  expect(useRunStore.getState().decaySkips).toBe(3);
-  expect(useRunStore.getState().runConsumables['cons_stasis']).toBe(0);
-
-  const before = useRunStore.getState().neurons;
-  useRunStore.getState().spin();
-  const after = useRunStore.getState();
-
-  expect(after.neurons).toBe(before);   // no decay consumed
-  expect(after.decaySkips).toBe(2);     // one skip used
+  useRunStore.getState().useConsumable('cons_focus');
+  expect(useRunStore.getState().nextSpinLucidityMultiplier).toBe(3.0);
+  expect(useRunStore.getState().runConsumables['cons_focus']).toBe(0);
 });
 
 test('store: consumable rejected when no charges remain', () => {
@@ -223,12 +216,11 @@ test('store: abilities and consumables are blocked while spinning', () => {
 });
 
 test('store: neurons never increase across any sequence of actions (Sacred Rule 1)', () => {
-  freshRun({ cons_stasis: 5, cons_focus: 5 });
+  freshRun({ cons_focus: 2, cons_tea: 2 });
   let lastNeurons = useRunStore.getState().neurons;
 
   for (let i = 0; i < 50; i++) {
     const s = useRunStore.getState();
-    if (i % 7 === 0) s.useConsumable('cons_stasis');
     if (i % 5 === 0) s.useConsumable('cons_focus');
     if (i % 3 === 0 && s.lastResult) s.rerollReel(0);
     s.spin();

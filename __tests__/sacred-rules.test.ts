@@ -33,7 +33,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     betMultiplier:             1,
     dealerPhase:               0,
     dealerPending:             false,
-    dealerOfferId:             null,
+    dealerOfferIds:            null,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,

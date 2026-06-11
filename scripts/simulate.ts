@@ -55,7 +55,7 @@ for (let r = 0; r < RUNS; r++) {
     betMultiplier:             1,
     dealerPhase:               0,
     dealerPending:             false,
-    dealerOfferId:             null,
+    dealerOfferIds:            null,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,

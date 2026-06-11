@@ -15,15 +15,9 @@ export interface Consumable {
 
 // Pre-run consumables: bought in the shop with wallet Lucidity before a run.
 // Max 2 distinct consumable types can be brought into a run (slots cap).
+// Each type stacks to at most MAX_CONSUMABLE_CHARGES_PER_SLOT charges.
 // Charges transfer to runConsumables when the run starts and are lost at run end.
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
-  {
-    id: 'cons_stasis',
-    name: 'Stasis Patch',
-    description: 'Your next 3 spins consume no neurons.',
-    shopCost: 80,
-    effect: { type: 'skipDecay', spins: 3 },
-  },
   {
     id: 'cons_focus',
     name: 'Focus Serum',
@@ -60,3 +54,6 @@ export const CONSUMABLE_MAP: Readonly<Record<string, Consumable>> = Object.fromE
 
 // Maximum number of distinct consumable types that can be brought into a run.
 export const MAX_CONSUMABLE_SLOTS = 2;
+
+// Maximum charges of a single consumable type that can be queued for a run.
+export const MAX_CONSUMABLE_CHARGES_PER_SLOT = 2;
