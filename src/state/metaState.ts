@@ -1,18 +1,106 @@
-// Phase 1: Wire this to Zustand + MMKV persistence.
-// MetaState is the only state that survives across runs.
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { MetaState, RunState, EndingType, UpgradeId } from '../game/types';
+import { bankRunToMeta } from '../game/endings';
+import { UPGRADE_MAP } from '../content/upgrades';
+import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, MAX_CONSUMABLE_CHARGES_PER_SLOT } from '../content/consumables';
+import { storage } from '../persistence/storage';
 
-import type { MetaState } from '../game/types';
+export interface MetaStore extends MetaState {
+  bankRun: (run: RunState, ending: EndingType) => void;
+  buyUpgrade: (upgradeId: UpgradeId) => void;
+  buyConsumableCharge: (consumableId: string) => void;
+  // Non-destructive read — pendingConsumables are cleared only inside bankRun.
+  getPendingConsumables: () => Partial<Record<string, number>>;
+}
 
-export const INITIAL_META_STATE: MetaState = {
-  schemaVersion:    1,
-  lucidityWallet:   0,
-  ownedPermanents:  [],
+const INITIAL_META_STATE: MetaState = {
+  schemaVersion:      1,
+  lucidityWallet:     0,
+  ownedPermanents:    [],
   corruptionEverUsed: false,
-  endingsReached:   [],
+  endingsReached:     [],
+  pendingConsumables: {},
   history: {
-    runsPlayed:       0,
-    bestLucidityRun:  0,
+    runsPlayed:      0,
+    bestLucidityRun: 0,
   },
 };
 
-// TODO (Phase 1): create(set => ({ ...INITIAL_META_STATE, spendLucidity, buyUpgrade, ... }))
+const mmkvStorage = createJSONStorage(() => ({
+  getItem:    (name: string) => storage.getString(name) ?? null,
+  setItem:    (name: string, value: string) => storage.set(name, value),
+  removeItem: (name: string) => storage.delete(name),
+}));
+
+export const useMetaStore = create<MetaStore>()(
+  persist(
+    (set, get) => ({
+      ...INITIAL_META_STATE,
+
+      bankRun(run: RunState, ending: EndingType): void {
+        const state = get();
+        const metaSnapshot: MetaState = {
+          schemaVersion:      state.schemaVersion,
+          lucidityWallet:     state.lucidityWallet,
+          ownedPermanents:    state.ownedPermanents,
+          corruptionEverUsed: state.corruptionEverUsed,
+          endingsReached:     state.endingsReached,
+          pendingConsumables: state.pendingConsumables,
+          history:            state.history,
+        };
+        const next = bankRunToMeta(run, metaSnapshot, ending);
+        // Clear pending consumables on bank — they were transferred to the run at start.
+        set({ ...next, pendingConsumables: {} });
+      },
+
+      buyUpgrade(upgradeId: UpgradeId): void {
+        const state = get();
+        const upgrade = UPGRADE_MAP[upgradeId];
+
+        if (!upgrade) return;
+        if (state.ownedPermanents.includes(upgradeId)) return;
+        if (upgrade.requiresId && !state.ownedPermanents.includes(upgrade.requiresId)) return;
+        if (state.lucidityWallet < upgrade.cost) return;
+
+        set({
+          lucidityWallet:     state.lucidityWallet - upgrade.cost,
+          ownedPermanents:    [...state.ownedPermanents, upgradeId],
+          corruptionEverUsed:
+            upgrade.category === 'corrupted' ? true : state.corruptionEverUsed,
+        });
+      },
+
+      buyConsumableCharge(consumableId: string): void {
+        const state = get();
+        const consumable = CONSUMABLE_MAP[consumableId];
+        if (!consumable) return;
+        if (state.lucidityWallet < consumable.shopCost) return;
+
+        // Enforce slot cap (max 2 types) and per-slot charge cap (max 2 charges)
+        const currentCharges = state.pendingConsumables[consumableId] ?? 0;
+        if (currentCharges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return;
+        if (currentCharges === 0) {
+          const distinctSlots = Object.values(state.pendingConsumables).filter(c => (c ?? 0) > 0).length;
+          if (distinctSlots >= MAX_CONSUMABLE_SLOTS) return;
+        }
+
+        set({
+          lucidityWallet: state.lucidityWallet - consumable.shopCost,
+          pendingConsumables: {
+            ...state.pendingConsumables,
+            [consumableId]: (state.pendingConsumables[consumableId] ?? 0) + 1,
+          },
+        });
+      },
+
+      getPendingConsumables(): Partial<Record<string, number>> {
+        return get().pendingConsumables;
+      },
+    }),
+    {
+      name:    'lobotomy-meta',
+      storage: mmkvStorage,
+    },
+  ),
+);

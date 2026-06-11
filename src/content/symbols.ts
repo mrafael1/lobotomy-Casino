@@ -4,25 +4,30 @@ export type SymbolId =
   | 'pill'
   | 'syringe'
   | 'scalpel'
-  | 'flatline';
+  | 'flatline'
+  | 'book';
 
 export interface SlotSymbol {
   readonly id: SymbolId;
   readonly name: string;
-  readonly weight: number;
+  readonly weight: number;  // base weight without upgrades (book=0 without Learning)
+  readonly rarityScore: number; // used by Cocktail dealer item
 }
 
-// Weights must always sum to 52.
+// Weights sum to 52 for base symbols (brain through flatline).
 // Brain is listed first so () => 0 always selects it (useful in tests).
+// Book weight is 0 by default; activated by the Learning upgrade (weight 7).
 export const SYMBOLS: Readonly<Record<SymbolId, SlotSymbol>> = {
-  brain:    { id: 'brain',    name: 'Brain',    weight: 6  },
-  eye:      { id: 'eye',      name: 'Eye',      weight: 8  },
-  pill:     { id: 'pill',     name: 'Pill',     weight: 9  },
-  syringe:  { id: 'syringe',  name: 'Syringe',  weight: 9  },
-  scalpel:  { id: 'scalpel',  name: 'Scalpel',  weight: 10 },
-  flatline: { id: 'flatline', name: 'Flatline', weight: 10 },
+  brain:    { id: 'brain',    name: 'Brain',    weight: 6,  rarityScore: 10 },
+  eye:      { id: 'eye',      name: 'Eye',      weight: 8,  rarityScore: 8  },
+  pill:     { id: 'pill',     name: 'Pill',     weight: 9,  rarityScore: 6  },
+  syringe:  { id: 'syringe',  name: 'Syringe',  weight: 9,  rarityScore: 6  },
+  scalpel:  { id: 'scalpel',  name: 'Scalpel',  weight: 10, rarityScore: 4  },
+  flatline: { id: 'flatline', name: 'Flatline', weight: 10, rarityScore: 4  },
+  book:     { id: 'book',     name: 'Book',     weight: 0,  rarityScore: 9  },
 } as const;
 
+// Base symbol weights (excludes book; book added dynamically when Learning owned).
 // Sum = 6+8+9+9+10+10 = 52
 export const TOTAL_SYMBOL_WEIGHT = 52;
 
@@ -34,3 +39,6 @@ export const SYMBOL_WEIGHTS: ReadonlyArray<{ weight: number; value: SymbolId }> 
   { weight: SYMBOLS.scalpel.weight,  value: 'scalpel'  },
   { weight: SYMBOLS.flatline.weight, value: 'flatline' },
 ];
+
+// Weight for book when Learning upgrade is owned.
+export const BOOK_SYMBOL_WEIGHT = 7;

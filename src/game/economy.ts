@@ -1,8 +1,8 @@
 import { ECONOMY } from '../content/economy';
 import { UPGRADE_MAP } from '../content/upgrades';
+import { BOOK_SYMBOL_WEIGHT } from '../content/symbols';
 import type { UpgradeId } from './types';
 
-// Compute the effective neuron decay for a spin given the current upgrade set.
 export function computeNeuronDecay(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
   let decay = ECONOMY.NEURON_DECAY_PER_SPIN;
   for (const id of ownedUpgrades) {
@@ -14,7 +14,6 @@ export function computeNeuronDecay(ownedUpgrades: ReadonlyArray<UpgradeId>): num
   return Math.max(ECONOMY.MIN_NEURON_DECAY, decay);
 }
 
-// Compute starting neurons for a new run from owned permanents.
 export function computeStartingNeurons(ownedPermanents: ReadonlyArray<UpgradeId>): number {
   let neurons = ECONOMY.STARTING_NEURONS;
   for (const id of ownedPermanents) {
@@ -26,34 +25,27 @@ export function computeStartingNeurons(ownedPermanents: ReadonlyArray<UpgradeId>
   return Math.min(neurons, computeNeuronCap(ownedPermanents));
 }
 
-// Compute the neuron cap (hard ceiling) from owned permanents.
 export function computeNeuronCap(ownedPermanents: ReadonlyArray<UpgradeId>): number {
-  let cap: number = ECONOMY.MAX_NEURONS;
-  for (const id of ownedPermanents) {
-    const upgrade = UPGRADE_MAP[id];
-    if (upgrade?.effect.type === 'neuronCapIncrease') {
-      cap = Math.max(cap, upgrade.effect.newCap);
-    }
-  }
-  return Math.min(cap, ECONOMY.MAX_NEURONS_ACT2);
+  return ECONOMY.MAX_NEURONS;
 }
 
-// Compute the combined Lucidity multiplier from all active upgrades.
+// Combined Lucidity multiplier: multiplicative clean upgrades × (1 + additive reward amp bonus).
 export function computeLucidityMultiplier(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
-  let multiplier = ECONOMY.BASE_LUCIDITY_MULTIPLIER;
+  let multiplicative = ECONOMY.BASE_LUCIDITY_MULTIPLIER;
+  let rewardAmpBonus = 0;
+
   for (const id of ownedUpgrades) {
     const upgrade = UPGRADE_MAP[id];
-    if (
-      upgrade?.effect.type === 'lucidityMultiplier' ||
-      upgrade?.effect.type === 'cleanLucidityMultiplier'
-    ) {
-      multiplier *= upgrade.effect.multiplier;
+    if (!upgrade) continue;
+    if (upgrade.effect.type === 'lucidityMultiplier') {
+      multiplicative *= upgrade.effect.multiplier;
+    } else if (upgrade.effect.type === 'rewardAmpBonus') {
+      rewardAmpBonus += upgrade.effect.bonus;
     }
   }
-  return multiplier;
+  return multiplicative * (1 + rewardAmpBonus);
 }
 
-// Compute the jackpot-specific multiplier from corrupted upgrades.
 export function computeJackpotMultiplier(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
   let multiplier = 1.0;
   for (const id of ownedUpgrades) {
@@ -65,19 +57,10 @@ export function computeJackpotMultiplier(ownedUpgrades: ReadonlyArray<UpgradeId>
   return multiplier;
 }
 
-// The maximum free spin count allowed given current upgrades.
-export function computeMaxFreeSpins(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
-  let max: number = ECONOMY.BASE_MAX_FREE_SPINS;
-  for (const id of ownedUpgrades) {
-    const upgrade = UPGRADE_MAP[id];
-    if (upgrade?.effect.type === 'freeSpinMaxIncrease') {
-      max = Math.max(max, upgrade.effect.newMax);
-    }
-  }
-  return Math.min(max, ECONOMY.UPGRADED_MAX_FREE_SPINS);
+export function computeMaxFreeSpins(_ownedUpgrades: ReadonlyArray<UpgradeId>): number {
+  return ECONOMY.BASE_MAX_FREE_SPINS;
 }
 
-// Passive Lucidity earned every spin regardless of result (positive upgrade).
 export function computePassiveLucidity(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
   let passive = 0;
   for (const id of ownedUpgrades) {
@@ -87,4 +70,38 @@ export function computePassiveLucidity(ownedUpgrades: ReadonlyArray<UpgradeId>):
     }
   }
   return passive;
+}
+
+// Returns > 0 if the Learning upgrade is owned (the book symbol weight to use).
+export function computeBookWeight(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
+  for (const id of ownedUpgrades) {
+    const upgrade = UPGRADE_MAP[id];
+    if (upgrade?.effect.type === 'bookSymbol') {
+      return upgrade.effect.weight;
+    }
+  }
+  return 0;
+}
+
+// Returns the extra brain weight from Pattern Recognition upgrade.
+// Does NOT include Syringe boost — that's tracked separately in RunState.
+export function computeBrainWeightBonus(ownedUpgrades: ReadonlyArray<UpgradeId>): number {
+  let bonus = 0;
+  for (const id of ownedUpgrades) {
+    const upgrade = UPGRADE_MAP[id];
+    if (upgrade?.effect.type === 'brainWeightBonus') {
+      bonus += upgrade.effect.amount;
+    }
+  }
+  return bonus;
+}
+
+// True if the Sedative Protocol corrupted upgrade is owned.
+export function hasSedative(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
+  return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'sedativeBonusSpin');
+}
+
+// True if Pattern Fabrication (⅔ triple) is owned.
+export function hasPattern23Triple(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
+  return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'pattern23Triple');
 }

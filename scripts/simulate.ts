@@ -18,6 +18,7 @@ const EMPTY_META: MetaState = {
   ownedPermanents:    [],
   corruptionEverUsed: false,
   endingsReached:     [],
+  pendingConsumables: {},
   history: { runsPlayed: 0, bestLucidityRun: 0 },
 };
 
@@ -46,11 +47,24 @@ for (let r = 0; r < RUNS; r++) {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
-    activeAbilities:           [],
-    ownedConsumables:          [],
+    runConsumables:            {},
+    abilitiesUsed:             [],
     ownedUpgrades:             [],
     spinCount:                 0,
     isFreeSpin:                false,
+    betMultiplier:             1,
+    dealerCount:               0,
+    dealer65SafetyFired:       false,
+    dealer35SafetyFired:       false,
+    dealerPending:             false,
+    dealerOfferIds:            null,
+    pendingGiftConsumableId:   null,
+    brainBoostSpins:           0,
+    forcedRandomBetSpins:      0,
+    guaranteedWinSpins:        0,
+    blockPowersSpins:          0,
+    hideNeuronsSpins:          0,
+    decaySkips:                0,
   };
 
   while (run.neurons > 0) {
@@ -65,6 +79,11 @@ for (let r = 0; r < RUNS; r++) {
       lockedReels:        [false, false, false],
       previousReels:      null,
       rng,
+      bookWeight:         0,
+      brainWeightBonus:   0,
+      guaranteedWin:      false,
+      pattern23Triple:    false,
+      learningActive:     false,
     });
 
     run = {

@@ -18,6 +18,6 @@ export const ECONOMY = {
   BASE_LUCIDITY_MULTIPLIER: 1.0,
 
   // Ending thresholds (tune via simulator)
-  WEALTH_LUCIDITY_THRESHOLD: 500,
-  EXIT_LUCIDITY_THRESHOLD:   500, // same bar but requires zero corruption
+  WEALTH_LUCIDITY_THRESHOLD: 1000, // corrupted builds can reach ~1200–1500 L/run
+  EXIT_LUCIDITY_THRESHOLD:    750, // pure positive ceiling ~850–950 L/run — hard but achievable
 } as const;

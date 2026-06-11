@@ -11,6 +11,7 @@ export const TRIPLE_PAYOUTS: Readonly<Partial<Record<SymbolId, number>>> = {
   syringe:  25,
   scalpel:  15,
   flatline: 0,
+  book:     15, // Learning upgrade: triple book payout
   // brain → jackpot, handled separately
 };
 
@@ -21,4 +22,8 @@ export const PAIR_PAYOUTS: Readonly<Partial<Record<SymbolId, number>>> = {
   syringe:  5,
   scalpel:  3,
   flatline: 0,
+  book:     5, // Learning upgrade: pair book payout
 };
+
+// Bonus Lucidity per book symbol visible on screen (requires Learning upgrade).
+export const BOOK_BONUS_PER_VISIBLE = 10;

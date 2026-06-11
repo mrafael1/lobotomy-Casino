@@ -1,48 +1,59 @@
 export type ConsumableEffect =
-  | { type: 'restoreNeurons';             amount: number }
-  | { type: 'grantFreeSpins';             amount: number }
-  | { type: 'lucidityMultiplierNextSpin'; multiplier: number }
-  | { type: 'lockReelNextSpin' };  // player chooses which reel at use-time
+  | { type: 'skipDecay';                  spins: number }
+  | { type: 'lucidityMultiplierNextSpin'; multiplier: number; hideNeuronsSpins?: number }
+  | { type: 'copyReel' }                    // White Powder: copy one reel symbol to another via UI
+  | { type: 'brainBoost';                 spins: number }  // Syringe: brain 5× more likely for N spins
+  | { type: 'restoreAbility' };             // Tea: restore one random used ability
 
 export interface Consumable {
   readonly id: string;
   readonly name: string;
   readonly description: string;
-  readonly cost: number;
+  readonly shopCost: number; // paid with wallet lucidity before the run
   readonly effect: ConsumableEffect;
 }
 
+// Pre-run consumables: bought in the shop with wallet Lucidity before a run.
+// Max 2 distinct consumable types can be brought into a run (slots cap).
+// Each type stacks to at most MAX_CONSUMABLE_CHARGES_PER_SLOT charges.
+// Charges transfer to runConsumables when the run starts and are lost at run end.
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
-    id: 'cons_neuron_restore',
-    name: 'Neural Patch',
-    description: 'Restore 20 neurons immediately.',
-    cost: 50,
-    effect: { type: 'restoreNeurons', amount: 20 },
-  },
-  {
-    id: 'cons_free_spin',
-    name: 'Complimentary Spin',
-    description: 'Grant 1 free spin immediately.',
-    cost: 40,
-    effect: { type: 'grantFreeSpins', amount: 1 },
-  },
-  {
-    id: 'cons_lucidity_boost',
+    id: 'cons_focus',
     name: 'Focus Serum',
-    description: 'Next spin earns 3× Lucidity.',
-    cost: 60,
-    effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0 },
+    description: 'Next spin earns 3× Lucidity. Side effect: your neuron count is hidden for 5 spins.',
+    shopCost: 60,
+    effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0, hideNeuronsSpins: 5 },
   },
   {
-    id: 'cons_reel_lock',
-    name: 'Memory Anchor',
-    description: 'Lock one reel in its current position for the next spin.',
-    cost: 35,
-    effect: { type: 'lockReelNextSpin' },
+    id: 'cons_white_powder',
+    name: 'White Powder',
+    description: 'Copy one reel\'s symbol onto another. Side effect: consume a random other supply or lose 20 neurons.',
+    shopCost: 70,
+    effect: { type: 'copyReel' },
+  },
+  {
+    id: 'cons_syringe',
+    name: 'Syringe',
+    description: 'Brain is 5× more likely for 5 spins. Reduced Lucidity and no abilities during boost. Permanently blocks a random ability.',
+    shopCost: 90,
+    effect: { type: 'brainBoost', spins: 5 },
+  },
+  {
+    id: 'cons_tea',
+    name: 'Herbal Tea',
+    description: 'Restore a random ability you have already used this run.',
+    shopCost: 50,
+    effect: { type: 'restoreAbility' },
   },
 ];
 
 export const CONSUMABLE_MAP: Readonly<Record<string, Consumable>> = Object.fromEntries(
   CONSUMABLES.map(c => [c.id, c])
 );
+
+// Maximum number of distinct consumable types that can be brought into a run.
+export const MAX_CONSUMABLE_SLOTS = 2;
+
+// Maximum charges of a single consumable type that can be queued for a run.
+export const MAX_CONSUMABLE_CHARGES_PER_SLOT = 2;

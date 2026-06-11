@@ -1,29 +1,30 @@
-export type AbilityId = 'swap' | 'moveColumn' | 'freeSpinAbility';
+export type AbilityId = 'reroll' | 'shift' | 'memory';
 
 export interface Ability {
   readonly id: AbilityId;
   readonly name: string;
   readonly description: string;
-  readonly cost: number; // Lucidity cost per use
+  readonly upgradeId?: string; // undefined = built-in (REROLL)
 }
 
+// Each ability has 1 use per run and costs nothing during the run.
+// REROLL is built-in. SHIFT and MEMORY require a permanent upgrade from the shop.
 export const ABILITIES: Readonly<Record<AbilityId, Ability>> = {
-  swap: {
-    id: 'swap',
-    name: 'Swap',
-    description: 'Swap the symbols of any two reel positions before the next spin.',
-    cost: 15,
+  reroll: {
+    id: 'reroll',
+    name: 'Reroll',
+    description: 'Spin one selected reel again for a new random symbol.',
   },
-  moveColumn: {
-    id: 'moveColumn',
-    name: 'Move Column',
-    description: 'Shift one reel\'s symbol up or down by one position.',
-    cost: 10,
+  shift: {
+    id: 'shift',
+    name: 'Shift',
+    description: "Move a reel's symbol up or down one step in the cycle.",
+    upgradeId: 'perm_shift',
   },
-  freeSpinAbility: {
-    id: 'freeSpinAbility',
-    name: 'Override',
-    description: 'Force the next spin to be free (no neuron cost).',
-    cost: 25,
+  memory: {
+    id: 'memory',
+    name: 'Memory',
+    description: 'Lock one reel in its current position for the next spin.',
+    upgradeId: 'perm_memory',
   },
 } as const;
