@@ -22,9 +22,11 @@ import type { ReelResult } from '../game/types';
 
 export type RunPhase = 'idle' | 'running' | 'over';
 
-// Thresholds at which the Dealer appears (neuron ratio vs starting neurons).
-const DEALER_THRESHOLD_HIGH = 0.65; // first appearance
-const DEALER_THRESHOLD_LOW  = 0.35; // second appearance
+// Dealer appearance config
+const DEALER_THRESHOLD_HIGH = 0.65; // safety gate — guarantees appearance if dealerCount === 0
+const DEALER_THRESHOLD_LOW  = 0.35; // safety gate — guarantees appearance if dealerCount === 1
+const DEALER_PROC_CHANCE    = 0.15; // 15% chance per spin (independent of thresholds)
+const DEALER_MAX_COUNT      = 3;    // max appearances per run
 
 // The 4 dealer item ids (rotated randomly when Dealer triggers).
 const DEALER_ITEM_IDS = [
@@ -77,7 +79,9 @@ const INITIAL_RUN_STATE: RunState = {
   spinCount:                  0,
   isFreeSpin:                 false,
   betMultiplier:              1,
-  dealerPhase:                0,
+  dealerCount:                0,
+  dealer65SafetyFired:        false,
+  dealer35SafetyFired:        false,
   dealerPending:              false,
   dealerOfferIds:             null,
   brainBoostSpins:            0,
@@ -423,19 +427,43 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const state = get();
     if (state.runPhase !== 'running' || state.dealerPending) return;
     if (state.startingNeurons <= 0) return;
+    if (state.dealerCount >= DEALER_MAX_COUNT) return;
 
     const ratio = state.neurons / state.startingNeurons;
+    let shouldTrigger = false;
+    let new65Fired = state.dealer65SafetyFired;
+    let new35Fired = state.dealer35SafetyFired;
 
-    const shouldTriggerPhase1 = state.dealerPhase === 0 && ratio <= DEALER_THRESHOLD_HIGH;
-    const shouldTriggerPhase2 = state.dealerPhase === 1 && ratio <= DEALER_THRESHOLD_LOW;
+    // Safety gate at 65%: guarantee if dealer has never appeared
+    if (!state.dealer65SafetyFired && ratio <= DEALER_THRESHOLD_HIGH) {
+      new65Fired = true;
+      if (state.dealerCount === 0) shouldTrigger = true;
+    }
 
-    if (shouldTriggerPhase1 || shouldTriggerPhase2) {
+    // Safety gate at 35%: guarantee if dealer appeared exactly once
+    if (!state.dealer35SafetyFired && ratio <= DEALER_THRESHOLD_LOW) {
+      new35Fired = true;
+      if (state.dealerCount === 1) shouldTrigger = true;
+    }
+
+    // Chance-based proc on any spin (only if safety didn't already force it)
+    if (!shouldTrigger) {
+      const rng = createRNG(((Date.now() ^ (state.spinCount * 0x9e3779b9 + 0xdeadbeef)) >>> 0));
+      if (rng() < DEALER_PROC_CHANCE) shouldTrigger = true;
+    }
+
+    if (shouldTrigger) {
       const offerIds = pickDealerItems(state.spinCount);
       set({
-        dealerPhase:    state.dealerPhase + 1 as 1 | 2,
-        dealerPending:  true,
-        dealerOfferIds: offerIds,
+        dealerCount:         state.dealerCount + 1,
+        dealer65SafetyFired: new65Fired,
+        dealer35SafetyFired: new35Fired,
+        dealerPending:       true,
+        dealerOfferIds:      offerIds,
       });
+    } else if (new65Fired !== state.dealer65SafetyFired || new35Fired !== state.dealer35SafetyFired) {
+      // Safety gates were evaluated but didn't force a trigger — still persist the flags
+      set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
     }
   },
 
