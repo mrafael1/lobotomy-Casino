@@ -63,7 +63,8 @@ export interface RunState {
   readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet
   readonly guaranteedWinSpins: number;   // Pill: spins guaranteed to win
   readonly blockPowersSpins: number;     // Pill: spins where abilities are blocked
-  readonly decaySkips: number;           // Stasis Patch: spins that cost 0 neurons
+  readonly hideNeuronsSpins: number;     // Focus Serum side effect: neuron count hidden
+  readonly decaySkips: number;           // spins that cost 0 neurons (skipDecay effects)
 }
 
 export interface RunHistory {

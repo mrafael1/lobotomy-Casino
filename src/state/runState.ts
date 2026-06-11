@@ -84,6 +84,7 @@ const INITIAL_RUN_STATE: RunState = {
   forcedRandomBetSpins:       0,
   guaranteedWinSpins:         0,
   blockPowersSpins:           0,
+  hideNeuronsSpins:           0,
   decaySkips:                 0,
 };
 
@@ -179,6 +180,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       forcedRandomBetSpins:       Math.max(0, state.forcedRandomBetSpins - 1),
       guaranteedWinSpins:         Math.max(0, state.guaranteedWinSpins - 1),
       blockPowersSpins:           Math.max(0, state.blockPowersSpins - 1),
+      hideNeuronsSpins:           Math.max(0, state.hideNeuronsSpins - 1),
     });
 
     return result;
@@ -242,7 +244,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
         return true;
 
       case 'lucidityMultiplierNextSpin':
-        set({ runConsumables: newRunConsumables, nextSpinLucidityMultiplier: effect.multiplier });
+        set({
+          runConsumables: newRunConsumables,
+          nextSpinLucidityMultiplier: effect.multiplier,
+          hideNeuronsSpins: state.hideNeuronsSpins + (effect.hideNeuronsSpins ?? 0),
+        });
         return true;
 
       case 'restoreAbility': {

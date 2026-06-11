@@ -60,6 +60,7 @@ for (let r = 0; r < RUNS; r++) {
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,
     blockPowersSpins:          0,
+    hideNeuronsSpins:          0,
     decaySkips:                0,
   };
 

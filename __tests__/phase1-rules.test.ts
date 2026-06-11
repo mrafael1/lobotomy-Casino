@@ -121,6 +121,19 @@ test('store: Focus Serum — sets nextSpinLucidityMultiplier to 3', () => {
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(0);
 });
 
+test('store: Focus Serum side effect — neurons hidden for 5 spins, then visible', () => {
+  freshRun({ cons_focus: 1 });
+  useRunStore.getState().useConsumable('cons_focus');
+  expect(useRunStore.getState().hideNeuronsSpins).toBe(5);
+
+  for (let i = 5; i > 0; i--) {
+    useRunStore.getState().spin();
+    useRunStore.getState().setSpinning(false);
+    expect(useRunStore.getState().hideNeuronsSpins).toBe(i - 1);
+  }
+  expect(useRunStore.getState().hideNeuronsSpins).toBe(0);
+});
+
 test('store: consumable rejected when no charges remain', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().useConsumable('cons_focus')).toBe(true);

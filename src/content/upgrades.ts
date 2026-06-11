@@ -139,14 +139,6 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
     effect: { type: 'passiveLucidityPerSpin', amount: 5 },
   },
   {
-    id: 'pos_brain_weight',
-    name: 'Pattern Recognition',
-    description: 'Brain symbol appears more frequently (+2 weight).',
-    category: 'positive',
-    cost: 400,
-    effect: { type: 'brainWeightBonus', amount: 2 },
-  },
-  {
     id: 'pos_enlightenment',
     name: 'Enlightenment',
     description: 'All wins pay 25% more Lucidity. Does not corrupt.',

@@ -10,8 +10,11 @@ import { useRunStore } from '../state/runState';
 import { ECONOMY } from '../content/economy';
 
 export function NeuronBar() {
-  const neurons         = useRunStore(s => s.neurons);
-  const startingNeurons = useRunStore(s => s.startingNeurons);
+  const neurons          = useRunStore(s => s.neurons);
+  const startingNeurons  = useRunStore(s => s.startingNeurons);
+  const hideNeuronsSpins = useRunStore(s => s.hideNeuronsSpins);
+
+  const blinded = hideNeuronsSpins > 0;
 
   const progress = useSharedValue(1); // 1 = full, 0 = empty
 
@@ -28,6 +31,18 @@ export function NeuronBar() {
       ['#ef4444', '#f97316', '#eab308', '#00e5ff'],
     ),
   }));
+
+  if (blinded) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.label}>NEURONS</Text>
+        <View style={styles.track}>
+          <View style={styles.fillBlinded} />
+        </View>
+        <Text style={styles.countBlinded}>?? / ??  ({hideNeuronsSpins} spins)</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -62,10 +77,23 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
+  fillBlinded: {
+    height: '100%',
+    width: '100%',
+    borderRadius: 3,
+    backgroundColor: 'rgba(168,85,247,0.35)',
+  },
   count: {
     color: '#e2e8f0',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'right',
+  },
+  countBlinded: {
+    color: '#a855f7',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+    letterSpacing: 1,
   },
 });

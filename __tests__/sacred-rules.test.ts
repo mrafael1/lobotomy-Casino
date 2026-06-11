@@ -38,6 +38,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,
     blockPowersSpins:          0,
+    hideNeuronsSpins:          0,
     decaySkips:                0,
     ...overrides,
   };

@@ -1,6 +1,6 @@
 export type ConsumableEffect =
   | { type: 'skipDecay';                  spins: number }
-  | { type: 'lucidityMultiplierNextSpin'; multiplier: number }
+  | { type: 'lucidityMultiplierNextSpin'; multiplier: number; hideNeuronsSpins?: number }
   | { type: 'copyReel' }                    // White Powder: copy one reel symbol to another via UI
   | { type: 'brainBoost';                 spins: number }  // Syringe: brain 5× more likely for N spins
   | { type: 'restoreAbility' };             // Tea: restore one random used ability
@@ -21,9 +21,9 @@ export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
     id: 'cons_focus',
     name: 'Focus Serum',
-    description: 'Next spin earns 3× Lucidity.',
+    description: 'Next spin earns 3× Lucidity. Side effect: your neuron count is hidden for 5 spins.',
     shopCost: 60,
-    effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0 },
+    effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0, hideNeuronsSpins: 5 },
   },
   {
     id: 'cons_white_powder',
