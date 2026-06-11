@@ -14,6 +14,26 @@ import { CONSUMABLES, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
+// Groups an upgrade list into individual cards and tier-group rows.
+// Returns an array of either a single Upgrade or an array of Upgrades (a tier group).
+function groupUpgrades(list: ReadonlyArray<Upgrade>): Array<Upgrade | Upgrade[]> {
+  const result: Array<Upgrade | Upgrade[]> = [];
+  const seen = new Set<string>();
+
+  for (const u of list) {
+    if (seen.has(u.id)) continue;
+    if (u.tierGroup) {
+      const group = list.filter(x => x.tierGroup === u.tierGroup);
+      group.forEach(x => seen.add(x.id));
+      result.push(group);
+    } else {
+      seen.add(u.id);
+      result.push(u);
+    }
+  }
+  return result;
+}
+
 export function ShopScreen() {
   const router = useRouter();
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
@@ -40,6 +60,7 @@ export function ShopScreen() {
     return 'buyable';
   }
 
+  // Single upgrade card (non-tiered)
   function renderUpgradeCard(upgrade: Upgrade, accent: string) {
     const status = upgradeStatus(upgrade);
     return (
@@ -65,6 +86,57 @@ export function ShopScreen() {
             {status === 'owned' ? 'OWNED' : upgrade.cost}
           </Text>
         </Pressable>
+      </View>
+    );
+  }
+
+  // Tier group card: one row with N tier buttons side by side
+  function renderTierGroupCard(group: Upgrade[], accent: string) {
+    const name = group[0].name;
+    return (
+      <View key={group[0].tierGroup} style={[styles.card, styles.tierCard, { borderColor: accent + '55' }]}>
+        <Text style={styles.cardName}>{name}</Text>
+        <View style={styles.tierRow}>
+          {group.map(upgrade => {
+            const status = upgradeStatus(upgrade);
+            return (
+              <Pressable
+                key={upgrade.id}
+                style={[
+                  styles.tierBtn,
+                  { borderColor: accent + '88' },
+                  status === 'owned'   && [styles.tierBtnOwned,   { borderColor: accent }],
+                  status === 'buyable' && [styles.tierBtnBuyable, { borderColor: accent, backgroundColor: accent + '22' }],
+                  (status === 'locked' || status === 'tooPoor') && styles.tierBtnDisabled,
+                ]}
+                disabled={status !== 'buyable'}
+                onPress={() => buyUpgrade(upgrade.id)}
+              >
+                <Text style={[styles.tierLabel, status === 'owned' && { color: accent }]}>
+                  {upgrade.tierLabel}
+                </Text>
+                {status === 'locked' ? (
+                  <Text style={styles.tierLock}>🔒</Text>
+                ) : status === 'owned' ? (
+                  <Text style={[styles.tierCost, { color: accent }]}>OWNED</Text>
+                ) : (
+                  <Text style={[
+                    styles.tierCost,
+                    status === 'buyable' && { color: accent },
+                  ]}>
+                    {upgrade.cost}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+        {/* Description of the highest owned or next purchasable tier */}
+        {(() => {
+          const next = group.find(u => upgradeStatus(u) !== 'owned');
+          const desc = next ? next.description : group[group.length - 1].description;
+          return <Text style={styles.tierDesc}>{desc}</Text>;
+        })()}
       </View>
     );
   }
@@ -101,6 +173,14 @@ export function ShopScreen() {
     );
   }
 
+  function renderSection(list: ReadonlyArray<Upgrade>, accent: string) {
+    return groupUpgrades(list).map(item =>
+      Array.isArray(item)
+        ? renderTierGroupCard(item, accent)
+        : renderUpgradeCard(item, accent),
+    );
+  }
+
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safe}>
@@ -116,7 +196,7 @@ export function ShopScreen() {
           <Text style={styles.sectionNote}>
             Permanent abilities. 1 use unlocked per run.
           </Text>
-          {ABILITY_UPGRADES.map(u => renderUpgradeCard(u, '#a855f7'))}
+          {renderSection(ABILITY_UPGRADES, '#a855f7')}
 
           {/* ── SUPPLIES ── */}
           <Text style={[styles.sectionLabel, styles.sectionLabelCyan]}>SUPPLIES</Text>
@@ -132,14 +212,14 @@ export function ShopScreen() {
               ? 'You are already corrupted. It does not wash off.'
               : 'Everything here changes you. Permanently.'}
           </Text>
-          {CORRUPTED_UPGRADES.map(u => renderUpgradeCard(u, '#ef4444'))}
+          {renderSection(CORRUPTED_UPGRADES, '#ef4444')}
 
           {/* ── POSITIVE ── */}
           <Text style={[styles.sectionLabel, styles.sectionLabelGold]}>POSITIVE</Text>
           <Text style={styles.sectionNote}>
             Enhancements that do not corrupt your record.
           </Text>
-          {POSITIVE_UPGRADES.map(u => renderUpgradeCard(u, '#22c55e'))}
+          {renderSection(POSITIVE_UPGRADES, '#22c55e')}
 
         </ScrollView>
 
@@ -188,15 +268,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 2,
   },
-  sectionLabelCyan: {
-    color: '#00e5ff',
-  },
-  sectionLabelRed: {
-    color: '#ef4444',
-  },
-  sectionLabelGold: {
-    color: '#22c55e',
-  },
+  sectionLabelCyan: { color: '#00e5ff' },
+  sectionLabelRed:  { color: '#ef4444' },
+  sectionLabelGold: { color: '#22c55e' },
   sectionNote: {
     color: '#64748b',
     fontSize: 10,
@@ -210,6 +284,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 8,
   },
+
+  // ── Standard single-upgrade card ──
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,6 +351,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
+
+  // ── Tier group card ──
+  tierCard: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tierBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  tierBtnOwned: {
+    backgroundColor: 'rgba(148,163,184,0.12)',
+  },
+  tierBtnBuyable: {
+    // accent color applied inline
+  },
+  tierBtnDisabled: {
+    opacity: 0.35,
+  },
+  tierLabel: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  tierCost: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tierLock: {
+    fontSize: 13,
+  },
+  tierDesc: {
+    color: '#94a3b8',
+    fontSize: 12,
+    paddingTop: 2,
+  },
+
   backBtn: {
     margin: 16,
     paddingVertical: 14,
