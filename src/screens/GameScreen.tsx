@@ -21,8 +21,8 @@ import { SYMBOLS } from '../content/symbols';
 // Reel-targeting state for abilities.
 type Selection =
   | { mode: 'none' }
+  | { mode: 'reroll' }
   | { mode: 'lock' }
-  | { mode: 'swap'; first: number | null }
   | { mode: 'move'; reel: number | null };
 
 const NO_SELECTION: Selection = { mode: 'none' };
@@ -48,7 +48,7 @@ export function GameScreen() {
   const startNewRun    = useRunStore(s => s.startNewRun);
   const useConsumable  = useRunStore(s => s.useConsumable);
   const lockReel       = useRunStore(s => s.lockReel);
-  const swapReels      = useRunStore(s => s.swapReels);
+  const rerollReel     = useRunStore(s => s.rerollReel);
   const moveReel       = useRunStore(s => s.moveReel);
 
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
@@ -90,23 +90,16 @@ export function GameScreen() {
   // Reads selection directly (not via functional updater) to avoid calling
   // Zustand store actions as side effects inside React state updaters.
   const handleReelPress = useCallback((i: number) => {
-    if (selection.mode === 'lock') {
+    if (selection.mode === 'reroll') {
+      rerollReel(i);
+      setSelection(NO_SELECTION);
+    } else if (selection.mode === 'lock') {
       lockReel(i);
       setSelection(NO_SELECTION);
-    } else if (selection.mode === 'swap') {
-      if (selection.first === null) {
-        setSelection({ mode: 'swap', first: i });
-      } else if (selection.first !== i) {
-        swapReels(selection.first, i);
-        setSelection(NO_SELECTION);
-      } else {
-        // Tapped the same reel twice — cancel
-        setSelection(NO_SELECTION);
-      }
     } else if (selection.mode === 'move') {
       setSelection({ mode: 'move', reel: i });
     }
-  }, [selection, lockReel, swapReels]);
+  }, [selection, lockReel, rerollReel]);
 
   const handleConsumable = useCallback((id: string) => {
     useConsumable(id);
@@ -148,15 +141,13 @@ export function GameScreen() {
     : null;
 
   const selectionHint =
-    selection.mode === 'lock' ? 'TAP A REEL TO LOCK IT'
-    : selection.mode === 'swap' && selection.first === null ? 'TAP FIRST REEL TO SWAP'
-    : selection.mode === 'swap' ? 'TAP SECOND REEL'
+    selection.mode === 'reroll' ? 'TAP A REEL TO REROLL'
+    : selection.mode === 'lock' ? 'TAP A REEL TO LOCK IT'
     : selection.mode === 'move' && selection.reel === null ? 'TAP A REEL TO SHIFT'
     : null;
 
   const selectedReels =
-    selection.mode === 'swap' && selection.first !== null ? [selection.first]
-    : selection.mode === 'move' && selection.reel !== null ? [selection.reel]
+    selection.mode === 'move' && selection.reel !== null ? [selection.reel]
     : [];
 
   const reelsTappable = selection.mode !== 'none';
@@ -268,12 +259,12 @@ export function GameScreen() {
               <Pressable
                 style={[
                   styles.itemBtn,
-                  (!abilitiesUsable || abilitiesUsed.includes('swap')) && styles.itemBtnDisabled,
+                  (!abilitiesUsable || abilitiesUsed.includes('reroll')) && styles.itemBtnDisabled,
                 ]}
-                disabled={!abilitiesUsable || abilitiesUsed.includes('swap')}
-                onPress={() => setSelection({ mode: 'swap', first: null })}
+                disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
+                onPress={() => setSelection({ mode: 'reroll' })}
               >
-                <Text style={styles.itemName}>SWAP</Text>
+                <Text style={styles.itemName}>REROLL</Text>
                 <Text style={styles.itemTag}>1/RUN</Text>
               </Pressable>
 

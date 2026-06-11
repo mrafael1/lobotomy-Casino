@@ -1,4 +1,6 @@
 import { scoreReels } from './evaluate';
+import { SYMBOL_WEIGHTS } from '../content/symbols';
+import { weightedPick } from './rng';
 import type { ReelResult, SymbolId, WinType } from './types';
 
 // Pure ability transforms. Each returns the new reels plus the Lucidity DELTA
@@ -36,15 +38,17 @@ function rescore(
   };
 }
 
-// Swap: exchange the symbols of two reel positions on the current result.
-export function applySwap(
+// Reroll: pick a fresh random symbol for one reel using the same weighted
+// distribution as a normal spin. Never grants free spins (re-score uses
+// allowFreeSpinGrant = false).
+export function applyReroll(
   reels: ReelResult,
-  i: number,
-  j: number,
+  reelIndex: number,
+  rng: () => number,
   lucidityMultiplier: number,
 ): AbilityOutcome {
   const next = [...reels] as ReelResult;
-  [next[i], next[j]] = [next[j], next[i]];
+  next[reelIndex] = weightedPick(SYMBOL_WEIGHTS, rng);
   return rescore(reels, next, lucidityMultiplier);
 }
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { RunState, SpinResult, UpgradeId, EndingType } from '../game/types';
 import { evaluate } from '../game/evaluate';
-import { applySwap, applyMoveColumn } from '../game/abilities';
+import { applyReroll, applyMoveColumn } from '../game/abilities';
 import { createRNG } from '../game/rng';
 import {
   computeNeuronDecay,
@@ -30,7 +30,7 @@ export interface RunStore extends RunState {
 
   useConsumable: (consumableId: string) => boolean;
   lockReel: (reelIndex: number) => void;
-  swapReels: (i: number, j: number) => boolean;
+  rerollReel: (reelIndex: number) => boolean;
   moveReel: (reelIndex: number, direction: -1 | 1) => boolean;
 }
 
@@ -200,14 +200,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
     });
   },
 
-  swapReels(i: number, j: number): boolean {
+  rerollReel(reelIndex: number): boolean {
     const state = get();
-    if (!canAct(state) || !state.lastResult || i === j) return false;
-    if (state.abilitiesUsed.includes('swap')) return false;
+    if (!canAct(state) || !state.lastResult) return false;
+    if (state.abilitiesUsed.includes('reroll')) return false;
 
-    const outcome = applySwap(state.lastResult.reels, i, j, state.lucidityMultiplier);
+    const seed = ((Date.now() ^ (state.spinCount * 0x5bd1e995 + reelIndex)) >>> 0);
+    const rng = createRNG(seed);
+    const outcome = applyReroll(state.lastResult.reels, reelIndex, rng, state.lucidityMultiplier);
     set({
-      abilitiesUsed: [...state.abilitiesUsed, 'swap'],
+      abilitiesUsed: [...state.abilitiesUsed, 'reroll'],
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
       lastResult: {
         ...state.lastResult,
