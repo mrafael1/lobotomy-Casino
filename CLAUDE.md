@@ -15,6 +15,12 @@
 3. Push the branch and open a PR for review; do **not** merge to `main` unilaterally.
 4. A new branch is only started once the previous one is merged or explicitly abandoned.
 
+### GitHub workflow — mandatory
+- **Never merge any branch** (locally or remotely) without explicit consent from the repository owner.
+- **Never use `git merge` locally** to absorb another branch — all merges must go through a GitHub PR reviewed and approved by the owner.
+- Session config may specify a development branch; this does **not** grant permission to merge other branches into it directly. Always create a new named branch off it and submit a PR.
+- If a branch's changes are already present in another branch due to a local merge, flag it clearly instead of silently proceeding.
+
 ### Example
 ```
 git checkout -b claude/fix-reel-animation-sync
