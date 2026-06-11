@@ -103,7 +103,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
       lastResult:                 result,
       spinCount:                  state.spinCount + 1,
       nextSpinLucidityMultiplier: 1.0,
-      lockedReels:                [false, false, false],
+      // lockedReels intentionally NOT reset here — SlotMachine reads them during
+      // animation to skip the spin on locked reels. Reset happens in setSpinning(false).
       decaySkips:                 stasisActive ? state.decaySkips - 1 : state.decaySkips,
     });
 
@@ -111,7 +112,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   setSpinning(v: boolean): void {
-    set({ isSpinning: v });
+    if (v) {
+      set({ isSpinning: true });
+    } else {
+      // Clear locks here so SlotMachine still reads them during the spin animation.
+      set({ isSpinning: false, lockedReels: [false, false, false] });
+    }
   },
 
   setBetMultiplier(m: 1 | 2 | 3): void {

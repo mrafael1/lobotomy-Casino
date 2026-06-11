@@ -15,6 +15,8 @@ import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
+import { MOVE_ORDER } from '../game/abilities';
+import { SYMBOLS } from '../content/symbols';
 
 // Reel-targeting state for abilities.
 type Selection =
@@ -85,23 +87,26 @@ export function GameScreen() {
   }, [startNewRun, ownedPermanents, takePendingConsumables]);
 
   // ── Reel targeting ──
+  // Reads selection directly (not via functional updater) to avoid calling
+  // Zustand store actions as side effects inside React state updaters.
   const handleReelPress = useCallback((i: number) => {
-    setSelection(prev => {
-      switch (prev.mode) {
-        case 'lock':
-          lockReel(i);
-          return NO_SELECTION;
-        case 'swap':
-          if (prev.first === null) return { mode: 'swap', first: i };
-          if (prev.first !== i) swapReels(prev.first, i);
-          return NO_SELECTION;
-        case 'move':
-          return { mode: 'move', reel: i };
-        default:
-          return prev;
+    if (selection.mode === 'lock') {
+      lockReel(i);
+      setSelection(NO_SELECTION);
+    } else if (selection.mode === 'swap') {
+      if (selection.first === null) {
+        setSelection({ mode: 'swap', first: i });
+      } else if (selection.first !== i) {
+        swapReels(selection.first, i);
+        setSelection(NO_SELECTION);
+      } else {
+        // Tapped the same reel twice — cancel
+        setSelection(NO_SELECTION);
       }
-    });
-  }, [lockReel, swapReels]);
+    } else if (selection.mode === 'move') {
+      setSelection({ mode: 'move', reel: i });
+    }
+  }, [selection, lockReel, swapReels]);
 
   const handleConsumable = useCallback((id: string) => {
     useConsumable(id);
@@ -216,12 +221,36 @@ export function GameScreen() {
         {/* ── Move direction picker ── */}
         {selection.mode === 'move' && selection.reel !== null ? (
           <View style={styles.moveDirRow}>
-            <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(-1)}>
-              <Text style={styles.moveDirText}>▲ UP</Text>
-            </Pressable>
-            <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(1)}>
-              <Text style={styles.moveDirText}>▼ DOWN</Text>
-            </Pressable>
+            {(() => {
+              const curSym = lastResult?.reels[selection.reel] ?? null;
+              const curIdx = curSym ? MOVE_ORDER.indexOf(curSym) : -1;
+              const upSym = curIdx >= 0
+                ? MOVE_ORDER[(curIdx - 1 + MOVE_ORDER.length) % MOVE_ORDER.length]
+                : null;
+              const downSym = curIdx >= 0
+                ? MOVE_ORDER[(curIdx + 1) % MOVE_ORDER.length]
+                : null;
+              return (
+                <>
+                  <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(-1)}>
+                    <Text style={styles.moveDirText}>▲</Text>
+                    {upSym && (
+                      <Text style={styles.moveDirSymbol}>
+                        {SYMBOLS[upSym].name.toUpperCase()}
+                      </Text>
+                    )}
+                  </Pressable>
+                  <Pressable style={styles.moveDirBtn} onPress={() => handleMoveDirection(1)}>
+                    <Text style={styles.moveDirText}>▼</Text>
+                    {downSym && (
+                      <Text style={styles.moveDirSymbol}>
+                        {SYMBOLS[downSym].name.toUpperCase()}
+                      </Text>
+                    )}
+                  </Pressable>
+                </>
+              );
+            })()}
             <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
               <Text style={styles.cancelText}>CANCEL</Text>
             </Pressable>
@@ -514,6 +543,13 @@ const styles = StyleSheet.create({
     color: '#00e5ff',
     fontSize: 13,
     fontWeight: '800',
+  },
+  moveDirSymbol: {
+    color: '#00e5ff',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    opacity: 0.8,
   },
   cancelBtn: {
     paddingVertical: 10,

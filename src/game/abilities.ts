@@ -10,7 +10,7 @@ import type { ReelResult, SymbolId, WinType } from './types';
 //   (re-scores pass allowFreeSpinGrant = false). The jackpot Lucidity still pays.
 
 // Fixed cycle order for Move Column. Independent of RNG weights.
-const MOVE_ORDER: ReadonlyArray<SymbolId> = [
+export const MOVE_ORDER: ReadonlyArray<SymbolId> = [
   'brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline',
 ];
 

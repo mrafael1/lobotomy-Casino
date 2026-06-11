@@ -77,9 +77,12 @@ export function SlotMachine({ onAllReelsDone, onReelPress, selectedReels = [] }:
     }
   }
 
-  // Reset completed counter when a new spin starts
+  // Reset completed counter when a new spin starts.
+  // Locked reels fire onComplete immediately without animating, so pre-count them.
   useEffect(() => {
-    if (isSpinning) completedRef.current = 0;
+    if (isSpinning) {
+      completedRef.current = lockedReels.filter(Boolean).length;
+    }
   }, [isSpinning]);
 
   // Reel window absolute coords over the machine image
@@ -113,6 +116,7 @@ export function SlotMachine({ onAllReelsDone, onReelPress, selectedReels = [] }:
             <Reel
               finalSymbol={reels[i]}
               spinning={isSpinning}
+              locked={lockedReels[i]}
               reelIndex={i}
               onComplete={handleReelComplete}
               size={symbolSize}

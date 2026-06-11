@@ -14,13 +14,13 @@ function cycleAt(index: number): SymbolId {
 interface Props {
   finalSymbol: SymbolId;
   spinning: boolean;
+  locked?: boolean;     // if true, skip animation and signal done immediately
   reelIndex: 0 | 1 | 2;
   onComplete?: () => void;
   size?: number;
 }
 
-export function Reel({ finalSymbol, spinning, reelIndex, onComplete, size = SYMBOL_SIZE }: Props) {
-  // midIndex is the index in CYCLE_ORDER for the main (result) row
+export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onComplete, size = SYMBOL_SIZE }: Props) {
   const midIndexRef = useRef<number>(reelIndex);
   const [symbols, setSymbols] = useState<[SymbolId, SymbolId, SymbolId]>(() => [
     cycleAt(reelIndex - 1),
@@ -48,6 +48,12 @@ export function Reel({ finalSymbol, spinning, reelIndex, onComplete, size = SYMB
       return;
     }
 
+    // Locked reels hold position — signal completion without animating.
+    if (locked) {
+      onComplete?.();
+      return;
+    }
+
     intervalRef.current = setInterval(() => {
       midIndexRef.current += 1;
       const mid = midIndexRef.current;
@@ -63,7 +69,7 @@ export function Reel({ finalSymbol, spinning, reelIndex, onComplete, size = SYMB
     }, STOP_TIMES_MS[reelIndex]);
 
     return clearTimers;
-  }, [spinning, finalSymbol, reelIndex]);
+  }, [spinning, finalSymbol, reelIndex, locked]);
 
   return (
     <View style={[styles.column, { width: size }]}>
