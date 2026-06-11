@@ -115,9 +115,9 @@ export function GameScreen() {
       setSelection({ mode: 'copy_target', sourceReel: i, consumableId: selection.consumableId });
     } else if (selection.mode === 'copy_target') {
       if (i !== selection.sourceReel) {
-        // Consume the charge only now — source and target are both confirmed.
-        useConsumable(selection.consumableId);
-        copyReel(selection.sourceReel, i);
+        if (useConsumable(selection.consumableId)) {
+          copyReel(selection.sourceReel, i);
+        }
         setSelection(NO_SELECTION);
       }
     }
