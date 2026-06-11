@@ -18,6 +18,7 @@ const EMPTY_META: MetaState = {
   ownedPermanents:    [],
   corruptionEverUsed: false,
   endingsReached:     [],
+  pendingConsumables: {},
   history: { runsPlayed: 0, bestLucidityRun: 0 },
 };
 
@@ -46,8 +47,8 @@ for (let r = 0; r < RUNS; r++) {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
-    activeAbilities:           [],
-    ownedConsumables:          [],
+    runConsumables:            {},
+    abilitiesUsed:             [],
     ownedUpgrades:             [],
     spinCount:                 0,
     isFreeSpin:                false,

@@ -15,9 +15,8 @@ import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
-import { ABILITIES } from '../content/abilities';
 
-// Reel-targeting state for abilities and the reel-lock consumable.
+// Reel-targeting state for abilities.
 type Selection =
   | { mode: 'none' }
   | { mode: 'lock' }
@@ -38,28 +37,29 @@ export function GameScreen() {
   const lastResult     = useRunStore(s => s.lastResult);
   const decaySkips     = useRunStore(s => s.decaySkips);
   const betMultiplier  = useRunStore(s => s.betMultiplier);
+  const runConsumables = useRunStore(s => s.runConsumables);
+  const abilitiesUsed  = useRunStore(s => s.abilitiesUsed);
   const spin           = useRunStore(s => s.spin);
   const setSpinning    = useRunStore(s => s.setSpinning);
   const setBetMultiplier = useRunStore(s => s.setBetMultiplier);
   const endRun         = useRunStore(s => s.endRun);
   const startNewRun    = useRunStore(s => s.startNewRun);
-  const buyConsumable  = useRunStore(s => s.buyConsumable);
+  const useConsumable  = useRunStore(s => s.useConsumable);
   const lockReel       = useRunStore(s => s.lockReel);
   const swapReels      = useRunStore(s => s.swapReels);
   const moveReel       = useRunStore(s => s.moveReel);
-  const buyOverrideFreeSpin = useRunStore(s => s.buyOverrideFreeSpin);
 
-  const lucidityWallet  = useMetaStore(s => s.lucidityWallet);
-  const ownedPermanents = useMetaStore(s => s.ownedPermanents);
-  const bankRun         = useMetaStore(s => s.bankRun);
+  const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
+  const ownedPermanents     = useMetaStore(s => s.ownedPermanents);
+  const bankRun             = useMetaStore(s => s.bankRun);
+  const takePendingConsumables = useMetaStore(s => s.takePendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
 
-  // Auto-start first run once meta has hydrated from MMKV.
-  // Hydration is synchronous with MMKV, so ownedPermanents is ready on mount.
   useEffect(() => {
     if (runPhase === 'idle') {
-      startNewRun(ownedPermanents);
+      const pending = takePendingConsumables();
+      startNewRun(ownedPermanents, pending);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -68,8 +68,6 @@ export function GameScreen() {
     spin();
   }, [spin]);
 
-  // Run-over transition AND banking both happen here, explicitly, after the
-  // last reel animation settles. Single-fire — impossible to double-bank.
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
     const runNow = useRunStore.getState();
@@ -82,8 +80,9 @@ export function GameScreen() {
 
   const handleNewRun = useCallback(() => {
     setSelection(NO_SELECTION);
-    startNewRun(ownedPermanents);
-  }, [startNewRun, ownedPermanents]);
+    const pending = takePendingConsumables();
+    startNewRun(ownedPermanents, pending);
+  }, [startNewRun, ownedPermanents, takePendingConsumables]);
 
   // ── Reel targeting ──
   const handleReelPress = useCallback((i: number) => {
@@ -105,9 +104,8 @@ export function GameScreen() {
   }, [lockReel, swapReels]);
 
   const handleConsumable = useCallback((id: string) => {
-    const outcome = buyConsumable(id);
-    if (outcome === 'needsReelPick') setSelection({ mode: 'lock' });
-  }, [buyConsumable]);
+    useConsumable(id);
+  }, [useConsumable]);
 
   const handleMoveDirection = useCallback((direction: -1 | 1) => {
     setSelection(prev => {
@@ -118,16 +116,21 @@ export function GameScreen() {
     });
   }, [moveReel]);
 
-  // Free spins bypass neuron cost; paid spins need >= 1 neuron (remainder rule)
   const canSpin =
     runPhase === 'running' &&
     !isSpinning &&
     (freeSpins > 0 || neurons >= 1);
 
-  // Actual neuron cost this spin (capped at available)
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
 
+  // Abilities require a result to act on; each has 1 use per spin
   const abilitiesUsable = runPhase === 'running' && !isSpinning && lastResult !== null;
+
+  const hasShift  = ownedPermanents.includes('perm_shift');
+  const hasMemory = ownedPermanents.includes('perm_memory');
+
+  // Consumables with at least 1 charge this run
+  const activeConsumables = CONSUMABLES.filter(c => (runConsumables[c.id] ?? 0) > 0);
 
   const winLabel = lastResult
     ? lastResult.winType === 'jackpot'
@@ -206,7 +209,7 @@ export function GameScreen() {
             </Text>
           )}
           {decaySkips > 0 && (
-            <Text style={styles.stasisBadge}>STASIS ×{decaySkips}</Text>
+            <Text style={styles.stasisBadge}>NO DECAY ×{decaySkips}</Text>
           )}
         </View>
 
@@ -234,51 +237,68 @@ export function GameScreen() {
             {/* ── Abilities ── */}
             <View style={styles.itemRow}>
               <Pressable
-                style={[styles.itemBtn, (!abilitiesUsable || lucidityEarned < ABILITIES.swap.cost) && styles.itemBtnDisabled]}
-                disabled={!abilitiesUsable || lucidityEarned < ABILITIES.swap.cost}
+                style={[
+                  styles.itemBtn,
+                  (!abilitiesUsable || abilitiesUsed.includes('swap')) && styles.itemBtnDisabled,
+                ]}
+                disabled={!abilitiesUsable || abilitiesUsed.includes('swap')}
                 onPress={() => setSelection({ mode: 'swap', first: null })}
               >
                 <Text style={styles.itemName}>SWAP</Text>
-                <Text style={styles.itemCost}>{ABILITIES.swap.cost}</Text>
+                <Text style={styles.itemTag}>1/RUN</Text>
               </Pressable>
-              <Pressable
-                style={[styles.itemBtn, (!abilitiesUsable || lucidityEarned < ABILITIES.moveColumn.cost) && styles.itemBtnDisabled]}
-                disabled={!abilitiesUsable || lucidityEarned < ABILITIES.moveColumn.cost}
-                onPress={() => setSelection({ mode: 'move', reel: null })}
-              >
-                <Text style={styles.itemName}>SHIFT</Text>
-                <Text style={styles.itemCost}>{ABILITIES.moveColumn.cost}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.itemBtn, (!abilitiesUsable || lucidityEarned < ABILITIES.freeSpinAbility.cost) && styles.itemBtnDisabled]}
-                disabled={!abilitiesUsable || lucidityEarned < ABILITIES.freeSpinAbility.cost}
-                onPress={buyOverrideFreeSpin}
-              >
-                <Text style={styles.itemName}>OVERRIDE</Text>
-                <Text style={styles.itemCost}>{ABILITIES.freeSpinAbility.cost}</Text>
-              </Pressable>
+
+              {hasShift && (
+                <Pressable
+                  style={[
+                    styles.itemBtn,
+                    (!abilitiesUsable || abilitiesUsed.includes('shift')) && styles.itemBtnDisabled,
+                  ]}
+                  disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
+                  onPress={() => setSelection({ mode: 'move', reel: null })}
+                >
+                  <Text style={styles.itemName}>SHIFT</Text>
+                  <Text style={styles.itemTag}>1/RUN</Text>
+                </Pressable>
+              )}
+
+              {hasMemory && (
+                <Pressable
+                  style={[
+                    styles.itemBtn,
+                    (!abilitiesUsable || abilitiesUsed.includes('memory')) && styles.itemBtnDisabled,
+                  ]}
+                  disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
+                  onPress={() => setSelection({ mode: 'lock' })}
+                >
+                  <Text style={styles.itemName}>MEMORY</Text>
+                  <Text style={styles.itemTag}>1/RUN</Text>
+                </Pressable>
+              )}
             </View>
 
-            {/* ── Consumables ── */}
-            <View style={styles.itemRow}>
-              {CONSUMABLES.map(c => {
-                const disabled =
-                  runPhase !== 'running' || isSpinning || lucidityEarned < c.cost;
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.itemBtn, disabled && styles.itemBtnDisabled]}
-                    disabled={disabled}
-                    onPress={() => handleConsumable(c.id)}
-                  >
-                    <Text style={styles.itemName} numberOfLines={1}>
-                      {c.name.split(' ')[0].toUpperCase()}
-                    </Text>
-                    <Text style={styles.itemCost}>{c.cost}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* ── Consumables (only show if charges available) ── */}
+            {activeConsumables.length > 0 && (
+              <View style={styles.itemRow}>
+                {activeConsumables.map(c => {
+                  const charges = runConsumables[c.id] ?? 0;
+                  const disabled = runPhase !== 'running' || isSpinning;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      style={[styles.itemBtn, styles.itemBtnConsumable, disabled && styles.itemBtnDisabled]}
+                      disabled={disabled}
+                      onPress={() => handleConsumable(c.id)}
+                    >
+                      <Text style={styles.itemName} numberOfLines={1}>
+                        {c.name.split(' ')[0].toUpperCase()}
+                      </Text>
+                      <Text style={styles.itemTag}>×{charges}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </>
         )}
 
@@ -454,6 +474,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     alignItems: 'center',
   },
+  itemBtnConsumable: {
+    backgroundColor: 'rgba(0,229,255,0.12)',
+    borderColor: 'rgba(0,229,255,0.4)',
+  },
   itemBtnDisabled: {
     opacity: 0.35,
   },
@@ -463,9 +487,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  itemCost: {
-    color: '#fbbf24',
-    fontSize: 10,
+  itemTag: {
+    color: '#a855f7',
+    fontSize: 9,
     fontWeight: '700',
   },
 

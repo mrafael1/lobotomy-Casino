@@ -10,7 +10,8 @@ export type UpgradeEffect =
   | { type: 'passiveLucidityPerSpin';   amount: number }
   | { type: 'neuronCapIncrease';        newCap: number }
   | { type: 'brainWeightBonus';         amount: number }
-  | { type: 'cleanLucidityMultiplier';  multiplier: number };
+  | { type: 'cleanLucidityMultiplier';  multiplier: number }
+  | { type: 'abilityUnlock';            abilityId: string };
 
 export interface Upgrade {
   readonly id: string;
@@ -22,18 +23,33 @@ export interface Upgrade {
   readonly requiresId?: string; // prerequisite upgrade
 }
 
+// --- Ability upgrades: permanent abilities unlocked per-run ---
+// Buying these adds the id to ownedPermanents; runState checks presence to
+// grant 1 use of the corresponding ability each run.
+
+export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
+  {
+    id: 'perm_shift',
+    name: 'Shift',
+    description: "Gain 1 use of Shift per run: move a reel's symbol up or down one step in the cycle.",
+    category: 'positive',
+    cost: 80,
+    effect: { type: 'abilityUnlock', abilityId: 'shift' },
+  },
+  {
+    id: 'perm_memory',
+    name: 'Memory',
+    description: 'Gain 1 use of Memory per run: lock one reel in its current position for the next spin.',
+    category: 'positive',
+    cost: 100,
+    effect: { type: 'abilityUnlock', abilityId: 'memory' },
+  },
+];
+
 // --- Act I: Corrupted upgrades (6) ---
 // Buying any of these permanently taints the save slot.
 
 export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
-  {
-    id: 'corr_slow_decay',
-    name: 'Sedative Protocol',
-    description: 'Reduce neuron decay by 1 per spin.',
-    category: 'corrupted',
-    cost: 80,
-    effect: { type: 'neuronDecayReduction', amount: 1 },
-  },
   {
     id: 'corr_lucidity_amplifier',
     name: 'Reward Amplification',
@@ -41,6 +57,15 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
     category: 'corrupted',
     cost: 120,
     effect: { type: 'lucidityMultiplier', multiplier: 1.5 },
+  },
+  {
+    id: 'corr_slow_decay',
+    name: 'Sedative Protocol',
+    description: 'Reduce neuron decay by 1 per spin.',
+    category: 'corrupted',
+    cost: 200,
+    requiresId: 'corr_lucidity_amplifier',
+    effect: { type: 'neuronDecayReduction', amount: 1 },
   },
   {
     id: 'corr_free_spin_max_2',
@@ -133,6 +158,7 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
 ];
 
 export const ALL_UPGRADES: ReadonlyArray<Upgrade> = [
+  ...ABILITY_UPGRADES,
   ...CORRUPTED_UPGRADES,
   ...POSITIVE_UPGRADES,
 ];

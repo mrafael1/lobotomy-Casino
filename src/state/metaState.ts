@@ -3,11 +3,14 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { MetaState, RunState, EndingType, UpgradeId } from '../game/types';
 import { bankRunToMeta } from '../game/endings';
 import { UPGRADE_MAP } from '../content/upgrades';
+import { CONSUMABLE_MAP } from '../content/consumables';
 import { storage } from '../persistence/storage';
 
 export interface MetaStore extends MetaState {
   bankRun: (run: RunState, ending: EndingType) => void;
   buyUpgrade: (upgradeId: UpgradeId) => void;
+  buyConsumableCharge: (consumableId: string) => void;
+  takePendingConsumables: () => Partial<Record<string, number>>;
 }
 
 const INITIAL_META_STATE: MetaState = {
@@ -16,6 +19,7 @@ const INITIAL_META_STATE: MetaState = {
   ownedPermanents:    [],
   corruptionEverUsed: false,
   endingsReached:     [],
+  pendingConsumables: {},
   history: {
     runsPlayed:      0,
     bestLucidityRun: 0,
@@ -41,6 +45,7 @@ export const useMetaStore = create<MetaStore>()(
           ownedPermanents:    state.ownedPermanents,
           corruptionEverUsed: state.corruptionEverUsed,
           endingsReached:     state.endingsReached,
+          pendingConsumables: state.pendingConsumables,
           history:            state.history,
         };
         const next = bankRunToMeta(run, metaSnapshot, ending);
@@ -62,6 +67,28 @@ export const useMetaStore = create<MetaStore>()(
           corruptionEverUsed:
             upgrade.category === 'corrupted' ? true : state.corruptionEverUsed,
         });
+      },
+
+      buyConsumableCharge(consumableId: string): void {
+        const state = get();
+        const consumable = CONSUMABLE_MAP[consumableId];
+        if (!consumable) return;
+        if (state.lucidityWallet < consumable.shopCost) return;
+
+        set({
+          lucidityWallet: state.lucidityWallet - consumable.shopCost,
+          pendingConsumables: {
+            ...state.pendingConsumables,
+            [consumableId]: (state.pendingConsumables[consumableId] ?? 0) + 1,
+          },
+        });
+      },
+
+      takePendingConsumables(): Partial<Record<string, number>> {
+        const state = get();
+        const pending = state.pendingConsumables;
+        set({ pendingConsumables: {} });
+        return pending;
       },
     }),
     {

@@ -4,7 +4,6 @@ import type { AbilityId } from '../content/abilities';
 export type { SymbolId, AbilityId };
 
 export type UpgradeId = string;
-export type ConsumableId = string;
 export type EndingType = 'flatline' | 'wealth' | 'exit';
 
 export type ReelResult = [SymbolId, SymbolId, SymbolId];
@@ -44,8 +43,8 @@ export interface RunState {
   readonly isSpinning: boolean;
   readonly lastResult: SpinResult | null;
   readonly lockedReels: [boolean, boolean, boolean];
-  readonly activeAbilities: ReadonlyArray<AbilityId>;
-  readonly ownedConsumables: ReadonlyArray<ConsumableId>;
+  readonly runConsumables: Partial<Record<string, number>>; // charges available this run
+  readonly abilitiesUsed: ReadonlyArray<AbilityId>;        // abilities used this run (1 use each)
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;
   readonly spinCount: number;
   readonly isFreeSpin: boolean;
@@ -66,6 +65,7 @@ export interface MetaState {
   readonly corruptionEverUsed: boolean;
   readonly endingsReached: ReadonlyArray<EndingType>;
   readonly history: RunHistory;
+  readonly pendingConsumables: Partial<Record<string, number>>;
 }
 
 export interface SaveSlot {

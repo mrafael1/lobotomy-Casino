@@ -25,8 +25,8 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
-    activeAbilities:           [],
-    ownedConsumables:          [],
+    runConsumables:            {},
+    abilitiesUsed:             [],
     ownedUpgrades:             [],
     spinCount:                 0,
     isFreeSpin:                false,
@@ -42,6 +42,7 @@ function baseMetaState(overrides: Partial<MetaState> = {}): MetaState {
     ownedPermanents:    [],
     corruptionEverUsed: false,
     endingsReached:     [],
+    pendingConsumables: {},
     history: { runsPlayed: 0, bestLucidityRun: 0 },
     ...overrides,
   };
