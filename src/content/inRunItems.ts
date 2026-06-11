@@ -36,8 +36,8 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_pill',
     name: 'The Pill',
-    description: 'Your next spin is guaranteed to win. No abilities for 5 spins.',
-    effect: { type: 'guaranteedWin', spins: 1, blockPowersSpins: 5 },
+    description: 'Your next 3 spins are guaranteed to win. No abilities for 5 spins.',
+    effect: { type: 'guaranteedWin', spins: 3, blockPowersSpins: 5 },
   },
 ];
 

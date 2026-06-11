@@ -134,7 +134,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     // Syringe brain boost: 5× brain weight
     const upgradesBrainBonus = computeBrainWeightBonus(state.ownedUpgrades);
-    const syringeBrainBonus = state.brainBoostSpins > 0 ? SYMBOLS.brain.weight * 4 : 0; // 4 extra = 5× total
+    const syringeBrainBonus = state.brainBoostSpins > 0 ? SYMBOLS.brain.weight * 3 : 0; // 3 extra = 4× total
     const brainWeightBonus = upgradesBrainBonus + syringeBrainBonus;
 
     // Lucidity multiplier — reduced during Syringe boost
