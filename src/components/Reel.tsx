@@ -41,6 +41,10 @@ export function Reel({ finalSymbol, spinning, reelIndex, onComplete, size = SYMB
   useEffect(() => {
     if (!spinning) {
       clearTimers();
+      // Sync to finalSymbol so ability results (SHIFT/SWAP) are reflected immediately.
+      const finalIdx = CYCLE_ORDER.indexOf(finalSymbol);
+      midIndexRef.current = finalIdx;
+      setSymbols([cycleAt(finalIdx - 1), finalSymbol, cycleAt(finalIdx + 1)]);
       return;
     }
 
