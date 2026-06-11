@@ -48,9 +48,10 @@ export function SlotMachine({ onAllReelsDone, onReelPress, selectedReels = [] }:
 
   const machineWidth  = screenWidth * 0.9;
   const machineHeight = machineWidth * MACHINE_ASPECT;
+  // Symbol fits into one of 3 rows within the reel window
   const symbolSize    = Math.min(
     Math.floor((machineWidth * WIN_W) / 3) - 4,
-    Math.floor(machineHeight * WIN_H) - 4,
+    Math.floor((machineHeight * WIN_H) / 3) - 2,
     SYMBOL_SIZE,
   );
 
@@ -103,7 +104,7 @@ export function SlotMachine({ onAllReelsDone, onReelPress, selectedReels = [] }:
             key={i}
             style={[
               styles.reelSlot,
-              { width: winW / 3, height: winH },
+              { width: winW / 3, height: symbolSize * 3 },
               selectedReels.includes(i) && styles.reelSelected,
             ]}
             onPress={onReelPress ? () => onReelPress(i) : undefined}

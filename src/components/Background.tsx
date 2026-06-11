@@ -29,12 +29,12 @@ export function Background({ children }: Props) {
       <Image
         source={require('../../assets/images/background_healthy.png')}
         style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
+        resizeMode="stretch"
       />
       <Animated.Image
         source={require('../../assets/images/background_decay.png')}
         style={[StyleSheet.absoluteFillObject, decayStyle]}
-        resizeMode="cover"
+        resizeMode="stretch"
       />
       {children}
     </View>

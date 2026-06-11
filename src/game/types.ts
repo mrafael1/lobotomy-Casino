@@ -49,6 +49,7 @@ export interface RunState {
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;
   readonly spinCount: number;
   readonly isFreeSpin: boolean;
+  readonly betMultiplier: 1 | 2 | 3;
 }
 
 export interface RunHistory {

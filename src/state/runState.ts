@@ -26,6 +26,7 @@ export interface RunStore extends RunState {
 
   spin: () => SpinResult | null;
   setSpinning: (v: boolean) => void;
+  setBetMultiplier: (m: 1 | 2 | 3) => void;
   startNewRun: (ownedPermanents: ReadonlyArray<UpgradeId>) => void;
   endRun: (ending: EndingType) => void;
 
@@ -53,6 +54,7 @@ const INITIAL_RUN_STATE: RunState = {
   ownedUpgrades:              [],
   spinCount:                  0,
   isFreeSpin:                 false,
+  betMultiplier:              1,
 };
 
 // Abilities and consumables are paid with THIS-RUN Lucidity, not the wallet.
@@ -75,10 +77,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
   spin(): SpinResult | null {
     const state = get();
 
-    // Free spins bypass the neuron minimum — they cost nothing
+    // Free spins bypass neuron cost; paid spins need >= 1 neuron (remainder rule)
     const isFreeSpin = state.freeSpinsRemaining > 0;
     if (state.runPhase !== 'running' || state.isSpinning) return null;
-    if (!isFreeSpin && state.neurons < ECONOMY.MIN_NEURONS_TO_SPIN) return null;
+    if (!isFreeSpin && state.neurons < 1) return null;
 
     const seed = ((Date.now() ^ (state.spinCount * 0x9e3779b9)) >>> 0);
     const rng = createRNG(seed);
@@ -86,12 +88,15 @@ export const useRunStore = create<RunStore>((set, get) => ({
     // Stasis Patch: paid spins cost 0 neurons while skips remain.
     // Free spins don't consume a skip — they're already free.
     const stasisActive = !isFreeSpin && state.decaySkips > 0;
+    // Bet multiplier scales neuron cost; "use the rest" caps it at available neurons
+    const baseDecay = computeNeuronDecay(state.ownedUpgrades);
     const neuronDecayAmount = stasisActive
       ? 0
-      : computeNeuronDecay(state.ownedUpgrades);
+      : Math.min(state.betMultiplier * baseDecay, state.neurons);
 
+    // Bet multiplier also scales payout
     const effectiveMultiplier =
-      state.lucidityMultiplier * state.nextSpinLucidityMultiplier;
+      state.lucidityMultiplier * state.nextSpinLucidityMultiplier * state.betMultiplier;
 
     const result = evaluate({
       neurons:            state.neurons,
@@ -126,6 +131,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   setSpinning(v: boolean): void {
     set({ isSpinning: v });
+  },
+
+  setBetMultiplier(m: 1 | 2 | 3): void {
+    set({ betMultiplier: m });
   },
 
   startNewRun(ownedPermanents: ReadonlyArray<UpgradeId>): void {

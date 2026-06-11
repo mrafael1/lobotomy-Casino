@@ -51,6 +51,7 @@ for (let r = 0; r < RUNS; r++) {
     ownedUpgrades:             [],
     spinCount:                 0,
     isFreeSpin:                false,
+    betMultiplier:             1,
   };
 
   while (run.neurons > 0) {

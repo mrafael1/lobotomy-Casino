@@ -30,6 +30,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     ownedUpgrades:             [],
     spinCount:                 0,
     isFreeSpin:                false,
+    betMultiplier:             1,
     ...overrides,
   };
 }
