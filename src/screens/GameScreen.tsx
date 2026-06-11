@@ -15,43 +15,57 @@ import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
+import { IN_RUN_ITEM_MAP } from '../content/inRunItems';
 
-// Reel-targeting state for abilities.
+// Reel-targeting state for abilities and consumable interactions.
 type Selection =
   | { mode: 'none' }
   | { mode: 'reroll' }
   | { mode: 'lock' }
-  | { mode: 'move'; reel: number | null };
+  | { mode: 'move'; reel: number | null }
+  | { mode: 'copy_source' }
+  | { mode: 'copy_target'; sourceReel: number };
 
 const NO_SELECTION: Selection = { mode: 'none' };
 
 export function GameScreen() {
   const router = useRouter();
 
-  const runPhase       = useRunStore(s => s.runPhase);
-  const lastEnding     = useRunStore(s => s.lastEnding);
-  const isSpinning     = useRunStore(s => s.isSpinning);
-  const neurons        = useRunStore(s => s.neurons);
-  const lucidityEarned = useRunStore(s => s.lucidityEarned);
-  const freeSpins      = useRunStore(s => s.freeSpinsRemaining);
-  const lastResult     = useRunStore(s => s.lastResult);
-  const decaySkips     = useRunStore(s => s.decaySkips);
-  const betMultiplier  = useRunStore(s => s.betMultiplier);
-  const runConsumables = useRunStore(s => s.runConsumables);
-  const abilitiesUsed  = useRunStore(s => s.abilitiesUsed);
-  const spin           = useRunStore(s => s.spin);
-  const setSpinning    = useRunStore(s => s.setSpinning);
-  const setBetMultiplier = useRunStore(s => s.setBetMultiplier);
-  const endRun         = useRunStore(s => s.endRun);
-  const startNewRun    = useRunStore(s => s.startNewRun);
-  const useConsumable  = useRunStore(s => s.useConsumable);
-  const lockReel       = useRunStore(s => s.lockReel);
-  const rerollReel     = useRunStore(s => s.rerollReel);
-  const moveReel       = useRunStore(s => s.moveReel);
+  const runPhase            = useRunStore(s => s.runPhase);
+  const lastEnding          = useRunStore(s => s.lastEnding);
+  const isSpinning          = useRunStore(s => s.isSpinning);
+  const neurons             = useRunStore(s => s.neurons);
+  const lucidityEarned      = useRunStore(s => s.lucidityEarned);
+  const freeSpins           = useRunStore(s => s.freeSpinsRemaining);
+  const lastResult          = useRunStore(s => s.lastResult);
+  const decaySkips          = useRunStore(s => s.decaySkips);
+  const betMultiplier       = useRunStore(s => s.betMultiplier);
+  const runConsumables      = useRunStore(s => s.runConsumables);
+  const abilitiesUsed       = useRunStore(s => s.abilitiesUsed);
+  const blockPowersSpins    = useRunStore(s => s.blockPowersSpins);
+  const brainBoostSpins     = useRunStore(s => s.brainBoostSpins);
+  const forcedRandomBetSpins = useRunStore(s => s.forcedRandomBetSpins);
+  const guaranteedWinSpins  = useRunStore(s => s.guaranteedWinSpins);
+  const dealerPending       = useRunStore(s => s.dealerPending);
+  const dealerOfferId       = useRunStore(s => s.dealerOfferId);
 
-  const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
-  const ownedPermanents     = useMetaStore(s => s.ownedPermanents);
-  const bankRun             = useMetaStore(s => s.bankRun);
+  const spin               = useRunStore(s => s.spin);
+  const setSpinning        = useRunStore(s => s.setSpinning);
+  const setBetMultiplier   = useRunStore(s => s.setBetMultiplier);
+  const endRun             = useRunStore(s => s.endRun);
+  const startNewRun        = useRunStore(s => s.startNewRun);
+  const useConsumable      = useRunStore(s => s.useConsumable);
+  const lockReel           = useRunStore(s => s.lockReel);
+  const rerollReel         = useRunStore(s => s.rerollReel);
+  const moveReel           = useRunStore(s => s.moveReel);
+  const copyReel           = useRunStore(s => s.copyReel);
+  const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
+  const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
+  const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
+
+  const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
+  const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
+  const bankRun                = useMetaStore(s => s.bankRun);
   const takePendingConsumables = useMetaStore(s => s.takePendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
@@ -71,12 +85,14 @@ export function GameScreen() {
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
     const runNow = useRunStore.getState();
+    // Check dealer thresholds after each spin
+    checkDealerTrigger();
     const ending = checkEnding(runNow, useMetaStore.getState());
     if (ending) {
       bankRun(runNow, ending);
       endRun(ending);
     }
-  }, [setSpinning, bankRun, endRun]);
+  }, [setSpinning, bankRun, endRun, checkDealerTrigger]);
 
   const handleNewRun = useCallback(() => {
     setSelection(NO_SELECTION);
@@ -85,8 +101,6 @@ export function GameScreen() {
   }, [startNewRun, ownedPermanents, takePendingConsumables]);
 
   // ── Reel targeting ──
-  // Reads selection directly (not via functional updater) to avoid calling
-  // Zustand store actions as side effects inside React state updaters.
   const handleReelPress = useCallback((i: number) => {
     if (selection.mode === 'reroll') {
       rerollReel(i);
@@ -96,11 +110,27 @@ export function GameScreen() {
       setSelection(NO_SELECTION);
     } else if (selection.mode === 'move') {
       setSelection({ mode: 'move', reel: i });
+    } else if (selection.mode === 'copy_source') {
+      setSelection({ mode: 'copy_target', sourceReel: i });
+    } else if (selection.mode === 'copy_target') {
+      if (i !== selection.sourceReel) {
+        copyReel(selection.sourceReel, i);
+        setSelection(NO_SELECTION);
+      }
     }
-  }, [selection, lockReel, rerollReel]);
+  }, [selection, lockReel, rerollReel, copyReel]);
 
   const handleConsumable = useCallback((id: string) => {
-    useConsumable(id);
+    const consumable = CONSUMABLES.find(c => c.id === id);
+    if (!consumable) return;
+
+    if (consumable.effect.type === 'copyReel') {
+      // White Powder: first consume the charge, then enter selection UI
+      useConsumable(id);
+      setSelection({ mode: 'copy_source' });
+    } else {
+      useConsumable(id);
+    }
   }, [useConsumable]);
 
   const handleMoveDirection = useCallback((direction: -1 | 1) => {
@@ -115,12 +145,14 @@ export function GameScreen() {
   const canSpin =
     runPhase === 'running' &&
     !isSpinning &&
+    !dealerPending &&
     (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
 
-  // Abilities require a result to act on; each has 1 use per spin
-  const abilitiesUsable = runPhase === 'running' && !isSpinning && lastResult !== null;
+  // Abilities blocked while spinning, powers blocked (Pill), or no result yet
+  const powersBlocked = blockPowersSpins > 0;
+  const abilitiesUsable = runPhase === 'running' && !isSpinning && lastResult !== null && !powersBlocked;
 
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
@@ -139,16 +171,21 @@ export function GameScreen() {
     : null;
 
   const selectionHint =
-    selection.mode === 'reroll' ? 'TAP A REEL TO REROLL'
-    : selection.mode === 'lock' ? 'TAP A REEL TO LOCK IT'
+    selection.mode === 'reroll'      ? 'TAP A REEL TO REROLL'
+    : selection.mode === 'lock'      ? 'TAP A REEL TO LOCK IT'
     : selection.mode === 'move' && selection.reel === null ? 'TAP A REEL TO SHIFT'
+    : selection.mode === 'copy_source' ? 'TAP THE REEL TO COPY FROM'
+    : selection.mode === 'copy_target' ? 'TAP THE REEL TO COPY ONTO'
     : null;
 
   const selectedReels =
     selection.mode === 'move' && selection.reel !== null ? [selection.reel]
+    : selection.mode === 'copy_target' ? [selection.sourceReel]
     : [];
 
   const reelsTappable = selection.mode !== 'none';
+
+  const dealerItem = dealerOfferId ? IN_RUN_ITEM_MAP[dealerOfferId] : null;
 
   return (
     <Background>
@@ -207,6 +244,18 @@ export function GameScreen() {
           {decaySkips > 0 && (
             <Text style={styles.stasisBadge}>NO DECAY ×{decaySkips}</Text>
           )}
+          {brainBoostSpins > 0 && (
+            <Text style={styles.boostBadge}>BRAIN BOOST ×{brainBoostSpins}</Text>
+          )}
+          {forcedRandomBetSpins > 0 && (
+            <Text style={styles.energyBadge}>RANDOM BET ×{forcedRandomBetSpins}</Text>
+          )}
+          {guaranteedWinSpins > 0 && (
+            <Text style={styles.pillBadge}>WIN GUARANTEED</Text>
+          )}
+          {powersBlocked && (
+            <Text style={styles.blockBadge}>POWERS BLOCKED ×{blockPowersSpins}</Text>
+          )}
         </View>
 
         {/* ── Cancel / ability+consumable area ── */}
@@ -261,7 +310,7 @@ export function GameScreen() {
               )}
             </View>
 
-            {/* ── Consumables (only show if charges available) ── */}
+            {/* ── Consumables ── */}
             {activeConsumables.length > 0 && (
               <View style={styles.itemRow}>
                 {activeConsumables.map(c => {
@@ -293,7 +342,7 @@ export function GameScreen() {
               key={m}
               style={[styles.betBtn, betMultiplier === m && styles.betBtnActive]}
               onPress={() => setBetMultiplier(m)}
-              disabled={isSpinning || runPhase !== 'running'}
+              disabled={isSpinning || runPhase !== 'running' || forcedRandomBetSpins > 0}
             >
               <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive]}>
                 ×{m}
@@ -319,6 +368,26 @@ export function GameScreen() {
         </View>
 
       </SafeAreaView>
+
+      {/* ── Dealer modal ── */}
+      {dealerPending && dealerItem && (
+        <View style={styles.overlay}>
+          <Text style={styles.dealerTitle}>THE DEALER</Text>
+          <Text style={styles.dealerSubtitle}>He slides something across the table.</Text>
+          <View style={styles.dealerCard}>
+            <Text style={styles.dealerItemName}>{dealerItem.name}</Text>
+            <Text style={styles.dealerItemDesc}>{dealerItem.description}</Text>
+          </View>
+          <View style={styles.dealerButtons}>
+            <Pressable style={styles.dealerAcceptBtn} onPress={acceptDealerOffer}>
+              <Text style={styles.dealerAcceptText}>TAKE IT</Text>
+            </Pressable>
+            <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
+              <Text style={styles.dealerDeclineText}>REFUSE</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ── Run-over overlay ── */}
       {runPhase === 'over' && (
@@ -424,19 +493,45 @@ const styles = StyleSheet.create({
   // Status badges
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 16,
+    gap: 8,
     minHeight: 18,
+    paddingHorizontal: 8,
   },
   freeSpinBadge: {
     color: '#00e5ff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 2,
   },
   stasisBadge: {
     color: '#a855f7',
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  boostBadge: {
+    color: '#f97316',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  energyBadge: {
+    color: '#22c55e',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  pillBadge: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  blockBadge: {
+    color: '#ef4444',
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 2,
   },
@@ -555,14 +650,83 @@ const styles = StyleSheet.create({
     letterSpacing: 6,
   },
 
-  // Game over overlay
+  // Dealer modal + Game over overlay (both use same base overlay)
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.88)',
+    backgroundColor: 'rgba(0,0,0,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    paddingHorizontal: 32,
   },
+
+  // Dealer
+  dealerTitle: {
+    color: '#a855f7',
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 6,
+  },
+  dealerSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  dealerCard: {
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderColor: 'rgba(168,85,247,0.45)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    gap: 8,
+    alignItems: 'center',
+  },
+  dealerItemName: {
+    color: '#e2e8f0',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  dealerItemDesc: {
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  dealerButtons: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+  },
+  dealerAcceptBtn: {
+    backgroundColor: '#a855f7',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  dealerAcceptText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
+  dealerDeclineBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  dealerDeclineText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+
+  // Game over
   overlayTitle: {
     color: '#ef4444',
     fontSize: 48,

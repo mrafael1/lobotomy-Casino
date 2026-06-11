@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { MetaState, RunState, EndingType, UpgradeId } from '../game/types';
 import { bankRunToMeta } from '../game/endings';
 import { UPGRADE_MAP } from '../content/upgrades';
-import { CONSUMABLE_MAP } from '../content/consumables';
+import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
 import { storage } from '../persistence/storage';
 
 export interface MetaStore extends MetaState {
@@ -74,6 +74,13 @@ export const useMetaStore = create<MetaStore>()(
         const consumable = CONSUMABLE_MAP[consumableId];
         if (!consumable) return;
         if (state.lucidityWallet < consumable.shopCost) return;
+
+        // Enforce 2-slot cap: reject if all slots are taken by other consumable types
+        const alreadyHas = (state.pendingConsumables[consumableId] ?? 0) > 0;
+        if (!alreadyHas) {
+          const distinctSlots = Object.values(state.pendingConsumables).filter(c => (c ?? 0) > 0).length;
+          if (distinctSlots >= MAX_CONSUMABLE_SLOTS) return;
+        }
 
         set({
           lucidityWallet: state.lucidityWallet - consumable.shopCost,

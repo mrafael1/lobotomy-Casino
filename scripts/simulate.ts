@@ -53,6 +53,14 @@ for (let r = 0; r < RUNS; r++) {
     spinCount:                 0,
     isFreeSpin:                false,
     betMultiplier:             1,
+    dealerPhase:               0,
+    dealerPending:             false,
+    dealerOfferId:             null,
+    brainBoostSpins:           0,
+    forcedRandomBetSpins:      0,
+    guaranteedWinSpins:        0,
+    blockPowersSpins:          0,
+    decaySkips:                0,
   };
 
   while (run.neurons > 0) {
@@ -67,6 +75,11 @@ for (let r = 0; r < RUNS; r++) {
       lockedReels:        [false, false, false],
       previousReels:      null,
       rng,
+      bookWeight:         0,
+      brainWeightBonus:   0,
+      guaranteedWin:      false,
+      pattern23Triple:    false,
+      learningActive:     false,
     });
 
     run = {

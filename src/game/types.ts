@@ -19,6 +19,11 @@ export interface SpinInput {
   readonly lockedReels: ReadonlyArray<boolean>; // [r0, r1, r2] — locked reels keep previous symbol
   readonly previousReels: ReelResult | null;    // needed when lockedReels has any true
   readonly rng: () => number;
+  readonly bookWeight: number;          // 0 = no book; >0 = Learning owned, book active
+  readonly brainWeightBonus: number;    // extra weight for brain (upgrades + Syringe boost)
+  readonly guaranteedWin: boolean;      // Pill: force at least a pair this spin
+  readonly pattern23Triple: boolean;    // Pattern Fabrication: ⅔ match → triple payout
+  readonly learningActive: boolean;     // Learning: book pays out and +10/book visible
 }
 
 export interface SpinResult {
@@ -49,6 +54,16 @@ export interface RunState {
   readonly spinCount: number;
   readonly isFreeSpin: boolean;
   readonly betMultiplier: 1 | 2 | 3;
+  // Dealer state
+  readonly dealerPhase: 0 | 1 | 2;    // 0=neither threshold hit, 1=65% hit, 2=35% hit
+  readonly dealerPending: boolean;     // dealer modal should be shown
+  readonly dealerOfferId: string | null; // id of the InRunItem being offered
+  // Active effects from consumables / dealer items
+  readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
+  readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet
+  readonly guaranteedWinSpins: number;   // Pill: spins guaranteed to win
+  readonly blockPowersSpins: number;     // Pill: spins where abilities are blocked
+  readonly decaySkips: number;           // Stasis Patch: spins that cost 0 neurons
 }
 
 export interface RunHistory {

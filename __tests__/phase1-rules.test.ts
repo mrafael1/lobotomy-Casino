@@ -24,6 +24,27 @@ test('scoreReels: brain triple grants a free spin only when allowed', () => {
   expect(denied.lucidityEarned).toBeGreaterThan(0);
 });
 
+test('scoreReels: pattern23Triple — non-adjacent match (a===c) pays triple', () => {
+  const reels: ReelResult = ['eye', 'pill', 'eye']; // a===c, no adjacent match
+  const withPattern = scoreReels(reels, 1, false, true);
+  const without     = scoreReels(reels, 1, false, false);
+
+  expect(withPattern.winType).toBe('triple');
+  expect(withPattern.lucidityEarned).toBeGreaterThan(0);
+  expect(without.winType).toBe('miss');
+});
+
+test('scoreReels: learning active — book visible adds +10 per book', () => {
+  const reels: ReelResult = ['book', 'eye', 'pill'];
+  const withLearning    = scoreReels(reels, 1, false, false, true);
+  const withoutLearning = scoreReels(reels, 1, false, false, false);
+
+  // With learning: pair (eye/pill miss) but +10 for 1 book visible → lucidity = 10
+  expect(withLearning.lucidityEarned).toBe(10);
+  // Without learning: book isn't in payout table in a meaningful way, treated as miss
+  expect(withoutLearning.lucidityEarned).toBe(0);
+});
+
 // ─────────────────────────────────────────────
 // Reroll ability
 // ─────────────────────────────────────────────
@@ -73,11 +94,11 @@ test('applyMoveColumn: wraps around the cycle in both directions', () => {
 });
 
 // ─────────────────────────────────────────────
-// Consumable content invariant (Sacred Rule 1 adjacency)
+// Consumable content invariant
 // ─────────────────────────────────────────────
 test('no consumable can ever add neurons', () => {
   const allowed = new Set([
-    'skipDecay', 'grantFreeSpins', 'lucidityMultiplierNextSpin',
+    'skipDecay', 'lucidityMultiplierNextSpin', 'copyReel', 'brainBoost', 'restoreAbility',
   ]);
   for (const c of CONSUMABLES) {
     expect(allowed.has(c.effect.type)).toBe(true);
@@ -113,17 +134,23 @@ test('store: consumable rejected when no charges remain', () => {
   expect(useRunStore.getState().useConsumable('cons_focus')).toBe(false);
 });
 
-test('store: free-spin consumable clamps to max and rejects at cap', () => {
-  freshRun({ cons_free_spin: 3 });
-  const max = useRunStore.getState().maxFreeSpins; // base = 1
+test('store: Tea restores a used ability', () => {
+  freshRun({ cons_tea: 1 });
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
 
-  expect(useRunStore.getState().useConsumable('cons_free_spin')).toBe(true);
-  expect(useRunStore.getState().freeSpinsRemaining).toBe(max);
+  // Use reroll first
+  expect(useRunStore.getState().rerollReel(0)).toBe(true);
+  expect(useRunStore.getState().abilitiesUsed).toContain('reroll');
 
-  // Already at cap — rejected, charge not consumed
-  const chargesBefore = useRunStore.getState().runConsumables['cons_free_spin'] ?? 0;
-  expect(useRunStore.getState().useConsumable('cons_free_spin')).toBe(false);
-  expect(useRunStore.getState().runConsumables['cons_free_spin']).toBe(chargesBefore);
+  // Tea restores it
+  expect(useRunStore.getState().useConsumable('cons_tea')).toBe(true);
+  expect(useRunStore.getState().abilitiesUsed).not.toContain('reroll');
+});
+
+test('store: Tea rejected when no abilities have been used', () => {
+  freshRun({ cons_tea: 1 });
+  expect(useRunStore.getState().useConsumable('cons_tea')).toBe(false);
 });
 
 test('store: REROLL ability is 1-use per run — second call rejected', () => {
@@ -147,14 +174,11 @@ test('store: REROLL only changes the target reel and applies Lucidity delta', ()
   expect(useRunStore.getState().rerollReel(2)).toBe(true);
   const after = useRunStore.getState();
 
-  // Reels 0 and 1 are unchanged
   expect(after.lastResult!.reels[0]).toBe(before[0]);
   expect(after.lastResult!.reels[1]).toBe(before[1]);
-  // Lucidity reflects the new score delta (may go up or down)
   expect(typeof after.lucidityEarned).toBe('number');
   expect(after.lucidityEarned).toBeGreaterThanOrEqual(0);
-  // Net lucidity moved by lucidityDelta (which could be negative — player's gamble)
-  void lucidityBefore; // referenced to satisfy linter
+  void lucidityBefore;
 });
 
 test('store: SHIFT requires perm_shift upgrade', () => {
@@ -162,16 +186,13 @@ test('store: SHIFT requires perm_shift upgrade', () => {
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
 
-  // Without the upgrade, move is rejected
   expect(useRunStore.getState().moveReel(0, 1)).toBe(false);
 
-  // With the upgrade present in ownedUpgrades
   useRunStore.getState().startNewRun(['perm_shift'], {});
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   expect(useRunStore.getState().moveReel(0, 1)).toBe(true);
   expect(useRunStore.getState().abilitiesUsed).toContain('shift');
-  // second call rejected (1 use per run)
   expect(useRunStore.getState().moveReel(0, -1)).toBe(false);
 });
 
@@ -180,18 +201,15 @@ test('store: MEMORY requires perm_memory upgrade', () => {
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
 
-  // Without the upgrade, lockReel is a no-op
   useRunStore.getState().lockReel(0);
   expect(useRunStore.getState().lockedReels).toEqual([false, false, false]);
 
-  // With upgrade, lockReel works and marks ability used
   useRunStore.getState().startNewRun(['perm_memory'], {});
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   useRunStore.getState().lockReel(1);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
   expect(useRunStore.getState().abilitiesUsed).toContain('memory');
-  // second lock rejected
   useRunStore.getState().lockReel(0);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
 });
@@ -221,4 +239,24 @@ test('store: neurons never increase across any sequence of actions (Sacred Rule 
     lastNeurons = now;
     if (now <= 0) break;
   }
+});
+
+test('store: sedative — every 3rd spin costs no neurons', () => {
+  useRunStore.getState().startNewRun(['corr_sedative'], {});
+  let spinsDone = 0;
+  let neuronsBefore: number;
+
+  // Spin until we've done a 3rd spin
+  while (spinsDone < 3) {
+    neuronsBefore = useRunStore.getState().neurons;
+    useRunStore.getState().spin();
+    useRunStore.getState().setSpinning(false);
+    spinsDone++;
+  }
+
+  // After exactly 3 spins, spin #3 (index 2) should have cost 0 neurons.
+  // We check that total neurons lost over 3 spins equals cost of 2 spins.
+  const state = useRunStore.getState();
+  const expected = state.startingNeurons - 2 * 3; // 2 real spins × 3N each
+  expect(state.neurons).toBe(expected);
 });

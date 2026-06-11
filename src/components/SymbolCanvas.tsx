@@ -124,6 +124,24 @@ export function SymbolCanvas({ symbol, size = SYMBOL_SIZE }: Props) {
           />
         </>
       )}
+
+      {symbol === 'book' && (
+        <>
+          {/* Book cover */}
+          <RoundedRect x={10 * s} y={10 * s} width={56 * s} height={56 * s} r={4 * s} color="#d97706" />
+          {/* Spine */}
+          <Rect x={10 * s} y={10 * s} width={10 * s} height={56 * s} color="#92400e" />
+          {/* Pages */}
+          <RoundedRect x={22 * s} y={14 * s} width={40 * s} height={48 * s} r={2 * s} color="#fef3c7" />
+          {/* Text lines */}
+          <Rect x={26 * s} y={22 * s} width={30 * s} height={3 * s} color="#d97706" />
+          <Rect x={26 * s} y={30 * s} width={24 * s} height={3 * s} color="#d97706" />
+          <Rect x={26 * s} y={38 * s} width={28 * s} height={3 * s} color="#d97706" />
+          <Rect x={26 * s} y={46 * s} width={20 * s} height={3 * s} color="#d97706" />
+          {/* Highlight on cover */}
+          <Rect x={14 * s} y={14 * s} width={4 * s} height={30 * s} color="rgba(255,255,255,0.15)" />
+        </>
+      )}
     </Canvas>
   );
 }

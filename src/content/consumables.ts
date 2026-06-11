@@ -1,7 +1,9 @@
 export type ConsumableEffect =
   | { type: 'skipDecay';                  spins: number }
-  | { type: 'grantFreeSpins';             amount: number }
-  | { type: 'lucidityMultiplierNextSpin'; multiplier: number };
+  | { type: 'lucidityMultiplierNextSpin'; multiplier: number }
+  | { type: 'copyReel' }                    // White Powder: copy one reel symbol to another via UI
+  | { type: 'brainBoost';                 spins: number }  // Syringe: brain 5× more likely for N spins
+  | { type: 'restoreAbility' };             // Tea: restore one random used ability
 
 export interface Consumable {
   readonly id: string;
@@ -11,16 +13,16 @@ export interface Consumable {
   readonly effect: ConsumableEffect;
 }
 
-// Consumables are bought in the shop with wallet Lucidity before a run.
-// Each purchase adds 1 charge to pendingConsumables; charges transfer to
-// runConsumables when the run starts and are lost (unused) at run end.
+// Pre-run consumables: bought in the shop with wallet Lucidity before a run.
+// Max 2 distinct consumable types can be brought into a run (slots cap).
+// Charges transfer to runConsumables when the run starts and are lost at run end.
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
-    id: 'cons_override',
-    name: 'Override',
-    description: 'Skip neuron decay for your next spin.',
-    shopCost: 50,
-    effect: { type: 'skipDecay', spins: 1 },
+    id: 'cons_stasis',
+    name: 'Stasis Patch',
+    description: 'Your next 3 spins consume no neurons.',
+    shopCost: 80,
+    effect: { type: 'skipDecay', spins: 3 },
   },
   {
     id: 'cons_focus',
@@ -30,21 +32,31 @@ export const CONSUMABLES: ReadonlyArray<Consumable> = [
     effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0 },
   },
   {
-    id: 'cons_stasis',
-    name: 'Stasis Patch',
-    description: 'Your next 3 spins consume no neurons.',
-    shopCost: 80,
-    effect: { type: 'skipDecay', spins: 3 },
+    id: 'cons_white_powder',
+    name: 'White Powder',
+    description: 'Copy one reel\'s symbol onto another. Side effect: consume a random other supply or lose 20 neurons.',
+    shopCost: 70,
+    effect: { type: 'copyReel' },
   },
   {
-    id: 'cons_free_spin',
-    name: 'Free Spin',
-    description: 'Grant 1 free spin.',
-    shopCost: 45,
-    effect: { type: 'grantFreeSpins', amount: 1 },
+    id: 'cons_syringe',
+    name: 'Syringe',
+    description: 'Brain is 5× more likely for 5 spins. Reduced Lucidity and no abilities during boost. Permanently blocks a random ability.',
+    shopCost: 90,
+    effect: { type: 'brainBoost', spins: 5 },
+  },
+  {
+    id: 'cons_tea',
+    name: 'Herbal Tea',
+    description: 'Restore a random ability you have already used this run.',
+    shopCost: 50,
+    effect: { type: 'restoreAbility' },
   },
 ];
 
 export const CONSUMABLE_MAP: Readonly<Record<string, Consumable>> = Object.fromEntries(
   CONSUMABLES.map(c => [c.id, c])
 );
+
+// Maximum number of distinct consumable types that can be brought into a run.
+export const MAX_CONSUMABLE_SLOTS = 2;

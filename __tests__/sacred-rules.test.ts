@@ -31,6 +31,14 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     spinCount:                 0,
     isFreeSpin:                false,
     betMultiplier:             1,
+    dealerPhase:               0,
+    dealerPending:             false,
+    dealerOfferId:             null,
+    brainBoostSpins:           0,
+    forcedRandomBetSpins:      0,
+    guaranteedWinSpins:        0,
+    blockPowersSpins:          0,
+    decaySkips:                0,
     ...overrides,
   };
 }
@@ -59,6 +67,11 @@ function baseSpinInput(overrides: Partial<SpinInput> = {}): SpinInput {
     lockedReels:        [false, false, false],
     previousReels:      null,
     rng:                createRNG(42),
+    bookWeight:         0,
+    brainWeightBonus:   0,
+    guaranteedWin:      false,
+    pattern23Triple:    false,
+    learningActive:     false,
     ...overrides,
   };
 }

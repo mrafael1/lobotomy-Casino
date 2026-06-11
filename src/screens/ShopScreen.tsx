@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
 import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
-import { CONSUMABLES } from '../content/consumables';
+import { CONSUMABLES, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
@@ -30,8 +30,14 @@ export function ShopScreen() {
     return 'buyable';
   }
 
-  function consumableStatus(c: Consumable): 'tooPoor' | 'buyable' {
-    return lucidityWallet < c.shopCost ? 'tooPoor' : 'buyable';
+  function consumableStatus(c: Consumable): 'tooPoor' | 'slotsFull' | 'buyable' {
+    if (lucidityWallet < c.shopCost) return 'tooPoor';
+    const alreadyHas = (pendingConsumables[c.id] ?? 0) > 0;
+    if (!alreadyHas) {
+      const distinctSlots = Object.values(pendingConsumables).filter(n => (n ?? 0) > 0).length;
+      if (distinctSlots >= MAX_CONSUMABLE_SLOTS) return 'slotsFull';
+    }
+    return 'buyable';
   }
 
   function renderUpgradeCard(upgrade: Upgrade, accent: string) {
@@ -76,14 +82,17 @@ export function ShopScreen() {
             )}
           </View>
           <Text style={styles.cardDesc}>{c.description}</Text>
+          {status === 'slotsFull' && (
+            <Text style={styles.cardLocked}>Both supply slots are full</Text>
+          )}
         </View>
         <Pressable
           style={[
             styles.buyBtn,
             styles.buyBtnConsumable,
-            status === 'tooPoor' && styles.buyBtnDisabled,
+            (status === 'tooPoor' || status === 'slotsFull') && styles.buyBtnDisabled,
           ]}
-          disabled={status === 'tooPoor'}
+          disabled={status !== 'buyable'}
           onPress={() => buyConsumableCharge(c.id)}
         >
           <Text style={styles.buyBtnText}>{c.shopCost}</Text>
@@ -112,7 +121,7 @@ export function ShopScreen() {
           {/* ── SUPPLIES ── */}
           <Text style={[styles.sectionLabel, styles.sectionLabelCyan]}>SUPPLIES</Text>
           <Text style={styles.sectionNote}>
-            Single-use charges brought into your next run. Unused charges are lost at run end.
+            Charges carried into your next run (max 2 types). Unused charges are lost at run end.
           </Text>
           {CONSUMABLES.map(c => renderConsumableCard(c))}
 

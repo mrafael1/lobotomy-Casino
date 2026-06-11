@@ -2,15 +2,15 @@ export type UpgradeCategory = 'corrupted' | 'positive';
 
 export type UpgradeEffect =
   | { type: 'neuronDecayReduction';     amount: number }
-  | { type: 'lucidityMultiplier';       multiplier: number }
-  | { type: 'freeSpinMaxIncrease';      newMax: number }
-  | { type: 'pairAsTriple' }
+  | { type: 'lucidityMultiplier';       multiplier: number }   // multiplicative, no corruption
+  | { type: 'rewardAmpBonus';           bonus: number }        // additive corrupted lucidity bonus
   | { type: 'jackpotLucidityMultiplier'; multiplier: number }
   | { type: 'startingNeuronBonus';      amount: number }
   | { type: 'passiveLucidityPerSpin';   amount: number }
-  | { type: 'neuronCapIncrease';        newCap: number }
   | { type: 'brainWeightBonus';         amount: number }
-  | { type: 'cleanLucidityMultiplier';  multiplier: number }
+  | { type: 'sedativeBonusSpin' }                              // every 3rd spin costs no neurons
+  | { type: 'pattern23Triple' }                                // any ⅔ matching reels → triple payout
+  | { type: 'bookSymbol';               weight: number }       // adds book to spin pool
   | { type: 'abilityUnlock';            abilityId: string };
 
 export interface Upgrade {
@@ -24,8 +24,6 @@ export interface Upgrade {
 }
 
 // --- Ability upgrades: permanent abilities unlocked per-run ---
-// Buying these adds the id to ownedPermanents; runState checks presence to
-// grant 1 use of the corresponding ability each run.
 
 export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
   {
@@ -46,51 +44,51 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
   },
 ];
 
-// --- Act I: Corrupted upgrades (6) ---
+// --- Corrupted upgrades ---
 // Buying any of these permanently taints the save slot.
 
 export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
   {
-    id: 'corr_lucidity_amplifier',
-    name: 'Reward Amplification',
-    description: 'All wins pay 50% more Lucidity.',
-    category: 'corrupted',
-    cost: 120,
-    effect: { type: 'lucidityMultiplier', multiplier: 1.5 },
-  },
-  {
-    id: 'corr_slow_decay',
-    name: 'Sedative Protocol',
-    description: 'Reduce neuron decay by 1 per spin.',
-    category: 'corrupted',
-    cost: 200,
-    requiresId: 'corr_lucidity_amplifier',
-    effect: { type: 'neuronDecayReduction', amount: 1 },
-  },
-  {
-    id: 'corr_free_spin_max_2',
-    name: 'Compulsive Loop I',
-    description: 'Raise free spin cap to 2.',
+    id: 'corr_reward_amp_1',
+    name: 'Reward Amplification I',
+    description: 'All wins pay 15% more Lucidity.',
     category: 'corrupted',
     cost: 100,
-    effect: { type: 'freeSpinMaxIncrease', newMax: 2 },
+    effect: { type: 'rewardAmpBonus', bonus: 0.15 },
   },
   {
-    id: 'corr_free_spin_max_3',
-    name: 'Compulsive Loop II',
-    description: 'Raise free spin cap to 3.',
+    id: 'corr_reward_amp_2',
+    name: 'Reward Amplification II',
+    description: 'All wins pay 25% more Lucidity (combined with tier I).',
     category: 'corrupted',
-    cost: 150,
-    effect: { type: 'freeSpinMaxIncrease', newMax: 3 },
-    requiresId: 'corr_free_spin_max_2',
+    cost: 160,
+    requiresId: 'corr_reward_amp_1',
+    effect: { type: 'rewardAmpBonus', bonus: 0.10 },
   },
   {
-    id: 'corr_pair_as_triple',
+    id: 'corr_reward_amp_3',
+    name: 'Reward Amplification III',
+    description: 'All wins pay 40% more Lucidity (combined with tiers I & II).',
+    category: 'corrupted',
+    cost: 220,
+    requiresId: 'corr_reward_amp_2',
+    effect: { type: 'rewardAmpBonus', bonus: 0.15 },
+  },
+  {
+    id: 'corr_sedative',
+    name: 'Sedative Protocol',
+    description: 'Every 3rd spin costs no neurons (bonus spin — no ×3 penalty).',
+    category: 'corrupted',
+    cost: 180,
+    effect: { type: 'sedativeBonusSpin' },
+  },
+  {
+    id: 'corr_pattern_23',
     name: 'Pattern Fabrication',
-    description: 'Pairs pay as if they were triples.',
+    description: 'Any 2 of 3 matching reels (including non-adjacent) pay as a triple.',
     category: 'corrupted',
     cost: 200,
-    effect: { type: 'pairAsTriple' },
+    effect: { type: 'pattern23Triple' },
   },
   {
     id: 'corr_jackpot_double',
@@ -102,17 +100,35 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
   },
 ];
 
-// --- Act II: Positive upgrades (6) ---
+// --- Positive upgrades ---
 // These never set corruptionEverUsed.
 
 export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
   {
-    id: 'pos_neuron_start',
-    name: 'Neural Regeneration',
-    description: 'Start each run with +20 neurons.',
+    id: 'pos_hydration_1',
+    name: 'Hydration I',
+    description: 'Start each run with +10 neurons.',
     category: 'positive',
-    cost: 300,
-    effect: { type: 'startingNeuronBonus', amount: 20 },
+    cost: 80,
+    effect: { type: 'startingNeuronBonus', amount: 10 },
+  },
+  {
+    id: 'pos_hydration_2',
+    name: 'Hydration II',
+    description: 'Start each run with +15 more neurons (+25 total with Hydration I).',
+    category: 'positive',
+    cost: 140,
+    requiresId: 'pos_hydration_1',
+    effect: { type: 'startingNeuronBonus', amount: 15 },
+  },
+  {
+    id: 'pos_hydration_3',
+    name: 'Hydration III',
+    description: 'Start each run with +15 more neurons (+40 total with Hydration I & II).',
+    category: 'positive',
+    cost: 200,
+    requiresId: 'pos_hydration_2',
+    effect: { type: 'startingNeuronBonus', amount: 15 },
   },
   {
     id: 'pos_passive_lucidity',
@@ -123,14 +139,6 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
     effect: { type: 'passiveLucidityPerSpin', amount: 5 },
   },
   {
-    id: 'pos_neuron_cap',
-    name: 'Expanded Capacity',
-    description: 'Raise maximum neurons to 200.',
-    category: 'positive',
-    cost: 350,
-    effect: { type: 'neuronCapIncrease', newCap: 200 },
-  },
-  {
     id: 'pos_brain_weight',
     name: 'Pattern Recognition',
     description: 'Brain symbol appears more frequently (+2 weight).',
@@ -139,21 +147,20 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
     effect: { type: 'brainWeightBonus', amount: 2 },
   },
   {
-    id: 'pos_neuron_cap_2',
-    name: 'Expanded Capacity II',
-    description: 'Raise maximum neurons to 300.',
-    category: 'positive',
-    cost: 500,
-    effect: { type: 'neuronCapIncrease', newCap: 300 },
-    requiresId: 'pos_neuron_cap',
-  },
-  {
-    id: 'pos_clean_multiplier',
-    name: 'Clean Cognition',
+    id: 'pos_enlightenment',
+    name: 'Enlightenment',
     description: 'All wins pay 25% more Lucidity. Does not corrupt.',
     category: 'positive',
     cost: 450,
-    effect: { type: 'cleanLucidityMultiplier', multiplier: 1.25 },
+    effect: { type: 'lucidityMultiplier', multiplier: 1.25 },
+  },
+  {
+    id: 'pos_learning',
+    name: 'Learning',
+    description: 'Adds the Book symbol to the reels. Book pair: +5 Lucidity. Book triple: +15. +10 per Book visible.',
+    category: 'positive',
+    cost: 300,
+    effect: { type: 'bookSymbol', weight: 7 },
   },
 ];
 
