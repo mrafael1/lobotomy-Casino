@@ -16,8 +16,10 @@ export function Background({ children }: Props) {
   const decayOpacity = useSharedValue(0);
 
   useEffect(() => {
-    const ratio = startingNeurons > 0 ? neurons / startingNeurons : 0;
-    decayOpacity.value = withTiming(1 - ratio, { duration: 600 });
+    const ratio = startingNeurons > 0 ? neurons / startingNeurons : 1;
+    // Square-root curve: decay is visible from the first few spins rather
+    // than requiring 40+ neurons to drain before anything is noticeable.
+    decayOpacity.value = withTiming(Math.sqrt(1 - ratio), { duration: 600 });
   }, [neurons, startingNeurons]);
 
   const decayStyle = useAnimatedStyle(() => ({
