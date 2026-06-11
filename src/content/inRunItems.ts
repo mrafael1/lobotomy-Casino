@@ -2,7 +2,7 @@
 // These are never bought in the pre-run shop — they appear during gameplay.
 
 export type InRunEffect =
-  | { type: 'addNeurons';          amount: number; forcedRandomBetSpins: number }
+  | { type: 'skipDecay';     spins: number; forcedRandomBetSpins: number } // Energy Drink: neurons preserved, erratic bet
   | { type: 'cocktailBoost' }      // grants Lucidity = sum(rarity scores of current reels) × 3
   | { type: 'addLucidity';         amount: number }
   | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number }
@@ -19,8 +19,8 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_energy_drink',
     name: 'Energy Drink',
-    description: '+30 neurons. Your next 5 spins use a random bet multiplier.',
-    effect: { type: 'addNeurons', amount: 30, forcedRandomBetSpins: 5 },
+    description: 'Your next 10 spins cost no neurons. Your next 5 spins use a random bet multiplier.',
+    effect: { type: 'skipDecay', spins: 10, forcedRandomBetSpins: 5 },
   },
   {
     id: 'item_cocktail',

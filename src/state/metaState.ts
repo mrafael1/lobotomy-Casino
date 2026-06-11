@@ -10,7 +10,8 @@ export interface MetaStore extends MetaState {
   bankRun: (run: RunState, ending: EndingType) => void;
   buyUpgrade: (upgradeId: UpgradeId) => void;
   buyConsumableCharge: (consumableId: string) => void;
-  takePendingConsumables: () => Partial<Record<string, number>>;
+  // Non-destructive read — pendingConsumables are cleared only inside bankRun.
+  getPendingConsumables: () => Partial<Record<string, number>>;
 }
 
 const INITIAL_META_STATE: MetaState = {
@@ -49,7 +50,8 @@ export const useMetaStore = create<MetaStore>()(
           history:            state.history,
         };
         const next = bankRunToMeta(run, metaSnapshot, ending);
-        set(next);
+        // Clear pending consumables on bank — they were transferred to the run at start.
+        set({ ...next, pendingConsumables: {} });
       },
 
       buyUpgrade(upgradeId: UpgradeId): void {
@@ -92,11 +94,8 @@ export const useMetaStore = create<MetaStore>()(
         });
       },
 
-      takePendingConsumables(): Partial<Record<string, number>> {
-        const state = get();
-        const pending = state.pendingConsumables;
-        set({ pendingConsumables: {} });
-        return pending;
+      getPendingConsumables(): Partial<Record<string, number>> {
+        return get().pendingConsumables;
       },
     }),
     {

@@ -486,11 +486,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const effect = item.effect;
 
     switch (effect.type) {
-      case 'addNeurons':
+      case 'skipDecay':
         set({
           dealerPending: false,
           dealerOfferIds: null,
-          neurons: Math.min(state.neurons + effect.amount, ECONOMY.MAX_NEURONS),
+          decaySkips: state.decaySkips + effect.spins,
           forcedRandomBetSpins: state.forcedRandomBetSpins + effect.forcedRandomBetSpins,
         });
         break;

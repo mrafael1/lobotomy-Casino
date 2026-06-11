@@ -23,8 +23,8 @@ type Selection =
   | { mode: 'reroll' }
   | { mode: 'lock' }
   | { mode: 'move'; reel: number | null }
-  | { mode: 'copy_source' }
-  | { mode: 'copy_target'; sourceReel: number };
+  | { mode: 'copy_source'; consumableId: string }       // charge NOT yet consumed
+  | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
 const NO_SELECTION: Selection = { mode: 'none' };
 
@@ -69,14 +69,13 @@ export function GameScreen() {
   const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
   const bankRun                = useMetaStore(s => s.bankRun);
-  const takePendingConsumables = useMetaStore(s => s.takePendingConsumables);
+  const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
 
   useEffect(() => {
     if (runPhase === 'idle') {
-      const pending = takePendingConsumables();
-      startNewRun(ownedPermanents, pending);
+      startNewRun(ownedPermanents, getPendingConsumables());
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -99,9 +98,8 @@ export function GameScreen() {
 
   const handleNewRun = useCallback(() => {
     setSelection(NO_SELECTION);
-    const pending = takePendingConsumables();
-    startNewRun(ownedPermanents, pending);
-  }, [startNewRun, ownedPermanents, takePendingConsumables]);
+    startNewRun(ownedPermanents, getPendingConsumables());
+  }, [startNewRun, ownedPermanents, getPendingConsumables]);
 
   // ── Reel targeting ──
   const handleReelPress = useCallback((i: number) => {
@@ -114,23 +112,25 @@ export function GameScreen() {
     } else if (selection.mode === 'move') {
       setSelection({ mode: 'move', reel: i });
     } else if (selection.mode === 'copy_source') {
-      setSelection({ mode: 'copy_target', sourceReel: i });
+      setSelection({ mode: 'copy_target', sourceReel: i, consumableId: selection.consumableId });
     } else if (selection.mode === 'copy_target') {
       if (i !== selection.sourceReel) {
+        // Consume the charge only now — source and target are both confirmed.
+        useConsumable(selection.consumableId);
         copyReel(selection.sourceReel, i);
         setSelection(NO_SELECTION);
       }
     }
-  }, [selection, lockReel, rerollReel, copyReel]);
+  }, [selection, lockReel, rerollReel, copyReel, useConsumable]);
 
   const handleConsumable = useCallback((id: string) => {
     const consumable = CONSUMABLES.find(c => c.id === id);
     if (!consumable) return;
 
     if (consumable.effect.type === 'copyReel') {
-      // White Powder: first consume the charge, then enter selection UI
-      useConsumable(id);
-      setSelection({ mode: 'copy_source' });
+      // White Powder: enter selection without consuming the charge yet.
+      // The charge is consumed only when source + target are both confirmed.
+      setSelection({ mode: 'copy_source', consumableId: id });
     } else {
       useConsumable(id);
     }
