@@ -60,6 +60,7 @@ export interface RunState {
   readonly dealer35SafetyFired: boolean;     // true once we've evaluated the 35% safety gate
   readonly dealerPending: boolean;           // dealer modal should be shown
   readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
+  readonly pendingGiftConsumableId: string | null;  // consumable given by dealer, awaiting slot resolution
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
   readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet

@@ -5,7 +5,8 @@ export type InRunEffect =
   | { type: 'addNeurons';          amount: number; forcedRandomBetSpins: number }
   | { type: 'cocktailBoost' }      // grants Lucidity = sum(rarity scores of current reels) × 3
   | { type: 'addLucidity';         amount: number }
-  | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number };
+  | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number }
+  | { type: 'giveConsumable' };    // gives a random consumable; player resolves slot conflicts
 
 export interface InRunItem {
   readonly id: string;
@@ -38,6 +39,12 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
     name: 'The Pill',
     description: 'Your next 3 spins are guaranteed to win. No abilities for 5 spins.',
     effect: { type: 'guaranteedWin', spins: 3, blockPowersSpins: 5 },
+  },
+  {
+    id: 'item_stash',
+    name: 'The Stash',
+    description: 'A random supply from his coat. If your slots are full, you decide what to do with it.',
+    effect: { type: 'giveConsumable' },
   },
 ];
 
