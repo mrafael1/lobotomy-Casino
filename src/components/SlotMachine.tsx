@@ -162,10 +162,10 @@ export function SlotMachine({
                 height: winTop - 4,
               },
             ]}
-            onPress={() => onShiftDirection(-1)}
+            onPress={() => onShiftDirection(1)}
           >
             <Text style={styles.shiftSymbolLabel}>
-              {SYMBOLS[shiftUpSym].name.toUpperCase()}
+              {SYMBOLS[shiftDownSym].name.toUpperCase()}
             </Text>
             <Text style={styles.shiftArrow}>▲</Text>
           </Pressable>
@@ -181,11 +181,11 @@ export function SlotMachine({
                 bottom: 0,
               },
             ]}
-            onPress={() => onShiftDirection(1)}
+            onPress={() => onShiftDirection(-1)}
           >
             <Text style={styles.shiftArrow}>▼</Text>
             <Text style={styles.shiftSymbolLabel}>
-              {SYMBOLS[shiftDownSym].name.toUpperCase()}
+              {SYMBOLS[shiftUpSym].name.toUpperCase()}
             </Text>
           </Pressable>
         </>
