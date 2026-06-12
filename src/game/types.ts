@@ -22,7 +22,7 @@ export interface SpinInput {
   readonly bookWeight: number;          // 0 = no book; >0 = Learning owned, book active
   readonly brainWeightBonus: number;    // extra weight for brain (upgrades + Syringe boost)
   readonly guaranteedWin: boolean;      // Pill: force at least a pair this spin
-  readonly pattern23Triple: boolean;    // Pattern Fabrication: ⅔ match → triple payout
+  readonly pattern23Triple: boolean;    // Pattern Fabrication: 2/3 match -> doubled pair payout
   readonly learningActive: boolean;     // Learning: book pays out and +10/book visible
 }
 
@@ -61,13 +61,16 @@ export interface RunState {
   readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown
   readonly dealerPending: boolean;           // dealer modal should be shown
   readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
-  readonly pendingGiftConsumableId: string | null;  // gift waiting for a stash slot — player must discard to take it
+  readonly pendingGiftConsumableId: string | null;  // dealer substance waiting for stash confirmation/discard
+  readonly pendingGiftNeedsDiscard: boolean; // true when the gift has not entered the stash yet
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
-  readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet
+  readonly forcedRandomBetSpins: number; // Energy Drink: spins with no decay and x3 locked
   readonly guaranteedWinSpins: number;   // Pill: spins guaranteed to win
   readonly blockPowersSpins: number;     // Pill: spins where abilities are blocked
   readonly hideNeuronsSpins: number;     // Focus Serum side effect: neuron count hidden
+  readonly cocktailBoostSpins: number;   // Cocktail: next spins get visible rarity-sum bonus
+  readonly compulsiveSpinSkips: number;  // Cocktail: forced x1 spins that skip player input
   readonly decaySkips: number;           // spins that cost 0 neurons (skipDecay effects)
 }
 

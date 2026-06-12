@@ -6,6 +6,8 @@ import { applyReroll, applyMoveColumn, applyCopyReel } from '../src/game/abiliti
 import { SYMBOL_WEIGHTS } from '../src/content/symbols';
 import { useRunStore } from '../src/state/runState';
 import { CONSUMABLES } from '../src/content/consumables';
+import { PAIR_PAYOUTS } from '../src/content/payouts';
+import { SYMBOLS } from '../src/content/symbols';
 import { createRNG } from '../src/game/rng';
 import type { ReelResult } from '../src/game/types';
 
@@ -25,14 +27,22 @@ test('scoreReels: brain triple grants a free spin only when allowed', () => {
   expect(denied.lucidityEarned).toBeGreaterThan(0);
 });
 
-test('scoreReels: pattern23Triple — non-adjacent match (a===c) pays triple', () => {
+test('scoreReels: Pattern Fabrication — non-adjacent match pays double pair value', () => {
   const reels: ReelResult = ['eye', 'pill', 'eye']; // a===c, no adjacent match
   const withPattern = scoreReels(reels, 1, false, true);
   const without     = scoreReels(reels, 1, false, false);
 
-  expect(withPattern.winType).toBe('triple');
-  expect(withPattern.lucidityEarned).toBeGreaterThan(0);
+  expect(withPattern.winType).toBe('pair');
+  expect(withPattern.lucidityEarned).toBe((PAIR_PAYOUTS.eye ?? 0) * 2);
   expect(without.winType).toBe('miss');
+});
+
+test('scoreReels: Pattern Fabrication — brain pair is not a jackpot', () => {
+  const result = scoreReels(['brain', 'eye', 'brain'], 1, true, true);
+
+  expect(result.winType).toBe('pair');
+  expect(result.lucidityEarned).toBe((PAIR_PAYOUTS.brain ?? 0) * 2);
+  expect(result.freeSpinsGranted).toBe(0);
 });
 
 test('scoreReels: learning active — book visible adds +10 per book', () => {
@@ -131,6 +141,10 @@ function freshRun(runConsumables: Partial<Record<string, number>> = {}): void {
   useRunStore.getState().startNewRun([], runConsumables);
 }
 
+function totalConsumableCharges(runConsumables: Partial<Record<string, number>>): number {
+  return Object.values(runConsumables).reduce<number>((sum, n) => sum + (n ?? 0), 0);
+}
+
 test('store: Focus Serum — sets nextSpinLucidityMultiplier to 3', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(1);
@@ -157,6 +171,108 @@ test('store: consumable rejected when no charges remain', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().useConsumable('cons_focus')).toBe(true);
   expect(useRunStore.getState().useConsumable('cons_focus')).toBe(false);
+});
+
+test('store: mid-run dealer Cocktail is stashed, not activated immediately', () => {
+  freshRun();
+  useRunStore.setState({
+    dealerPending: true,
+    dealerOfferIds: ['item_cocktail', 'item_water'],
+  });
+
+  useRunStore.getState().acceptDealerOffer('item_cocktail');
+  let state = useRunStore.getState();
+
+  expect(state.pendingGiftConsumableId).toBeNull();
+  expect(state.pendingGiftNeedsDiscard).toBe(false);
+  expect(state.runConsumables.item_cocktail).toBe(1);
+  expect(totalConsumableCharges(state.runConsumables)).toBe(1);
+  expect(state.lucidityEarned).toBe(0);
+
+  expect(useRunStore.getState().useConsumable('item_cocktail')).toBe(true);
+  state = useRunStore.getState();
+
+  expect(state.runConsumables.item_cocktail).toBe(0);
+  expect(state.cocktailBoostSpins).toBe(3);
+  expect(state.compulsiveSpinSkips).toBe(2);
+  expect(state.lucidityEarned).toBe(0);
+});
+
+test('store: Cocktail adds visible rarity sum to the next 3 spins and forces 2 x1 spins', () => {
+  freshRun({ item_cocktail: 1 });
+  useRunStore.getState().setBetMultiplier(3);
+
+  expect(useRunStore.getState().useConsumable('item_cocktail')).toBe(true);
+  expect(useRunStore.getState().cocktailBoostSpins).toBe(3);
+  expect(useRunStore.getState().compulsiveSpinSkips).toBe(2);
+
+  const neuronsBefore = useRunStore.getState().neurons;
+  useRunStore.getState().spin({ compulsive: true });
+  useRunStore.getState().setSpinning(false);
+
+  let state = useRunStore.getState();
+  const firstBonus = state.lastResult!.reels.reduce(
+    (sum, sym) => sum + SYMBOLS[sym].rarityScore,
+    0,
+  );
+  expect(state.neurons).toBe(neuronsBefore - 3);
+  expect(state.lastResult!.lucidityEarned).toBeGreaterThanOrEqual(firstBonus);
+  expect(state.cocktailBoostSpins).toBe(2);
+  expect(state.compulsiveSpinSkips).toBe(1);
+
+  useRunStore.getState().spin({ compulsive: true });
+  useRunStore.getState().setSpinning(false);
+  expect(useRunStore.getState().cocktailBoostSpins).toBe(1);
+  expect(useRunStore.getState().compulsiveSpinSkips).toBe(0);
+
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  state = useRunStore.getState();
+  expect(state.cocktailBoostSpins).toBe(0);
+});
+
+test('store: Energy Drink locks out x3 and preserves neurons while active', () => {
+  freshRun({ item_energy_drink: 1 });
+  useRunStore.getState().setBetMultiplier(3);
+
+  expect(useRunStore.getState().useConsumable('item_energy_drink')).toBe(true);
+  expect(useRunStore.getState().betMultiplier).toBe(2);
+  expect(useRunStore.getState().forcedRandomBetSpins).toBe(5);
+
+  useRunStore.getState().setBetMultiplier(3);
+  expect(useRunStore.getState().betMultiplier).toBe(2);
+
+  const neuronsBefore = useRunStore.getState().neurons;
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+
+  const state = useRunStore.getState();
+  expect(state.neurons).toBe(neuronsBefore);
+  expect(state.decaySkips).toBe(4);
+  expect(state.forcedRandomBetSpins).toBe(4);
+});
+
+test('store: mid-run dealer substance waits for discard when stash is full', () => {
+  freshRun({ cons_focus: 2, cons_tea: 2 });
+  useRunStore.setState({
+    dealerPending: true,
+    dealerOfferIds: ['item_pill', 'item_water'],
+  });
+
+  useRunStore.getState().acceptDealerOffer('item_pill');
+  let state = useRunStore.getState();
+
+  expect(state.pendingGiftConsumableId).toBe('item_pill');
+  expect(state.pendingGiftNeedsDiscard).toBe(true);
+  expect(totalConsumableCharges(state.runConsumables)).toBe(4);
+
+  useRunStore.getState().discardConsumableForGift('cons_focus');
+  state = useRunStore.getState();
+
+  expect(state.pendingGiftConsumableId).toBeNull();
+  expect(state.pendingGiftNeedsDiscard).toBe(false);
+  expect(state.runConsumables.cons_focus).toBeUndefined();
+  expect(state.runConsumables.item_pill).toBe(1);
 });
 
 test('store: Tea restores a used ability', () => {

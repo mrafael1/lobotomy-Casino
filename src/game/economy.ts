@@ -101,7 +101,7 @@ export function hasSedative(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
   return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'sedativeBonusSpin');
 }
 
-// True if Pattern Fabrication (⅔ triple) is owned.
+// True if Pattern Fabrication (2/3 doubled pair) is owned.
 export function hasPattern23Triple(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
   return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'pattern23Triple');
 }

@@ -2,11 +2,10 @@
 // These are never bought in the pre-run shop — they appear during gameplay.
 
 export type InRunEffect =
-  | { type: 'skipDecay';     spins: number; forcedRandomBetSpins: number } // Energy Drink: neurons preserved, erratic bet
-  | { type: 'cocktailBoost' }      // grants Lucidity = sum(rarity scores of current reels) × 3
+  | { type: 'skipDecay';     spins: number; forcedRandomBetSpins: number } // Energy Drink: neurons preserved, x3 bet locked
+  | { type: 'cocktailBoost'; spins: number; compulsiveSpins: number }
   | { type: 'addLucidity';         amount: number }
-  | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number }
-  | { type: 'giveConsumable' };    // gives a random consumable; if slots are full the player must discard one
+  | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number };
 
 export interface InRunItem {
   readonly id: string;
@@ -19,14 +18,14 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_energy_drink',
     name: 'Energy Drink',
-    description: '×5 random-bet spins, then ×5 free spins.',
+    description: 'Next 5 spins cost 0 neurons. The machine jitters too hard for x3 bets.',
     effect: { type: 'skipDecay', spins: 5, forcedRandomBetSpins: 5 },
   },
   {
     id: 'item_cocktail',
     name: 'Cocktail',
-    description: 'Gain Lucidity equal to 3× the rarity sum of your current reels.',
-    effect: { type: 'cocktailBoost' },
+    description: 'Next 3 spins gain the rarity sum of all visible symbols, even on losses. Then the machine steals 2 x1 spins.',
+    effect: { type: 'cocktailBoost', spins: 3, compulsiveSpins: 2 },
   },
   {
     id: 'item_water',
@@ -36,15 +35,9 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   },
   {
     id: 'item_pill',
-    name: 'The Pill',
+    name: 'Red Pill',
     description: 'Your next 3 spins are guaranteed to win. No abilities for 5 spins.',
     effect: { type: 'guaranteedWin', spins: 3, blockPowersSpins: 5 },
-  },
-  {
-    id: 'item_stash',
-    name: 'The Stash',
-    description: 'A random supply from his coat. If your slots are full, you\'ll have to make room.',
-    effect: { type: 'giveConsumable' },
   },
 ];
 

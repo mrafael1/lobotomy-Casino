@@ -60,11 +60,14 @@ for (let r = 0; r < RUNS; r++) {
     dealerPending:             false,
     dealerOfferIds:            null,
     pendingGiftConsumableId:   null,
+    pendingGiftNeedsDiscard:   false,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,
     blockPowersSpins:          0,
     hideNeuronsSpins:          0,
+    cocktailBoostSpins:        0,
+    compulsiveSpinSkips:       0,
     decaySkips:                0,
   };
 

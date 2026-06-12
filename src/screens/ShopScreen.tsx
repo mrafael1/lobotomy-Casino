@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
 import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
-import { CONSUMABLES, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
+import { CONSUMABLES, MAX_CONSUMABLE_CHARGES_PER_SLOT, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
@@ -50,9 +50,11 @@ export function ShopScreen() {
     return 'buyable';
   }
 
-  function consumableStatus(c: Consumable): 'tooPoor' | 'slotsFull' | 'buyable' {
+  function consumableStatus(c: Consumable): 'maxed' | 'tooPoor' | 'slotsFull' | 'buyable' {
+    const charges = pendingConsumables[c.id] ?? 0;
+    if (charges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return 'maxed';
     if (lucidityWallet < c.shopCost) return 'tooPoor';
-    const alreadyHas = (pendingConsumables[c.id] ?? 0) > 0;
+    const alreadyHas = charges > 0;
     if (!alreadyHas) {
       const distinctSlots = Object.values(pendingConsumables).filter(n => (n ?? 0) > 0).length;
       if (distinctSlots >= MAX_CONSUMABLE_SLOTS) return 'slotsFull';
@@ -157,17 +159,22 @@ export function ShopScreen() {
           {status === 'slotsFull' && (
             <Text style={styles.cardLocked}>Both supply slots are full</Text>
           )}
+          {status === 'maxed' && (
+            <Text style={styles.cardLocked}>Supply locked at 2 charges</Text>
+          )}
         </View>
         <Pressable
           style={[
             styles.buyBtn,
             styles.buyBtnConsumable,
-            (status === 'tooPoor' || status === 'slotsFull') && styles.buyBtnDisabled,
+            status !== 'buyable' && styles.buyBtnDisabled,
           ]}
           disabled={status !== 'buyable'}
           onPress={() => buyConsumableCharge(c.id)}
         >
-          <Text style={styles.buyBtnText}>{c.shopCost}</Text>
+          <Text style={styles.buyBtnText}>
+            {status === 'maxed' ? 'LOCKED' : c.shopCost}
+          </Text>
         </Pressable>
       </View>
     );

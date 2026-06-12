@@ -14,13 +14,14 @@ import {
   hasPattern23Triple,
 } from '../game/economy';
 import { ECONOMY } from '../content/economy';
-import { CONSUMABLE_MAP, CONSUMABLES, MAX_CONSUMABLE_SLOTS, MAX_CONSUMABLE_CHARGES_PER_SLOT } from '../content/consumables';
-import { IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, MAX_CONSUMABLE_CHARGES_PER_SLOT } from '../content/consumables';
+import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
 import { SYMBOLS } from '../content/symbols';
 import { SYMBOL_WEIGHTS } from '../content/symbols';
 import type { ReelResult } from '../game/types';
 
 export type RunPhase = 'idle' | 'running' | 'over';
+export type SpinOptions = { readonly compulsive?: boolean };
 
 // Dealer appearance config
 const DEALER_THRESHOLD_HIGH = 0.65; // safety gate — guarantees appearance if dealerCount === 0
@@ -28,21 +29,15 @@ const DEALER_THRESHOLD_LOW  = 0.35; // safety gate — guarantees appearance if 
 const DEALER_PROC_CHANCE    = 0.15; // 15% chance per spin (independent of thresholds)
 const DEALER_MAX_COUNT      = 3;    // max appearances per run
 
-// Dealer item pool — 2 are drawn randomly per encounter.
-const DEALER_ITEM_IDS = [
-  'item_energy_drink',
-  'item_cocktail',
-  'item_water',
-  'item_pill',
-  'item_stash',
-] as const;
+// Dealer item pool — two storable substances are drawn randomly per encounter.
+const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
 
 export interface RunStore extends RunState {
   runPhase: RunPhase;
   lastEnding: EndingType | null;
   decaySkips: number;
 
-  spin: () => SpinResult | null;
+  spin: (options?: SpinOptions) => SpinResult | null;
   setSpinning: (v: boolean) => void;
   setBetMultiplier: (m: 1 | 2 | 3) => void;
   startNewRun: (
@@ -91,11 +86,14 @@ const INITIAL_RUN_STATE: RunState = {
   dealerPending:              false,
   dealerOfferIds:             null,
   pendingGiftConsumableId:    null,
+  pendingGiftNeedsDiscard:    false,
   brainBoostSpins:            0,
   forcedRandomBetSpins:       0,
   guaranteedWinSpins:         0,
   blockPowersSpins:           0,
   hideNeuronsSpins:           0,
+  cocktailBoostSpins:         0,
+  compulsiveSpinSkips:        0,
   decaySkips:                 0,
 };
 
@@ -107,10 +105,24 @@ function canUseAbility(state: RunStore): boolean {
   return canAct(state) && state.lastResult !== null && state.blockPowersSpins <= 0;
 }
 
-function pickDealerItems(spinCount: number): [string, string] {
+function activeSlotIds(runConsumables: Partial<Record<string, number>>): string[] {
+  return Object.keys(runConsumables).filter(k => (runConsumables[k] ?? 0) > 0);
+}
+
+function canStoreItem(runConsumables: Partial<Record<string, number>>, itemId: string): boolean {
+  const currentCharges = runConsumables[itemId] ?? 0;
+  if (currentCharges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return false;
+  if (currentCharges > 0) return true;
+  return activeSlotIds(runConsumables).length < MAX_CONSUMABLE_SLOTS;
+}
+
+function pickDealerItems(spinCount: number, runConsumables: Partial<Record<string, number>>): [string, string] | null {
   const rng = createRNG(((Date.now() ^ (spinCount * 0x6b43c7f)) >>> 0));
-  // Shuffle and take the first two — guarantees two distinct offers
-  const shuffled = [...DEALER_ITEM_IDS].sort(() => rng() - 0.5);
+  const candidates = DEALER_ITEM_IDS.filter(id =>
+    (runConsumables[id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
+  if (candidates.length < 2) return null;
+  // Shuffle and take the first two — guarantees two distinct offers.
+  const shuffled = [...candidates].sort(() => rng() - 0.5);
   return [shuffled[0], shuffled[1]];
 }
 
@@ -120,25 +132,27 @@ export const useRunStore = create<RunStore>((set, get) => ({
   lastEnding: null,
   decaySkips: 0,
 
-  spin(): SpinResult | null {
+  spin(options?: SpinOptions): SpinResult | null {
     const state = get();
     if (state.runPhase !== 'running' || state.isSpinning) return null;
 
-    const isFreeSpin = state.freeSpinsRemaining > 0;
+    const isCompulsive = options?.compulsive === true && state.compulsiveSpinSkips > 0;
+    const isFreeSpin = !isCompulsive && state.freeSpinsRemaining > 0;
     if (!isFreeSpin && state.neurons < 1) return null;
 
     const seed = ((Date.now() ^ (state.spinCount * 0x9e3779b9)) >>> 0);
     const rng = createRNG(seed);
 
-    // Stasis / sedative / forced random bet
-    const stasisActive = !isFreeSpin && state.decaySkips > 0 && state.forcedRandomBetSpins === 0;
-    const sedativeActive = !isFreeSpin && hasSedative(state.ownedUpgrades) &&
+    // Stasis / sedative / forced spins. Cocktail compulsion ignores free spins and always uses x1.
+    const stasisActive = !isCompulsive && !isFreeSpin && state.decaySkips > 0;
+    const sedativeActive = !isCompulsive && !isFreeSpin && hasSedative(state.ownedUpgrades) &&
       (state.spinCount + 1) % 3 === 0;
 
     let effectiveBetMultiplier: 1 | 2 | 3 = state.betMultiplier;
-    if (state.forcedRandomBetSpins > 0) {
-      const choices: [1, 2, 3] = [1, 2, 3];
-      effectiveBetMultiplier = choices[Math.floor(rng() * 3)] as 1 | 2 | 3;
+    if (isCompulsive) {
+      effectiveBetMultiplier = 1;
+    } else if (state.forcedRandomBetSpins > 0 && effectiveBetMultiplier === 3) {
+      effectiveBetMultiplier = 2;
     }
 
     const baseDecay = computeNeuronDecay(state.ownedUpgrades);
@@ -177,13 +191,20 @@ export const useRunStore = create<RunStore>((set, get) => ({
       learningActive:     learningOn,
     });
 
+    const cocktailBonus = state.cocktailBoostSpins > 0
+      ? result.reels.reduce((sum, sym) => sum + (SYMBOLS[sym]?.rarityScore ?? 0), 0)
+      : 0;
+    const finalResult: SpinResult = cocktailBonus > 0
+      ? { ...result, lucidityEarned: result.lucidityEarned + cocktailBonus }
+      : result;
+
     set({
-      neurons:                    result.neuronsAfter,
-      lucidityEarned:             state.lucidityEarned + result.lucidityEarned,
-      freeSpinsRemaining:         result.freeSpinsAfter,
-      isFreeSpin:                 result.isFreeSpin,
+      neurons:                    finalResult.neuronsAfter,
+      lucidityEarned:             state.lucidityEarned + finalResult.lucidityEarned,
+      freeSpinsRemaining:         finalResult.freeSpinsAfter,
+      isFreeSpin:                 finalResult.isFreeSpin,
       isSpinning:                 true,
-      lastResult:                 result,
+      lastResult:                 finalResult,
       spinCount:                  state.spinCount + 1,
       nextSpinLucidityMultiplier: 1.0,
       decaySkips:                 stasisActive ? state.decaySkips - 1 : state.decaySkips,
@@ -192,9 +213,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
       guaranteedWinSpins:         Math.max(0, state.guaranteedWinSpins - 1),
       blockPowersSpins:           Math.max(0, state.blockPowersSpins - 1),
       hideNeuronsSpins:           Math.max(0, state.hideNeuronsSpins - 1),
+      cocktailBoostSpins:         Math.max(0, state.cocktailBoostSpins - 1),
+      compulsiveSpinSkips:        isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips,
     });
 
-    return result;
+    return finalResult;
   },
 
   setSpinning(v: boolean): void {
@@ -206,6 +229,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   setBetMultiplier(m: 1 | 2 | 3): void {
+    if (m === 3 && get().forcedRandomBetSpins > 0) return;
     set({ betMultiplier: m });
   },
 
@@ -241,13 +265,54 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (!canAct(state)) return false;
 
     const consumable = CONSUMABLE_MAP[consumableId];
-    if (!consumable) return false;
+    const inRunItem = IN_RUN_ITEM_MAP[consumableId];
+    if (!consumable && !inRunItem) return false;
 
     const charges = state.runConsumables[consumableId] ?? 0;
     if (charges < 1) return false;
 
     const newRunConsumables = { ...state.runConsumables, [consumableId]: charges - 1 };
-    const effect = consumable.effect;
+
+    if (inRunItem) {
+      const effect = inRunItem.effect;
+
+      switch (effect.type) {
+        case 'skipDecay':
+          set({
+            runConsumables: newRunConsumables,
+            decaySkips: state.decaySkips + effect.spins,
+            forcedRandomBetSpins: state.forcedRandomBetSpins + effect.forcedRandomBetSpins,
+            betMultiplier: state.betMultiplier === 3 ? 2 : state.betMultiplier,
+          });
+          return true;
+
+        case 'addLucidity':
+          set({
+            runConsumables: newRunConsumables,
+            lucidityEarned: state.lucidityEarned + effect.amount,
+          });
+          return true;
+
+        case 'cocktailBoost': {
+          set({
+            runConsumables: newRunConsumables,
+            cocktailBoostSpins: state.cocktailBoostSpins + effect.spins,
+            compulsiveSpinSkips: state.compulsiveSpinSkips + effect.compulsiveSpins,
+          });
+          return true;
+        }
+
+        case 'guaranteedWin':
+          set({
+            runConsumables: newRunConsumables,
+            guaranteedWinSpins: state.guaranteedWinSpins + effect.spins,
+            blockPowersSpins: state.blockPowersSpins + effect.blockPowersSpins,
+          });
+          return true;
+      }
+    }
+
+    const effect = consumable!.effect;
 
     switch (effect.type) {
       case 'skipDecay':
@@ -466,7 +531,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
     }
 
     if (shouldTrigger) {
-      const offerIds = pickDealerItems(state.spinCount);
+      const offerIds = pickDealerItems(state.spinCount, state.runConsumables);
+      if (!offerIds) {
+        set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
+        return;
+      }
       set({
         dealerCount:         state.dealerCount + 1,
         dealer65SafetyFired: new65Fired,
@@ -503,87 +572,24 @@ export const useRunStore = create<RunStore>((set, get) => ({
       return;
     }
 
-    const effect = item.effect;
-
-    switch (effect.type) {
-      case 'skipDecay':
-        set({
-          dealerPending: false,
-          dealerOfferIds: null,
-          decaySkips: state.decaySkips + effect.spins,
-          forcedRandomBetSpins: state.forcedRandomBetSpins + effect.forcedRandomBetSpins,
-        });
-        break;
-
-      case 'addLucidity':
-        set({
-          dealerPending: false,
-          dealerOfferIds: null,
-          lucidityEarned: state.lucidityEarned + effect.amount,
-        });
-        break;
-
-      case 'cocktailBoost': {
-        const raritySum = state.lastResult
-          ? state.lastResult.reels.reduce((sum, sym) => sum + (SYMBOLS[sym]?.rarityScore ?? 0), 0)
-          : 0;
-        set({
-          dealerPending: false,
-          dealerOfferIds: null,
-          lucidityEarned: state.lucidityEarned + raritySum * 3,
-        });
-        break;
-      }
-
-      case 'guaranteedWin':
-        set({
-          dealerPending: false,
-          dealerOfferIds: null,
-          guaranteedWinSpins: state.guaranteedWinSpins + effect.spins,
-          blockPowersSpins: state.blockPowersSpins + effect.blockPowersSpins,
-        });
-        break;
-
-      case 'giveConsumable': {
-        const rng = createRNG(((Date.now() ^ (state.spinCount * 0xbeefcafe)) >>> 0));
-        // Never draw a consumable the player can't hold more of (already at max charges)
-        const pool = CONSUMABLES.filter(c =>
-          (state.runConsumables[c.id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
-        if (pool.length === 0) {
-          set({ dealerPending: false, dealerOfferIds: null });
-          break;
-        }
-        const consumableId = pool[Math.floor(rng() * pool.length)].id;
-        const existingCharges = state.runConsumables[consumableId] ?? 0;
-        const occupiedSlots = Object.keys(state.runConsumables).filter(k => (state.runConsumables[k] ?? 0) > 0);
-        const canAddDirectly = occupiedSlots.includes(consumableId)
-          ? existingCharges < MAX_CONSUMABLE_CHARGES_PER_SLOT
-          : occupiedSlots.length < MAX_CONSUMABLE_SLOTS;
-
-        if (canAddDirectly) {
-          // Add to stash and show a confirmation overlay — prevents ghost-tap
-          // activation when the dealer modal closes and the consumable row appears.
-          set({
-            dealerPending: false,
-            dealerOfferIds: null,
-            runConsumables: { ...state.runConsumables, [consumableId]: existingCharges + 1 },
-            pendingGiftConsumableId: consumableId,
-          });
-          break;
-        }
-
-        // Stash full — player must discard one item to take the gift.
-        set({
-          dealerPending: false,
-          dealerOfferIds: null,
-          pendingGiftConsumableId: consumableId,
-        });
-        break;
-      }
-
-      default:
-        set({ dealerPending: false, dealerOfferIds: null });
+    const existingCharges = state.runConsumables[itemId] ?? 0;
+    if (canStoreItem(state.runConsumables, itemId)) {
+      set({
+        dealerPending: false,
+        dealerOfferIds: null,
+        runConsumables: { ...state.runConsumables, [itemId]: existingCharges + 1 },
+        pendingGiftConsumableId: null,
+        pendingGiftNeedsDiscard: false,
+      });
+      return;
     }
+
+    set({
+      dealerPending: false,
+      dealerOfferIds: null,
+      pendingGiftConsumableId: itemId,
+      pendingGiftNeedsDiscard: true,
+    });
   },
 
   declineDealerOffer(): void {
@@ -599,10 +605,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const next = { ...state.runConsumables };
     delete next[discardId];
     next[giftId] = Math.min((next[giftId] ?? 0) + 1, MAX_CONSUMABLE_CHARGES_PER_SLOT);
-    set({ runConsumables: next, pendingGiftConsumableId: null });
+    set({ runConsumables: next, pendingGiftConsumableId: null, pendingGiftNeedsDiscard: false });
   },
 
   dismissGift(): void {
-    set({ pendingGiftConsumableId: null });
+    set({ pendingGiftConsumableId: null, pendingGiftNeedsDiscard: false });
   },
 }));

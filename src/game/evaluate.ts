@@ -11,7 +11,7 @@ import type { SpinInput, SpinResult, ReelResult, SymbolId, WinType } from './typ
 
 export interface ScoreOptions {
   readonly allowFreeSpinGrant: boolean;
-  readonly pattern23Triple: boolean; // ⅔ match → triple payout (Pattern Fabrication)
+  readonly pattern23Triple: boolean; // 2/3 match -> doubled pair payout (Pattern Fabrication)
   readonly learningActive: boolean;  // book symbol pays + +10/book visible
   readonly lucidityMultiplier: number;
 }
@@ -69,7 +69,8 @@ export function scoreReels(
     };
   }
 
-  // Pattern Fabrication (⅔): any two identical reels pay as a triple
+  // Pattern Fabrication: any two identical reels pay as a doubled pair.
+  // Brain matches through this effect are not jackpots and never grant free spins.
   if (pattern23Triple) {
     const matchSym: SymbolId | null =
       a === b ? a :
@@ -78,17 +79,9 @@ export function scoreReels(
       null;
 
     if (matchSym !== null) {
-      if (matchSym === 'brain') {
-        // Brain pair-as-triple still jackpot
-        return {
-          winType: 'jackpot',
-          lucidityEarned: Math.round((JACKPOT_LUCIDITY + bookBonus) * lucidityMultiplier),
-          freeSpinsGranted: allowFreeSpinGrant ? JACKPOT_FREE_SPIN_GRANT : 0,
-        };
-      }
       return {
-        winType: 'triple',
-        lucidityEarned: Math.round(((TRIPLE_PAYOUTS[matchSym] ?? 0) + bookBonus) * lucidityMultiplier),
+        winType: 'pair',
+        lucidityEarned: Math.round((((PAIR_PAYOUTS[matchSym] ?? 0) * 2) + bookBonus) * lucidityMultiplier),
         freeSpinsGranted: 0,
       };
     }
