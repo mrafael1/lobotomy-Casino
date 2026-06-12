@@ -21,6 +21,8 @@ export interface Upgrade {
   readonly cost: number;
   readonly effect: UpgradeEffect;
   readonly requiresId?: string; // prerequisite upgrade
+  readonly tierGroup?: string;  // upgrades sharing this key are rendered as a single row
+  readonly tierLabel?: string;  // short label shown on the tier button (e.g. "I", "II", "III")
 }
 
 // --- Ability upgrades: permanent abilities unlocked per-run ---
@@ -50,29 +52,35 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
 export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
   {
     id: 'corr_reward_amp_1',
-    name: 'Reward Amplification I',
+    name: 'Reward Amplification',
     description: 'All wins pay 15% more Lucidity.',
     category: 'corrupted',
     cost: 100,
     effect: { type: 'rewardAmpBonus', bonus: 0.15 },
+    tierGroup: 'reward_amp',
+    tierLabel: 'I',
   },
   {
     id: 'corr_reward_amp_2',
-    name: 'Reward Amplification II',
-    description: 'All wins pay 25% more Lucidity (combined with tier I).',
+    name: 'Reward Amplification',
+    description: 'All wins pay 25% more Lucidity.',
     category: 'corrupted',
     cost: 160,
     requiresId: 'corr_reward_amp_1',
     effect: { type: 'rewardAmpBonus', bonus: 0.10 },
+    tierGroup: 'reward_amp',
+    tierLabel: 'II',
   },
   {
     id: 'corr_reward_amp_3',
-    name: 'Reward Amplification III',
-    description: 'All wins pay 40% more Lucidity (combined with tiers I & II).',
+    name: 'Reward Amplification',
+    description: 'All wins pay 40% more Lucidity.',
     category: 'corrupted',
     cost: 220,
     requiresId: 'corr_reward_amp_2',
     effect: { type: 'rewardAmpBonus', bonus: 0.15 },
+    tierGroup: 'reward_amp',
+    tierLabel: 'III',
   },
   {
     id: 'corr_sedative',
@@ -106,29 +114,35 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
 export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
   {
     id: 'pos_hydration_1',
-    name: 'Hydration I',
+    name: 'Hydration',
     description: 'Start each run with +10 neurons.',
     category: 'positive',
     cost: 80,
     effect: { type: 'startingNeuronBonus', amount: 10 },
+    tierGroup: 'hydration',
+    tierLabel: 'I',
   },
   {
     id: 'pos_hydration_2',
-    name: 'Hydration II',
-    description: 'Start each run with +15 more neurons (+25 total with Hydration I).',
+    name: 'Hydration',
+    description: 'Start each run with +25 total bonus neurons.',
     category: 'positive',
     cost: 140,
     requiresId: 'pos_hydration_1',
     effect: { type: 'startingNeuronBonus', amount: 15 },
+    tierGroup: 'hydration',
+    tierLabel: 'II',
   },
   {
     id: 'pos_hydration_3',
-    name: 'Hydration III',
-    description: 'Start each run with +15 more neurons (+40 total with Hydration I & II).',
+    name: 'Hydration',
+    description: 'Start each run with +40 total bonus neurons.',
     category: 'positive',
     cost: 200,
     requiresId: 'pos_hydration_2',
     effect: { type: 'startingNeuronBonus', amount: 15 },
+    tierGroup: 'hydration',
+    tierLabel: 'III',
   },
   {
     id: 'pos_passive_lucidity',
