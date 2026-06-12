@@ -400,3 +400,14 @@ test('store: sedative — every 3rd spin costs no neurons', () => {
   const expected = state.startingNeurons - 2 * 3; // 2 real spins × 3N each
   expect(state.neurons).toBe(expected);
 });
+
+test('store: Hydration raises starting neurons above the base cap', () => {
+  useRunStore.getState().startNewRun(['pos_hydration_1'], {});
+  expect(useRunStore.getState().startingNeurons).toBe(110);
+  expect(useRunStore.getState().neurons).toBe(110);
+
+  useRunStore.getState().startNewRun(
+    ['pos_hydration_1', 'pos_hydration_2', 'pos_hydration_3'], {});
+  expect(useRunStore.getState().startingNeurons).toBe(140);
+  expect(useRunStore.getState().neurons).toBe(140);
+});

@@ -468,9 +468,6 @@ export function GameScreen() {
                 <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
                   {betLocked ? '🔒' : `×${m}`}
                 </Text>
-                <Text style={[styles.betCostText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
-                  -{m * ECONOMY.NEURON_DECAY_PER_SPIN}N
-                </Text>
               </Pressable>
             );
           })}
@@ -879,12 +876,6 @@ const styles = StyleSheet.create({
   },
   betBtnLockedText: {
     color: 'rgba(255,255,255,0.35)',
-  },
-  betCostText: {
-    color: 'rgba(255,45,120,0.4)',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
   },
 
   // Spin button
