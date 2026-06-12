@@ -46,9 +46,8 @@ export function GameScreen() {
   const brainBoostSpins     = useRunStore(s => s.brainBoostSpins);
   const forcedRandomBetSpins = useRunStore(s => s.forcedRandomBetSpins);
   const guaranteedWinSpins  = useRunStore(s => s.guaranteedWinSpins);
-  const dealerPending            = useRunStore(s => s.dealerPending);
-  const dealerOfferIds           = useRunStore(s => s.dealerOfferIds);
-  const pendingGiftConsumableId  = useRunStore(s => s.pendingGiftConsumableId);
+  const dealerPending       = useRunStore(s => s.dealerPending);
+  const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -61,10 +60,8 @@ export function GameScreen() {
   const moveReel           = useRunStore(s => s.moveReel);
   const copyReel           = useRunStore(s => s.copyReel);
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
-  const acceptDealerOffer       = useRunStore(s => s.acceptDealerOffer);
-  const declineDealerOffer      = useRunStore(s => s.declineDealerOffer);
-  const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
-  const useGiftDirectly         = useRunStore(s => s.useGiftDirectly);
+  const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
+  const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
 
   const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
@@ -149,7 +146,6 @@ export function GameScreen() {
     runPhase === 'running' &&
     !isSpinning &&
     !dealerPending &&
-    !pendingGiftConsumableId &&
     (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
@@ -192,11 +188,6 @@ export function GameScreen() {
   const dealerItems = dealerOfferIds
     ? dealerOfferIds.map(id => IN_RUN_ITEM_MAP[id]).filter(Boolean)
     : [];
-
-  const giftConsumable = pendingGiftConsumableId
-    ? CONSUMABLES.find(c => c.id === pendingGiftConsumableId) ?? null
-    : null;
-  const isGiftCopyReel = giftConsumable?.effect.type === 'copyReel';
 
   return (
     <Background>
@@ -401,45 +392,6 @@ export function GameScreen() {
           </View>
           <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
             <Text style={styles.dealerDeclineText}>REFUSE BOTH</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* ── Pending gift (slots full) overlay ── */}
-      {pendingGiftConsumableId && giftConsumable && (
-        <View style={styles.overlay}>
-          <Text style={styles.dealerTitle}>THE STASH</Text>
-          <Text style={styles.dealerSubtitle}>He hands you something. Your slots are full.</Text>
-
-          <View style={styles.giftCard}>
-            <Text style={styles.dealerItemName}>{giftConsumable.name.toUpperCase()}</Text>
-            <Text style={styles.dealerItemDesc}>{giftConsumable.description}</Text>
-          </View>
-
-          <Text style={styles.giftPrompt}>DISCARD SOMETHING TO MAKE ROOM</Text>
-          <View style={styles.dealerOffers}>
-            {activeConsumables.map(c => (
-              <Pressable
-                key={c.id}
-                style={styles.dealerCard}
-                onPress={() => discardConsumableForGift(c.id)}
-              >
-                <Text style={styles.dealerItemName}>{c.name.split(' ')[0].toUpperCase()}</Text>
-                <Text style={styles.giftDiscardCharges}>×{runConsumables[c.id] ?? 0} charges lost</Text>
-                <View style={[styles.dealerAcceptBtn, styles.giftDiscardBtn]}>
-                  <Text style={styles.dealerAcceptText}>DISCARD</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-
-          <Pressable
-            style={[styles.dealerDeclineBtn, isGiftCopyReel && styles.giftWastedBtn]}
-            onPress={useGiftDirectly}
-          >
-            <Text style={styles.dealerDeclineText}>
-              {isGiftCopyReel ? 'DISCARD (WASTED — COPY NEEDS TARGET)' : 'USE NOW'}
-            </Text>
           </Pressable>
         </View>
       )}
@@ -783,36 +735,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 2,
-  },
-
-  // Pending gift overlay extras
-  giftCard: {
-    backgroundColor: 'rgba(0,229,255,0.08)',
-    borderColor: 'rgba(0,229,255,0.35)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    width: '100%',
-    alignItems: 'center',
-    gap: 6,
-  },
-  giftPrompt: {
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  giftDiscardCharges: {
-    color: '#ef4444',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  giftDiscardBtn: {
-    backgroundColor: 'rgba(239,68,68,0.75)',
-  },
-  giftWastedBtn: {
-    borderColor: '#ef4444',
   },
 
   // Game over
