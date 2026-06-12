@@ -149,6 +149,15 @@ export function GameScreen() {
     (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
+  const _base = ECONOMY.NEURON_DECAY_PER_SPIN;
+  const spinLabel =
+    freeSpins > 0
+      ? 'FREE SPIN'
+      : decaySkips > 0
+      ? 'SPIN  0N'
+      : forcedRandomBetSpins > 0
+      ? `SPIN  ${_base}–${_base * 3}N`
+      : `SPIN  -${spinNeuronCost}N`;
 
   // Abilities blocked while spinning, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
@@ -339,21 +348,25 @@ export function GameScreen() {
 
         {/* ── Bet multiplier selector ── */}
         <View style={styles.betRow}>
-          {([1, 2, 3] as const).map(m => (
-            <Pressable
-              key={m}
-              style={[styles.betBtn, betMultiplier === m && styles.betBtnActive]}
-              onPress={() => setBetMultiplier(m)}
-              disabled={isSpinning || runPhase !== 'running' || forcedRandomBetSpins > 0}
-            >
-              <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive]}>
-                ×{m}
-              </Text>
-              <Text style={[styles.betCostText, betMultiplier === m && styles.betBtnTextActive]}>
-                -{m * ECONOMY.NEURON_DECAY_PER_SPIN}N
-              </Text>
-            </Pressable>
-          ))}
+          {([1, 2, 3] as const).map(m => {
+            const betLocked = forcedRandomBetSpins > 0 || neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN;
+            const betDisabled = isSpinning || runPhase !== 'running' || betLocked;
+            return (
+              <Pressable
+                key={m}
+                style={[styles.betBtn, betMultiplier === m && styles.betBtnActive, betLocked && styles.betBtnLocked]}
+                onPress={() => setBetMultiplier(m)}
+                disabled={betDisabled}
+              >
+                <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
+                  {betLocked ? '🔒' : `×${m}`}
+                </Text>
+                <Text style={[styles.betCostText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
+                  -{m * ECONOMY.NEURON_DECAY_PER_SPIN}N
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* ── Spin button ── */}
@@ -364,7 +377,7 @@ export function GameScreen() {
             disabled={!canSpin}
           >
             <Text style={styles.spinBtnText}>
-              {freeSpins > 0 ? 'FREE SPIN' : `SPIN  -${spinNeuronCost}N`}
+              {spinLabel}
             </Text>
           </Pressable>
         </View>
@@ -627,6 +640,13 @@ const styles = StyleSheet.create({
   },
   betBtnTextActive: {
     color: '#ff2d78',
+  },
+  betBtnLocked: {
+    opacity: 0.4,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  betBtnLockedText: {
+    color: 'rgba(255,255,255,0.35)',
   },
   betCostText: {
     color: 'rgba(255,45,120,0.4)',
