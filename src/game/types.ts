@@ -58,6 +58,7 @@ export interface RunState {
   readonly dealerCount: number;              // how many times the Dealer has appeared this run (max 3)
   readonly dealer65SafetyFired: boolean;     // true once we've evaluated the 65% safety gate
   readonly dealer35SafetyFired: boolean;     // true once we've evaluated the 35% safety gate
+  readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown
   readonly dealerPending: boolean;           // dealer modal should be shown
   readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
   // Active effects from consumables / dealer items

@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   SafeAreaView,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Background } from '../components/Background';
@@ -46,6 +47,7 @@ export function GameScreen() {
   const brainBoostSpins     = useRunStore(s => s.brainBoostSpins);
   const forcedRandomBetSpins = useRunStore(s => s.forcedRandomBetSpins);
   const guaranteedWinSpins  = useRunStore(s => s.guaranteedWinSpins);
+  const dealerIncoming      = useRunStore(s => s.dealerIncoming);
   const dealerPending       = useRunStore(s => s.dealerPending);
   const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
 
@@ -60,6 +62,7 @@ export function GameScreen() {
   const moveReel           = useRunStore(s => s.moveReel);
   const copyReel           = useRunStore(s => s.copyReel);
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
+  const revealDealer       = useRunStore(s => s.revealDealer);
   const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
   const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
 
@@ -70,6 +73,21 @@ export function GameScreen() {
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
+
+  const tapAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!dealerIncoming) return;
+    tapAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 200, useNativeDriver: true }),
+    ]).start(() => revealDealer());
+  }, [dealerIncoming]);
 
   useEffect(() => {
     if (runPhase === 'idle') {
@@ -149,6 +167,7 @@ export function GameScreen() {
     runPhase === 'running' &&
     !isSpinning &&
     rerollingReelIndex === null &&
+    !dealerIncoming &&
     !dealerPending &&
     (freeSpins > 0 || neurons >= 1);
 
@@ -223,7 +242,7 @@ export function GameScreen() {
         </View>
 
         {/* ── Slot machine ── */}
-        <View style={styles.machineWrap}>
+        <Animated.View style={[styles.machineWrap, { transform: [{ translateX: tapAnim }] }]}>
           <SlotMachine
             onAllReelsDone={handleAllReelsDone}
             onReelPress={reelsTappable ? handleReelPress : undefined}
@@ -233,7 +252,7 @@ export function GameScreen() {
             rerollingReelIndex={rerollingReelIndex}
             onRerollDone={() => setRerollingReelIndex(null)}
           />
-        </View>
+        </Animated.View>
 
         {/* ── Neuron health bar ── */}
         <NeuronBar />

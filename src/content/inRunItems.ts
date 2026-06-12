@@ -19,8 +19,8 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_energy_drink',
     name: 'Energy Drink',
-    description: '×5 random-bet free spins, then ×5 free spins.',
-    effect: { type: 'skipDecay', spins: 10, forcedRandomBetSpins: 5 },
+    description: '×5 random-bet spins, then ×5 free spins.',
+    effect: { type: 'skipDecay', spins: 5, forcedRandomBetSpins: 5 },
   },
   {
     id: 'item_cocktail',

@@ -59,6 +59,7 @@ export interface RunStore extends RunState {
 
   // Dealer interactions
   checkDealerTrigger: () => void;
+  revealDealer: () => void;
   acceptDealerOffer: (itemId: string) => void;
   declineDealerOffer: () => void;
 }
@@ -83,6 +84,7 @@ const INITIAL_RUN_STATE: RunState = {
   dealerCount:                0,
   dealer65SafetyFired:        false,
   dealer35SafetyFired:        false,
+  dealerIncoming:             false,
   dealerPending:              false,
   dealerOfferIds:             null,
   brainBoostSpins:            0,
@@ -125,7 +127,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const rng = createRNG(seed);
 
     // Stasis / sedative / forced random bet
-    const stasisActive = !isFreeSpin && state.decaySkips > 0;
+    const stasisActive = !isFreeSpin && state.decaySkips > 0 && state.forcedRandomBetSpins === 0;
     const sedativeActive = !isFreeSpin && hasSedative(state.ownedUpgrades) &&
       (state.spinCount + 1) % 3 === 0;
 
@@ -426,7 +428,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   checkDealerTrigger(): void {
     const state = get();
-    if (state.runPhase !== 'running' || state.dealerPending) return;
+    if (state.runPhase !== 'running' || state.dealerPending || state.dealerIncoming) return;
     if (state.startingNeurons <= 0) return;
     if (state.dealerCount >= DEALER_MAX_COUNT) return;
 
@@ -459,13 +461,19 @@ export const useRunStore = create<RunStore>((set, get) => ({
         dealerCount:         state.dealerCount + 1,
         dealer65SafetyFired: new65Fired,
         dealer35SafetyFired: new35Fired,
-        dealerPending:       true,
+        dealerIncoming:      true,
         dealerOfferIds:      offerIds,
       });
     } else if (new65Fired !== state.dealer65SafetyFired || new35Fired !== state.dealer35SafetyFired) {
       // Safety gates were evaluated but didn't force a trigger — still persist the flags
       set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
     }
+  },
+
+  revealDealer(): void {
+    const state = get();
+    if (!state.dealerIncoming) return;
+    set({ dealerIncoming: false, dealerPending: true });
   },
 
   acceptDealerOffer(itemId: string): void {
