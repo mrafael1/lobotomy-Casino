@@ -383,17 +383,15 @@ export function GameScreen() {
           )}
         </View>
 
-        {/* ── Cancel / ability+consumable area ── */}
-        {selection.mode !== 'none' ? (
-          <View style={styles.cancelRow}>
+        {/* ── Powers + consumables — single fixed-height row so the machine
+               never shifts when a power is selected or cancelled ── */}
+        <View style={styles.itemArea}>
+          {selection.mode !== 'none' ? (
             <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
               <Text style={styles.cancelText}>CANCEL</Text>
             </Pressable>
-          </View>
-        ) : (
-          <>
-            {/* ── Abilities ── */}
-            <View style={styles.itemRow}>
+          ) : (
+            <>
               <Pressable
                 style={[
                   styles.itemBtn,
@@ -433,34 +431,27 @@ export function GameScreen() {
                   <Text style={styles.itemTag}>1/RUN</Text>
                 </Pressable>
               )}
-            </View>
 
-            {/* ── Consumables ── */}
-            <View style={[styles.itemRow, styles.stashRow]}>
-              {activeStashItems.length > 0 && (
-                <>
-                {activeStashItems.map(c => {
-                  const charges = runConsumables[c.id] ?? 0;
-                  const disabled = runPhase !== 'running' || runBusy;
-                  return (
-                    <Pressable
-                      key={c.id}
-                      style={[styles.itemBtn, styles.itemBtnConsumable, disabled && styles.itemBtnDisabled]}
-                      disabled={disabled}
-                      onPress={() => handleConsumable(c.id)}
-                    >
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {c.name.split(' ')[0].toUpperCase()}
-                      </Text>
-                      <Text style={styles.itemTag}>×{charges}</Text>
-                    </Pressable>
-                  );
-                })}
-                </>
-              )}
-            </View>
-          </>
-        )}
+              {activeStashItems.map(c => {
+                const charges = runConsumables[c.id] ?? 0;
+                const disabled = runPhase !== 'running' || runBusy;
+                return (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.itemBtn, styles.itemBtnConsumable, disabled && styles.itemBtnDisabled]}
+                    disabled={disabled}
+                    onPress={() => handleConsumable(c.id)}
+                  >
+                    <Text style={styles.itemName} numberOfLines={1}>
+                      {c.name.split(' ')[0].toUpperCase()}
+                    </Text>
+                    <Text style={styles.itemTag}>×{charges}</Text>
+                  </Pressable>
+                );
+              })}
+            </>
+          )}
+        </View>
 
         {/* ── Bet multiplier selector ── */}
         <View style={styles.betRow}>
@@ -802,16 +793,15 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Abilities + consumables
-  itemRow: {
+  // Powers + consumables + cancel share one fixed-height row — the machine's
+  // vertical position must not depend on which of them is showing.
+  itemArea: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 6,
-  },
-  stashRow: {
-    minHeight: 40,
+    height: 52,
   },
   itemBtn: {
     flex: 1,
@@ -841,13 +831,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Cancel row shown during any active selection
-  cancelRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    minHeight: 40,
-    alignItems: 'center',
-  },
   cancelBtn: {
     paddingVertical: 10,
     paddingHorizontal: 18,
