@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   SafeAreaView,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Background } from '../components/Background';
@@ -46,9 +47,10 @@ export function GameScreen() {
   const brainBoostSpins     = useRunStore(s => s.brainBoostSpins);
   const forcedRandomBetSpins = useRunStore(s => s.forcedRandomBetSpins);
   const guaranteedWinSpins  = useRunStore(s => s.guaranteedWinSpins);
-  const dealerPending            = useRunStore(s => s.dealerPending);
-  const dealerOfferIds           = useRunStore(s => s.dealerOfferIds);
-  const pendingGiftConsumableId  = useRunStore(s => s.pendingGiftConsumableId);
+  const dealerIncoming      = useRunStore(s => s.dealerIncoming);
+  const dealerPending       = useRunStore(s => s.dealerPending);
+  const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
+  const pendingGiftId       = useRunStore(s => s.pendingGiftConsumableId);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -61,10 +63,11 @@ export function GameScreen() {
   const moveReel           = useRunStore(s => s.moveReel);
   const copyReel           = useRunStore(s => s.copyReel);
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
-  const acceptDealerOffer       = useRunStore(s => s.acceptDealerOffer);
-  const declineDealerOffer      = useRunStore(s => s.declineDealerOffer);
+  const revealDealer       = useRunStore(s => s.revealDealer);
+  const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
+  const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
   const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
-  const useGiftDirectly         = useRunStore(s => s.useGiftDirectly);
+  const dismissGift        = useRunStore(s => s.dismissGift);
 
   const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
@@ -72,6 +75,22 @@ export function GameScreen() {
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
+
+  const tapAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!dealerIncoming) return;
+    tapAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
+      Animated.timing(tapAnim, { toValue:  0, duration: 200, useNativeDriver: true }),
+    ]).start(() => revealDealer());
+  }, [dealerIncoming]);
 
   useEffect(() => {
     if (runPhase === 'idle') {
@@ -87,12 +106,13 @@ export function GameScreen() {
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
     const runNow = useRunStore.getState();
-    // Check dealer thresholds after each spin
-    checkDealerTrigger();
+    // End check runs first — if the run is over the Dealer should not appear.
     const ending = checkEnding(runNow, useMetaStore.getState());
     if (ending) {
       bankRun(runNow, ending);
       endRun(ending);
+    } else {
+      checkDealerTrigger();
     }
   }, [setSpinning, bankRun, endRun, checkDealerTrigger]);
 
@@ -104,7 +124,9 @@ export function GameScreen() {
   // ── Reel targeting ──
   const handleReelPress = useCallback((i: number) => {
     if (selection.mode === 'reroll') {
-      rerollReel(i);
+      if (rerollReel(i)) {
+        setRerollingReelIndex(i);
+      }
       setSelection(NO_SELECTION);
     } else if (selection.mode === 'lock') {
       lockReel(i);
@@ -145,18 +167,29 @@ export function GameScreen() {
     });
   }, [moveReel]);
 
-  const canSpin =
-    runPhase === 'running' &&
-    !isSpinning &&
-    !dealerPending &&
-    !pendingGiftConsumableId &&
-    (freeSpins > 0 || neurons >= 1);
+  const runBusy =
+    isSpinning ||
+    rerollingReelIndex !== null ||
+    dealerIncoming ||
+    dealerPending ||
+    pendingGiftId !== null;
+
+  const canSpin = runPhase === 'running' && !runBusy && (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
+  const _base = ECONOMY.NEURON_DECAY_PER_SPIN;
+  const spinLabel =
+    freeSpins > 0
+      ? 'FREE SPIN'
+      : decaySkips > 0
+      ? 'SPIN  0N'
+      : forcedRandomBetSpins > 0
+      ? `SPIN  ${_base}–${_base * 3}N`
+      : `SPIN  -${spinNeuronCost}N`;
 
-  // Abilities blocked while spinning, powers blocked (Pill), or no result yet
+  // Abilities blocked while game is busy, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
-  const abilitiesUsable = runPhase === 'running' && !isSpinning && lastResult !== null && !powersBlocked;
+  const abilitiesUsable = runPhase === 'running' && !runBusy && lastResult !== null && !powersBlocked;
 
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
@@ -187,16 +220,11 @@ export function GameScreen() {
     : selection.mode === 'copy_target' ? [selection.sourceReel]
     : [];
 
-  const reelsTappable = selection.mode !== 'none';
+  const reelsTappable = selection.mode !== 'none' && !runBusy;
 
   const dealerItems = dealerOfferIds
     ? dealerOfferIds.map(id => IN_RUN_ITEM_MAP[id]).filter(Boolean)
     : [];
-
-  const giftConsumable = pendingGiftConsumableId
-    ? CONSUMABLES.find(c => c.id === pendingGiftConsumableId) ?? null
-    : null;
-  const isGiftCopyReel = giftConsumable?.effect.type === 'copyReel';
 
   return (
     <Background>
@@ -218,15 +246,17 @@ export function GameScreen() {
         </View>
 
         {/* ── Slot machine ── */}
-        <View style={styles.machineWrap}>
+        <Animated.View style={[styles.machineWrap, { transform: [{ translateX: tapAnim }] }]}>
           <SlotMachine
             onAllReelsDone={handleAllReelsDone}
             onReelPress={reelsTappable ? handleReelPress : undefined}
             selectedReels={selectedReels}
             shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
             onShiftDirection={handleMoveDirection}
+            rerollingReelIndex={rerollingReelIndex}
+            onRerollDone={() => setRerollingReelIndex(null)}
           />
-        </View>
+        </Animated.View>
 
         {/* ── Neuron health bar ── */}
         <NeuronBar />
@@ -326,7 +356,7 @@ export function GameScreen() {
               <View style={styles.itemRow}>
                 {activeConsumables.map(c => {
                   const charges = runConsumables[c.id] ?? 0;
-                  const disabled = runPhase !== 'running' || isSpinning;
+                  const disabled = runPhase !== 'running' || runBusy;
                   return (
                     <Pressable
                       key={c.id}
@@ -348,21 +378,25 @@ export function GameScreen() {
 
         {/* ── Bet multiplier selector ── */}
         <View style={styles.betRow}>
-          {([1, 2, 3] as const).map(m => (
-            <Pressable
-              key={m}
-              style={[styles.betBtn, betMultiplier === m && styles.betBtnActive]}
-              onPress={() => setBetMultiplier(m)}
-              disabled={isSpinning || runPhase !== 'running' || forcedRandomBetSpins > 0}
-            >
-              <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive]}>
-                ×{m}
-              </Text>
-              <Text style={[styles.betCostText, betMultiplier === m && styles.betBtnTextActive]}>
-                -{m * ECONOMY.NEURON_DECAY_PER_SPIN}N
-              </Text>
-            </Pressable>
-          ))}
+          {([1, 2, 3] as const).map(m => {
+            const betLocked = forcedRandomBetSpins > 0 || neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN;
+            const betDisabled = runPhase !== 'running' || runBusy || betLocked;
+            return (
+              <Pressable
+                key={m}
+                style={[styles.betBtn, betMultiplier === m && styles.betBtnActive, betLocked && styles.betBtnLocked]}
+                onPress={() => setBetMultiplier(m)}
+                disabled={betDisabled}
+              >
+                <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
+                  {betLocked ? '🔒' : `×${m}`}
+                </Text>
+                <Text style={[styles.betCostText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
+                  -{m * ECONOMY.NEURON_DECAY_PER_SPIN}N
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* ── Spin button ── */}
@@ -373,7 +407,7 @@ export function GameScreen() {
             disabled={!canSpin}
           >
             <Text style={styles.spinBtnText}>
-              {freeSpins > 0 ? 'FREE SPIN' : `SPIN  -${spinNeuronCost}N`}
+              {spinLabel}
             </Text>
           </Pressable>
         </View>
@@ -405,41 +439,30 @@ export function GameScreen() {
         </View>
       )}
 
-      {/* ── Pending gift (slots full) overlay ── */}
-      {pendingGiftConsumableId && giftConsumable && (
+      {/* ── Stash-full gift overlay ── */}
+      {pendingGiftId && (
         <View style={styles.overlay}>
-          <Text style={styles.dealerTitle}>THE STASH</Text>
-          <Text style={styles.dealerSubtitle}>He hands you something. Your slots are full.</Text>
-
-          <View style={styles.giftCard}>
-            <Text style={styles.dealerItemName}>{giftConsumable.name.toUpperCase()}</Text>
-            <Text style={styles.dealerItemDesc}>{giftConsumable.description}</Text>
-          </View>
-
-          <Text style={styles.giftPrompt}>DISCARD SOMETHING TO MAKE ROOM</Text>
+          <Text style={styles.dealerTitle}>STASH FULL</Text>
+          <Text style={styles.dealerSubtitle}>
+            He hands you {CONSUMABLES.find(c => c.id === pendingGiftId)?.name ?? 'something'}.
+            {'\n'}Discard something to make room.
+          </Text>
           <View style={styles.dealerOffers}>
             {activeConsumables.map(c => (
-              <Pressable
-                key={c.id}
-                style={styles.dealerCard}
-                onPress={() => discardConsumableForGift(c.id)}
-              >
-                <Text style={styles.dealerItemName}>{c.name.split(' ')[0].toUpperCase()}</Text>
-                <Text style={styles.giftDiscardCharges}>×{runConsumables[c.id] ?? 0} charges lost</Text>
-                <View style={[styles.dealerAcceptBtn, styles.giftDiscardBtn]}>
+              <View key={c.id} style={styles.dealerCard}>
+                <Text style={styles.dealerItemName}>{c.name}</Text>
+                <Text style={styles.dealerItemDesc}>×{runConsumables[c.id] ?? 0} charge{(runConsumables[c.id] ?? 0) > 1 ? 's' : ''}</Text>
+                <Pressable
+                  style={styles.dealerAcceptBtn}
+                  onPress={() => discardConsumableForGift(c.id)}
+                >
                   <Text style={styles.dealerAcceptText}>DISCARD</Text>
-                </View>
-              </Pressable>
+                </Pressable>
+              </View>
             ))}
           </View>
-
-          <Pressable
-            style={[styles.dealerDeclineBtn, isGiftCopyReel && styles.giftWastedBtn]}
-            onPress={useGiftDirectly}
-          >
-            <Text style={styles.dealerDeclineText}>
-              {isGiftCopyReel ? 'DISCARD (WASTED — COPY NEEDS TARGET)' : 'USE NOW'}
-            </Text>
+          <Pressable style={styles.dealerDeclineBtn} onPress={dismissGift}>
+            <Text style={styles.dealerDeclineText}>TOSS THE GIFT</Text>
           </Pressable>
         </View>
       )}
@@ -676,6 +699,13 @@ const styles = StyleSheet.create({
   betBtnTextActive: {
     color: '#ff2d78',
   },
+  betBtnLocked: {
+    opacity: 0.4,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  betBtnLockedText: {
+    color: 'rgba(255,255,255,0.35)',
+  },
   betCostText: {
     color: 'rgba(255,45,120,0.4)',
     fontSize: 9,
@@ -783,36 +813,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 2,
-  },
-
-  // Pending gift overlay extras
-  giftCard: {
-    backgroundColor: 'rgba(0,229,255,0.08)',
-    borderColor: 'rgba(0,229,255,0.35)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    width: '100%',
-    alignItems: 'center',
-    gap: 6,
-  },
-  giftPrompt: {
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  giftDiscardCharges: {
-    color: '#ef4444',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  giftDiscardBtn: {
-    backgroundColor: 'rgba(239,68,68,0.75)',
-  },
-  giftWastedBtn: {
-    borderColor: '#ef4444',
   },
 
   // Game over

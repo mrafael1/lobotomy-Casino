@@ -56,6 +56,7 @@ for (let r = 0; r < RUNS; r++) {
     dealerCount:               0,
     dealer65SafetyFired:       false,
     dealer35SafetyFired:       false,
+    dealerIncoming:            false,
     dealerPending:             false,
     dealerOfferIds:            null,
     pendingGiftConsumableId:   null,

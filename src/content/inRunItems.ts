@@ -6,7 +6,7 @@ export type InRunEffect =
   | { type: 'cocktailBoost' }      // grants Lucidity = sum(rarity scores of current reels) × 3
   | { type: 'addLucidity';         amount: number }
   | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number }
-  | { type: 'giveConsumable' };    // gives a random consumable; player resolves slot conflicts
+  | { type: 'giveConsumable' };    // gives a random consumable; if slots are full the player must discard one
 
 export interface InRunItem {
   readonly id: string;
@@ -19,8 +19,8 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_energy_drink',
     name: 'Energy Drink',
-    description: 'Your next 10 spins cost no neurons. Your next 5 spins use a random bet multiplier.',
-    effect: { type: 'skipDecay', spins: 10, forcedRandomBetSpins: 5 },
+    description: '×5 random-bet spins, then ×5 free spins.',
+    effect: { type: 'skipDecay', spins: 5, forcedRandomBetSpins: 5 },
   },
   {
     id: 'item_cocktail',
@@ -43,7 +43,7 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_stash',
     name: 'The Stash',
-    description: 'A random supply from his coat. If your slots are full, you decide what to do with it.',
+    description: 'A random supply from his coat. If your slots are full, you\'ll have to make room.',
     effect: { type: 'giveConsumable' },
   },
 ];

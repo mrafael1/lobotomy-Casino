@@ -59,11 +59,11 @@ export interface RunStore extends RunState {
 
   // Dealer interactions
   checkDealerTrigger: () => void;
+  revealDealer: () => void;
   acceptDealerOffer: (itemId: string) => void;
   declineDealerOffer: () => void;
-  // Pending gift resolution (slots-full case from item_stash)
-  discardConsumableForGift: (typeId: string) => void; // discard all charges of typeId, add the gift
-  useGiftDirectly: () => void;                        // apply gift effect immediately (copyReel: wasted)
+  discardConsumableForGift: (discardId: string) => void;
+  dismissGift: () => void;
 }
 
 const INITIAL_RUN_STATE: RunState = {
@@ -86,6 +86,7 @@ const INITIAL_RUN_STATE: RunState = {
   dealerCount:                0,
   dealer65SafetyFired:        false,
   dealer35SafetyFired:        false,
+  dealerIncoming:             false,
   dealerPending:              false,
   dealerOfferIds:             null,
   pendingGiftConsumableId:    null,
@@ -129,7 +130,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const rng = createRNG(seed);
 
     // Stasis / sedative / forced random bet
-    const stasisActive = !isFreeSpin && state.decaySkips > 0;
+    const stasisActive = !isFreeSpin && state.decaySkips > 0 && state.forcedRandomBetSpins === 0;
     const sedativeActive = !isFreeSpin && hasSedative(state.ownedUpgrades) &&
       (state.spinCount + 1) % 3 === 0;
 
@@ -430,7 +431,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   checkDealerTrigger(): void {
     const state = get();
-    if (state.runPhase !== 'running' || state.dealerPending) return;
+    if (state.runPhase !== 'running' || state.dealerPending || state.dealerIncoming) return;
     if (state.startingNeurons <= 0) return;
     if (state.dealerCount >= DEALER_MAX_COUNT) return;
 
@@ -463,13 +464,19 @@ export const useRunStore = create<RunStore>((set, get) => ({
         dealerCount:         state.dealerCount + 1,
         dealer65SafetyFired: new65Fired,
         dealer35SafetyFired: new35Fired,
-        dealerPending:       true,
+        dealerIncoming:      true,
         dealerOfferIds:      offerIds,
       });
     } else if (new65Fired !== state.dealer65SafetyFired || new35Fired !== state.dealer35SafetyFired) {
       // Safety gates were evaluated but didn't force a trigger — still persist the flags
       set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
     }
+  },
+
+  revealDealer(): void {
+    const state = get();
+    if (!state.dealerIncoming || state.runPhase !== 'running') return;
+    set({ dealerIncoming: false, dealerPending: true });
   },
 
   acceptDealerOffer(itemId: string): void {
@@ -526,7 +533,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
       case 'giveConsumable': {
         const rng = createRNG(((Date.now() ^ (state.spinCount * 0xbeefcafe)) >>> 0));
-        const consumableId = CONSUMABLES[Math.floor(rng() * CONSUMABLES.length)].id;
+        // Never draw a consumable the player can't hold more of (already at max charges)
+        const pool = CONSUMABLES.filter(c =>
+          (state.runConsumables[c.id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
+        if (pool.length === 0) {
+          set({ dealerPending: false, dealerOfferIds: null });
+          break;
+        }
+        const consumableId = pool[Math.floor(rng() * pool.length)].id;
         const existingCharges = state.runConsumables[consumableId] ?? 0;
         const occupiedSlots = Object.keys(state.runConsumables).filter(k => (state.runConsumables[k] ?? 0) > 0);
         const canAddDirectly = occupiedSlots.includes(consumableId)
@@ -539,9 +553,15 @@ export const useRunStore = create<RunStore>((set, get) => ({
             dealerOfferIds: null,
             runConsumables: { ...state.runConsumables, [consumableId]: existingCharges + 1 },
           });
-        } else {
-          set({ dealerPending: false, dealerOfferIds: null, pendingGiftConsumableId: consumableId });
+          break;
         }
+
+        // Stash full — player must discard one item to take the gift (no direct use).
+        set({
+          dealerPending: false,
+          dealerOfferIds: null,
+          pendingGiftConsumableId: consumableId,
+        });
         break;
       }
 
@@ -554,77 +574,19 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({ dealerPending: false, dealerOfferIds: null });
   },
 
-  discardConsumableForGift(typeId: string): void {
+  discardConsumableForGift(discardId: string): void {
     const state = get();
-    if (!state.pendingGiftConsumableId) return;
-    if (!((state.runConsumables[typeId] ?? 0) > 0)) return;
-
     const giftId = state.pendingGiftConsumableId;
-    set({
-      pendingGiftConsumableId: null,
-      runConsumables: {
-        ...state.runConsumables,
-        [typeId]: 0,   // clear entire slot
-        [giftId]: 1,   // add gift with 1 charge
-      },
-    });
+    if (!giftId) return;
+    if ((state.runConsumables[discardId] ?? 0) <= 0) return;
+
+    const next = { ...state.runConsumables };
+    delete next[discardId];
+    next[giftId] = Math.min((next[giftId] ?? 0) + 1, MAX_CONSUMABLE_CHARGES_PER_SLOT);
+    set({ runConsumables: next, pendingGiftConsumableId: null });
   },
 
-  useGiftDirectly(): void {
-    const state = get();
-    const consumableId = state.pendingGiftConsumableId;
-    if (!consumableId) return;
-
-    const consumable = CONSUMABLE_MAP[consumableId];
-    if (!consumable) { set({ pendingGiftConsumableId: null }); return; }
-
-    const effect = consumable.effect;
-    switch (effect.type) {
-      case 'skipDecay':
-        set({ pendingGiftConsumableId: null, decaySkips: state.decaySkips + effect.spins });
-        break;
-
-      case 'lucidityMultiplierNextSpin':
-        set({
-          pendingGiftConsumableId: null,
-          nextSpinLucidityMultiplier: effect.multiplier,
-          hideNeuronsSpins: state.hideNeuronsSpins + (effect.hideNeuronsSpins ?? 0),
-        });
-        break;
-
-      case 'brainBoost': {
-        const allAbilities: AbilityId[] = ['reroll', 'shift', 'memory'];
-        const available = allAbilities.filter(a => !state.abilitiesUsed.includes(a));
-        const toBlock: AbilityId[] = available.length > 0
-          ? (() => {
-              const rng = createRNG(((Date.now() ^ state.spinCount) >>> 0));
-              const pick = available[Math.floor(rng() * available.length)];
-              return [pick];
-            })()
-          : [];
-        set({
-          pendingGiftConsumableId: null,
-          brainBoostSpins: effect.spins,
-          abilitiesUsed: [...state.abilitiesUsed, ...toBlock] as ReadonlyArray<AbilityId>,
-        });
-        break;
-      }
-
-      case 'restoreAbility': {
-        if (state.abilitiesUsed.length === 0) { set({ pendingGiftConsumableId: null }); break; }
-        const rng = createRNG(((Date.now() ^ (state.spinCount * 0xdeadbeef)) >>> 0));
-        const idx = Math.floor(rng() * state.abilitiesUsed.length);
-        set({
-          pendingGiftConsumableId: null,
-          abilitiesUsed: state.abilitiesUsed.filter((_, i) => i !== idx) as ReadonlyArray<AbilityId>,
-        });
-        break;
-      }
-
-      case 'copyReel':
-        // Requires UI source/target selection — wasted when applied directly
-        set({ pendingGiftConsumableId: null });
-        break;
-    }
+  dismissGift(): void {
+    set({ pendingGiftConsumableId: null });
   },
 }));
