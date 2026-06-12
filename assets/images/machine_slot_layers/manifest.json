@@ -1,0 +1,78 @@
+{
+  "width": 200,
+  "height": 300,
+  "layers": [
+    {
+      "name": "Cabinet",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Cabinet.png"
+    },
+    {
+      "name": "Trim",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Trim.png"
+    },
+    {
+      "name": "ReelWindow",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\ReelWindow.png"
+    },
+    {
+      "name": "Glass",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Glass.png"
+    },
+    {
+      "name": "Neon_Trim",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Neon_Trim.png"
+    },
+    {
+      "name": "Lights_Bright",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Lights_Bright.png"
+    },
+    {
+      "name": "Jackpot_Flash",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Jackpot_Flash.png"
+    },
+    {
+      "name": "Cabinet_Sickly",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Cabinet_Sickly.png"
+    },
+    {
+      "name": "Glitch",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Glitch.png"
+    },
+    {
+      "name": "Flicker_Dead",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Flicker_Dead.png"
+    },
+    {
+      "name": "Crack",
+      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Crack.png"
+    }
+  ],
+  "reel": {
+    "inner": {
+      "x": 25,
+      "y": 82,
+      "width": 150,
+      "height": 100
+    },
+    "columns": [
+      {
+        "x": 25,
+        "y": 82,
+        "width": 50,
+        "height": 100
+      },
+      {
+        "x": 75,
+        "y": 82,
+        "width": 50,
+        "height": 100
+      },
+      {
+        "x": 125,
+        "y": 82,
+        "width": 50,
+        "height": 100
+      }
+    ]
+  }
+}

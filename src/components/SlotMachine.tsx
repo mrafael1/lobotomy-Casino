@@ -7,15 +7,15 @@ import { SYMBOLS } from '../content/symbols';
 import { useRunStore } from '../state/runState';
 import type { SymbolId } from '../game/types';
 
-// Machine PNG aspect ratio (height / width). Measured from provided assets.
-const MACHINE_ASPECT = 1.337;
+// Runtime PNG is a 3x nearest-neighbor upscale of the 200x300 source art.
+const MACHINE_ASPECT = 900 / 600;
 
-// Reel window position as fractions of the machine image dimensions.
-// Tune these if the overlay drifts on the actual assets.
-const WIN_TOP   = 0.162;
-const WIN_LEFT  = 0.125;
-const WIN_W     = 0.750;
-const WIN_H     = 0.380;
+// Exact reel window from the Aseprite source:
+// x=25, y=82, width=150, height=100 on a 200x300 cabinet.
+const WIN_TOP   = 82 / 300;
+const WIN_LEFT  = 25 / 200;
+const WIN_W     = 150 / 200;
+const WIN_H     = 100 / 300;
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
@@ -41,7 +41,7 @@ export function SlotMachine({
   rerollingReelIndex = null,
   onRerollDone,
 }: Props) {
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const isSpinning  = useRunStore(s => s.isSpinning);
   const lastResult  = useRunStore(s => s.lastResult);
@@ -62,7 +62,10 @@ export function SlotMachine({
     return () => { if (flashTimer.current) clearTimeout(flashTimer.current); };
   }, [lastResult, isSpinning]);
 
-  const machineWidth  = screenWidth * 0.9;
+  const machineWidth  = Math.floor(Math.min(
+    screenWidth * 0.9,
+    (screenHeight * 0.56) / MACHINE_ASPECT,
+  ));
   const machineHeight = machineWidth * MACHINE_ASPECT;
   const symbolSize    = Math.min(
     Math.floor((machineWidth * WIN_W) / 3) - 4,
@@ -70,13 +73,10 @@ export function SlotMachine({
     SYMBOL_SIZE,
   );
 
-  const neuronRatio = startingN > 0 ? neurons / startingN : 0;
-  const isDecay     = neuronRatio <= 0.5 && runPhase === 'running';
-  const machineImg  = jackpotFlash
-    ? require('../../assets/images/machine_jackpot.png')
-    : isDecay
-      ? require('../../assets/images/machine_decay.png')
-      : require('../../assets/images/machine_normal.png');
+  const neuronRatio = startingN > 0 ? neurons / startingN : 1;
+  const decayOpacity = runPhase === 'running'
+    ? Math.pow(Math.max(0, Math.min(1, 1 - neuronRatio)), 0.7)
+    : 0;
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels
@@ -92,13 +92,13 @@ export function SlotMachine({
     }
   }
 
-  // Reset completed counter when a new spin starts.
-  // Locked reels fire onComplete immediately without animating, so pre-count them.
+  // Reset completed counter when a new spin starts. Locked reels fire their
+  // own completion immediately, so they should not be pre-counted here.
   useEffect(() => {
     if (isSpinning) {
-      completedRef.current = lockedReels.filter(Boolean).length;
+      completedRef.current = 0;
     }
-  }, [isSpinning]);
+  }, [isSpinning, lockedReels]);
 
   // Reel window absolute coords over the machine image
   const winTop  = machineHeight * WIN_TOP;
@@ -120,7 +120,23 @@ export function SlotMachine({
 
   return (
     <View style={[styles.machine, { width: machineWidth, height: machineHeight }]}>
-      <Image source={machineImg} style={styles.machineImg} resizeMode="contain" />
+      <Image
+        source={require('../../assets/images/machine_normal.png')}
+        style={styles.machineImg}
+        resizeMode="contain"
+      />
+      <Image
+        source={require('../../assets/images/machine_decay.png')}
+        style={[styles.machineImg, styles.machineOverlay, { opacity: decayOpacity }]}
+        resizeMode="contain"
+      />
+      {jackpotFlash && (
+        <Image
+          source={require('../../assets/images/machine_jackpot.png')}
+          style={[styles.machineImg, styles.machineOverlay]}
+          resizeMode="contain"
+        />
+      )}
 
       {/* Reels overlay */}
       <View
@@ -210,6 +226,11 @@ const styles = StyleSheet.create({
   machineImg: {
     width: '100%',
     height: '100%',
+  },
+  machineOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   reelWindow: {
     position: 'absolute',

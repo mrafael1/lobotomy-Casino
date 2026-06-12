@@ -16,7 +16,8 @@ export function Background({ children }: Props) {
   const decayOpacity = useSharedValue(0);
 
   useEffect(() => {
-    const ratio = startingNeurons > 0 ? neurons / startingNeurons : 1;
+    const rawRatio = startingNeurons > 0 ? neurons / startingNeurons : 1;
+    const ratio = Math.max(0, Math.min(1, rawRatio));
     // Square-root curve: decay is visible from the first few spins rather
     // than requiring 40+ neurons to drain before anything is noticeable.
     decayOpacity.value = withTiming(Math.sqrt(1 - ratio), { duration: 600 });
@@ -31,12 +32,12 @@ export function Background({ children }: Props) {
       <Image
         source={require('../../assets/images/background_healthy.png')}
         style={StyleSheet.absoluteFillObject}
-        resizeMode="stretch"
+        resizeMode="cover"
       />
       <Animated.Image
         source={require('../../assets/images/background_decay.png')}
         style={[StyleSheet.absoluteFillObject, decayStyle]}
-        resizeMode="stretch"
+        resizeMode="cover"
       />
       {children}
     </View>
@@ -46,5 +47,6 @@ export function Background({ children }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#030307',
   },
 });

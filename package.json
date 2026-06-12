@@ -4,11 +4,12 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
-    "simulate": "npx ts-node scripts/simulate.ts"
+    "simulate": "npx ts-node scripts/simulate.ts",
+    "assets:compose": "node scripts/compose-runtime-assets.js"
   },
   "dependencies": {
     "@shopify/react-native-skia": "^1.5.4",
