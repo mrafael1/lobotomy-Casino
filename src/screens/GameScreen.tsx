@@ -102,8 +102,9 @@ export function GameScreen() {
   // ── Reel targeting ──
   const handleReelPress = useCallback((i: number) => {
     if (selection.mode === 'reroll') {
-      rerollReel(i);
-      setRerollingReelIndex(i);
+      if (rerollReel(i)) {
+        setRerollingReelIndex(i);
+      }
       setSelection(NO_SELECTION);
     } else if (selection.mode === 'lock') {
       lockReel(i);
@@ -162,9 +163,10 @@ export function GameScreen() {
       ? `SPIN  ${_base}–${_base * 3}N`
       : `SPIN  -${spinNeuronCost}N`;
 
-  // Abilities blocked while spinning, powers blocked (Pill), or no result yet
+  // Abilities blocked while spinning, rerolling, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
-  const abilitiesUsable = runPhase === 'running' && !isSpinning && lastResult !== null && !powersBlocked;
+  const abilitiesUsable =
+    runPhase === 'running' && !isSpinning && rerollingReelIndex === null && lastResult !== null && !powersBlocked;
 
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
@@ -331,7 +333,7 @@ export function GameScreen() {
               <View style={styles.itemRow}>
                 {activeConsumables.map(c => {
                   const charges = runConsumables[c.id] ?? 0;
-                  const disabled = runPhase !== 'running' || isSpinning;
+                  const disabled = runPhase !== 'running' || isSpinning || rerollingReelIndex !== null;
                   return (
                     <Pressable
                       key={c.id}
