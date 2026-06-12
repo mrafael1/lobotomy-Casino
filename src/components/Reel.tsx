@@ -18,9 +18,10 @@ interface Props {
   reelIndex: 0 | 1 | 2;
   onComplete?: () => void;
   size?: number;
+  overrideStopMs?: number; // when set, used instead of STOP_TIMES_MS[reelIndex]
 }
 
-export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onComplete, size = SYMBOL_SIZE }: Props) {
+export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onComplete, size = SYMBOL_SIZE, overrideStopMs }: Props) {
   const midIndexRef = useRef<number>(reelIndex);
   const [symbols, setSymbols] = useState<[SymbolId, SymbolId, SymbolId]>(() => [
     cycleAt(reelIndex - 1),
@@ -66,10 +67,10 @@ export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onCompl
       midIndexRef.current = finalIdx;
       setSymbols([cycleAt(finalIdx - 1), finalSymbol, cycleAt(finalIdx + 1)]);
       onComplete?.();
-    }, STOP_TIMES_MS[reelIndex]);
+    }, overrideStopMs ?? STOP_TIMES_MS[reelIndex]);
 
     return clearTimers;
-  }, [spinning, finalSymbol, reelIndex, locked]);
+  }, [spinning, finalSymbol, reelIndex, locked, overrideStopMs]);
 
   return (
     <View style={[styles.column, { width: size }]}>

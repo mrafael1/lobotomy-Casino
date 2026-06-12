@@ -27,6 +27,9 @@ interface Props {
   // When set, renders ▲/▼ shift buttons above/below that reel column.
   shiftTargetReel?: number | null;
   onShiftDirection?: (direction: -1 | 1) => void;
+  // Single-reel reroll animation: spins only that reel, fires when done.
+  rerollingReelIndex?: number | null;
+  onRerollDone?: () => void;
 }
 
 export function SlotMachine({
@@ -35,6 +38,8 @@ export function SlotMachine({
   selectedReels = [],
   shiftTargetReel,
   onShiftDirection,
+  rerollingReelIndex = null,
+  onRerollDone,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
 
@@ -124,28 +129,32 @@ export function SlotMachine({
           { top: winTop, left: winLeft, width: winW, height: winH },
         ]}
       >
-        {([0, 1, 2] as const).map(i => (
-          <Pressable
-            key={i}
-            style={[
-              styles.reelSlot,
-              { width: reelW, height: symbolSize * 3 },
-              selectedReels.includes(i) && styles.reelSelected,
-            ]}
-            onPress={onReelPress ? () => onReelPress(i) : undefined}
-            disabled={!onReelPress || isSpinning}
-          >
-            <Reel
-              finalSymbol={reels[i]}
-              spinning={isSpinning}
-              locked={lockedReels[i]}
-              reelIndex={i}
-              onComplete={handleReelComplete}
-              size={symbolSize}
-            />
-            {lockedReels[i] && <Text style={styles.lockBadge}>LOCKED</Text>}
-          </Pressable>
-        ))}
+        {([0, 1, 2] as const).map(i => {
+          const isRerolling = rerollingReelIndex === i;
+          return (
+            <Pressable
+              key={i}
+              style={[
+                styles.reelSlot,
+                { width: reelW, height: symbolSize * 3 },
+                selectedReels.includes(i) && styles.reelSelected,
+              ]}
+              onPress={onReelPress ? () => onReelPress(i) : undefined}
+              disabled={!onReelPress || isSpinning || rerollingReelIndex !== null}
+            >
+              <Reel
+                finalSymbol={reels[i]}
+                spinning={isSpinning || isRerolling}
+                locked={lockedReels[i]}
+                reelIndex={i}
+                onComplete={isRerolling ? onRerollDone : handleReelComplete}
+                overrideStopMs={isRerolling ? 600 : undefined}
+                size={symbolSize}
+              />
+              {lockedReels[i] && <Text style={styles.lockBadge}>LOCKED</Text>}
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Shift direction buttons — above and below the selected reel column */}

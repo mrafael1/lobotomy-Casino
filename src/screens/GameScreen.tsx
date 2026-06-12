@@ -69,6 +69,7 @@ export function GameScreen() {
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (runPhase === 'idle') {
@@ -102,6 +103,7 @@ export function GameScreen() {
   const handleReelPress = useCallback((i: number) => {
     if (selection.mode === 'reroll') {
       rerollReel(i);
+      setRerollingReelIndex(i);
       setSelection(NO_SELECTION);
     } else if (selection.mode === 'lock') {
       lockReel(i);
@@ -145,6 +147,7 @@ export function GameScreen() {
   const canSpin =
     runPhase === 'running' &&
     !isSpinning &&
+    rerollingReelIndex === null &&
     !dealerPending &&
     (freeSpins > 0 || neurons >= 1);
 
@@ -225,6 +228,8 @@ export function GameScreen() {
             selectedReels={selectedReels}
             shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
             onShiftDirection={handleMoveDirection}
+            rerollingReelIndex={rerollingReelIndex}
+            onRerollDone={() => setRerollingReelIndex(null)}
           />
         </View>
 
