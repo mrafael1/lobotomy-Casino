@@ -106,12 +106,13 @@ export function GameScreen() {
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
     const runNow = useRunStore.getState();
-    // Check dealer thresholds after each spin
-    checkDealerTrigger();
+    // End check runs first — if the run is over the Dealer should not appear.
     const ending = checkEnding(runNow, useMetaStore.getState());
     if (ending) {
       bankRun(runNow, ending);
       endRun(ending);
+    } else {
+      checkDealerTrigger();
     }
   }, [setSpinning, bankRun, endRun, checkDealerTrigger]);
 
@@ -166,14 +167,14 @@ export function GameScreen() {
     });
   }, [moveReel]);
 
-  const canSpin =
-    runPhase === 'running' &&
-    !isSpinning &&
-    rerollingReelIndex === null &&
-    !dealerIncoming &&
-    !dealerPending &&
-    pendingGiftId === null &&
-    (freeSpins > 0 || neurons >= 1);
+  const runBusy =
+    isSpinning ||
+    rerollingReelIndex !== null ||
+    dealerIncoming ||
+    dealerPending ||
+    pendingGiftId !== null;
+
+  const canSpin = runPhase === 'running' && !runBusy && (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
   const _base = ECONOMY.NEURON_DECAY_PER_SPIN;
@@ -186,10 +187,9 @@ export function GameScreen() {
       ? `SPIN  ${_base}–${_base * 3}N`
       : `SPIN  -${spinNeuronCost}N`;
 
-  // Abilities blocked while spinning, rerolling, powers blocked (Pill), or no result yet
+  // Abilities blocked while game is busy, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
-  const abilitiesUsable =
-    runPhase === 'running' && !isSpinning && rerollingReelIndex === null && lastResult !== null && !powersBlocked;
+  const abilitiesUsable = runPhase === 'running' && !runBusy && lastResult !== null && !powersBlocked;
 
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
@@ -220,7 +220,7 @@ export function GameScreen() {
     : selection.mode === 'copy_target' ? [selection.sourceReel]
     : [];
 
-  const reelsTappable = selection.mode !== 'none';
+  const reelsTappable = selection.mode !== 'none' && !runBusy;
 
   const dealerItems = dealerOfferIds
     ? dealerOfferIds.map(id => IN_RUN_ITEM_MAP[id]).filter(Boolean)
@@ -356,7 +356,7 @@ export function GameScreen() {
               <View style={styles.itemRow}>
                 {activeConsumables.map(c => {
                   const charges = runConsumables[c.id] ?? 0;
-                  const disabled = runPhase !== 'running' || isSpinning || rerollingReelIndex !== null;
+                  const disabled = runPhase !== 'running' || runBusy;
                   return (
                     <Pressable
                       key={c.id}
@@ -380,7 +380,7 @@ export function GameScreen() {
         <View style={styles.betRow}>
           {([1, 2, 3] as const).map(m => {
             const betLocked = forcedRandomBetSpins > 0 || neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN;
-            const betDisabled = isSpinning || runPhase !== 'running' || betLocked;
+            const betDisabled = runPhase !== 'running' || runBusy || betLocked;
             return (
               <Pressable
                 key={m}

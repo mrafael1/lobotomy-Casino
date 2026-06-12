@@ -475,7 +475,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   revealDealer(): void {
     const state = get();
-    if (!state.dealerIncoming) return;
+    if (!state.dealerIncoming || state.runPhase !== 'running') return;
     set({ dealerIncoming: false, dealerPending: true });
   },
 
