@@ -194,20 +194,21 @@ test('store: mid-run dealer Cocktail is stashed, not activated immediately', () 
 
   expect(state.runConsumables.item_cocktail).toBe(0);
   expect(state.cocktailBoostSpins).toBe(3);
-  expect(state.compulsiveSpinSkips).toBe(2);
+  expect(state.compulsiveSpinSkips).toBe(0);
+  expect(state.pendingCompulsiveSpinSkips).toBe(2);
   expect(state.lucidityEarned).toBe(0);
 });
 
-test('store: Cocktail adds visible rarity sum to the next 3 spins and forces 2 x1 spins', () => {
+test('store: Cocktail boosts 3 spins first, THEN forces 2 x1 spins', () => {
   freshRun({ item_cocktail: 1 });
-  useRunStore.getState().setBetMultiplier(3);
 
   expect(useRunStore.getState().useConsumable('item_cocktail')).toBe(true);
   expect(useRunStore.getState().cocktailBoostSpins).toBe(3);
-  expect(useRunStore.getState().compulsiveSpinSkips).toBe(2);
+  expect(useRunStore.getState().compulsiveSpinSkips).toBe(0);
+  expect(useRunStore.getState().pendingCompulsiveSpinSkips).toBe(2);
 
-  const neuronsBefore = useRunStore.getState().neurons;
-  useRunStore.getState().spin({ compulsive: true });
+  // First boosted spin is a normal player spin with the rarity bonus.
+  useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
 
   let state = useRunStore.getState();
@@ -215,20 +216,30 @@ test('store: Cocktail adds visible rarity sum to the next 3 spins and forces 2 x
     (sum, sym) => sum + SYMBOLS[sym].rarityScore,
     0,
   );
-  expect(state.neurons).toBe(neuronsBefore - 3);
   expect(state.lastResult!.lucidityEarned).toBeGreaterThanOrEqual(firstBonus);
   expect(state.cocktailBoostSpins).toBe(2);
-  expect(state.compulsiveSpinSkips).toBe(1);
+  expect(state.compulsiveSpinSkips).toBe(0);
 
-  useRunStore.getState().spin({ compulsive: true });
+  useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
-  expect(useRunStore.getState().cocktailBoostSpins).toBe(1);
   expect(useRunStore.getState().compulsiveSpinSkips).toBe(0);
 
+  // Third boosted spin: compulsion unlocks only now.
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   state = useRunStore.getState();
   expect(state.cocktailBoostSpins).toBe(0);
+  expect(state.compulsiveSpinSkips).toBe(2);
+  expect(state.pendingCompulsiveSpinSkips).toBe(0);
+
+  // Compulsive spins are forced x1 and no longer get the boost.
+  const beforeCompulsive = useRunStore.getState().neurons;
+  useRunStore.getState().setBetMultiplier(3);
+  useRunStore.getState().spin({ compulsive: true });
+  useRunStore.getState().setSpinning(false);
+  state = useRunStore.getState();
+  expect(state.neurons).toBe(beforeCompulsive - 3); // x1 decay despite x3 selected
+  expect(state.compulsiveSpinSkips).toBe(1);
 });
 
 test('store: Energy Drink locks out x3 and preserves neurons while active', () => {
@@ -399,6 +410,34 @@ test('store: sedative — every 3rd spin costs no neurons', () => {
   const state = useRunStore.getState();
   const expected = state.startingNeurons - 2 * 3; // 2 real spins × 3N each
   expect(state.neurons).toBe(expected);
+});
+
+test('store: power-made jackpot keeps lastResult free-spin metadata in sync', () => {
+  freshRun();
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+
+  // Force a known pair so copying reel 0 onto reel 2 creates a fresh jackpot.
+  useRunStore.setState({
+    freeSpinsRemaining: 0,
+    lastResult: {
+      ...useRunStore.getState().lastResult!,
+      reels: ['brain', 'brain', 'eye'] as ReelResult,
+      isJackpot: false,
+      winType: 'pair',
+      isFreeSpin: false,
+      freeSpinsGranted: 0,
+      freeSpinsAfter: 0,
+    },
+  });
+
+  expect(useRunStore.getState().copyReel(0, 2)).toBe(true);
+  const state = useRunStore.getState();
+  expect(state.lastResult!.isJackpot).toBe(true);
+  expect(state.freeSpinsRemaining).toBe(1);
+  // lastResult must agree with the store, not keep the pre-power values.
+  expect(state.lastResult!.freeSpinsGranted).toBe(1);
+  expect(state.lastResult!.freeSpinsAfter).toBe(1);
 });
 
 test('store: Hydration raises starting neurons above the base cap', () => {

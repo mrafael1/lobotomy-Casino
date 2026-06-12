@@ -71,6 +71,7 @@ export interface RunState {
   readonly hideNeuronsSpins: number;     // Focus Serum side effect: neuron count hidden
   readonly cocktailBoostSpins: number;   // Cocktail: next spins get visible rarity-sum bonus
   readonly compulsiveSpinSkips: number;  // Cocktail: forced x1 spins that skip player input
+  readonly pendingCompulsiveSpinSkips: number; // Cocktail compulsion queued until the boost spins finish
   readonly decaySkips: number;           // spins that cost 0 neurons (skipDecay effects)
 }
 

@@ -94,6 +94,7 @@ const INITIAL_RUN_STATE: RunState = {
   hideNeuronsSpins:           0,
   cocktailBoostSpins:         0,
   compulsiveSpinSkips:        0,
+  pendingCompulsiveSpinSkips: 0,
   decaySkips:                 0,
 };
 
@@ -214,7 +215,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
       blockPowersSpins:           Math.max(0, state.blockPowersSpins - 1),
       hideNeuronsSpins:           Math.max(0, state.hideNeuronsSpins - 1),
       cocktailBoostSpins:         Math.max(0, state.cocktailBoostSpins - 1),
-      compulsiveSpinSkips:        isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips,
+      // This spin consumed the last boosted spin — release the queued compulsion.
+      compulsiveSpinSkips:
+        (isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips) +
+        (state.cocktailBoostSpins === 1 ? state.pendingCompulsiveSpinSkips : 0),
+      pendingCompulsiveSpinSkips: state.cocktailBoostSpins === 1 ? 0 : state.pendingCompulsiveSpinSkips,
     });
 
     return finalResult;
@@ -294,10 +299,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
           return true;
 
         case 'cocktailBoost': {
+          // Compulsion is queued, not active: it kicks in only after the
+          // boosted spins are used up ("Then the machine steals 2 x1 spins").
           set({
             runConsumables: newRunConsumables,
             cocktailBoostSpins: state.cocktailBoostSpins + effect.spins,
-            compulsiveSpinSkips: state.compulsiveSpinSkips + effect.compulsiveSpins,
+            pendingCompulsiveSpinSkips: state.pendingCompulsiveSpinSkips + effect.compulsiveSpins,
           });
           return true;
         }
@@ -412,17 +419,20 @@ export const useRunStore = create<RunStore>((set, get) => ({
       weights, pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
+    const freeSpinsAfter = Math.min(
+      state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'reroll'],
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
-      freeSpinsRemaining: Math.min(
-        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
+      freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
-        reels:          outcome.reels,
-        isJackpot:      outcome.isJackpot,
-        winType:        outcome.winType,
-        lucidityEarned: Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        reels:            outcome.reels,
+        isJackpot:        outcome.isJackpot,
+        winType:          outcome.winType,
+        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
+        freeSpinsAfter,
       },
     });
     return true;
@@ -441,17 +451,20 @@ export const useRunStore = create<RunStore>((set, get) => ({
       state.lastResult.reels, reelIndex, direction, state.lucidityMultiplier,
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
+    const freeSpinsAfter = Math.min(
+      state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'shift'],
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
-      freeSpinsRemaining: Math.min(
-        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
+      freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
-        reels:          outcome.reels,
-        isJackpot:      outcome.isJackpot,
-        winType:        outcome.winType,
-        lucidityEarned: Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        reels:            outcome.reels,
+        isJackpot:        outcome.isJackpot,
+        winType:          outcome.winType,
+        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
+        freeSpinsAfter,
       },
     });
     return true;
@@ -484,18 +497,21 @@ export const useRunStore = create<RunStore>((set, get) => ({
       neuronsAfter = Math.max(0, state.neurons - 20);
     }
 
+    const freeSpinsAfter = Math.min(
+      state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       runConsumables: newRunConsumables,
       neurons: neuronsAfter,
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
-      freeSpinsRemaining: Math.min(
-        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
+      freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
-        reels:          outcome.reels,
-        isJackpot:      outcome.isJackpot,
-        winType:        outcome.winType,
-        lucidityEarned: Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        reels:            outcome.reels,
+        isJackpot:        outcome.isJackpot,
+        winType:          outcome.winType,
+        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
+        freeSpinsAfter,
       },
     });
     return true;

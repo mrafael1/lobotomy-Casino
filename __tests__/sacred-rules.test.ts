@@ -46,6 +46,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     hideNeuronsSpins:          0,
     cocktailBoostSpins:        0,
     compulsiveSpinSkips:       0,
+    pendingCompulsiveSpinSkips: 0,
     decaySkips:                0,
     ...overrides,
   };

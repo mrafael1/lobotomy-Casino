@@ -68,6 +68,7 @@ for (let r = 0; r < RUNS; r++) {
     hideNeuronsSpins:          0,
     cocktailBoostSpins:        0,
     compulsiveSpinSkips:       0,
+    pendingCompulsiveSpinSkips: 0,
     decaySkips:                0,
   };
 
