@@ -93,12 +93,13 @@ export function SlotMachine({
   }
 
   // Reset completed counter when a new spin starts. Locked reels fire their
-  // own completion immediately, so they should not be pre-counted here.
+  // onComplete before this effect runs (child effects before parent), so
+  // pre-seed with the number of locked reels to avoid a missed completion.
   useEffect(() => {
     if (isSpinning) {
-      completedRef.current = 0;
+      completedRef.current = lockedReels.filter(Boolean).length;
     }
-  }, [isSpinning, lockedReels]);
+  }, [isSpinning]);
 
   // Reel window absolute coords over the machine image
   const winTop  = machineHeight * WIN_TOP;
@@ -231,6 +232,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    width: '100%',
+    height: '100%',
   },
   reelWindow: {
     position: 'absolute',

@@ -181,10 +181,10 @@ export function GameScreen() {
   const spinLabel =
     freeSpins > 0
       ? 'FREE SPIN'
-      : decaySkips > 0
-      ? 'SPIN  0N'
       : forcedRandomBetSpins > 0
       ? `SPIN  ${_base}–${_base * 3}N`
+      : decaySkips > 0
+      ? 'SPIN  0N'
       : `SPIN  -${spinNeuronCost}N`;
 
   // Abilities blocked while game is busy, powers blocked (Pill), or no result yet
@@ -245,6 +245,9 @@ export function GameScreen() {
           </View>
         </View>
 
+        {/* ── Neuron health bar ── */}
+        <NeuronBar />
+
         {/* ── Slot machine ── */}
         <Animated.View style={[styles.machineWrap, { transform: [{ translateX: tapAnim }] }]}>
           <SlotMachine
@@ -257,9 +260,6 @@ export function GameScreen() {
             onRerollDone={() => setRerollingReelIndex(null)}
           />
         </Animated.View>
-
-        {/* ── Neuron health bar ── */}
-        <NeuronBar />
 
         {/* ── Win label / selection hint ── */}
         <View style={styles.winRow}>
@@ -439,31 +439,49 @@ export function GameScreen() {
         </View>
       )}
 
-      {/* ── Stash-full gift overlay ── */}
+      {/* ── Gift overlay (stash received, or stash full + discard) ── */}
       {pendingGiftId && (
         <View style={styles.overlay}>
-          <Text style={styles.dealerTitle}>STASH FULL</Text>
-          <Text style={styles.dealerSubtitle}>
-            He hands you {CONSUMABLES.find(c => c.id === pendingGiftId)?.name ?? 'something'}.
-            {'\n'}Discard something to make room.
-          </Text>
-          <View style={styles.dealerOffers}>
-            {activeConsumables.map(c => (
-              <View key={c.id} style={styles.dealerCard}>
-                <Text style={styles.dealerItemName}>{c.name}</Text>
-                <Text style={styles.dealerItemDesc}>×{runConsumables[c.id] ?? 0} charge{(runConsumables[c.id] ?? 0) > 1 ? 's' : ''}</Text>
-                <Pressable
-                  style={styles.dealerAcceptBtn}
-                  onPress={() => discardConsumableForGift(c.id)}
-                >
-                  <Text style={styles.dealerAcceptText}>DISCARD</Text>
-                </Pressable>
+          {(runConsumables[pendingGiftId] ?? 0) > 0 ? (
+            <>
+              <Text style={styles.dealerTitle}>STASHED</Text>
+              <Text style={styles.dealerSubtitle}>
+                He slips you{'\n'}
+                <Text style={styles.dealerItemName}>
+                  {CONSUMABLES.find(c => c.id === pendingGiftId)?.name ?? 'something'}
+                </Text>
+                .{'\n'}Tucked away in your coat.
+              </Text>
+              <Pressable style={styles.dealerAcceptBtn} onPress={dismissGift}>
+                <Text style={styles.dealerAcceptText}>GOT IT</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.dealerTitle}>STASH FULL</Text>
+              <Text style={styles.dealerSubtitle}>
+                He hands you {CONSUMABLES.find(c => c.id === pendingGiftId)?.name ?? 'something'}.
+                {'\n'}Discard something to make room.
+              </Text>
+              <View style={styles.dealerOffers}>
+                {activeConsumables.map(c => (
+                  <View key={c.id} style={styles.dealerCard}>
+                    <Text style={styles.dealerItemName}>{c.name}</Text>
+                    <Text style={styles.dealerItemDesc}>×{runConsumables[c.id] ?? 0} charge{(runConsumables[c.id] ?? 0) > 1 ? 's' : ''}</Text>
+                    <Pressable
+                      style={styles.dealerAcceptBtn}
+                      onPress={() => discardConsumableForGift(c.id)}
+                    >
+                      <Text style={styles.dealerAcceptText}>DISCARD</Text>
+                    </Pressable>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-          <Pressable style={styles.dealerDeclineBtn} onPress={dismissGift}>
-            <Text style={styles.dealerDeclineText}>TOSS THE GIFT</Text>
-          </Pressable>
+              <Pressable style={styles.dealerDeclineBtn} onPress={dismissGift}>
+                <Text style={styles.dealerDeclineText}>TOSS THE GIFT</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       )}
 

@@ -548,15 +548,18 @@ export const useRunStore = create<RunStore>((set, get) => ({
           : occupiedSlots.length < MAX_CONSUMABLE_SLOTS;
 
         if (canAddDirectly) {
+          // Add to stash and show a confirmation overlay — prevents ghost-tap
+          // activation when the dealer modal closes and the consumable row appears.
           set({
             dealerPending: false,
             dealerOfferIds: null,
             runConsumables: { ...state.runConsumables, [consumableId]: existingCharges + 1 },
+            pendingGiftConsumableId: consumableId,
           });
           break;
         }
 
-        // Stash full — player must discard one item to take the gift (no direct use).
+        // Stash full — player must discard one item to take the gift.
         set({
           dealerPending: false,
           dealerOfferIds: null,
