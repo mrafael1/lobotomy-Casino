@@ -54,13 +54,15 @@ export function SlotMachine({
   const [jackpotFlash, setJackpotFlash] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Waits for the reroll animation too — a power-made jackpot should flash
+  // when the reel lands, not while it is still spinning.
   useEffect(() => {
-    if (lastResult?.isJackpot && !isSpinning) {
+    if (lastResult?.isJackpot && !isSpinning && rerollingReelIndex === null) {
       setJackpotFlash(true);
       flashTimer.current = setTimeout(() => setJackpotFlash(false), 1800);
     }
     return () => { if (flashTimer.current) clearTimeout(flashTimer.current); };
-  }, [lastResult, isSpinning]);
+  }, [lastResult, isSpinning, rerollingReelIndex]);
 
   const machineWidth  = Math.floor(Math.min(
     screenWidth * 0.9,

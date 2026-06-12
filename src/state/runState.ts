@@ -60,6 +60,7 @@ export interface RunStore extends RunState {
   // Dealer interactions
   checkDealerTrigger: () => void;
   revealDealer: () => void;
+  declineDealerVisit: () => void;
   acceptDealerOffer: (itemId: string) => void;
   declineDealerOffer: () => void;
   discardConsumableForGift: (discardId: string) => void;
@@ -343,12 +344,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     const outcome = applyReroll(
       state.lastResult.reels, reelIndex, rng, state.lucidityMultiplier,
-      weights, pattern23, learningOn,
+      weights, pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'reroll'],
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      freeSpinsRemaining: Math.min(
+        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
       lastResult: {
         ...state.lastResult,
         reels:          outcome.reels,
@@ -371,11 +374,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     const outcome = applyMoveColumn(
       state.lastResult.reels, reelIndex, direction, state.lucidityMultiplier,
-      pattern23, learningOn,
+      pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'shift'],
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      freeSpinsRemaining: Math.min(
+        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
       lastResult: {
         ...state.lastResult,
         reels:          outcome.reels,
@@ -396,7 +401,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     const outcome = applyCopyReel(
       state.lastResult.reels, sourceReel, targetReel, state.lucidityMultiplier,
-      pattern23, learningOn,
+      pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
     // Side effect: consume a random other consumable or lose 20 neurons
@@ -418,6 +423,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
       runConsumables: newRunConsumables,
       neurons: neuronsAfter,
       lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      freeSpinsRemaining: Math.min(
+        state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins),
       lastResult: {
         ...state.lastResult,
         reels:          outcome.reels,
@@ -477,6 +484,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const state = get();
     if (!state.dealerIncoming || state.runPhase !== 'running') return;
     set({ dealerIncoming: false, dealerPending: true });
+  },
+
+  // Player waves the dealer off before seeing the offers ("No" on the bubble).
+  // Counts as an appearance — dealerCount was already incremented on trigger.
+  declineDealerVisit(): void {
+    set({ dealerIncoming: false, dealerPending: false, dealerOfferIds: null });
   },
 
   acceptDealerOffer(itemId: string): void {

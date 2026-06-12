@@ -14,6 +14,7 @@ import { NeuronBar } from '../components/NeuronBar';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
+import { hasSedative } from '../game/economy';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
 import { IN_RUN_ITEM_MAP } from '../content/inRunItems';
@@ -51,6 +52,8 @@ export function GameScreen() {
   const dealerPending       = useRunStore(s => s.dealerPending);
   const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
   const pendingGiftId       = useRunStore(s => s.pendingGiftConsumableId);
+  const spinCount           = useRunStore(s => s.spinCount);
+  const ownedUpgrades       = useRunStore(s => s.ownedUpgrades);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -64,6 +67,7 @@ export function GameScreen() {
   const copyReel           = useRunStore(s => s.copyReel);
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
   const revealDealer       = useRunStore(s => s.revealDealer);
+  const declineDealerVisit = useRunStore(s => s.declineDealerVisit);
   const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
   const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
   const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
@@ -76,20 +80,48 @@ export function GameScreen() {
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
+  // Dealer arrival prompt: 'taps' = shoulder-tap text popping, 'ask' = speech bubble.
+  const [dealerPrompt, setDealerPrompt] = useState<'taps' | 'ask' | null>(null);
 
-  const tapAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const tapTexts  = useRef([
+    new Animated.Value(0), new Animated.Value(0), new Animated.Value(0),
+  ]).current;
 
+  // Machine shakes on jackpot — including jackpots made with powers, once the
+  // reroll animation has landed.
   useEffect(() => {
-    if (!dealerIncoming) return;
-    tapAnim.setValue(0);
+    if (!lastResult?.isJackpot || isSpinning || rerollingReelIndex !== null) return;
+    shakeAnim.setValue(0);
     Animated.sequence([
-      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
-      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
-      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
-      Animated.timing(tapAnim, { toValue:  0, duration: 70,  useNativeDriver: true }),
-      Animated.timing(tapAnim, { toValue:  7, duration: 70,  useNativeDriver: true }),
-      Animated.timing(tapAnim, { toValue:  0, duration: 200, useNativeDriver: true }),
-    ]).start(() => revealDealer());
+      Animated.timing(shakeAnim, { toValue:  9, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -9, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue:  7, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -7, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue:  4, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -4, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue:  0, duration: 60, useNativeDriver: true }),
+    ]).start();
+  }, [lastResult, isSpinning, rerollingReelIndex]);
+
+  // Dealer arrival: "tap tap tap" pops on screen like he's tapping your
+  // shoulder, fades, then his speech bubble asks if you want to see the goods.
+  useEffect(() => {
+    if (!dealerIncoming) {
+      setDealerPrompt(null);
+      return;
+    }
+    setDealerPrompt('taps');
+    tapTexts.forEach(v => v.setValue(0));
+    Animated.sequence([
+      Animated.stagger(280, tapTexts.map(v =>
+        Animated.timing(v, { toValue: 1, duration: 130, useNativeDriver: true }))),
+      Animated.delay(400),
+      Animated.parallel(tapTexts.map(v =>
+        Animated.timing(v, { toValue: 0, duration: 220, useNativeDriver: true }))),
+    ]).start(({ finished }) => {
+      if (finished) setDealerPrompt('ask');
+    });
   }, [dealerIncoming]);
 
   useEffect(() => {
@@ -178,12 +210,14 @@ export function GameScreen() {
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
   const _base = ECONOMY.NEURON_DECAY_PER_SPIN;
+  // Sedative Protocol: every 3rd spin costs nothing — mirror spin()'s check.
+  const sedativeNext = hasSedative(ownedUpgrades) && freeSpins === 0 && (spinCount + 1) % 3 === 0;
   const spinLabel =
     freeSpins > 0
       ? 'FREE SPIN'
       : forcedRandomBetSpins > 0
       ? `SPIN  ${_base}–${_base * 3}N`
-      : decaySkips > 0
+      : decaySkips > 0 || sedativeNext
       ? 'SPIN  0N'
       : `SPIN  -${spinNeuronCost}N`;
 
@@ -249,7 +283,7 @@ export function GameScreen() {
         <NeuronBar />
 
         {/* ── Slot machine ── */}
-        <Animated.View style={[styles.machineWrap, { transform: [{ translateX: tapAnim }] }]}>
+        <Animated.View style={[styles.machineWrap, { transform: [{ translateX: shakeAnim }] }]}>
           <SlotMachine
             onAllReelsDone={handleAllReelsDone}
             onReelPress={reelsTappable ? handleReelPress : undefined}
@@ -284,6 +318,9 @@ export function GameScreen() {
           )}
           {decaySkips > 0 && (
             <Text style={styles.stasisBadge}>NO DECAY ×{decaySkips}</Text>
+          )}
+          {sedativeNext && (
+            <Text style={styles.stasisBadge}>SEDATIVE — FREE SPIN</Text>
           )}
           {brainBoostSpins > 0 && (
             <Text style={styles.boostBadge}>BRAIN BOOST ×{brainBoostSpins}</Text>
@@ -413,6 +450,41 @@ export function GameScreen() {
         </View>
 
       </SafeAreaView>
+
+      {/* ── Dealer arrival: shoulder taps ── */}
+      {dealerPrompt === 'taps' && (
+        <View style={styles.tapOverlay} pointerEvents="none">
+          {tapTexts.map((v, i) => (
+            <Animated.Text
+              key={i}
+              style={[
+                styles.tapText,
+                { opacity: v, transform: [{ translateY: i * 26 }, { translateX: (i - 1) * 30 }] },
+              ]}
+            >
+              tap
+            </Animated.Text>
+          ))}
+        </View>
+      )}
+
+      {/* ── Dealer arrival: speech bubble ── */}
+      {dealerPrompt === 'ask' && (
+        <View style={styles.bubbleOverlay}>
+          <View style={styles.bubble}>
+            <Text style={styles.bubbleText}>"Care to see what I've got?"</Text>
+            <View style={styles.bubbleBtnRow}>
+              <Pressable style={styles.bubbleYesBtn} onPress={revealDealer}>
+                <Text style={styles.bubbleYesText}>YES</Text>
+              </Pressable>
+              <Pressable style={styles.bubbleNoBtn} onPress={declineDealerVisit}>
+                <Text style={styles.bubbleNoText}>NO</Text>
+              </Pressable>
+            </View>
+          </View>
+          <View style={styles.bubbleTail} />
+        </View>
+      )}
 
       {/* ── Dealer modal ── */}
       {dealerPending && dealerItems.length > 0 && (
@@ -761,6 +833,85 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     paddingHorizontal: 32,
+  },
+
+  // Dealer arrival prompt
+  tapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tapText: {
+    color: '#a855f7',
+    fontSize: 24,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: 4,
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowRadius: 6,
+  },
+  bubbleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubble: {
+    backgroundColor: '#13091f',
+    borderColor: '#a855f7',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    gap: 16,
+    alignItems: 'center',
+    maxWidth: '80%',
+  },
+  bubbleTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderTopWidth: 14,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#a855f7',
+    marginTop: -1,
+  },
+  bubbleText: {
+    color: '#e2e8f0',
+    fontSize: 15,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  bubbleBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bubbleYesBtn: {
+    backgroundColor: '#a855f7',
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+  },
+  bubbleYesText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  bubbleNoBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  bubbleNoText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 2,
   },
 
   // Dealer

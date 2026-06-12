@@ -2,7 +2,8 @@
 // These extend (never replace) the sacred-rule tests.
 
 import { scoreReels } from '../src/game/evaluate';
-import { applyReroll, applyMoveColumn } from '../src/game/abilities';
+import { applyReroll, applyMoveColumn, applyCopyReel } from '../src/game/abilities';
+import { SYMBOL_WEIGHTS } from '../src/content/symbols';
 import { useRunStore } from '../src/state/runState';
 import { CONSUMABLES } from '../src/content/consumables';
 import { createRNG } from '../src/game/rng';
@@ -58,10 +59,25 @@ test('applyReroll: replaces exactly the target reel, others untouched', () => {
   expect(outcome.reels[2]).toBe('brain'); // rerolled to brain
 });
 
-test('applyReroll: never mints free spins', () => {
-  const outcome = applyReroll(['brain', 'brain', 'eye'], 2, () => 0, 1);
-  expect('freeSpinsGranted' in outcome).toBe(false);
-  expect('freeSpinsAfter' in outcome).toBe(false);
+test('applyReroll: mints free spins only when allowed and the jackpot is new', () => {
+  // Default (grant not allowed — e.g. result came from a free spin): no grant.
+  const denied = applyReroll(['brain', 'brain', 'eye'], 2, () => 0, 1);
+  expect(denied.isJackpot).toBe(true);
+  expect(denied.freeSpinsGranted).toBe(0);
+
+  // Allowed on a paid spin: power-made jackpot grants the free spin.
+  const granted = applyReroll(
+    ['brain', 'brain', 'eye'], 2, () => 0, 1, SYMBOL_WEIGHTS, false, false, true);
+  expect(granted.isJackpot).toBe(true);
+  expect(granted.freeSpinsGranted).toBe(1);
+});
+
+test('abilities: an already-jackpot result never grants again', () => {
+  // Copy brain onto brain — jackpot before AND after → no double grant.
+  const outcome = applyCopyReel(
+    ['brain', 'brain', 'brain'], 0, 2, 1, false, false, true);
+  expect(outcome.isJackpot).toBe(true);
+  expect(outcome.freeSpinsGranted).toBe(0);
 });
 
 test('applyReroll: completing a triple gives a positive delta', () => {
@@ -75,14 +91,17 @@ test('applyReroll: completing a triple gives a positive delta', () => {
 // ─────────────────────────────────────────────
 // Move Column ability
 // ─────────────────────────────────────────────
-test('applyMoveColumn: can complete a jackpot — Lucidity pays, no free spin exists', () => {
+test('applyMoveColumn: can complete a jackpot — Lucidity pays, free spin only when allowed', () => {
   const before: ReelResult = ['brain', 'brain', 'eye'];
   const outcome = applyMoveColumn(before, 2, -1, 1);
 
   expect(outcome.reels).toEqual(['brain', 'brain', 'brain']);
   expect(outcome.isJackpot).toBe(true);
   expect(outcome.lucidityDelta).toBeGreaterThan(0);
-  expect('freeSpinsGranted' in outcome).toBe(false);
+  expect(outcome.freeSpinsGranted).toBe(0); // grant not allowed by default
+
+  const allowed = applyMoveColumn(before, 2, -1, 1, false, false, true);
+  expect(allowed.freeSpinsGranted).toBe(1);
 });
 
 test('applyMoveColumn: wraps around the cycle in both directions', () => {
