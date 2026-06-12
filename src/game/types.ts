@@ -61,6 +61,7 @@ export interface RunState {
   readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown
   readonly dealerPending: boolean;           // dealer modal should be shown
   readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
+  readonly pendingGiftConsumableId: string | null;  // gift waiting for a stash slot — player must discard to take it
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
   readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet

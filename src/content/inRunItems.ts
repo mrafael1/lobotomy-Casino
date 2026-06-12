@@ -6,7 +6,7 @@ export type InRunEffect =
   | { type: 'cocktailBoost' }      // grants Lucidity = sum(rarity scores of current reels) × 3
   | { type: 'addLucidity';         amount: number }
   | { type: 'guaranteedWin';       spins: number; blockPowersSpins: number }
-  | { type: 'giveConsumable' };    // gives a random consumable; activates instantly if slots are full
+  | { type: 'giveConsumable' };    // gives a random consumable; if slots are full the player must discard one
 
 export interface InRunItem {
   readonly id: string;
@@ -43,7 +43,7 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_stash',
     name: 'The Stash',
-    description: 'A random supply from his coat. If your slots are full, it takes effect immediately.',
+    description: 'A random supply from his coat. If your slots are full, you\'ll have to make room.',
     effect: { type: 'giveConsumable' },
   },
 ];

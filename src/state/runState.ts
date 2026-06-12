@@ -62,6 +62,8 @@ export interface RunStore extends RunState {
   revealDealer: () => void;
   acceptDealerOffer: (itemId: string) => void;
   declineDealerOffer: () => void;
+  discardConsumableForGift: (discardId: string) => void;
+  dismissGift: () => void;
 }
 
 const INITIAL_RUN_STATE: RunState = {
@@ -87,6 +89,7 @@ const INITIAL_RUN_STATE: RunState = {
   dealerIncoming:             false,
   dealerPending:              false,
   dealerOfferIds:             null,
+  pendingGiftConsumableId:    null,
   brainBoostSpins:            0,
   forcedRandomBetSpins:       0,
   guaranteedWinSpins:         0,
@@ -530,7 +533,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
       case 'giveConsumable': {
         const rng = createRNG(((Date.now() ^ (state.spinCount * 0xbeefcafe)) >>> 0));
-        const consumableId = CONSUMABLES[Math.floor(rng() * CONSUMABLES.length)].id;
+        // Never draw a consumable the player can't hold more of (already at max charges)
+        const pool = CONSUMABLES.filter(c =>
+          (state.runConsumables[c.id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
+        if (pool.length === 0) {
+          set({ dealerPending: false, dealerOfferIds: null });
+          break;
+        }
+        const consumableId = pool[Math.floor(rng() * pool.length)].id;
         const existingCharges = state.runConsumables[consumableId] ?? 0;
         const occupiedSlots = Object.keys(state.runConsumables).filter(k => (state.runConsumables[k] ?? 0) > 0);
         const canAddDirectly = occupiedSlots.includes(consumableId)
@@ -546,60 +556,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
           break;
         }
 
-        // No room (2 slots / 2 charges per slot) — the gift activates instantly.
-        const giftEffect = CONSUMABLE_MAP[consumableId].effect;
-        switch (giftEffect.type) {
-          case 'skipDecay':
-            set({
-              dealerPending: false,
-              dealerOfferIds: null,
-              decaySkips: state.decaySkips + giftEffect.spins,
-            });
-            break;
-
-          case 'lucidityMultiplierNextSpin':
-            set({
-              dealerPending: false,
-              dealerOfferIds: null,
-              nextSpinLucidityMultiplier: giftEffect.multiplier,
-              hideNeuronsSpins: state.hideNeuronsSpins + (giftEffect.hideNeuronsSpins ?? 0),
-            });
-            break;
-
-          case 'brainBoost': {
-            const allAbilities: AbilityId[] = ['reroll', 'shift', 'memory'];
-            const available = allAbilities.filter(a => !state.abilitiesUsed.includes(a));
-            const toBlock: AbilityId[] = available.length > 0
-              ? [available[Math.floor(rng() * available.length)]]
-              : [];
-            set({
-              dealerPending: false,
-              dealerOfferIds: null,
-              brainBoostSpins: giftEffect.spins,
-              abilitiesUsed: [...state.abilitiesUsed, ...toBlock] as ReadonlyArray<AbilityId>,
-            });
-            break;
-          }
-
-          case 'restoreAbility': {
-            if (state.abilitiesUsed.length === 0) {
-              set({ dealerPending: false, dealerOfferIds: null });
-              break;
-            }
-            const idx = Math.floor(rng() * state.abilitiesUsed.length);
-            set({
-              dealerPending: false,
-              dealerOfferIds: null,
-              abilitiesUsed: state.abilitiesUsed.filter((_, i) => i !== idx) as ReadonlyArray<AbilityId>,
-            });
-            break;
-          }
-
-          case 'copyReel':
-            // Needs source/target selection — no targeting flow here, so it fizzles
-            set({ dealerPending: false, dealerOfferIds: null });
-            break;
-        }
+        // Stash full — player must discard one item to take the gift (no direct use).
+        set({
+          dealerPending: false,
+          dealerOfferIds: null,
+          pendingGiftConsumableId: consumableId,
+        });
         break;
       }
 
@@ -610,5 +572,21 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   declineDealerOffer(): void {
     set({ dealerPending: false, dealerOfferIds: null });
+  },
+
+  discardConsumableForGift(discardId: string): void {
+    const state = get();
+    const giftId = state.pendingGiftConsumableId;
+    if (!giftId) return;
+    if ((state.runConsumables[discardId] ?? 0) <= 0) return;
+
+    const next = { ...state.runConsumables };
+    delete next[discardId];
+    next[giftId] = Math.min((next[giftId] ?? 0) + 1, MAX_CONSUMABLE_CHARGES_PER_SLOT);
+    set({ runConsumables: next, pendingGiftConsumableId: null });
+  },
+
+  dismissGift(): void {
+    set({ pendingGiftConsumableId: null });
   },
 }));

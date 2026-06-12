@@ -37,6 +37,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     dealerIncoming:            false,
     dealerPending:             false,
     dealerOfferIds:            null,
+    pendingGiftConsumableId:   null,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,

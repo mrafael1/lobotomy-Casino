@@ -50,6 +50,7 @@ export function GameScreen() {
   const dealerIncoming      = useRunStore(s => s.dealerIncoming);
   const dealerPending       = useRunStore(s => s.dealerPending);
   const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
+  const pendingGiftId       = useRunStore(s => s.pendingGiftConsumableId);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -65,6 +66,8 @@ export function GameScreen() {
   const revealDealer       = useRunStore(s => s.revealDealer);
   const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
   const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
+  const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
+  const dismissGift        = useRunStore(s => s.dismissGift);
 
   const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
@@ -169,6 +172,7 @@ export function GameScreen() {
     rerollingReelIndex === null &&
     !dealerIncoming &&
     !dealerPending &&
+    pendingGiftId === null &&
     (freeSpins > 0 || neurons >= 1);
 
   const spinNeuronCost = freeSpins > 0 ? 0 : Math.min(betMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
@@ -431,6 +435,34 @@ export function GameScreen() {
           </View>
           <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
             <Text style={styles.dealerDeclineText}>REFUSE BOTH</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* ── Stash-full gift overlay ── */}
+      {pendingGiftId && (
+        <View style={styles.overlay}>
+          <Text style={styles.dealerTitle}>STASH FULL</Text>
+          <Text style={styles.dealerSubtitle}>
+            He hands you {CONSUMABLES.find(c => c.id === pendingGiftId)?.name ?? 'something'}.
+            {'\n'}Discard something to make room.
+          </Text>
+          <View style={styles.dealerOffers}>
+            {activeConsumables.map(c => (
+              <View key={c.id} style={styles.dealerCard}>
+                <Text style={styles.dealerItemName}>{c.name}</Text>
+                <Text style={styles.dealerItemDesc}>×{runConsumables[c.id] ?? 0} charge{(runConsumables[c.id] ?? 0) > 1 ? 's' : ''}</Text>
+                <Pressable
+                  style={styles.dealerAcceptBtn}
+                  onPress={() => discardConsumableForGift(c.id)}
+                >
+                  <Text style={styles.dealerAcceptText}>DISCARD</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+          <Pressable style={styles.dealerDeclineBtn} onPress={dismissGift}>
+            <Text style={styles.dealerDeclineText}>TOSS THE GIFT</Text>
           </Pressable>
         </View>
       )}
