@@ -1,15 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useRunStore } from '../state/runState';
 
 // Number of sample points — more = smoother trace, but more Views to render.
 const N = 38;
 // Height of the waveform drawable area (px).
 const WAVE_H = 44;
-// Update interval (ms). 50 ms ≈ 20 fps.
-const TICK_MS = 50;
+// Update interval (ms). 120 ms ≈ 8 fps — slow enough for a pixel-art retro feel.
+const TICK_MS = 120;
 // How many phase units advance per tick. Controls scroll speed.
-const PHASE_STEP = 0.011;
+const PHASE_STEP = 0.007;
 
 // Deterministic pseudo-noise in [-1, 1] based on column index and a seed.
 function pnoise(i: number, seed: number): number {
@@ -136,14 +136,6 @@ export function Oscilloscope() {
           />
         ))}
       </View>
-
-      {hideNeuronsSpins > 0 ? (
-        <Text style={styles.countBlinded}>
-          ?? / ??  ({hideNeuronsSpins} spins)
-        </Text>
-      ) : (
-        <Text style={styles.count}>{neurons} / {startingNeurons}</Text>
-      )}
     </View>
   );
 }
@@ -162,18 +154,5 @@ const styles = StyleSheet.create({
     position:     'absolute',
     height:       2,
     borderRadius: 1,
-  },
-  count: {
-    color:      '#e2e8f0',
-    fontSize:   12,
-    fontWeight: '600',
-    textAlign:  'right',
-  },
-  countBlinded: {
-    color:         '#a855f7',
-    fontSize:      12,
-    fontWeight:    '700',
-    textAlign:     'right',
-    letterSpacing: 1,
   },
 });
