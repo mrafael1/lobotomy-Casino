@@ -47,6 +47,7 @@ for (let r = 0; r < RUNS; r++) {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
+    lockedReelSpinsRemaining:  0,
     runConsumables:            {},
     abilitiesUsed:             [],
     ownedUpgrades:             [],

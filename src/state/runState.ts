@@ -73,6 +73,7 @@ const INITIAL_RUN_STATE: RunState = {
   isSpinning:                 false,
   lastResult:                 null,
   lockedReels:                [false, false, false],
+  lockedReelSpinsRemaining:   0,
   runConsumables:             {},
   abilitiesUsed:              [],
   ownedUpgrades:              [],
@@ -229,7 +230,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (v) {
       set({ isSpinning: true });
     } else {
-      set({ isSpinning: false, lockedReels: [false, false, false] });
+      const state = get();
+      const remaining = Math.max(0, state.lockedReelSpinsRemaining - 1);
+      set({
+        isSpinning: false,
+        lockedReels: remaining > 0 ? state.lockedReels : [false, false, false],
+        lockedReelSpinsRemaining: remaining,
+      });
     }
   },
 
@@ -383,8 +390,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const locks: [boolean, boolean, boolean] = [false, false, false];
     locks[reelIndex] = true;
     set({
-      lockedReels:   locks,
-      abilitiesUsed: [...state.abilitiesUsed, 'memory'],
+      lockedReels:              locks,
+      lockedReelSpinsRemaining: 3,
+      abilitiesUsed:            [...state.abilitiesUsed, 'memory'],
     });
   },
 

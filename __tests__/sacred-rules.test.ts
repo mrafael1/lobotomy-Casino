@@ -25,6 +25,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
+    lockedReelSpinsRemaining:  0,
     runConsumables:            {},
     abilitiesUsed:             [],
     ownedUpgrades:             [],

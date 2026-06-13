@@ -110,10 +110,15 @@ export function SlotMachine({
   const winH    = machineHeight * WIN_H;
   const reelW   = winW / 3;
 
-  // Adjacent symbols for the shift buttons
+  const lockedReelSpinsRemaining = useRunStore(s => s.lockedReelSpinsRemaining);
+
+  // Adjacent symbols for the shift buttons.
+  // Book is not in MOVE_ORDER — clamp to 0 (brain's position), matching applyMoveColumn,
+  // so the direction buttons still appear even when the reel shows a book.
   const shiftCurrentSym =
     shiftTargetReel != null ? reels[shiftTargetReel] : null;
-  const shiftIdx = shiftCurrentSym ? MOVE_ORDER.indexOf(shiftCurrentSym) : -1;
+  const rawShiftIdx = shiftCurrentSym ? MOVE_ORDER.indexOf(shiftCurrentSym) : -1;
+  const shiftIdx = rawShiftIdx < 0 && shiftCurrentSym !== null ? 0 : rawShiftIdx;
   const shiftUpSym   = shiftIdx >= 0
     ? MOVE_ORDER[(shiftIdx - 1 + MOVE_ORDER.length) % MOVE_ORDER.length]
     : null;
@@ -170,7 +175,11 @@ export function SlotMachine({
                 overrideStopMs={isRerolling ? 600 : undefined}
                 size={symbolSize}
               />
-              {lockedReels[i] && <Text style={styles.lockBadge}>LOCKED</Text>}
+              {lockedReels[i] && (
+                <Text style={styles.lockBadge}>
+                  LOCK {lockedReelSpinsRemaining}
+                </Text>
+              )}
             </Pressable>
           );
         })}

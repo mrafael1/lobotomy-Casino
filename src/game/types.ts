@@ -48,6 +48,7 @@ export interface RunState {
   readonly isSpinning: boolean;
   readonly lastResult: SpinResult | null;
   readonly lockedReels: [boolean, boolean, boolean];
+  readonly lockedReelSpinsRemaining: number; // Memory: spins left before the lock expires
   readonly runConsumables: Partial<Record<string, number>>; // charges available this run
   readonly abilitiesUsed: ReadonlyArray<AbilityId>;        // abilities used this run (1 use each)
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;

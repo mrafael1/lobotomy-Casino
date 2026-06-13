@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Background } from '../components/Background';
 import { SlotMachine } from '../components/SlotMachine';
-import { NeuronBar } from '../components/NeuronBar';
+import { Oscilloscope } from '../components/Oscilloscope';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
@@ -320,8 +320,8 @@ export function GameScreen() {
           </View>
         </View>
 
-        {/* ── Neuron health bar ── */}
-        <NeuronBar />
+        {/* ── Oscilloscope (neuron health) ── */}
+        <Oscilloscope />
 
         {/* ── Slot machine ── */}
         <Animated.View style={[styles.machineWrap, { transform: [{ translateX: shakeAnim }] }]}>

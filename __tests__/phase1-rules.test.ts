@@ -361,9 +361,39 @@ test('store: MEMORY requires perm_memory upgrade', () => {
   useRunStore.getState().setSpinning(false);
   useRunStore.getState().lockReel(1);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
+  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(3);
   expect(useRunStore.getState().abilitiesUsed).toContain('memory');
+  // 1/run — second lock call is ignored
   useRunStore.getState().lockReel(0);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
+});
+
+test('store: MEMORY lock persists for exactly 3 spins', () => {
+  useRunStore.getState().startNewRun(['perm_memory'], {});
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+
+  useRunStore.getState().lockReel(0);
+  expect(useRunStore.getState().lockedReels[0]).toBe(true);
+  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(3);
+
+  // Spin 1 — lock should still be active after finishing
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  expect(useRunStore.getState().lockedReels[0]).toBe(true);
+  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(2);
+
+  // Spin 2
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  expect(useRunStore.getState().lockedReels[0]).toBe(true);
+  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(1);
+
+  // Spin 3 — lock expires after this spin
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  expect(useRunStore.getState().lockedReels[0]).toBe(false);
+  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(0);
 });
 
 test('store: abilities and consumables are blocked while spinning', () => {
