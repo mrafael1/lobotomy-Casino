@@ -55,6 +55,7 @@ for (let r = 0; r < RUNS; r++) {
     isFreeSpin:                false,
     betMultiplier:             1,
     dealerCount:               0,
+    dealerLastSpinCount:       0,
     dealer65SafetyFired:       false,
     dealer35SafetyFired:       false,
     dealerIncoming:            false,

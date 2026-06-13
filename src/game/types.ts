@@ -57,6 +57,7 @@ export interface RunState {
   readonly betMultiplier: 1 | 2 | 3;
   // Dealer state
   readonly dealerCount: number;              // how many times the Dealer has appeared this run (max 3)
+  readonly dealerLastSpinCount: number;      // spinCount when the dealer last triggered (cooldown guard)
   readonly dealer65SafetyFired: boolean;     // true once we've evaluated the 65% safety gate
   readonly dealer35SafetyFired: boolean;     // true once we've evaluated the 35% safety gate
   readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown

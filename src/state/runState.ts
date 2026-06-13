@@ -28,6 +28,7 @@ const DEALER_THRESHOLD_HIGH = 0.65; // safety gate — guarantees appearance if 
 const DEALER_THRESHOLD_LOW  = 0.35; // safety gate — guarantees appearance if dealerCount === 1
 const DEALER_PROC_CHANCE    = 0.15; // 15% chance per spin (independent of thresholds)
 const DEALER_MAX_COUNT      = 3;    // max appearances per run
+const DEALER_MIN_SPIN_GAP   = 3;    // minimum spins between any two dealer appearances
 
 // Dealer item pool — two storable substances are drawn randomly per encounter.
 const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
@@ -81,6 +82,7 @@ const INITIAL_RUN_STATE: RunState = {
   isFreeSpin:                 false,
   betMultiplier:              1,
   dealerCount:                0,
+  dealerLastSpinCount:        0,
   dealer65SafetyFired:        false,
   dealer35SafetyFired:        false,
   dealerIncoming:             false,
@@ -530,6 +532,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (state.runPhase !== 'running' || state.dealerPending || state.dealerIncoming) return;
     if (state.startingNeurons <= 0) return;
     if (state.dealerCount >= DEALER_MAX_COUNT) return;
+    if (state.spinCount - state.dealerLastSpinCount < DEALER_MIN_SPIN_GAP) return;
 
     const ratio = state.neurons / state.startingNeurons;
     let shouldTrigger = false;
@@ -562,6 +565,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       }
       set({
         dealerCount:         state.dealerCount + 1,
+        dealerLastSpinCount: state.spinCount,
         dealer65SafetyFired: new65Fired,
         dealer35SafetyFired: new35Fired,
         dealerIncoming:      true,
