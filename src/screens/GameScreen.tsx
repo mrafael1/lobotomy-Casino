@@ -41,7 +41,6 @@ export function GameScreen() {
   const freeSpins           = useRunStore(s => s.freeSpinsRemaining);
   const lastResult          = useRunStore(s => s.lastResult);
   const decaySkips          = useRunStore(s => s.decaySkips);
-  const betMultiplier       = useRunStore(s => s.betMultiplier);
   const runConsumables      = useRunStore(s => s.runConsumables);
   const abilitiesUsed       = useRunStore(s => s.abilitiesUsed);
   const blockPowersSpins    = useRunStore(s => s.blockPowersSpins);
@@ -245,17 +244,6 @@ export function GameScreen() {
   const sedativeNext = hasSedative(ownedUpgrades) && freeSpins === 0 && (spinCount + 1) % 3 === 0;
   const energyLocked = forcedRandomBetSpins > 0;
   const noNeuronCostSpin = freeSpins > 0 || decaySkips > 0 || sedativeNext;
-  const visibleBetMultiplier = energyLocked && betMultiplier === 3 ? 2 : betMultiplier;
-  const spinNeuronCost = noNeuronCostSpin ? 0 : Math.min(visibleBetMultiplier * ECONOMY.NEURON_DECAY_PER_SPIN, neurons);
-  const spinLabel =
-    compulsiveSpinSkips > 0
-      ? 'COMPULSION  x1'
-      : freeSpins > 0
-      ? 'FREE SPIN'
-      : noNeuronCostSpin
-      ? 'SPIN  0N'
-      : `SPIN  -${spinNeuronCost}N`;
-
   // Abilities blocked while game is busy, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
   const abilitiesUsable = runPhase === 'running' && !runBusy && lastResult !== null && !powersBlocked;
@@ -459,22 +447,6 @@ export function GameScreen() {
               })}
             </>
           )}
-        </View>
-
-        {/* Bet multiplier is selected on the machine's top-panel buttons,
-            and the lever (right side) pulls to spin — see SlotMachine. */}
-
-        {/* ── Spin button ── */}
-        <View style={styles.controls}>
-          <Pressable
-            style={[styles.spinBtn, !canSpin && styles.spinBtnDisabled]}
-            onPress={handleSpin}
-            disabled={!canSpin}
-          >
-            <Text style={styles.spinBtnText}>
-              {spinLabel}
-            </Text>
-          </Pressable>
         </View>
 
       </SafeAreaView>
@@ -828,28 +800,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 2,
-  },
-
-  // Spin button
-  controls: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    paddingTop: 4,
-  },
-  spinBtn: {
-    backgroundColor: '#ff2d78',
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  spinBtnDisabled: {
-    backgroundColor: 'rgba(255,45,120,0.25)',
-  },
-  spinBtnText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 6,
   },
 
   // Dealer modal + Game over overlay (both use same base overlay)

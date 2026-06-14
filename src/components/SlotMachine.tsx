@@ -43,7 +43,7 @@ const LEVER_PNGS: Record<1 | 2 | 3, number> = {
   2: require('../../assets/images/machine_lever_2.png'),
   3: require('../../assets/images/machine_lever_3.png'),
 };
-const LEVER_HIT = { left: 160 / 200, top: 104 / 300, width: 40 / 200, height: 56 / 300 };
+const LEVER_HIT = { left: 160 / 200, top: 214 / 300, width: 40 / 200, height: 56 / 300 };
 const LEVER_FRAME_MS = 70;
 
 interface Props {
@@ -216,22 +216,36 @@ export function SlotMachine({
         />
       )}
 
-      {/* Tappable multiplier buttons over the top-panel squares */}
+      {/* Tappable multiplier buttons over the top-panel squares.
+          Shows a lock overlay on buttons that cannot be selected right now. */}
       {multiplierInteractive && onSelectMultiplier &&
-        ([1, 2, 3] as const).map(m => (
-          <Pressable
-            key={m}
-            style={{
-              position: 'absolute',
-              top:    machineHeight * MULT_BTN_TOP,
-              left:   machineWidth  * MULT_BTN_LEFT[m],
-              width:  machineWidth  * MULT_BTN_SIZE_W,
-              height: machineHeight * MULT_BTN_SIZE_H,
-            }}
-            onPress={() => onSelectMultiplier(m)}
-            disabled={isMultiplierLocked ? isMultiplierLocked(m) : false}
-          />
-        ))}
+        ([1, 2, 3] as const).map(m => {
+          const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
+          const btnW = machineWidth  * MULT_BTN_SIZE_W;
+          const btnH = machineHeight * MULT_BTN_SIZE_H;
+          return (
+            <Pressable
+              key={m}
+              style={{
+                position: 'absolute',
+                top:    machineHeight * MULT_BTN_TOP,
+                left:   machineWidth  * MULT_BTN_LEFT[m],
+                width:  btnW,
+                height: btnH,
+              }}
+              onPress={() => onSelectMultiplier(m)}
+              disabled={locked}
+            >
+              {locked && (
+                <View style={[StyleSheet.absoluteFill, styles.multLockOverlay]}>
+                  <Text style={[styles.multLockIcon, { fontSize: Math.floor(btnH * 0.52) }]}>
+                    🔒
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
 
       {/* Reels overlay */}
       <View
@@ -402,5 +416,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     opacity: 0.85,
+  },
+  multLockOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  multLockIcon: {
+    lineHeight: undefined,
   },
 });

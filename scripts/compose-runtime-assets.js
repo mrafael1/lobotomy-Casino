@@ -123,8 +123,28 @@ function composeMultiplier() {
   }
 }
 
+// Shift all non-transparent pixels in src down by dy pixels (in-place-safe, returns new PNG).
+function shiftDown(src, dy) {
+  const out = makePng(src.width, src.height);
+  for (let y = 0; y < src.height; y++) {
+    for (let x = 0; x < src.width; x++) {
+      const si = (y * src.width + x) * 4;
+      if (src.data[si + 3] === 0) continue;
+      const ny = y + dy;
+      if (ny < 0 || ny >= src.height) continue;
+      const di = (ny * src.width + x) * 4;
+      out.data[di]     = src.data[si];
+      out.data[di + 1] = src.data[si + 1];
+      out.data[di + 2] = src.data[si + 2];
+      out.data[di + 3] = src.data[si + 3];
+    }
+  }
+  return out;
+}
+
 // Lever: lever_frames.png is a 600x300 sheet of three 200x300 frames
-// (idle / mid / pulled). Split and upscale each into its own runtime overlay.
+// (idle / mid / pulled). Split, shift down to cash-tray area, and upscale.
+// Source art has lever at y≈110-154; +110 moves it to y≈220-264 (payout slot).
 function composeLever() {
   const layerDir = path.join(ROOT, 'assets', 'images', 'machine_slot_layers');
   const sheet = readPng(path.join(layerDir, 'lever_frames.png'));
@@ -132,7 +152,7 @@ function composeLever() {
     const frame = crop(sheet, f * 200, 0, 200, 300);
     writePng(
       path.join(ROOT, 'assets', 'images', `machine_lever_${f + 1}.png`),
-      upscaleNearest(frame, 3),
+      upscaleNearest(shiftDown(frame, 110), 3),
     );
   }
 }

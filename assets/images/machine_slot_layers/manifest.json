@@ -63,7 +63,7 @@
       "sheet": { "frames": 3, "frameWidth": 200, "frameHeight": 300 },
       "frames": ["idle", "mid", "pulled"],
       "action": "pull spins the reels",
-      "hit": { "x": 160, "y": 104, "width": 40, "height": 56 }
+      "hit": { "x": 160, "y": 214, "width": 40, "height": 56 }
     }
   },
   "reel": {
