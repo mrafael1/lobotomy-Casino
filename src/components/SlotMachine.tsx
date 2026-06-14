@@ -19,21 +19,21 @@ const WIN_H     = 100 / 300;
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
-// Multiplier buttons (top panel) — one transparent overlay per bet state,
-// swapped by betMultiplier. Tap targets mirror the button geometry baked into
-// Multiplier_Top_Xn.png: three 57x20 buttons spanning x=13/73/133, y=44 (200x300 src).
+// Multiplier buttons — three 45×24 buttons filling the top glass panel.
+// Source geometry (200×300): inner glass x=31–170, y=45–68.
+// Buttons: x=31/78/125, y=45, w=45, h=24, 2px gap between each.
 const MULTIPLIER_PNGS: Record<1 | 2 | 3, number> = {
   1: require('../../assets/images/machine_multiplier_x1.png'),
   2: require('../../assets/images/machine_multiplier_x2.png'),
   3: require('../../assets/images/machine_multiplier_x3.png'),
 };
-const MULT_BTN_TOP = 44 / 300;
-const MULT_BTN_SIZE_W = 57 / 200;
-const MULT_BTN_SIZE_H = 20 / 300;
+const MULT_BTN_TOP = 45 / 300;
+const MULT_BTN_SIZE_W = 45 / 200;
+const MULT_BTN_SIZE_H = 24 / 300;
 const MULT_BTN_LEFT: Record<1 | 2 | 3, number> = {
-  1: 13 / 200,
-  2: 73 / 200,
-  3: 133 / 200,
+  1: 31 / 200,
+  2: 78 / 200,
+  3: 125 / 200,
 };
 
 // Lever — three frames (idle / mid / pulled) on the right side of the cabinet.
