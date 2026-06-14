@@ -22,7 +22,7 @@ export interface SpinInput {
   readonly bookWeight: number;          // 0 = no book; >0 = Learning owned, book active
   readonly brainWeightBonus: number;    // extra weight for brain (upgrades + Syringe boost)
   readonly guaranteedWin: boolean;      // Pill: force at least a pair this spin
-  readonly pattern23Triple: boolean;    // Pattern Fabrication: ⅔ match → triple payout
+  readonly pattern23Triple: boolean;    // Pattern Fabrication: 2/3 match -> doubled pair payout
   readonly learningActive: boolean;     // Learning: book pays out and +10/book visible
 }
 
@@ -48,6 +48,7 @@ export interface RunState {
   readonly isSpinning: boolean;
   readonly lastResult: SpinResult | null;
   readonly lockedReels: [boolean, boolean, boolean];
+  readonly lockedReelSpinsRemaining: number; // Memory: spins left before the lock expires
   readonly runConsumables: Partial<Record<string, number>>; // charges available this run
   readonly abilitiesUsed: ReadonlyArray<AbilityId>;        // abilities used this run (1 use each)
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;
@@ -56,18 +57,23 @@ export interface RunState {
   readonly betMultiplier: 1 | 2 | 3;
   // Dealer state
   readonly dealerCount: number;              // how many times the Dealer has appeared this run (max 3)
+  readonly dealerLastSpinCount: number;      // spinCount when the dealer last triggered (cooldown guard)
   readonly dealer65SafetyFired: boolean;     // true once we've evaluated the 65% safety gate
   readonly dealer35SafetyFired: boolean;     // true once we've evaluated the 35% safety gate
   readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown
   readonly dealerPending: boolean;           // dealer modal should be shown
   readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
-  readonly pendingGiftConsumableId: string | null;  // gift waiting for a stash slot — player must discard to take it
+  readonly pendingGiftConsumableId: string | null;  // dealer substance waiting for stash confirmation/discard
+  readonly pendingGiftNeedsDiscard: boolean; // true when the gift has not entered the stash yet
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
-  readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet
+  readonly forcedRandomBetSpins: number; // Energy Drink: spins with no decay and x3 locked
   readonly guaranteedWinSpins: number;   // Pill: spins guaranteed to win
   readonly blockPowersSpins: number;     // Pill: spins where abilities are blocked
   readonly hideNeuronsSpins: number;     // Focus Serum side effect: neuron count hidden
+  readonly cocktailBoostSpins: number;   // Cocktail: next spins get visible rarity-sum bonus
+  readonly compulsiveSpinSkips: number;  // Cocktail: forced x1 spins that skip player input
+  readonly pendingCompulsiveSpinSkips: number; // Cocktail compulsion queued until the boost spins finish
   readonly decaySkips: number;           // spins that cost 0 neurons (skipDecay effects)
 }
 

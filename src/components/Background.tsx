@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Image, View } from 'react-native';
+import { StyleSheet, Image, View, useWindowDimensions } from 'react-native';
 import Animated, { useSharedValue, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 import { useRunStore } from '../state/runState';
 
@@ -7,9 +7,14 @@ interface Props {
   children: React.ReactNode;
 }
 
+const BACKGROUND_WIDTH = 640;
+const BACKGROUND_HEIGHT = 960;
+const BACKGROUND_ASPECT = BACKGROUND_WIDTH / BACKGROUND_HEIGHT;
+
 // Healthy and decay backgrounds cross-fade continuously as neurons drain.
 // At 100% neurons: only healthy visible. At 0%: only decay visible.
 export function Background({ children }: Props) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const neurons         = useRunStore(s => s.neurons);
   const startingNeurons = useRunStore(s => s.startingNeurons);
 
@@ -27,17 +32,31 @@ export function Background({ children }: Props) {
     opacity: decayOpacity.value,
   }));
 
+  const screenAspect = screenHeight > 0 ? screenWidth / screenHeight : BACKGROUND_ASPECT;
+  const fittedWidth = screenAspect > BACKGROUND_ASPECT
+    ? screenWidth
+    : screenHeight * BACKGROUND_ASPECT;
+  const fittedHeight = screenAspect > BACKGROUND_ASPECT
+    ? screenWidth / BACKGROUND_ASPECT
+    : screenHeight;
+  const backgroundFrame = {
+    width: fittedWidth,
+    height: fittedHeight,
+    left: (screenWidth - fittedWidth) / 2,
+    top: (screenHeight - fittedHeight) / 2,
+  };
+
   return (
     <View style={styles.root}>
       <Image
         source={require('../../assets/images/background_healthy.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
+        style={[styles.backgroundImage, backgroundFrame]}
+        resizeMode="stretch"
       />
       <Animated.Image
         source={require('../../assets/images/background_decay.png')}
-        style={[StyleSheet.absoluteFillObject, decayStyle]}
-        resizeMode="cover"
+        style={[styles.backgroundImage, backgroundFrame, decayStyle]}
+        resizeMode="stretch"
       />
       {children}
     </View>
@@ -48,5 +67,8 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#030307',
+  },
+  backgroundImage: {
+    position: 'absolute',
   },
 });

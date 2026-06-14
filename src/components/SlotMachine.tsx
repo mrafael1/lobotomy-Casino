@@ -54,13 +54,15 @@ export function SlotMachine({
   const [jackpotFlash, setJackpotFlash] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Waits for the reroll animation too — a power-made jackpot should flash
+  // when the reel lands, not while it is still spinning.
   useEffect(() => {
-    if (lastResult?.isJackpot && !isSpinning) {
+    if (lastResult?.isJackpot && !isSpinning && rerollingReelIndex === null) {
       setJackpotFlash(true);
       flashTimer.current = setTimeout(() => setJackpotFlash(false), 1800);
     }
     return () => { if (flashTimer.current) clearTimeout(flashTimer.current); };
-  }, [lastResult, isSpinning]);
+  }, [lastResult, isSpinning, rerollingReelIndex]);
 
   const machineWidth  = Math.floor(Math.min(
     screenWidth * 0.9,
@@ -93,12 +95,13 @@ export function SlotMachine({
   }
 
   // Reset completed counter when a new spin starts. Locked reels fire their
-  // own completion immediately, so they should not be pre-counted here.
+  // onComplete before this effect runs (child effects before parent), so
+  // pre-seed with the number of locked reels to avoid a missed completion.
   useEffect(() => {
     if (isSpinning) {
-      completedRef.current = 0;
+      completedRef.current = lockedReels.filter(Boolean).length;
     }
-  }, [isSpinning, lockedReels]);
+  }, [isSpinning]);
 
   // Reel window absolute coords over the machine image
   const winTop  = machineHeight * WIN_TOP;
@@ -107,10 +110,15 @@ export function SlotMachine({
   const winH    = machineHeight * WIN_H;
   const reelW   = winW / 3;
 
-  // Adjacent symbols for the shift buttons
+  const lockedReelSpinsRemaining = useRunStore(s => s.lockedReelSpinsRemaining);
+
+  // Adjacent symbols for the shift buttons.
+  // Book is not in MOVE_ORDER — clamp to 0 (brain's position), matching applyMoveColumn,
+  // so the direction buttons still appear even when the reel shows a book.
   const shiftCurrentSym =
     shiftTargetReel != null ? reels[shiftTargetReel] : null;
-  const shiftIdx = shiftCurrentSym ? MOVE_ORDER.indexOf(shiftCurrentSym) : -1;
+  const rawShiftIdx = shiftCurrentSym ? MOVE_ORDER.indexOf(shiftCurrentSym) : -1;
+  const shiftIdx = rawShiftIdx < 0 && shiftCurrentSym !== null ? 0 : rawShiftIdx;
   const shiftUpSym   = shiftIdx >= 0
     ? MOVE_ORDER[(shiftIdx - 1 + MOVE_ORDER.length) % MOVE_ORDER.length]
     : null;
@@ -167,7 +175,11 @@ export function SlotMachine({
                 overrideStopMs={isRerolling ? 600 : undefined}
                 size={symbolSize}
               />
-              {lockedReels[i] && <Text style={styles.lockBadge}>LOCKED</Text>}
+              {lockedReels[i] && (
+                <Text style={styles.lockBadge}>
+                  LOCK {lockedReelSpinsRemaining}
+                </Text>
+              )}
             </Pressable>
           );
         })}
@@ -231,6 +243,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    width: '100%',
+    height: '100%',
   },
   reelWindow: {
     position: 'absolute',
