@@ -51,11 +51,13 @@
     "note": "Runtime overlays swapped/animated by the app, not part of the baked machine stack. Built into runtime PNGs by compose-runtime-assets.js.",
     "multiplier": {
       "files": ["Multiplier_Top_X1.png", "Multiplier_Top_X2.png", "Multiplier_Top_X3.png"],
+      "generatedBy": "scripts/gen-multiplier-overlays.js",
       "swappedBy": "betMultiplier",
+      "row": { "x": 56, "y": 42, "width": 92, "height": 25, "note": "solid background strip between panel pillars" },
       "buttons": [
-        { "m": 1, "x": 67, "y": 46, "width": 18, "height": 18 },
-        { "m": 2, "x": 90, "y": 46, "width": 18, "height": 18 },
-        { "m": 3, "x": 113, "y": 46, "width": 18, "height": 18 }
+        { "m": 1, "x": 59, "y": 45, "width": 26, "height": 19 },
+        { "m": 2, "x": 88, "y": 45, "width": 26, "height": 19 },
+        { "m": 3, "x": 117, "y": 45, "width": 26, "height": 19 }
       ]
     },
     "lever": {
