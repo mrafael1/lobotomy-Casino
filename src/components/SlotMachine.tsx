@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, Pressable, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Image, Pressable, Text, Animated, StyleSheet, useWindowDimensions } from 'react-native';
 import { Reel } from './Reel';
 import { SYMBOL_SIZE } from './SymbolCanvas';
 import { MOVE_ORDER } from '../game/abilities';
@@ -107,6 +107,31 @@ export function SlotMachine({
   }
 
   useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
+
+  // Lever glow — breathing neon ring when a spin is ready.
+  const leverGlowOpacity = useRef(new Animated.Value(0)).current;
+  const leverGlowScale   = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!leverEnabled) {
+      leverGlowOpacity.stopAnimation(() => leverGlowOpacity.setValue(0));
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(leverGlowOpacity, { toValue: 0.9, duration: 550, useNativeDriver: true }),
+          Animated.timing(leverGlowScale,   { toValue: 1.1, duration: 550, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(leverGlowOpacity, { toValue: 0.15, duration: 650, useNativeDriver: true }),
+          Animated.timing(leverGlowScale,   { toValue: 0.92, duration: 650, useNativeDriver: true }),
+        ]),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [leverEnabled]);
 
   // Jackpot flash
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -216,36 +241,36 @@ export function SlotMachine({
         />
       )}
 
-      {/* Tappable multiplier buttons over the top-panel squares.
-          Shows a lock overlay on buttons that cannot be selected right now. */}
-      {multiplierInteractive && onSelectMultiplier &&
-        ([1, 2, 3] as const).map(m => {
-          const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
-          const btnW = machineWidth  * MULT_BTN_SIZE_W;
-          const btnH = machineHeight * MULT_BTN_SIZE_H;
-          return (
-            <Pressable
-              key={m}
-              style={{
-                position: 'absolute',
-                top:    machineHeight * MULT_BTN_TOP,
-                left:   machineWidth  * MULT_BTN_LEFT[m],
-                width:  btnW,
-                height: btnH,
-              }}
-              onPress={() => onSelectMultiplier(m)}
-              disabled={locked}
-            >
-              {locked && (
-                <View style={[StyleSheet.absoluteFill, styles.multLockOverlay]}>
-                  <Text style={[styles.multLockIcon, { fontSize: Math.floor(btnH * 0.52) }]}>
-                    🔒
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
+      {/* Multiplier buttons — lock overlay always shown (even while spinning).
+          Tap target only active when multiplierInteractive. */}
+      {([1, 2, 3] as const).map(m => {
+        const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
+        const canTap = multiplierInteractive && !!onSelectMultiplier && !locked;
+        const btnW   = machineWidth  * MULT_BTN_SIZE_W;
+        const btnH   = machineHeight * MULT_BTN_SIZE_H;
+        return (
+          <Pressable
+            key={m}
+            style={{
+              position: 'absolute',
+              top:    machineHeight * MULT_BTN_TOP,
+              left:   machineWidth  * MULT_BTN_LEFT[m],
+              width:  btnW,
+              height: btnH,
+            }}
+            onPress={canTap ? () => onSelectMultiplier!(m) : undefined}
+            disabled={!canTap}
+          >
+            {locked && (
+              <View style={[StyleSheet.absoluteFill, styles.multLockOverlay]}>
+                <Text style={[styles.multLockIcon, { fontSize: Math.floor(btnH * 0.52) }]}>
+                  🔒
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
 
       {/* Reels overlay */}
       <View
@@ -329,10 +354,27 @@ export function SlotMachine({
         </>
       )}
 
-      {/* Pull-lever hit target — pulling spins the reels. Rendered last so it
-          wins the touch where it overlaps the reel window's right edge; only
-          shown when a spin is allowed (never during reel-targeting). */}
-      {leverEnabled && onLeverPull && (
+      {/* Lever glow ring — neon pink halo that breathes when a spin is ready.
+          pointerEvents="none" so it never intercepts the Pressable below. */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position:    'absolute',
+          top:         machineHeight * LEVER_HIT.top    - 5,
+          left:        machineWidth  * LEVER_HIT.left   - 5,
+          width:       machineWidth  * LEVER_HIT.width  + 10,
+          height:      machineHeight * LEVER_HIT.height + 10,
+          borderRadius: 8,
+          borderWidth: 2.5,
+          borderColor: '#ff2d78',
+          opacity:     leverGlowOpacity,
+          transform:   [{ scale: leverGlowScale }],
+        }}
+      />
+
+      {/* Pull-lever hit target — rendered last so it wins the touch contest
+          where the lever overlaps the reel window's right edge. */}
+      {onLeverPull && (
         <Pressable
           style={{
             position: 'absolute',
@@ -342,6 +384,7 @@ export function SlotMachine({
             height: machineHeight * LEVER_HIT.height,
           }}
           onPress={pullLever}
+          disabled={!leverEnabled}
         />
       )}
     </View>
