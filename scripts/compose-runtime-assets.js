@@ -123,6 +123,27 @@ function composeMultiplier() {
   }
 }
 
+// Individual machine layers — each baked composite layer also emitted as its
+// own 3x upscaled runtime PNG into machine_layers/. The current renderer uses
+// the flat machine_normal/decay composites; these granular layers are raw
+// material for phase-3 per-layer effects (independent flicker, glitch jitter,
+// staged cracks) without re-running the source art. No runtime cost until used.
+function composeLayers() {
+  const layerDir = path.join(ROOT, 'assets', 'images', 'machine_slot_layers');
+  const outDir = path.join(ROOT, 'assets', 'images', 'machine_layers');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const layers = [
+    'Cabinet', 'ReelWindow', 'Trim', 'Glass',
+    'Neon_Trim', 'Lights_Bright', 'Jackpot_Flash',
+    'Cabinet_Sickly', 'Glitch', 'Flicker_Dead', 'Crack',
+  ];
+  for (const name of layers) {
+    const src = path.join(layerDir, `${name}.png`);
+    if (!fs.existsSync(src)) continue;
+    writePng(path.join(outDir, `${name}.png`), upscaleNearest(readPng(src), 3));
+  }
+}
+
 // Shift all non-transparent pixels in src down by dy pixels (in-place-safe, returns new PNG).
 function shiftDown(src, dy) {
   const out = makePng(src.width, src.height);
@@ -203,6 +224,7 @@ function composeUI() {
 }
 
 composeMachine();
+composeLayers();
 composeMultiplier();
 composeLever();
 composeBackground();
@@ -212,6 +234,7 @@ console.log('Composited runtime assets:');
 console.log('assets/images/machine_normal.png 600x900');
 console.log('assets/images/machine_decay.png 600x900');
 console.log('assets/images/machine_jackpot.png 600x900 transparent overlay');
+console.log('assets/images/machine_layers/*.png 600x900 individual layers (phase-3 effects)');
 console.log('assets/images/machine_multiplier_x1..3.png 600x900 transparent overlay');
 console.log('assets/images/machine_lever_1..3.png 600x900 transparent overlay');
 console.log('assets/images/background_healthy.png 640x960');
