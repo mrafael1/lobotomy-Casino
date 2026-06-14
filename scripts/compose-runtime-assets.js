@@ -179,27 +179,26 @@ function composeBackground() {
 }
 
 // UI sprites — power icon chips, stash tray, consumable placeholder, dealer art.
-// Source PNGs placed in assets/images/ui/ by the artist; 2× upscaled here.
-// Silently skips any file not yet created so the pipeline stays runnable
-// while art is in progress.
+// Sources live wherever the artist saved them; each is nearest-neighbor
+// upscaled into assets/images/ui/ so it stays crisp when scaled in the app.
+// Silently skips any source not yet created so the pipeline stays runnable.
 function composeUI() {
-  const srcDir  = path.join(ROOT, 'assets', 'images', 'ui');
-  const outDir  = path.join(ROOT, 'assets', 'images', 'ui');
-  const sprites = [
-    'power_reroll',
-    'power_shift',
-    'power_memory',
-    'stash_tray',
-    'consumable_placeholder',
-    'dealer_portrait',
-    'dealer_hands',
+  const outDir = path.join(ROOT, 'assets', 'images', 'ui');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const items = [
+    { src: 'powers/power_reroll.png',          name: 'power_reroll',           scale: 3 },
+    { src: 'powers/power_shift.png',           name: 'power_shift',            scale: 3 },
+    { src: 'powers/power_memory.png',          name: 'power_memory',           scale: 3 },
+    { src: 'stash_tray.png',                   name: 'stash_tray',             scale: 3 },
+    { src: 'items/consumable_placeholder.png', name: 'consumable_placeholder', scale: 3 },
+    { src: 'dealer_portrait.png',              name: 'dealer_portrait',        scale: 3 },
+    { src: 'dealer_hands.png',                 name: 'dealer_hands',           scale: 3 },
   ];
-  for (const name of sprites) {
-    const src = path.join(srcDir, `${name}.png`);
+  for (const it of items) {
+    const src = path.join(ROOT, 'assets', 'images', it.src);
     if (!fs.existsSync(src)) continue;
-    const out = path.join(outDir, `${name}@2x.png`);
-    writePng(out, upscaleNearest(readPng(src), 2));
-    console.log(`assets/images/ui/${name}@2x.png`);
+    writePng(path.join(outDir, `${it.name}.png`), upscaleNearest(readPng(src), it.scale));
+    console.log(`assets/images/ui/${it.name}.png`);
   }
 }
 

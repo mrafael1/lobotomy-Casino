@@ -2,15 +2,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   StyleSheet,
   SafeAreaView,
   Animated,
 } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Background } from '../components/Background';
 import { SlotMachine } from '../components/SlotMachine';
 import { Oscilloscope } from '../components/Oscilloscope';
+import { Stash } from '../components/Stash';
+import { POWER_ICONS, DEALER_PORTRAIT, DEALER_HANDS, itemIcon } from '../content/uiAssets';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
@@ -29,6 +33,30 @@ type Selection =
   | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
 const NO_SELECTION: Selection = { mode: 'none' };
+
+// One power ability as an icon chip (reroll / shift / memory).
+function PowerChip({
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  icon: ImageSourcePropType;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.powerChip} disabled={disabled} onPress={onPress}>
+      <Image
+        source={icon}
+        style={[styles.powerIcon, disabled && styles.powerChipDisabled]}
+        resizeMode="contain"
+      />
+      <Text style={[styles.powerLabel, disabled && styles.powerChipDisabled]}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export function GameScreen() {
   const router = useRouter();
@@ -254,6 +282,13 @@ export function GameScreen() {
   const stashItems = [...CONSUMABLES, ...IN_RUN_ITEMS];
   const activeStashItems = stashItems.filter(c => (runConsumables[c.id] ?? 0) > 0);
 
+  // Two physical stash slots — index maps to a tray receptacle; null = empty.
+  const stashSlots = [0, 1].map(i => {
+    const c = activeStashItems[i];
+    return c ? { id: c.id, name: c.name, charges: runConsumables[c.id] ?? 0 } : null;
+  });
+  const stashUsable = runPhase === 'running' && !runBusy && selection.mode === 'none';
+
   const winLabel = lastResult
     ? lastResult.winType === 'jackpot'
       ? `JACKPOT  +${lastResult.lucidityEarned}`
@@ -379,74 +414,48 @@ export function GameScreen() {
           )}
         </View>
 
-        {/* ── Powers + consumables — single fixed-height row so the machine
-               never shifts when a power is selected or cancelled ── */}
-        <View style={styles.itemArea}>
-          {selection.mode !== 'none' ? (
-            <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
-              <Text style={styles.cancelText}>CANCEL</Text>
-            </Pressable>
-          ) : (
-            <>
-              <Pressable
-                style={[
-                  styles.itemBtn,
-                  (!abilitiesUsable || abilitiesUsed.includes('reroll')) && styles.itemBtnDisabled,
-                ]}
-                disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
-                onPress={() => setSelection({ mode: 'reroll' })}
-              >
-                <Text style={styles.itemName}>REROLL</Text>
-                <Text style={styles.itemTag}>1/RUN</Text>
+        {/* ── Bottom bar: stash tray (left) + power icon chips (center).
+               Fixed height so the machine never shifts. ── */}
+        <View style={styles.bottomBar}>
+          <Stash
+            items={stashSlots}
+            onUse={handleConsumable}
+            disabled={!stashUsable}
+            width={120}
+          />
+
+          <View style={styles.powerRow}>
+            {selection.mode !== 'none' ? (
+              <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
+                <Text style={styles.cancelText}>CANCEL</Text>
               </Pressable>
-
-              {hasShift && (
-                <Pressable
-                  style={[
-                    styles.itemBtn,
-                    (!abilitiesUsable || abilitiesUsed.includes('shift')) && styles.itemBtnDisabled,
-                  ]}
-                  disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
-                  onPress={() => setSelection({ mode: 'move', reel: null })}
-                >
-                  <Text style={styles.itemName}>SHIFT</Text>
-                  <Text style={styles.itemTag}>1/RUN</Text>
-                </Pressable>
-              )}
-
-              {hasMemory && (
-                <Pressable
-                  style={[
-                    styles.itemBtn,
-                    (!abilitiesUsable || abilitiesUsed.includes('memory')) && styles.itemBtnDisabled,
-                  ]}
-                  disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
-                  onPress={() => setSelection({ mode: 'lock' })}
-                >
-                  <Text style={styles.itemName}>MEMORY</Text>
-                  <Text style={styles.itemTag}>1/RUN</Text>
-                </Pressable>
-              )}
-
-              {activeStashItems.map(c => {
-                const charges = runConsumables[c.id] ?? 0;
-                const disabled = runPhase !== 'running' || runBusy;
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.itemBtn, styles.itemBtnConsumable, disabled && styles.itemBtnDisabled]}
-                    disabled={disabled}
-                    onPress={() => handleConsumable(c.id)}
-                  >
-                    <Text style={styles.itemName} numberOfLines={1}>
-                      {c.name.split(' ')[0].toUpperCase()}
-                    </Text>
-                    <Text style={styles.itemTag}>×{charges}</Text>
-                  </Pressable>
-                );
-              })}
-            </>
-          )}
+            ) : (
+              <>
+                <PowerChip
+                  icon={POWER_ICONS.reroll}
+                  label="REROLL"
+                  disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
+                  onPress={() => setSelection({ mode: 'reroll' })}
+                />
+                {hasShift && (
+                  <PowerChip
+                    icon={POWER_ICONS.shift}
+                    label="SHIFT"
+                    disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
+                    onPress={() => setSelection({ mode: 'move', reel: null })}
+                  />
+                )}
+                {hasMemory && (
+                  <PowerChip
+                    icon={POWER_ICONS.memory}
+                    label="MEMORY"
+                    disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
+                    onPress={() => setSelection({ mode: 'lock' })}
+                  />
+                )}
+              </>
+            )}
+          </View>
         </View>
 
       </SafeAreaView>
@@ -468,7 +477,7 @@ export function GameScreen() {
         </View>
       )}
 
-      {/* ── Dealer arrival: speech bubble ── */}
+      {/* ── Dealer arrival: portrait + speech bubble ── */}
       {dealerPrompt === 'ask' && (
         <View style={styles.bubbleOverlay}>
           <View style={styles.bubble}>
@@ -483,32 +492,18 @@ export function GameScreen() {
             </View>
           </View>
           <View style={styles.bubbleTail} />
+          <Image source={DEALER_PORTRAIT} style={styles.dealerArrivalPortrait} resizeMode="contain" />
         </View>
       )}
 
-      {/* ── Dealer modal ── */}
+      {/* ── Dealer modal — portrait, a speech bubble explaining the goods,
+             and the two offers presented in the dealer's hands. ── */}
       {dealerPending && dealerItems.length > 0 && (
         <View style={styles.overlay}>
-          <Text style={styles.dealerTitle}>THE DEALER</Text>
-          <Text style={styles.dealerSubtitle}>Tap a substance to inspect it.</Text>
-          <View style={styles.dealerOffers}>
-            {dealerItems.map(item => {
-              const inspected = inspectedDealerItemId === item.id;
-              return (
-              <Pressable
-                key={item.id}
-                style={[styles.dealerCard, inspected && styles.dealerCardSelected]}
-                onPress={() => setInspectedDealerItemId(item.id)}
-              >
-                <Text style={styles.dealerItemName}>{item.name}</Text>
-                <Text style={styles.dealerItemDesc}>
-                  {inspected ? 'Selected' : 'Tap to inspect'}
-                </Text>
-              </Pressable>
-            );
-            })}
-          </View>
-          <View style={styles.dealerInspectPanel}>
+          <Image source={DEALER_PORTRAIT} style={styles.dealerModalPortrait} resizeMode="contain" />
+
+          {/* Speech bubble: prompt, or the inspected item's effect. */}
+          <View style={styles.dealerSpeech}>
             {inspectedDealerItem ? (
               <>
                 <Text style={styles.dealerInspectName}>{inspectedDealerItem.name}</Text>
@@ -518,11 +513,33 @@ export function GameScreen() {
                 </Text>
               </>
             ) : (
-              <Text style={styles.dealerInspectDesc}>
-                Choose one of the two substances to see what it does.
+              <Text style={styles.bubbleText}>
+                "Go on, tap one. See what it does to you."
               </Text>
             )}
           </View>
+          <View style={styles.dealerSpeechTail} />
+
+          {/* Two hands, each presenting an offer icon. */}
+          <View style={styles.dealerHandsRow}>
+            <Image source={DEALER_HANDS} style={styles.dealerHandsImg} resizeMode="contain" />
+            <View style={styles.dealerHandsOffers}>
+              {dealerItems.map(item => {
+                const inspected = inspectedDealerItemId === item.id;
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[styles.dealerHandSlot, inspected && styles.dealerHandSlotSelected]}
+                    onPress={() => setInspectedDealerItemId(item.id)}
+                  >
+                    <Image source={itemIcon(item.id)} style={styles.dealerHandIcon} resizeMode="contain" />
+                    <Text style={styles.dealerHandName} numberOfLines={1}>{item.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           <Pressable
             style={[styles.dealerAcceptBtn, !inspectedDealerItem && styles.itemBtnDisabled]}
             disabled={!inspectedDealerItem}
@@ -753,42 +770,42 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Powers + consumables + cancel share one fixed-height row — the machine's
-  // vertical position must not depend on which of them is showing.
-  itemArea: {
+  // Bottom bar: stash tray (left) + power chips (center). Fixed height so the
+  // machine's vertical position never depends on what is showing.
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    height: 76,
+    gap: 8,
+  },
+  powerRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    height: 52,
+    gap: 14,
   },
-  itemBtn: {
-    flex: 1,
-    backgroundColor: 'rgba(168,85,247,0.18)',
-    borderColor: 'rgba(168,85,247,0.5)',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingVertical: 6,
+  powerChip: {
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
-  itemBtnConsumable: {
-    backgroundColor: 'rgba(0,229,255,0.12)',
-    borderColor: 'rgba(0,229,255,0.4)',
+  powerIcon: {
+    width: 40,
+    height: 40,
   },
-  itemBtnDisabled: {
-    opacity: 0.35,
-  },
-  itemName: {
-    color: '#e2e8f0',
-    fontSize: 10,
+  powerLabel: {
+    color: '#cbd5e1',
+    fontSize: 8,
     fontWeight: '800',
     letterSpacing: 1,
   },
-  itemTag: {
-    color: '#a855f7',
-    fontSize: 9,
-    fontWeight: '700',
+  powerChipDisabled: {
+    opacity: 0.3,
+  },
+  itemBtnDisabled: {
+    opacity: 0.35,
   },
 
   cancelBtn: {
@@ -919,19 +936,78 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  dealerCardSelected: {
-    backgroundColor: 'rgba(0,229,255,0.14)',
-    borderColor: '#00e5ff',
+  // Dealer portraits + offer hands
+  dealerArrivalPortrait: {
+    width: 96,
+    height: 144,
+    marginTop: 8,
   },
-  dealerInspectPanel: {
-    width: '100%',
-    minHeight: 84,
+  dealerModalPortrait: {
+    width: 88,
+    height: 132,
+  },
+  dealerSpeech: {
+    backgroundColor: '#13091f',
+    borderColor: '#a855f7',
     borderWidth: 1,
-    borderColor: 'rgba(0,229,255,0.35)',
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    maxWidth: '88%',
+    minHeight: 84,
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,229,255,0.07)',
+  },
+  dealerSpeechTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderBottomWidth: 12,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#a855f7',
+    marginBottom: -1,
+    marginTop: -1,
+    transform: [{ rotate: '180deg' }],
+  },
+  dealerHandsRow: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dealerHandsImg: {
+    width: 256,
+    height: 128,
+  },
+  dealerHandsOffers: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
+  dealerHandSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    gap: 2,
+  },
+  dealerHandSlotSelected: {
+    borderColor: '#00e5ff',
+    backgroundColor: 'rgba(0,229,255,0.12)',
+  },
+  dealerHandIcon: {
+    width: 44,
+    height: 44,
+  },
+  dealerHandName: {
+    color: '#e2e8f0',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    maxWidth: 90,
   },
   dealerInspectName: {
     color: '#00e5ff',
