@@ -17,26 +17,6 @@ const WIN_LEFT  = 25 / 200;
 const WIN_W     = 150 / 200;
 const WIN_H     = 100 / 300;
 
-// Multiplier panel: transparent overlays baked by the asset pipeline
-// (scripts/generate-machine-overlays.js -> compose-runtime-assets.js).
-// One PNG per bet state; the app swaps the source by betMultiplier.
-const MULTIPLIER_PNGS: Record<1 | 2 | 3, number> = {
-  1: require('../../assets/images/machine_multiplier_x1.png'),
-  2: require('../../assets/images/machine_multiplier_x2.png'),
-  3: require('../../assets/images/machine_multiplier_x3.png'),
-};
-
-// Tap targets over the three on-machine multiplier slots, as fractions of the
-// cabinet. These mirror the slot geometry in generate-machine-overlays.js
-// (panel x=33..167, y=190..246; slots width 39 at x=37/80/123, y=196..240).
-const MULT_SLOT_TOP = 196 / 300;
-const MULT_SLOT_H   = 44 / 300;
-const MULT_SLOTS: ReadonlyArray<{ left: number; width: number }> = [
-  { left: 37 / 200,  width: 39 / 200 },
-  { left: 80 / 200,  width: 39 / 200 },
-  { left: 123 / 200, width: 39 / 200 },
-];
-
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 interface Props {
@@ -50,10 +30,6 @@ interface Props {
   // Single-reel reroll animation: spins only that reel, fires when done.
   rerollingReelIndex?: number | null;
   onRerollDone?: () => void;
-  // Bet multiplier selection via the on-machine panel (replaces the old buttons).
-  onSelectMultiplier?: (m: 1 | 2 | 3) => void;
-  isMultiplierLocked?: (m: 1 | 2 | 3) => boolean;
-  multiplierInteractive?: boolean;
 }
 
 export function SlotMachine({
@@ -64,19 +40,15 @@ export function SlotMachine({
   onShiftDirection,
   rerollingReelIndex = null,
   onRerollDone,
-  onSelectMultiplier,
-  isMultiplierLocked,
-  multiplierInteractive = false,
 }: Props) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  const isSpinning    = useRunStore(s => s.isSpinning);
-  const lastResult    = useRunStore(s => s.lastResult);
-  const lockedReels   = useRunStore(s => s.lockedReels);
-  const neurons       = useRunStore(s => s.neurons);
-  const startingN     = useRunStore(s => s.startingNeurons);
-  const runPhase      = useRunStore(s => s.runPhase);
-  const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
+  const isSpinning  = useRunStore(s => s.isSpinning);
+  const lastResult  = useRunStore(s => s.lastResult);
+  const lockedReels = useRunStore(s => s.lockedReels);
+  const neurons     = useRunStore(s => s.neurons);
+  const startingN   = useRunStore(s => s.startingNeurons);
+  const runPhase    = useRunStore(s => s.runPhase);
 
   // Jackpot flash
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -166,13 +138,6 @@ export function SlotMachine({
         style={[styles.machineImg, styles.machineOverlay, { opacity: decayOpacity }]}
         resizeMode="contain"
       />
-      {/* Multiplier panel — drawn on top of decay so the active bet stays
-          readable; under the jackpot flash. */}
-      <Image
-        source={MULTIPLIER_PNGS[betMultiplier]}
-        style={[styles.machineImg, styles.machineOverlay]}
-        resizeMode="contain"
-      />
       {jackpotFlash && (
         <Image
           source={require('../../assets/images/machine_jackpot.png')}
@@ -180,23 +145,6 @@ export function SlotMachine({
           resizeMode="contain"
         />
       )}
-
-      {/* Tappable multiplier slots over the on-machine panel */}
-      {multiplierInteractive && onSelectMultiplier &&
-        ([1, 2, 3] as const).map((m, i) => (
-          <Pressable
-            key={m}
-            style={{
-              position: 'absolute',
-              top:    machineHeight * MULT_SLOT_TOP,
-              left:   machineWidth  * MULT_SLOTS[i].left,
-              width:  machineWidth  * MULT_SLOTS[i].width,
-              height: machineHeight * MULT_SLOT_H,
-            }}
-            onPress={() => onSelectMultiplier(m)}
-            disabled={isMultiplierLocked ? isMultiplierLocked(m) : false}
-          />
-        ))}
 
       {/* Reels overlay */}
       <View

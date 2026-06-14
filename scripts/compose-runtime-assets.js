@@ -72,7 +72,6 @@ function composeMachine() {
     'Glass',
     'Neon_Trim',
     'Lights_Bright',
-    'Lever',
   ]);
 
   const decay = composite(layerDir, 200, 300, [
@@ -82,7 +81,6 @@ function composeMachine() {
     'Glass',
     'Neon_Trim',
     'Lights_Bright',
-    'Lever',
     'Cabinet_Sickly',
     'Glitch',
     'Flicker_Dead',
@@ -94,21 +92,6 @@ function composeMachine() {
   writePng(path.join(ROOT, 'assets', 'images', 'machine_normal.png'), upscaleNearest(healthy, 3));
   writePng(path.join(ROOT, 'assets', 'images', 'machine_decay.png'), upscaleNearest(decay, 3));
   writePng(path.join(ROOT, 'assets', 'images', 'machine_jackpot.png'), upscaleNearest(jackpot, 3));
-}
-
-// The multiplier panel is a transparent overlay the app swaps by betMultiplier
-// (rendered on top of the machine, the same way decay/jackpot overlays are).
-// Each Multiplier_Xn layer is already a full self-contained panel, so we just
-// upscale it to the runtime resolution.
-function composeMultiplier() {
-  const layerDir = path.join(ROOT, 'assets', 'images', 'machine_slot_layers');
-  for (const n of [1, 2, 3]) {
-    const layer = readPng(path.join(layerDir, `Multiplier_X${n}.png`));
-    writePng(
-      path.join(ROOT, 'assets', 'images', `machine_multiplier_x${n}.png`),
-      upscaleNearest(layer, 3),
-    );
-  }
 }
 
 function composeBackground() {
@@ -133,15 +116,11 @@ function composeBackground() {
 }
 
 composeMachine();
-composeMultiplier();
 composeBackground();
 
 console.log('Composited runtime assets:');
 console.log('assets/images/machine_normal.png 600x900');
 console.log('assets/images/machine_decay.png 600x900');
 console.log('assets/images/machine_jackpot.png 600x900 transparent overlay');
-console.log('assets/images/machine_multiplier_x1.png 600x900 transparent overlay');
-console.log('assets/images/machine_multiplier_x2.png 600x900 transparent overlay');
-console.log('assets/images/machine_multiplier_x3.png 600x900 transparent overlay');
 console.log('assets/images/background_healthy.png 640x960');
 console.log('assets/images/background_decay.png 640x960');

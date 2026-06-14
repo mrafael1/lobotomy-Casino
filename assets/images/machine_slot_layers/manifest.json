@@ -45,30 +45,6 @@
     {
       "name": "Crack",
       "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Crack.png"
-    },
-    {
-      "name": "Lever",
-      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Lever.png",
-      "generated": "scripts/generate-machine-overlays.js",
-      "note": "Side pull lever; baked into machine_normal + machine_decay."
-    },
-    {
-      "name": "Multiplier_X1",
-      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Multiplier_X1.png",
-      "generated": "scripts/generate-machine-overlays.js",
-      "note": "Runtime overlay swapped by betMultiplier; not part of the baked stack."
-    },
-    {
-      "name": "Multiplier_X2",
-      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Multiplier_X2.png",
-      "generated": "scripts/generate-machine-overlays.js",
-      "note": "Runtime overlay swapped by betMultiplier; not part of the baked stack."
-    },
-    {
-      "name": "Multiplier_X3",
-      "file": "C:\\Users\\marqu\\Desktop\\GoonLab\\lobotomy-Casino\\assets\\images\\machine_slot_layers\\Multiplier_X3.png",
-      "generated": "scripts/generate-machine-overlays.js",
-      "note": "Runtime overlay swapped by betMultiplier; not part of the baked stack."
     }
   ],
   "reel": {
