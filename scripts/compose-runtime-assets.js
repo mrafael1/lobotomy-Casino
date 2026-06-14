@@ -178,10 +178,36 @@ function composeBackground() {
   writePng(path.join(ROOT, 'assets', 'images', 'background_decay.png'), upscaleNearest(decay, 2));
 }
 
+// UI sprites — power icon chips, stash tray, consumable placeholder, dealer art.
+// Source PNGs placed in assets/images/ui/ by the artist; 2× upscaled here.
+// Silently skips any file not yet created so the pipeline stays runnable
+// while art is in progress.
+function composeUI() {
+  const srcDir  = path.join(ROOT, 'assets', 'images', 'ui');
+  const outDir  = path.join(ROOT, 'assets', 'images', 'ui');
+  const sprites = [
+    'power_reroll',
+    'power_shift',
+    'power_memory',
+    'stash_tray',
+    'consumable_placeholder',
+    'dealer_portrait',
+    'dealer_hands',
+  ];
+  for (const name of sprites) {
+    const src = path.join(srcDir, `${name}.png`);
+    if (!fs.existsSync(src)) continue;
+    const out = path.join(outDir, `${name}@2x.png`);
+    writePng(out, upscaleNearest(readPng(src), 2));
+    console.log(`assets/images/ui/${name}@2x.png`);
+  }
+}
+
 composeMachine();
 composeMultiplier();
 composeLever();
 composeBackground();
+composeUI();
 
 console.log('Composited runtime assets:');
 console.log('assets/images/machine_normal.png 600x900');
