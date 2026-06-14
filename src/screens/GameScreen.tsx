@@ -333,6 +333,14 @@ export function GameScreen() {
             onShiftDirection={handleMoveDirection}
             rerollingReelIndex={rerollingReelIndex}
             onRerollDone={() => setRerollingReelIndex(null)}
+            multiplierInteractive={runPhase === 'running' && !runBusy}
+            onSelectMultiplier={setBetMultiplier}
+            isMultiplierLocked={(m) =>
+              (energyLocked && m === 3) ||
+              (!noNeuronCostSpin && neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN)
+            }
+            onLeverPull={handleSpin}
+            leverEnabled={canSpin}
           />
         </Animated.View>
 
@@ -453,25 +461,8 @@ export function GameScreen() {
           )}
         </View>
 
-        {/* ── Bet multiplier selector ── */}
-        <View style={styles.betRow}>
-          {([1, 2, 3] as const).map(m => {
-            const betLocked = (energyLocked && m === 3) || (!noNeuronCostSpin && neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN);
-            const betDisabled = runPhase !== 'running' || runBusy || betLocked;
-            return (
-              <Pressable
-                key={m}
-                style={[styles.betBtn, betMultiplier === m && styles.betBtnActive, betLocked && styles.betBtnLocked]}
-                onPress={() => setBetMultiplier(m)}
-                disabled={betDisabled}
-              >
-                <Text style={[styles.betBtnText, betMultiplier === m && styles.betBtnTextActive, betLocked && styles.betBtnLockedText]}>
-                  {betLocked ? '🔒' : `×${m}`}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {/* Bet multiplier is selected on the machine's top-panel buttons,
+            and the lever (right side) pulls to spin — see SlotMachine. */}
 
         {/* ── Spin button ── */}
         <View style={styles.controls}>
@@ -837,45 +828,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 2,
-  },
-
-  // Bet multiplier
-  betRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  betBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255,45,120,0.35)',
-    borderRadius: 6,
-    paddingVertical: 5,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,45,120,0.07)',
-  },
-  betBtnActive: {
-    backgroundColor: 'rgba(255,45,120,0.28)',
-    borderColor: '#ff2d78',
-  },
-  betBtnText: {
-    color: 'rgba(255,45,120,0.55)',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  betBtnTextActive: {
-    color: '#ff2d78',
-  },
-  betBtnLocked: {
-    opacity: 0.4,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  betBtnLockedText: {
-    color: 'rgba(255,255,255,0.35)',
   },
 
   // Spin button

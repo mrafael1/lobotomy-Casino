@@ -94,6 +94,49 @@ function composeMachine() {
   writePng(path.join(ROOT, 'assets', 'images', 'machine_jackpot.png'), upscaleNearest(jackpot, 3));
 }
 
+// Crop a (sx,sy,w,h) region from src into a new PNG.
+function crop(src, sx, sy, w, h) {
+  const out = makePng(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const si = ((sy + y) * src.width + (sx + x)) * 4;
+      const di = (y * w + x) * 4;
+      out.data[di] = src.data[si];
+      out.data[di + 1] = src.data[si + 1];
+      out.data[di + 2] = src.data[si + 2];
+      out.data[di + 3] = src.data[si + 3];
+    }
+  }
+  return out;
+}
+
+// Multiplier buttons: one transparent 200x300 overlay per bet state, swapped
+// at runtime by betMultiplier. Just upscale each to the runtime resolution.
+function composeMultiplier() {
+  const layerDir = path.join(ROOT, 'assets', 'images', 'machine_slot_layers');
+  for (const n of [1, 2, 3]) {
+    const layer = readPng(path.join(layerDir, `Multiplier_Top_X${n}.png`));
+    writePng(
+      path.join(ROOT, 'assets', 'images', `machine_multiplier_x${n}.png`),
+      upscaleNearest(layer, 3),
+    );
+  }
+}
+
+// Lever: lever_frames.png is a 600x300 sheet of three 200x300 frames
+// (idle / mid / pulled). Split and upscale each into its own runtime overlay.
+function composeLever() {
+  const layerDir = path.join(ROOT, 'assets', 'images', 'machine_slot_layers');
+  const sheet = readPng(path.join(layerDir, 'lever_frames.png'));
+  for (let f = 0; f < 3; f++) {
+    const frame = crop(sheet, f * 200, 0, 200, 300);
+    writePng(
+      path.join(ROOT, 'assets', 'images', `machine_lever_${f + 1}.png`),
+      upscaleNearest(frame, 3),
+    );
+  }
+}
+
 function composeBackground() {
   const layerDir = path.join(ROOT, 'assets', 'images', 'lobotomy_background_layers');
   const healthy = composite(layerDir, 320, 480, [
@@ -116,11 +159,15 @@ function composeBackground() {
 }
 
 composeMachine();
+composeMultiplier();
+composeLever();
 composeBackground();
 
 console.log('Composited runtime assets:');
 console.log('assets/images/machine_normal.png 600x900');
 console.log('assets/images/machine_decay.png 600x900');
 console.log('assets/images/machine_jackpot.png 600x900 transparent overlay');
+console.log('assets/images/machine_multiplier_x1..3.png 600x900 transparent overlay');
+console.log('assets/images/machine_lever_1..3.png 600x900 transparent overlay');
 console.log('assets/images/background_healthy.png 640x960');
 console.log('assets/images/background_decay.png 640x960');

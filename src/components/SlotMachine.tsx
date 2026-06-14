@@ -19,6 +19,33 @@ const WIN_H     = 100 / 300;
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
+// Multiplier buttons (top panel) — one transparent overlay per bet state,
+// swapped by betMultiplier. Tap targets mirror the button geometry baked into
+// Multiplier_Top_Xn.png: three 18x18 squares at x=67/90/113, y=46 (200x300 src).
+const MULTIPLIER_PNGS: Record<1 | 2 | 3, number> = {
+  1: require('../../assets/images/machine_multiplier_x1.png'),
+  2: require('../../assets/images/machine_multiplier_x2.png'),
+  3: require('../../assets/images/machine_multiplier_x3.png'),
+};
+const MULT_BTN_TOP = 46 / 300;
+const MULT_BTN_SIZE_W = 18 / 200;
+const MULT_BTN_SIZE_H = 18 / 300;
+const MULT_BTN_LEFT: Record<1 | 2 | 3, number> = {
+  1: 67 / 200,
+  2: 90 / 200,
+  3: 113 / 200,
+};
+
+// Lever — three frames (idle / mid / pulled) on the right side of the cabinet.
+// Pulling it triggers a spin. Tap region covers x=160..199, y=104..160 (200x300).
+const LEVER_PNGS: Record<1 | 2 | 3, number> = {
+  1: require('../../assets/images/machine_lever_1.png'),
+  2: require('../../assets/images/machine_lever_2.png'),
+  3: require('../../assets/images/machine_lever_3.png'),
+};
+const LEVER_HIT = { left: 160 / 200, top: 104 / 300, width: 40 / 200, height: 56 / 300 };
+const LEVER_FRAME_MS = 70;
+
 interface Props {
   onAllReelsDone: () => void;
   // When set, reels are tappable (ability/lock targeting) and highlight on press.
@@ -30,6 +57,13 @@ interface Props {
   // Single-reel reroll animation: spins only that reel, fires when done.
   rerollingReelIndex?: number | null;
   onRerollDone?: () => void;
+  // Bet multiplier selection via the on-machine top-panel buttons.
+  onSelectMultiplier?: (m: 1 | 2 | 3) => void;
+  isMultiplierLocked?: (m: 1 | 2 | 3) => boolean;
+  multiplierInteractive?: boolean;
+  // Pull lever to spin. onLeverPull fires after the pull animation lands.
+  onLeverPull?: () => void;
+  leverEnabled?: boolean;
 }
 
 export function SlotMachine({
@@ -40,15 +74,39 @@ export function SlotMachine({
   onShiftDirection,
   rerollingReelIndex = null,
   onRerollDone,
+  onSelectMultiplier,
+  isMultiplierLocked,
+  multiplierInteractive = false,
+  onLeverPull,
+  leverEnabled = false,
 }: Props) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  const isSpinning  = useRunStore(s => s.isSpinning);
-  const lastResult  = useRunStore(s => s.lastResult);
-  const lockedReels = useRunStore(s => s.lockedReels);
-  const neurons     = useRunStore(s => s.neurons);
-  const startingN   = useRunStore(s => s.startingNeurons);
-  const runPhase    = useRunStore(s => s.runPhase);
+  const isSpinning    = useRunStore(s => s.isSpinning);
+  const lastResult    = useRunStore(s => s.lastResult);
+  const lockedReels   = useRunStore(s => s.lockedReels);
+  const neurons       = useRunStore(s => s.neurons);
+  const startingN     = useRunStore(s => s.startingNeurons);
+  const runPhase      = useRunStore(s => s.runPhase);
+  const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
+
+  // Lever frame: 1 idle, 2 mid, 3 pulled. Pulling plays 1->2->3 then fires spin.
+  const [leverFrame, setLeverFrame] = useState<1 | 2 | 3>(1);
+  const leverTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  function pullLever() {
+    if (!leverEnabled || !onLeverPull) return;
+    leverTimers.current.forEach(clearTimeout);
+    leverTimers.current = [];
+    setLeverFrame(2);
+    leverTimers.current.push(setTimeout(() => setLeverFrame(3), LEVER_FRAME_MS));
+    leverTimers.current.push(setTimeout(() => {
+      onLeverPull();
+      setLeverFrame(1);
+    }, LEVER_FRAME_MS * 2));
+  }
+
+  useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
 
   // Jackpot flash
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -138,6 +196,18 @@ export function SlotMachine({
         style={[styles.machineImg, styles.machineOverlay, { opacity: decayOpacity }]}
         resizeMode="contain"
       />
+      {/* Multiplier buttons — drawn over decay so the active bet stays readable. */}
+      <Image
+        source={MULTIPLIER_PNGS[betMultiplier]}
+        style={[styles.machineImg, styles.machineOverlay]}
+        resizeMode="contain"
+      />
+      {/* Lever (current frame) */}
+      <Image
+        source={LEVER_PNGS[leverFrame]}
+        style={[styles.machineImg, styles.machineOverlay]}
+        resizeMode="contain"
+      />
       {jackpotFlash && (
         <Image
           source={require('../../assets/images/machine_jackpot.png')}
@@ -145,6 +215,23 @@ export function SlotMachine({
           resizeMode="contain"
         />
       )}
+
+      {/* Tappable multiplier buttons over the top-panel squares */}
+      {multiplierInteractive && onSelectMultiplier &&
+        ([1, 2, 3] as const).map(m => (
+          <Pressable
+            key={m}
+            style={{
+              position: 'absolute',
+              top:    machineHeight * MULT_BTN_TOP,
+              left:   machineWidth  * MULT_BTN_LEFT[m],
+              width:  machineWidth  * MULT_BTN_SIZE_W,
+              height: machineHeight * MULT_BTN_SIZE_H,
+            }}
+            onPress={() => onSelectMultiplier(m)}
+            disabled={isMultiplierLocked ? isMultiplierLocked(m) : false}
+          />
+        ))}
 
       {/* Reels overlay */}
       <View
@@ -226,6 +313,22 @@ export function SlotMachine({
             </Text>
           </Pressable>
         </>
+      )}
+
+      {/* Pull-lever hit target — pulling spins the reels. Rendered last so it
+          wins the touch where it overlaps the reel window's right edge; only
+          shown when a spin is allowed (never during reel-targeting). */}
+      {leverEnabled && onLeverPull && (
+        <Pressable
+          style={{
+            position: 'absolute',
+            top:    machineHeight * LEVER_HIT.top,
+            left:   machineWidth  * LEVER_HIT.left,
+            width:  machineWidth  * LEVER_HIT.width,
+            height: machineHeight * LEVER_HIT.height,
+          }}
+          onPress={pullLever}
+        />
       )}
     </View>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { SymbolCanvas, SYMBOL_SIZE } from './SymbolCanvas';
+import { Symbol, SYMBOL_SIZE } from './Symbol';
 import type { SymbolId } from '../game/types';
 
 const CYCLE_ORDER: SymbolId[] = ['brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline'];
@@ -83,7 +83,7 @@ export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onCompl
             row === 1 && styles.mainRow,
           ]}
         >
-          <SymbolCanvas symbol={sym} size={size} />
+          <Symbol symbol={sym} size={size} />
         </View>
       ))}
     </View>
