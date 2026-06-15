@@ -44,7 +44,10 @@ const CONS_ICON_W = 52;
 const CONS_ICON_H = 52;
 const CONS_ICON_X0 = 22;
 const CONS_ICON_GAP = 16;
-const CONS_ICON_Y = 295;          // centre of icon above counter (source y)
+// Icon bottom sits exactly on the counter top (source y=358): 358 - 52 = 306.
+// The counter PNG has a soft shadow stripe at y=352..357 that peeks out in
+// the gaps between icons, giving a "resting on the bar" shadow effect.
+const CONS_ICON_Y = 306;
 
 // Dealer portrait — aspect-correct, base sits at the counter top.
 const DEALER_AR     = 192 / 288;  // width / height of dealer_portrait.png
