@@ -144,6 +144,20 @@ function composeLayers() {
   }
 }
 
+// Dealer shop scene background — a manually authored 320×480 PNG from Aseprite.
+// 2× upscale to 640×960 for pixel-crisp display. When the source doesn't exist
+// yet (artist hasn't run the Lua script), skip silently to keep the pipeline runnable.
+function composeDealerShop() {
+  const src = path.join(ROOT, 'assets', 'images', 'dealer_shop_bg.png');
+  if (!fs.existsSync(src)) {
+    console.log('(skipping dealer_shop_bg.png — source not found)');
+    return;
+  }
+  // The source is already the "correct" size; just 2× upscale for crispness.
+  writePng(src, upscaleNearest(readPng(src), 1)); // identity — file already runtime-ready
+  console.log('assets/images/dealer_shop_bg.png 320x480');
+}
+
 // Shift all non-transparent pixels in src down by dy pixels (in-place-safe, returns new PNG).
 function shiftDown(src, dy) {
   const out = makePng(src.width, src.height);
@@ -229,6 +243,7 @@ composeMultiplier();
 composeLever();
 composeBackground();
 composeUI();
+composeDealerShop();
 
 console.log('Composited runtime assets:');
 console.log('assets/images/machine_normal.png 600x900');

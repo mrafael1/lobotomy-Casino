@@ -630,7 +630,7 @@ export function GameScreen() {
           <Pressable style={styles.restartBtn} onPress={handleNewRun}>
             <Text style={styles.restartText}>START AGAIN</Text>
           </Pressable>
-          <Pressable style={styles.shopBtn} onPress={() => router.push('/shop')}>
+          <Pressable style={styles.shopBtn} onPress={() => router.push('/dealer')}>
             <Text style={styles.shopText}>VISIT THE DEALER</Text>
           </Pressable>
         </View>
