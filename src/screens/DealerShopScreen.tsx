@@ -13,6 +13,7 @@ import { useMetaStore } from '../state/metaState';
 import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
 import { CONSUMABLES } from '../content/consumables';
 import { itemIcon, DEALER_PORTRAIT, DEALER_SHOP_COUNTER } from '../content/uiAssets';
+import { Stash } from '../components/Stash';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
@@ -77,6 +78,14 @@ export function DealerShopScreen() {
   const buyConsumableCharge = useMetaStore(s => s.buyConsumableCharge);
 
   const [selected, setSelected] = useState<ShopItem | null>(null);
+
+  // Stash tray (bottom-left) — mirrors the supplies queued for the next run.
+  // Buying a supply drops it straight in here. Max 2 distinct types.
+  const stashSlots = [0, 1].map(i => {
+    const queued = CONSUMABLES.filter(c => (pendingConsumables[c.id] ?? 0) > 0);
+    const c = queued[i];
+    return c ? { id: c.id, name: c.name, charges: pendingConsumables[c.id] ?? 0 } : null;
+  });
 
   // ── Status helpers ─────────────────────────────────────────────────────────
   function upgradeStatus(u: Upgrade) {
@@ -243,7 +252,13 @@ export function DealerShopScreen() {
         />
       ))}
 
-      {/* ── Description panel (screen bottom) ──────────────────────── */}
+      {/* ── Stash tray (bottom-left) — purchased supplies land here ─── */}
+      <SafeAreaView style={styles.stashAnchor} pointerEvents="box-none">
+        <Text style={styles.stashLabel}>STASH</Text>
+        <Stash items={stashSlots} disabled width={104} />
+      </SafeAreaView>
+
+      {/* ── Description panel (bottom, right of the stash tray) ─────── */}
       {selected && (
         <SafeAreaView style={styles.descAnchor} pointerEvents="box-none">
           {renderDescription()}
@@ -282,14 +297,26 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 
-  // Description panel anchored to screen bottom
+  // Stash tray pinned bottom-left
+  stashAnchor: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    alignItems: 'center',
+  },
+  stashLabel: {
+    color: '#00e5ff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 3,
+    marginBottom: 2,
+  },
+  // Description panel anchored bottom, to the right of the stash tray
   descAnchor: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
+    left: 128,
+    right: 12,
+    bottom: 12,
   },
   descPanel: {
     backgroundColor: 'rgba(8,4,20,0.95)',
