@@ -195,9 +195,13 @@ export function DealerShopScreen() {
     <View style={styles.root}>
 
       {/* ── LAYER 1: Background wall + shelves ─────────────────────── */}
+      {/* Explicit screen-sized frame — absoluteFill on an <Image> does NOT
+          reliably stretch to full height, it falls back to source aspect and
+          pins to the top. Explicit width/height guarantees the layer fills the
+          exact same space the sx()/sy() overlays are positioned in. */}
       <Image
         source={require('../../assets/images/dealer_shop_bg.png')}
-        style={StyleSheet.absoluteFill}
+        style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
         resizeMode="stretch"
       />
 
@@ -217,7 +221,7 @@ export function DealerShopScreen() {
       {/* ── LAYER 3: Counter (transparent above bar, hides dealer legs) */}
       <Image
         source={DEALER_SHOP_COUNTER}
-        style={StyleSheet.absoluteFill}
+        style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
         resizeMode="stretch"
       />
 
@@ -282,7 +286,8 @@ export function DealerShopScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#08040e',
+    // Wall colour, so any sub-pixel rounding gap shows the wall, never black.
+    backgroundColor: '#0e081c',
   },
 
   // Icon — no cell, just the image
