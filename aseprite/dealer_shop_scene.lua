@@ -14,15 +14,19 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- LAYOUT (source px, must stay in sync with DealerShopScreen.tsx)
 --
---   POWERS    shelf : slots y=28,  board y=56    accent #a855f7 (purple)
---   POSITIVE  shelf : slots y=82,  board y=110   accent #22c55e (green)
---   CORRUPTED shelf : slots y=136, board y=164   accent #ef4444 (red)
---     each shelf: 6 slots, w=44 h=24, x = 18,66,114,162,210,258
+--   POWERS    shelf : icon centre y=12,  shelf board y=56   accent #a855f7
+--   POSITIVE  shelf : icon centre y=66,  shelf board y=110  accent #22c55e
+--   CORRUPTED shelf : icon centre y=120, shelf board y=164  accent #ef4444
+--     each shelf: icons 44×44, x = 18,66,114,162,210,258 (NO cell frames)
 --
---   BACK BAR backdrop : x=70–250, y=168–356 (dealer overlaid on top of this)
+--   BACK BAR backdrop : x=70–250, y=168–358 (dealer portrait overlaid on top)
 --
---   COUNTER top : y=358   front face : y=370–479   neon strip #00e5ff
---   SUPPLIES on counter : 4 slots, w=60 h=38, y=318, x = 18,90,162,234  (cyan)
+--   SUPPLIES on counter : icons 52×52, y=295, x = 22,90,158,226 (cyan)
+--     (rendered AFTER the counter PNG so they appear to sit on the bar surface)
+--
+-- The counter is a SEPARATE FILE: dealer_shop_counter.png (transparent above
+-- y=358 so the dealer shows through; counter face from y=358 downward).
+-- Do NOT draw the counter in this file.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 local W, H = 320, 480

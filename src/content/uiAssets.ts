@@ -11,6 +11,7 @@ export const POWER_ICONS: Record<'reroll' | 'shift' | 'memory', ImageSourcePropT
 export const STASH_TRAY = require('../../assets/images/ui/stash_tray.png');
 export const DEALER_PORTRAIT = require('../../assets/images/ui/dealer_portrait.png');
 export const DEALER_HANDS = require('../../assets/images/ui/dealer_hands.png');
+export const DEALER_SHOP_COUNTER = require('../../assets/images/dealer_shop_counter.png');
 
 // Generic consumable/in-run-item icon. Per-item art is a later pass; until then
 // every stash item and dealer offer renders this placeholder vial.
