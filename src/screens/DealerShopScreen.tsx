@@ -6,67 +6,49 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  Modal,
-  ScrollView,
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
-import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES, ALL_UPGRADES } from '../content/upgrades';
+import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
 import { CONSUMABLES } from '../content/consumables';
-import { itemIcon } from '../content/uiAssets';
+import { itemIcon, DEALER_PORTRAIT } from '../content/uiAssets';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
 // ─── Scene layout constants ───────────────────────────────────────────────────
-// Source canvas: 320×480 → 2× runtime → 640×960.
-// All coords below are in source (320×480) space; multiply by (sceneW/320) and
-// (sceneH/480) to get screen pixels at runtime.
+// Source canvas: 320×480 (matches dealer_shop_bg.png). The background stretches
+// to fill the whole screen; slot tap targets are positioned via fractional
+// coords (sx/sy) so they track the stretch. The dealer is overlaid separately
+// and kept aspect-correct so it never distorts.
 const SRC_W = 320;
 const SRC_H = 480;
 
-// Item slot size (source px)
+// Shelf item slots (source px)
 const SLOT_W  = 44;
-const SLOT_H  = 22;
+const SLOT_H  = 24;
 const SLOT_GAP = 4;
 const SLOT_X_START = 18;
 
-// Shelf rows: { y, accent, items[] }
+// Shelf rows distributed down the upper scene.
 const SHELF_ROWS = [
-  {
-    key: 'powers',
-    label: 'POWERS',
-    accent: '#a855f7',
-    y: 28,
-    items: ABILITY_UPGRADES as ReadonlyArray<Upgrade>,
-    type: 'upgrade' as const,
-  },
-  {
-    key: 'positive',
-    label: 'POSITIVE',
-    accent: '#22c55e',
-    y: 68,
-    items: POSITIVE_UPGRADES as ReadonlyArray<Upgrade>,
-    type: 'upgrade' as const,
-  },
-  {
-    key: 'corrupted',
-    label: 'CORRUPTED',
-    accent: '#ef4444',
-    y: 108,
-    items: CORRUPTED_UPGRADES as ReadonlyArray<Upgrade>,
-    type: 'upgrade' as const,
-  },
+  { key: 'powers',    label: 'POWERS',    accent: '#a855f7', y: 28,  items: ABILITY_UPGRADES   as ReadonlyArray<Upgrade> },
+  { key: 'positive',  label: 'POSITIVE',  accent: '#22c55e', y: 82,  items: POSITIVE_UPGRADES  as ReadonlyArray<Upgrade> },
+  { key: 'corrupted', label: 'CORRUPTED', accent: '#ef4444', y: 136, items: CORRUPTED_UPGRADES as ReadonlyArray<Upgrade> },
 ] as const;
 
-// Consumable slots on counter (source px)
+// Consumable slots resting on the counter top (source px)
 const CONS_SLOT_W = 60;
+const CONS_SLOT_H = 38;
 const CONS_SLOT_X_START = 18;
 const CONS_SLOT_GAP = 12;
-const CONS_Y = 184;
+const CONS_Y = 318;
 
-// Dealer drag-target area (source px) — reserved for future drag-to-buy gesture
-const DEALER_AREA = { x: 118, y: 136, w: 84, h: 80 };
+// Dealer overlay — bottom anchored at the counter top, horizontally centered,
+// aspect preserved (portrait is 192×288).
+const DEALER_PORTRAIT_AR = 192 / 288;
+const DEALER_BOTTOM_Y    = 358;  // source y where the counter top sits
+const DEALER_VIS_H       = 182;  // source-px visible height of the dealer
 
 // ─── Selected item union ──────────────────────────────────────────────────────
 type ShopItem =
@@ -76,13 +58,21 @@ type ShopItem =
 // ─── Component ───────────────────────────────────────────────────────────────
 export function DealerShopScreen() {
   const router   = useRouter();
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // Scene fills screen width; height proportional.
+  // Scene fills the entire screen; background stretches to fit.
   const sceneW = screenW;
-  const sceneH = sceneW * (SRC_H / SRC_W);
+  const sceneH = screenH;
   const sx = (v: number) => (v / SRC_W) * sceneW;  // source-x → screen-x
   const sy = (v: number) => (v / SRC_H) * sceneH;  // source-y → screen-y
+
+  // Dealer box in screen space — height from source fraction, width from aspect
+  // so the portrait stays undistorted regardless of background stretch.
+  const dealerH      = sy(DEALER_VIS_H);
+  const dealerW      = dealerH * DEALER_PORTRAIT_AR;
+  const dealerBottom = sy(DEALER_BOTTOM_Y);
+  const dealerTop    = dealerBottom - dealerH;
+  const dealerLeft   = (sceneW - dealerW) / 2;
 
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents     = useMetaStore(s => s.ownedPermanents);
@@ -207,14 +197,27 @@ export function DealerShopScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.scene, { width: sceneW, height: sceneH }]}>
-        {/* Background scene */}
+        {/* Background scene — stretches to fill the screen */}
         <Image
           source={require('../../assets/images/dealer_shop_bg.png')}
           style={StyleSheet.absoluteFill}
           resizeMode="stretch"
         />
 
-        {/* ── Powers shelf ─────────────────────────────────────────────── */}
+        {/* ── Dealer behind the bar (real portrait, aspect-correct) ─────── */}
+        <Image
+          source={DEALER_PORTRAIT}
+          style={{
+            position: 'absolute',
+            left: dealerLeft,
+            top: dealerTop,
+            width: dealerW,
+            height: dealerH,
+          }}
+          resizeMode="contain"
+        />
+
+        {/* ── Shelf items (powers / positive / corrupted) ──────────────── */}
         {SHELF_ROWS.map(shelf =>
           shelf.items.map((item, idx) => (
             <ItemSlot
@@ -229,7 +232,8 @@ export function DealerShopScreen() {
           ))
         )}
 
-        {/* ── Consumables on counter ───────────────────────────────────── */}
+        {/* ── Consumables on the counter (rendered after the dealer so
+               they read as sitting in front, on the bar) ─────────────── */}
         {CONSUMABLES.map((c, idx) => (
           <ItemSlot
             key={c.id}
@@ -238,17 +242,19 @@ export function DealerShopScreen() {
             slotX={CONS_SLOT_X_START + idx * (CONS_SLOT_W + CONS_SLOT_GAP)}
             slotY={CONS_Y}
             w={CONS_SLOT_W}
-            h={26}
+            h={CONS_SLOT_H}
           />
         ))}
-
-        {/* ── Description panel (anchored bottom of scene) ─────────────── */}
-        <View style={[styles.descAnchor, { top: sy(310) }]}>
-          {renderDescription()}
-        </View>
       </View>
 
-      {/* HUD — wallet + back — outside scene so it sits above on safe area */}
+      {/* Description panel — fixed at the screen bottom, above the safe area */}
+      {selected && (
+        <SafeAreaView style={styles.descAnchor} pointerEvents="box-none">
+          {renderDescription()}
+        </SafeAreaView>
+      )}
+
+      {/* HUD — wallet + back */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
         <View style={styles.hudRow}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -302,7 +308,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
     paddingHorizontal: 12,
+    paddingBottom: 16,
   },
   descPanel: {
     backgroundColor: 'rgba(10,4,22,0.94)',
