@@ -6,7 +6,7 @@ import { applyReroll, applyMoveColumn, applyCopyReel } from '../src/game/abiliti
 import { SYMBOL_WEIGHTS } from '../src/content/symbols';
 import { useRunStore } from '../src/state/runState';
 import { CONSUMABLES } from '../src/content/consumables';
-import { PAIR_PAYOUTS } from '../src/content/payouts';
+import { PAIR_SCORE } from '../src/content/payouts';
 import { SYMBOLS } from '../src/content/symbols';
 import { createRNG } from '../src/game/rng';
 import type { ReelResult } from '../src/game/types';
@@ -23,8 +23,8 @@ test('scoreReels: brain triple grants a free spin only when allowed', () => {
   expect(granted.freeSpinsGranted).toBe(1);
   expect(denied.winType).toBe('jackpot');
   expect(denied.freeSpinsGranted).toBe(0);
-  expect(granted.lucidityEarned).toBe(denied.lucidityEarned);
-  expect(denied.lucidityEarned).toBeGreaterThan(0);
+  expect(granted.scoreEarned).toBe(denied.scoreEarned);
+  expect(denied.scoreEarned).toBeGreaterThan(0);
 });
 
 test('scoreReels: Pattern Fabrication — non-adjacent match pays double pair value', () => {
@@ -33,7 +33,7 @@ test('scoreReels: Pattern Fabrication — non-adjacent match pays double pair va
   const without     = scoreReels(reels, 1, false, false);
 
   expect(withPattern.winType).toBe('pair');
-  expect(withPattern.lucidityEarned).toBe((PAIR_PAYOUTS.eye ?? 0) * 2);
+  expect(withPattern.scoreEarned).toBe((PAIR_SCORE.eye ?? 0) * 2);
   expect(without.winType).toBe('miss');
 });
 
@@ -41,7 +41,7 @@ test('scoreReels: Pattern Fabrication — brain pair is not a jackpot', () => {
   const result = scoreReels(['brain', 'eye', 'brain'], 1, true, true);
 
   expect(result.winType).toBe('pair');
-  expect(result.lucidityEarned).toBe((PAIR_PAYOUTS.brain ?? 0) * 2);
+  expect(result.scoreEarned).toBe((PAIR_SCORE.brain ?? 0) * 2);
   expect(result.freeSpinsGranted).toBe(0);
 });
 
@@ -51,9 +51,9 @@ test('scoreReels: learning active — book visible adds +10 per book', () => {
   const withoutLearning = scoreReels(reels, 1, false, false, false);
 
   // With learning: pair (eye/pill miss) but +10 for 1 book visible → lucidity = 10
-  expect(withLearning.lucidityEarned).toBe(10);
+  expect(withLearning.scoreEarned).toBe(10);
   // Without learning: book isn't in payout table in a meaningful way, treated as miss
-  expect(withoutLearning.lucidityEarned).toBe(0);
+  expect(withoutLearning.scoreEarned).toBe(0);
 });
 
 // ─────────────────────────────────────────────
@@ -95,7 +95,7 @@ test('applyReroll: completing a triple gives a positive delta', () => {
   // rng → 0 always picks brain; completing the triple → positive delta
   const outcome = applyReroll(before, 2, () => 0, 1);
   expect(outcome.isJackpot).toBe(true);
-  expect(outcome.lucidityDelta).toBeGreaterThan(0);
+  expect(outcome.scoreDelta).toBeGreaterThan(0);
 });
 
 // ─────────────────────────────────────────────
@@ -107,7 +107,7 @@ test('applyMoveColumn: can complete a jackpot — Lucidity pays, free spin only 
 
   expect(outcome.reels).toEqual(['brain', 'brain', 'brain']);
   expect(outcome.isJackpot).toBe(true);
-  expect(outcome.lucidityDelta).toBeGreaterThan(0);
+  expect(outcome.scoreDelta).toBeGreaterThan(0);
   expect(outcome.freeSpinsGranted).toBe(0); // grant not allowed by default
 
   const allowed = applyMoveColumn(before, 2, -1, 1, false, false, true);
@@ -187,7 +187,7 @@ test('store: mid-run dealer Cocktail is stashed, not activated immediately', () 
   expect(state.pendingGiftNeedsDiscard).toBe(false);
   expect(state.runConsumables.item_cocktail).toBe(1);
   expect(totalConsumableCharges(state.runConsumables)).toBe(1);
-  expect(state.lucidityEarned).toBe(0);
+  expect(state.scoreEarned).toBe(0);
 
   expect(useRunStore.getState().useConsumable('item_cocktail')).toBe(true);
   state = useRunStore.getState();
@@ -196,7 +196,7 @@ test('store: mid-run dealer Cocktail is stashed, not activated immediately', () 
   expect(state.cocktailBoostSpins).toBe(3);
   expect(state.compulsiveSpinSkips).toBe(0);
   expect(state.pendingCompulsiveSpinSkips).toBe(2);
-  expect(state.lucidityEarned).toBe(0);
+  expect(state.scoreEarned).toBe(0);
 });
 
 test('store: Cocktail boosts 3 spins first, THEN forces 2 x1 spins', () => {
@@ -216,7 +216,7 @@ test('store: Cocktail boosts 3 spins first, THEN forces 2 x1 spins', () => {
     (sum, sym) => sum + SYMBOLS[sym].rarityScore,
     0,
   );
-  expect(state.lastResult!.lucidityEarned).toBeGreaterThanOrEqual(firstBonus);
+  expect(state.lastResult!.scoreEarned).toBeGreaterThanOrEqual(firstBonus);
   expect(state.cocktailBoostSpins).toBe(2);
   expect(state.compulsiveSpinSkips).toBe(0);
 
@@ -321,15 +321,15 @@ test('store: REROLL only changes the target reel and applies Lucidity delta', ()
   useRunStore.getState().setSpinning(false);
 
   const before = useRunStore.getState().lastResult!.reels;
-  const lucidityBefore = useRunStore.getState().lucidityEarned;
+  const lucidityBefore = useRunStore.getState().scoreEarned;
 
   expect(useRunStore.getState().rerollReel(2)).toBe(true);
   const after = useRunStore.getState();
 
   expect(after.lastResult!.reels[0]).toBe(before[0]);
   expect(after.lastResult!.reels[1]).toBe(before[1]);
-  expect(typeof after.lucidityEarned).toBe('number');
-  expect(after.lucidityEarned).toBeGreaterThanOrEqual(0);
+  expect(typeof after.scoreEarned).toBe('number');
+  expect(after.scoreEarned).toBeGreaterThanOrEqual(0);
   void lucidityBefore;
 });
 

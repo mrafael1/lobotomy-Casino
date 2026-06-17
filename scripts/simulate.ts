@@ -13,13 +13,13 @@ const RUNS       = 100_000;
 const SEED_BASE  = 0xDEADBEEF;
 
 const EMPTY_META: MetaState = {
-  schemaVersion:      1,
+  schemaVersion:      2,
   lucidityWallet:     0,
   ownedPermanents:    [],
   corruptionEverUsed: false,
   endingsReached:     [],
   pendingConsumables: {},
-  history: { runsPlayed: 0, bestLucidityRun: 0 },
+  history: { runsPlayed: 0, bestScoreRun: 0 },
 };
 
 let totalSpins       = 0;
@@ -39,7 +39,8 @@ for (let r = 0; r < RUNS; r++) {
   let run: RunState = {
     neurons:                   startingNeurons,
     startingNeurons,
-    lucidityEarned:            0,
+    scoreEarned:               0,
+    lucidityCoins:             0,
     freeSpinsRemaining:        0,
     maxFreeSpins:              ECONOMY.BASE_MAX_FREE_SPINS,
     lucidityMultiplier:        ECONOMY.BASE_LUCIDITY_MULTIPLIER,
@@ -96,7 +97,8 @@ for (let r = 0; r < RUNS; r++) {
     run = {
       ...run,
       neurons:            result.neuronsAfter,
-      lucidityEarned:     run.lucidityEarned + result.lucidityEarned,
+      scoreEarned:        run.scoreEarned + result.scoreEarned,
+      lucidityCoins:      run.lucidityCoins + result.coinsEarned,
       freeSpinsRemaining: result.freeSpinsAfter,
       lastResult:         result,
       spinCount:          run.spinCount + 1,
@@ -115,7 +117,7 @@ for (let r = 0; r < RUNS; r++) {
   if (ending === 'flatline') flatlinesCount++;
 
   totalSpins    += run.spinCount;
-  totalLucidity += run.lucidityEarned;
+  totalLucidity += run.scoreEarned;
   if (run.spinCount > longestRun)  longestRun  = run.spinCount;
   if (run.spinCount < shortestRun) shortestRun = run.spinCount;
 }
@@ -140,6 +142,6 @@ console.log(`Triples (non-jack):  ${triples.toLocaleString()}`);
 console.log(`Pairs:               ${pairs.toLocaleString()}`);
 console.log(`Flatline endings:    ${flatlinesCount.toLocaleString()} / ${RUNS.toLocaleString()}`);
 console.log('');
-console.log(`Wealth threshold:    ${ECONOMY.WEALTH_LUCIDITY_THRESHOLD} Lucidity`);
-console.log(`Runs to wealth:      ~${Math.ceil(ECONOMY.WEALTH_LUCIDITY_THRESHOLD / avgLucidity)} runs avg`);
+console.log(`Wealth threshold:    ${ECONOMY.WEALTH_SCORE_THRESHOLD} Lucidity`);
+console.log(`Runs to wealth:      ~${Math.ceil(ECONOMY.WEALTH_SCORE_THRESHOLD / avgLucidity)} runs avg`);
 console.log('');

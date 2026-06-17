@@ -24,13 +24,12 @@ export type RunPhase = 'idle' | 'running' | 'over';
 export type SpinOptions = { readonly compulsive?: boolean };
 
 // Dealer appearance config
-const DEALER_THRESHOLD_HIGH = 0.65; // safety gate — guarantees appearance if dealerCount === 0
-const DEALER_THRESHOLD_LOW  = 0.35; // safety gate — guarantees appearance if dealerCount === 1
-const DEALER_PROC_CHANCE    = 0.15; // 15% chance per spin (independent of thresholds)
-const DEALER_MAX_COUNT      = 3;    // max appearances per run
-const DEALER_MIN_SPIN_GAP   = 3;    // minimum spins between any two dealer appearances
+const DEALER_THRESHOLD_HIGH = 0.65;
+const DEALER_THRESHOLD_LOW  = 0.35;
+const DEALER_PROC_CHANCE    = 0.15;
+const DEALER_MAX_COUNT      = 3;
+const DEALER_MIN_SPIN_GAP   = 3;
 
-// Dealer item pool — two storable substances are drawn randomly per encounter.
 const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
 
 export interface RunStore extends RunState {
@@ -66,7 +65,8 @@ export interface RunStore extends RunState {
 const INITIAL_RUN_STATE: RunState = {
   neurons:                    0,
   startingNeurons:            0,
-  lucidityEarned:             0,
+  scoreEarned:                0,
+  lucidityCoins:              0,
   freeSpinsRemaining:         0,
   maxFreeSpins:               ECONOMY.BASE_MAX_FREE_SPINS,
   lucidityMultiplier:         ECONOMY.BASE_LUCIDITY_MULTIPLIER,
@@ -125,9 +125,21 @@ function pickDealerItems(spinCount: number, runConsumables: Partial<Record<strin
   const candidates = DEALER_ITEM_IDS.filter(id =>
     (runConsumables[id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
   if (candidates.length < 2) return null;
-  // Shuffle and take the first two — guarantees two distinct offers.
   const shuffled = [...candidates].sort(() => rng() - 0.5);
   return [shuffled[0], shuffled[1]];
+}
+
+// Attempt to restore a randomly-chosen spent ability.
+// Called when a 30-coin threshold is crossed. If no ability has been used,
+// the credit is lost ("lose it" semantics — no carry-over).
+function tryRestoreAbility(
+  abilitiesUsed: ReadonlyArray<AbilityId>,
+  seed: number,
+): ReadonlyArray<AbilityId> {
+  if (abilitiesUsed.length === 0) return abilitiesUsed;
+  const rng = createRNG((seed >>> 0));
+  const idx = Math.floor(rng() * abilitiesUsed.length);
+  return abilitiesUsed.filter((_, i) => i !== idx) as ReadonlyArray<AbilityId>;
 }
 
 export const useRunStore = create<RunStore>((set, get) => ({
@@ -147,7 +159,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const seed = ((Date.now() ^ (state.spinCount * 0x9e3779b9)) >>> 0);
     const rng = createRNG(seed);
 
-    // Stasis / sedative / forced spins. Cocktail compulsion ignores free spins and always uses x1.
     const stasisActive = !isCompulsive && !isFreeSpin && state.decaySkips > 0;
     const sedativeActive = !isCompulsive && !isFreeSpin && hasSedative(state.ownedUpgrades) &&
       (state.spinCount + 1) % 3 === 0;
@@ -164,12 +175,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
       ? 0
       : Math.min(effectiveBetMultiplier * baseDecay, state.neurons);
 
-    // Syringe brain boost: 5× brain weight
     const upgradesBrainBonus = computeBrainWeightBonus(state.ownedUpgrades);
-    const syringeBrainBonus = state.brainBoostSpins > 0 ? SYMBOLS.brain.weight * 3 : 0; // 3 extra = 4× total
+    const syringeBrainBonus = state.brainBoostSpins > 0 ? SYMBOLS.brain.weight * 3 : 0;
     const brainWeightBonus = upgradesBrainBonus + syringeBrainBonus;
 
-    // Lucidity multiplier — reduced during Syringe boost
+    // Score multiplier applies to score only, never to coins
     const baseMultiplier = state.lucidityMultiplier * state.nextSpinLucidityMultiplier * effectiveBetMultiplier;
     const effectiveMultiplier = state.brainBoostSpins > 0 ? baseMultiplier * 0.5 : baseMultiplier;
 
@@ -195,16 +205,31 @@ export const useRunStore = create<RunStore>((set, get) => ({
       learningActive:     learningOn,
     });
 
+    // Cocktail rarity bonus goes to score only (it's already a multiplied variable)
     const cocktailBonus = state.cocktailBoostSpins > 0
       ? result.reels.reduce((sum, sym) => sum + (SYMBOLS[sym]?.rarityScore ?? 0), 0)
       : 0;
     const finalResult: SpinResult = cocktailBonus > 0
-      ? { ...result, lucidityEarned: result.lucidityEarned + cocktailBonus }
+      ? { ...result, scoreEarned: result.scoreEarned + cocktailBonus }
       : result;
+
+    // Lucidity coin accumulation + ability-restore check.
+    // Every LUCIDITY_COINS_PER_RESTORE coins earned fires one restore attempt.
+    // "Lose it" semantics: if no ability has been spent, the credit is forfeited.
+    const prevCoins = state.lucidityCoins;
+    const newCoins  = prevCoins + finalResult.coinsEarned;
+    const prevGen   = Math.floor(prevCoins / ECONOMY.LUCIDITY_COINS_PER_RESTORE);
+    const nextGen   = Math.floor(newCoins  / ECONOMY.LUCIDITY_COINS_PER_RESTORE);
+    let abilitiesUsed = state.abilitiesUsed;
+    for (let i = prevGen; i < nextGen; i++) {
+      abilitiesUsed = tryRestoreAbility(abilitiesUsed, seed ^ (i * 0x517cc1b7));
+    }
 
     set({
       neurons:                    finalResult.neuronsAfter,
-      lucidityEarned:             state.lucidityEarned + finalResult.lucidityEarned,
+      scoreEarned:                state.scoreEarned + finalResult.scoreEarned,
+      lucidityCoins:              newCoins,
+      abilitiesUsed,
       freeSpinsRemaining:         finalResult.freeSpinsAfter,
       isFreeSpin:                 finalResult.isFreeSpin,
       isSpinning:                 true,
@@ -218,7 +243,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
       blockPowersSpins:           Math.max(0, state.blockPowersSpins - 1),
       hideNeuronsSpins:           Math.max(0, state.hideNeuronsSpins - 1),
       cocktailBoostSpins:         Math.max(0, state.cocktailBoostSpins - 1),
-      // This spin consumed the last boosted spin — release the queued compulsion.
       compulsiveSpinSkips:
         (isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips) +
         (state.cocktailBoostSpins === 1 ? state.pendingCompulsiveSpinSkips : 0),
@@ -301,22 +325,20 @@ export const useRunStore = create<RunStore>((set, get) => ({
           return true;
 
         case 'addLucidity':
+          // Water (dealer item): grants coins directly to the run wallet drip
           set({
             runConsumables: newRunConsumables,
-            lucidityEarned: state.lucidityEarned + effect.amount,
+            lucidityCoins: state.lucidityCoins + effect.amount,
           });
           return true;
 
-        case 'cocktailBoost': {
-          // Compulsion is queued, not active: it kicks in only after the
-          // boosted spins are used up ("Then the machine steals 2 x1 spins").
+        case 'cocktailBoost':
           set({
             runConsumables: newRunConsumables,
             cocktailBoostSpins: state.cocktailBoostSpins + effect.spins,
             pendingCompulsiveSpinSkips: state.pendingCompulsiveSpinSkips + effect.compulsiveSpins,
           });
           return true;
-        }
 
         case 'guaranteedWin':
           set({
@@ -345,17 +367,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
       case 'restoreAbility': {
         if (state.abilitiesUsed.length === 0) return false;
-        // Randomly restore one used ability
         const rng = createRNG(((Date.now() ^ (state.spinCount * 0xdeadbeef)) >>> 0));
         const idx = Math.floor(rng() * state.abilitiesUsed.length);
-        const restored = state.abilitiesUsed[idx];
         const newUsed = state.abilitiesUsed.filter((_, i) => i !== idx);
         set({ runConsumables: newRunConsumables, abilitiesUsed: newUsed as ReadonlyArray<AbilityId> });
         return true;
       }
 
       case 'brainBoost': {
-        // Block a random unblocked ability for the rest of the run
         const allAbilities: AbilityId[] = ['reroll', 'shift', 'memory'];
         const available = allAbilities.filter(a => !state.abilitiesUsed.includes(a));
         const toBlock: AbilityId[] = available.length > 0
@@ -374,9 +393,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
         return true;
       }
 
-      // copyReel is handled via the UI flow (copyReel store action), not useConsumable directly.
-      // Calling useConsumable with copyReel just marks the charge as consumed — the UI
-      // orchestrates source/target selection and calls store.copyReel() separately.
       case 'copyReel':
         set({ runConsumables: newRunConsumables });
         return true;
@@ -406,7 +422,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const seed = ((Date.now() ^ (state.spinCount * 0x5bd1e995 + reelIndex)) >>> 0);
     const rng = createRNG(seed);
 
-    // Build effective weights (same as spin: includes brain bonus and book)
     const upgradesBrainBonus = computeBrainWeightBonus(state.ownedUpgrades);
     const syringeBrainBonus = state.brainBoostSpins > 0 ? SYMBOLS.brain.weight * 4 : 0;
     const brainWeightBonus = upgradesBrainBonus + syringeBrainBonus;
@@ -433,14 +448,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'reroll'],
-      lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
+      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
         reels:            outcome.reels,
         isJackpot:        outcome.isJackpot,
         winType:          outcome.winType,
-        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        scoreEarned:      Math.max(0, state.lastResult.scoreEarned + outcome.scoreDelta),
+        coinsEarned:      Math.max(0, state.lastResult.coinsEarned + outcome.coinsDelta),
         freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
         freeSpinsAfter,
       },
@@ -465,14 +482,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       abilitiesUsed: [...state.abilitiesUsed, 'shift'],
-      lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
+      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
         reels:            outcome.reels,
         isJackpot:        outcome.isJackpot,
         winType:          outcome.winType,
-        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        scoreEarned:      Math.max(0, state.lastResult.scoreEarned + outcome.scoreDelta),
+        coinsEarned:      Math.max(0, state.lastResult.coinsEarned + outcome.coinsDelta),
         freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
         freeSpinsAfter,
       },
@@ -492,7 +511,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
-    // Side effect: consume a random other consumable or lose 20 neurons
     const otherConsumables = Object.entries(state.runConsumables)
       .filter(([id, charges]) => id !== 'cons_white_powder' && (charges ?? 0) > 0);
 
@@ -512,14 +530,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({
       runConsumables: newRunConsumables,
       neurons: neuronsAfter,
-      lucidityEarned: Math.max(0, state.lucidityEarned + outcome.lucidityDelta),
+      scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
+      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
         reels:            outcome.reels,
         isJackpot:        outcome.isJackpot,
         winType:          outcome.winType,
-        lucidityEarned:   Math.max(0, state.lastResult.lucidityEarned + outcome.lucidityDelta),
+        scoreEarned:      Math.max(0, state.lastResult.scoreEarned + outcome.scoreDelta),
+        coinsEarned:      Math.max(0, state.lastResult.coinsEarned + outcome.coinsDelta),
         freeSpinsGranted: state.lastResult.freeSpinsGranted + (freeSpinsAfter - state.freeSpinsRemaining),
         freeSpinsAfter,
       },
@@ -539,19 +559,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
     let new65Fired = state.dealer65SafetyFired;
     let new35Fired = state.dealer35SafetyFired;
 
-    // Safety gate at 65%: guarantee if dealer has never appeared
     if (!state.dealer65SafetyFired && ratio <= DEALER_THRESHOLD_HIGH) {
       new65Fired = true;
       if (state.dealerCount === 0) shouldTrigger = true;
     }
 
-    // Safety gate at 35%: guarantee if dealer appeared exactly once
     if (!state.dealer35SafetyFired && ratio <= DEALER_THRESHOLD_LOW) {
       new35Fired = true;
       if (state.dealerCount === 1) shouldTrigger = true;
     }
 
-    // Chance-based proc on any spin (only if safety didn't already force it)
     if (!shouldTrigger) {
       const rng = createRNG(((Date.now() ^ (state.spinCount * 0x9e3779b9 + 0xdeadbeef)) >>> 0));
       if (rng() < DEALER_PROC_CHANCE) shouldTrigger = true;
@@ -572,7 +589,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
         dealerOfferIds:      offerIds,
       });
     } else if (new65Fired !== state.dealer65SafetyFired || new35Fired !== state.dealer35SafetyFired) {
-      // Safety gates were evaluated but didn't force a trigger — still persist the flags
       set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
     }
   },
@@ -583,8 +599,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({ dealerIncoming: false, dealerPending: true });
   },
 
-  // Player waves the dealer off before seeing the offers ("No" on the bubble).
-  // Counts as an appearance — dealerCount was already incremented on trigger.
   declineDealerVisit(): void {
     set({ dealerIncoming: false, dealerPending: false, dealerOfferIds: null });
   },

@@ -1,25 +1,22 @@
 import { ECONOMY } from '../content/economy';
 import type { RunState, MetaState, EndingType } from './types';
 
-// Check if the current run has triggered an ending condition.
-// Returns null if the run should continue.
 export function checkEnding(run: RunState, meta: MetaState): EndingType | null {
   if (run.neurons <= 0) return 'flatline';
-  if (run.lucidityEarned >= ECONOMY.WEALTH_LUCIDITY_THRESHOLD) return 'wealth';
+  if (run.scoreEarned >= ECONOMY.WEALTH_SCORE_THRESHOLD) return 'wealth';
   return null;
 }
 
-// The Exit Route requires no corruption AND a Lucidity threshold.
-// corruptionEverUsed is permanent per slot — there is no undo path here.
+// The Exit Route requires no corruption AND enough lucidity coins banked this run.
 export function checkExitEligibility(run: RunState, meta: MetaState): boolean {
   return (
     !meta.corruptionEverUsed &&
-    run.lucidityEarned >= ECONOMY.EXIT_LUCIDITY_THRESHOLD
+    run.lucidityCoins >= ECONOMY.EXIT_LUCIDITY_THRESHOLD
   );
 }
 
 // The single transition point where run state crosses into meta.
-// ONLY Lucidity crosses — neurons, free spins, spin count, all die with the run.
+// lucidityCoins bank to the wallet; scoreEarned tracks the personal best.
 export function bankRunToMeta(
   run: RunState,
   meta: MetaState,
@@ -31,11 +28,11 @@ export function bankRunToMeta(
 
   return {
     ...meta,
-    lucidityWallet: meta.lucidityWallet + run.lucidityEarned,
+    lucidityWallet: meta.lucidityWallet + run.lucidityCoins,
     endingsReached,
     history: {
       runsPlayed: meta.history.runsPlayed + 1,
-      bestLucidityRun: Math.max(meta.history.bestLucidityRun, run.lucidityEarned),
+      bestScoreRun: Math.max(meta.history.bestScoreRun, run.scoreEarned),
       wealthEndingReachedAt:
         ending === 'wealth' && !meta.history.wealthEndingReachedAt
           ? Date.now()

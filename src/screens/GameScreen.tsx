@@ -65,7 +65,8 @@ export function GameScreen() {
   const lastEnding          = useRunStore(s => s.lastEnding);
   const isSpinning          = useRunStore(s => s.isSpinning);
   const neurons             = useRunStore(s => s.neurons);
-  const lucidityEarned      = useRunStore(s => s.lucidityEarned);
+  const scoreEarned         = useRunStore(s => s.scoreEarned);
+  const lucidityCoins        = useRunStore(s => s.lucidityCoins);
   const freeSpins           = useRunStore(s => s.freeSpinsRemaining);
   const lastResult          = useRunStore(s => s.lastResult);
   const decaySkips          = useRunStore(s => s.decaySkips);
@@ -291,13 +292,13 @@ export function GameScreen() {
 
   const winLabel = lastResult
     ? lastResult.winType === 'jackpot'
-      ? `JACKPOT  +${lastResult.lucidityEarned}`
+      ? `JACKPOT  +${lastResult.scoreEarned}`
       : lastResult.winType === 'triple'
-        ? `TRIPLE  +${lastResult.lucidityEarned}`
+        ? `TRIPLE  +${lastResult.scoreEarned}`
         : lastResult.winType === 'pair'
-          ? `PAIR  +${lastResult.lucidityEarned}`
-          : lastResult.lucidityEarned > 0
-            ? `BONUS  +${lastResult.lucidityEarned}`
+          ? `PAIR  +${lastResult.scoreEarned}`
+          : lastResult.scoreEarned > 0
+            ? `BONUS  +${lastResult.scoreEarned}`
           : null
     : null;
 
@@ -339,7 +340,7 @@ export function GameScreen() {
           </View>
           <View style={styles.hudItem}>
             <Text style={styles.hudLabel}>THIS RUN</Text>
-            <Text style={styles.hudValue}>{lucidityEarned}</Text>
+            <Text style={styles.hudValue}>{scoreEarned}</Text>
           </View>
         </View>
 
@@ -625,7 +626,7 @@ export function GameScreen() {
             <Text style={styles.overlayTitle}>FLATLINE</Text>
           )}
           <Text style={styles.overlayBody}>
-            {lucidityEarned} Lucidity banked
+            {lucidityCoins} Lucidity banked
           </Text>
           <Pressable style={styles.restartBtn} onPress={handleNewRun}>
             <Text style={styles.restartText}>START AGAIN</Text>
