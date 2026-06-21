@@ -4,6 +4,11 @@ import { Symbol } from './Symbol';
 import { SYMBOLS_SHEET_V3, SYMBOL_FRAME_COUNT } from '../content/machineAssets';
 import type { SymbolId } from '../game/types';
 
+const SYMBOLS_SHEET_NATIVE = Image.resolveAssetSource(SYMBOLS_SHEET_V3);
+const SYMBOLS_SHEET_WIDTH = SYMBOLS_SHEET_NATIVE.width;
+const SYMBOLS_SHEET_HEIGHT = SYMBOLS_SHEET_NATIVE.height;
+const SYMBOL_FRAME_WIDTH = SYMBOLS_SHEET_WIDTH / SYMBOL_FRAME_COUNT;
+
 // Spin-blur cadence and per-reel stop times (ms) — matches the previous reel.
 const CYCLE_INTERVAL_MS = 60;
 const STOP_TIMES_MS = [600, 850, 1100];
@@ -32,11 +37,10 @@ interface Props {
   symbolSize: number;        // size of the landed sprite
 }
 
-// One reel cell for the v3 machine. While spinning it cycles the 5-frame
-// symbols.png sheet (authored on the machine's own canvas, so clipping the cell
-// to its hole shows the symbol in place) for a smooth blur. On stop it shows the
-// exact resolved symbol via its per-symbol sprite — covering all 7 symbols,
-// including scalpel/book which the sheet doesn't contain.
+// One reel cell for the v3 machine. While spinning it cycles symbols.png, which
+// is already authored at the x5 runtime size. On stop it shows the exact
+// resolved symbol via its per-symbol sprite — covering all 7 symbols, including
+// scalpel/book which the sheet doesn't contain.
 export function ReelCellV3({
   finalSymbol,
   spinning,
@@ -49,6 +53,9 @@ export function ReelCellV3({
   hole,
   symbolSize,
 }: Props) {
+  const adjacentSymbolSize = Math.round(symbolSize * 0.9);
+  const landedStripHeight = symbolSize + adjacentSymbolSize * 2;
+
   // null = show the resolved sprite; number = show that sheet frame (blurring).
   const [blurFrame, setBlurFrame] = useState<number | null>(null);
   const frameRef = useRef(reelIndex); // staggered start so reels look independent
@@ -107,27 +114,26 @@ export function ReelCellV3({
       {blurFrame === null ? (
         // Landed reel strip: centre = result (full), neighbours peek above/below
         // and are clipped by the hole so only an edge of each shows.
-        <View style={{ height: symbolSize * 3, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ height: landedStripHeight, alignItems: 'center', justifyContent: 'center' }}>
           <View style={{ opacity: 0.5 }}>
-            <Symbol symbol={neighbours(finalSymbol).top} size={symbolSize} tile={false} />
+            <Symbol symbol={neighbours(finalSymbol).top} size={adjacentSymbolSize} tile={false} />
           </View>
           <Symbol symbol={finalSymbol} size={symbolSize} tile={false} />
           <View style={{ opacity: 0.5 }}>
-            <Symbol symbol={neighbours(finalSymbol).bottom} size={symbolSize} tile={false} />
+            <Symbol symbol={neighbours(finalSymbol).bottom} size={adjacentSymbolSize} tile={false} />
           </View>
         </View>
       ) : (
-        // Full-canvas sheet, shifted so frame `blurFrame` lands at canvas origin
-        // and the cell's hole offset is subtracted — the clip shows just this cell.
+        // Full-canvas x5 sheet, shifted so frame `blurFrame` lands at canvas
+        // origin. The cell's hole offset is already in x5 display pixels.
         <Image
           source={SYMBOLS_SHEET_V3}
           fadeDuration={0}
-          resizeMode="stretch"
           style={{
             position: 'absolute',
-            width: machineWidth * SYMBOL_FRAME_COUNT,
-            height: machineHeight,
-            left: -hole.left - blurFrame * machineWidth,
+            width: SYMBOLS_SHEET_WIDTH,
+            height: SYMBOLS_SHEET_HEIGHT,
+            left: -hole.left - blurFrame * SYMBOL_FRAME_WIDTH,
             top: -hole.top,
           }}
         />
