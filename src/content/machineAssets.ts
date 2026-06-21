@@ -21,6 +21,14 @@ export const REEL_WINDOW = { left: 21, top: 68, width: 45, height: 14 } as const
 export const REEL_CELL_CENTERS = [26, 43, 60] as const; // source x of each hole centre
 export const REEL_CELL_WIDTH = 11; // source px — width of one hole
 
+// Per-cell hole rects (source px). symbols.png is authored on this same canvas,
+// so clipping a cell to its hole and showing frame i renders symbol i in place.
+export const REEL_HOLES = [
+  { left: 21, top: 68, width: 11, height: 14 },
+  { left: 38, top: 68, width: 11, height: 14 },
+  { left: 55, top: 68, width: 11, height: 14 },
+] as const;
+
 // The TV screen at the top of the cabinet — app-rendered meters go here.
 export const TV_SCREEN = { left: 13, top: 16, width: 54, height: 29 } as const; // x13..66, y16..44
 
@@ -54,3 +62,4 @@ export const REEL_BG_V3: ImageSourcePropType = require('../../assets/images/reel
 export const MULTIPLIER_V3: ImageSourcePropType = require('../../assets/images/multiplier_v3.png');
 export const LEVER_V3: ImageSourcePropType = require('../../assets/images/lever_v3.png');
 export const JACKPOT_V3: ImageSourcePropType = require('../../assets/images/jackpot_v3.png');
+export const SYMBOLS_SHEET_V3: ImageSourcePropType = require('../../assets/images/symbols_v3.png');

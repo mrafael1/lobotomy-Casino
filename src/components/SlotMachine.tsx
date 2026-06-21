@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Image, Pressable, Text, Animated, StyleSheet, useWindowDimensions } from 'react-native';
-import { Reel } from './Reel';
+import { ReelCellV3 } from './ReelCellV3';
 import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
 import { MOVE_ORDER } from '../game/abilities';
@@ -10,7 +10,7 @@ import type { SymbolId } from '../game/types';
 import {
   MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
-  REEL_WINDOW, REEL_CELL_CENTERS, REEL_CELL_WIDTH, TV_SCREEN,
+  REEL_WINDOW, REEL_CELL_CENTERS, REEL_CELL_WIDTH, REEL_HOLES, TV_SCREEN,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT,
   LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT,
 } from '../content/machineAssets';
@@ -19,9 +19,6 @@ const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 // Lever pull plays frames 0 → 5 quickly, fires the spin, then snaps back to idle.
 const LEVER_FRAME_MS = 42;
-
-// Centre y of the reel holes (source px).
-const HOLE_CENTER_Y = REEL_WINDOW.top + REEL_WINDOW.height / 2;
 
 interface Props {
   onAllReelsDone: () => void;
@@ -136,14 +133,16 @@ export function SlotMachine({
     };
   }, [lastResult, isSpinning, rerollingReelIndex]);
 
-  // ── Sizing — largest integer scale of the 96×144 cabinet that fits portrait. ──
-  const maxW = screenWidth * 0.94;
-  const maxH = screenHeight * 0.52;
-  const rawScale = Math.min(maxW / MACHINE_SRC_W, maxH / (MACHINE_SRC_W * MACHINE_ASPECT));
-  const scale = Math.max(2, Math.min(4, Math.floor(rawScale)));
-  const machineWidth  = MACHINE_SRC_W * scale;
+  // ── Sizing — fill the available portrait box. The 96×144 cabinet is tiny, so
+  // an integer-only scale wastes a lot of space (×3 leaves wide margins); we scale
+  // to fit instead. Runtime art is pre-upscaled 4×, so a fractional down-scale
+  // stays acceptably crisp. Every layer derives from `f`, so all of it scales. ──
+  const maxW = screenWidth * 0.98;
+  const maxH = screenHeight * 0.60;
+  const scale = Math.max(2, Math.min(5, Math.min(maxW / MACHINE_SRC_W, maxH / (MACHINE_SRC_W * MACHINE_ASPECT))));
+  const machineWidth  = Math.round(MACHINE_SRC_W * scale);
   const machineHeight = Math.round(machineWidth * MACHINE_ASPECT);
-  const f = machineWidth / MACHINE_SRC_W; // display px per source px (== scale)
+  const f = machineWidth / MACHINE_SRC_W; // display px per source px
 
   const symbolSize = Math.round(REEL_CELL_WIDTH * f);
 
@@ -190,32 +189,30 @@ export function SlotMachine({
       {/* 1 — Reel backing (white cells) behind the cabinet windows */}
       <Image source={REEL_BG_V3} style={styles.fill} resizeMode="stretch" fadeDuration={0} />
 
-      {/* 2 — Reel symbol columns (masked by the cabinet's holes, drawn next) */}
+      {/* 2 — Reel cells: 5-frame spin blur (symbols.png), landing on the resolved
+              sprite. Masked by the cabinet's holes, drawn next. */}
       <View style={styles.fill} pointerEvents="none">
         {([0, 1, 2] as const).map(i => {
           const isRerolling = rerollingReelIndex === i;
           return (
-            <View
+            <ReelCellV3
               key={i}
-              style={{
-                position: 'absolute',
-                left: (REEL_CELL_CENTERS[i] - REEL_CELL_WIDTH / 2) * f,
-                top: HOLE_CENTER_Y * f - (symbolSize * 3) / 2,
-                width: symbolSize,
-                height: symbolSize * 3,
+              finalSymbol={reels[i]}
+              spinning={isSpinning || isRerolling}
+              locked={lockedReels[i]}
+              reelIndex={i}
+              onComplete={isRerolling ? onRerollDone : handleReelComplete}
+              overrideStopMs={isRerolling ? 600 : undefined}
+              machineWidth={machineWidth}
+              machineHeight={machineHeight}
+              hole={{
+                left: REEL_HOLES[i].left * f,
+                top: REEL_HOLES[i].top * f,
+                width: REEL_HOLES[i].width * f,
+                height: REEL_HOLES[i].height * f,
               }}
-            >
-              <Reel
-                finalSymbol={reels[i]}
-                spinning={isSpinning || isRerolling}
-                locked={lockedReels[i]}
-                reelIndex={i}
-                onComplete={isRerolling ? onRerollDone : handleReelComplete}
-                overrideStopMs={isRerolling ? 600 : undefined}
-                size={symbolSize}
-                tile={false}
-              />
-            </View>
+              symbolSize={symbolSize}
+            />
           );
         })}
       </View>

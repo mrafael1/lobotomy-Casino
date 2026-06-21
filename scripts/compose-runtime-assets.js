@@ -205,6 +205,7 @@ function composeV3() {
     { src: 'multiplier.png',  out: 'multiplier_v3.png' },
     { src: 'lever v3.png',    out: 'lever_v3.png' },
     { src: 'jackpot v3.png',  out: 'jackpot_v3.png' },
+    { src: 'symbols.png',     out: 'symbols_v3.png' },
   ];
   for (const j of jobs) {
     const src = path.join(dir, j.src);
