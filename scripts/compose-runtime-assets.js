@@ -194,9 +194,12 @@ function composeLever() {
 
 // Machine v3 — hand-authored 96×144 layers ("machine v3.png", "reel.png",
 // "multiplier.png", "lever v3.png", "jackpot v3.png"). Each is nearest-neighbour
-// upscaled 4× into an import-safe runtime PNG the app references directly. Spaced
-// source names are kept as-authored; runtime names use underscores. Sources that
-// don't exist yet are skipped so the pipeline stays runnable.
+// upscaled 5× into an import-safe runtime PNG the app references directly. 5×
+// matches the on-screen machine scale (96 → 480), so the app displays them 1:1
+// with no runtime bilinear blur. Spaced source names are kept as-authored;
+// runtime names use underscores. Missing sources are skipped so the pipeline
+// stays runnable.
+const V3_SCALE = 5;
 function composeV3() {
   const dir = path.join(ROOT, 'assets', 'images');
   const jobs = [
@@ -213,7 +216,7 @@ function composeV3() {
       console.log(`(skipping ${j.out} — source "${j.src}" not found)`);
       continue;
     }
-    writePng(path.join(dir, j.out), upscaleNearest(readPng(src), 4));
+    writePng(path.join(dir, j.out), upscaleNearest(readPng(src), V3_SCALE));
     console.log(`assets/images/${j.out}`);
   }
 }

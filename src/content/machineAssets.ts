@@ -2,10 +2,10 @@ import type { ImageSourcePropType } from 'react-native';
 
 // ── Machine v3 art ──────────────────────────────────────────────────────────
 // All v3 layers are authored on the same 96×144 canvas and stack on top of each
-// other. The runtime PNGs referenced here are 4× nearest-neighbour upscales of
-// the hand-authored sources ("machine v3.png", "reel.png", …) so they stay crisp
-// when the app scales them down to the device size. Regenerate with the
-// composeV3() step in scripts/compose-runtime-assets.js.
+// other. The runtime PNGs referenced here are 5× nearest-neighbour upscales of
+// the hand-authored sources ("machine v3.png", "reel.png", …) — 5× matches the
+// on-screen scale (96 → 480), so the app draws them 1:1 with no runtime blur.
+// Regenerate with the composeV3() step in scripts/compose-runtime-assets.js.
 //
 // Geometry below is expressed in SOURCE pixels (96×144). The renderer converts
 // to display pixels with a single factor f = machineWidth / 96 (the aspect is

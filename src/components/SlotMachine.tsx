@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, Pressable, Text, Animated, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Image, Pressable, Text, StyleSheet } from 'react-native';
 import { ReelCellV3 } from './ReelCellV3';
 import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
@@ -54,8 +54,6 @@ export function SlotMachine({
   onLeverPull,
   leverEnabled = false,
 }: Props) {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-
   const isSpinning    = useRunStore(s => s.isSpinning);
   const lastResult    = useRunStore(s => s.lastResult);
   const lockedReels   = useRunStore(s => s.lockedReels);
@@ -81,31 +79,6 @@ export function SlotMachine({
   }
 
   useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
-
-  // Lever glow — breathing neon ring when a spin is ready.
-  const leverGlowOpacity = useRef(new Animated.Value(0)).current;
-  const leverGlowScale   = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (!leverEnabled) {
-      leverGlowOpacity.stopAnimation(() => leverGlowOpacity.setValue(0));
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(leverGlowOpacity, { toValue: 0.9, duration: 550, useNativeDriver: true }),
-          Animated.timing(leverGlowScale,   { toValue: 1.1, duration: 550, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(leverGlowOpacity, { toValue: 0.15, duration: 650, useNativeDriver: true }),
-          Animated.timing(leverGlowScale,   { toValue: 0.92, duration: 650, useNativeDriver: true }),
-        ]),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [leverEnabled]);
 
   // ── Jackpot flash (2-frame banner) ──
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -133,19 +106,16 @@ export function SlotMachine({
     };
   }, [lastResult, isSpinning, rerollingReelIndex]);
 
-  // ── Sizing — target ×4 (the 96×144 cabinet → 384×576), scaling down only when
-  // the screen can't fit it alongside the HUD / oscilloscope / tray (~285px of
-  // fixed chrome). Runtime art is pre-upscaled 4×, so any down-scale stays crisp.
-  // Every layer derives from `f`, so all of it scales together. ──
-  const maxW = screenWidth * 0.99;
-  const maxH = Math.max(260, screenHeight - 285);
-  const scale = Math.max(2.5, Math.min(4, Math.min(maxW / MACHINE_SRC_W, maxH / (MACHINE_SRC_W * MACHINE_ASPECT))));
-  const machineWidth  = Math.round(MACHINE_SRC_W * scale);
+  // ── Sizing — fixed ×5 (the 96×144 cabinet → 480×720). Runtime art is
+  // pre-upscaled 5×, so this keeps every source pixel aligned 1:1 to display
+  // pixels (no runtime bilinear blur). Every layer derives from `f`. ──
+  const scale = 5;
+  const machineWidth  = MACHINE_SRC_W * scale;
   const machineHeight = Math.round(machineWidth * MACHINE_ASPECT);
   const f = machineWidth / MACHINE_SRC_W; // display px per source px
 
-  // A bit smaller than the hole so the neighbouring symbols peek above/below.
-  const symbolSize = Math.round(9 * f);
+  // Landed sprites are authored at 32x32. Keep them at x1 for crisp main symbols.
+  const symbolSize = 32;
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels
@@ -218,10 +188,20 @@ export function SlotMachine({
         })}
       </View>
 
-      {/* 3 — Cabinet (its transparent windows reveal the reels above) */}
+      {/* 3 — Lever (current frame), drawn behind the cabinet body. */}
+      <SpriteSheetFrame
+        source={LEVER_V3}
+        frameIndex={leverFrame}
+        frameCount={LEVER_FRAME_COUNT}
+        width={machineWidth}
+        height={machineHeight}
+        style={styles.fill}
+      />
+
+      {/* 4 — Cabinet (its transparent windows reveal the reels above) */}
       <Image source={MACHINE_V3} style={styles.fill} resizeMode="stretch" fadeDuration={0} />
 
-      {/* 4 — TV screen meters (app-rendered) */}
+      {/* 5 — TV screen meters (app-rendered) */}
       <View
         style={{
           position: 'absolute',
@@ -235,21 +215,11 @@ export function SlotMachine({
         <MachineScreenMeters width={TV_SCREEN.width * f} height={TV_SCREEN.height * f} />
       </View>
 
-      {/* 5 — Multiplier readout (frame = current bet) */}
+      {/* 6 — Multiplier readout (frame = current bet) */}
       <SpriteSheetFrame
         source={MULTIPLIER_V3}
         frameIndex={betMultiplier - 1}
         frameCount={MULTIPLIER_FRAME_COUNT}
-        width={machineWidth}
-        height={machineHeight}
-        style={styles.fill}
-      />
-
-      {/* 6 — Lever (current frame) */}
-      <SpriteSheetFrame
-        source={LEVER_V3}
-        frameIndex={leverFrame}
-        frameCount={LEVER_FRAME_COUNT}
         width={machineWidth}
         height={machineHeight}
         style={styles.fill}
@@ -368,24 +338,7 @@ export function SlotMachine({
         </>
       )}
 
-      {/* 11 — Lever glow ring — breathes when a spin is ready. */}
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top:    LEVER_HIT.top * f - 4,
-          left:   LEVER_HIT.left * f - 4,
-          width:  LEVER_HIT.width * f + 8,
-          height: LEVER_HIT.height * f + 8,
-          borderRadius: 8,
-          borderWidth: 2,
-          borderColor: '#ff2d78',
-          opacity: leverGlowOpacity,
-          transform: [{ scale: leverGlowScale }],
-        }}
-      />
-
-      {/* 12 — Lever pull hit target (rendered last so it wins the touch contest). */}
+      {/* 11 — Lever pull hit target (rendered last so it wins the touch contest). */}
       {onLeverPull && (
         <Pressable
           style={{
