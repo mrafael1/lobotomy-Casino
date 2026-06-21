@@ -8,6 +8,16 @@ import type { SymbolId } from '../game/types';
 const CYCLE_INTERVAL_MS = 60;
 const STOP_TIMES_MS = [600, 850, 1100];
 
+// Visual neighbour order for the landed reel strip (book sits outside it).
+const STRIP_ORDER: SymbolId[] = ['brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline'];
+
+function neighbours(sym: SymbolId): { top: SymbolId; bottom: SymbolId } {
+  const i = STRIP_ORDER.indexOf(sym);
+  const n = STRIP_ORDER.length;
+  if (i < 0) return { top: STRIP_ORDER[n - 1], bottom: STRIP_ORDER[0] };
+  return { top: STRIP_ORDER[(i - 1 + n) % n], bottom: STRIP_ORDER[(i + 1) % n] };
+}
+
 interface Props {
   finalSymbol: SymbolId;
   spinning: boolean;
@@ -95,7 +105,17 @@ export function ReelCellV3({
       }}
     >
       {blurFrame === null ? (
-        <Symbol symbol={finalSymbol} size={symbolSize} tile={false} />
+        // Landed reel strip: centre = result (full), neighbours peek above/below
+        // and are clipped by the hole so only an edge of each shows.
+        <View style={{ height: symbolSize * 3, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ opacity: 0.5 }}>
+            <Symbol symbol={neighbours(finalSymbol).top} size={symbolSize} tile={false} />
+          </View>
+          <Symbol symbol={finalSymbol} size={symbolSize} tile={false} />
+          <View style={{ opacity: 0.5 }}>
+            <Symbol symbol={neighbours(finalSymbol).bottom} size={symbolSize} tile={false} />
+          </View>
+        </View>
       ) : (
         // Full-canvas sheet, shifted so frame `blurFrame` lands at canvas origin
         // and the cell's hole offset is subtracted — the clip shows just this cell.

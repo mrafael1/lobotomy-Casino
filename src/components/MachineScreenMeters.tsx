@@ -16,15 +16,15 @@ export function MachineScreenMeters({ width, height }: Props) {
   const scoreEarned    = useRunStore(s => s.scoreEarned);
   const neurons        = useRunStore(s => s.neurons);
   const startingN      = useRunStore(s => s.startingNeurons);
-  const betMultiplier  = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
 
   const goal = ECONOMY.WEALTH_SCORE_THRESHOLD;
   const wealthRatio = Math.max(0, Math.min(1, scoreEarned / goal));
 
-  // Approximate spins remaining before flatline at the current bet. Upgrades can
-  // shift the real decay; this is a readable HUD estimate, not the spin rule.
-  const costPerSpin = ECONOMY.NEURON_DECAY_PER_SPIN * betMultiplier;
-  const spinsLeft = Math.max(0, Math.ceil(neurons / costPerSpin));
+  // Spins remaining before flatline, measured at the BASE per-spin cost — kept
+  // independent of the selected bet so changing the multiplier doesn't yank the
+  // number around (a worse-feeling signal than the neuron meter itself). This is
+  // a readable estimate, not the spin rule.
+  const spinsLeft = Math.max(0, Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN));
   const mindRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
 
   const fontSize = Math.max(6, Math.round(width * 0.085));

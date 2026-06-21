@@ -10,7 +10,7 @@ import type { SymbolId } from '../game/types';
 import {
   MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
-  REEL_WINDOW, REEL_CELL_CENTERS, REEL_CELL_WIDTH, REEL_HOLES, TV_SCREEN,
+  REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT,
   LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT,
 } from '../content/machineAssets';
@@ -133,18 +133,19 @@ export function SlotMachine({
     };
   }, [lastResult, isSpinning, rerollingReelIndex]);
 
-  // ── Sizing — fill the available portrait box. The 96×144 cabinet is tiny, so
-  // an integer-only scale wastes a lot of space (×3 leaves wide margins); we scale
-  // to fit instead. Runtime art is pre-upscaled 4×, so a fractional down-scale
-  // stays acceptably crisp. Every layer derives from `f`, so all of it scales. ──
-  const maxW = screenWidth * 0.98;
-  const maxH = screenHeight * 0.60;
-  const scale = Math.max(2, Math.min(5, Math.min(maxW / MACHINE_SRC_W, maxH / (MACHINE_SRC_W * MACHINE_ASPECT))));
+  // ── Sizing — target ×4 (the 96×144 cabinet → 384×576), scaling down only when
+  // the screen can't fit it alongside the HUD / oscilloscope / tray (~285px of
+  // fixed chrome). Runtime art is pre-upscaled 4×, so any down-scale stays crisp.
+  // Every layer derives from `f`, so all of it scales together. ──
+  const maxW = screenWidth * 0.99;
+  const maxH = Math.max(260, screenHeight - 285);
+  const scale = Math.max(2.5, Math.min(4, Math.min(maxW / MACHINE_SRC_W, maxH / (MACHINE_SRC_W * MACHINE_ASPECT))));
   const machineWidth  = Math.round(MACHINE_SRC_W * scale);
   const machineHeight = Math.round(machineWidth * MACHINE_ASPECT);
   const f = machineWidth / MACHINE_SRC_W; // display px per source px
 
-  const symbolSize = Math.round(REEL_CELL_WIDTH * f);
+  // A bit smaller than the hole so the neighbouring symbols peek above/below.
+  const symbolSize = Math.round(9 * f);
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels
