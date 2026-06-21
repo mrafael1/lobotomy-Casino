@@ -19,9 +19,10 @@ interface Props {
   onComplete?: () => void;
   size?: number;
   overrideStopMs?: number; // when set, used instead of STOP_TIMES_MS[reelIndex]
+  tile?: boolean;          // false = render sprites on a transparent backing
 }
 
-export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onComplete, size = SYMBOL_SIZE, overrideStopMs }: Props) {
+export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onComplete, size = SYMBOL_SIZE, overrideStopMs, tile = true }: Props) {
   const midIndexRef = useRef<number>(reelIndex);
   const [symbols, setSymbols] = useState<[SymbolId, SymbolId, SymbolId]>(() => [
     cycleAt(reelIndex - 1),
@@ -83,7 +84,7 @@ export function Reel({ finalSymbol, spinning, locked = false, reelIndex, onCompl
             row === 1 && styles.mainRow,
           ]}
         >
-          <Symbol symbol={sym} size={size} />
+          <Symbol symbol={sym} size={size} tile={tile} />
         </View>
       ))}
     </View>

@@ -192,6 +192,31 @@ function composeLever() {
   }
 }
 
+// Machine v3 — hand-authored 96×144 layers ("machine v3.png", "reel.png",
+// "multiplier.png", "lever v3.png", "jackpot v3.png"). Each is nearest-neighbour
+// upscaled 4× into an import-safe runtime PNG the app references directly. Spaced
+// source names are kept as-authored; runtime names use underscores. Sources that
+// don't exist yet are skipped so the pipeline stays runnable.
+function composeV3() {
+  const dir = path.join(ROOT, 'assets', 'images');
+  const jobs = [
+    { src: 'machine v3.png',  out: 'machine_v3.png' },
+    { src: 'reel.png',        out: 'reel_bg_v3.png' },
+    { src: 'multiplier.png',  out: 'multiplier_v3.png' },
+    { src: 'lever v3.png',    out: 'lever_v3.png' },
+    { src: 'jackpot v3.png',  out: 'jackpot_v3.png' },
+  ];
+  for (const j of jobs) {
+    const src = path.join(dir, j.src);
+    if (!fs.existsSync(src)) {
+      console.log(`(skipping ${j.out} — source "${j.src}" not found)`);
+      continue;
+    }
+    writePng(path.join(dir, j.out), upscaleNearest(readPng(src), 4));
+    console.log(`assets/images/${j.out}`);
+  }
+}
+
 function composeBackground() {
   const layerDir = path.join(ROOT, 'assets', 'images', 'lobotomy_background_layers');
   const healthy = composite(layerDir, 320, 480, [
@@ -241,6 +266,7 @@ composeMachine();
 composeLayers();
 composeMultiplier();
 composeLever();
+composeV3();
 composeBackground();
 composeUI();
 composeDealerShop();
