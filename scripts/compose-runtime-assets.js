@@ -208,7 +208,8 @@ function composeV3() {
     { src: 'multiplier.png',  out: 'multiplier_v3.png' },
     { src: 'lever v3.png',    out: 'lever_v3.png' },
     { src: 'jackpot v3.png',  out: 'jackpot_v3.png' },
-    { src: 'symbols.png',     out: 'symbols_v3.png' },
+    // Note: symbols.png is authored directly at the 5× runtime size (2400×720)
+    // and consumed as-is by ReelCellV3, so it is not part of this upscale step.
   ];
   for (const j of jobs) {
     const src = path.join(dir, j.src);
