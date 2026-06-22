@@ -46,9 +46,12 @@ export const LEVER_FRAME_COUNT = 6;      // idle (0) → pulled (5), horizontal 
 export const MULTIPLIER_FRAME_COUNT = 6;
 export const JACKPOT_FRAME_COUNT = 2;     // 2-frame flashing banner
 export const SYMBOL_FRAME_COUNT = 4;      // spin-blur frames in symbols.png
-// Health / Wealth are 36-frame fill bars drawn inside the TV screen.
-// Wealth: frame 0 empty → 35 full. Health: frame 0 full → 35 empty (depletes).
-export const BAR_FRAME_COUNT = 36;
+
+// TV fill bars are rendered as a track + a fill clipped left→right by the value.
+// (The authored 36-frame sheets are 17280px wide — past the GPU texture limit —
+// so we use a single track/fill frame each and reveal the fill ourselves.)
+// Fill region within the 96×144 canvas (same for both bars):
+export const BAR_FILL = { left: 26, width: 35 } as const;
 
 // ── Runtime image sources ───────────────────────────────────────────────────
 export const MACHINE_V3: ImageSourcePropType = require('../../assets/images/machine_v3.png');
@@ -57,7 +60,9 @@ export const MULTIPLIER_V3: ImageSourcePropType = require('../../assets/images/m
 export const LEVER_V3: ImageSourcePropType = require('../../assets/images/lever_v3.png');
 export const JACKPOT_V3: ImageSourcePropType = require('../../assets/images/jackpot_v3.png');
 export const SYMBOLS_SHEET_V3: ImageSourcePropType = require('../../assets/images/symbols_v3.png');
-// Bar sheets are 36×96=3456 wide; kept at source res (a 5× would exceed the GPU
-// texture limit) and rendered scaled — the thin bar tolerates it fine.
-export const HEALTH_BAR_V3: ImageSourcePropType = require('../../assets/images/Health.png');
-export const WEALTH_BAR_V3: ImageSourcePropType = require('../../assets/images/Wealth.png');
+// TV bars — track (empty) + fill (full), each a single 5× full-canvas frame
+// cropped from the authored sheets. Small textures, crisp at the machine's scale.
+export const WEALTH_TRACK_V3: ImageSourcePropType = require('../../assets/images/wealth_track.png');
+export const WEALTH_FILL_V3: ImageSourcePropType = require('../../assets/images/wealth_fill.png');
+export const HEALTH_TRACK_V3: ImageSourcePropType = require('../../assets/images/health_track.png');
+export const HEALTH_FILL_V3: ImageSourcePropType = require('../../assets/images/health_fill.png');

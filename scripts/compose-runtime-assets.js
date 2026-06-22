@@ -209,9 +209,10 @@ function composeV3() {
     { src: 'lever v3.png',    out: 'lever_v3.png' },
     { src: 'jackpot v3.png',  out: 'jackpot_v3.png' },
     { src: 'symbols.png',     out: 'symbols_v3.png' },
-    // Note: Health.png / Wealth.png are 36-frame bar sheets (3456px wide at 1×).
-    // A 5× upscale (17280px) would exceed the GPU texture limit, so they are
-    // consumed at source resolution and scaled at render time.
+    // Note: Health.png / Wealth.png are 36-frame bar sheets. At 5× they are
+    // 17280px wide — past the GPU texture limit — so instead of shipping the
+    // sheet we crop a single empty (track) and full (fill) frame from each
+    // (wealth_track/fill, health_track/fill) and TvFillBar reveals the fill.
   ];
   for (const j of jobs) {
     const src = path.join(dir, j.src);

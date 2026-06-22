@@ -7,13 +7,15 @@ import { MOVE_ORDER } from '../game/abilities';
 import { SYMBOLS } from '../content/symbols';
 import { useRunStore } from '../state/runState';
 import type { SymbolId } from '../game/types';
+import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
 import {
-  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3, HEALTH_BAR_V3, WEALTH_BAR_V3,
+  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
+  WEALTH_TRACK_V3, WEALTH_FILL_V3, HEALTH_TRACK_V3, HEALTH_FILL_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
-  REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN,
+  REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN, BAR_FILL,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT,
-  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, BAR_FRAME_COUNT,
+  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
@@ -131,12 +133,9 @@ export function SlotMachine({
     : x3Locked           ? (betMultiplier === 2 ? 5 : 3)
     :                       betMultiplier - 1;
 
-  // TV bars: wealth fills up (0→full), health depletes (full→empty, frame reversed).
-  const lastBar = BAR_FRAME_COUNT - 1;
+  // TV bars: wealth fills up with score, health follows remaining neurons.
   const wealthRatio = Math.max(0, Math.min(1, scoreEarned / ECONOMY.WEALTH_SCORE_THRESHOLD));
   const healthRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
-  const wealthFrame = Math.round(wealthRatio * lastBar);
-  const healthFrame = Math.round((1 - healthRatio) * lastBar);
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels
@@ -223,21 +222,23 @@ export function SlotMachine({
       <Image source={MACHINE_V3} style={styles.fill} resizeMode="stretch" fadeDuration={0} />
 
       {/* 4b — TV fill bars (wealth + health), drawn into the TV screen */}
-      <SpriteSheetFrame
-        source={WEALTH_BAR_V3}
-        frameIndex={wealthFrame}
-        frameCount={BAR_FRAME_COUNT}
-        width={machineWidth}
-        height={machineHeight}
-        style={styles.fill}
+      <TvFillBar
+        track={WEALTH_TRACK_V3}
+        fill={WEALTH_FILL_V3}
+        ratio={wealthRatio}
+        machineWidth={machineWidth}
+        machineHeight={machineHeight}
+        fillLeft={BAR_FILL.left * f}
+        fillWidth={BAR_FILL.width * f}
       />
-      <SpriteSheetFrame
-        source={HEALTH_BAR_V3}
-        frameIndex={healthFrame}
-        frameCount={BAR_FRAME_COUNT}
-        width={machineWidth}
-        height={machineHeight}
-        style={styles.fill}
+      <TvFillBar
+        track={HEALTH_TRACK_V3}
+        fill={HEALTH_FILL_V3}
+        ratio={healthRatio}
+        machineWidth={machineWidth}
+        machineHeight={machineHeight}
+        fillLeft={BAR_FILL.left * f}
+        fillWidth={BAR_FILL.width * f}
       />
 
       {/* 5 — TV screen meters (app-rendered) */}
