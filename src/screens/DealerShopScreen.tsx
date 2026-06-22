@@ -5,82 +5,58 @@ import {
   Pressable,
   Text,
   StyleSheet,
-  SafeAreaView,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
-import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
 import { CONSUMABLES } from '../content/consumables';
-import { itemIcon, DEALER_PORTRAIT, DEALER_SHOP_COUNTER } from '../content/uiAssets';
+import { itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT } from '../content/uiAssets';
 import { Stash } from '../components/Stash';
-import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
-// ─── Scene geometry (source 320×480) ─────────────────────────────────────────
-// Background stretches to fill the whole screen. All layout coords are in
-// source (320×480) space; sx()/sy() convert to screen pixels at runtime.
-const SRC_W = 320;
-const SRC_H = 480;
+// ─── Scene geometry ───────────────────────────────────────────────────────────
+// All scene art is baked on the same 800×1200 canvas (logical 160×240 at 5×).
+// Layout coords below are in that 800×1200 pixel space; sx()/sy() convert to
+// screen pixels at runtime. The three full-screen layers (bg → dealer → counter)
+// are each stretched to fill the screen, so the overlays line up with the art.
+const SRC_W = 800;
+const SRC_H = 1200;
 
-// Icon size on shelves (source px). No cell border — icons float directly
-// on the shelf surface. Tap target is the icon itself.
-const ICON_W = 44;
-const ICON_H = 44;
-const ICON_GAP = 4;
-const ICON_X0 = 18;
+// Counter circles — the "slots" consumables rest in. Centres measured from
+// dealer_shop_counter.png (uniform 110px pitch, radius ≈18px, row at y≈847).
+const CIRCLE_CX = [77, 187, 297, 407, 517, 627] as const;
+const CIRCLE_CY = 847;
+const CIRCLE_R  = 18;
 
-// Shelf rows — y is the centre of the icon, board is 2px below y+ICON_H/2.
-const SHELF_ROWS = [
-  { key: 'powers',    accent: '#a855f7', iconY: 12, items: ABILITY_UPGRADES   as ReadonlyArray<Upgrade> },
-  { key: 'positive',  accent: '#22c55e', iconY: 66, items: POSITIVE_UPGRADES  as ReadonlyArray<Upgrade> },
-  { key: 'corrupted', accent: '#ef4444', iconY: 120, items: CORRUPTED_UPGRADES as ReadonlyArray<Upgrade> },
-] as const;
+// Consumable icon resting in a circle: base sits on the circle bottom, the
+// circle peeking out beneath reads as the slot/shadow it rests in.
+const CONS_ICON = 56;
 
-// Consumable icons sit ON the counter top (behind the counter PNG layer but
-// visually resting on the bar surface). The counter PNG is transparent above
-// CTOP=358 except for a subtle shadow stripe.
-const CONS_ICON_W = 52;
-const CONS_ICON_H = 52;
-const CONS_ICON_X0 = 22;
-const CONS_ICON_GAP = 16;
-// Icon bottom sits exactly on the counter top (source y=358): 358 - 52 = 306.
-// The counter PNG has a soft shadow stripe at y=352..357 that peeks out in
-// the gaps between icons, giving a "resting on the bar" shadow effect.
-const CONS_ICON_Y = 306;
+// TV screen (baked into dealer_shop_bg.png, far left). The selected item's
+// explanation is rendered onto this dark panel. Inner safe area is inset from
+// the bezel/rounded corners.
+const TV = { left: 24, top: 446, width: 168, height: 104 } as const;
 
-// Dealer portrait — aspect-correct, base sits at the counter top.
-const DEALER_AR     = 192 / 288;  // width / height of dealer_portrait.png
-const DEALER_BASE_Y = 358;        // source y where counter top begins
-const DEALER_VIS_H  = 190;        // visible height of dealer in source px
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-type ShopItem =
-  | { kind: 'upgrade';    item: Upgrade }
-  | { kind: 'consumable'; item: Consumable };
+// Dealer portrait is a 2-frame horizontal sheet (1600×1200). Each frame is a
+// full 800×1200 canvas with the dealer already positioned, so we just stretch
+// the whole sheet to 2× screen width and slide it to reveal one frame.
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export function DealerShopScreen() {
   const router = useRouter();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // Source → screen coordinate conversion (background stretches to fill screen)
+  // Source → screen coordinate conversion (layers stretch to fill the screen).
   const sx = (v: number) => (v / SRC_W) * screenW;
   const sy = (v: number) => (v / SRC_H) * screenH;
 
-  // Dealer portrait dimensions in screen space
-  const dealerH    = sy(DEALER_VIS_H);
-  const dealerW    = dealerH * DEALER_AR;
-  const dealerLeft = (screenW - dealerW) / 2;
-  const dealerTop  = sy(DEALER_BASE_Y) - dealerH;
-
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
-  const ownedPermanents     = useMetaStore(s => s.ownedPermanents);
   const pendingConsumables  = useMetaStore(s => s.pendingConsumables);
-  const buyUpgrade          = useMetaStore(s => s.buyUpgrade);
   const buyConsumableCharge = useMetaStore(s => s.buyConsumableCharge);
 
-  const [selected, setSelected] = useState<ShopItem | null>(null);
+  const [selected, setSelected]   = useState<Consumable | null>(null);
+  const [dealerFrame, setDealerFrame] = useState(0);
 
   // Stash tray (bottom-left) — mirrors the supplies queued for the next run.
   // Buying a supply drops it straight in here. Max 2 distinct types.
@@ -90,13 +66,6 @@ export function DealerShopScreen() {
     return c ? { id: c.id, name: c.name, charges: pendingConsumables[c.id] ?? 0 } : null;
   });
 
-  // ── Status helpers ─────────────────────────────────────────────────────────
-  function upgradeStatus(u: Upgrade) {
-    if (ownedPermanents.includes(u.id))                          return 'owned';
-    if (u.requiresId && !ownedPermanents.includes(u.requiresId)) return 'locked';
-    if (lucidityWallet < u.cost)                                 return 'tooPoor';
-    return 'buyable';
-  }
   function consumableStatus(c: Consumable) {
     const charges = pendingConsumables[c.id] ?? 0;
     if (charges >= 2)                      return 'maxed';
@@ -106,86 +75,61 @@ export function DealerShopScreen() {
     return 'buyable';
   }
 
+  // Tapping a counter item selects it (TV explains it) and makes the dealer react.
+  function handleSelect(c: Consumable) {
+    setSelected(prev => (prev?.id === c.id ? prev : c));
+    setDealerFrame(f => (f === 0 ? 1 : 0));
+  }
+
   function handleBuy() {
     if (!selected) return;
-    if (selected.kind === 'upgrade') buyUpgrade(selected.item.id);
-    else buyConsumableCharge(selected.item.id);
+    buyConsumableCharge(selected.id);
     setSelected(null);
   }
 
-  // ── Icon slot — no cell border, just the icon ──────────────────────────────
-  function IconSlot({
-    item, accent, slotX, slotY, w, h,
-  }: {
-    item: Upgrade | Consumable;
-    accent: string;
-    slotX: number; slotY: number; w: number; h: number;
-  }) {
-    const isUpgrade = 'cost' in item;
-    const shopItem: ShopItem = isUpgrade
-      ? { kind: 'upgrade',    item: item as Upgrade }
-      : { kind: 'consumable', item: item as Consumable };
-    const isSelected = selected?.item.id === item.id;
-    const owned = isUpgrade && ownedPermanents.includes((item as Upgrade).id);
-
+  // ── TV explanation overlay ───────────────────────────────────────────────
+  function renderTV() {
+    if (!selected) return null;
     return (
-      <Pressable
+      <View
         style={{
           position: 'absolute',
-          left: sx(slotX),
-          top:  sy(slotY),
-          width:  sx(w),
-          height: sy(h),
-          opacity: owned ? 0.45 : 1,
-          alignItems: 'center',
-          justifyContent: 'center',
+          left:   sx(TV.left),
+          top:    sy(TV.top),
+          width:  sx(TV.width),
+          height: sy(TV.height),
+          padding: 4,
+          justifyContent: 'flex-start',
         }}
-        onPress={() => setSelected(isSelected ? null : shopItem)}
+        pointerEvents="none"
       >
-        <Image
-          source={itemIcon(item.id)}
-          style={[
-            styles.icon,
-            isSelected && { tintColor: undefined, borderColor: accent, borderWidth: 2, borderRadius: 4 },
-          ]}
-          resizeMode="contain"
-        />
-        {isSelected && (
-          <View style={[styles.selectedRing, { borderColor: accent }]} />
-        )}
-      </Pressable>
+        <Text style={styles.tvName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {selected.name}
+        </Text>
+        <Text style={styles.tvDesc} numberOfLines={6} adjustsFontSizeToFit minimumFontScale={0.5}>
+          {selected.description}
+        </Text>
+      </View>
     );
   }
 
-  // ── Description panel ──────────────────────────────────────────────────────
-  function renderDescription() {
+  // ── Buy bar (bottom, right of the stash tray) ────────────────────────────
+  function renderBuyBar() {
     if (!selected) return null;
-    const { item, kind } = selected;
-    const isUpgrade = kind === 'upgrade';
-    const u = isUpgrade ? (item as Upgrade) : null;
-    const c = !isUpgrade ? (item as Consumable) : null;
-    const cost   = isUpgrade ? u!.cost : c!.shopCost;
-    const status = isUpgrade ? upgradeStatus(u!) : consumableStatus(c!);
-    const accent = isUpgrade
-      ? (u!.category === 'corrupted' ? '#ef4444' : u!.category === 'positive' ? '#22c55e' : '#a855f7')
-      : '#00e5ff';
+    const status = consumableStatus(selected);
     return (
-      <View style={styles.descPanel}>
-        <Text style={[styles.descName, { color: accent }]}>{item.name}</Text>
-        <Text style={styles.descText}>{item.description}</Text>
-        {status === 'locked'    && <Text style={styles.descWarn}>Requires previous tier</Text>}
-        {status === 'tooPoor'   && <Text style={styles.descWarn}>Not enough Lucidity</Text>}
-        {status === 'maxed'     && <Text style={styles.descWarn}>Slots maxed</Text>}
-        {status === 'slotsFull' && <Text style={styles.descWarn}>Supply slots full</Text>}
-        <View style={styles.descRow}>
-          <Text style={[styles.descCost, { color: accent }]}>
-            {status === 'owned' ? 'OWNED' : `${cost} L`}
-          </Text>
+      <View style={styles.buyPanel}>
+        <Text style={styles.buyName}>{selected.name}</Text>
+        <View style={styles.buyRow}>
+          <Text style={styles.buyCost}>{selected.shopCost} L</Text>
           {status === 'buyable' && (
-            <Pressable style={[styles.buyBtn, { backgroundColor: accent }]} onPress={handleBuy}>
+            <Pressable style={styles.buyBtn} onPress={handleBuy}>
               <Text style={styles.buyText}>TAKE IT</Text>
             </Pressable>
           )}
+          {status === 'tooPoor'   && <Text style={styles.buyWarn}>Not enough Lucidity</Text>}
+          {status === 'maxed'     && <Text style={styles.buyWarn}>Charges maxed</Text>}
+          {status === 'slotsFull' && <Text style={styles.buyWarn}>Supply slots full</Text>}
           <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
@@ -197,82 +141,83 @@ export function DealerShopScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── LAYER 1: Background wall + shelves ─────────────────────── */}
-      {/* Explicit screen-sized frame — absoluteFill on an <Image> does NOT
-          reliably stretch to full height, it falls back to source aspect and
-          pins to the top. Explicit width/height guarantees the layer fills the
-          exact same space the sx()/sy() overlays are positioned in. */}
+      {/* ── LAYER 1: Background wall, shelves, TV ──────────────────────── */}
       <Image
         source={require('../../assets/images/dealer_shop_bg.png')}
         style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
         resizeMode="stretch"
       />
 
-      {/* ── LAYER 2: Dealer portrait (aspect-correct) ──────────────── */}
-      <Image
-        source={DEALER_PORTRAIT}
-        style={{
-          position: 'absolute',
-          left: dealerLeft,
-          top:  dealerTop,
-          width: dealerW,
-          height: dealerH,
-        }}
-        resizeMode="contain"
-      />
+      {/* ── TV explanation (drawn on the bg's TV screen) ───────────────── */}
+      {renderTV()}
 
-      {/* ── LAYER 3: Counter (transparent above bar, hides dealer legs) */}
+      {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame) ─── */}
+      <View
+        style={{
+          position: 'absolute', left: 0, top: 0,
+          width: screenW, height: screenH, overflow: 'hidden',
+        }}
+        pointerEvents="none"
+      >
+        <Image
+          source={DEALER_SHOP_PORTRAIT}
+          style={{
+            position: 'absolute', top: 0,
+            left: -dealerFrame * screenW,
+            width: screenW * 2, height: screenH,
+          }}
+          resizeMode="stretch"
+        />
+      </View>
+
+      {/* ── LAYER 3: Counter (drawn over the dealer's lower body) ───────── */}
       <Image
         source={DEALER_SHOP_COUNTER}
         style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
         resizeMode="stretch"
       />
 
-      {/* ── Icon overlays (rendered after counter so consumables appear
-           on the bar surface, shelf icons appear on the wall) ─────── */}
+      {/* ── Consumables resting in the counter circles ─────────────────── */}
+      {CONSUMABLES.map((c, idx) => {
+        const cx = CIRCLE_CX[idx];
+        if (cx === undefined) return null;
+        const isSelected = selected?.id === c.id;
+        const left = cx - CONS_ICON / 2;
+        const top  = (CIRCLE_CY + CIRCLE_R) - CONS_ICON;
+        return (
+          <Pressable
+            key={c.id}
+            style={{
+              position: 'absolute',
+              left:   sx(left),
+              top:    sy(top),
+              width:  sx(CONS_ICON),
+              height: sy(CONS_ICON),
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            }}
+            onPress={() => handleSelect(c)}
+          >
+            <Image source={itemIcon(c.id)} style={styles.consIcon} resizeMode="contain" />
+            {isSelected && <View style={styles.selectedRing} />}
+          </Pressable>
+        );
+      })}
 
-      {/* Shelf icons */}
-      {SHELF_ROWS.map(shelf =>
-        shelf.items.map((item, idx) => (
-          <IconSlot
-            key={item.id}
-            item={item}
-            accent={shelf.accent}
-            slotX={ICON_X0 + idx * (ICON_W + ICON_GAP)}
-            slotY={shelf.iconY}
-            w={ICON_W}
-            h={ICON_H}
-          />
-        ))
-      )}
-
-      {/* Consumable icons on the bar */}
-      {CONSUMABLES.map((c, idx) => (
-        <IconSlot
-          key={c.id}
-          item={c}
-          accent="#00e5ff"
-          slotX={CONS_ICON_X0 + idx * (CONS_ICON_W + CONS_ICON_GAP)}
-          slotY={CONS_ICON_Y}
-          w={CONS_ICON_W}
-          h={CONS_ICON_H}
-        />
-      ))}
-
-      {/* ── Stash tray (bottom-left) — purchased supplies land here ─── */}
+      {/* ── Stash tray (bottom-left) — purchased supplies land here ─────── */}
       <SafeAreaView style={styles.stashAnchor} pointerEvents="box-none">
         <Text style={styles.stashLabel}>STASH</Text>
         <Stash items={stashSlots} disabled width={104} />
       </SafeAreaView>
 
-      {/* ── Description panel (bottom, right of the stash tray) ─────── */}
+      {/* ── Buy bar (bottom, right of the stash tray) ──────────────────── */}
       {selected && (
-        <SafeAreaView style={styles.descAnchor} pointerEvents="box-none">
-          {renderDescription()}
+        <SafeAreaView style={styles.buyAnchor} pointerEvents="box-none">
+          {renderBuyBar()}
         </SafeAreaView>
       )}
 
-      {/* ── HUD ────────────────────────────────────────────────────── */}
+      {/* ── HUD ────────────────────────────────────────────────────────── */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
         <View style={styles.hudRow}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -293,8 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0e081c',
   },
 
-  // Icon — no cell, just the image
-  icon: {
+  consIcon: {
     width: '100%',
     height: '100%',
   },
@@ -302,7 +246,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     inset: -2,
     borderWidth: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+    borderColor: '#00e5ff',
+  },
+
+  // TV explanation text (on the in-world screen)
+  tvName: {
+    color: '#00e5ff',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  tvDesc: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    lineHeight: 13,
   },
 
   // Stash tray pinned bottom-left
@@ -319,57 +278,57 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     marginBottom: 2,
   },
-  // Description panel anchored bottom, to the right of the stash tray
-  descAnchor: {
+
+  // Buy bar anchored bottom, to the right of the stash tray
+  buyAnchor: {
     position: 'absolute',
     left: 128,
     right: 12,
     bottom: 12,
   },
-  descPanel: {
+  buyPanel: {
     backgroundColor: 'rgba(8,4,20,0.95)',
-    borderColor: 'rgba(168,85,247,0.25)',
+    borderColor: 'rgba(0,229,255,0.3)',
     borderWidth: 1,
     borderRadius: 12,
-    padding: 14,
+    padding: 12,
     gap: 8,
   },
-  descName: {
-    fontSize: 15,
+  buyName: {
+    color: '#00e5ff',
+    fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
-  descText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  descWarn: {
-    color: '#f97316',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  descRow: {
+  buyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingTop: 4,
   },
-  descCost: {
+  buyCost: {
+    color: '#00e5ff',
     fontSize: 14,
     fontWeight: '900',
+  },
+  buyWarn: {
+    color: '#f97316',
+    fontSize: 11,
+    fontWeight: '700',
     flex: 1,
   },
   buyBtn: {
+    backgroundColor: '#00e5ff',
     borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 16,
+    flex: 1,
   },
   buyText: {
-    color: '#fff',
+    color: '#08020e',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1,
+    textAlign: 'center',
   },
   closeBtn: {
     padding: 8,
