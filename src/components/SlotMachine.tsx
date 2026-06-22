@@ -7,12 +7,13 @@ import { MOVE_ORDER } from '../game/abilities';
 import { SYMBOLS } from '../content/symbols';
 import { useRunStore } from '../state/runState';
 import type { SymbolId } from '../game/types';
+import { ECONOMY } from '../content/economy';
 import {
-  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
+  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3, HEALTH_BAR_V3, WEALTH_BAR_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
   REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT,
-  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT,
+  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, BAR_FRAME_COUNT,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
@@ -59,6 +60,9 @@ export function SlotMachine({
   const lockedReels   = useRunStore(s => s.lockedReels);
   const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
   const lockedReelSpinsRemaining = useRunStore(s => s.lockedReelSpinsRemaining);
+  const scoreEarned   = useRunStore(s => s.scoreEarned);
+  const neurons       = useRunStore(s => s.neurons);
+  const startingN     = useRunStore(s => s.startingNeurons);
 
   // ── Lever animation (idle 0 → pulled 5) ──
   const [leverFrame, setLeverFrame] = useState(0);
@@ -116,6 +120,23 @@ export function SlotMachine({
 
   // Landed sprites are authored at 32x32. Keep them at x1 for crisp main symbols.
   const symbolSize = 32;
+
+  // Multiplier frame encodes selected bet + which bets are locked. Only x3-locked
+  // and x2+x3-locked combos occur (cost/energy lock x3 before x2), matching the art:
+  //   0:×1  1:×2  2:×3  3:×1(×3 lock)  4:×1(×2+×3 lock)  5:×2(×3 lock)
+  const x2Locked = isMultiplierLocked ? isMultiplierLocked(2) : false;
+  const x3Locked = isMultiplierLocked ? isMultiplierLocked(3) : false;
+  const multFrame =
+    x2Locked && x3Locked ? 4
+    : x3Locked           ? (betMultiplier === 2 ? 5 : 3)
+    :                       betMultiplier - 1;
+
+  // TV bars: wealth fills up (0→full), health depletes (full→empty, frame reversed).
+  const lastBar = BAR_FRAME_COUNT - 1;
+  const wealthRatio = Math.max(0, Math.min(1, scoreEarned / ECONOMY.WEALTH_SCORE_THRESHOLD));
+  const healthRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
+  const wealthFrame = Math.round(wealthRatio * lastBar);
+  const healthFrame = Math.round((1 - healthRatio) * lastBar);
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels
@@ -201,6 +222,24 @@ export function SlotMachine({
       {/* 4 — Cabinet (its transparent windows reveal the reels above) */}
       <Image source={MACHINE_V3} style={styles.fill} resizeMode="stretch" fadeDuration={0} />
 
+      {/* 4b — TV fill bars (wealth + health), drawn into the TV screen */}
+      <SpriteSheetFrame
+        source={WEALTH_BAR_V3}
+        frameIndex={wealthFrame}
+        frameCount={BAR_FRAME_COUNT}
+        width={machineWidth}
+        height={machineHeight}
+        style={styles.fill}
+      />
+      <SpriteSheetFrame
+        source={HEALTH_BAR_V3}
+        frameIndex={healthFrame}
+        frameCount={BAR_FRAME_COUNT}
+        width={machineWidth}
+        height={machineHeight}
+        style={styles.fill}
+      />
+
       {/* 5 — TV screen meters (app-rendered) */}
       <View
         style={{
@@ -215,10 +254,10 @@ export function SlotMachine({
         <MachineScreenMeters width={TV_SCREEN.width * f} height={TV_SCREEN.height * f} />
       </View>
 
-      {/* 6 — Multiplier readout (frame = current bet) */}
+      {/* 6 — Multiplier readout (frame encodes selected bet + locks) */}
       <SpriteSheetFrame
         source={MULTIPLIER_V3}
-        frameIndex={betMultiplier - 1}
+        frameIndex={multFrame}
         frameCount={MULTIPLIER_FRAME_COUNT}
         width={machineWidth}
         height={machineHeight}
@@ -267,15 +306,17 @@ export function SlotMachine({
         })}
       </View>
 
-      {/* 9 — Multiplier tap targets (above cabinet) + lock overlay */}
+      {/* 9 — Multiplier tap targets (above cabinet). The lock state is baked into
+             the multiplier art frames, so no overlay is drawn here. */}
       <View style={styles.fill} pointerEvents="box-none">
         {([1, 2, 3] as const).map(m => {
           const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
           const canTap = multiplierInteractive && !!onSelectMultiplier && !locked;
+          if (!canTap) return null;
           const cx = MULT_BADGE_CENTERS[m - 1];
           const w = 16 * f;
           return (
-            <View
+            <Pressable
               key={m}
               style={{
                 position: 'absolute',
@@ -284,17 +325,8 @@ export function SlotMachine({
                 width: w,
                 height: MULT_STRIP.height * f,
               }}
-              pointerEvents="box-none"
-            >
-              {canTap && (
-                <Pressable style={StyleSheet.absoluteFill} onPress={() => onSelectMultiplier!(m)} />
-              )}
-              {locked && (
-                <View style={[StyleSheet.absoluteFill, styles.multLockOverlay]} pointerEvents="none">
-                  <Text style={{ fontSize: Math.round(MULT_STRIP.height * f * 0.7) }}>🔒</Text>
-                </View>
-              )}
-            </View>
+              onPress={() => onSelectMultiplier!(m)}
+            />
           );
         })}
       </View>
@@ -313,9 +345,9 @@ export function SlotMachine({
                 height: (REEL_WINDOW.top - TV_SCREEN.top - 2) * f,
               },
             ]}
-            onPress={() => onShiftDirection(1)}
+            onPress={() => onShiftDirection(-1)}
           >
-            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftDownSym].name.toUpperCase()}</Text>
+            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftUpSym].name.toUpperCase()}</Text>
             <Text style={styles.shiftArrow}>▲</Text>
           </Pressable>
 
@@ -330,10 +362,10 @@ export function SlotMachine({
                 height: 24 * f,
               },
             ]}
-            onPress={() => onShiftDirection(-1)}
+            onPress={() => onShiftDirection(1)}
           >
             <Text style={styles.shiftArrow}>▼</Text>
-            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftUpSym].name.toUpperCase()}</Text>
+            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftDownSym].name.toUpperCase()}</Text>
           </Pressable>
         </>
       )}

@@ -41,20 +41,14 @@ export const LEVER_HIT = { left: 72, top: 56, width: 21, height: 54 } as const; 
 
 // ── Frame counts ────────────────────────────────────────────────────────────
 export const LEVER_FRAME_COUNT = 6;      // idle (0) → pulled (5), horizontal strip
-export const MULTIPLIER_FRAME_COUNT = 3;  // bet 1/2/3 → frame 0/1/2
+// Multiplier frames encode both the selected bet AND which bets are locked:
+//   0:×1  1:×2  2:×3  3:×1 (×3 locked)  4:×1 (×2+×3 locked)  5:×2 (×3 locked)
+export const MULTIPLIER_FRAME_COUNT = 6;
 export const JACKPOT_FRAME_COUNT = 2;     // 2-frame flashing banner
-export const SYMBOL_FRAME_COUNT = 5;      // brain/eye/flatline/pill/syringe (reference sheet)
-
-// Maps the 5 packed frames in symbols.png to symbol ids. Kept for reference; the
-// reel renders the per-symbol sprites in symbolAssets.ts so all 7 symbols
-// (incl. scalpel/book, absent from symbols.png) stay renderable.
-export const SYMBOL_FRAME_BY_ID = {
-  brain: 0,
-  eye: 1,
-  flatline: 2,
-  pill: 3,
-  syringe: 4,
-} as const;
+export const SYMBOL_FRAME_COUNT = 4;      // spin-blur frames in symbols.png
+// Health / Wealth are 36-frame fill bars drawn inside the TV screen.
+// Wealth: frame 0 empty → 35 full. Health: frame 0 full → 35 empty (depletes).
+export const BAR_FRAME_COUNT = 36;
 
 // ── Runtime image sources ───────────────────────────────────────────────────
 export const MACHINE_V3: ImageSourcePropType = require('../../assets/images/machine_v3.png');
@@ -63,3 +57,7 @@ export const MULTIPLIER_V3: ImageSourcePropType = require('../../assets/images/m
 export const LEVER_V3: ImageSourcePropType = require('../../assets/images/lever_v3.png');
 export const JACKPOT_V3: ImageSourcePropType = require('../../assets/images/jackpot_v3.png');
 export const SYMBOLS_SHEET_V3: ImageSourcePropType = require('../../assets/images/symbols_v3.png');
+// Bar sheets are 36×96=3456 wide; kept at source res (a 5× would exceed the GPU
+// texture limit) and rendered scaled — the thin bar tolerates it fine.
+export const HEALTH_BAR_V3: ImageSourcePropType = require('../../assets/images/Health.png');
+export const WEALTH_BAR_V3: ImageSourcePropType = require('../../assets/images/Wealth.png');

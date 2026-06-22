@@ -11,7 +11,7 @@ const SYMBOL_FRAME_WIDTH = SYMBOLS_SHEET_WIDTH / SYMBOL_FRAME_COUNT;
 
 // Spin-blur cadence and per-reel stop times (ms) — matches the previous reel.
 const CYCLE_INTERVAL_MS = 60;
-const STOP_TIMES_MS = [600, 850, 1100];
+const STOP_TIMES_MS = [600, 900, 1300];
 
 // Visual neighbour order for the landed reel strip (book sits outside it).
 const STRIP_ORDER: SymbolId[] = ['brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline'];

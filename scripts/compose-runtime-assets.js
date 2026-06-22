@@ -208,8 +208,10 @@ function composeV3() {
     { src: 'multiplier.png',  out: 'multiplier_v3.png' },
     { src: 'lever v3.png',    out: 'lever_v3.png' },
     { src: 'jackpot v3.png',  out: 'jackpot_v3.png' },
-    // Note: symbols.png is authored directly at the 5× runtime size (2400×720)
-    // and consumed as-is by ReelCellV3, so it is not part of this upscale step.
+    { src: 'symbols.png',     out: 'symbols_v3.png' },
+    // Note: Health.png / Wealth.png are 36-frame bar sheets (3456px wide at 1×).
+    // A 5× upscale (17280px) would exceed the GPU texture limit, so they are
+    // consumed at source resolution and scaled at render time.
   ];
   for (const j of jobs) {
     const src = path.join(dir, j.src);
