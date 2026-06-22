@@ -47,9 +47,22 @@ export function DealerShopScreen() {
   const router = useRouter();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // Source → screen coordinate conversion (layers stretch to fill the screen).
-  const sx = (v: number) => (v / SRC_W) * screenW;
-  const sy = (v: number) => (v / SRC_H) * screenH;
+  // The scene art is aspect-fitted (contain) into the screen rather than
+  // stretched, so the pixel art is never distorted on non-2:3 displays. The
+  // wall-coloured root fills any letterbox bars. This mirrors how the game
+  // scene fits its background (see Background.tsx). All three layers and every
+  // overlay share this same fitted frame so the coords line up.
+  const SRC_AR    = SRC_W / SRC_H;
+  const screenAR  = screenH > 0 ? screenW / screenH : SRC_AR;
+  const fitW = screenAR > SRC_AR ? screenH * SRC_AR : screenW;
+  const fitH = screenAR > SRC_AR ? screenH          : screenW / SRC_AR;
+  const fitX = (screenW - fitW) / 2;
+  const fitY = (screenH - fitH) / 2;
+  const sceneFrame = { left: fitX, top: fitY, width: fitW, height: fitH } as const;
+
+  // Source → screen coordinate conversion (into the fitted scene frame).
+  const sx = (v: number) => fitX + (v / SRC_W) * fitW;
+  const sy = (v: number) => fitY + (v / SRC_H) * fitH;
 
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
   const pendingConsumables  = useMetaStore(s => s.pendingConsumables);
@@ -144,8 +157,8 @@ export function DealerShopScreen() {
       {/* ── LAYER 1: Background wall, shelves, TV ──────────────────────── */}
       <Image
         source={require('../../assets/images/dealer_shop_bg.png')}
-        style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
-        resizeMode="stretch"
+        style={{ position: 'absolute', ...sceneFrame }}
+        resizeMode="contain"
       />
 
       {/* ── TV explanation (drawn on the bg's TV screen) ───────────────── */}
@@ -153,28 +166,25 @@ export function DealerShopScreen() {
 
       {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame) ─── */}
       <View
-        style={{
-          position: 'absolute', left: 0, top: 0,
-          width: screenW, height: screenH, overflow: 'hidden',
-        }}
+        style={{ position: 'absolute', ...sceneFrame, overflow: 'hidden' }}
         pointerEvents="none"
       >
         <Image
           source={DEALER_SHOP_PORTRAIT}
           style={{
             position: 'absolute', top: 0,
-            left: -dealerFrame * screenW,
-            width: screenW * 2, height: screenH,
+            left: -dealerFrame * fitW,
+            width: fitW * 2, height: fitH,
           }}
-          resizeMode="stretch"
+          resizeMode="contain"
         />
       </View>
 
       {/* ── LAYER 3: Counter (drawn over the dealer's lower body) ───────── */}
       <Image
         source={DEALER_SHOP_COUNTER}
-        style={{ position: 'absolute', left: 0, top: 0, width: screenW, height: screenH }}
-        resizeMode="stretch"
+        style={{ position: 'absolute', ...sceneFrame }}
+        resizeMode="contain"
       />
 
       {/* ── Consumables resting in the counter circles ─────────────────── */}
