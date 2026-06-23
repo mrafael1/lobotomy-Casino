@@ -1,19 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
-  Text,
   Image,
   Pressable,
   StyleSheet,
-  SafeAreaView,
   Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Text } from '../components/PixelText';
+import { PIXEL_FONT } from '../content/typography';
 import { Background } from '../components/Background';
 import { SlotMachine } from '../components/SlotMachine';
-import { Oscilloscope } from '../components/Oscilloscope';
+import { PixelScene } from '../components/PixelScene';
 import { Stash } from '../components/Stash';
+import { vpx, ASSET_SCALE, MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H } from '../content/layout';
 import { POWER_ICONS, DEALER_PORTRAIT, DEALER_HANDS, itemIcon } from '../content/uiAssets';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
@@ -65,7 +67,6 @@ export function GameScreen() {
   const lastEnding          = useRunStore(s => s.lastEnding);
   const isSpinning          = useRunStore(s => s.isSpinning);
   const neurons             = useRunStore(s => s.neurons);
-  const scoreEarned         = useRunStore(s => s.scoreEarned);
   const lucidityCoins        = useRunStore(s => s.lucidityCoins);
   const freeSpins           = useRunStore(s => s.freeSpinsRemaining);
   const lastResult          = useRunStore(s => s.lastResult);
@@ -104,7 +105,6 @@ export function GameScreen() {
   const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
   const dismissGift        = useRunStore(s => s.dismissGift);
 
-  const lucidityWallet         = useMetaStore(s => s.lucidityWallet);
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
   const bankRun                = useMetaStore(s => s.bankRun);
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
@@ -327,48 +327,48 @@ export function GameScreen() {
 
   return (
     <Background>
-      <SafeAreaView style={styles.safe}>
 
-        {/* ── HUD ── */}
-        <View style={styles.hud}>
-          <View style={styles.hudItem}>
-            <Text style={styles.hudLabel}>WALLET</Text>
-            <Text style={styles.hudValue}>{lucidityWallet}</Text>
+      {/* ── Pixel-art scene: the slot machine placed in the 160×320 virtual
+             canvas. The jackpot shake lives on the outer (screen-space)
+             container so its magnitude stays visually constant across devices. ── */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { transform: [{ translateX: shakeAnim }] }]}
+        pointerEvents="box-none"
+      >
+        <PixelScene>
+          <View
+            style={{
+              position: 'absolute',
+              left: vpx(MACHINE_X),
+              top: vpx(MACHINE_Y),
+              width: vpx(MACHINE_W),
+              height: vpx(MACHINE_H),
+            }}
+          >
+            <SlotMachine
+              onAllReelsDone={handleAllReelsDone}
+              onReelPress={reelsTappable ? handleReelPress : undefined}
+              selectedReels={selectedReels}
+              shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
+              onShiftDirection={handleMoveDirection}
+              rerollingReelIndex={rerollingReelIndex}
+              onRerollDone={() => setRerollingReelIndex(null)}
+              multiplierInteractive={runPhase === 'running' && !runBusy}
+              onSelectMultiplier={setBetMultiplier}
+              isMultiplierLocked={(m) =>
+                (energyLocked && m === 3) ||
+                (!noNeuronCostSpin && neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN)
+              }
+              onLeverPull={handleSpin}
+              leverEnabled={canSpin}
+              scale={ASSET_SCALE}
+            />
           </View>
-          <View style={styles.hudCenter}>
-            <Text style={styles.title}>LOBOTOMY</Text>
-          </View>
-          <View style={styles.hudItem}>
-            <Text style={styles.hudLabel}>THIS RUN</Text>
-            <Text style={styles.hudValue}>{scoreEarned}</Text>
-          </View>
-        </View>
+        </PixelScene>
+      </Animated.View>
 
-        {/* ── Oscilloscope (neuron health) ── */}
-        <Oscilloscope />
-
-        {/* ── Slot machine ── */}
-        <Animated.View style={[styles.machineWrap, { transform: [{ translateX: shakeAnim }] }]}>
-          <SlotMachine
-            onAllReelsDone={handleAllReelsDone}
-            onReelPress={reelsTappable ? handleReelPress : undefined}
-            selectedReels={selectedReels}
-            shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
-            onShiftDirection={handleMoveDirection}
-            rerollingReelIndex={rerollingReelIndex}
-            onRerollDone={() => setRerollingReelIndex(null)}
-            multiplierInteractive={runPhase === 'running' && !runBusy}
-            onSelectMultiplier={setBetMultiplier}
-            isMultiplierLocked={(m) =>
-              (energyLocked && m === 3) ||
-              (!noNeuronCostSpin && neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN)
-            }
-            onLeverPull={handleSpin}
-            leverEnabled={canSpin}
-          />
-        </Animated.View>
-
-        {/* ── Win label / selection hint ── */}
+      {/* ── Top HUD band: win label / selection hint + status badges ── */}
+      <SafeAreaView style={styles.topBand} pointerEvents="box-none">
         <View style={styles.winRow}>
           {selectionHint ? (
             <Text style={styles.selectionHint}>{selectionHint}</Text>
@@ -382,7 +382,6 @@ export function GameScreen() {
           ) : <View style={styles.winPlaceholder} />}
         </View>
 
-        {/* ── Status badges ── */}
         <View style={styles.badgeRow}>
           {freeSpins > 0 && (
             <Text style={styles.freeSpinBadge}>
@@ -414,9 +413,10 @@ export function GameScreen() {
             <Text style={styles.blockBadge}>POWERS BLOCKED ×{blockPowersSpins}</Text>
           )}
         </View>
+      </SafeAreaView>
 
-        {/* ── Bottom bar: stash tray (left) + power icon chips (center).
-               Fixed height so the machine never shifts. ── */}
+      {/* ── Bottom controls band: stash tray (left) + power icon chips (center). ── */}
+      <SafeAreaView style={styles.bottomBand} pointerEvents="box-none">
         <View style={styles.bottomBar}>
           <Stash
             items={stashSlots}
@@ -458,7 +458,6 @@ export function GameScreen() {
             )}
           </View>
         </View>
-
       </SafeAreaView>
 
       {/* ── Dealer arrival: shoulder taps ── */}
@@ -641,50 +640,22 @@ export function GameScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-  },
-
-  // HUD
-  hud: {
-    flexDirection: 'row',
+  // Screen-space HUD bands. The pixel-art scene (machine) sits in the 160×320
+  // virtual canvas between them; these anchor to the top/bottom screen edges and
+  // fill the extra vertical room the taller canvas opened up.
+  topBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 4,
   },
-  hudItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  hudCenter: {
-    flex: 2,
-    alignItems: 'center',
-  },
-  hudLabel: {
-    color: '#94a3b8',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  hudValue: {
-    color: '#00e5ff',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  title: {
-    color: '#ff2d78',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 6,
-  },
-
-  // Machine
-  machineWrap: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
+  bottomBand: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 
   // Win label
@@ -838,6 +809,7 @@ const styles = StyleSheet.create({
   },
   tapText: {
     color: '#a855f7',
+    fontFamily: PIXEL_FONT,
     fontSize: 24,
     fontWeight: '900',
     fontStyle: 'italic',

@@ -49,12 +49,12 @@ export function Background({ children }: Props) {
   return (
     <View style={styles.root}>
       <Image
-        source={require('../../assets/images/background_healthy.png')}
+        source={require('../../assets/images/bg_black.png')}
         style={[styles.backgroundImage, backgroundFrame]}
         resizeMode="stretch"
       />
       <Animated.Image
-        source={require('../../assets/images/background_decay.png')}
+        source={require('../../assets/images/bg_black.png')}
         style={[styles.backgroundImage, backgroundFrame, decayStyle]}
         resizeMode="stretch"
       />

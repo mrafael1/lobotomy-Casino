@@ -1,12 +1,12 @@
 import React from 'react';
 import {
   View,
-  Text,
   Pressable,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text } from '../components/PixelText';
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
 import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';

@@ -29,7 +29,7 @@ const INITIAL_META_STATE: MetaState = {
 const mmkvStorage = createJSONStorage(() => ({
   getItem:    (name: string) => storage.getString(name) ?? null,
   setItem:    (name: string, value: string) => storage.set(name, value),
-  removeItem: (name: string) => storage.delete(name),
+  removeItem: (name: string) => storage.remove(name),
 }));
 
 export const useMetaStore = create<MetaStore>()(

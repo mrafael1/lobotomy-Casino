@@ -3,12 +3,12 @@ import {
   View,
   Image,
   Pressable,
-  Text,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Text } from '../components/PixelText';
 import { useMetaStore } from '../state/metaState';
 import { CONSUMABLES } from '../content/consumables';
 import { itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT } from '../content/uiAssets';
@@ -16,31 +16,37 @@ import { Stash } from '../components/Stash';
 import type { Consumable } from '../content/consumables';
 
 // ─── Scene geometry ───────────────────────────────────────────────────────────
-// All scene art is baked on the same 800×1200 canvas (logical 160×240 at 5×).
-// Layout coords below are in that 800×1200 pixel space; sx()/sy() convert to
-// screen pixels at runtime. The three full-screen layers (bg → dealer → counter)
-// are each stretched to fill the screen, so the overlays line up with the art.
-const SRC_W = 800;
-const SRC_H = 1200;
+// The bg + counter layers are baked on the full 1280×2560 canvas (logical
+// 160×320 at 8×, matching the taller virtual game canvas — see content/layout.ts).
+// Layout coords below are in that 1280×2560 pixel space; sx()/sy() convert a
+// point and sw()/sh() convert a size into the aspect-fitted scene frame. The
+// bg → dealer → counter layers all share that frame so the overlays line up.
+const SRC_W = 1280;
+const SRC_H = 2560;
 
 // Counter circles — the "slots" consumables rest in. Centres measured from
-// dealer_shop_counter.png (uniform 110px pitch, radius ≈18px, row at y≈847).
-const CIRCLE_CX = [77, 187, 297, 407, 517, 627] as const;
-const CIRCLE_CY = 847;
-const CIRCLE_R  = 18;
+// dealer_shop_counter.png (1280×2560): uniform 176px pitch, radius ≈29px,
+// row at y≈1671.
+const CIRCLE_CX = [124, 300, 476, 652, 820, 996] as const;
+const CIRCLE_CY = 1671;
+const CIRCLE_R  = 29;
 
 // Consumable icon resting in a circle: base sits on the circle bottom, the
 // circle peeking out beneath reads as the slot/shadow it rests in.
-const CONS_ICON = 56;
+const CONS_ICON = 90;
 
-// TV screen (baked into dealer_shop_bg.png, far left). The selected item's
-// explanation is rendered onto this dark panel. Inner safe area is inset from
-// the bezel/rounded corners.
-const TV = { left: 24, top: 446, width: 168, height: 104 } as const;
+// TV screen (the green-framed panel in dealer_shop_counter.png, top-left). The
+// selected item's explanation is rendered onto it; inset inside the green bezel.
+const TV = { left: 44, top: 660, width: 152, height: 124 } as const;
 
-// Dealer portrait is a 2-frame horizontal sheet (1600×1200). Each frame is a
-// full 800×1200 canvas with the dealer already positioned, so we just stretch
-// the whole sheet to 2× screen width and slide it to reveal one frame.
+// Dealer portrait is still a 160×240 (2:3) 2-frame horizontal sheet (1600×1200),
+// NOT re-authored to the taller 160×320 canvas. So it is drawn undistorted at
+// full scene width and anchored so its baked counter-line (≈70.6% down its body,
+// where the old 160×240 counter sat) lands on the new counter row:
+//   DEALER_TOP = CIRCLE_CY − 0.706 · DEALER_FRAME_H ≈ 316.
+const DEALER_FRAME_W = 1280; // one frame = 160 logical ×8
+const DEALER_FRAME_H = 1920; // 240 logical ×8 (2:3 preserved)
+const DEALER_TOP     = 316;  // src y within the scene
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export function DealerShopScreen() {
@@ -60,9 +66,12 @@ export function DealerShopScreen() {
   const fitY = (screenH - fitH) / 2;
   const sceneFrame = { left: fitX, top: fitY, width: fitW, height: fitH } as const;
 
-  // Source → screen coordinate conversion (into the fitted scene frame).
+  // Source → screen conversion (into the fitted scene frame). sx/sy map a point
+  // (include the letterbox offset); sw/sh map a size (no offset).
   const sx = (v: number) => fitX + (v / SRC_W) * fitW;
   const sy = (v: number) => fitY + (v / SRC_H) * fitH;
+  const sw = (v: number) => (v / SRC_W) * fitW;
+  const sh = (v: number) => (v / SRC_H) * fitH;
 
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
   const pendingConsumables  = useMetaStore(s => s.pendingConsumables);
@@ -109,8 +118,8 @@ export function DealerShopScreen() {
           position: 'absolute',
           left:   sx(TV.left),
           top:    sy(TV.top),
-          width:  sx(TV.width),
-          height: sy(TV.height),
+          width:  sw(TV.width),
+          height: sh(TV.height),
           padding: 4,
           justifyContent: 'flex-start',
         }}
@@ -161,10 +170,10 @@ export function DealerShopScreen() {
         resizeMode="contain"
       />
 
-      {/* ── TV explanation (drawn on the bg's TV screen) ───────────────── */}
-      {renderTV()}
-
-      {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame) ─── */}
+      {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame). The
+             sheet is still 2:3 per frame, so it is drawn at its native aspect
+             (full scene width, 0.75× scene height) and anchored at DEALER_TOP —
+             never stretched to the taller 160×320 canvas. ─── */}
       <View
         style={{ position: 'absolute', ...sceneFrame, overflow: 'hidden' }}
         pointerEvents="none"
@@ -172,11 +181,13 @@ export function DealerShopScreen() {
         <Image
           source={DEALER_SHOP_PORTRAIT}
           style={{
-            position: 'absolute', top: 0,
+            position: 'absolute',
+            top:  sh(DEALER_TOP),
             left: -dealerFrame * fitW,
-            width: fitW * 2, height: fitH,
+            width:  fitW * 2,
+            height: sh(DEALER_FRAME_H),
           }}
-          resizeMode="contain"
+          resizeMode="stretch"
         />
       </View>
 
@@ -186,6 +197,10 @@ export function DealerShopScreen() {
         style={{ position: 'absolute', ...sceneFrame }}
         resizeMode="contain"
       />
+
+      {/* ── TV explanation — drawn on the counter layer's green TV panel, so it
+             must render after the counter art (the TV graphic lives there). ── */}
+      {renderTV()}
 
       {/* ── Consumables resting in the counter circles ─────────────────── */}
       {CONSUMABLES.map((c, idx) => {
@@ -201,8 +216,8 @@ export function DealerShopScreen() {
               position: 'absolute',
               left:   sx(left),
               top:    sy(top),
-              width:  sx(CONS_ICON),
-              height: sy(CONS_ICON),
+              width:  sw(CONS_ICON),
+              height: sh(CONS_ICON),
               alignItems: 'center',
               justifyContent: 'flex-end',
             }}

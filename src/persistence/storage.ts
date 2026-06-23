@@ -1,6 +1,6 @@
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
-export const storage = new MMKV({ id: 'lobotomy' });
+export const storage = createMMKV({ id: 'lobotomy' });
 
 export const STORAGE_KEYS = {
   GLOBAL_STATE: 'global',

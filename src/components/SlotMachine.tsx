@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Image, Pressable, StyleSheet } from 'react-native';
+import { Text } from './PixelText';
 import { ReelCellV3 } from './ReelCellV3';
 import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
@@ -41,6 +42,9 @@ interface Props {
   // Pull lever to spin. onLeverPull fires after the pull animation lands.
   onLeverPull?: () => void;
   leverEnabled?: boolean;
+  // Display scale: source px → display px. Must equal the runtime art's authored
+  // scale (V3_SCALE) so the nearest-neighbour sheets draw 1:1 and crisp.
+  scale?: number;
 }
 
 export function SlotMachine({
@@ -56,6 +60,7 @@ export function SlotMachine({
   multiplierInteractive = false,
   onLeverPull,
   leverEnabled = false,
+  scale = 5,
 }: Props) {
   const isSpinning    = useRunStore(s => s.isSpinning);
   const lastResult    = useRunStore(s => s.lastResult);
@@ -112,16 +117,18 @@ export function SlotMachine({
     };
   }, [lastResult, isSpinning, rerollingReelIndex]);
 
-  // ── Sizing — fixed ×5 (the 96×144 cabinet → 480×720). Runtime art is
-  // pre-upscaled 5×, so this keeps every source pixel aligned 1:1 to display
-  // pixels (no runtime bilinear blur). Every layer derives from `f`. ──
-  const scale = 5;
+  // ── Sizing — integer `scale` (the 96×144 cabinet → 96·scale × 144·scale).
+  // Runtime art is nearest-neighbour pre-upscaled to this same scale, so every
+  // source pixel aligns 1:1 to display pixels (no runtime bilinear blur). Every
+  // layer — including the reel-blur sheet offsets in ReelCellV3 — derives from
+  // `f`, so `scale` MUST match the art's authored V3_SCALE. ──
   const machineWidth  = MACHINE_SRC_W * scale;
   const machineHeight = Math.round(machineWidth * MACHINE_ASPECT);
   const f = machineWidth / MACHINE_SRC_W; // display px per source px
 
-  // Landed sprites are authored at 32x32. Keep them at x1 for crisp main symbols.
-  const symbolSize = 32;
+  // Landed symbol sprite size, scaled to the reel hole so it fills it like the
+  // spin-blur frames do (~58% of the hole width, matching the previous look).
+  const symbolSize = Math.round(REEL_HOLES[0].width * f * 0.58);
 
   // Multiplier frame encodes selected bet + which bets are locked. Only x3-locked
   // and x2+x3-locked combos occur (cost/energy lock x3 before x2), matching the art:
@@ -252,7 +259,7 @@ export function SlotMachine({
         }}
         pointerEvents="none"
       >
-        <MachineScreenMeters width={TV_SCREEN.width * f} height={TV_SCREEN.height * f} />
+        <MachineScreenMeters width={TV_SCREEN.width * f} height={TV_SCREEN.height * f} f={f} />
       </View>
 
       {/* 6 — Multiplier readout (frame encodes selected bet + locks) */}

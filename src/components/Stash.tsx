@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Image, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Image, Pressable, StyleSheet } from 'react-native';
+import { Text } from './PixelText';
 import { STASH_TRAY, itemIcon } from '../content/uiAssets';
 
 // Stash tray art is 66x34 with two 24x24 slot depressions.
