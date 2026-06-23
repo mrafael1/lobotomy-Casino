@@ -24,26 +24,23 @@ export const VIRTUAL_HEIGHT = 320;
 // the ×8 art is downscaled to fit (supersampled → crisp).
 export const ASSET_SCALE = 8;
 
-// ── Vertical zones (machine-variant layout) ──────────────────────────────────
-//   0–48    top HUD: win label + status badges
-//  48–250   scene band: the slot machine
-// 250–304   controls: stash tray + power chips
-// 304–320   bottom safe margin / darkness
-export const TOP_UI_Y = 0;
-export const TOP_UI_HEIGHT = 48;
-export const SCENE_Y = 48;
-export const SCENE_HEIGHT = 202;
-export const CONTROLS_Y = 250;
-export const CONTROLS_HEIGHT = 54;
-export const BOTTOM_SAFE_Y = 304;
-export const BOTTOM_SAFE_HEIGHT = 16;
+// ── One full-canvas composition (no reserved UI bands) ───────────────────────
+// The 160×320 canvas is treated as a single pixel-art composition, NOT split into
+// fixed top/middle/bottom UI bands. The machine art is the whole canvas (cabinet
+// in the lower portion, empty space above); HUD chrome — win label, status
+// badges, stash tray and power chips — composes into that empty upper region so
+// nothing floats in screen-space letterbox margins. Only full-screen overlays
+// (dealer / gift / run-over) remain outside the PixelScene.
 
-// ── Machine — the new-view sprite IS the full 160×320 scene (cabinet in the
-// lower portion, empty space up top for the HUD), so it fills the whole canvas.
+// ── Machine — the sprite IS the full 160×320 scene, so it fills the whole canvas.
 export const MACHINE_W = VIRTUAL_WIDTH;   // 160
 export const MACHINE_H = VIRTUAL_HEIGHT;  // 320
 export const MACHINE_X = 0;
 export const MACHINE_Y = 0;
+
+// ── HUD region — the empty space above the cabinet (the cabinet's TV starts at
+// virtual y≈128). HUD elements are positioned within this band, in the scene.
+export const HUD_HEIGHT = 124;
 
 // Virtual px → asset-space px. Position PixelScene children with this.
 export const vpx = (n: number) => n * ASSET_SCALE;

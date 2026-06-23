@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Text } from '../components/PixelText';
@@ -15,7 +14,10 @@ import { Background } from '../components/Background';
 import { SlotMachine } from '../components/SlotMachine';
 import { PixelScene } from '../components/PixelScene';
 import { Stash } from '../components/Stash';
-import { vpx, ASSET_SCALE, MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H } from '../content/layout';
+import {
+  vpx, ASSET_SCALE, VIRTUAL_WIDTH, HUD_HEIGHT,
+  MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H,
+} from '../content/layout';
 import { POWER_ICONS, DEALER_PORTRAIT, DEALER_HANDS, itemIcon } from '../content/uiAssets';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
@@ -328,9 +330,11 @@ export function GameScreen() {
   return (
     <Background>
 
-      {/* ── Pixel-art scene: the slot machine placed in the 160×320 virtual
-             canvas. The jackpot shake lives on the outer (screen-space)
-             container so its magnitude stays visually constant across devices. ── */}
+      {/* ── Pixel-art scene: the whole 160×320 virtual canvas as one composition —
+             the machine fills it, and the HUD (win label, badges, stash, powers)
+             composes into the empty upper region. The jackpot shake lives on the
+             outer (screen-space) container so its magnitude stays visually
+             constant across devices. ── */}
       <Animated.View
         style={[StyleSheet.absoluteFill, { transform: [{ translateX: shakeAnim }] }]}
         pointerEvents="box-none"
@@ -364,101 +368,101 @@ export function GameScreen() {
               scale={ASSET_SCALE}
             />
           </View>
+
+          {/* ── In-scene HUD: composed into the empty space above the cabinet.
+                 Sizes are in asset-space (× ASSET_SCALE via vpx) so text stays
+                 crisp (rendered large, downscaled with the rest of the canvas). ── */}
+          <View style={styles.hud} pointerEvents="box-none">
+            <View style={styles.winRow}>
+              {selectionHint ? (
+                <Text style={styles.selectionHint}>{selectionHint}</Text>
+              ) : winLabel ? (
+                <Text style={[
+                  styles.winLabel,
+                  lastResult?.winType === 'jackpot' && styles.winJackpot,
+                ]}>
+                  {winLabel}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.badgeRow}>
+              {freeSpins > 0 && (
+                <Text style={[styles.badge, styles.badgeCyan]}>
+                  FREE SPIN{freeSpins > 1 ? ` ×${freeSpins}` : ''}
+                </Text>
+              )}
+              {decaySkips > 0 && (
+                <Text style={[styles.badge, styles.badgeViolet]}>NO DECAY ×{decaySkips}</Text>
+              )}
+              {sedativeNext && (
+                <Text style={[styles.badge, styles.badgeViolet]}>SEDATIVE — FREE SPIN</Text>
+              )}
+              {brainBoostSpins > 0 && (
+                <Text style={[styles.badge, styles.badgeOrange]}>BRAIN BOOST ×{brainBoostSpins}</Text>
+              )}
+              {forcedRandomBetSpins > 0 && (
+                <Text style={[styles.badge, styles.badgeGreen]}>ENERGY x{forcedRandomBetSpins}</Text>
+              )}
+              {cocktailBoostSpins > 0 && (
+                <Text style={[styles.badge, styles.badgePink]}>COCKTAIL x{cocktailBoostSpins}</Text>
+              )}
+              {compulsiveSpinSkips > 0 && (
+                <Text style={[styles.badge, styles.badgeRose]}>COMPULSION x{compulsiveSpinSkips}</Text>
+              )}
+              {guaranteedWinSpins > 0 && (
+                <Text style={[styles.badge, styles.badgeAmber]}>WIN GUARANTEED</Text>
+              )}
+              {powersBlocked && (
+                <Text style={[styles.badge, styles.badgeRed]}>POWERS BLOCKED ×{blockPowersSpins}</Text>
+              )}
+            </View>
+
+            {/* Controls: stash tray (left) + power chips, sat just above the cabinet. */}
+            <View style={styles.controlsRow}>
+              <Stash
+                items={stashSlots}
+                onUse={handleConsumable}
+                disabled={!stashUsable}
+                width={vpx(48)}
+              />
+
+              <View style={styles.powerRow}>
+                {selection.mode !== 'none' ? (
+                  <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
+                    <Text style={styles.cancelText}>CANCEL</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <PowerChip
+                      icon={POWER_ICONS.reroll}
+                      label="REROLL"
+                      disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
+                      onPress={() => setSelection({ mode: 'reroll' })}
+                    />
+                    {hasShift && (
+                      <PowerChip
+                        icon={POWER_ICONS.shift}
+                        label="SHIFT"
+                        disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
+                        onPress={() => setSelection({ mode: 'move', reel: null })}
+                      />
+                    )}
+                    {hasMemory && (
+                      <PowerChip
+                        icon={POWER_ICONS.memory}
+                        label="MEMORY"
+                        disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
+                        onPress={() => setSelection({ mode: 'lock' })}
+                      />
+                    )}
+                  </>
+                )}
+              </View>
+            </View>
+          </View>
         </PixelScene>
       </Animated.View>
-
-      {/* ── Top HUD band: win label / selection hint + status badges ── */}
-      <SafeAreaView style={styles.topBand} pointerEvents="box-none">
-        <View style={styles.winRow}>
-          {selectionHint ? (
-            <Text style={styles.selectionHint}>{selectionHint}</Text>
-          ) : winLabel ? (
-            <Text style={[
-              styles.winLabel,
-              lastResult?.winType === 'jackpot' && styles.winJackpot,
-            ]}>
-              {winLabel}
-            </Text>
-          ) : <View style={styles.winPlaceholder} />}
-        </View>
-
-        <View style={styles.badgeRow}>
-          {freeSpins > 0 && (
-            <Text style={styles.freeSpinBadge}>
-              FREE SPIN{freeSpins > 1 ? ` ×${freeSpins}` : ''}
-            </Text>
-          )}
-          {decaySkips > 0 && (
-            <Text style={styles.stasisBadge}>NO DECAY ×{decaySkips}</Text>
-          )}
-          {sedativeNext && (
-            <Text style={styles.stasisBadge}>SEDATIVE — FREE SPIN</Text>
-          )}
-          {brainBoostSpins > 0 && (
-            <Text style={styles.boostBadge}>BRAIN BOOST ×{brainBoostSpins}</Text>
-          )}
-          {forcedRandomBetSpins > 0 && (
-            <Text style={styles.energyBadge}>ENERGY x{forcedRandomBetSpins}</Text>
-          )}
-          {cocktailBoostSpins > 0 && (
-            <Text style={styles.cocktailBadge}>COCKTAIL x{cocktailBoostSpins}</Text>
-          )}
-          {compulsiveSpinSkips > 0 && (
-            <Text style={styles.compulsionBadge}>COMPULSION x{compulsiveSpinSkips}</Text>
-          )}
-          {guaranteedWinSpins > 0 && (
-            <Text style={styles.pillBadge}>WIN GUARANTEED</Text>
-          )}
-          {powersBlocked && (
-            <Text style={styles.blockBadge}>POWERS BLOCKED ×{blockPowersSpins}</Text>
-          )}
-        </View>
-      </SafeAreaView>
-
-      {/* ── Bottom controls band: stash tray (left) + power icon chips (center). ── */}
-      <SafeAreaView style={styles.bottomBand} pointerEvents="box-none">
-        <View style={styles.bottomBar}>
-          <Stash
-            items={stashSlots}
-            onUse={handleConsumable}
-            disabled={!stashUsable}
-            width={120}
-          />
-
-          <View style={styles.powerRow}>
-            {selection.mode !== 'none' ? (
-              <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
-                <Text style={styles.cancelText}>CANCEL</Text>
-              </Pressable>
-            ) : (
-              <>
-                <PowerChip
-                  icon={POWER_ICONS.reroll}
-                  label="REROLL"
-                  disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
-                  onPress={() => setSelection({ mode: 'reroll' })}
-                />
-                {hasShift && (
-                  <PowerChip
-                    icon={POWER_ICONS.shift}
-                    label="SHIFT"
-                    disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
-                    onPress={() => setSelection({ mode: 'move', reel: null })}
-                  />
-                )}
-                {hasMemory && (
-                  <PowerChip
-                    icon={POWER_ICONS.memory}
-                    label="MEMORY"
-                    disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
-                    onPress={() => setSelection({ mode: 'lock' })}
-                  />
-                )}
-              </>
-            )}
-          </View>
-        </View>
-      </SafeAreaView>
 
       {/* ── Dealer arrival: shoulder taps ── */}
       {dealerPrompt === 'taps' && (
@@ -640,138 +644,100 @@ export function GameScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Screen-space HUD bands. The pixel-art scene (machine) sits in the 160×320
-  // virtual canvas between them; these anchor to the top/bottom screen edges and
-  // fill the extra vertical room the taller canvas opened up.
-  topBand: {
+  // ── In-scene HUD ────────────────────────────────────────────────────────────
+  // The HUD lives INSIDE PixelScene (one full-canvas composition), positioned in
+  // the empty space above the cabinet. All sizes are asset-space (× ASSET_SCALE
+  // via vpx), matching MachineScreenMeters, so text renders large and downscales
+  // crisp with the rest of the canvas — no separate screen-space UI bands.
+  hud: {
     position: 'absolute',
+    left: 0,
     top: 0,
-    left: 0,
-    right: 0,
+    width: vpx(VIRTUAL_WIDTH),
+    height: vpx(HUD_HEIGHT),
+    paddingTop: vpx(6),
     alignItems: 'center',
-    paddingTop: 8,
-  },
-  bottomBand: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
 
-  // Win label
+  // Win label / selection hint
   winRow: {
-    height: 28,
+    height: vpx(16),
     alignItems: 'center',
     justifyContent: 'center',
   },
   winLabel: {
     color: '#fbbf24',
-    fontSize: 16,
+    fontSize: vpx(11),
     fontWeight: '800',
-    letterSpacing: 3,
+    letterSpacing: vpx(1),
   },
   winJackpot: {
     color: '#ff2d78',
-    fontSize: 20,
-  },
-  winPlaceholder: {
-    height: 28,
+    fontSize: vpx(14),
   },
   selectionHint: {
     color: '#00e5ff',
-    fontSize: 13,
+    fontSize: vpx(9),
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: vpx(0.7),
   },
 
-  // Status badges
+  // Status badges — shared size, per-effect colour.
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 8,
-    minHeight: 18,
-    paddingHorizontal: 8,
+    gap: vpx(4),
+    minHeight: vpx(10),
+    paddingHorizontal: vpx(6),
   },
-  freeSpinBadge: {
-    color: '#00e5ff',
-    fontSize: 11,
+  badge: {
+    fontSize: vpx(7),
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: vpx(0.6),
   },
-  stasisBadge: {
-    color: '#a855f7',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  boostBadge: {
-    color: '#f97316',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  energyBadge: {
-    color: '#22c55e',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  cocktailBadge: {
-    color: '#f0abfc',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  compulsionBadge: {
-    color: '#f43f5e',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  pillBadge: {
-    color: '#fbbf24',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  blockBadge: {
-    color: '#ef4444',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
+  badgeCyan:   { color: '#00e5ff' },
+  badgeViolet: { color: '#a855f7' },
+  badgeOrange: { color: '#f97316' },
+  badgeGreen:  { color: '#22c55e' },
+  badgePink:   { color: '#f0abfc' },
+  badgeRose:   { color: '#f43f5e' },
+  badgeAmber:  { color: '#fbbf24' },
+  badgeRed:    { color: '#ef4444' },
 
-  // Bottom bar: stash tray (left) + power chips (center). Fixed height so the
-  // machine's vertical position never depends on what is showing.
-  bottomBar: {
+  // Controls row: stash tray (left) + power chips, anchored to the bottom of the
+  // HUD region so it sits just above the cabinet.
+  controlsRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: vpx(6),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 76,
-    gap: 8,
+    paddingHorizontal: vpx(8),
+    gap: vpx(6),
   },
   powerRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
+    gap: vpx(7),
   },
   powerChip: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: vpx(1),
   },
   powerIcon: {
-    width: 40,
-    height: 40,
+    width: vpx(18),
+    height: vpx(18),
   },
   powerLabel: {
     color: '#cbd5e1',
-    fontSize: 8,
+    fontSize: vpx(4.5),
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: vpx(0.4),
   },
   powerChipDisabled: {
     opacity: 0.3,
@@ -781,14 +747,14 @@ const styles = StyleSheet.create({
   },
 
   cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingVertical: vpx(5),
+    paddingHorizontal: vpx(9),
   },
   cancelText: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: vpx(7),
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: vpx(1),
   },
 
   // Dealer modal + Game over overlay (both use same base overlay)
