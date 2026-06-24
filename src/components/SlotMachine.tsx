@@ -12,17 +12,24 @@ import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
 import {
   MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
+  REROLL_V3, SHIFT_V3, LOCK_V3,
   WEALTH_TRACK_V3, WEALTH_FILL_V3, HEALTH_TRACK_V3, HEALTH_FILL_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
   REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN, BAR_FILL,
-  MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT,
-  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT,
+  MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT, POWER_HITS,
+  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, POWER_FRAME_COUNT,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 // Lever pull plays frames 0 → 5 quickly, fires the spin, then snaps back to idle.
 const LEVER_FRAME_MS = 42;
+
+interface PowerControl {
+  visible: boolean;
+  frame: 0 | 1 | 2;
+  onPress?: () => void;
+}
 
 interface Props {
   onAllReelsDone: () => void;
@@ -42,6 +49,14 @@ interface Props {
   // Pull lever to spin. onLeverPull fires after the pull animation lands.
   onLeverPull?: () => void;
   leverEnabled?: boolean;
+  // Machine-mounted power buttons. GameScreen computes each power's display state;
+  // SlotMachine just draws the right sheet frame and a hit zone. frame: 0 available,
+  // 1 selected/pressed, 2 unavailable. "memory" uses the lock art.
+  powers?: {
+    reroll: PowerControl;
+    shift: PowerControl;
+    memory: PowerControl;
+  };
   // Display scale: source px → display px. Must equal the runtime art's authored
   // scale (V3_SCALE) so the nearest-neighbour sheets draw 1:1 and crisp.
   scale?: number;
@@ -60,6 +75,7 @@ export function SlotMachine({
   multiplierInteractive = false,
   onLeverPull,
   leverEnabled = false,
+  powers,
   scale = 5,
 }: Props) {
   const isSpinning    = useRunStore(s => s.isSpinning);
@@ -130,15 +146,21 @@ export function SlotMachine({
   // spin-blur frames do (~58% of the hole width, matching the previous look).
   const symbolSize = Math.round(REEL_HOLES[0].width * f * 0.58);
 
-  // Multiplier frame encodes selected bet + which bets are locked. Only x3-locked
-  // and x2+x3-locked combos occur (cost/energy lock x3 before x2), matching the art:
+  // Multiplier frame encodes the EFFECTIVE bet + which bets are locked. Only
+  // x3-locked and x2+x3-locked combos occur (cost/energy lock x3 before x2),
+  // matching the art:
   //   0:×1  1:×2  2:×3  3:×1(×3 lock)  4:×1(×2+×3 lock)  5:×2(×3 lock)
+  // The selected bet is clamped to the highest affordable level so a locked
+  // selection shows the level it actually spins at (never a higher-than-shown
+  // value) — see the matching clamp in runState's spin().
   const x2Locked = isMultiplierLocked ? isMultiplierLocked(2) : false;
   const x3Locked = isMultiplierLocked ? isMultiplierLocked(3) : false;
+  const affordableMult = x2Locked ? 1 : x3Locked ? 2 : 3;
+  const effectiveMult = Math.min(betMultiplier, affordableMult);
   const multFrame =
-    x2Locked && x3Locked ? 4
-    : x3Locked           ? (betMultiplier === 2 ? 5 : 3)
-    :                       betMultiplier - 1;
+    affordableMult === 1 ? 4
+    : affordableMult === 2 ? (effectiveMult === 2 ? 5 : 3)
+    :                        effectiveMult - 1;
 
   // TV bars: wealth fills up with score, health follows remaining neurons.
   const wealthRatio = Math.max(0, Math.min(1, scoreEarned / ECONOMY.WEALTH_SCORE_THRESHOLD));
@@ -181,6 +203,14 @@ export function SlotMachine({
   const cellTapW = 17 * f;
   const cellTapTop = (REEL_WINDOW.top - 4) * f;
   const cellTapH = (REEL_WINDOW.height + 8) * f;
+
+  // Machine-mounted power buttons: each art sheet + its on-canvas hit rect, paired
+  // with the display state GameScreen passes in. "memory" ability uses the lock art.
+  const powerDefs = [
+    { key: 'reroll', source: REROLL_V3, hit: POWER_HITS.reroll, state: powers?.reroll },
+    { key: 'shift',  source: SHIFT_V3,  hit: POWER_HITS.shift,  state: powers?.shift  },
+    { key: 'memory', source: LOCK_V3,   hit: POWER_HITS.lock,   state: powers?.memory },
+  ] as const;
 
   return (
     <View style={[styles.machine, { width: machineWidth, height: machineHeight }]}>
@@ -272,17 +302,28 @@ export function SlotMachine({
         style={styles.fill}
       />
 
-      {/* 7 — Jackpot banner flash */}
-      {jackpotFlash && (
+      {/* 6b — Machine power button art (full-canvas layers; only the visible ones) */}
+      {powerDefs.map(p => p.state && p.state.visible ? (
         <SpriteSheetFrame
-          source={JACKPOT_V3}
-          frameIndex={jackpotFrame}
-          frameCount={JACKPOT_FRAME_COUNT}
+          key={p.key}
+          source={p.source}
+          frameIndex={p.state.frame}
+          frameCount={POWER_FRAME_COUNT}
           width={machineWidth}
           height={machineHeight}
           style={styles.fill}
         />
-      )}
+      ) : null)}
+
+      {/* 7 — Jackpot lamp: frame 0 (unlit) at rest, cycling frames while flashing */}
+      <SpriteSheetFrame
+        source={JACKPOT_V3}
+        frameIndex={jackpotFlash ? jackpotFrame : 0}
+        frameCount={JACKPOT_FRAME_COUNT}
+        width={machineWidth}
+        height={machineHeight}
+        style={styles.fill}
+      />
 
       {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
       <View style={styles.fill} pointerEvents="box-none">
@@ -337,6 +378,26 @@ export function SlotMachine({
             />
           );
         })}
+      </View>
+
+      {/* 9b — Machine power tap targets. Tappable only when visible and usable
+             (frame 0/1); frame 2 (unavailable) renders no hit zone. */}
+      <View style={styles.fill} pointerEvents="box-none">
+        {powerDefs.map(p =>
+          p.state && p.state.visible && p.state.frame !== 2 && p.state.onPress ? (
+            <Pressable
+              key={p.key}
+              style={{
+                position: 'absolute',
+                left: p.hit.left * f,
+                top: p.hit.top * f,
+                width: p.hit.width * f,
+                height: p.hit.height * f,
+              }}
+              onPress={p.state.onPress}
+            />
+          ) : null,
+        )}
       </View>
 
       {/* 10 — Shift direction buttons — above and below the selected reel column */}

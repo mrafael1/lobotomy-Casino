@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import type { ImageSourcePropType } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Text } from '../components/PixelText';
 import { PIXEL_FONT } from '../content/typography';
@@ -18,14 +17,14 @@ import {
   vpx, ASSET_SCALE, VIRTUAL_WIDTH, HUD_HEIGHT,
   MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H,
 } from '../content/layout';
-import { POWER_ICONS, DEALER_PORTRAIT, DEALER_HANDS, itemIcon } from '../content/uiAssets';
+import { DEALER_PORTRAIT } from '../content/uiAssets';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { hasSedative } from '../game/economy';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES } from '../content/consumables';
-import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import { IN_RUN_ITEMS } from '../content/inRunItems';
 
 // Reel-targeting state for abilities and consumable interactions.
 type Selection =
@@ -37,30 +36,6 @@ type Selection =
   | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
 const NO_SELECTION: Selection = { mode: 'none' };
-
-// One power ability as an icon chip (reroll / shift / memory).
-function PowerChip({
-  icon,
-  label,
-  disabled,
-  onPress,
-}: {
-  icon: ImageSourcePropType;
-  label: string;
-  disabled: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.powerChip} disabled={disabled} onPress={onPress}>
-      <Image
-        source={icon}
-        style={[styles.powerIcon, disabled && styles.powerChipDisabled]}
-        resizeMode="contain"
-      />
-      <Text style={[styles.powerLabel, disabled && styles.powerChipDisabled]}>{label}</Text>
-    </Pressable>
-  );
-}
 
 export function GameScreen() {
   const router = useRouter();
@@ -83,7 +58,6 @@ export function GameScreen() {
   const compulsiveSpinSkips = useRunStore(s => s.compulsiveSpinSkips);
   const dealerIncoming      = useRunStore(s => s.dealerIncoming);
   const dealerPending       = useRunStore(s => s.dealerPending);
-  const dealerOfferIds      = useRunStore(s => s.dealerOfferIds);
   const pendingGiftId       = useRunStore(s => s.pendingGiftConsumableId);
   const spinCount           = useRunStore(s => s.spinCount);
   const ownedUpgrades       = useRunStore(s => s.ownedUpgrades);
@@ -102,8 +76,6 @@ export function GameScreen() {
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
   const revealDealer       = useRunStore(s => s.revealDealer);
   const declineDealerVisit = useRunStore(s => s.declineDealerVisit);
-  const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
-  const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
   const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
   const dismissGift        = useRunStore(s => s.dismissGift);
 
@@ -113,7 +85,6 @@ export function GameScreen() {
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
-  const [inspectedDealerItemId, setInspectedDealerItemId] = useState<string | null>(null);
   // Dealer arrival prompt: 'taps' = shoulder-tap text popping, 'ask' = speech bubble.
   const [dealerPrompt, setDealerPrompt] = useState<'taps' | 'ask' | null>(null);
 
@@ -165,11 +136,15 @@ export function GameScreen() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!dealerPending) {
-      setInspectedDealerItemId(null);
-    }
-  }, [dealerPending]);
+  // COME: accept the dealer's invitation. We flip the run into the active
+  // dealer-visit state (revealDealer → dealerPending) and leave the machine for
+  // the FULL dealer scene in run-consumables mode — the shop is no longer drawn
+  // as a modal here. DealerShopScreen reads the run offer + applies/declines and
+  // navigates back to the machine.
+  const handleDealerCome = useCallback(() => {
+    revealDealer();
+    router.push({ pathname: '/dealer', params: { mode: 'run_consumables' } });
+  }, [revealDealer, router]);
 
   const handleSpin = useCallback(() => {
     setSelection(NO_SELECTION);
@@ -282,6 +257,34 @@ export function GameScreen() {
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
 
+  // Machine-mounted power buttons. Frame: 1 selected, 0 available, 2 unavailable.
+  // Pressing the active power again cancels; pressing another switches selection.
+  const powerFrame = (
+    mode: Selection['mode'],
+    abilityId: 'reroll' | 'shift' | 'memory',
+  ): 0 | 1 | 2 =>
+    selection.mode === mode ? 1
+    : abilitiesUsable && !abilitiesUsed.includes(abilityId) ? 0
+    : 2;
+
+  const powers = {
+    reroll: {
+      visible: true,
+      frame: powerFrame('reroll', 'reroll'),
+      onPress: () => setSelection(s => (s.mode === 'reroll' ? NO_SELECTION : { mode: 'reroll' })),
+    },
+    shift: {
+      visible: hasShift,
+      frame: powerFrame('move', 'shift'),
+      onPress: () => setSelection(s => (s.mode === 'move' ? NO_SELECTION : { mode: 'move', reel: null })),
+    },
+    memory: {
+      visible: hasMemory,
+      frame: powerFrame('lock', 'memory'),
+      onPress: () => setSelection(s => (s.mode === 'lock' ? NO_SELECTION : { mode: 'lock' })),
+    },
+  };
+
   const stashItems = [...CONSUMABLES, ...IN_RUN_ITEMS];
   const activeStashItems = stashItems.filter(c => (runConsumables[c.id] ?? 0) > 0);
 
@@ -319,10 +322,6 @@ export function GameScreen() {
 
   const reelsTappable = selection.mode !== 'none' && !runBusy;
 
-  const dealerItems = dealerOfferIds
-    ? dealerOfferIds.map(id => IN_RUN_ITEM_MAP[id]).filter(Boolean)
-    : [];
-  const inspectedDealerItem = dealerItems.find(item => item.id === inspectedDealerItemId) ?? null;
   const pendingGift = pendingGiftId
     ? stashItems.find(c => c.id === pendingGiftId)
     : null;
@@ -360,11 +359,15 @@ export function GameScreen() {
               multiplierInteractive={runPhase === 'running' && !runBusy}
               onSelectMultiplier={setBetMultiplier}
               isMultiplierLocked={(m) =>
+                // Budget-based: with N spins of neurons left you can afford a ×N
+                // bet (one spin that drains that budget), matching the on-screen
+                // "SPINS LEFT" meter. Lock ×m only when fewer than m spins remain.
                 (energyLocked && m === 3) ||
-                (!noNeuronCostSpin && neurons < m * ECONOMY.NEURON_DECAY_PER_SPIN)
+                (!noNeuronCostSpin && Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN) < m)
               }
               onLeverPull={handleSpin}
               leverEnabled={canSpin}
+              powers={powers}
               scale={ASSET_SCALE}
             />
           </View>
@@ -418,48 +421,31 @@ export function GameScreen() {
               )}
             </View>
 
-            {/* Controls: stash tray (left) + power chips, sat just above the cabinet. */}
+            {/* Controls: only the cancel affordance for an active selection lives
+                in the HUD now. Powers are machine-mounted buttons; the stash tray
+                sits below them on the lower cabinet face (see stashStrip). */}
             <View style={styles.controlsRow}>
-              <Stash
-                items={stashSlots}
-                onUse={handleConsumable}
-                disabled={!stashUsable}
-                width={vpx(48)}
-              />
-
-              <View style={styles.powerRow}>
-                {selection.mode !== 'none' ? (
+              <View style={styles.cancelArea}>
+                {selection.mode !== 'none' && (
                   <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
                     <Text style={styles.cancelText}>CANCEL</Text>
                   </Pressable>
-                ) : (
-                  <>
-                    <PowerChip
-                      icon={POWER_ICONS.reroll}
-                      label="REROLL"
-                      disabled={!abilitiesUsable || abilitiesUsed.includes('reroll')}
-                      onPress={() => setSelection({ mode: 'reroll' })}
-                    />
-                    {hasShift && (
-                      <PowerChip
-                        icon={POWER_ICONS.shift}
-                        label="SHIFT"
-                        disabled={!abilitiesUsable || abilitiesUsed.includes('shift')}
-                        onPress={() => setSelection({ mode: 'move', reel: null })}
-                      />
-                    )}
-                    {hasMemory && (
-                      <PowerChip
-                        icon={POWER_ICONS.memory}
-                        label="MEMORY"
-                        disabled={!abilitiesUsable || abilitiesUsed.includes('memory')}
-                        onPress={() => setSelection({ mode: 'lock' })}
-                      />
-                    )}
-                  </>
                 )}
               </View>
             </View>
+          </View>
+
+          {/* ── Stash tray — sits on the empty lower cabinet face, directly BELOW
+                 the machine-mounted power buttons (powers above, stash below). The
+                 red panel here (virtual y≈240–283) is clear of reels/meters/lever/
+                 powers, so the tray doesn't overlap any functional art. ── */}
+          <View style={styles.stashStrip} pointerEvents="box-none">
+            <Stash
+              items={stashSlots}
+              onUse={handleConsumable}
+              disabled={!stashUsable}
+              width={vpx(48)}
+            />
           </View>
         </PixelScene>
       </Animated.View>
@@ -485,13 +471,13 @@ export function GameScreen() {
       {dealerPrompt === 'ask' && (
         <View style={styles.bubbleOverlay}>
           <View style={styles.bubble}>
-            <Text style={styles.bubbleText}>"Care to see what I've got?"</Text>
+            <Text style={styles.bubbleText}>"I've got something for you"</Text>
             <View style={styles.bubbleBtnRow}>
-              <Pressable style={styles.bubbleYesBtn} onPress={revealDealer}>
-                <Text style={styles.bubbleYesText}>YES</Text>
+              <Pressable style={styles.bubbleYesBtn} onPress={handleDealerCome}>
+                <Text style={styles.bubbleYesText}>COME</Text>
               </Pressable>
               <Pressable style={styles.bubbleNoBtn} onPress={declineDealerVisit}>
-                <Text style={styles.bubbleNoText}>NO</Text>
+                <Text style={styles.bubbleNoText}>IGNORE</Text>
               </Pressable>
             </View>
           </View>
@@ -500,62 +486,9 @@ export function GameScreen() {
         </View>
       )}
 
-      {/* ── Dealer modal — portrait, a speech bubble explaining the goods,
-             and the two offers presented in the dealer's hands. ── */}
-      {dealerPending && dealerItems.length > 0 && (
-        <View style={styles.overlay}>
-          <Image source={DEALER_PORTRAIT} style={styles.dealerModalPortrait} resizeMode="contain" />
-
-          {/* Speech bubble: prompt, or the inspected item's effect. */}
-          <View style={styles.dealerSpeech}>
-            {inspectedDealerItem ? (
-              <>
-                <Text style={styles.dealerInspectName}>{inspectedDealerItem.name}</Text>
-                <Text style={styles.dealerInspectDesc}>
-                  {inspectedDealerItem.description}
-                  {'\n'}Taking it puts it in your supply stash.
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.bubbleText}>
-                "Go on, tap one. See what it does to you."
-              </Text>
-            )}
-          </View>
-          <View style={styles.dealerSpeechTail} />
-
-          {/* Two hands, each presenting an offer icon. */}
-          <View style={styles.dealerHandsRow}>
-            <Image source={DEALER_HANDS} style={styles.dealerHandsImg} resizeMode="contain" />
-            <View style={styles.dealerHandsOffers}>
-              {dealerItems.map(item => {
-                const inspected = inspectedDealerItemId === item.id;
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={[styles.dealerHandSlot, inspected && styles.dealerHandSlotSelected]}
-                    onPress={() => setInspectedDealerItemId(item.id)}
-                  >
-                    <Image source={itemIcon(item.id)} style={styles.dealerHandIcon} resizeMode="contain" />
-                    <Text style={styles.dealerHandName} numberOfLines={1}>{item.name}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <Pressable
-            style={[styles.dealerAcceptBtn, !inspectedDealerItem && styles.itemBtnDisabled]}
-            disabled={!inspectedDealerItem}
-            onPress={() => inspectedDealerItem && acceptDealerOffer(inspectedDealerItem.id)}
-          >
-            <Text style={styles.dealerAcceptText}>TAKE SUBSTANCE</Text>
-          </Pressable>
-          <Pressable style={styles.dealerDeclineBtn} onPress={declineDealerOffer}>
-            <Text style={styles.dealerDeclineText}>REFUSE BOTH</Text>
-          </Pressable>
-        </View>
-      )}
+      {/* The in-run dealer's consumable offer is NOT a modal — COME leaves the
+          machine for the full DealerShopScreen in run-consumables mode (see
+          handleDealerCome). Only the invitation prompt lives here. */}
 
       {/* ── Gift overlay (stash received, or stash full + discard) ── */}
       {pendingGiftId && (
@@ -705,8 +638,8 @@ const styles = StyleSheet.create({
   badgeAmber:  { color: '#fbbf24' },
   badgeRed:    { color: '#ef4444' },
 
-  // Controls row: stash tray (left) + power chips, anchored to the bottom of the
-  // HUD region so it sits just above the cabinet.
+  // Controls row: stash tray (left) + cancel affordance, anchored to the bottom of
+  // the HUD region so it sits just above the cabinet. Powers are on the machine.
   controlsRow: {
     position: 'absolute',
     left: 0,
@@ -717,30 +650,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: vpx(8),
     gap: vpx(6),
   },
-  powerRow: {
+  cancelArea: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: vpx(7),
   },
-  powerChip: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: vpx(1),
-  },
-  powerIcon: {
-    width: vpx(18),
-    height: vpx(18),
-  },
-  powerLabel: {
-    color: '#cbd5e1',
-    fontSize: vpx(4.5),
-    fontWeight: '800',
-    letterSpacing: vpx(0.4),
-  },
-  powerChipDisabled: {
-    opacity: 0.3,
+
+  // Stash tray, placed on the lower red cabinet face just under the power
+  // buttons (POWER_HITS top ≈ y223). Asset-space coords (vpx) like the rest of
+  // the in-scene composition; centred horizontally (tray is 48 wide → left 56).
+  stashStrip: {
+    position: 'absolute',
+    top: vpx(250),
+    left: vpx(56),
+    width: vpx(48),
   },
   itemBtnDisabled: {
     opacity: 0.35,

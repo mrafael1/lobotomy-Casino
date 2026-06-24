@@ -170,6 +170,15 @@ export const useRunStore = create<RunStore>((set, get) => ({
       effectiveBetMultiplier = 2;
     }
 
+    // When the spin costs neurons, you can't bet more spins-worth than you have
+    // left: clamp to the affordable budget so scoring matches the multiplier
+    // badge (which demotes a locked selection in SlotMachine). Free/stasis/
+    // sedative spins cost nothing, so the full selected multiplier stands.
+    if (!stasisActive && !sedativeActive && !isFreeSpin) {
+      const spinsBudget = Math.max(1, Math.ceil(state.neurons / ECONOMY.NEURON_DECAY_PER_SPIN));
+      effectiveBetMultiplier = Math.min(effectiveBetMultiplier, spinsBudget) as 1 | 2 | 3;
+    }
+
     const baseDecay = computeNeuronDecay(state.ownedUpgrades);
     const neuronDecayAmount = (stasisActive || sedativeActive || isFreeSpin)
       ? 0

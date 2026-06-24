@@ -21,8 +21,19 @@ export const DEALER_SHOP_PORTRAIT = require('../../assets/images/dealer_portrait
 export const CONSUMABLE_ICON_FALLBACK = require('../../assets/images/ui/consumable_placeholder.png');
 
 // Per-item icon registry. Add entries here as bespoke icons are authored;
-// anything missing falls back to CONSUMABLE_ICON_FALLBACK.
-export const ITEM_ICONS: Record<string, ImageSourcePropType> = {};
+// anything missing falls back to CONSUMABLE_ICON_FALLBACK. Keys are the existing
+// consumable/in-run-item IDs (content/consumables.ts, content/inRunItems.ts) —
+// the new items/ art is mapped onto those IDs, no duplicate item logic.
+export const ITEM_ICONS: Record<string, ImageSourcePropType> = {
+  item_water:        require('../../assets/images/items/water.png'),         // Glass of Water
+  item_pill:         require('../../assets/images/items/Tablet.png'),        // Red Pill (a tablet)
+  cons_white_powder: require('../../assets/images/items/white_powder.png'),  // White Powder
+};
+
+// The items/ art is authored at 32×32 and is meant to be shown upscaled. Display
+// at an integer multiple so the pixel art stays crisp (no fractional resample).
+export const ITEM_NATIVE_PX = 32;
+export const ITEM_DISPLAY_SCALE = 2;
 
 export function itemIcon(id: string): ImageSourcePropType {
   return ITEM_ICONS[id] ?? CONSUMABLE_ICON_FALLBACK;

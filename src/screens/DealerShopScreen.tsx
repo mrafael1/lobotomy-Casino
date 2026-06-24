@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Image,
@@ -7,13 +7,16 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Text } from '../components/PixelText';
 import { useMetaStore } from '../state/metaState';
-import { CONSUMABLES } from '../content/consumables';
-import { itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT } from '../content/uiAssets';
+import { useRunStore } from '../state/runState';
+import { CONSUMABLES, CONSUMABLE_MAP } from '../content/consumables';
+import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import {
+  itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT, ITEM_DISPLAY_SCALE,
+} from '../content/uiAssets';
 import { Stash } from '../components/Stash';
-import type { Consumable } from '../content/consumables';
 
 // ─── Scene geometry ───────────────────────────────────────────────────────────
 // The bg + counter layers are baked on the full 1280×2560 canvas (logical
@@ -32,12 +35,17 @@ const CIRCLE_CY = 1671;
 const CIRCLE_R  = 29;
 
 // Consumable icon resting in a circle: base sits on the circle bottom, the
-// circle peeking out beneath reads as the slot/shadow it rests in.
-const CONS_ICON = 90;
+// circle peeking out beneath reads as the slot/shadow it rests in. Run mode
+// shows only 2 offers, so it renders the item art larger (×ITEM_DISPLAY_SCALE)
+// while still clearing the 176px circle pitch.
+const CONS_ICON     = 90;
+const RUN_CONS_ICON = 80 * ITEM_DISPLAY_SCALE; // 160 src px — run consumables at x2
 
-// TV screen (the green-framed panel in dealer_shop_counter.png, top-left). The
-// selected item's explanation is rendered onto it; inset inside the green bezel.
-const TV = { left: 44, top: 660, width: 152, height: 124 } as const;
+// The big in-world TV (the black rounded screen in dealer_shop_bg.png, left of
+// the dealer). Measured bounding box in the 1280×2560 scene. The dealer's
+// explanation / instruction text and the selected item's effect render here —
+// NOT on the small green dice panel up top.
+const TV = { left: 16, top: 1008, width: 392, height: 208 } as const;
 
 // Dealer portrait is still a 160×240 (2:3) 2-frame horizontal sheet (1600×1200),
 // NOT re-authored to the taller 160×320 canvas. So it is drawn undistorted at
@@ -48,10 +56,24 @@ const DEALER_FRAME_W = 1280; // one frame = 160 logical ×8
 const DEALER_FRAME_H = 1920; // 240 logical ×8 (2:3 preserved)
 const DEALER_TOP     = 316;  // src y within the scene
 
+// One item shown resting on the counter — works for both the meta shop's
+// pre-run consumables and the in-run dealer's run consumables.
+type Offering = { id: string; name: string; description: string };
+
+// Items that can occupy the RUN stash (pre-run consumables carried in + in-run
+// items handed over by the dealer), for labelling the run-mode stash tray.
+const RUN_STASH_ITEMS = [...CONSUMABLES, ...IN_RUN_ITEMS];
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export function DealerShopScreen() {
   const router = useRouter();
   const { width: screenW, height: screenH } = useWindowDimensions();
+
+  // Mode flag — the same scene serves the normal out-of-run shop AND the in-run
+  // dealer event. 'run_consumables' is set by GameScreen's COME handler; absent
+  // (or anything else) means the normal meta shop.
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const runMode = params.mode === 'run_consumables';
 
   // The scene art is aspect-fitted (contain) into the screen rather than
   // stretched, so the pixel art is never distorted on non-2:3 displays. The
@@ -73,22 +95,53 @@ export function DealerShopScreen() {
   const sw = (v: number) => (v / SRC_W) * fitW;
   const sh = (v: number) => (v / SRC_H) * fitH;
 
+  // ── Meta shop (normal mode) ──
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
   const pendingConsumables  = useMetaStore(s => s.pendingConsumables);
   const buyConsumableCharge = useMetaStore(s => s.buyConsumableCharge);
 
-  const [selected, setSelected]   = useState<Consumable | null>(null);
+  // ── In-run dealer visit (run_consumables mode) ──
+  const dealerOfferIds     = useRunStore(s => s.dealerOfferIds);
+  const runConsumables     = useRunStore(s => s.runConsumables);
+  const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
+  const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
+
+  const [selected, setSelected]   = useState<Offering | null>(null);
   const [dealerFrame, setDealerFrame] = useState(0);
 
-  // Stash tray (bottom-left) — mirrors the supplies queued for the next run.
-  // Buying a supply drops it straight in here. Max 2 distinct types.
+  // Safety net: if the player leaves the run-mode dealer scene by any path
+  // (hardware back included) without our take/leave handler clearing it, close
+  // the in-run dealer visit so the machine isn't left locked (runBusy).
+  useEffect(() => {
+    if (!runMode) return;
+    return () => {
+      const s = useRunStore.getState();
+      if (s.dealerPending) s.declineDealerOffer();
+    };
+  }, [runMode]);
+
+  // The offerings resting on the counter. Run mode shows ONLY the in-run
+  // consumables the dealer is offering this visit — no permanent/meta items.
+  const offerings: Offering[] = runMode
+    ? (dealerOfferIds ?? [])
+        .map(id => IN_RUN_ITEM_MAP[id])
+        .filter((i): i is NonNullable<typeof i> => Boolean(i))
+        .map(i => ({ id: i.id, name: i.name, description: i.description }))
+    : CONSUMABLES.map(c => ({ id: c.id, name: c.name, description: c.description }));
+
+  // Stash tray (bottom-left). Normal mode mirrors supplies queued for the next
+  // run; run mode mirrors the supplies already in the current run.
   const stashSlots = [0, 1].map(i => {
-    const queued = CONSUMABLES.filter(c => (pendingConsumables[c.id] ?? 0) > 0);
+    const source = runMode ? runConsumables : pendingConsumables;
+    const pool   = runMode ? RUN_STASH_ITEMS : CONSUMABLES;
+    const queued = pool.filter(c => (source[c.id] ?? 0) > 0);
     const c = queued[i];
-    return c ? { id: c.id, name: c.name, charges: pendingConsumables[c.id] ?? 0 } : null;
+    return c ? { id: c.id, name: c.name, charges: source[c.id] ?? 0 } : null;
   });
 
-  function consumableStatus(c: Consumable) {
+  function consumableStatus(id: string) {
+    const c = CONSUMABLE_MAP[id];
+    if (!c) return 'buyable';
     const charges = pendingConsumables[c.id] ?? 0;
     if (charges >= 2)                      return 'maxed';
     if (lucidityWallet < c.shopCost)       return 'tooPoor';
@@ -98,20 +151,41 @@ export function DealerShopScreen() {
   }
 
   // Tapping a counter item selects it (TV explains it) and makes the dealer react.
-  function handleSelect(c: Consumable) {
-    setSelected(prev => (prev?.id === c.id ? prev : c));
+  function handleSelect(o: Offering) {
+    setSelected(prev => (prev?.id === o.id ? prev : o));
     setDealerFrame(f => (f === 0 ? 1 : 0));
   }
 
   function handleBuy() {
     if (!selected) return;
+    if (runMode) {
+      // Take exactly one — apply it to the CURRENT run, then leave for the
+      // machine. The screen unmounts, so no second purchase is possible.
+      acceptDealerOffer(selected.id);
+      router.back();
+      return;
+    }
     buyConsumableCharge(selected.id);
     setSelected(null);
   }
 
+  // Leave without buying — run mode dismisses the dealer offer and returns to
+  // the machine; normal mode just pops back to wherever the shop was opened.
+  function handleLeave() {
+    if (runMode) declineDealerOffer();
+    router.back();
+  }
+
   // ── TV explanation overlay ───────────────────────────────────────────────
+  // The big in-world TV is the dealer scene's text display: the run instruction
+  // by default, the selected item's DESCRIPTION once one is tapped. The item
+  // NAME is no longer shown here (it sits under the item icon instead), which
+  // frees the screen for a larger, more readable font.
   function renderTV() {
-    if (!selected) return null;
+    const body = selected
+      ? selected.description
+      : (runMode ? 'Take one.\nThen get back to the machine.' : null);
+    if (!body) return null;
     return (
       <View
         style={{
@@ -120,16 +194,14 @@ export function DealerShopScreen() {
           top:    sy(TV.top),
           width:  sw(TV.width),
           height: sh(TV.height),
-          padding: 4,
-          justifyContent: 'flex-start',
+          paddingHorizontal: sw(20),
+          paddingVertical: sh(16),
+          justifyContent: 'center',
         }}
         pointerEvents="none"
       >
-        <Text style={styles.tvName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {selected.name}
-        </Text>
-        <Text style={styles.tvDesc} numberOfLines={6} adjustsFontSizeToFit minimumFontScale={0.5}>
-          {selected.description}
+        <Text style={styles.tvDesc} numberOfLines={5} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {body}
         </Text>
       </View>
     );
@@ -138,12 +210,31 @@ export function DealerShopScreen() {
   // ── Buy bar (bottom, right of the stash tray) ────────────────────────────
   function renderBuyBar() {
     if (!selected) return null;
-    const status = consumableStatus(selected);
+
+    // Run mode: the dealer's offer is free — take one and go.
+    if (runMode) {
+      return (
+        <View style={styles.buyPanel}>
+          <Text style={styles.buyName}>{selected.name}</Text>
+          <View style={styles.buyRow}>
+            <Pressable style={styles.buyBtn} onPress={handleBuy}>
+              <Text style={styles.buyText}>TAKE IT</Text>
+            </Pressable>
+            <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
+              <Text style={styles.closeText}>✕</Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+
+    const status = consumableStatus(selected.id);
+    const cost = CONSUMABLE_MAP[selected.id]?.shopCost ?? 0;
     return (
       <View style={styles.buyPanel}>
         <Text style={styles.buyName}>{selected.name}</Text>
         <View style={styles.buyRow}>
-          <Text style={styles.buyCost}>{selected.shopCost} L</Text>
+          <Text style={styles.buyCost}>{cost} L</Text>
           {status === 'buyable' && (
             <Pressable style={styles.buyBtn} onPress={handleBuy}>
               <Text style={styles.buyText}>TAKE IT</Text>
@@ -203,33 +294,55 @@ export function DealerShopScreen() {
       {renderTV()}
 
       {/* ── Consumables resting in the counter circles ─────────────────── */}
-      {CONSUMABLES.map((c, idx) => {
+      {offerings.map((o, idx) => {
         const cx = CIRCLE_CX[idx];
         if (cx === undefined) return null;
-        const isSelected = selected?.id === c.id;
-        const left = cx - CONS_ICON / 2;
-        const top  = (CIRCLE_CY + CIRCLE_R) - CONS_ICON;
+        const isSelected = selected?.id === o.id;
+        const iconBox = runMode ? RUN_CONS_ICON : CONS_ICON;
+        const left = cx - iconBox / 2;
+        const top  = (CIRCLE_CY + CIRCLE_R) - iconBox;
         return (
-          <Pressable
-            key={c.id}
-            style={{
-              position: 'absolute',
-              left:   sx(left),
-              top:    sy(top),
-              width:  sw(CONS_ICON),
-              height: sh(CONS_ICON),
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-            }}
-            onPress={() => handleSelect(c)}
-          >
-            <Image source={itemIcon(c.id)} style={styles.consIcon} resizeMode="contain" />
-            {isSelected && <View style={styles.selectedRing} />}
-          </Pressable>
+          <React.Fragment key={o.id}>
+            <Pressable
+              style={{
+                position: 'absolute',
+                left:   sx(left),
+                top:    sy(top),
+                width:  sw(iconBox),
+                height: sh(iconBox),
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+              }}
+              onPress={() => handleSelect(o)}
+            >
+              {/* resizeMode 'contain' = proportional, never stretched/blurred */}
+              <Image source={itemIcon(o.id)} style={styles.consIcon} resizeMode="contain" />
+              {isSelected && <View style={styles.selectedRing} />}
+            </Pressable>
+
+            {/* Selected item's NAME, directly under it (centred on the circle,
+                just below the resting spot) — moved off the TV. */}
+            {isSelected && (
+              <View
+                style={{
+                  position: 'absolute',
+                  left:  sx(cx - 110),
+                  top:   sy(CIRCLE_CY + CIRCLE_R + 8),
+                  width: sw(220),
+                  alignItems: 'center',
+                }}
+                pointerEvents="none"
+              >
+                <Text style={styles.itemName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {o.name.toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </React.Fragment>
         );
       })}
 
-      {/* ── Stash tray (bottom-left) — purchased supplies land here ─────── */}
+      {/* ── Stash tray (bottom-left) — purchased / carried supplies land here ── */}
       <SafeAreaView style={styles.stashAnchor} pointerEvents="box-none">
         <Text style={styles.stashLabel}>STASH</Text>
         <Stash items={stashSlots} disabled width={104} />
@@ -245,10 +358,12 @@ export function DealerShopScreen() {
       {/* ── HUD ────────────────────────────────────────────────────────── */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
         <View style={styles.hudRow}>
-          <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backText}>← BACK</Text>
+          <Pressable style={styles.backBtn} onPress={handleLeave}>
+            <Text style={styles.backText}>← {runMode ? 'LEAVE' : 'BACK'}</Text>
           </Pressable>
-          <Text style={styles.wallet}>{lucidityWallet} L</Text>
+          {/* Run mode: the instruction copy lives on the big TV (renderTV), not
+              up here. Normal shop keeps its wallet readout. */}
+          {!runMode && <Text style={styles.wallet}>{lucidityWallet} L</Text>}
         </View>
       </SafeAreaView>
     </View>
@@ -275,18 +390,23 @@ const styles = StyleSheet.create({
     borderColor: '#00e5ff',
   },
 
-  // TV explanation text (on the in-world screen)
-  tvName: {
+  // TV explanation text (on the big in-world screen). With the item name moved
+  // out, this gets the whole screen — bigger, more readable.
+  tvDesc: {
+    color: '#e2e8f0',
+    fontSize: 19,
+    lineHeight: 23,
+  },
+
+  // Selected item's name, shown directly under its icon on the counter.
+  itemName: {
     color: '#00e5ff',
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1,
-    marginBottom: 3,
-  },
-  tvDesc: {
-    color: '#cbd5e1',
-    fontSize: 10,
-    lineHeight: 13,
+    textAlign: 'center',
+    textShadowColor: '#000',
+    textShadowRadius: 3,
   },
 
   // Stash tray pinned bottom-left
