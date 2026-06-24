@@ -13,6 +13,7 @@ import { useMetaStore } from '../state/metaState';
 import { useRunStore } from '../state/runState';
 import { CONSUMABLES, CONSUMABLE_MAP } from '../content/consumables';
 import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import { ITEM_HINTS, FALLBACK_HINTS } from '../content/itemHints';
 import {
   itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT, ITEM_DISPLAY_SCALE,
 } from '../content/uiAssets';
@@ -176,32 +177,45 @@ export function DealerShopScreen() {
     router.back();
   }
 
-  // ── TV explanation overlay ───────────────────────────────────────────────
-  // The big in-world TV is the dealer scene's text display: the run instruction
-  // by default, the selected item's DESCRIPTION once one is tapped. The item
-  // NAME is no longer shown here (it sits under the item icon instead), which
-  // frees the screen for a larger, more readable font.
+  // ── TV overlay ───────────────────────────────────────────────────────────
+  // The big TV shows ONLY the compact green (+) / red (−) hints for the
+  // selected item (no name, no description, no numbers) — in BOTH the in-run
+  // dealer and the pre-run shop. When nothing is selected, run mode shows the
+  // instruction; the pre-run shop leaves the screen blank.
+  const tvBox = {
+    position: 'absolute',
+    left:   sx(TV.left),
+    top:    sy(TV.top),
+    width:  sw(TV.width),
+    height: sh(TV.height),
+    paddingHorizontal: sw(20),
+    paddingVertical: sh(16),
+    justifyContent: 'center',
+  } as const;
+
   function renderTV() {
-    const body = selected
-      ? selected.description
-      : (runMode ? 'Take one.\nThen get back to the machine.' : null);
-    if (!body) return null;
+    if (selected) {
+      const hints = ITEM_HINTS[selected.id] ?? FALLBACK_HINTS;
+      return (
+        <View style={[tvBox, { alignItems: 'flex-start' }]} pointerEvents="none">
+          {/* Fixed size, single line, left-anchored to the TV edge — NO
+              adjustsFontSizeToFit and NO centering, so the + and − lines are
+              always the same size and start at the same x (never shift). */}
+          <Text style={styles.tvHintPos} numberOfLines={1}>
+            + {hints.positiveHint}
+          </Text>
+          <Text style={styles.tvHintNeg} numberOfLines={1}>
+            - {hints.negativeHint}
+          </Text>
+        </View>
+      );
+    }
+
+    if (!runMode) return null;
     return (
-      <View
-        style={{
-          position: 'absolute',
-          left:   sx(TV.left),
-          top:    sy(TV.top),
-          width:  sw(TV.width),
-          height: sh(TV.height),
-          paddingHorizontal: sw(20),
-          paddingVertical: sh(16),
-          justifyContent: 'center',
-        }}
-        pointerEvents="none"
-      >
+      <View style={tvBox} pointerEvents="none">
         <Text style={styles.tvDesc} numberOfLines={5} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {body}
+          {'Take one.\nThen get back to the machine.'}
         </Text>
       </View>
     );
@@ -289,9 +303,20 @@ export function DealerShopScreen() {
         resizeMode="contain"
       />
 
-      {/* ── TV explanation — drawn on the counter layer's green TV panel, so it
-             must render after the counter art (the TV graphic lives there). ── */}
+      {/* ── TV — drawn after the counter art (the TV graphic lives there). ── */}
       {renderTV()}
+
+      {/* ── Dealer speech bubble — flavor/mood only (run mode, item selected).
+             Never repeats the green/red hints or the item name. ── */}
+      {runMode && selected && (
+        <SafeAreaView style={styles.bubbleAnchor} pointerEvents="none">
+          <View style={styles.dealerBubble}>
+            <Text style={styles.dealerBubbleText}>
+              "{(ITEM_HINTS[selected.id] ?? FALLBACK_HINTS).flavorText}"
+            </Text>
+          </View>
+        </SafeAreaView>
+      )}
 
       {/* ── Consumables resting in the counter circles ─────────────────── */}
       {offerings.map((o, idx) => {
@@ -390,12 +415,54 @@ const styles = StyleSheet.create({
     borderColor: '#00e5ff',
   },
 
-  // TV explanation text (on the big in-world screen). With the item name moved
-  // out, this gets the whole screen — bigger, more readable.
+  // TV explanation text (normal shop description / run instruction).
   tvDesc: {
     color: '#e2e8f0',
     fontSize: 19,
     lineHeight: 23,
+  },
+
+  // TV mechanical hints (run mode): compact, big, green = good / red = bad.
+  // No fontWeight — DTM-Sans ships a single weight, so asking for 900 makes
+  // Android drop the pixel font for the system sans. The face is already bold.
+  tvHintPos: {
+    color: '#22c55e',
+    fontSize: 17,
+    textAlign: 'left',
+    marginBottom: 8,
+  },
+  tvHintNeg: {
+    color: '#ef4444',
+    fontSize: 17,
+    textAlign: 'left',
+  },
+
+  // Dealer speech bubble — short flavor text, anchored near the top, clear of
+  // the back button and the dice/TV/item row.
+  bubbleAnchor: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingTop: 44,
+    paddingHorizontal: 24,
+  },
+  dealerBubble: {
+    backgroundColor: '#13091f',
+    borderColor: '#a855f7',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    maxWidth: '88%',
+  },
+  dealerBubbleText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 17,
   },
 
   // Selected item's name, shown directly under its icon on the counter.
