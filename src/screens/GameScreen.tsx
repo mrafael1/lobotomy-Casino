@@ -570,6 +570,9 @@ export function GameScreen() {
           <Pressable style={styles.shopBtn} onPress={() => router.push('/dealer')}>
             <Text style={styles.shopText}>VISIT THE DEALER</Text>
           </Pressable>
+          <Pressable style={styles.metaShopBtn} onPress={() => router.push('/shop')}>
+            <Text style={styles.metaShopText}>SPEND LUCIDITY</Text>
+          </Pressable>
         </View>
       )}
     </Background>
@@ -972,6 +975,20 @@ const styles = StyleSheet.create({
   },
   shopText: {
     color: '#a855f7',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+  },
+  metaShopBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#22d3ee',
+  },
+  metaShopText: {
+    color: '#22d3ee',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 3,

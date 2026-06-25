@@ -53,8 +53,3 @@ export const PAIR_COINS: Readonly<Partial<Record<SymbolId, number>>> = {
   book:     3,
   flatline: 0,
 };
-
-// ── Legacy aliases kept for the test suite ────────────────────────────────────
-export const JACKPOT_LUCIDITY = JACKPOT_SCORE;
-export const TRIPLE_PAYOUTS   = TRIPLE_SCORE;
-export const PAIR_PAYOUTS     = PAIR_SCORE;

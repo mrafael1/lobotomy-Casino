@@ -27,9 +27,12 @@ export const SYMBOLS: Readonly<Record<SymbolId, SlotSymbol>> = {
   book:     { id: 'book',     name: 'Book',     weight: 0,  rarityScore: 9  },
 } as const;
 
-// Base symbol weights (excludes book; book added dynamically when Learning owned).
-// Sum = 6+8+9+9+10+10 = 52
-export const TOTAL_SYMBOL_WEIGHT = 52;
+// Canonical reel cycle order of the base symbols (book sits outside the visible
+// strip). Single source of truth for the order reels cycle through and abilities
+// step along — keep reel visuals and ability logic in sync by importing this.
+export const BASE_SYMBOL_CYCLE: ReadonlyArray<SymbolId> = [
+  'brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline',
+];
 
 export const SYMBOL_WEIGHTS: ReadonlyArray<{ weight: number; value: SymbolId }> = [
   { weight: SYMBOLS.brain.weight,    value: 'brain'    },

@@ -1,10 +1,5 @@
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
-export const storage = new MMKV({ id: 'lobotomy' });
-
-export const STORAGE_KEYS = {
-  GLOBAL_STATE: 'global',
-  META_STATE:   'meta',
-  SAVE_SLOT:    (id: string) => `slot:${id}`,
-  SLOT_BACKUP:  (id: string) => `slot:${id}:backup`,
-} as const;
+// react-native-mmkv v4 removed the `new MMKV()` class constructor — instances are
+// now created via the createMMKV() factory. `MMKV` is a type-only export in v4.
+export const storage = createMMKV({ id: 'lobotomy' });

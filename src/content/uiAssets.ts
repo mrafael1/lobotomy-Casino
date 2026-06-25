@@ -1,16 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
-// Power ability icon chips (reroll / shift / memory). Rendered as the bottom
-// power row in place of the old text buttons.
-export const POWER_ICONS: Record<'reroll' | 'shift' | 'memory', ImageSourcePropType> = {
-  reroll: require('../../assets/images/ui/power_reroll.png'),
-  shift:  require('../../assets/images/ui/power_shift.png'),
-  memory: require('../../assets/images/ui/power_memory.png'),
-};
-
 export const STASH_TRAY = require('../../assets/images/ui/stash_tray.png');
 export const DEALER_PORTRAIT = require('../../assets/images/ui/dealer_portrait.png');
-export const DEALER_HANDS = require('../../assets/images/ui/dealer_hands.png');
 export const DEALER_SHOP_COUNTER = require('../../assets/images/dealer_shop_counter.png');
 // Dealer shop scene art (5×-baked, 800×1200 canvas). The portrait is a 2-frame
 // horizontal sheet (1600×1200) — frame swaps each time a counter item is tapped.
@@ -32,7 +23,6 @@ export const ITEM_ICONS: Record<string, ImageSourcePropType> = {
 
 // The items/ art is authored at 32×32 and is meant to be shown upscaled. Display
 // at an integer multiple so the pixel art stays crisp (no fractional resample).
-export const ITEM_NATIVE_PX = 32;
 export const ITEM_DISPLAY_SCALE = 2;
 
 export function itemIcon(id: string): ImageSourcePropType {

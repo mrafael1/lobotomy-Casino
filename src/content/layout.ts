@@ -13,10 +13,11 @@
 //
 // Children are positioned in asset-space via vpx() (= virtual × ASSET_SCALE) and
 // drawn at their native pixel size, so every source pixel maps to ASSET_SCALE
-// display pixels exactly. The machine ends up MACHINE_W·ASSET_SCALE = 96·4 = 384px.
+// intermediate-render pixels exactly. The machine fills the full canvas
+// (MACHINE_W·ASSET_SCALE = 160·8 = 1280px), which PixelScene fit-scales to device.
 //
-// To change scale (e.g. ×4 → ×5 for larger screens): regenerate the runtime art
-// at the new V3_SCALE AND bump ASSET_SCALE to match — the two must stay in lockstep.
+// To change scale: regenerate the runtime art at the new V3_SCALE AND bump
+// ASSET_SCALE to match — the two must stay in lockstep.
 export const VIRTUAL_WIDTH = 160;
 export const VIRTUAL_HEIGHT = 320;
 // The machine/scene art is authored at ×8 (1280×2560). PixelScene fit-scales the

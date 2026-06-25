@@ -1,7 +1,7 @@
 import { scoreReels } from './evaluate';
-import { SYMBOL_WEIGHTS } from '../content/symbols';
+import { SYMBOL_WEIGHTS, BASE_SYMBOL_CYCLE } from '../content/symbols';
 import { weightedPick } from './rng';
-import type { ReelResult, SymbolId, WinType } from './types';
+import type { ReelResult, WinType } from './types';
 
 // Pure ability transforms. Each returns new reels plus both deltas so the
 // caller can apply them to scoreEarned and lucidityCoins independently.
@@ -11,9 +11,8 @@ import type { ReelResult, SymbolId, WinType } from './types';
 // - Free spins are granted only when the transform CREATES a jackpot that
 //   wasn't there before, and only when allowFreeSpinGrant is true.
 
-export const MOVE_ORDER: ReadonlyArray<SymbolId> = [
-  'brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline',
-];
+// SHIFT steps a reel along the canonical base-symbol cycle (content/symbols.ts).
+export const MOVE_ORDER = BASE_SYMBOL_CYCLE;
 
 export interface AbilityOutcome {
   readonly reels: ReelResult;
