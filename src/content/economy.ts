@@ -14,10 +14,14 @@ export const ECONOMY = {
   BASE_MAX_FREE_SPINS:      1,   // default cap; jackpot grants exactly this
   UPGRADED_MAX_FREE_SPINS:  3,   // max reachable with corrupted upgrades
 
-  // Lucidity
+  // Score multiplier baseline (bet × reward-amp on top of this)
   BASE_LUCIDITY_MULTIPLIER: 1.0,
 
-  // Ending thresholds (tune via simulator)
-  WEALTH_LUCIDITY_THRESHOLD: 1000, // corrupted builds can reach ~1200–1500 L/run
-  EXIT_LUCIDITY_THRESHOLD:    750, // pure positive ceiling ~850–950 L/run — hard but achievable
+  // Ending thresholds
+  WEALTH_SCORE_THRESHOLD:   1000, // score needed to trigger the wealth ending
+  EXIT_LUCIDITY_THRESHOLD:   750, // lucidity wallet needed for a voluntary exit
+
+  // Every N lucidity coins earned in a run restores one randomly-chosen spent ability.
+  // If no ability has been used at the threshold crossing the credit is lost.
+  LUCIDITY_COINS_PER_RESTORE: 30,
 } as const;

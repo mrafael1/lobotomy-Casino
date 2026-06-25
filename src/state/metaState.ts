@@ -10,20 +10,19 @@ export interface MetaStore extends MetaState {
   bankRun: (run: RunState, ending: EndingType) => void;
   buyUpgrade: (upgradeId: UpgradeId) => void;
   buyConsumableCharge: (consumableId: string) => void;
-  // Non-destructive read — pendingConsumables are cleared only inside bankRun.
   getPendingConsumables: () => Partial<Record<string, number>>;
 }
 
 const INITIAL_META_STATE: MetaState = {
-  schemaVersion:      1,
+  schemaVersion:      2,
   lucidityWallet:     0,
   ownedPermanents:    [],
   corruptionEverUsed: false,
   endingsReached:     [],
   pendingConsumables: {},
   history: {
-    runsPlayed:      0,
-    bestLucidityRun: 0,
+    runsPlayed:   0,
+    bestScoreRun: 0,
   },
 };
 
@@ -50,7 +49,6 @@ export const useMetaStore = create<MetaStore>()(
           history:            state.history,
         };
         const next = bankRunToMeta(run, metaSnapshot, ending);
-        // Clear pending consumables on bank — they were transferred to the run at start.
         set({ ...next, pendingConsumables: {} });
       },
 
@@ -77,7 +75,6 @@ export const useMetaStore = create<MetaStore>()(
         if (!consumable) return;
         if (state.lucidityWallet < consumable.shopCost) return;
 
-        // Enforce slot cap (max 2 types) and per-slot charge cap (max 2 charges)
         const currentCharges = state.pendingConsumables[consumableId] ?? 0;
         if (currentCharges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return;
         if (currentCharges === 0) {

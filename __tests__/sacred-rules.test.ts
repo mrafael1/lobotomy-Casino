@@ -17,7 +17,8 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
   return {
     neurons:                   ECONOMY.STARTING_NEURONS,
     startingNeurons:           ECONOMY.STARTING_NEURONS,
-    lucidityEarned:            0,
+    scoreEarned:               0,
+    lucidityCoins:             0,
     freeSpinsRemaining:        0,
     maxFreeSpins:              ECONOMY.BASE_MAX_FREE_SPINS,
     lucidityMultiplier:        1,
@@ -25,6 +26,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
+    lockedReelSpinsRemaining:  0,
     runConsumables:            {},
     abilitiesUsed:             [],
     ownedUpgrades:             [],
@@ -32,17 +34,22 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     isFreeSpin:                false,
     betMultiplier:             1,
     dealerCount:               0,
+    dealerLastSpinCount:       0,
     dealer65SafetyFired:       false,
     dealer35SafetyFired:       false,
     dealerIncoming:            false,
     dealerPending:             false,
     dealerOfferIds:            null,
     pendingGiftConsumableId:   null,
+    pendingGiftNeedsDiscard:   false,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,
     blockPowersSpins:          0,
     hideNeuronsSpins:          0,
+    cocktailBoostSpins:        0,
+    compulsiveSpinSkips:       0,
+    pendingCompulsiveSpinSkips: 0,
     decaySkips:                0,
     ...overrides,
   };
@@ -50,13 +57,13 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
 
 function baseMetaState(overrides: Partial<MetaState> = {}): MetaState {
   return {
-    schemaVersion:      1,
+    schemaVersion:      2,
     lucidityWallet:     0,
     ownedPermanents:    [],
     corruptionEverUsed: false,
     endingsReached:     [],
     pendingConsumables: {},
-    history: { runsPlayed: 0, bestLucidityRun: 0 },
+    history: { runsPlayed: 0, bestScoreRun: 0 },
     ...overrides,
   };
 }
@@ -151,7 +158,7 @@ test('Rule 4: jackpot on free spin — Lucidity awarded, no free spin granted', 
     }),
   );
   expect(result.isJackpot).toBe(true);
-  expect(result.lucidityEarned).toBeGreaterThan(0);
+  expect(result.scoreEarned).toBeGreaterThan(0);
   expect(result.freeSpinsGranted).toBe(0);
   // consuming the free spin decrements remaining
   expect(result.freeSpinsAfter).toBe(0);
@@ -162,14 +169,14 @@ test('Rule 4: jackpot on free spin — Lucidity awarded, no free spin granted', 
 // ─────────────────────────────────────────────
 test('Rule 5: tainted meta stays tainted through bankRunToMeta', () => {
   const taintedMeta = baseMetaState({ corruptionEverUsed: true });
-  const run = baseRunState({ lucidityEarned: 100 });
+  const run = baseRunState({ lucidityCoins: 100 });
   const banked = bankRunToMeta(run, taintedMeta, 'flatline');
   expect(banked.corruptionEverUsed).toBe(true);
 });
 
 test('Rule 5: clean meta stays clean through bankRunToMeta', () => {
   const cleanMeta = baseMetaState({ corruptionEverUsed: false });
-  const run = baseRunState({ lucidityEarned: 100 });
+  const run = baseRunState({ lucidityCoins: 100 });
   const banked = bankRunToMeta(run, cleanMeta, 'flatline');
   // bankRunToMeta never sets corruptionEverUsed to true — only the shop does
   expect(banked.corruptionEverUsed).toBe(false);
@@ -179,19 +186,19 @@ test('Rule 5: clean meta stays clean through bankRunToMeta', () => {
 // Rule 6: Exit Route fails if corruptionEverUsed === true
 // ─────────────────────────────────────────────
 test('Rule 6: Exit Route blocked when slot is tainted', () => {
-  const run = baseRunState({ lucidityEarned: 99999 }); // far above any threshold
+  const run = baseRunState({ lucidityCoins: 99999 }); // far above any threshold
   const tainted = baseMetaState({ corruptionEverUsed: true });
   expect(checkExitEligibility(run, tainted)).toBe(false);
 });
 
 test('Rule 6: Exit Route available when slot is clean and threshold met', () => {
-  const run = baseRunState({ lucidityEarned: ECONOMY.EXIT_LUCIDITY_THRESHOLD });
+  const run = baseRunState({ lucidityCoins: ECONOMY.EXIT_LUCIDITY_THRESHOLD });
   const clean = baseMetaState({ corruptionEverUsed: false });
   expect(checkExitEligibility(run, clean)).toBe(true);
 });
 
 test('Rule 6: Exit Route blocked even on clean slot if threshold not met', () => {
-  const run = baseRunState({ lucidityEarned: ECONOMY.EXIT_LUCIDITY_THRESHOLD - 1 });
+  const run = baseRunState({ lucidityCoins: ECONOMY.EXIT_LUCIDITY_THRESHOLD - 1 });
   const clean = baseMetaState({ corruptionEverUsed: false });
   expect(checkExitEligibility(run, clean)).toBe(false);
 });
@@ -200,7 +207,7 @@ test('Rule 6: Exit Route blocked even on clean slot if threshold not met', () =>
 // Rule 7: Run end banks only Lucidity — nothing else crosses into meta
 // ─────────────────────────────────────────────
 test('Rule 7: bankRunToMeta transfers Lucidity and history, nothing else', () => {
-  const run = baseRunState({ neurons: 42, lucidityEarned: 150, spinCount: 77 });
+  const run = baseRunState({ neurons: 42, lucidityCoins: 150, spinCount: 77 });
   const meta = baseMetaState({ lucidityWallet: 50 });
   const banked = bankRunToMeta(run, meta, 'flatline');
 
@@ -217,11 +224,13 @@ test('Rule 7: bankRunToMeta transfers Lucidity and history, nothing else', () =>
   expect('lastResult' in banked).toBe(false);
   expect('isFreeSpin' in banked).toBe(false);
   expect('lucidityMultiplier' in banked).toBe(false);
+  expect('scoreEarned' in banked).toBe(false);
+  expect('lucidityCoins' in banked).toBe(false);
 });
 
 test('Rule 7: history.runsPlayed increments by exactly 1 per run end', () => {
-  const meta = baseMetaState({ history: { runsPlayed: 5, bestLucidityRun: 0 } });
-  const run = baseRunState({ lucidityEarned: 10 });
+  const meta = baseMetaState({ history: { runsPlayed: 5, bestScoreRun: 0 } });
+  const run = baseRunState({ lucidityCoins: 10 });
   const banked = bankRunToMeta(run, meta, 'flatline');
   expect(banked.history.runsPlayed).toBe(6);
 });

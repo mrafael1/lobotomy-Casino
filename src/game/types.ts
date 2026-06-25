@@ -22,15 +22,16 @@ export interface SpinInput {
   readonly bookWeight: number;          // 0 = no book; >0 = Learning owned, book active
   readonly brainWeightBonus: number;    // extra weight for brain (upgrades + Syringe boost)
   readonly guaranteedWin: boolean;      // Pill: force at least a pair this spin
-  readonly pattern23Triple: boolean;    // Pattern Fabrication: ⅔ match → triple payout
+  readonly pattern23Triple: boolean;    // Pattern Fabrication: 2/3 match -> doubled pair payout
   readonly learningActive: boolean;     // Learning: book pays out and +10/book visible
 }
 
 export interface SpinResult {
   readonly reels: ReelResult;
-  readonly lucidityEarned: number;
+  readonly scoreEarned: number;         // in-run score (multiplied) — drives the wealth ending
+  readonly coinsEarned: number;         // flat lucidity coins banked to the wallet
   readonly neuronsAfter: number;
-  readonly freeSpinsGranted: number;  // always 0 if isFreeSpin === true
+  readonly freeSpinsGranted: number;    // always 0 if isFreeSpin === true
   readonly freeSpinsAfter: number;
   readonly isJackpot: boolean;
   readonly isFreeSpin: boolean;
@@ -40,7 +41,8 @@ export interface SpinResult {
 export interface RunState {
   readonly neurons: number;
   readonly startingNeurons: number;
-  readonly lucidityEarned: number;
+  readonly scoreEarned: number;         // accumulated in-run score (for wealth ending)
+  readonly lucidityCoins: number;       // accumulated flat coins this run (banks to wallet)
   readonly freeSpinsRemaining: number;
   readonly maxFreeSpins: number;
   readonly lucidityMultiplier: number;
@@ -48,32 +50,38 @@ export interface RunState {
   readonly isSpinning: boolean;
   readonly lastResult: SpinResult | null;
   readonly lockedReels: [boolean, boolean, boolean];
-  readonly runConsumables: Partial<Record<string, number>>; // charges available this run
-  readonly abilitiesUsed: ReadonlyArray<AbilityId>;        // abilities used this run (1 use each)
+  readonly lockedReelSpinsRemaining: number; // Memory: spins left before the lock expires
+  readonly runConsumables: Partial<Record<string, number>>;
+  readonly abilitiesUsed: ReadonlyArray<AbilityId>;
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;
   readonly spinCount: number;
   readonly isFreeSpin: boolean;
   readonly betMultiplier: 1 | 2 | 3;
   // Dealer state
-  readonly dealerCount: number;              // how many times the Dealer has appeared this run (max 3)
-  readonly dealer65SafetyFired: boolean;     // true once we've evaluated the 65% safety gate
-  readonly dealer35SafetyFired: boolean;     // true once we've evaluated the 35% safety gate
-  readonly dealerIncoming: boolean;          // tap animation playing — modal not yet shown
-  readonly dealerPending: boolean;           // dealer modal should be shown
-  readonly dealerOfferIds: [string, string] | null; // two items offered simultaneously
-  readonly pendingGiftConsumableId: string | null;  // gift waiting for a stash slot — player must discard to take it
+  readonly dealerCount: number;
+  readonly dealerLastSpinCount: number;
+  readonly dealer65SafetyFired: boolean;
+  readonly dealer35SafetyFired: boolean;
+  readonly dealerIncoming: boolean;
+  readonly dealerPending: boolean;
+  readonly dealerOfferIds: [string, string] | null;
+  readonly pendingGiftConsumableId: string | null;
+  readonly pendingGiftNeedsDiscard: boolean;
   // Active effects from consumables / dealer items
-  readonly brainBoostSpins: number;   // Syringe: spins remaining with brain boost
-  readonly forcedRandomBetSpins: number; // Energy Drink: spins with random bet
-  readonly guaranteedWinSpins: number;   // Pill: spins guaranteed to win
-  readonly blockPowersSpins: number;     // Pill: spins where abilities are blocked
-  readonly hideNeuronsSpins: number;     // Focus Serum side effect: neuron count hidden
-  readonly decaySkips: number;           // spins that cost 0 neurons (skipDecay effects)
+  readonly brainBoostSpins: number;
+  readonly forcedRandomBetSpins: number;
+  readonly guaranteedWinSpins: number;
+  readonly blockPowersSpins: number;
+  readonly hideNeuronsSpins: number;
+  readonly cocktailBoostSpins: number;
+  readonly compulsiveSpinSkips: number;
+  readonly pendingCompulsiveSpinSkips: number;
+  readonly decaySkips: number;
 }
 
 export interface RunHistory {
   readonly runsPlayed: number;
-  readonly bestLucidityRun: number;
+  readonly bestScoreRun: number;       // highest single-run score achieved
   readonly wealthEndingReachedAt?: number;
   readonly exitEndingReachedAt?: number;
 }

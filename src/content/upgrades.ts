@@ -9,7 +9,7 @@ export type UpgradeEffect =
   | { type: 'passiveLucidityPerSpin';   amount: number }
   | { type: 'brainWeightBonus';         amount: number }
   | { type: 'sedativeBonusSpin' }                              // every 3rd spin costs no neurons
-  | { type: 'pattern23Triple' }                                // any ⅔ matching reels → triple payout
+  | { type: 'pattern23Triple' }                                // any 2/3 matching reels -> doubled pair payout
   | { type: 'bookSymbol';               weight: number }       // adds book to spin pool
   | { type: 'abilityUnlock';            abilityId: string };
 
@@ -93,7 +93,7 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
   {
     id: 'corr_pattern_23',
     name: 'Pattern Fabrication',
-    description: 'Any 2 of 3 matching reels (including non-adjacent) pay as a triple.',
+    description: 'Any 2 of 3 matching reels, including non-adjacent, pay double pair value. Brain matches are not jackpots.',
     category: 'corrupted',
     cost: 200,
     effect: { type: 'pattern23Triple' },

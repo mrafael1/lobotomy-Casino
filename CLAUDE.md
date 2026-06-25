@@ -28,3 +28,26 @@ git checkout -b claude/fix-reel-animation-sync
 git push -u origin claude/fix-reel-animation-sync
 # open PR — do not merge yourself
 ```
+
+## Pixel-art rendering conventions
+
+- The game screen is a **160×320 virtual canvas**. `PixelScene` (`src/components/PixelScene.tsx`) centers and aspect-fit-scales it to the device; treat it as **one full-canvas composition**, not fixed top/bottom UI bands. Only full-screen overlays/modals live outside `PixelScene`.
+- `ASSET_SCALE` (in `src/content/layout.ts`) **must equal the authored scale of the runtime PNGs** (currently `8` — the `*_final_machine.png` art is 8× the 160×320 source). Changing it requires regenerating the art; it cancels out of the on-screen canvas size and only sets the intermediate render resolution.
+- Position children with `vpx(n)` (= `n * ASSET_SCALE`). In-scene HUD/text is sized in **asset-space** (i.e. multiply px sizes by `ASSET_SCALE` / use `vpx`) so it renders large and downscales crisp with the rest of the canvas — see `MachineScreenMeters` and the HUD styles in `GameScreen`.
+- All visible game text must go through the **`PixelText`** wrapper (`src/components/PixelText.tsx`, applies `PIXEL_FONT`). RN 0.81's `Text` is a function component, so there is no global font patch.
+
+## Machine geometry (data-driven — re-measure on art swaps)
+
+- The slot machine's layout lives as **source-pixel constants** in `src/content/machineAssets.ts` (`REEL_HOLES`, `REEL_CELL_CENTERS`, `TV_SCREEN`, `MULT_STRIP`/`MULT_BADGE_CENTERS`, `BAR_FILL`/`WEALTH_BAR`/`HEALTH_BAR`, `LEVER_HIT`, `POWER_HITS`). The full-canvas image layers self-align, but every **app-rendered overlay and tap target** (reel symbols, meter text, fill bars, reel/multiplier/lever/power touch zones) is positioned from these constants.
+- **When the machine PNGs are replaced, these constants MUST be re-measured** or the machine silently misaligns (symbols/taps land in the wrong place) even though the art looks right.
+- Measure with `pngjs` (already a dependency). **Source px = original px ÷ ASSET_SCALE.** Decode the PNG, find the bounding box of the relevant feature (opaque/colored pixels), and divide by `ASSET_SCALE`. Multi-frame sheets are horizontal strips of full-canvas frames (frame width = source width × ASSET_SCALE).
+
+## Android toolchain constraint
+
+- **Kotlin must stay below 2.1.0** (use `2.0.21`). React Native 0.81's Gradle plugin is compiled against Kotlin 1.9.x and calls `KotlinTopLevelExtension` as a class; it became an interface in Kotlin 2.1.0, so KGP ≥ 2.1 fails the Gradle config with *"Found interface … KotlinTopLevelExtension, but class was expected."*
+- Set it in **`app.json`** (`expo-build-properties` → `android.kotlinVersion`) — the source of truth — **and** in `android/gradle.properties` (`android.kotlinVersion`) so the already-generated `android/` builds without a fresh prebuild. After changing it, stop the Gradle daemon (`android/gradlew.bat --stop`) before rebuilding.
+
+## Verification & dev loop
+
+- Before considering work done: `npx tsc --noEmit -p tsconfig.json` (clean) and `npx jest` (all pass).
+- Debug builds load JS from the Metro dev server, so **JS/TS-only changes just need a Metro reload (`r`)** — no native rebuild. A native rebuild is only required for native/config changes (new native modules, `app.json`/gradle, Kotlin version, etc.).

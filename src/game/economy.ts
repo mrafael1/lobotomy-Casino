@@ -25,8 +25,17 @@ export function computeStartingNeurons(ownedPermanents: ReadonlyArray<UpgradeId>
   return Math.min(neurons, computeNeuronCap(ownedPermanents));
 }
 
+// The cap rises with starting-neuron upgrades (Hydration) — otherwise the
+// bonus would be clamped straight back to MAX_NEURONS and do nothing.
 export function computeNeuronCap(ownedPermanents: ReadonlyArray<UpgradeId>): number {
-  return ECONOMY.MAX_NEURONS;
+  let bonus = 0;
+  for (const id of ownedPermanents) {
+    const upgrade = UPGRADE_MAP[id];
+    if (upgrade?.effect.type === 'startingNeuronBonus') {
+      bonus += upgrade.effect.amount;
+    }
+  }
+  return Math.min(ECONOMY.MAX_NEURONS + bonus, ECONOMY.MAX_NEURONS_ACT2);
 }
 
 // Combined Lucidity multiplier: multiplicative clean upgrades × (1 + additive reward amp bonus).
@@ -101,7 +110,7 @@ export function hasSedative(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
   return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'sedativeBonusSpin');
 }
 
-// True if Pattern Fabrication (⅔ triple) is owned.
+// True if Pattern Fabrication (2/3 doubled pair) is owned.
 export function hasPattern23Triple(ownedUpgrades: ReadonlyArray<UpgradeId>): boolean {
   return ownedUpgrades.some(id => UPGRADE_MAP[id]?.effect.type === 'pattern23Triple');
 }
