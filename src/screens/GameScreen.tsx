@@ -400,6 +400,7 @@ export function GameScreen() {
               leverEnabled={canSpin}
               powers={powers}
               scale={ASSET_SCALE}
+              rewardHold={isSpinning || rerollingReelIndex !== null}
             />
           </View>
 

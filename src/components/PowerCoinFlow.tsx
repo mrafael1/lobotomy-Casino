@@ -30,9 +30,11 @@ function powerCenter(power: AbilityId): { cx: number; cy: number } {
 
 interface Props {
   f: number; // display px per source px (must match SlotMachine's `f`)
+  // Extra hold flag: keeps the power-coin animation frozen during reroll visuals.
+  hold?: boolean;
 }
 
-export function PowerCoinFlow({ f }: Props) {
+export function PowerCoinFlow({ f, hold = false }: Props) {
   const queue = useRunStore(s => s.pendingPowerRestores);
   const isSpinning = useRunStore(s => s.isSpinning);
   const commitPowerRestore = useRunStore(s => s.commitPowerRestore);
@@ -42,9 +44,9 @@ export function PowerCoinFlow({ f }: Props) {
   const fly = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
 
-  // Start the next coin once the reels have stopped and nothing is mid-flight.
+  // Start the next coin once reels have stopped and no visual hold is active.
   useEffect(() => {
-    if (active !== null || isSpinning || queue.length === 0) return;
+    if (active !== null || isSpinning || hold || queue.length === 0) return;
     const power = queue[0];
     setActive(power);
     fly.setValue(0);
@@ -63,7 +65,7 @@ export function PowerCoinFlow({ f }: Props) {
         Animated.timing(flash, { toValue: 0, duration: FLASH_MS - 90, useNativeDriver: true }),
       ]).start(() => setFlashPower(null));
     });
-  }, [active, isSpinning, queue, commitPowerRestore, fly, flash]);
+  }, [active, isSpinning, hold, queue, commitPowerRestore, fly, flash]);
 
   const size = COIN_SRC_SIZE * f;
 

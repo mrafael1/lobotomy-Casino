@@ -7,15 +7,15 @@ import { useRunStore } from './runState';
 // flying from the tray, the counter climbing, the bar filling — should wait for
 // the final reel (incl. the 3rd-reel pair tension) to land. Non-spin gains (dealer
 // water, power re-scores) happen while not spinning, so they release at once.
-export function useSettledLucidity(): number {
+export function useSettledLucidity(hold = false): number {
   const coins = useRunStore(s => s.lucidityCoins);
   const isSpinning = useRunStore(s => s.isSpinning);
   const [settled, setSettled] = useState(coins);
 
   useEffect(() => {
-    // Hold during the spin; snap to the real total the moment the reels stop.
-    if (!isSpinning) setSettled(coins);
-  }, [coins, isSpinning]);
+    // Hold during the spin or any external visual-hold (e.g. reroll animation).
+    if (!isSpinning && !hold) setSettled(coins);
+  }, [coins, isSpinning, hold]);
 
   return settled;
 }

@@ -32,12 +32,14 @@ interface Props {
   f: number;
   // Fired when a flying coin reaches the counter, so the bar can shake.
   onArrive?: () => void;
+  // Extra hold flag: keeps coins frozen during reroll visual animations.
+  hold?: boolean;
 }
 
-export function CoinFlow({ f, onArrive }: Props) {
-  // Settled total: only changes once the reels stop, so coins launch after the
-  // 3rd reel lands rather than the instant spin() banks them.
-  const lucidityCoins = useSettledLucidity();
+export function CoinFlow({ f, onArrive, hold = false }: Props) {
+  // Settled total: frozen while spinning OR while any visual hold is active
+  // (e.g. a power reroll), so coins never launch before the final reel lands.
+  const lucidityCoins = useSettledLucidity(hold);
   const prevCoins = useRef(lucidityCoins);
   const idRef = useRef(0);
   const [sprites, setSprites] = useState<Sprite[]>([]);

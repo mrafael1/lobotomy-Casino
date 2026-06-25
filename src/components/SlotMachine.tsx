@@ -68,6 +68,9 @@ interface Props {
   // Display scale: source px → display px. Must equal the runtime art's authored
   // scale (V3_SCALE) so the nearest-neighbour sheets draw 1:1 and crisp.
   scale?: number;
+  // When true, holds coin/power-coin animations until the visual result has
+  // fully landed (e.g. during a power reroll animation in GameScreen).
+  rewardHold?: boolean;
 }
 
 export function SlotMachine({
@@ -85,6 +88,7 @@ export function SlotMachine({
   leverEnabled = false,
   powers,
   scale = 5,
+  rewardHold = false,
 }: Props) {
   const isSpinning    = useRunStore(s => s.isSpinning);
   const lastResult    = useRunStore(s => s.lastResult);
@@ -373,8 +377,8 @@ export function SlotMachine({
               up to the objective bar; each landing nudges the bar. Power coins
               (every 30L) are separate — they fly to the power they restore. */}
       <View style={styles.fill} pointerEvents="none">
-        <CoinFlow f={f} onArrive={() => runLucidityShake(false)} />
-        <PowerCoinFlow f={f} />
+        <CoinFlow f={f} onArrive={() => runLucidityShake(false)} hold={rewardHold} />
+        <PowerCoinFlow f={f} hold={rewardHold} />
       </View>
 
       {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
