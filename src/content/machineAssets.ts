@@ -20,7 +20,6 @@ export const MACHINE_ASPECT = MACHINE_SRC_H / MACHINE_SRC_W; // 2.0
 // reel_final_machine (the reel windows sit higher in the new cabinet).
 export const REEL_WINDOW = { left: 33, top: 170, width: 85, height: 30 } as const; // x33..118, y170..200
 export const REEL_CELL_CENTERS = [43.5, 75.5, 107.5] as const; // source x of each hole centre
-export const REEL_CELL_WIDTH = 21; // source px — width of one hole
 
 // Per-cell hole rects (source px). spin_final_machine.png is authored on this same
 // canvas, so clipping a cell to its hole and showing frame i renders symbol i.

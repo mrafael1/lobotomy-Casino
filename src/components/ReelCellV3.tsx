@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Image } from 'react-native';
 import { Symbol } from './Symbol';
 import { SYMBOLS_SHEET_V3, SYMBOL_FRAME_COUNT } from '../content/machineAssets';
+import { BASE_SYMBOL_CYCLE } from '../content/symbols';
 import type { SymbolId } from '../game/types';
 
 const SYMBOLS_SHEET_NATIVE = Image.resolveAssetSource(SYMBOLS_SHEET_V3);
@@ -13,8 +14,9 @@ const SYMBOL_FRAME_WIDTH = SYMBOLS_SHEET_WIDTH / SYMBOL_FRAME_COUNT;
 const CYCLE_INTERVAL_MS = 60;
 const STOP_TIMES_MS = [600, 900, 1300];
 
-// Visual neighbour order for the landed reel strip (book sits outside it).
-const STRIP_ORDER: SymbolId[] = ['brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline'];
+// Visual neighbour order for the landed reel strip (book sits outside it) —
+// shares the canonical base-symbol cycle so reel visuals match SHIFT/ability logic.
+const STRIP_ORDER = BASE_SYMBOL_CYCLE;
 
 function neighbours(sym: SymbolId): { top: SymbolId; bottom: SymbolId } {
   const i = STRIP_ORDER.indexOf(sym);
