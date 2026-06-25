@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, Pressable, StyleSheet } from 'react-native';
+import { View, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import { Text } from './PixelText';
 import { ReelCellV3 } from './ReelCellV3';
 import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
+import { CoinFlow } from './CoinFlow';
+import { PowerCoinFlow } from './PowerCoinFlow';
 import { MOVE_ORDER } from '../game/abilities';
 import { SYMBOLS } from '../content/symbols';
 import { useRunStore } from '../state/runState';
+import { useAnimatedLucidity } from '../state/useAnimatedLucidity';
 import type { SymbolId } from '../game/types';
 import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
@@ -24,6 +27,11 @@ const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 // Lever pull plays frames 0 → 5 quickly, fires the spin, then snaps back to idle.
 const LEVER_FRAME_MS = 42;
+
+// Tension: when the first two reels already match, the 3rd reel holds a touch
+// longer before stopping (a possible triple). Animation timing only — the result
+// is already resolved and unchanged. Tune 200–500ms.
+const THIRD_REEL_PAIR_TENSION_DELAY_MS = 250;
 
 interface PowerControl {
   visible: boolean;
@@ -83,9 +91,27 @@ export function SlotMachine({
   const lockedReels   = useRunStore(s => s.lockedReels);
   const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
   const lockedReelSpinsRemaining = useRunStore(s => s.lockedReelSpinsRemaining);
-  const scoreEarned   = useRunStore(s => s.scoreEarned);
+  // Displayed Lucidity for the objective bar climbs gradually toward the real
+  // total (state updates immediately) so big gains fill the bar smoothly. The
+  // 30-coin shake/flash is driven separately by CoinFlow off the real total.
+  const lucidityCoins = useAnimatedLucidity();
   const neurons       = useRunStore(s => s.neurons);
   const startingN     = useRunStore(s => s.startingNeurons);
+
+  // Lucidity bar shake — nudged each time a flying coin lands on the counter; a
+  // touch harder on a power coin. No colour wash over the bar (that used to span
+  // the full width and read as a full bar) — threshold feedback now rides on the
+  // power_coin → power-button animation instead.
+  const lucidityShake = useRef(new Animated.Value(0)).current;
+  const runLucidityShake = (strong: boolean) => {
+    const amp = strong ? 4 : 2;
+    lucidityShake.setValue(0);
+    Animated.sequence([
+      Animated.timing(lucidityShake, { toValue:  amp, duration: 40, useNativeDriver: true }),
+      Animated.timing(lucidityShake, { toValue: -amp, duration: 40, useNativeDriver: true }),
+      Animated.timing(lucidityShake, { toValue:  0,   duration: 40, useNativeDriver: true }),
+    ]).start();
+  };
 
   // ── Lever animation (idle 0 → pulled 5) ──
   const [leverFrame, setLeverFrame] = useState(0);
@@ -162,8 +188,13 @@ export function SlotMachine({
     : affordableMult === 2 ? (effectiveMult === 2 ? 5 : 3)
     :                        effectiveMult - 1;
 
-  // TV bars: wealth fills up with score, health follows remaining neurons.
-  const wealthRatio = Math.max(0, Math.min(1, scoreEarned / ECONOMY.WEALTH_SCORE_THRESHOLD));
+  // TV bars: the top bar is the Lucidity OBJECTIVE bar — it tracks progress
+  // toward the current Lucidity goal (LUCIDITY_OBJECTIVE, default 1000 L) and
+  // never resets. The 30-coin power-restore threshold is separate: it only
+  // shakes/flashes this bar (see runLucidityShake), it does NOT reset it. It
+  // reuses the wealth bar's art/slot until dedicated objective art exists. The
+  // lower bar still follows remaining neurons.
+  const lucidityRatio = Math.max(0, Math.min(1, lucidityCoins / ECONOMY.LUCIDITY_OBJECTIVE));
   const healthRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
@@ -222,6 +253,12 @@ export function SlotMachine({
       <View style={styles.fill} pointerEvents="none">
         {([0, 1, 2] as const).map(i => {
           const isRerolling = rerollingReelIndex === i;
+          // 3rd reel tension: only on a full spin (not a reroll) when reels 0 & 1
+          // already match. Timing only — the resolved symbols are unchanged.
+          const pairTension =
+            i === 2 && !isRerolling && reels[0] === reels[1]
+              ? THIRD_REEL_PAIR_TENSION_DELAY_MS
+              : 0;
           return (
             <ReelCellV3
               key={i}
@@ -231,6 +268,7 @@ export function SlotMachine({
               reelIndex={i}
               onComplete={isRerolling ? onRerollDone : handleReelComplete}
               overrideStopMs={isRerolling ? 600 : undefined}
+              extraStopMs={pairTension}
               machineWidth={machineWidth}
               machineHeight={machineHeight}
               hole={{
@@ -258,16 +296,22 @@ export function SlotMachine({
       {/* 4 — Cabinet (its transparent windows reveal the reels above) */}
       <Image source={MACHINE_V3} style={styles.fill} resizeMode="stretch" fadeDuration={0} />
 
-      {/* 4b — TV fill bars (wealth + health), drawn into the TV screen */}
-      <TvFillBar
-        track={WEALTH_TRACK_V3}
-        fill={WEALTH_FILL_V3}
-        ratio={wealthRatio}
-        machineWidth={machineWidth}
-        machineHeight={machineHeight}
-        fillLeft={BAR_FILL.left * f}
-        fillWidth={BAR_FILL.width * f}
-      />
+      {/* 4b — TV fill bars (Lucidity + health), drawn into the TV screen. The
+              Lucidity bar shakes a touch each time a flying coin lands. */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { transform: [{ translateX: lucidityShake }] }]}
+        pointerEvents="none"
+      >
+        <TvFillBar
+          track={WEALTH_TRACK_V3}
+          fill={WEALTH_FILL_V3}
+          ratio={lucidityRatio}
+          machineWidth={machineWidth}
+          machineHeight={machineHeight}
+          fillLeft={BAR_FILL.left * f}
+          fillWidth={BAR_FILL.width * f}
+        />
+      </Animated.View>
       <TvFillBar
         track={HEALTH_TRACK_V3}
         fill={HEALTH_FILL_V3}
@@ -324,6 +368,14 @@ export function SlotMachine({
         height={machineHeight}
         style={styles.fill}
       />
+
+      {/* 7b — Coin flow: Lucidity coins burst from the bottom tray, then stream
+              up to the objective bar; each landing nudges the bar. Power coins
+              (every 30L) are separate — they fly to the power they restore. */}
+      <View style={styles.fill} pointerEvents="none">
+        <CoinFlow f={f} onArrive={() => runLucidityShake(false)} />
+        <PowerCoinFlow f={f} />
+      </View>
 
       {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
       <View style={styles.fill} pointerEvents="box-none">

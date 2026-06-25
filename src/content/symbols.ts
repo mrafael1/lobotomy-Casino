@@ -3,7 +3,7 @@ export type SymbolId =
   | 'eye'
   | 'pill'
   | 'syringe'
-  | 'scalpel'
+  | 'vial'
   | 'flatline'
   | 'book';
 
@@ -22,7 +22,7 @@ export const SYMBOLS: Readonly<Record<SymbolId, SlotSymbol>> = {
   eye:      { id: 'eye',      name: 'Eye',      weight: 8,  rarityScore: 8  },
   pill:     { id: 'pill',     name: 'Pill',     weight: 9,  rarityScore: 6  },
   syringe:  { id: 'syringe',  name: 'Syringe',  weight: 9,  rarityScore: 6  },
-  scalpel:  { id: 'scalpel',  name: 'Scalpel',  weight: 10, rarityScore: 4  },
+  vial:  { id: 'vial',  name: 'vial',  weight: 10, rarityScore: 4  },
   flatline: { id: 'flatline', name: 'Flatline', weight: 10, rarityScore: 4  },
   book:     { id: 'book',     name: 'Book',     weight: 0,  rarityScore: 9  },
 } as const;
@@ -31,7 +31,7 @@ export const SYMBOLS: Readonly<Record<SymbolId, SlotSymbol>> = {
 // strip). Single source of truth for the order reels cycle through and abilities
 // step along — keep reel visuals and ability logic in sync by importing this.
 export const BASE_SYMBOL_CYCLE: ReadonlyArray<SymbolId> = [
-  'brain', 'eye', 'pill', 'syringe', 'scalpel', 'flatline',
+  'brain', 'eye', 'pill', 'syringe', 'vial', 'flatline',
 ];
 
 export const SYMBOL_WEIGHTS: ReadonlyArray<{ weight: number; value: SymbolId }> = [
@@ -39,7 +39,7 @@ export const SYMBOL_WEIGHTS: ReadonlyArray<{ weight: number; value: SymbolId }> 
   { weight: SYMBOLS.eye.weight,      value: 'eye'      },
   { weight: SYMBOLS.pill.weight,     value: 'pill'     },
   { weight: SYMBOLS.syringe.weight,  value: 'syringe'  },
-  { weight: SYMBOLS.scalpel.weight,  value: 'scalpel'  },
+  { weight: SYMBOLS.vial.weight,  value: 'vial'  },
   { weight: SYMBOLS.flatline.weight, value: 'flatline' },
 ];
 

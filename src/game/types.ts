@@ -65,8 +65,6 @@ export interface RunState {
   readonly dealerIncoming: boolean;
   readonly dealerPending: boolean;
   readonly dealerOfferIds: [string, string] | null;
-  readonly pendingGiftConsumableId: string | null;
-  readonly pendingGiftNeedsDiscard: boolean;
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;
   readonly forcedRandomBetSpins: number;

@@ -7,6 +7,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../components/PixelText';
 import { PIXEL_FONT } from '../content/typography';
 import { Background } from '../components/Background';
@@ -17,13 +18,13 @@ import {
   vpx, ASSET_SCALE, VIRTUAL_WIDTH, HUD_HEIGHT,
   MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H,
 } from '../content/layout';
-import { DEALER_PORTRAIT } from '../content/uiAssets';
+import { DEALER_SHOP_PORTRAIT } from '../content/uiAssets';
 import { useRunStore } from '../state/runState';
 import { useMetaStore } from '../state/metaState';
 import { checkEnding } from '../game/endings';
 import { hasSedative } from '../game/economy';
 import { ECONOMY } from '../content/economy';
-import { CONSUMABLES } from '../content/consumables';
+import { CONSUMABLES, buildStashSlots } from '../content/consumables';
 import { IN_RUN_ITEMS } from '../content/inRunItems';
 
 // Reel-targeting state for abilities and consumable interactions.
@@ -36,6 +37,25 @@ type Selection =
   | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
 const NO_SELECTION: Selection = { mode: 'none' };
+
+// After the final spin drops spins/neurons to a run-ending state, hold on the
+// resolved reels + payout for this long before showing the run-over (Flatline /
+// Wealth) overlay, so the player actually sees the last result.
+const FLATLINE_REVEAL_DELAY_MS = 1000;
+
+// Machine dealer-arrival portrait. The dealer-scene sheet (dealer_portrait.png,
+// 2560×2560 = two 1280×2560 frames) draws the figure small inside a full scene
+// canvas, so we CROP to the figure's measured alpha bounds within frame 2
+// (index 1) and scale that crop up — readable, same dealer as the scene, no
+// stretch (uniform scale). Crop measured from the PNG alpha box.
+const DEALER_SHEET_SIZE   = 2560;
+const DEALER_FRAME_W      = 1280;
+const DEALER_FRAME_INDEX  = 1; // "frame 2"
+const DEALER_CROP         = { x: 392, y: 1048, w: 464, h: 640 } as const;
+const DEALER_PORTRAIT_H   = 176;
+const DEALER_PORTRAIT_W   = Math.round(DEALER_PORTRAIT_H * DEALER_CROP.w / DEALER_CROP.h);
+const DEALER_PORTRAIT_SCALE = DEALER_PORTRAIT_W / DEALER_CROP.w;
+const DEALER_PORTRAIT_SRC_X = DEALER_FRAME_INDEX * DEALER_FRAME_W + DEALER_CROP.x;
 
 export function GameScreen() {
   const router = useRouter();
@@ -58,10 +78,8 @@ export function GameScreen() {
   const compulsiveSpinSkips = useRunStore(s => s.compulsiveSpinSkips);
   const dealerIncoming      = useRunStore(s => s.dealerIncoming);
   const dealerPending       = useRunStore(s => s.dealerPending);
-  const pendingGiftId       = useRunStore(s => s.pendingGiftConsumableId);
   const spinCount           = useRunStore(s => s.spinCount);
   const ownedUpgrades       = useRunStore(s => s.ownedUpgrades);
-  const pendingGiftNeedsDiscard = useRunStore(s => s.pendingGiftNeedsDiscard);
 
   const spin               = useRunStore(s => s.spin);
   const setSpinning        = useRunStore(s => s.setSpinning);
@@ -76,8 +94,6 @@ export function GameScreen() {
   const checkDealerTrigger = useRunStore(s => s.checkDealerTrigger);
   const revealDealer       = useRunStore(s => s.revealDealer);
   const declineDealerVisit = useRunStore(s => s.declineDealerVisit);
-  const discardConsumableForGift = useRunStore(s => s.discardConsumableForGift);
-  const dismissGift        = useRunStore(s => s.dismissGift);
 
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
   const bankRun                = useMetaStore(s => s.bankRun);
@@ -87,6 +103,9 @@ export function GameScreen() {
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
   // Dealer arrival prompt: 'taps' = shoulder-tap text popping, 'ask' = speech bubble.
   const [dealerPrompt, setDealerPrompt] = useState<'taps' | 'ask' | null>(null);
+  // True while holding on the final spin result before the run-over overlay shows.
+  const [endingPending, setEndingPending] = useState(false);
+  const endingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const tapTexts  = useRef([
@@ -157,8 +176,18 @@ export function GameScreen() {
     // End check runs first — if the run is over the Dealer should not appear.
     const ending = checkEnding(runNow, useMetaStore.getState());
     if (ending) {
-      bankRun(runNow, ending);
-      endRun(ending);
+      // Hold on the final reels + payout, THEN flip to the run-over overlay.
+      // endingPending locks the machine (runBusy) so no spin/race during the
+      // hold; the guard prevents scheduling a second timer / duplicate overlay.
+      if (endingTimer.current) return;
+      setEndingPending(true);
+      endingTimer.current = setTimeout(() => {
+        endingTimer.current = null;
+        setEndingPending(false);
+        const latest = useRunStore.getState();
+        bankRun(latest, ending);
+        endRun(ending);
+      }, FLATLINE_REVEAL_DELAY_MS);
     } else if (runNow.compulsiveSpinSkips > 0) {
       return;
     } else {
@@ -167,9 +196,19 @@ export function GameScreen() {
   }, [setSpinning, bankRun, endRun, checkDealerTrigger]);
 
   const handleNewRun = useCallback(() => {
+    if (endingTimer.current) {
+      clearTimeout(endingTimer.current);
+      endingTimer.current = null;
+    }
+    setEndingPending(false);
     setSelection(NO_SELECTION);
     startNewRun(ownedPermanents, getPendingConsumables());
   }, [startNewRun, ownedPermanents, getPendingConsumables]);
+
+  // Clear the pending run-over timer if the screen unmounts mid-hold.
+  useEffect(() => () => {
+    if (endingTimer.current) clearTimeout(endingTimer.current);
+  }, []);
 
   // ── Reel targeting ──
   const handleReelPress = useCallback((i: number) => {
@@ -221,11 +260,11 @@ export function GameScreen() {
     rerollingReelIndex !== null ||
     dealerIncoming ||
     dealerPending ||
-    pendingGiftId !== null ||
+    endingPending ||
     compulsiveSpinSkips > 0;
 
   useEffect(() => {
-    const modalBusy = rerollingReelIndex !== null || dealerIncoming || dealerPending || pendingGiftId !== null;
+    const modalBusy = rerollingReelIndex !== null || dealerIncoming || dealerPending || endingPending;
     if (runPhase !== 'running' || isSpinning || modalBusy || compulsiveSpinSkips <= 0) return;
 
     if (compulsiveSpinTimer.current) {
@@ -242,7 +281,7 @@ export function GameScreen() {
         compulsiveSpinTimer.current = null;
       }
     };
-  }, [runPhase, isSpinning, rerollingReelIndex, dealerIncoming, dealerPending, pendingGiftId, compulsiveSpinSkips]);
+  }, [runPhase, isSpinning, rerollingReelIndex, dealerIncoming, dealerPending, endingPending, compulsiveSpinSkips]);
 
   const canSpin = runPhase === 'running' && !runBusy && (freeSpins > 0 || neurons >= 1);
 
@@ -285,14 +324,10 @@ export function GameScreen() {
     },
   };
 
+  // Physical stash slots — duplicates occupy separate slots (WATER, WATER), so
+  // expand copies into slots rather than stacking with a ×N badge.
   const stashItems = [...CONSUMABLES, ...IN_RUN_ITEMS];
-  const activeStashItems = stashItems.filter(c => (runConsumables[c.id] ?? 0) > 0);
-
-  // Two physical stash slots — index maps to a tray receptacle; null = empty.
-  const stashSlots = [0, 1].map(i => {
-    const c = activeStashItems[i];
-    return c ? { id: c.id, name: c.name, charges: runConsumables[c.id] ?? 0 } : null;
-  });
+  const stashSlots = buildStashSlots(runConsumables, stashItems);
   const stashUsable = runPhase === 'running' && !runBusy && selection.mode === 'none';
 
   const winLabel = lastResult
@@ -321,10 +356,6 @@ export function GameScreen() {
     : [];
 
   const reelsTappable = selection.mode !== 'none' && !runBusy;
-
-  const pendingGift = pendingGiftId
-    ? stashItems.find(c => c.id === pendingGiftId)
-    : null;
 
   return (
     <Background>
@@ -450,6 +481,14 @@ export function GameScreen() {
         </PixelScene>
       </Animated.View>
 
+      {/* ── Scores table button — top-right corner, clear of the centred HUD and
+             the machine. Opens the read-only scores screen. ── */}
+      <SafeAreaView style={styles.scoresAnchor} pointerEvents="box-none">
+        <Pressable style={styles.scoresBtn} onPress={() => router.push('/scores')}>
+          <Text style={styles.scoresText}>SCORES</Text>
+        </Pressable>
+      </SafeAreaView>
+
       {/* ── Dealer arrival: shoulder taps ── */}
       {dealerPrompt === 'taps' && (
         <View style={styles.tapOverlay} pointerEvents="none">
@@ -482,7 +521,23 @@ export function GameScreen() {
             </View>
           </View>
           <View style={styles.bubbleTail} />
-          <Image source={DEALER_PORTRAIT} style={styles.dealerArrivalPortrait} resizeMode="contain" />
+          {/* Same dealer as the dealer scene: frame 2 of dealer_portrait.png,
+              cropped to the figure and scaled up so it's readable (not tiny,
+              not stretched). */}
+          <View style={styles.dealerArrivalPortrait}>
+            <Image
+              source={DEALER_SHOP_PORTRAIT}
+              style={{
+                position: 'absolute',
+                left: -DEALER_PORTRAIT_SRC_X * DEALER_PORTRAIT_SCALE,
+                top:  -DEALER_CROP.y * DEALER_PORTRAIT_SCALE,
+                width:  DEALER_SHEET_SIZE * DEALER_PORTRAIT_SCALE,
+                height: DEALER_SHEET_SIZE * DEALER_PORTRAIT_SCALE,
+              }}
+              resizeMode="stretch"
+              fadeDuration={0}
+            />
+          </View>
         </View>
       )}
 
@@ -490,63 +545,8 @@ export function GameScreen() {
           machine for the full DealerShopScreen in run-consumables mode (see
           handleDealerCome). Only the invitation prompt lives here. */}
 
-      {/* ── Gift overlay (stash received, or stash full + discard) ── */}
-      {pendingGiftId && (
-        <View style={styles.overlay}>
-          {!pendingGiftNeedsDiscard ? (
-            <>
-              <Text style={styles.dealerTitle}>STASHED</Text>
-              <Text style={styles.dealerSubtitle}>
-                He slips you{'\n'}
-                <Text style={styles.dealerItemName}>
-                  {pendingGift?.name ?? 'something'}
-                </Text>
-                .{'\n'}Tucked away in your coat.
-              </Text>
-              {pendingGift && (
-                <Text style={styles.giftDesc}>{pendingGift.description}</Text>
-              )}
-              <Text style={styles.dealerItemDesc}>
-                Stash: ×{runConsumables[pendingGiftId] ?? 0}
-              </Text>
-              <Pressable style={styles.dealerAcceptBtn} onPress={dismissGift}>
-                <Text style={styles.dealerAcceptText}>GOT IT</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Text style={styles.dealerTitle}>STASH FULL</Text>
-              <Text style={styles.dealerSubtitle}>
-                He hands you {pendingGift?.name ?? 'something'}.
-                {'\n'}Discard a slot to make room.
-              </Text>
-              {pendingGift && (
-                <Text style={styles.giftDesc}>{pendingGift.description}</Text>
-              )}
-              <View style={styles.dealerOffers}>
-                {activeStashItems.map(c => (
-                  <View key={c.id} style={styles.dealerCard}>
-                    <Text style={styles.dealerItemName}>{c.name}</Text>
-                    <Text style={styles.dealerItemDesc}>
-                      ×{runConsumables[c.id] ?? 0} charge{(runConsumables[c.id] ?? 0) > 1 ? 's' : ''}
-                      {'\n'}{c.description}
-                    </Text>
-                    <Pressable
-                      style={styles.dealerAcceptBtn}
-                      onPress={() => discardConsumableForGift(c.id)}
-                    >
-                      <Text style={styles.dealerAcceptText}>DISCARD</Text>
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-              <Pressable style={styles.dealerDeclineBtn} onPress={dismissGift}>
-                <Text style={styles.dealerDeclineText}>DON'T TAKE IT</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      )}
+      {/* Stash-full is handled on the dealer screen now (drag an item onto the
+          dealer to throw one out) — no gift/discard modal here. */}
 
       {/* ── Run-over overlay ── */}
       {runPhase === 'over' && (
@@ -562,7 +562,7 @@ export function GameScreen() {
             <Text style={styles.overlayTitle}>FLATLINE</Text>
           )}
           <Text style={styles.overlayBody}>
-            {lucidityCoins} Lucidity banked
+            {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
           </Text>
           <Pressable style={styles.restartBtn} onPress={handleNewRun}>
             <Text style={styles.restartText}>START AGAIN</Text>
@@ -657,6 +657,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Scores button — screen-space, pinned to the top-right corner.
+  scoresAnchor: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'flex-end',
+    paddingTop: 6,
+    paddingHorizontal: 10,
+  },
+  scoresBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: '#fbbf2455',
+  },
+  scoresText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    letterSpacing: 2,
   },
 
   // Stash tray, placed on the lower red cabinet face just under the power
@@ -773,43 +797,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Dealer
-  dealerTitle: {
-    color: '#a855f7',
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 6,
-  },
-  dealerSubtitle: {
-    color: '#64748b',
-    fontSize: 13,
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  dealerOffers: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  dealerCard: {
-    flex: 1,
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderColor: 'rgba(168,85,247,0.45)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
-    alignItems: 'center',
-  },
   // Dealer portraits + offer hands
   dealerArrivalPortrait: {
-    width: 96,
-    height: 144,
+    width: DEALER_PORTRAIT_W,
+    height: DEALER_PORTRAIT_H,
     marginTop: 8,
-  },
-  dealerModalPortrait: {
-    width: 88,
-    height: 132,
+    alignSelf: 'center',
+    overflow: 'hidden',
   },
   dealerSpeech: {
     backgroundColor: '#13091f',
@@ -887,54 +881,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
-  },
-  dealerItemName: {
-    color: '#e2e8f0',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  dealerItemDesc: {
-    color: '#94a3b8',
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
-    flex: 1,
-  },
-  giftDesc: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-    maxWidth: 280,
-  },
-  dealerAcceptBtn: {
-    backgroundColor: '#a855f7',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  dealerAcceptText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  dealerDeclineBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#475569',
-  },
-  dealerDeclineText: {
-    color: '#64748b',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
   },
 
   // Game over

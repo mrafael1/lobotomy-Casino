@@ -15,7 +15,7 @@ export const ITEM_HINTS: Record<string, ConsumableDisplayHints> = {
   // ── The three new item assets (water / tablet / white powder) ──
   item_water: {
     positiveHint: 'CLEAR',
-    negativeHint: 'LOW PAY',
+    negativeHint: 'WEAK',
     flavorText: 'Still water. Still hands.',
   },
   item_pill: { // Red Pill — the "tablet" asset

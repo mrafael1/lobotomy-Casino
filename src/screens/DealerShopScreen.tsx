@@ -1,23 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Image,
   Pressable,
   StyleSheet,
   useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Text } from '../components/PixelText';
 import { useMetaStore } from '../state/metaState';
-import { useRunStore } from '../state/runState';
-import { CONSUMABLES, CONSUMABLE_MAP } from '../content/consumables';
+import { useRunStore, canStoreRunConsumable } from '../state/runState';
+import {
+  CONSUMABLES, CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS,
+  totalConsumableCopies, buildStashSlots,
+} from '../content/consumables';
 import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
 import { ITEM_HINTS, FALLBACK_HINTS } from '../content/itemHints';
 import {
-  itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT, ITEM_DISPLAY_SCALE,
+  itemIcon, DEALER_SHOP_COUNTER, DEALER_SHOP_PORTRAIT, COIN_ICON,
 } from '../content/uiAssets';
 import { Stash } from '../components/Stash';
+import { PanResponder } from 'react-native';
 
 // ─── Scene geometry ───────────────────────────────────────────────────────────
 // The bg + counter layers are baked on the full 1280×2560 canvas (logical
@@ -36,11 +41,10 @@ const CIRCLE_CY = 1671;
 const CIRCLE_R  = 29;
 
 // Consumable icon resting in a circle: base sits on the circle bottom, the
-// circle peeking out beneath reads as the slot/shadow it rests in. Run mode
-// shows only 2 offers, so it renders the item art larger (×ITEM_DISPLAY_SCALE)
-// while still clearing the 176px circle pitch.
-const CONS_ICON     = 90;
-const RUN_CONS_ICON = 80 * ITEM_DISPLAY_SCALE; // 160 src px — run consumables at x2
+// circle peeking out beneath reads as the slot/shadow it rests in. Rendered at
+// the art's native size (128×128), which clears the 176px circle pitch.
+const CONS_ICON     = 128;
+const RUN_CONS_ICON = 128;
 
 // The big in-world TV (the black rounded screen in dealer_shop_bg.png, left of
 // the dealer). Measured bounding box in the 1280×2560 scene. The dealer's
@@ -48,14 +52,12 @@ const RUN_CONS_ICON = 80 * ITEM_DISPLAY_SCALE; // 160 src px — run consumables
 // NOT on the small green dice panel up top.
 const TV = { left: 16, top: 1008, width: 392, height: 208 } as const;
 
-// Dealer portrait is still a 160×240 (2:3) 2-frame horizontal sheet (1600×1200),
-// NOT re-authored to the taller 160×320 canvas. So it is drawn undistorted at
-// full scene width and anchored so its baked counter-line (≈70.6% down its body,
-// where the old 160×240 counter sat) lands on the new counter row:
-//   DEALER_TOP = CIRCLE_CY − 0.706 · DEALER_FRAME_H ≈ 316.
-const DEALER_FRAME_W = 1280; // one frame = 160 logical ×8
-const DEALER_FRAME_H = 1920; // 240 logical ×8 (2:3 preserved)
-const DEALER_TOP     = 316;  // src y within the scene
+// Dealer portrait is a 2-frame horizontal sheet authored on the full 160×320
+// scene canvas (2560×2560 = two 1280×2560 frames at 8×), so each frame is
+// already calibrated to the scene like the bg/counter layers. It is drawn
+// across the whole scene frame and slid one frame width to swap frames — no
+// anchor offset or per-frame box (those were needed only by the old, shorter
+// 160×240 art).
 
 // One item shown resting on the counter — works for both the meta shop's
 // pre-run consumables and the in-run dealer's run consumables.
@@ -106,9 +108,27 @@ export function DealerShopScreen() {
   const runConsumables     = useRunStore(s => s.runConsumables);
   const acceptDealerOffer  = useRunStore(s => s.acceptDealerOffer);
   const declineDealerOffer = useRunStore(s => s.declineDealerOffer);
+  const discardRunConsumable = useRunStore(s => s.discardRunConsumable);
 
   const [selected, setSelected]   = useState<Offering | null>(null);
   const [dealerFrame, setDealerFrame] = useState(0);
+  // Transient dealer one-liner shown in the speech bubble after a rejected
+  // purchase (not enough Lucidity / stash full). Cleared on the next selection.
+  const [dealerMessage, setDealerMessage] = useState<string | null>(null);
+
+  // Shake driver for the stash tray + dealer on a rejected purchase.
+  const shake = useRef(new Animated.Value(0)).current;
+  function runShake() {
+    shake.setValue(0);
+    Animated.sequence([
+      Animated.timing(shake, { toValue: 1,  duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 1,  duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -1, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0,  duration: 50, useNativeDriver: true }),
+    ]).start();
+  }
+  const shakeX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-6, 6] });
 
   // Safety net: if the player leaves the run-mode dealer scene by any path
   // (hardware back included) without our take/leave handler clearing it, close
@@ -131,43 +151,83 @@ export function DealerShopScreen() {
     : CONSUMABLES.map(c => ({ id: c.id, name: c.name, description: c.description }));
 
   // Stash tray (bottom-left). Normal mode mirrors supplies queued for the next
-  // run; run mode mirrors the supplies already in the current run.
-  const stashSlots = [0, 1].map(i => {
-    const source = runMode ? runConsumables : pendingConsumables;
-    const pool   = runMode ? RUN_STASH_ITEMS : CONSUMABLES;
-    const queued = pool.filter(c => (source[c.id] ?? 0) > 0);
-    const c = queued[i];
-    return c ? { id: c.id, name: c.name, charges: source[c.id] ?? 0 } : null;
-  });
+  // run; run mode mirrors the supplies already in the current run. Duplicates
+  // occupy separate slots (expanded by buildStashSlots).
+  const stashSlots = buildStashSlots(
+    runMode ? runConsumables : pendingConsumables,
+    runMode ? RUN_STASH_ITEMS : CONSUMABLES,
+  );
 
   function consumableStatus(id: string) {
     const c = CONSUMABLE_MAP[id];
     if (!c) return 'buyable';
-    const charges = pendingConsumables[c.id] ?? 0;
-    if (charges >= 2)                      return 'maxed';
-    if (lucidityWallet < c.shopCost)       return 'tooPoor';
-    const slots = Object.values(pendingConsumables).filter(n => (n ?? 0) > 0).length;
-    if (charges === 0 && slots >= 2)       return 'slotsFull';
+    if (lucidityWallet < c.shopCost) return 'tooPoor';
+    // Duplicates allowed: the only block is a full stash.
+    if (totalConsumableCopies(pendingConsumables) >= MAX_CONSUMABLE_SLOTS) return 'slotsFull';
     return 'buyable';
   }
+
+  // In-character dealer lines for a rejected purchase.
+  const MSG_TOO_POOR   = '"Come back richer."';
+  const MSG_STASH_FULL = '"Your pockets are full."';
+  const MSG_MAXED      = '"No room for that."';
 
   // Tapping a counter item selects it (TV explains it) and makes the dealer react.
   function handleSelect(o: Offering) {
     setSelected(prev => (prev?.id === o.id ? prev : o));
     setDealerFrame(f => (f === 0 ? 1 : 0));
+    setDealerMessage(null);
   }
 
-  function handleBuy() {
-    if (!selected) return;
+  // Acquire an offering by dragging it onto the dealer/counter (and, pre-run,
+  // onto the stash). Buying never ACTIVATES a consumable — it only stores/takes
+  // it. On failure the dealer shakes and says why. Works in both modes (#5/#8).
+  function attemptAcquire(o: Offering) {
+    setSelected(o);
     if (runMode) {
-      // Take exactly one — apply it to the CURRENT run, then leave for the
-      // machine. The screen unmounts, so no second purchase is possible.
-      acceptDealerOffer(selected.id);
+      // No room? Reject with shake + message; the player can throw a stash item
+      // onto the dealer to free a slot, then take again, or just leave.
+      if (!canStoreRunConsumable(runConsumables, o.id)) {
+        setDealerMessage(MSG_STASH_FULL);
+        runShake();
+        return;
+      }
+      // Take one, apply it to the CURRENT run, then return to the machine.
+      acceptDealerOffer(o.id);
       router.back();
       return;
     }
-    buyConsumableCharge(selected.id);
-    setSelected(null);
+    const status = consumableStatus(o.id);
+    if (status === 'buyable') {
+      buyConsumableCharge(o.id);
+      setDealerMessage(null);
+      return;
+    }
+    setDealerMessage(
+      status === 'tooPoor'   ? MSG_TOO_POOR :
+      status === 'slotsFull' ? MSG_STASH_FULL :
+                               MSG_MAXED,
+    );
+    runShake();
+  }
+
+  // Drop zones. The dealer/counter is anywhere above the counter surface; the
+  // stash tray sits bottom-left. An offering can be dropped on either to buy/take.
+  function isOnDealer(_absX: number, absY: number): boolean {
+    return absY < sy(CIRCLE_CY - CIRCLE_R);
+  }
+  function isOnStash(absX: number, absY: number): boolean {
+    return absX < 140 && absY > screenH - 96;
+  }
+  function isOnAcquireZone(absX: number, absY: number): boolean {
+    return isOnDealer(absX, absY) || isOnStash(absX, absY);
+  }
+
+  // Throw a stash item onto the dealer to free its slot — gives nothing back.
+  function handleThrow(id: string) {
+    discardRunConsumable(id);
+    setDealerMessage(null);
+    setDealerFrame(f => (f === 0 ? 1 : 0));
   }
 
   // Leave without buying — run mode dismisses the dealer offer and returns to
@@ -215,52 +275,8 @@ export function DealerShopScreen() {
     return (
       <View style={tvBox} pointerEvents="none">
         <Text style={styles.tvDesc} numberOfLines={5} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {'Take one.\nThen get back to the machine.'}
+          {'Drag one to me.\nThen back to the machine.'}
         </Text>
-      </View>
-    );
-  }
-
-  // ── Buy bar (bottom, right of the stash tray) ────────────────────────────
-  function renderBuyBar() {
-    if (!selected) return null;
-
-    // Run mode: the dealer's offer is free — take one and go.
-    if (runMode) {
-      return (
-        <View style={styles.buyPanel}>
-          <Text style={styles.buyName}>{selected.name}</Text>
-          <View style={styles.buyRow}>
-            <Pressable style={styles.buyBtn} onPress={handleBuy}>
-              <Text style={styles.buyText}>TAKE IT</Text>
-            </Pressable>
-            <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
-          </View>
-        </View>
-      );
-    }
-
-    const status = consumableStatus(selected.id);
-    const cost = CONSUMABLE_MAP[selected.id]?.shopCost ?? 0;
-    return (
-      <View style={styles.buyPanel}>
-        <Text style={styles.buyName}>{selected.name}</Text>
-        <View style={styles.buyRow}>
-          <Text style={styles.buyCost}>{cost} L</Text>
-          {status === 'buyable' && (
-            <Pressable style={styles.buyBtn} onPress={handleBuy}>
-              <Text style={styles.buyText}>TAKE IT</Text>
-            </Pressable>
-          )}
-          {status === 'tooPoor'   && <Text style={styles.buyWarn}>Not enough Lucidity</Text>}
-          {status === 'maxed'     && <Text style={styles.buyWarn}>Charges maxed</Text>}
-          {status === 'slotsFull' && <Text style={styles.buyWarn}>Supply slots full</Text>}
-          <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
-        </View>
       </View>
     );
   }
@@ -275,26 +291,25 @@ export function DealerShopScreen() {
         resizeMode="contain"
       />
 
-      {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame). The
-             sheet is still 2:3 per frame, so it is drawn at its native aspect
-             (full scene width, 0.75× scene height) and anchored at DEALER_TOP —
-             never stretched to the taller 160×320 canvas. ─── */}
-      <View
-        style={{ position: 'absolute', ...sceneFrame, overflow: 'hidden' }}
+      {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame). Each
+             frame is a full 160×320 scene canvas, so it fills the whole scene
+             frame; sliding left by one frame width (fitW) swaps frames. ─── */}
+      <Animated.View
+        style={{ position: 'absolute', ...sceneFrame, overflow: 'hidden', transform: [{ translateX: shakeX }] }}
         pointerEvents="none"
       >
         <Image
           source={DEALER_SHOP_PORTRAIT}
           style={{
             position: 'absolute',
-            top:  sh(DEALER_TOP),
+            top:  0,
             left: -dealerFrame * fitW,
             width:  fitW * 2,
-            height: sh(DEALER_FRAME_H),
+            height: fitH,
           }}
           resizeMode="stretch"
         />
-      </View>
+      </Animated.View>
 
       {/* ── LAYER 3: Counter (drawn over the dealer's lower body) ───────── */}
       <Image
@@ -306,15 +321,18 @@ export function DealerShopScreen() {
       {/* ── TV — drawn after the counter art (the TV graphic lives there). ── */}
       {renderTV()}
 
-      {/* ── Dealer speech bubble — flavor/mood only (run mode, item selected).
-             Never repeats the green/red hints or the item name. ── */}
-      {runMode && selected && (
+      {/* ── Dealer speech bubble — a rejected-purchase line (both modes) takes
+             priority; otherwise the selected item's flavor/mood. All dealer
+             feedback lives here now (no bottom text box). ── */}
+      {(dealerMessage || selected) && (
         <SafeAreaView style={styles.bubbleAnchor} pointerEvents="none">
-          <View style={styles.dealerBubble}>
+          <Animated.View style={[styles.dealerBubble, { transform: [{ translateX: shakeX }] }]}>
             <Text style={styles.dealerBubbleText}>
-              "{(ITEM_HINTS[selected.id] ?? FALLBACK_HINTS).flavorText}"
+              {dealerMessage
+                ? dealerMessage
+                : `"${(ITEM_HINTS[selected!.id] ?? FALLBACK_HINTS).flavorText}"`}
             </Text>
-          </View>
+          </Animated.View>
         </SafeAreaView>
       )}
 
@@ -326,27 +344,49 @@ export function DealerShopScreen() {
         const iconBox = runMode ? RUN_CONS_ICON : CONS_ICON;
         const left = cx - iconBox / 2;
         const top  = (CIRCLE_CY + CIRCLE_R) - iconBox;
+        const itemBox = {
+          position: 'absolute' as const,
+          left:   sx(left),
+          top:    sy(top),
+          width:  sw(iconBox),
+          height: sh(iconBox),
+          alignItems: 'center' as const,
+          justifyContent: 'flex-end' as const,
+        };
+        const shopCost = CONSUMABLE_MAP[o.id]?.shopCost ?? 0;
         return (
           <React.Fragment key={o.id}>
-            <Pressable
-              style={{
-                position: 'absolute',
-                left:   sx(left),
-                top:    sy(top),
-                width:  sw(iconBox),
-                height: sh(iconBox),
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-              }}
-              onPress={() => handleSelect(o)}
-            >
-              {/* resizeMode 'contain' = proportional, never stretched/blurred */}
-              <Image source={itemIcon(o.id)} style={styles.consIcon} resizeMode="contain" />
-              {isSelected && <View style={styles.selectedRing} />}
-            </Pressable>
+            {/* PRICE + coin icon, ABOVE the consumable (pre-run shop only). */}
+            {!runMode && (
+              <View
+                style={{
+                  position: 'absolute',
+                  left:  sx(cx - 70),
+                  top:   sy(top - 46),
+                  width: sw(140),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                pointerEvents="none"
+              >
+                <Text style={styles.priceText}>{shopCost}</Text>
+                <Image source={COIN_ICON} style={styles.priceCoin} resizeMode="contain" />
+              </View>
+            )}
 
-            {/* Selected item's NAME, directly under it (centred on the circle,
-                just below the resting spot) — moved off the TV. */}
+            {/* Tap selects; drag onto the dealer (or the stash, pre-run) buys/
+                takes it. Drag-to-acquire works in BOTH dealer modes. */}
+            <DraggableCounterItem
+              boxStyle={itemBox}
+              iconId={o.id}
+              onTap={() => handleSelect(o)}
+              onDrop={() => attemptAcquire(o)}
+              dropTest={isOnAcquireZone}
+            />
+
+            {/* NAME — only for the SELECTED item, directly UNDER it. Unselected
+                items show just the asset (+ price above), no name. */}
             {isSelected && (
               <View
                 style={{
@@ -358,7 +398,12 @@ export function DealerShopScreen() {
                 }}
                 pointerEvents="none"
               >
-                <Text style={styles.itemName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                <Text
+                  style={styles.itemName}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                >
                   {o.name.toUpperCase()}
                 </Text>
               </View>
@@ -367,18 +412,23 @@ export function DealerShopScreen() {
         );
       })}
 
-      {/* ── Stash tray (bottom-left) — purchased / carried supplies land here ── */}
+      {/* ── Stash tray (bottom-left) — purchased / carried supplies land here.
+             In run mode the items are draggable: drop one on the dealer to throw
+             it out and free a slot. Pre-run, offerings can be dropped onto this
+             tray to buy them (see isOnStash). ── */}
       <SafeAreaView style={styles.stashAnchor} pointerEvents="box-none">
         <Text style={styles.stashLabel}>STASH</Text>
-        <Stash items={stashSlots} disabled width={104} />
+        <Animated.View style={{ transform: [{ translateX: shakeX }] }}>
+          <Stash
+            items={stashSlots}
+            disabled={!runMode}
+            draggable={runMode}
+            onThrow={handleThrow}
+            dropTest={isOnDealer}
+            width={104}
+          />
+        </Animated.View>
       </SafeAreaView>
-
-      {/* ── Buy bar (bottom, right of the stash tray) ──────────────────── */}
-      {selected && (
-        <SafeAreaView style={styles.buyAnchor} pointerEvents="box-none">
-          {renderBuyBar()}
-        </SafeAreaView>
-      )}
 
       {/* ── HUD ────────────────────────────────────────────────────────── */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
@@ -387,11 +437,70 @@ export function DealerShopScreen() {
             <Text style={styles.backText}>← {runMode ? 'LEAVE' : 'BACK'}</Text>
           </Pressable>
           {/* Run mode: the instruction copy lives on the big TV (renderTV), not
-              up here. Normal shop keeps its wallet readout. */}
-          {!runMode && <Text style={styles.wallet}>{lucidityWallet} L</Text>}
+              up here. Normal shop keeps its wallet readout (Lucidity + coin). */}
+          {!runMode && (
+            <View style={styles.walletPill}>
+              <Image source={COIN_ICON} style={styles.walletCoin} resizeMode="contain" />
+              <Text style={styles.wallet}>{lucidityWallet}</Text>
+            </View>
+          )}
         </View>
       </SafeAreaView>
     </View>
+  );
+}
+
+// ─── Draggable counter item (pre-run shop) ──────────────────────────────────
+// A counter offering you can either tap (select) or drag onto the dealer to buy.
+// Drag visual follows the finger; on release, a tiny move is treated as a tap, a
+// drop over a valid zone fires onDrop, and any other drop springs the
+// icon back to its resting circle. No physics — just a follow + snap-back.
+interface DraggableCounterItemProps {
+  boxStyle: object;
+  iconId: string;
+  onTap: () => void;
+  onDrop: () => void;
+  dropTest: (absX: number, absY: number) => boolean;
+}
+
+function DraggableCounterItem({
+  boxStyle, iconId, onTap, onDrop, dropTest,
+}: DraggableCounterItemProps) {
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const TAP_SLOP = 6;
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => Math.hypot(g.dx, g.dy) > 4,
+      onPanResponderGrant: () => pan.setValue({ x: 0, y: 0 }),
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+        useNativeDriver: false,
+      }),
+      onPanResponderRelease: (_e, g) => {
+        const moved = Math.hypot(g.dx, g.dy) > TAP_SLOP;
+        if (!moved) {
+          onTap();
+          return;
+        }
+        if (dropTest(g.moveX, g.moveY)) {
+          onDrop();
+        }
+        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      },
+    }),
+  ).current;
+
+  return (
+    <Animated.View
+      {...responder.panHandlers}
+      style={[boxStyle, { transform: pan.getTranslateTransform() }]}
+    >
+      <Image source={itemIcon(iconId)} style={styles.consIcon} resizeMode="contain" />
+    </Animated.View>
   );
 }
 
@@ -406,13 +515,6 @@ const styles = StyleSheet.create({
   consIcon: {
     width: '100%',
     height: '100%',
-  },
-  selectedRing: {
-    position: 'absolute',
-    inset: -2,
-    borderWidth: 2,
-    borderRadius: 6,
-    borderColor: '#00e5ff',
   },
 
   // TV explanation text (normal shop description / run instruction).
@@ -465,15 +567,29 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // Selected item's name, shown directly under its icon on the counter.
+  // Item name, shown directly under its icon on the counter. No fontWeight so
+  // the DTM pixel font isn't dropped on Android (single-weight face).
   itemName: {
     color: '#00e5ff',
     fontSize: 13,
-    fontWeight: '900',
     letterSpacing: 1,
     textAlign: 'center',
     textShadowColor: '#000',
     textShadowRadius: 3,
+  },
+  // Price above the consumable (pre-run): big number + Lucidity coin. No
+  // fontWeight (keep the DTM pixel font on Android).
+  priceText: {
+    color: '#fbbf24',
+    fontSize: 15,
+    letterSpacing: 1,
+    textShadowColor: '#000',
+    textShadowRadius: 3,
+    marginRight: 4,
+  },
+  priceCoin: {
+    width: 16,
+    height: 16,
   },
 
   // Stash tray pinned bottom-left
@@ -486,69 +602,8 @@ const styles = StyleSheet.create({
   stashLabel: {
     color: '#00e5ff',
     fontSize: 9,
-    fontWeight: '900',
     letterSpacing: 3,
     marginBottom: 2,
-  },
-
-  // Buy bar anchored bottom, to the right of the stash tray
-  buyAnchor: {
-    position: 'absolute',
-    left: 128,
-    right: 12,
-    bottom: 12,
-  },
-  buyPanel: {
-    backgroundColor: 'rgba(8,4,20,0.95)',
-    borderColor: 'rgba(0,229,255,0.3)',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  buyName: {
-    color: '#00e5ff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  buyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  buyCost: {
-    color: '#00e5ff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  buyWarn: {
-    color: '#f97316',
-    fontSize: 11,
-    fontWeight: '700',
-    flex: 1,
-  },
-  buyBtn: {
-    backgroundColor: '#00e5ff',
-    borderRadius: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    flex: 1,
-  },
-  buyText: {
-    color: '#08020e',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  closeBtn: {
-    padding: 8,
-  },
-  closeText: {
-    color: '#64748b',
-    fontSize: 16,
-    fontWeight: '700',
   },
 
   // HUD
@@ -576,17 +631,24 @@ const styles = StyleSheet.create({
   backText: {
     color: '#00e5ff',
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 2,
   },
-  wallet: {
-    color: '#00e5ff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
+  walletPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: 'rgba(0,0,0,0.55)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  walletCoin: {
+    width: 14,
+    height: 14,
+  },
+  wallet: {
+    color: '#00e5ff',
+    fontSize: 14,
+    letterSpacing: 1,
   },
 });

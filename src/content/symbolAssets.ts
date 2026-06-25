@@ -10,7 +10,7 @@ export const SYMBOL_SPRITES: Record<SymbolId, ImageSourcePropType | null> = {
   eye:      require('../../assets/images/symbols/eye.png'),
   pill:     require('../../assets/images/symbols/pill.png'),
   syringe:  require('../../assets/images/symbols/syringe.png'),
-  scalpel:  require('../../assets/images/symbols/scalpel_32.png'),
+  vial:  require('../../assets/images/symbols/vial.png'),
   flatline: require('../../assets/images/symbols/flatline.png'),
   book:     require('../../assets/images/symbols/book_32.png'),
 };

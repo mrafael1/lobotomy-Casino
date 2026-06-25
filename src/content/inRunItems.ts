@@ -29,7 +29,7 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   },
   {
     id: 'item_water',
-    name: 'Glass of Water',
+    name: 'Water',
     description: '+40 Lucidity.',
     effect: { type: 'addLucidity', amount: 40 },
   },
