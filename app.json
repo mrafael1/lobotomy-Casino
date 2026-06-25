@@ -8,7 +8,7 @@
     "scheme": "lobotomy",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/images/background_healthy.png",
+      "image": "./assets/images/bg_black.png",
       "resizeMode": "cover",
       "backgroundColor": "#1a0a2e"
     },
