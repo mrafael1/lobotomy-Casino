@@ -14,6 +14,7 @@ import { Background } from '../components/Background';
 import { SlotMachine } from '../components/SlotMachine';
 import { PixelScene } from '../components/PixelScene';
 import { Stash } from '../components/Stash';
+import { FlatlineKeptCountdown } from '../components/FlatlineKeptCountdown';
 import {
   vpx, ASSET_SCALE, VIRTUAL_WIDTH, HUD_HEIGHT,
   MACHINE_X, MACHINE_Y, MACHINE_W, MACHINE_H,
@@ -103,6 +104,10 @@ export function GameScreen() {
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
+  // Reel the score announcement should emerge from. A normal spin's final scoring
+  // action is the 3rd reel (default, via ?? 2 below); a power that changes a reel
+  // and updates the result sets this to that reel. Reset at the start of each spin.
+  const [scoreSourceReel, setScoreSourceReel] = useState<0 | 1 | 2 | null>(null);
   // Dealer arrival prompt: 'taps' = shoulder-tap text popping, 'ask' = speech bubble.
   const [dealerPrompt, setDealerPrompt] = useState<'taps' | 'ask' | null>(null);
   // True while holding on the final spin result before the run-over overlay shows.
@@ -118,6 +123,17 @@ export function GameScreen() {
     new Animated.Value(0), new Animated.Value(0), new Animated.Value(0),
   ]).current;
   const compulsiveSpinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Compulsion (Cocktail) possession visuals ──
+  // A separate shake layer (kept apart from the jackpot shakeAnim so they can't
+  // conflict), a forced x1/x2 bet shown on the readout, and a lever self-pull cue.
+  const compulsionShake = useRef(new Animated.Value(0)).current;
+  // True while a forced spin's reels are turning. The last forced spin zeroes the
+  // counter at its START, so this flag carries the possession visuals THROUGH it
+  // (the counter alone would drop the visuals one spin early).
+  const [forcedSpinInFlight, setForcedSpinInFlight] = useState(false);
+  const [compulsionVisualMultiplier, setCompulsionVisualMultiplier] = useState<1 | 2 | null>(null);
+  const [compulsionPullSignal, setCompulsionPullSignal] = useState(0);
 
   // Machine shakes on jackpot — including jackpots made with powers, once the
   // reroll animation has landed.
@@ -173,6 +189,8 @@ export function GameScreen() {
 
   const handleSpin = useCallback(() => {
     setSelection(NO_SELECTION);
+    // A fresh spin's score comes from the 3rd reel until a power says otherwise.
+    setScoreSourceReel(null);
     spin();
   }, [spin]);
 
@@ -253,6 +271,8 @@ export function GameScreen() {
     if (selection.mode === 'reroll') {
       if (rerollReel(i)) {
         setRerollingReelIndex(i);
+        // Reroll changes this reel and re-scores → score emerges from it.
+        setScoreSourceReel(i as 0 | 1 | 2);
       }
       setSelection(NO_SELECTION);
     } else if (selection.mode === 'lock') {
@@ -264,6 +284,8 @@ export function GameScreen() {
       if (i !== selection.sourceReel) {
         if (useConsumable(selection.consumableId)) {
           copyReel(selection.sourceReel, i);
+          // The copy writes onto the target reel and re-scores → score from it.
+          setScoreSourceReel(i as 0 | 1 | 2);
         }
         setSelection(NO_SELECTION);
       }
@@ -283,13 +305,14 @@ export function GameScreen() {
   }, [useConsumable]);
 
   const handleShiftReel = useCallback((reelIndex: number, direction: -1 | 1) => {
-    setSelection(prev => {
-      if (prev.mode === 'move') {
-        moveReel(reelIndex, direction);
+    if (selection.mode === 'move') {
+      if (moveReel(reelIndex, direction)) {
+        // Shift changes this reel and re-scores → score emerges from it.
+        setScoreSourceReel(reelIndex as 0 | 1 | 2);
       }
-      return NO_SELECTION;
-    });
-  }, [moveReel]);
+    }
+    setSelection(NO_SELECTION);
+  }, [selection, moveReel]);
 
   const runBusy =
     isSpinning ||
@@ -299,16 +322,32 @@ export function GameScreen() {
     endingPending ||
     compulsiveSpinSkips > 0;
 
+  // Compulsion is active while forced spins are pending OR one is still animating
+  // (the last forced spin zeroes the counter at its start, so the in-flight flag
+  // carries the visuals through it). Purely derived → it tracks the real spin
+  // lifecycle exactly and can never lag on or get stuck.
+  const compulsionActive =
+    runPhase === 'running' && (compulsiveSpinSkips > 0 || forcedSpinInFlight);
+
   useEffect(() => {
     const modalBusy = rerollingReelIndex !== null || dealerIncoming || dealerPending || endingPending;
     if (runPhase !== 'running' || isSpinning || modalBusy || compulsiveSpinSkips <= 0) return;
+
+    // Possession cues for this forced spin: a self-pull of the lever and a random
+    // forced bet (x1/x2 only — never x3) shown on the readout. The spin itself is
+    // still fired exactly once, by the timer below — these are visual only.
+    setCompulsionVisualMultiplier(Math.random() < 0.5 ? 1 : 2);
+    setCompulsionPullSignal(n => n + 1);
 
     if (compulsiveSpinTimer.current) {
       clearTimeout(compulsiveSpinTimer.current);
     }
     compulsiveSpinTimer.current = setTimeout(() => {
       compulsiveSpinTimer.current = null;
-      useRunStore.getState().spin({ compulsive: true });
+      // Mark the forced spin in flight so the visuals stay through the LAST one
+      // (its counter is already 0). Only if it actually started (else don't stick).
+      const fired = useRunStore.getState().spin({ compulsive: true });
+      setForcedSpinInFlight(fired !== null);
     }, 450);
 
     return () => {
@@ -318,6 +357,43 @@ export function GameScreen() {
       }
     };
   }, [runPhase, isSpinning, rerollingReelIndex, dealerIncoming, dealerPending, endingPending, compulsiveSpinSkips]);
+
+  // A forced spin stops being "in flight" the instant its reels stop.
+  useEffect(() => {
+    if (!isSpinning) setForcedSpinInFlight(false);
+  }, [isSpinning]);
+
+  // Safety net: if the in-flight flag is ever left set (e.g. a forced spin that
+  // never started), force it off after a generous ceiling so visuals can't stick.
+  useEffect(() => {
+    if (!forcedSpinInFlight) return;
+    const safety = setTimeout(() => setForcedSpinInFlight(false), 8000);
+    return () => clearTimeout(safety);
+  }, [forcedSpinInFlight]);
+
+  // Clear the forced-bet readout the moment Compulsion ends → back to the player's
+  // own multiplier.
+  useEffect(() => {
+    if (!compulsionActive) setCompulsionVisualMultiplier(null);
+  }, [compulsionActive]);
+
+  // Machine vibration for the whole Compulsion: a small fast jitter on its own
+  // animated value (independent of the jackpot shakeAnim). Runs while active,
+  // reliably stopped + reset when it ends — so it can never shake forever.
+  useEffect(() => {
+    if (!compulsionActive) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(compulsionShake, { toValue:  1, duration: 45, useNativeDriver: true }),
+        Animated.timing(compulsionShake, { toValue: -1, duration: 45, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      compulsionShake.setValue(0);
+    };
+  }, [compulsionActive, compulsionShake]);
 
   const canSpin = runPhase === 'running' && !runBusy && (freeSpins > 0 || neurons >= 1);
 
@@ -366,23 +442,16 @@ export function GameScreen() {
   const stashSlots = buildStashSlots(runConsumables, stashItems);
   const stashUsable = runPhase === 'running' && !runBusy && selection.mode === 'none';
 
-  const winLabel = lastResult
-    ? lastResult.winType === 'jackpot'
-      ? `JACKPOT  +${lastResult.scoreEarned}`
-      : lastResult.winType === 'triple'
-        ? `TRIPLE  +${lastResult.scoreEarned}`
-        : lastResult.winType === 'pair'
-          ? `PAIR  +${lastResult.scoreEarned}`
-          : lastResult.scoreEarned > 0
-            ? `BONUS  +${lastResult.scoreEarned}`
-          : null
-    : null;
-
+  // The result announcement (PAIR / TRIPLE / JACKPOT + amount) no longer lives in
+  // this fixed top label — it bursts from the source reel inside the machine (see
+  // ScoreBurst in SlotMachine). The remaining selection hint now sits at the bottom
+  // of the screen (see the hint anchor below). Shift has NO hint — its on-reel
+  // up/down arrows are self-explanatory, so 'move' deliberately yields null here.
+  // Reroll/lock no longer carry a text hint — the on-reel selection arrows
+  // (reel_selection overlay) make the "tap a reel" affordance clear. Only the
+  // copy (White Powder) flow, which has no arrows, keeps a hint.
   const selectionHint =
-    selection.mode === 'reroll'      ? 'TAP A REEL TO REROLL'
-    : selection.mode === 'lock'      ? 'TAP A REEL TO LOCK IT'
-    : selection.mode === 'move'     ? 'TAP AN ARROW TO SHIFT A REEL'
-    : selection.mode === 'copy_source' ? 'TAP THE REEL TO COPY FROM'
+    selection.mode === 'copy_source' ? 'TAP THE REEL TO COPY FROM'
     : selection.mode === 'copy_target' ? 'TAP THE REEL TO COPY ONTO'
     : null;
 
@@ -394,6 +463,16 @@ export function GameScreen() {
   // non-tappable; every other targeting mode taps the reels directly.
   const reelsTappable = selection.mode !== 'none' && selection.mode !== 'move' && !runBusy;
 
+  // Compulsion jitter — small fast X (with a touch of Y), additive to the jackpot
+  // shake but driven by its own value so the two never interfere. Created ONCE
+  // (not inline each render) so we don't rebuild native animated nodes on the root.
+  const compulsionShakeX = useRef(
+    compulsionShake.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] }),
+  ).current;
+  const compulsionShakeY = useRef(
+    compulsionShake.interpolate({ inputRange: [-1, 1], outputRange: [-2, 2] }),
+  ).current;
+
   return (
     <Background>
 
@@ -403,7 +482,17 @@ export function GameScreen() {
              outer (screen-space) container so its magnitude stays visually
              constant across devices. ── */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, { transform: [{ translateX: shakeAnim }] }]}
+        style={[StyleSheet.absoluteFill, {
+          // Only layer the compulsion jitter while it's actually active — at rest
+          // the transform is exactly the jackpot shake (no idle vibration).
+          transform: compulsionActive
+            ? [
+                { translateX: shakeAnim },
+                { translateX: compulsionShakeX },
+                { translateY: compulsionShakeY },
+              ]
+            : [{ translateX: shakeAnim }],
+        }]}
         pointerEvents="box-none"
       >
         <PixelScene>
@@ -422,6 +511,7 @@ export function GameScreen() {
               selectedReels={selectedReels}
               shiftActive={selection.mode === 'move'}
               onShiftReel={handleShiftReel}
+              reelSelectActive={selection.mode === 'reroll' || selection.mode === 'lock'}
               rerollingReelIndex={rerollingReelIndex}
               onRerollDone={() => setRerollingReelIndex(null)}
               multiplierInteractive={runPhase === 'running' && !runBusy}
@@ -438,6 +528,9 @@ export function GameScreen() {
               powers={powers}
               scale={ASSET_SCALE}
               rewardHold={isSpinning || rerollingReelIndex !== null}
+              scoreSourceReelIndex={scoreSourceReel}
+              forcedMultiplier={compulsionVisualMultiplier}
+              compulsionPullSignal={compulsionPullSignal}
             />
           </View>
 
@@ -445,18 +538,9 @@ export function GameScreen() {
                  Sizes are in asset-space (× ASSET_SCALE via vpx) so text stays
                  crisp (rendered large, downscaled with the rest of the canvas). ── */}
           <View style={styles.hud} pointerEvents="box-none">
-            <View style={styles.winRow}>
-              {selectionHint ? (
-                <Text style={styles.selectionHint}>{selectionHint}</Text>
-              ) : winLabel ? (
-                <Text style={[
-                  styles.winLabel,
-                  lastResult?.winType === 'jackpot' && styles.winJackpot,
-                ]}>
-                  {winLabel}
-                </Text>
-              ) : null}
-            </View>
+            {/* Spacer above the badges. The selection hint moved to the bottom of
+                the screen (temporary placement — see the hint anchor below). */}
+            <View style={styles.winRow} />
 
             <View style={styles.badgeRow}>
               {freeSpins > 0 && (
@@ -495,7 +579,10 @@ export function GameScreen() {
                 sits below them on the lower cabinet face (see stashStrip). */}
             <View style={styles.controlsRow}>
               <View style={styles.cancelArea}>
-                {selection.mode !== 'none' && (
+                {/* Powers (reroll/shift/lock) cancel by tapping the lit power
+                    again, so no CANCEL is shown for them. The copy flow (White
+                    Powder) has no such toggle, so it keeps a CANCEL escape. */}
+                {(selection.mode === 'copy_source' || selection.mode === 'copy_target') && (
                   <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
                     <Text style={styles.cancelText}>CANCEL</Text>
                   </Pressable>
@@ -526,6 +613,15 @@ export function GameScreen() {
           <Text style={styles.scoresText}>SCORES</Text>
         </Pressable>
       </SafeAreaView>
+
+      {/* ── Power/selection hint — TEMPORARY placement at the bottom of the screen,
+             clear of the reels, meters, powers and stash. Pixel font (no
+             fontWeight, so the DTM face is kept). Shift has no hint (arrows only). ── */}
+      {selectionHint && (
+        <SafeAreaView style={styles.hintAnchor} pointerEvents="none">
+          <Text style={styles.bottomHint}>{selectionHint}</Text>
+        </SafeAreaView>
+      )}
 
       {/* ── Dealer arrival: shoulder taps ── */}
       {dealerPrompt === 'taps' && (
@@ -595,13 +691,22 @@ export function GameScreen() {
               <Text style={styles.overlayBody}>
                 You have everything.{'\n'}It isn't enough.
               </Text>
+              <Text style={styles.overlayBody}>
+                {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
+              </Text>
             </>
           ) : (
-            <Text style={styles.overlayTitle}>FLATLINE</Text>
+            <>
+              <Text style={styles.overlayTitle}>FLATLINE</Text>
+              {/* Show the run's score, then drain it down to the 10% kept so the
+                  player watches the loss happen. Visual only — banking already
+                  kept the real 10% when the run ended. */}
+              <FlatlineKeptCountdown
+                total={lucidityCoins}
+                keptFraction={ECONOMY.END_OF_RUN_LUCIDITY_KEPT}
+              />
+            </>
           )}
-          <Text style={styles.overlayBody}>
-            {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
-          </Text>
           {lastEnding === 'wealth' && (
             <Pressable style={styles.continueBtn} onPress={handleContinueRun}>
               <Text style={styles.continueText}>CONTINUE RUN?</Text>
@@ -638,27 +743,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Win label / selection hint
+  // Top HUD spacer (formerly the win label / selection hint row).
   winRow: {
     height: vpx(16),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  winLabel: {
-    color: '#fbbf24',
-    fontSize: vpx(11),
-    fontWeight: '800',
-    letterSpacing: vpx(1),
+
+  // Selection/power hint — temporary bottom placement, screen-space. Pixel font
+  // (NO fontWeight, or Android drops the DTM face for the system sans), on a dark
+  // pill for readability over whatever sits behind it.
+  hintAnchor: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingBottom: 12,
+    paddingHorizontal: 16,
   },
-  winJackpot: {
-    color: '#ff2d78',
-    fontSize: vpx(14),
-  },
-  selectionHint: {
+  bottomHint: {
     color: '#00e5ff',
-    fontSize: vpx(9),
-    fontWeight: '800',
-    letterSpacing: vpx(0.7),
+    fontSize: 13,
+    letterSpacing: 1,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
 
   // Status badges — shared size, per-effect colour.

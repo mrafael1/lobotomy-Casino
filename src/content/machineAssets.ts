@@ -90,6 +90,16 @@ export const SHIFT_POWER_FRAME_COUNT = 7;
 export const SHIFT_POWER_COLUMNS = 3;
 // Locked-reel indicator: frame index == the locked reel (0/1/2).
 export const LOCK_POWER_FRAME_COUNT = 3;
+
+// ── Reel-selection overlay (reroll / lock targeting) ─────────────────────────
+// reel_selection.png is a full-canvas 4-frame 2×2 GRID (2560×5120, row-major)
+// drawing one arrow per reel, shown while a reroll/lock power is choosing a reel:
+//   0: all three arrows (idle)   1: reel 0 arrow pressed   2: reel 1   3: reel 2
+// The pressed frame is tap feedback — frame = pressedReel + 1 (0 = none pressed).
+// Laid out as a grid (like shift_power) rather than a wide 1×4 strip so it renders
+// crisp without the wide-texture downsampling — see SHIFT_POWER notes above.
+export const REEL_SELECT_FRAME_COUNT = 4;
+export const REEL_SELECT_COLUMNS = 2;
 export const SHIFT_ARROW_HITS = [
   { up: { left: 33, top: 153, width: 21, height: 15 }, down: { left: 33, top: 204, width: 21, height: 15 } },
   { up: { left: 65, top: 153, width: 21, height: 15 }, down: { left: 65, top: 204, width: 21, height: 15 } },
@@ -111,6 +121,8 @@ export const SHIFT_POWER_V3: ImageSourcePropType = require('../../assets/images/
 // Locked-reel indicator overlay: 3-frame full-canvas sheet, frame i draws the
 // lock box over reel i (memory locks exactly one reel at a time).
 export const LOCK_POWER_V3: ImageSourcePropType = require('../../assets/images/machine new view/lock_power.png');
+// Reel-selection arrows for reroll/lock targeting (4-frame full-canvas strip).
+export const REEL_SELECT_V3: ImageSourcePropType = require('../../assets/images/machine new view/reel_selection.png');
 export const LOCK_V3: ImageSourcePropType = require('../../assets/images/machine new view/lock_final_machine.png');
 // TV bars — track (empty) + fill (full), each a single 5× full-canvas frame
 // cropped from the authored sheets. Small textures, crisp at the machine's scale.
