@@ -10,7 +10,7 @@ import { Text } from '../components/PixelText';
 import { useRouter } from 'expo-router';
 import { useMetaStore } from '../state/metaState';
 import { ABILITY_UPGRADES, CORRUPTED_UPGRADES, POSITIVE_UPGRADES } from '../content/upgrades';
-import { CONSUMABLES, MAX_CONSUMABLE_CHARGES_PER_SLOT, MAX_CONSUMABLE_SLOTS } from '../content/consumables';
+import { CONSUMABLES, MAX_CONSUMABLE_SLOTS, totalConsumableCopies } from '../content/consumables';
 import type { Upgrade } from '../content/upgrades';
 import type { Consumable } from '../content/consumables';
 
@@ -50,15 +50,10 @@ export function ShopScreen() {
     return 'buyable';
   }
 
-  function consumableStatus(c: Consumable): 'maxed' | 'tooPoor' | 'slotsFull' | 'buyable' {
-    const charges = pendingConsumables[c.id] ?? 0;
-    if (charges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return 'maxed';
+  function consumableStatus(c: Consumable): 'tooPoor' | 'slotsFull' | 'buyable' {
     if (lucidityWallet < c.shopCost) return 'tooPoor';
-    const alreadyHas = charges > 0;
-    if (!alreadyHas) {
-      const distinctSlots = Object.values(pendingConsumables).filter(n => (n ?? 0) > 0).length;
-      if (distinctSlots >= MAX_CONSUMABLE_SLOTS) return 'slotsFull';
-    }
+    // Duplicates allowed: the only block is a full stash (total copies).
+    if (totalConsumableCopies(pendingConsumables) >= MAX_CONSUMABLE_SLOTS) return 'slotsFull';
     return 'buyable';
   }
 
@@ -157,10 +152,7 @@ export function ShopScreen() {
           </View>
           <Text style={styles.cardDesc}>{c.description}</Text>
           {status === 'slotsFull' && (
-            <Text style={styles.cardLocked}>Both supply slots are full</Text>
-          )}
-          {status === 'maxed' && (
-            <Text style={styles.cardLocked}>Supply locked at 2 charges</Text>
+            <Text style={styles.cardLocked}>Stash is full</Text>
           )}
         </View>
         <Pressable
@@ -172,9 +164,7 @@ export function ShopScreen() {
           disabled={status !== 'buyable'}
           onPress={() => buyConsumableCharge(c.id)}
         >
-          <Text style={styles.buyBtnText}>
-            {status === 'maxed' ? 'LOCKED' : c.shopCost}
-          </Text>
+          <Text style={styles.buyBtnText}>{c.shopCost}</Text>
         </Pressable>
       </View>
     );

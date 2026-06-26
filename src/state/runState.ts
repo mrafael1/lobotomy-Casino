@@ -14,7 +14,7 @@ import {
   hasPattern23Triple,
 } from '../game/economy';
 import { ECONOMY } from '../content/economy';
-import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, MAX_CONSUMABLE_CHARGES_PER_SLOT } from '../content/consumables';
+import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, totalConsumableCopies } from '../content/consumables';
 import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
 import { SYMBOLS } from '../content/symbols';
 import { SYMBOL_WEIGHTS } from '../content/symbols';
@@ -35,7 +35,19 @@ const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
 export interface RunStore extends RunState {
   runPhase: RunPhase;
   lastEnding: EndingType | null;
+  // Set once the player chooses "Continue run?" past the wealth threshold. While
+  // true the wealth ending is suppressed (GameScreen skips it) so the run only
+  // ends on flatline, and banking is deferred to that real end (full total).
+  wealthContinued: boolean;
   decaySkips: number;
+
+  // Powers that a 30L-threshold restore already gave back, queued ONLY so the
+  // power_coin animation can fly a coin toward each as feedback. The gameplay
+  // restore (removal from abilitiesUsed) has ALREADY happened at the Lucidity
+  // gain — this queue owns no state. commitPowerRestore clears one when its coin
+  // lands (or the flight is interrupted). Not persisted; purely visual.
+  pendingPowerRestores: ReadonlyArray<AbilityId>;
+  commitPowerRestore: (powerId: AbilityId) => void;
 
   spin: (options?: SpinOptions) => SpinResult | null;
   setSpinning: (v: boolean) => void;
@@ -45,6 +57,7 @@ export interface RunStore extends RunState {
     pendingConsumables: Partial<Record<string, number>>,
   ) => void;
   endRun: (ending: EndingType) => void;
+  continueRun: () => void;
 
   useConsumable: (consumableId: string) => boolean;
   lockReel: (reelIndex: number) => void;
@@ -58,8 +71,7 @@ export interface RunStore extends RunState {
   declineDealerVisit: () => void;
   acceptDealerOffer: (itemId: string) => void;
   declineDealerOffer: () => void;
-  discardConsumableForGift: (discardId: string) => void;
-  dismissGift: () => void;
+  discardRunConsumable: (discardId: string) => void;
 }
 
 const INITIAL_RUN_STATE: RunState = {
@@ -74,7 +86,7 @@ const INITIAL_RUN_STATE: RunState = {
   isSpinning:                 false,
   lastResult:                 null,
   lockedReels:                [false, false, false],
-  lockedReelSpinsRemaining:   0,
+  lockedReelSpins:            [0, 0, 0],
   runConsumables:             {},
   abilitiesUsed:              [],
   ownedUpgrades:              [],
@@ -88,8 +100,6 @@ const INITIAL_RUN_STATE: RunState = {
   dealerIncoming:             false,
   dealerPending:              false,
   dealerOfferIds:             null,
-  pendingGiftConsumableId:    null,
-  pendingGiftNeedsDiscard:    false,
   brainBoostSpins:            0,
   forcedRandomBetSpins:       0,
   guaranteedWinSpins:         0,
@@ -109,44 +119,86 @@ function canUseAbility(state: RunStore): boolean {
   return canAct(state) && state.lastResult !== null && state.blockPowersSpins <= 0;
 }
 
-function activeSlotIds(runConsumables: Partial<Record<string, number>>): string[] {
-  return Object.keys(runConsumables).filter(k => (runConsumables[k] ?? 0) > 0);
+// A copy can be stored whenever the stash isn't full. Duplicates are allowed —
+// the same item may occupy more than one slot — so there is no per-item cap;
+// only the total-copies cap matters. (itemId kept for call-site clarity.)
+export function canStoreRunConsumable(runConsumables: Partial<Record<string, number>>, itemId: string): boolean {
+  void itemId;
+  return totalConsumableCopies(runConsumables) < MAX_CONSUMABLE_SLOTS;
 }
 
-function canStoreItem(runConsumables: Partial<Record<string, number>>, itemId: string): boolean {
-  const currentCharges = runConsumables[itemId] ?? 0;
-  if (currentCharges >= MAX_CONSUMABLE_CHARGES_PER_SLOT) return false;
-  if (currentCharges > 0) return true;
-  return activeSlotIds(runConsumables).length < MAX_CONSUMABLE_SLOTS;
-}
-
-function pickDealerItems(spinCount: number, runConsumables: Partial<Record<string, number>>): [string, string] | null {
+function pickDealerItems(spinCount: number): [string, string] | null {
   const rng = createRNG(((Date.now() ^ (spinCount * 0x6b43c7f)) >>> 0));
-  const candidates = DEALER_ITEM_IDS.filter(id =>
-    (runConsumables[id] ?? 0) < MAX_CONSUMABLE_CHARGES_PER_SLOT);
+  // Duplicates are allowed in the stash now, so offer any two distinct items
+  // for variety regardless of what's already held (a full stash is rejected on
+  // take, with a dealer message).
+  const candidates = DEALER_ITEM_IDS;
   if (candidates.length < 2) return null;
   const shuffled = [...candidates].sort(() => rng() - 0.5);
   return [shuffled[0], shuffled[1]];
 }
 
-// Attempt to restore a randomly-chosen spent ability.
-// Called when a 30-coin threshold is crossed. If no ability has been used,
-// the credit is lost ("lose it" semantics — no carry-over).
-function tryRestoreAbility(
+// Apply a Lucidity gain and IMMEDIATELY restore one random spent power per 50-coin
+// threshold crossed (Math.floor(total / 50) index increases). Threshold counting
+// is on the run's cumulative Lucidity, so it triggers from any coin gain (spins,
+// dealer water, power re-scores) — not just at end of run.
+//
+// The restore is part of THIS gameplay state change: the chosen powers are removed
+// from abilitiesUsed and the shrunken list is returned. It never waits on an
+// animation. The picks are also returned in `restores` purely so the optional
+// power_coin animation can fly a coin toward each restored power as feedback.
+//
+// Eligibility = ANY spent power (an entry in abilitiesUsed); other powers still
+// being available does not matter. One instance is removed per crossing, and the
+// shrinking list is re-checked each crossing, so the same spent instance is never
+// restored twice and multiple crossings restore multiple powers when possible.
+// Non-positive gains, or no spent power, restore nothing. Independent of the TV
+// objective bar (which tracks LUCIDITY_OBJECTIVE and never resets).
+export function planLucidityGain(
+  prevCoins: number,
+  gain: number,
   abilitiesUsed: ReadonlyArray<AbilityId>,
   seed: number,
-): ReadonlyArray<AbilityId> {
-  if (abilitiesUsed.length === 0) return abilitiesUsed;
-  const rng = createRNG((seed >>> 0));
-  const idx = Math.floor(rng() * abilitiesUsed.length);
-  return abilitiesUsed.filter((_, i) => i !== idx) as ReadonlyArray<AbilityId>;
+): { lucidityCoins: number; abilitiesUsed: ReadonlyArray<AbilityId>; restores: AbilityId[] } {
+  const newCoins = Math.max(0, prevCoins + gain);
+  if (gain <= 0) return { lucidityCoins: newCoins, abilitiesUsed, restores: [] };
+
+  const per = ECONOMY.LUCIDITY_COINS_PER_RESTORE;
+  const prevIndex = Math.floor(prevCoins / per);
+  const nextIndex = Math.floor(newCoins / per);
+
+  const restores: AbilityId[] = [];
+  let remaining = [...abilitiesUsed];
+  for (let i = prevIndex; i < nextIndex; i++) {
+    if (remaining.length === 0) break; // nothing spent left → remaining credits lost
+    const rng = createRNG((seed ^ (i * 0x517cc1b7)) >>> 0);
+    const idx = Math.min(remaining.length - 1, Math.floor(rng() * remaining.length));
+    restores.push(remaining[idx]);
+    remaining = remaining.filter((_, j) => j !== idx); // remove exactly one instance
+  }
+  return { lucidityCoins: newCoins, abilitiesUsed: remaining, restores };
 }
 
 export const useRunStore = create<RunStore>((set, get) => ({
   ...INITIAL_RUN_STATE,
   runPhase: 'idle',
   lastEnding: null,
+  wealthContinued: false,
   decaySkips: 0,
+  pendingPowerRestores: [],
+
+  // Called by the power_coin animation when its coin reaches the power (or the
+  // flight is interrupted). The restore itself ALREADY happened at the Lucidity
+  // gain, so this only clears the power from the visual queue, letting the next
+  // queued coin play. A no-op if the id isn't queued.
+  commitPowerRestore(powerId: AbilityId): void {
+    const state = get();
+    const queueIdx = state.pendingPowerRestores.indexOf(powerId);
+    if (queueIdx < 0) return;
+    set({
+      pendingPowerRestores: state.pendingPowerRestores.filter((_, i) => i !== queueIdx),
+    });
+  },
 
   spin(options?: SpinOptions): SpinResult | null {
     const state = get();
@@ -222,23 +274,20 @@ export const useRunStore = create<RunStore>((set, get) => ({
       ? { ...result, scoreEarned: result.scoreEarned + cocktailBonus }
       : result;
 
-    // Lucidity coin accumulation + ability-restore check.
-    // Every LUCIDITY_COINS_PER_RESTORE coins earned fires one restore attempt.
-    // "Lose it" semantics: if no ability has been spent, the credit is forfeited.
-    const prevCoins = state.lucidityCoins;
-    const newCoins  = prevCoins + finalResult.coinsEarned;
-    const prevGen   = Math.floor(prevCoins / ECONOMY.LUCIDITY_COINS_PER_RESTORE);
-    const nextGen   = Math.floor(newCoins  / ECONOMY.LUCIDITY_COINS_PER_RESTORE);
-    let abilitiesUsed = state.abilitiesUsed;
-    for (let i = prevGen; i < nextGen; i++) {
-      abilitiesUsed = tryRestoreAbility(abilitiesUsed, seed ^ (i * 0x517cc1b7));
-    }
+    // Lucidity gained is 1:1 with the score shown this spin (cocktail rarity
+    // bonus included), so the coin count matches the win label exactly. Each
+    // 50-coin threshold restores one spent power immediately (abilitiesUsed
+    // shrinks now); the picks are queued only for the power_coin feedback.
+    const plan = planLucidityGain(
+      state.lucidityCoins, finalResult.scoreEarned, state.abilitiesUsed, seed,
+    );
 
     set({
       neurons:                    finalResult.neuronsAfter,
       scoreEarned:                state.scoreEarned + finalResult.scoreEarned,
-      lucidityCoins:              newCoins,
-      abilitiesUsed,
+      lucidityCoins:              plan.lucidityCoins,
+      abilitiesUsed:              plan.abilitiesUsed,
+      pendingPowerRestores:       [...state.pendingPowerRestores, ...plan.restores],
       freeSpinsRemaining:         finalResult.freeSpinsAfter,
       isFreeSpin:                 finalResult.isFreeSpin,
       isSpinning:                 true,
@@ -266,11 +315,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
       set({ isSpinning: true });
     } else {
       const state = get();
-      const remaining = Math.max(0, state.lockedReelSpinsRemaining - 1);
+      // Each locked reel counts down independently; a reel unlocks when its own
+      // timer hits 0, leaving any other locks untouched.
+      const spins = state.lockedReelSpins.map(n => Math.max(0, n - 1)) as [number, number, number];
+      const locks = spins.map(n => n > 0) as [boolean, boolean, boolean];
       set({
         isSpinning: false,
-        lockedReels: remaining > 0 ? state.lockedReels : [false, false, false],
-        lockedReelSpinsRemaining: remaining,
+        lockedReels: locks,
+        lockedReelSpins: spins,
       });
     }
   },
@@ -297,9 +349,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
       ownedUpgrades:  ownedPermanents,
       runConsumables: pendingConsumables,
       abilitiesUsed:  [],
-      runPhase:       'running',
-      lastEnding:     null,
-      decaySkips:     0,
+      pendingPowerRestores: [],
+      runPhase:        'running',
+      lastEnding:      null,
+      wealthContinued: false,
+      decaySkips:      0,
     });
   },
 
@@ -307,9 +361,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({ runPhase: 'over', lastEnding: ending });
   },
 
+  // "Continue run?" from the wealth screen: resume play instead of ending. The
+  // wealth ending won't fire again this run (GameScreen checks wealthContinued),
+  // so the run now ends only on flatline — where the full final total is banked.
+  continueRun(): void {
+    const state = get();
+    if (state.runPhase !== 'over' || state.lastEnding !== 'wealth') return;
+    set({ runPhase: 'running', lastEnding: null, wealthContinued: true });
+  },
+
   useConsumable(consumableId: string): boolean {
     const state = get();
     if (!canAct(state)) return false;
+    // Consumables can never be activated while a dealer scene is up (the
+    // invitation prompt or the in-run dealer visit). Shopping/selecting is fine;
+    // activating an effect is machine-only. This is a hard state-level block on
+    // top of the UI hiding the use affordance in those scenes.
+    if (state.dealerIncoming || state.dealerPending) return false;
 
     const consumable = CONSUMABLE_MAP[consumableId];
     const inRunItem = IN_RUN_ITEM_MAP[consumableId];
@@ -333,13 +401,21 @@ export const useRunStore = create<RunStore>((set, get) => ({
           });
           return true;
 
-        case 'addLucidity':
-          // Water (dealer item): grants coins directly to the run wallet drip
+        case 'addLucidity': {
+          // Water (dealer item): grants coins directly — and, like any Lucidity
+          // gain, can cross 50-coin thresholds to restore spent powers immediately.
+          const plan = planLucidityGain(
+            state.lucidityCoins, effect.amount, state.abilitiesUsed,
+            ((Date.now() ^ (state.spinCount * 0x2545f491)) >>> 0),
+          );
           set({
             runConsumables: newRunConsumables,
-            lucidityCoins: state.lucidityCoins + effect.amount,
+            lucidityCoins: plan.lucidityCoins,
+            abilitiesUsed: plan.abilitiesUsed,
+            pendingPowerRestores: [...state.pendingPowerRestores, ...plan.restores],
           });
           return true;
+        }
 
         case 'cocktailBoost':
           set({
@@ -414,12 +490,17 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (!state.ownedUpgrades.includes('perm_memory')) return;
     if (state.abilitiesUsed.includes('memory')) return;
 
-    const locks: [boolean, boolean, boolean] = [false, false, false];
+    // Keep any reel already locked — a new lock stacks on top rather than
+    // replacing it. Only the new reel's timer (re)starts at 3; existing locks
+    // keep counting down on their own.
+    const locks: [boolean, boolean, boolean] = [...state.lockedReels];
     locks[reelIndex] = true;
+    const spins: [number, number, number] = [...state.lockedReelSpins];
+    spins[reelIndex] = 2;
     set({
-      lockedReels:              locks,
-      lockedReelSpinsRemaining: 3,
-      abilitiesUsed:            [...state.abilitiesUsed, 'memory'],
+      lockedReels:     locks,
+      lockedReelSpins: spins,
+      abilitiesUsed:   [...state.abilitiesUsed, 'memory'],
     });
   },
 
@@ -449,16 +530,24 @@ export const useRunStore = create<RunStore>((set, get) => ({
     }
 
     const outcome = applyReroll(
-      state.lastResult.reels, reelIndex, rng, state.lucidityMultiplier,
+      state.lastResult.reels, reelIndex, rng, state.lastResult.scoreMultiplier,
       weights, pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
+    // Plan restores on the list that INCLUDES this reroll: if using it to make
+    // the pair/triple crosses a 30L threshold, reroll itself is eligible to be
+    // restored (so a power used to trigger a reset can be the one given back).
+    const markedUsed = [...state.abilitiesUsed, 'reroll'] as ReadonlyArray<AbilityId>;
+    const plan = planLucidityGain(
+      state.lucidityCoins, outcome.coinsDelta, markedUsed, seed,
+    );
     const freeSpinsAfter = Math.min(
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
-      abilitiesUsed: [...state.abilitiesUsed, 'reroll'],
+      abilitiesUsed: plan.abilitiesUsed,
       scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
-      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
+      lucidityCoins: plan.lucidityCoins,
+      pendingPowerRestores: [...state.pendingPowerRestores, ...plan.restores],
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
@@ -484,15 +573,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const learningOn = computeBookWeight(state.ownedUpgrades) > 0;
 
     const outcome = applyMoveColumn(
-      state.lastResult.reels, reelIndex, direction, state.lucidityMultiplier,
+      state.lastResult.reels, reelIndex, direction, state.lastResult.scoreMultiplier,
       pattern23, learningOn, !state.lastResult.isFreeSpin,
+    );
+    const moveSeed = ((Date.now() ^ (state.spinCount * 0x27d4eb2f + reelIndex)) >>> 0);
+    // Include this shift so, like reroll, a power used to make the gain that
+    // crosses a 30L threshold can itself be the restored one.
+    const markedUsed = [...state.abilitiesUsed, 'shift'] as ReadonlyArray<AbilityId>;
+    const plan = planLucidityGain(
+      state.lucidityCoins, outcome.coinsDelta, markedUsed, moveSeed,
     );
     const freeSpinsAfter = Math.min(
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
-      abilitiesUsed: [...state.abilitiesUsed, 'shift'],
+      abilitiesUsed: plan.abilitiesUsed,
       scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
-      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
+      lucidityCoins: plan.lucidityCoins,
+      pendingPowerRestores: [...state.pendingPowerRestores, ...plan.restores],
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
@@ -516,7 +613,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const learningOn = computeBookWeight(state.ownedUpgrades) > 0;
 
     const outcome = applyCopyReel(
-      state.lastResult.reels, sourceReel, targetReel, state.lucidityMultiplier,
+      state.lastResult.reels, sourceReel, targetReel, state.lastResult.scoreMultiplier,
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
@@ -534,13 +631,19 @@ export const useRunStore = create<RunStore>((set, get) => ({
       neuronsAfter = Math.max(0, state.neurons - 20);
     }
 
+    const copySeed = ((Date.now() ^ (state.spinCount * 0x165667b1)) >>> 0);
+    const plan = planLucidityGain(
+      state.lucidityCoins, outcome.coinsDelta, state.abilitiesUsed, copySeed,
+    );
     const freeSpinsAfter = Math.min(
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
       runConsumables: newRunConsumables,
       neurons: neuronsAfter,
+      abilitiesUsed: plan.abilitiesUsed,
       scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
-      lucidityCoins: Math.max(0, state.lucidityCoins + outcome.coinsDelta),
+      lucidityCoins: plan.lucidityCoins,
+      pendingPowerRestores: [...state.pendingPowerRestores, ...plan.restores],
       freeSpinsRemaining: freeSpinsAfter,
       lastResult: {
         ...state.lastResult,
@@ -584,7 +687,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     }
 
     if (shouldTrigger) {
-      const offerIds = pickDealerItems(state.spinCount, state.runConsumables);
+      const offerIds = pickDealerItems(state.spinCount);
       if (!offerIds) {
         set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
         return;
@@ -623,23 +726,18 @@ export const useRunStore = create<RunStore>((set, get) => ({
       return;
     }
 
+    // Stash-full case is handled on the dealer screen (drag an item onto the
+    // dealer to throw one out, then take again), so this only stores when there
+    // is room — full is a defensive no-op.
     const existingCharges = state.runConsumables[itemId] ?? 0;
-    if (canStoreItem(state.runConsumables, itemId)) {
-      set({
-        dealerPending: false,
-        dealerOfferIds: null,
-        runConsumables: { ...state.runConsumables, [itemId]: existingCharges + 1 },
-        pendingGiftConsumableId: null,
-        pendingGiftNeedsDiscard: false,
-      });
+    if (!canStoreRunConsumable(state.runConsumables, itemId)) {
+      set({ dealerPending: false, dealerOfferIds: null });
       return;
     }
-
     set({
       dealerPending: false,
       dealerOfferIds: null,
-      pendingGiftConsumableId: itemId,
-      pendingGiftNeedsDiscard: true,
+      runConsumables: { ...state.runConsumables, [itemId]: existingCharges + 1 },
     });
   },
 
@@ -647,19 +745,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({ dealerPending: false, dealerOfferIds: null });
   },
 
-  discardConsumableForGift(discardId: string): void {
+  // Throw ONE stash copy away to free its slot — gives nothing back. With
+  // duplicates allowed, this removes a single copy (decrement), clearing the
+  // entry only when the last copy is thrown.
+  discardRunConsumable(discardId: string): void {
     const state = get();
-    const giftId = state.pendingGiftConsumableId;
-    if (!giftId) return;
-    if ((state.runConsumables[discardId] ?? 0) <= 0) return;
-
+    const current = state.runConsumables[discardId] ?? 0;
+    if (current <= 0) return;
     const next = { ...state.runConsumables };
-    delete next[discardId];
-    next[giftId] = Math.min((next[giftId] ?? 0) + 1, MAX_CONSUMABLE_CHARGES_PER_SLOT);
-    set({ runConsumables: next, pendingGiftConsumableId: null, pendingGiftNeedsDiscard: false });
-  },
-
-  dismissGift(): void {
-    set({ pendingGiftConsumableId: null, pendingGiftNeedsDiscard: false });
+    if (current <= 1) delete next[discardId];
+    else next[discardId] = current - 1;
+    set({ runConsumables: next });
   },
 }));

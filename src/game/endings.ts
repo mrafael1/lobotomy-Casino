@@ -17,6 +17,10 @@ export function checkExitEligibility(run: RunState, meta: MetaState): boolean {
 
 // The single transition point where run state crosses into meta.
 // lucidityCoins bank to the wallet; scoreEarned tracks the personal best.
+//
+// Retention: the player keeps only END_OF_RUN_LUCIDITY_KEPT (10%) of the Lucidity
+// accumulated this run — e.g. 150 accumulated → 15 banked. Floor so the kept
+// amount is a whole coin and never rounds up past what was earned.
 export function bankRunToMeta(
   run: RunState,
   meta: MetaState,
@@ -26,9 +30,11 @@ export function bankRunToMeta(
     ? meta.endingsReached
     : ([...meta.endingsReached, ending] as MetaState['endingsReached']);
 
+  const keptLucidity = Math.floor(run.lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT);
+
   return {
     ...meta,
-    lucidityWallet: meta.lucidityWallet + run.lucidityCoins,
+    lucidityWallet: meta.lucidityWallet + keptLucidity,
     endingsReached,
     history: {
       runsPlayed: meta.history.runsPlayed + 1,

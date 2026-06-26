@@ -32,6 +32,7 @@ interface Props {
   reelIndex: 0 | 1 | 2;
   onComplete?: () => void;
   overrideStopMs?: number;   // single-reel reroll uses its own stop time
+  extraStopMs?: number;      // added to the stop time (e.g. 3rd-reel pair tension)
   // Display geometry (px).
   machineWidth: number;
   machineHeight: number;
@@ -42,7 +43,7 @@ interface Props {
 // One reel cell for the v3 machine. While spinning it cycles symbols.png, which
 // is already authored at the x5 runtime size. On stop it shows the exact
 // resolved symbol via its per-symbol sprite — covering all 7 symbols, including
-// scalpel/book which the sheet doesn't contain.
+// vial/book which the sheet doesn't contain.
 export function ReelCellV3({
   finalSymbol,
   spinning,
@@ -50,6 +51,7 @@ export function ReelCellV3({
   reelIndex,
   onComplete,
   overrideStopMs,
+  extraStopMs = 0,
   machineWidth,
   machineHeight,
   hole,
@@ -95,10 +97,10 @@ export function ReelCellV3({
       clearTimers();
       setBlurFrame(null);
       onComplete?.();
-    }, overrideStopMs ?? STOP_TIMES_MS[reelIndex]);
+    }, (overrideStopMs ?? STOP_TIMES_MS[reelIndex]) + extraStopMs);
 
     return clearTimers;
-  }, [spinning, finalSymbol, reelIndex, locked, overrideStopMs]);
+  }, [spinning, finalSymbol, reelIndex, locked, overrideStopMs, extraStopMs]);
 
   return (
     <View

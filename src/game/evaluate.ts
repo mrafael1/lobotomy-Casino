@@ -1,12 +1,9 @@
 import { SYMBOL_WEIGHTS } from '../content/symbols';
 import {
   JACKPOT_SCORE,
-  JACKPOT_COINS,
   JACKPOT_FREE_SPIN_GRANT,
   TRIPLE_SCORE,
-  TRIPLE_COINS,
   PAIR_SCORE,
-  PAIR_COINS,
   BOOK_BONUS_PER_VISIBLE,
 } from '../content/payouts';
 import { weightedPick } from './rng';
@@ -22,7 +19,7 @@ export interface ScoreOptions {
 export interface ReelScore {
   readonly winType: WinType;
   readonly scoreEarned: number;  // multiplied — accumulates toward the wealth ending
-  readonly coinsEarned: number;  // flat — banks to wallet, drives ability-restore cadence
+  readonly coinsEarned: number;  // 1:1 with scoreEarned — Lucidity gained equals the win shown
   readonly freeSpinsGranted: number;
 }
 
@@ -43,7 +40,10 @@ function buildWeights(
 
 // Single source of truth for what a reel combination is worth.
 // Used by evaluate() for spins and by abilities.ts to re-score modified reels.
-// Book bonus is score-only (no coin equivalent — it's already a multiplied bonus).
+//
+// Lucidity is now 1:1 with the win shown: coinsEarned always equals scoreEarned
+// (no separate flat-coin table, no conversion ratio). A pair worth +6 gives 6
+// Lucidity; a triple worth +18 gives 18. Book bonus is included in both.
 export function scoreReels(
   reels: ReelResult,
   lucidityMultiplier: number,
@@ -60,17 +60,19 @@ export function scoreReels(
   // Triple: all three identical
   if (a === b && b === c) {
     if (a === 'brain') {
+      const score = Math.round((JACKPOT_SCORE + bookBonus) * lucidityMultiplier);
       return {
         winType: 'jackpot',
-        scoreEarned: Math.round((JACKPOT_SCORE + bookBonus) * lucidityMultiplier),
-        coinsEarned: JACKPOT_COINS,
+        scoreEarned: score,
+        coinsEarned: score,
         freeSpinsGranted: allowFreeSpinGrant ? JACKPOT_FREE_SPIN_GRANT : 0,
       };
     }
+    const score = Math.round(((TRIPLE_SCORE[a] ?? 0) + bookBonus) * lucidityMultiplier);
     return {
       winType: 'triple',
-      scoreEarned: Math.round(((TRIPLE_SCORE[a] ?? 0) + bookBonus) * lucidityMultiplier),
-      coinsEarned: TRIPLE_COINS[a] ?? 0,
+      scoreEarned: score,
+      coinsEarned: score,
       freeSpinsGranted: 0,
     };
   }
@@ -85,10 +87,11 @@ export function scoreReels(
       null;
 
     if (matchSym !== null) {
+      const score = Math.round((((PAIR_SCORE[matchSym] ?? 0) * 2) + bookBonus) * lucidityMultiplier);
       return {
         winType: 'pair',
-        scoreEarned: Math.round((((PAIR_SCORE[matchSym] ?? 0) * 2) + bookBonus) * lucidityMultiplier),
-        coinsEarned: PAIR_COINS[matchSym] ?? 0,
+        scoreEarned: score,
+        coinsEarned: score,
         freeSpinsGranted: 0,
       };
     }
@@ -96,20 +99,22 @@ export function scoreReels(
     // Standard adjacent pair (a===b or b===c; a===c without b match is a miss)
     if (a === b || b === c) {
       const matchSymbol: SymbolId = a === b ? a : b;
+      const score = Math.round(((PAIR_SCORE[matchSymbol] ?? 0) + bookBonus) * lucidityMultiplier);
       return {
         winType: 'pair',
-        scoreEarned: Math.round(((PAIR_SCORE[matchSymbol] ?? 0) + bookBonus) * lucidityMultiplier),
-        coinsEarned: PAIR_COINS[matchSymbol] ?? 0,
+        scoreEarned: score,
+        coinsEarned: score,
         freeSpinsGranted: 0,
       };
     }
   }
 
-  // Miss — still pay book score bonus if Learning active; coins are always 0 on a miss
+  // Miss — still pay book score bonus if Learning active; Lucidity mirrors it.
+  const missScore = bookBonus > 0 ? Math.round(bookBonus * lucidityMultiplier) : 0;
   return {
     winType: 'miss',
-    scoreEarned: bookBonus > 0 ? Math.round(bookBonus * lucidityMultiplier) : 0,
-    coinsEarned: 0,
+    scoreEarned: missScore,
+    coinsEarned: missScore,
     freeSpinsGranted: 0,
   };
 }
@@ -163,6 +168,7 @@ export function evaluate(input: SpinInput): SpinResult {
 
   return {
     reels,
+    scoreMultiplier: lucidityMultiplier,
     scoreEarned: score.scoreEarned,
     coinsEarned: score.coinsEarned,
     neuronsAfter,

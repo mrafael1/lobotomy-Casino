@@ -10,6 +10,7 @@ export default function RootLayout() {
   // the system font.
   const [fontsLoaded] = useFonts({
     'Determination Sans': require('../assets/font/DTM-Sans.otf'),
+    'Determination Mono': require('../assets/font/DTM-Mono.otf'),
   });
 
   if (!fontsLoaded) return null;

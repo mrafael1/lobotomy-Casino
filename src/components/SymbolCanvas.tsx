@@ -88,7 +88,7 @@ export function SymbolCanvas({ symbol, size = SYMBOL_SIZE }: Props) {
         </>
       )}
 
-      {symbol === 'scalpel' && (
+      {symbol === 'vial' && (
         <>
           {/* Handle */}
           <RoundedRect x={32 * s} y={4 * s} width={12 * s} height={36 * s} r={4 * s} color="#64748b" />

@@ -28,6 +28,10 @@ export interface SpinInput {
 
 export interface SpinResult {
   readonly reels: ReelResult;
+  // Effective score multiplier this spin was scored at (lucidity × next-spin
+  // boost × bet, with brain-boost halving applied). Powers re-score modified
+  // reels at this same multiplier so a power-formed win pays like a natural one.
+  readonly scoreMultiplier: number;
   readonly scoreEarned: number;         // in-run score (multiplied) — drives the wealth ending
   readonly coinsEarned: number;         // flat lucidity coins banked to the wallet
   readonly neuronsAfter: number;
@@ -50,7 +54,7 @@ export interface RunState {
   readonly isSpinning: boolean;
   readonly lastResult: SpinResult | null;
   readonly lockedReels: [boolean, boolean, boolean];
-  readonly lockedReelSpinsRemaining: number; // Memory: spins left before the lock expires
+  readonly lockedReelSpins: [number, number, number]; // Memory: per-reel spins left before each lock expires (0 = unlocked)
   readonly runConsumables: Partial<Record<string, number>>;
   readonly abilitiesUsed: ReadonlyArray<AbilityId>;
   readonly ownedUpgrades: ReadonlyArray<UpgradeId>;
@@ -65,8 +69,6 @@ export interface RunState {
   readonly dealerIncoming: boolean;
   readonly dealerPending: boolean;
   readonly dealerOfferIds: [string, string] | null;
-  readonly pendingGiftConsumableId: string | null;
-  readonly pendingGiftNeedsDiscard: boolean;
   // Active effects from consumables / dealer items
   readonly brainBoostSpins: number;
   readonly forcedRandomBetSpins: number;

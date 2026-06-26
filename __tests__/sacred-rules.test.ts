@@ -26,7 +26,7 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     isSpinning:                false,
     lastResult:                null,
     lockedReels:               [false, false, false],
-    lockedReelSpinsRemaining:  0,
+    lockedReelSpins:           [0, 0, 0],
     runConsumables:            {},
     abilitiesUsed:             [],
     ownedUpgrades:             [],
@@ -40,8 +40,6 @@ function baseRunState(overrides: Partial<RunState> = {}): RunState {
     dealerIncoming:            false,
     dealerPending:             false,
     dealerOfferIds:            null,
-    pendingGiftConsumableId:   null,
-    pendingGiftNeedsDiscard:   false,
     brainBoostSpins:           0,
     forcedRandomBetSpins:      0,
     guaranteedWinSpins:        0,
@@ -211,8 +209,9 @@ test('Rule 7: bankRunToMeta transfers Lucidity and history, nothing else', () =>
   const meta = baseMetaState({ lucidityWallet: 50 });
   const banked = bankRunToMeta(run, meta, 'flatline');
 
-  // Lucidity banks
-  expect(banked.lucidityWallet).toBe(200);
+  // Lucidity banks — only 10% of the run's accumulated coins are kept.
+  // 50 wallet + floor(150 * 0.10) = 50 + 15 = 65.
+  expect(banked.lucidityWallet).toBe(65);
 
   // Run-only fields are NOT present in MetaState
   expect('neurons' in banked).toBe(false);
