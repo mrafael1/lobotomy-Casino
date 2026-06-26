@@ -102,6 +102,7 @@ export function DealerShopScreen() {
   const lucidityWallet      = useMetaStore(s => s.lucidityWallet);
   const pendingConsumables  = useMetaStore(s => s.pendingConsumables);
   const buyConsumableCharge = useMetaStore(s => s.buyConsumableCharge);
+  const discardPendingConsumable = useMetaStore(s => s.discardPendingConsumable);
 
   // ── In-run dealer visit (run_consumables mode) ──
   const dealerOfferIds     = useRunStore(s => s.dealerOfferIds);
@@ -223,9 +224,11 @@ export function DealerShopScreen() {
     return isOnDealer(absX, absY) || isOnStash(absX, absY);
   }
 
-  // Throw a stash item onto the dealer to free its slot — gives nothing back.
+  // Throw a stash item onto the dealer to free its slot. In run mode the item is
+  // gone for good; pre-run it undoes the queued purchase (Lucidity refunded).
   function handleThrow(id: string) {
-    discardRunConsumable(id);
+    if (runMode) discardRunConsumable(id);
+    else discardPendingConsumable(id);
     setDealerMessage(null);
     setDealerFrame(f => (f === 0 ? 1 : 0));
   }
@@ -271,14 +274,9 @@ export function DealerShopScreen() {
       );
     }
 
-    if (!runMode) return null;
-    return (
-      <View style={tvBox} pointerEvents="none">
-        <Text style={styles.tvDesc} numberOfLines={5} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {'Drag one to me.\nThen back to the machine.'}
-        </Text>
-      </View>
-    );
+    // The run-mode "drag one to me" instruction now lives in the dealer's speech
+    // bubble (see below); the TV only shows a selected item's effect hints.
+    return null;
   }
 
   return (
@@ -324,13 +322,15 @@ export function DealerShopScreen() {
       {/* ── Dealer speech bubble — a rejected-purchase line (both modes) takes
              priority; otherwise the selected item's flavor/mood. All dealer
              feedback lives here now (no bottom text box). ── */}
-      {(dealerMessage || selected) && (
+      {(dealerMessage || selected || runMode) && (
         <SafeAreaView style={styles.bubbleAnchor} pointerEvents="none">
           <Animated.View style={[styles.dealerBubble, { transform: [{ translateX: shakeX }] }]}>
             <Text style={styles.dealerBubbleText}>
               {dealerMessage
                 ? dealerMessage
-                : `"${(ITEM_HINTS[selected!.id] ?? FALLBACK_HINTS).flavorText}"`}
+                : selected
+                  ? `"${(ITEM_HINTS[selected.id] ?? FALLBACK_HINTS).flavorText}"`
+                  : 'Drag one to me.\nThen back to the machine.'}
             </Text>
           </Animated.View>
         </SafeAreaView>
@@ -421,8 +421,7 @@ export function DealerShopScreen() {
         <Animated.View style={{ transform: [{ translateX: shakeX }] }}>
           <Stash
             items={stashSlots}
-            disabled={!runMode}
-            draggable={runMode}
+            draggable
             onThrow={handleThrow}
             dropTest={isOnDealer}
             width={104}
@@ -469,6 +468,13 @@ function DraggableCounterItem({
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const TAP_SLOP = 6;
 
+  // The PanResponder is created once, so it would otherwise capture the first
+  // render's callbacks forever — leaving onDrop closing over a stale stash
+  // (e.g. still "full" after the player throws an item). Read the latest
+  // callbacks through a ref that re-points every render.
+  const cb = useRef({ onTap, onDrop, dropTest });
+  cb.current = { onTap, onDrop, dropTest };
+
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -480,11 +486,11 @@ function DraggableCounterItem({
       onPanResponderRelease: (_e, g) => {
         const moved = Math.hypot(g.dx, g.dy) > TAP_SLOP;
         if (!moved) {
-          onTap();
+          cb.current.onTap();
           return;
         }
-        if (dropTest(g.moveX, g.moveY)) {
-          onDrop();
+        if (cb.current.dropTest(g.moveX, g.moveY)) {
+          cb.current.onDrop();
         }
         Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
       },
@@ -515,13 +521,6 @@ const styles = StyleSheet.create({
   consIcon: {
     width: '100%',
     height: '100%',
-  },
-
-  // TV explanation text (normal shop description / run instruction).
-  tvDesc: {
-    color: '#e2e8f0',
-    fontSize: 19,
-    lineHeight: 23,
   },
 
   // TV mechanical hints (run mode): compact, big, green = good / red = bad.

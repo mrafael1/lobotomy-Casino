@@ -99,6 +99,11 @@ function DraggableSlot({ item, left, top, width, height, onThrow, dropTest }: Dr
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const dragging = useRef(false);
 
+  // The responder is created once; read the latest item/callbacks through a ref
+  // so a thrown slot resolves against the current item, not the mount-time one.
+  const cb = useRef({ item, onThrow, dropTest });
+  cb.current = { item, onThrow, dropTest };
+
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -112,8 +117,8 @@ function DraggableSlot({ item, left, top, width, height, onThrow, dropTest }: Dr
       }),
       onPanResponderRelease: (_evt, gesture) => {
         dragging.current = false;
-        if (dropTest?.(gesture.moveX, gesture.moveY)) {
-          onThrow?.(item.id);
+        if (cb.current.dropTest?.(gesture.moveX, gesture.moveY)) {
+          cb.current.onThrow?.(cb.current.item.id);
           return;
         }
         Animated.spring(pan, {

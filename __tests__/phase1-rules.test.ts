@@ -380,39 +380,33 @@ test('store: MEMORY requires perm_memory upgrade', () => {
   useRunStore.getState().setSpinning(false);
   useRunStore.getState().lockReel(1);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
-  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(3);
+  expect(useRunStore.getState().lockedReelSpins[1]).toBe(2);
   expect(useRunStore.getState().abilitiesUsed).toContain('memory');
   // 1/run — second lock call is ignored
   useRunStore.getState().lockReel(0);
   expect(useRunStore.getState().lockedReels).toEqual([false, true, false]);
 });
 
-test('store: MEMORY lock persists for exactly 3 spins', () => {
+test('store: MEMORY lock persists for exactly 2 spins', () => {
   useRunStore.getState().startNewRun(['perm_memory'], {});
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
 
   useRunStore.getState().lockReel(0);
   expect(useRunStore.getState().lockedReels[0]).toBe(true);
-  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(3);
+  expect(useRunStore.getState().lockedReelSpins[0]).toBe(2);
 
   // Spin 1 — lock should still be active after finishing
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   expect(useRunStore.getState().lockedReels[0]).toBe(true);
-  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(2);
+  expect(useRunStore.getState().lockedReelSpins[0]).toBe(1);
 
-  // Spin 2
-  useRunStore.getState().spin();
-  useRunStore.getState().setSpinning(false);
-  expect(useRunStore.getState().lockedReels[0]).toBe(true);
-  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(1);
-
-  // Spin 3 — lock expires after this spin
+  // Spin 2 — lock expires after this spin
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   expect(useRunStore.getState().lockedReels[0]).toBe(false);
-  expect(useRunStore.getState().lockedReelSpinsRemaining).toBe(0);
+  expect(useRunStore.getState().lockedReelSpins[0]).toBe(0);
 });
 
 test('store: consumables cannot be activated inside a dealer scene', () => {
@@ -433,21 +427,21 @@ test('store: consumables cannot be activated inside a dealer scene', () => {
   expect(useRunStore.getState().useConsumable('item_water')).toBe(true);
 });
 
-test('store: a 30L threshold restores a spent power IMMEDIATELY, not on commit', () => {
+test('store: a 50L threshold restores a spent power IMMEDIATELY, not on commit', () => {
   useRunStore.getState().startNewRun([], {});
   useRunStore.setState({
-    lucidityCoins: 0,
+    lucidityCoins: 20,
     abilitiesUsed: ['reroll'],
     pendingPowerRestores: [],
     runConsumables: { item_water: 1 },
     isSpinning: false,
   });
 
-  // +40 Lucidity crosses the 30 threshold → reroll is restored right now. The
-  // power_coin queue holds it only for the visual; gameplay no longer waits.
+  // +40 Lucidity (20 → 60) crosses the 50 threshold → reroll is restored right
+  // now. The power_coin queue holds it only for the visual; gameplay no longer waits.
   expect(useRunStore.getState().useConsumable('item_water')).toBe(true);
   let s = useRunStore.getState();
-  expect(s.lucidityCoins).toBe(40);
+  expect(s.lucidityCoins).toBe(60);
   expect(s.abilitiesUsed).not.toContain('reroll'); // restored without any commit
   expect(s.pendingPowerRestores).toContain('reroll'); // queued for the coin visual
 
@@ -462,31 +456,31 @@ test('store: a 30L threshold restores a spent power IMMEDIATELY, not on commit',
 test('store: a power restores even when other powers are still available', () => {
   useRunStore.getState().startNewRun([], {});
   useRunStore.setState({
-    lucidityCoins: 0,
+    lucidityCoins: 20,
     abilitiesUsed: ['reroll'], // reroll spent; shift & memory still available
     pendingPowerRestores: [],
     runConsumables: { item_water: 1 },
     isSpinning: false,
   });
 
-  expect(useRunStore.getState().useConsumable('item_water')).toBe(true); // +40
+  expect(useRunStore.getState().useConsumable('item_water')).toBe(true); // 20 → 60
   const s = useRunStore.getState();
   expect(s.abilitiesUsed).not.toContain('reroll'); // the one spent power came back
 });
 
-test('store: a 30L threshold with no spent power restores nothing', () => {
+test('store: a 50L threshold with no spent power restores nothing', () => {
   useRunStore.getState().startNewRun([], {});
   useRunStore.setState({
-    lucidityCoins: 0,
+    lucidityCoins: 20,
     abilitiesUsed: [],
     pendingPowerRestores: [],
     runConsumables: { item_water: 1 },
     isSpinning: false,
   });
 
-  useRunStore.getState().useConsumable('item_water'); // +40, crosses 30
+  useRunStore.getState().useConsumable('item_water'); // 20 → 60, crosses 50
   const s = useRunStore.getState();
-  expect(s.lucidityCoins).toBe(40);
+  expect(s.lucidityCoins).toBe(60);
   expect(s.abilitiesUsed).toEqual([]);
   expect(s.pendingPowerRestores).toEqual([]); // nothing spent → nothing restored
 });
@@ -494,24 +488,24 @@ test('store: a 30L threshold with no spent power restores nothing', () => {
 // ─────────────────────────────────────────────
 // planLucidityGain — the pure restoration helper
 // ─────────────────────────────────────────────
-test('planLucidityGain: 29 → 35 restores one used power', () => {
-  const plan = planLucidityGain(29, 6, ['reroll'] as AbilityId[], 1);
-  expect(plan.lucidityCoins).toBe(35);
+test('planLucidityGain: 49 → 55 restores one used power', () => {
+  const plan = planLucidityGain(49, 6, ['reroll'] as AbilityId[], 1);
+  expect(plan.lucidityCoins).toBe(55);
   expect(plan.restores).toEqual(['reroll']);
   expect(plan.abilitiesUsed).toEqual([]);
 });
 
-test('planLucidityGain: 58 → 91 restores two used powers when two are depleted', () => {
-  const plan = planLucidityGain(58, 33, ['reroll', 'shift'] as AbilityId[], 1);
-  expect(plan.lucidityCoins).toBe(91);
-  expect(plan.restores.length).toBe(2); // two thresholds crossed (60, 90)
+test('planLucidityGain: 40 → 140 restores two used powers when two are depleted', () => {
+  const plan = planLucidityGain(40, 100, ['reroll', 'shift'] as AbilityId[], 1);
+  expect(plan.lucidityCoins).toBe(140);
+  expect(plan.restores.length).toBe(2); // two thresholds crossed (50, 100)
   expect(plan.restores.sort()).toEqual(['reroll', 'shift']);
   expect(plan.abilitiesUsed).toEqual([]);
 });
 
 test('planLucidityGain: one used + two available restores only the used one', () => {
   // Available powers simply aren't in abilitiesUsed; only the spent one is eligible.
-  const plan = planLucidityGain(0, 30, ['memory'] as AbilityId[], 1);
+  const plan = planLucidityGain(0, 50, ['memory'] as AbilityId[], 1);
   expect(plan.restores).toEqual(['memory']);
   expect(plan.abilitiesUsed).toEqual([]);
 });
@@ -524,16 +518,16 @@ test('planLucidityGain: a threshold crossed with no used powers restores none', 
 });
 
 test('planLucidityGain: a single threshold restores at most one power (no double)', () => {
-  // 29 → 35 crosses exactly one threshold, so even with two spent powers only one
+  // 49 → 55 crosses exactly one threshold, so even with two spent powers only one
   // is restored; the other stays used.
-  const plan = planLucidityGain(29, 6, ['reroll', 'shift'] as AbilityId[], 1);
+  const plan = planLucidityGain(49, 6, ['reroll', 'shift'] as AbilityId[], 1);
   expect(plan.restores.length).toBe(1);
   expect(plan.abilitiesUsed.length).toBe(1); // the unrestored one remains spent
 });
 
-test('planLucidityGain: 0 → 95 restores up to three used powers', () => {
-  const plan = planLucidityGain(0, 95, ['reroll', 'shift', 'memory'] as AbilityId[], 1);
-  expect(plan.restores.length).toBe(3); // thresholds at 30, 60, 90
+test('planLucidityGain: 0 → 160 restores up to three used powers', () => {
+  const plan = planLucidityGain(0, 160, ['reroll', 'shift', 'memory'] as AbilityId[], 1);
+  expect(plan.restores.length).toBe(3); // thresholds at 50, 100, 150
   expect(plan.restores.sort()).toEqual(['memory', 'reroll', 'shift']);
   expect(plan.abilitiesUsed).toEqual([]);
 });

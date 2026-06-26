@@ -35,6 +35,10 @@ const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
 export interface RunStore extends RunState {
   runPhase: RunPhase;
   lastEnding: EndingType | null;
+  // Set once the player chooses "Continue run?" past the wealth threshold. While
+  // true the wealth ending is suppressed (GameScreen skips it) so the run only
+  // ends on flatline, and banking is deferred to that real end (full total).
+  wealthContinued: boolean;
   decaySkips: number;
 
   // Powers that a 30L-threshold restore already gave back, queued ONLY so the
@@ -53,6 +57,7 @@ export interface RunStore extends RunState {
     pendingConsumables: Partial<Record<string, number>>,
   ) => void;
   endRun: (ending: EndingType) => void;
+  continueRun: () => void;
 
   useConsumable: (consumableId: string) => boolean;
   lockReel: (reelIndex: number) => void;
@@ -81,7 +86,7 @@ const INITIAL_RUN_STATE: RunState = {
   isSpinning:                 false,
   lastResult:                 null,
   lockedReels:                [false, false, false],
-  lockedReelSpinsRemaining:   0,
+  lockedReelSpins:            [0, 0, 0],
   runConsumables:             {},
   abilitiesUsed:              [],
   ownedUpgrades:              [],
@@ -133,8 +138,8 @@ function pickDealerItems(spinCount: number): [string, string] | null {
   return [shuffled[0], shuffled[1]];
 }
 
-// Apply a Lucidity gain and IMMEDIATELY restore one random spent power per 30-coin
-// threshold crossed (Math.floor(total / 30) index increases). Threshold counting
+// Apply a Lucidity gain and IMMEDIATELY restore one random spent power per 50-coin
+// threshold crossed (Math.floor(total / 50) index increases). Threshold counting
 // is on the run's cumulative Lucidity, so it triggers from any coin gain (spins,
 // dealer water, power re-scores) — not just at end of run.
 //
@@ -178,6 +183,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   ...INITIAL_RUN_STATE,
   runPhase: 'idle',
   lastEnding: null,
+  wealthContinued: false,
   decaySkips: 0,
   pendingPowerRestores: [],
 
@@ -270,7 +276,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     // Lucidity gained is 1:1 with the score shown this spin (cocktail rarity
     // bonus included), so the coin count matches the win label exactly. Each
-    // 30-coin threshold restores one spent power immediately (abilitiesUsed
+    // 50-coin threshold restores one spent power immediately (abilitiesUsed
     // shrinks now); the picks are queued only for the power_coin feedback.
     const plan = planLucidityGain(
       state.lucidityCoins, finalResult.scoreEarned, state.abilitiesUsed, seed,
@@ -309,11 +315,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
       set({ isSpinning: true });
     } else {
       const state = get();
-      const remaining = Math.max(0, state.lockedReelSpinsRemaining - 1);
+      // Each locked reel counts down independently; a reel unlocks when its own
+      // timer hits 0, leaving any other locks untouched.
+      const spins = state.lockedReelSpins.map(n => Math.max(0, n - 1)) as [number, number, number];
+      const locks = spins.map(n => n > 0) as [boolean, boolean, boolean];
       set({
         isSpinning: false,
-        lockedReels: remaining > 0 ? state.lockedReels : [false, false, false],
-        lockedReelSpinsRemaining: remaining,
+        lockedReels: locks,
+        lockedReelSpins: spins,
       });
     }
   },
@@ -341,14 +350,24 @@ export const useRunStore = create<RunStore>((set, get) => ({
       runConsumables: pendingConsumables,
       abilitiesUsed:  [],
       pendingPowerRestores: [],
-      runPhase:       'running',
-      lastEnding:     null,
-      decaySkips:     0,
+      runPhase:        'running',
+      lastEnding:      null,
+      wealthContinued: false,
+      decaySkips:      0,
     });
   },
 
   endRun(ending: EndingType): void {
     set({ runPhase: 'over', lastEnding: ending });
+  },
+
+  // "Continue run?" from the wealth screen: resume play instead of ending. The
+  // wealth ending won't fire again this run (GameScreen checks wealthContinued),
+  // so the run now ends only on flatline — where the full final total is banked.
+  continueRun(): void {
+    const state = get();
+    if (state.runPhase !== 'over' || state.lastEnding !== 'wealth') return;
+    set({ runPhase: 'running', lastEnding: null, wealthContinued: true });
   },
 
   useConsumable(consumableId: string): boolean {
@@ -384,7 +403,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
         case 'addLucidity': {
           // Water (dealer item): grants coins directly — and, like any Lucidity
-          // gain, can cross 30-coin thresholds to restore spent powers immediately.
+          // gain, can cross 50-coin thresholds to restore spent powers immediately.
           const plan = planLucidityGain(
             state.lucidityCoins, effect.amount, state.abilitiesUsed,
             ((Date.now() ^ (state.spinCount * 0x2545f491)) >>> 0),
@@ -471,12 +490,17 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (!state.ownedUpgrades.includes('perm_memory')) return;
     if (state.abilitiesUsed.includes('memory')) return;
 
-    const locks: [boolean, boolean, boolean] = [false, false, false];
+    // Keep any reel already locked — a new lock stacks on top rather than
+    // replacing it. Only the new reel's timer (re)starts at 3; existing locks
+    // keep counting down on their own.
+    const locks: [boolean, boolean, boolean] = [...state.lockedReels];
     locks[reelIndex] = true;
+    const spins: [number, number, number] = [...state.lockedReelSpins];
+    spins[reelIndex] = 2;
     set({
-      lockedReels:              locks,
-      lockedReelSpinsRemaining: 3,
-      abilitiesUsed:            [...state.abilitiesUsed, 'memory'],
+      lockedReels:     locks,
+      lockedReelSpins: spins,
+      abilitiesUsed:   [...state.abilitiesUsed, 'memory'],
     });
   },
 
@@ -506,7 +530,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     }
 
     const outcome = applyReroll(
-      state.lastResult.reels, reelIndex, rng, state.lucidityMultiplier,
+      state.lastResult.reels, reelIndex, rng, state.lastResult.scoreMultiplier,
       weights, pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
@@ -549,7 +573,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const learningOn = computeBookWeight(state.ownedUpgrades) > 0;
 
     const outcome = applyMoveColumn(
-      state.lastResult.reels, reelIndex, direction, state.lucidityMultiplier,
+      state.lastResult.reels, reelIndex, direction, state.lastResult.scoreMultiplier,
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
     const moveSeed = ((Date.now() ^ (state.spinCount * 0x27d4eb2f + reelIndex)) >>> 0);
@@ -589,7 +613,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const learningOn = computeBookWeight(state.ownedUpgrades) > 0;
 
     const outcome = applyCopyReel(
-      state.lastResult.reels, sourceReel, targetReel, state.lucidityMultiplier,
+      state.lastResult.reels, sourceReel, targetReel, state.lastResult.scoreMultiplier,
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 

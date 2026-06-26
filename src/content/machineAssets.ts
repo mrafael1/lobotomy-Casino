@@ -72,6 +72,30 @@ export const POWER_HITS = {
   lock:   { left: 49, top: 223, width: 13, height: 15 },
 } as const;
 
+// ── Shift arrows (shift_power.png) ───────────────────────────────────────────
+// shift_power.png is a full-canvas 7-frame sheet drawing an up + down arrow over
+// each of the three reel columns. Shown only while the shift power is active;
+// tapping a reel's up/down arrow shifts that reel. Frame 0 is the idle state; the
+// remaining six show a single arrow in its pressed state, ordered per reel as
+// down then up:
+//   0 idle · 1 R0↓ · 2 R0↑ · 3 R1↓ · 4 R1↑ · 5 R2↓ · 6 R2↑
+// i.e. frame = 1 + reel*2 + (up ? 1 : 0); 0 when nothing is held.
+// The sheet is a 3×3 GRID (row-major; cells 7–8 unused), 3840×7680 — laid out as
+// a grid rather than one 8960px strip so it stays under the GPU max texture size
+// (a wider strip gets downsampled and renders blurry). Arrow art measured at src
+// y155..166 (up) and y206..217 (down), centred on each REEL_CELL_CENTERS column.
+// Hit rects sit a touch larger and clear of the reel window (y170..200) so
+// neither arrow overlaps the symbols.
+export const SHIFT_POWER_FRAME_COUNT = 7;
+export const SHIFT_POWER_COLUMNS = 3;
+// Locked-reel indicator: frame index == the locked reel (0/1/2).
+export const LOCK_POWER_FRAME_COUNT = 3;
+export const SHIFT_ARROW_HITS = [
+  { up: { left: 33, top: 153, width: 21, height: 15 }, down: { left: 33, top: 204, width: 21, height: 15 } },
+  { up: { left: 65, top: 153, width: 21, height: 15 }, down: { left: 65, top: 204, width: 21, height: 15 } },
+  { up: { left: 97, top: 153, width: 21, height: 15 }, down: { left: 97, top: 204, width: 21, height: 15 } },
+] as const;
+
 // ── Runtime image sources ───────────────────────────────────────────────────
 export const MACHINE_V3: ImageSourcePropType = require('../../assets/images/machine new view/final_machine.png');
 export const REEL_BG_V3: ImageSourcePropType = require('../../assets/images/machine new view/reel_final_machine.png');
@@ -82,6 +106,11 @@ export const SYMBOLS_SHEET_V3: ImageSourcePropType = require('../../assets/image
 // Machine-mounted power button sheets (3 frames each — see POWER_FRAME_COUNT).
 export const REROLL_V3: ImageSourcePropType = require('../../assets/images/machine new view/reroll_final_machine.png');
 export const SHIFT_V3: ImageSourcePropType = require('../../assets/images/machine new view/shift_final_machine.png');
+// Shift-arrow overlay (7-frame full-canvas sheet — see SHIFT_POWER_FRAME_COUNT).
+export const SHIFT_POWER_V3: ImageSourcePropType = require('../../assets/images/machine new view/shift_power.png');
+// Locked-reel indicator overlay: 3-frame full-canvas sheet, frame i draws the
+// lock box over reel i (memory locks exactly one reel at a time).
+export const LOCK_POWER_V3: ImageSourcePropType = require('../../assets/images/machine new view/lock_power.png');
 export const LOCK_V3: ImageSourcePropType = require('../../assets/images/machine new view/lock_final_machine.png');
 // TV bars — track (empty) + fill (full), each a single 5× full-canvas frame
 // cropped from the authored sheets. Small textures, crisp at the machine's scale.

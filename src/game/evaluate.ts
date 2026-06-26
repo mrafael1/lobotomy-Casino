@@ -168,6 +168,7 @@ export function evaluate(input: SpinInput): SpinResult {
 
   return {
     reels,
+    scoreMultiplier: lucidityMultiplier,
     scoreEarned: score.scoreEarned,
     coinsEarned: score.coinsEarned,
     neuronsAfter,

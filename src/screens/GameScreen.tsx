@@ -32,7 +32,7 @@ type Selection =
   | { mode: 'none' }
   | { mode: 'reroll' }
   | { mode: 'lock' }
-  | { mode: 'move'; reel: number | null }
+  | { mode: 'move' }
   | { mode: 'copy_source'; consumableId: string }       // charge NOT yet consumed
   | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
@@ -85,6 +85,7 @@ export function GameScreen() {
   const setSpinning        = useRunStore(s => s.setSpinning);
   const setBetMultiplier   = useRunStore(s => s.setBetMultiplier);
   const endRun             = useRunStore(s => s.endRun);
+  const continueRun        = useRunStore(s => s.continueRun);
   const startNewRun        = useRunStore(s => s.startNewRun);
   const useConsumable      = useRunStore(s => s.useConsumable);
   const lockReel           = useRunStore(s => s.lockReel);
@@ -97,6 +98,7 @@ export function GameScreen() {
 
   const ownedPermanents        = useMetaStore(s => s.ownedPermanents);
   const bankRun                = useMetaStore(s => s.bankRun);
+  const markEndingReached      = useMetaStore(s => s.markEndingReached);
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
@@ -106,6 +108,10 @@ export function GameScreen() {
   // True while holding on the final spin result before the run-over overlay shows.
   const [endingPending, setEndingPending] = useState(false);
   const endingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether this run's payout has been banked yet. The wealth ending defers
+  // banking (the player may Continue and earn more), so we bank lazily — on
+  // flatline, or when the player finally leaves the wealth screen — exactly once.
+  const bankedRef = useRef(false);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const tapTexts  = useRef([
@@ -174,36 +180,68 @@ export function GameScreen() {
     setSpinning(false);
     const runNow = useRunStore.getState();
     // End check runs first — if the run is over the Dealer should not appear.
-    const ending = checkEnding(runNow, useMetaStore.getState());
+    let ending = checkEnding(runNow, useMetaStore.getState());
+    // Once the player has Continued past the wealth threshold, the wealth ending
+    // no longer fires (only flatline can end the run from here).
+    if (ending === 'wealth' && runNow.wealthContinued) ending = null;
     if (ending) {
       // Hold on the final reels + payout, THEN flip to the run-over overlay.
       // endingPending locks the machine (runBusy) so no spin/race during the
       // hold; the guard prevents scheduling a second timer / duplicate overlay.
       if (endingTimer.current) return;
+      const endingType = ending;
       setEndingPending(true);
       endingTimer.current = setTimeout(() => {
         endingTimer.current = null;
         setEndingPending(false);
-        const latest = useRunStore.getState();
-        bankRun(latest, ending);
-        endRun(ending);
+        // Flatline is final — bank now. Wealth defers banking until the player
+        // leaves the screen (they may Continue and bank a larger total later),
+        // but the win still counts as reached the moment the screen shows.
+        if (endingType === 'flatline') {
+          bankRun(useRunStore.getState(), endingType);
+          bankedRef.current = true;
+        } else {
+          markEndingReached(endingType);
+        }
+        endRun(endingType);
       }, FLATLINE_REVEAL_DELAY_MS);
     } else if (runNow.compulsiveSpinSkips > 0) {
       return;
     } else {
       checkDealerTrigger();
     }
-  }, [setSpinning, bankRun, endRun, checkDealerTrigger]);
+  }, [setSpinning, bankRun, markEndingReached, endRun, checkDealerTrigger]);
+
+  // Bank the finished run's payout exactly once. Flatline already banked at the
+  // ending hold; the wealth screen defers to here, so leaving it (start again /
+  // dealer / shop) commits the bank with the full final total.
+  const commitBankIfNeeded = useCallback(() => {
+    if (bankedRef.current) return;
+    const latest = useRunStore.getState();
+    if (latest.lastEnding) {
+      bankRun(latest, latest.lastEnding);
+      bankedRef.current = true;
+    }
+  }, [bankRun]);
+
+  // "Continue run?" — resume play past the wealth threshold; nothing is banked
+  // yet (the larger total banks when the run truly ends).
+  const handleContinueRun = useCallback(() => {
+    setSelection(NO_SELECTION);
+    continueRun();
+  }, [continueRun]);
 
   const handleNewRun = useCallback(() => {
     if (endingTimer.current) {
       clearTimeout(endingTimer.current);
       endingTimer.current = null;
     }
+    commitBankIfNeeded();
     setEndingPending(false);
     setSelection(NO_SELECTION);
     startNewRun(ownedPermanents, getPendingConsumables());
-  }, [startNewRun, ownedPermanents, getPendingConsumables]);
+    bankedRef.current = false;
+  }, [commitBankIfNeeded, startNewRun, ownedPermanents, getPendingConsumables]);
 
   // Clear the pending run-over timer if the screen unmounts mid-hold.
   useEffect(() => () => {
@@ -220,8 +258,6 @@ export function GameScreen() {
     } else if (selection.mode === 'lock') {
       lockReel(i);
       setSelection(NO_SELECTION);
-    } else if (selection.mode === 'move') {
-      setSelection({ mode: 'move', reel: i });
     } else if (selection.mode === 'copy_source') {
       setSelection({ mode: 'copy_target', sourceReel: i, consumableId: selection.consumableId });
     } else if (selection.mode === 'copy_target') {
@@ -246,10 +282,10 @@ export function GameScreen() {
     }
   }, [useConsumable]);
 
-  const handleMoveDirection = useCallback((direction: -1 | 1) => {
+  const handleShiftReel = useCallback((reelIndex: number, direction: -1 | 1) => {
     setSelection(prev => {
-      if (prev.mode === 'move' && prev.reel !== null) {
-        moveReel(prev.reel, direction);
+      if (prev.mode === 'move') {
+        moveReel(reelIndex, direction);
       }
       return NO_SELECTION;
     });
@@ -315,7 +351,7 @@ export function GameScreen() {
     shift: {
       visible: hasShift,
       frame: powerFrame('move', 'shift'),
-      onPress: () => setSelection(s => (s.mode === 'move' ? NO_SELECTION : { mode: 'move', reel: null })),
+      onPress: () => setSelection(s => (s.mode === 'move' ? NO_SELECTION : { mode: 'move' })),
     },
     memory: {
       visible: hasMemory,
@@ -345,17 +381,18 @@ export function GameScreen() {
   const selectionHint =
     selection.mode === 'reroll'      ? 'TAP A REEL TO REROLL'
     : selection.mode === 'lock'      ? 'TAP A REEL TO LOCK IT'
-    : selection.mode === 'move' && selection.reel === null ? 'TAP A REEL TO SHIFT'
+    : selection.mode === 'move'     ? 'TAP AN ARROW TO SHIFT A REEL'
     : selection.mode === 'copy_source' ? 'TAP THE REEL TO COPY FROM'
     : selection.mode === 'copy_target' ? 'TAP THE REEL TO COPY ONTO'
     : null;
 
   const selectedReels =
-    selection.mode === 'move' && selection.reel !== null ? [selection.reel]
-    : selection.mode === 'copy_target' ? [selection.sourceReel]
+    selection.mode === 'copy_target' ? [selection.sourceReel]
     : [];
 
-  const reelsTappable = selection.mode !== 'none' && !runBusy;
+  // In 'move' mode the shift arrows (not the reels) take the taps, so reels stay
+  // non-tappable; every other targeting mode taps the reels directly.
+  const reelsTappable = selection.mode !== 'none' && selection.mode !== 'move' && !runBusy;
 
   return (
     <Background>
@@ -383,8 +420,8 @@ export function GameScreen() {
               onAllReelsDone={handleAllReelsDone}
               onReelPress={reelsTappable ? handleReelPress : undefined}
               selectedReels={selectedReels}
-              shiftTargetReel={selection.mode === 'move' ? selection.reel : null}
-              onShiftDirection={handleMoveDirection}
+              shiftActive={selection.mode === 'move'}
+              onShiftReel={handleShiftReel}
               rerollingReelIndex={rerollingReelIndex}
               onRerollDone={() => setRerollingReelIndex(null)}
               multiplierInteractive={runPhase === 'running' && !runBusy}
@@ -565,13 +602,18 @@ export function GameScreen() {
           <Text style={styles.overlayBody}>
             {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
           </Text>
+          {lastEnding === 'wealth' && (
+            <Pressable style={styles.continueBtn} onPress={handleContinueRun}>
+              <Text style={styles.continueText}>CONTINUE RUN?</Text>
+            </Pressable>
+          )}
           <Pressable style={styles.restartBtn} onPress={handleNewRun}>
             <Text style={styles.restartText}>START AGAIN</Text>
           </Pressable>
-          <Pressable style={styles.shopBtn} onPress={() => router.push('/dealer')}>
+          <Pressable style={styles.shopBtn} onPress={() => { commitBankIfNeeded(); router.push('/dealer'); }}>
             <Text style={styles.shopText}>VISIT THE DEALER</Text>
           </Pressable>
-          <Pressable style={styles.metaShopBtn} onPress={() => router.push('/shop')}>
+          <Pressable style={styles.metaShopBtn} onPress={() => { commitBankIfNeeded(); router.push('/shop'); }}>
             <Text style={styles.metaShopText}>SPEND LUCIDITY</Text>
           </Pressable>
         </View>
@@ -899,6 +941,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 2,
     textAlign: 'center',
+  },
+  continueBtn: {
+    marginTop: 24,
+    marginBottom: 4,
+    backgroundColor: '#22c55e',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+  },
+  continueText: {
+    color: '#06210f',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 3,
   },
   restartBtn: {
     marginTop: 24,

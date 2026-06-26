@@ -6,8 +6,6 @@ import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
 import { CoinFlow } from './CoinFlow';
 import { PowerCoinFlow } from './PowerCoinFlow';
-import { MOVE_ORDER } from '../game/abilities';
-import { SYMBOLS } from '../content/symbols';
 import { useRunStore } from '../state/runState';
 import { useAnimatedLucidity } from '../state/useAnimatedLucidity';
 import type { SymbolId } from '../game/types';
@@ -15,12 +13,13 @@ import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
 import {
   MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
-  REROLL_V3, SHIFT_V3, LOCK_V3,
+  REROLL_V3, SHIFT_V3, LOCK_V3, SHIFT_POWER_V3, LOCK_POWER_V3,
   WEALTH_TRACK_V3, WEALTH_FILL_V3, HEALTH_TRACK_V3, HEALTH_FILL_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
   REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN, BAR_FILL,
-  MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT, POWER_HITS,
+  MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT, POWER_HITS, SHIFT_ARROW_HITS,
   LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, POWER_FRAME_COUNT,
+  SHIFT_POWER_FRAME_COUNT, SHIFT_POWER_COLUMNS, LOCK_POWER_FRAME_COUNT,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
@@ -44,9 +43,10 @@ interface Props {
   // When set, reels are tappable (ability/lock targeting) and highlight on press.
   onReelPress?: (reelIndex: number) => void;
   selectedReels?: ReadonlyArray<number>;
-  // When set, renders ▲/▼ shift buttons above/below that reel column.
-  shiftTargetReel?: number | null;
-  onShiftDirection?: (direction: -1 | 1) => void;
+  // When true, the shift power is active: draws the shift_power overlay (up/down
+  // arrows on every reel) and makes each arrow tappable to shift that reel.
+  shiftActive?: boolean;
+  onShiftReel?: (reelIndex: number, direction: -1 | 1) => void;
   // Single-reel reroll animation: spins only that reel, fires when done.
   rerollingReelIndex?: number | null;
   onRerollDone?: () => void;
@@ -77,8 +77,8 @@ export function SlotMachine({
   onAllReelsDone,
   onReelPress,
   selectedReels = [],
-  shiftTargetReel,
-  onShiftDirection,
+  shiftActive = false,
+  onShiftReel,
   rerollingReelIndex = null,
   onRerollDone,
   onSelectMultiplier,
@@ -94,7 +94,7 @@ export function SlotMachine({
   const lastResult    = useRunStore(s => s.lastResult);
   const lockedReels   = useRunStore(s => s.lockedReels);
   const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
-  const lockedReelSpinsRemaining = useRunStore(s => s.lockedReelSpinsRemaining);
+  const lockedReelSpins = useRunStore(s => s.lockedReelSpins);
   // Displayed Lucidity for the objective bar climbs gradually toward the real
   // total (state updates immediately) so big gains fill the bar smoothly. The
   // 30-coin shake/flash is driven separately by CoinFlow off the real total.
@@ -224,14 +224,12 @@ export function SlotMachine({
     }
   }, [isSpinning]);
 
-  // Adjacent symbols for the shift buttons.
-  // Book is not in MOVE_ORDER — clamp to 0 (brain's position), matching applyMoveColumn,
-  // so the direction buttons still appear even when the reel shows a book.
-  const shiftCurrentSym = shiftTargetReel != null ? reels[shiftTargetReel] : null;
-  const rawShiftIdx = shiftCurrentSym ? MOVE_ORDER.indexOf(shiftCurrentSym) : -1;
-  const shiftIdx = rawShiftIdx < 0 && shiftCurrentSym !== null ? 0 : rawShiftIdx;
-  const shiftUpSym   = shiftIdx >= 0 ? MOVE_ORDER[(shiftIdx - 1 + MOVE_ORDER.length) % MOVE_ORDER.length] : null;
-  const shiftDownSym = shiftIdx >= 0 ? MOVE_ORDER[(shiftIdx + 1) % MOVE_ORDER.length] : null;
+  // Overlay frame for the shift arrows: 0 idle, else the held arrow's pressed
+  // frame (1 + reel*2 + up). Reset to idle whenever shift deactivates.
+  const [shiftFrame, setShiftFrame] = useState(0);
+  useEffect(() => {
+    if (!shiftActive) setShiftFrame(0);
+  }, [shiftActive]);
 
   // Cell tap-target geometry (source px → display px). A touch of vertical
   // padding makes the small reel windows comfortably tappable.
@@ -381,12 +379,44 @@ export function SlotMachine({
         <PowerCoinFlow f={f} hold={rewardHold} />
       </View>
 
+      {/* 7c — Locked-reel indicators: a full-canvas lock box per locked reel
+              (frame index == that reel; transparent elsewhere, so multiple stack
+              cleanly). The spins-left count sits just below each box, clear of
+              the symbol. */}
+      {([0, 1, 2] as const).map(i => lockedReels[i] ? (
+        <React.Fragment key={`lock-${i}`}>
+          <SpriteSheetFrame
+            source={LOCK_POWER_V3}
+            frameIndex={i}
+            frameCount={LOCK_POWER_FRAME_COUNT}
+            width={machineWidth}
+            height={machineHeight}
+            style={styles.fill}
+          />
+          <Text
+            style={[
+              styles.lockCount,
+              {
+                position: 'absolute',
+                left: (REEL_CELL_CENTERS[i] - 8) * f,
+                top: 205 * f,
+                width: 16 * f,
+                fontSize: Math.round(5 * f),
+                textAlign: 'center',
+              },
+            ]}
+            pointerEvents="none"
+          >
+            {lockedReelSpins[i]}
+          </Text>
+        </React.Fragment>
+      ) : null)}
+
       {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
       <View style={styles.fill} pointerEvents="box-none">
         {([0, 1, 2] as const).map(i => {
           const left = REEL_CELL_CENTERS[i] * f - cellTapW / 2;
           const selected = selectedReels.includes(i);
-          const locked = lockedReels[i];
           const tappable = !!onReelPress && !isSpinning && rerollingReelIndex === null;
           return (
             <View
@@ -398,14 +428,6 @@ export function SlotMachine({
                 <Pressable style={StyleSheet.absoluteFill} onPress={() => onReelPress!(i)} />
               )}
               {selected && <View style={[StyleSheet.absoluteFill, styles.reelSelected]} pointerEvents="none" />}
-              {locked && (
-                <View style={[StyleSheet.absoluteFill, styles.lockBadge]} pointerEvents="none">
-                  <Text style={[styles.lockIcon, { fontSize: Math.round(7 * f) }]}>🔒</Text>
-                  <Text style={[styles.lockCount, { fontSize: Math.round(3.5 * f) }]}>
-                    {lockedReelSpinsRemaining}
-                  </Text>
-                </View>
-              )}
             </View>
           );
         })}
@@ -456,42 +478,41 @@ export function SlotMachine({
         )}
       </View>
 
-      {/* 10 — Shift direction buttons — above and below the selected reel column */}
-      {shiftTargetReel != null && onShiftDirection && shiftUpSym && shiftDownSym && (
+      {/* 10 — Shift power: full-canvas up/down arrow overlay + per-reel hit zones.
+              Tapping a reel's arrow shifts that reel; the overlay shows its pressed
+              frame while any arrow is held. */}
+      {shiftActive && onShiftReel && (
         <>
-          <Pressable
-            style={[
-              styles.shiftBtn,
-              styles.shiftBtnTop,
-              {
-                left: REEL_CELL_CENTERS[shiftTargetReel] * f - cellTapW / 2,
-                width: cellTapW,
-                top: TV_SCREEN.top * f,
-                height: (REEL_WINDOW.top - TV_SCREEN.top - 2) * f,
-              },
-            ]}
-            onPress={() => onShiftDirection(-1)}
-          >
-            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftUpSym].name.toUpperCase()}</Text>
-            <Text style={styles.shiftArrow}>▲</Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.shiftBtn,
-              styles.shiftBtnBottom,
-              {
-                left: REEL_CELL_CENTERS[shiftTargetReel] * f - cellTapW / 2,
-                width: cellTapW,
-                top: (REEL_WINDOW.top + REEL_WINDOW.height + 2) * f,
-                height: 24 * f,
-              },
-            ]}
-            onPress={() => onShiftDirection(1)}
-          >
-            <Text style={styles.shiftArrow}>▼</Text>
-            <Text style={styles.shiftSymbolLabel}>{SYMBOLS[shiftDownSym].name.toUpperCase()}</Text>
-          </Pressable>
+          <SpriteSheetFrame
+            source={SHIFT_POWER_V3}
+            frameIndex={shiftFrame}
+            frameCount={SHIFT_POWER_FRAME_COUNT}
+            columns={SHIFT_POWER_COLUMNS}
+            width={machineWidth}
+            height={machineHeight}
+            style={styles.fill}
+          />
+          {SHIFT_ARROW_HITS.map((arrows, i) =>
+            (['up', 'down'] as const).map(dir => {
+              const r = arrows[dir];
+              const frame = 1 + i * 2 + (dir === 'up' ? 1 : 0);
+              return (
+                <Pressable
+                  key={`${i}-${dir}`}
+                  style={{
+                    position: 'absolute',
+                    left: r.left * f,
+                    top: r.top * f,
+                    width: r.width * f,
+                    height: r.height * f,
+                  }}
+                  onPressIn={() => setShiftFrame(frame)}
+                  onPressOut={() => setShiftFrame(0)}
+                  onPress={() => onShiftReel(i, dir === 'up' ? 1 : -1)}
+                />
+              );
+            }),
+          )}
         </>
       )}
 
@@ -529,49 +550,13 @@ const styles = StyleSheet.create({
     borderColor: '#00e5ff',
     borderRadius: 4,
   },
-  lockBadge: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lockIcon: {
-    lineHeight: undefined,
-  },
   lockCount: {
-    color: '#fbbf24',
-    fontWeight: '900',
+    // Same blue as the lock art. No fontWeight: a custom pixel font has no bold
+    // face, so requesting one makes RN fall back to a system font.
+    color: '#00e5ff',
   },
   multLockOverlay: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  shiftBtn: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,229,255,0.16)',
-    borderColor: 'rgba(0,229,255,0.5)',
-    borderWidth: 1,
-    borderRadius: 6,
-  },
-  shiftBtnTop: {
-    justifyContent: 'flex-end',
-    paddingBottom: 2,
-  },
-  shiftBtnBottom: {
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-  },
-  shiftArrow: {
-    color: '#00e5ff',
-    fontSize: 16,
-    fontWeight: '900',
-    lineHeight: 18,
-  },
-  shiftSymbolLabel: {
-    color: '#00e5ff',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 1,
-    opacity: 0.9,
   },
 });
