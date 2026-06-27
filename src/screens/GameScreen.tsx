@@ -53,6 +53,15 @@ type InteractionMode =
 // Wealth) overlay, so the player actually sees the last result.
 const FLATLINE_REVEAL_DELAY_MS = 1000;
 
+// Cocktail "compulsion": after the 3 boosted spins, the machine spins itself a
+// couple more times. The pause before each auto-spin has to outlast the coin
+// reward flight (CoinFlow's ~720ms burst+collect) so the auto-spin begins AFTER
+// the spin's result has visibly come in — not while the coins are still flying.
+// That matches the natural manual rhythm: you see the result land, then it spins
+// again just as you'd reach for the lever. A shorter gap read as the compulsion
+// yanking control "too soon", before the 3rd result had resolved.
+const COMPULSIVE_SPIN_DELAY_MS = 850;
+
 // Machine dealer-arrival portrait. The dealer-scene sheet (dealer_portrait.png,
 // 2560×2560 = two 1280×2560 frames) draws the figure small inside a full scene
 // canvas, so we CROP to the figure's measured alpha bounds within frame 2
@@ -374,11 +383,16 @@ export function GameScreen() {
     }
     compulsiveSpinTimer.current = setTimeout(() => {
       compulsiveSpinTimer.current = null;
+<<<<<<< HEAD
       // Mark the forced spin in flight so the visuals stay through the LAST one
       // (its counter is already 0). Only if it actually started (else don't stick).
       const fired = useRunStore.getState().spin({ compulsive: true });
       setForcedSpinInFlight(fired !== null);
     }, 450);
+=======
+      useRunStore.getState().spin({ compulsive: true });
+    }, COMPULSIVE_SPIN_DELAY_MS);
+>>>>>>> c36d1fe (fix(cocktail): hold compulsion auto-spin until the result lands)
 
     return () => {
       if (compulsiveSpinTimer.current) {
