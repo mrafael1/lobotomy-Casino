@@ -66,7 +66,11 @@ export function Stash({
         return (
           <Pressable
             key={i}
-            style={[styles.slot, { left: sx, top: sy, width: sw, height: sh }]}
+            style={({ pressed }) => [
+              styles.slot,
+              { left: sx, top: sy, width: sw, height: sh },
+              pressed && item && !disabled ? styles.slotPressed : null,
+            ]}
             onPress={item && onUse && !disabled ? () => onUse(item.id) : undefined}
             disabled={!item || !onUse || disabled}
           >
@@ -160,6 +164,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  slotPressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.94 }],
   },
   // Dragged icons float above neighbouring UI (buy bar, etc.).
   draggable: {

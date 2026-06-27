@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Image, Text, StyleSheet } from 'react-native';
 import { useRunStore } from '../state/runState';
 import { useAnimatedLucidity } from '../state/useAnimatedLucidity';
+import { useRenderCount } from '../perf/useRenderCount';
 import { ECONOMY } from '../content/economy';
 import { TV_SCREEN, WEALTH_BAR, HEALTH_BAR } from '../content/machineAssets';
 import { PIXEL_FONT } from '../content/typography';
@@ -23,7 +24,12 @@ const GAP_SRC = 3;
 // above the health bar. All TV text uses PIXEL_FONT (the DTM font) to stay
 // consistent with the rest of the app. The fill bars themselves are art drawn by
 // SlotMachine; this only adds the text/icon.
-export function MachineScreenMeters({ width, height, f }: Props) {
+// Memoized: this is the per-frame count-up text leaf — it MUST re-render ~60fps
+// to tick the number, so it is kept tiny (two text rows + a static coin icon)
+// and isolated. Memo stops an unrelated SlotMachine re-render from also paying
+// for it; the props (size + scale) only change on an art/scale swap.
+function MachineScreenMetersImpl({ width, height, f }: Props) {
+  useRenderCount('MachineScreenMeters');
   // Displayed Lucidity climbs gradually toward the real total (gameplay state is
   // already updated); shared with the TV objective bar so they animate together.
   const lucidityCoins = useAnimatedLucidity();
@@ -64,6 +70,8 @@ export function MachineScreenMeters({ width, height, f }: Props) {
     </View>
   );
 }
+
+export const MachineScreenMeters = React.memo(MachineScreenMetersImpl);
 
 const styles = StyleSheet.create({
   absolute: {

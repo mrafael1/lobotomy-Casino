@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Image,
@@ -89,7 +89,10 @@ export function DealerShopScreen() {
   const fitH = screenAR > SRC_AR ? screenH          : screenW / SRC_AR;
   const fitX = (screenW - fitW) / 2;
   const fitY = (screenH - fitH) / 2;
-  const sceneFrame = { left: fitX, top: fitY, width: fitW, height: fitH } as const;
+  const sceneFrame = useMemo(
+    () => ({ left: fitX, top: fitY, width: fitW, height: fitH } as const),
+    [fitX, fitY, fitW, fitH],
+  );
 
   // Source → screen conversion (into the fitted scene frame). sx/sy map a point
   // (include the letterbox offset); sw/sh map a size (no offset).
@@ -144,19 +147,24 @@ export function DealerShopScreen() {
 
   // The offerings resting on the counter. Run mode shows ONLY the in-run
   // consumables the dealer is offering this visit — no permanent/meta items.
-  const offerings: Offering[] = runMode
-    ? (dealerOfferIds ?? [])
-        .map(id => IN_RUN_ITEM_MAP[id])
-        .filter((i): i is NonNullable<typeof i> => Boolean(i))
-        .map(i => ({ id: i.id, name: i.name, description: i.description }))
-    : CONSUMABLES.map(c => ({ id: c.id, name: c.name, description: c.description }));
+  const offerings: Offering[] = useMemo(() => (
+    runMode
+      ? (dealerOfferIds ?? [])
+          .map(id => IN_RUN_ITEM_MAP[id])
+          .filter((i): i is NonNullable<typeof i> => Boolean(i))
+          .map(i => ({ id: i.id, name: i.name, description: i.description }))
+      : CONSUMABLES.map(c => ({ id: c.id, name: c.name, description: c.description }))
+  ), [runMode, dealerOfferIds]);
 
   // Stash tray (bottom-left). Normal mode mirrors supplies queued for the next
   // run; run mode mirrors the supplies already in the current run. Duplicates
   // occupy separate slots (expanded by buildStashSlots).
-  const stashSlots = buildStashSlots(
-    runMode ? runConsumables : pendingConsumables,
-    runMode ? RUN_STASH_ITEMS : CONSUMABLES,
+  const stashSlots = useMemo(
+    () => buildStashSlots(
+      runMode ? runConsumables : pendingConsumables,
+      runMode ? RUN_STASH_ITEMS : CONSUMABLES,
+    ),
+    [runMode, runConsumables, pendingConsumables],
   );
 
   function consumableStatus(id: string) {
@@ -174,11 +182,11 @@ export function DealerShopScreen() {
   const MSG_MAXED      = '"No room for that."';
 
   // Tapping a counter item selects it (TV explains it) and makes the dealer react.
-  function handleSelect(o: Offering) {
+  const handleSelect = useCallback((o: Offering) => {
     setSelected(prev => (prev?.id === o.id ? prev : o));
     setDealerFrame(f => (f === 0 ? 1 : 0));
     setDealerMessage(null);
-  }
+  }, []);
 
   // Acquire an offering by dragging it onto the dealer/counter (and, pre-run,
   // onto the stash). Buying never ACTIVATES a consumable — it only stores/takes
@@ -193,7 +201,8 @@ export function DealerShopScreen() {
         runShake();
         return;
       }
-      // Take one, apply it to the CURRENT run, then return to the machine.
+      // Take one, apply it to the CURRENT run, then return to the machine — on
+      // the same tick so the scene starts changing immediately.
       acceptDealerOffer(o.id);
       router.back();
       return;
@@ -235,10 +244,10 @@ export function DealerShopScreen() {
 
   // Leave without buying — run mode dismisses the dealer offer and returns to
   // the machine; normal mode just pops back to wherever the shop was opened.
-  function handleLeave() {
+  const handleLeave = useCallback(() => {
     if (runMode) declineDealerOffer();
     router.back();
-  }
+  }, [runMode, declineDealerOffer, router]);
 
   // ── TV overlay ───────────────────────────────────────────────────────────
   // The big TV shows ONLY the compact green (+) / red (−) hints for the
@@ -432,7 +441,10 @@ export function DealerShopScreen() {
       {/* ── HUD ────────────────────────────────────────────────────────── */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none">
         <View style={styles.hudRow}>
-          <Pressable style={styles.backBtn} onPress={handleLeave}>
+          <Pressable
+            style={({ pressed }) => [styles.backBtn, pressed && styles.pressFeedback]}
+            onPress={handleLeave}
+          >
             <Text style={styles.backText}>← {runMode ? 'LEAVE' : 'BACK'}</Text>
           </Pressable>
           {/* Run mode: the instruction copy lives on the big TV (renderTV), not
@@ -626,6 +638,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
     borderColor: '#00e5ff44',
+  },
+  pressFeedback: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
   },
   backText: {
     color: '#00e5ff',

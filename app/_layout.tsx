@@ -1,5 +1,7 @@
 import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
+import { useEffect } from 'react';
+import { preloadGameImages } from '../src/perf/preloadAssets';
 
 export default function RootLayout() {
   // Load the DTM-Sans (Undertale-style) pixel font. The family key here MUST
@@ -12,6 +14,10 @@ export default function RootLayout() {
     'Determination Sans': require('../assets/font/DTM-Sans.otf'),
     'Determination Mono': require('../assets/font/DTM-Mono.otf'),
   });
+
+  useEffect(() => {
+    if (fontsLoaded) preloadGameImages();
+  }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
 

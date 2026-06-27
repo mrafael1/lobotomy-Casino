@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Image,
@@ -27,6 +27,7 @@ import { hasSedative } from '../game/economy';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLES, buildStashSlots } from '../content/consumables';
 import { IN_RUN_ITEMS } from '../content/inRunItems';
+import { useRenderCount, DEBUG_POWER } from '../perf/useRenderCount';
 
 // Reel-targeting state for abilities and consumable interactions.
 type Selection =
@@ -38,6 +39,14 @@ type Selection =
   | { mode: 'copy_target'; sourceReel: number; consumableId: string }; // charge NOT yet consumed
 
 const NO_SELECTION: Selection = { mode: 'none' };
+
+type InteractionMode =
+  | 'idle'
+  | 'spinning'
+  | 'selecting_shift_target'
+  | 'animating_shift'
+  | 'dealer'
+  | 'modal';
 
 // After the final spin drops spins/neurons to a run-ending state, hold on the
 // resolved reels + payout for this long before showing the run-over (Flatline /
@@ -59,6 +68,7 @@ const DEALER_PORTRAIT_SCALE = DEALER_PORTRAIT_W / DEALER_CROP.w;
 const DEALER_PORTRAIT_SRC_X = DEALER_FRAME_INDEX * DEALER_FRAME_W + DEALER_CROP.x;
 
 export function GameScreen() {
+  useRenderCount('GameScreen');
   const router = useRouter();
 
   const runPhase            = useRunStore(s => s.runPhase);
@@ -183,6 +193,8 @@ export function GameScreen() {
   // as a modal here. DealerShopScreen reads the run offer + applies/declines and
   // navigates back to the machine.
   const handleDealerCome = useCallback(() => {
+    // Flip into the dealer visit and navigate on the SAME tick — no rAF defer, so
+    // the scene starts changing immediately on press.
     revealDealer();
     router.push({ pathname: '/dealer', params: { mode: 'run_consumables' } });
   }, [revealDealer, router]);
@@ -194,6 +206,10 @@ export function GameScreen() {
     spin();
   }, [spin]);
 
+  const cancelSelection = useCallback(() => {
+    setSelection(NO_SELECTION);
+  }, []);
+
   const handleAllReelsDone = useCallback(() => {
     setSpinning(false);
     const runNow = useRunStore.getState();
@@ -204,7 +220,7 @@ export function GameScreen() {
     if (ending === 'wealth' && runNow.wealthContinued) ending = null;
     if (ending) {
       // Hold on the final reels + payout, THEN flip to the run-over overlay.
-      // endingPending locks the machine (runBusy) so no spin/race during the
+      // endingPending locks machine input so no spin/race during the
       // hold; the guard prevents scheduling a second timer / duplicate overlay.
       if (endingTimer.current) return;
       const endingType = ending;
@@ -311,16 +327,30 @@ export function GameScreen() {
         setScoreSourceReel(reelIndex as 0 | 1 | 2);
       }
     }
-    setSelection(NO_SELECTION);
-  }, [selection, moveReel]);
+    cancelSelection();
+  }, [selection, moveReel, cancelSelection]);
 
-  const runBusy =
-    isSpinning ||
-    rerollingReelIndex !== null ||
-    dealerIncoming ||
-    dealerPending ||
-    endingPending ||
-    compulsiveSpinSkips > 0;
+  const isSpinAnimating = isSpinning;
+  const isPowerExecuting = rerollingReelIndex !== null;
+  const isSelectingTarget = selection.mode !== 'none';
+  const isDealerMode = dealerIncoming || dealerPending;
+  const isModalMode = endingPending || runPhase === 'over';
+  const isForcedSpinQueued = compulsiveSpinSkips > 0;
+
+  const interactionMode: InteractionMode =
+    isDealerMode ? 'dealer'
+    : isModalMode ? 'modal'
+    : isSpinAnimating ? 'spinning'
+    : selection.mode === 'move' ? 'selecting_shift_target'
+    : isPowerExecuting ? 'animating_shift'
+    : 'idle';
+
+  const machineInputLocked =
+    interactionMode === 'spinning' ||
+    interactionMode === 'animating_shift' ||
+    interactionMode === 'dealer' ||
+    interactionMode === 'modal' ||
+    isForcedSpinQueued;
 
   // Compulsion is active while forced spins are pending OR one is still animating
   // (the last forced spin zeroes the counter at its start, so the in-flight flag
@@ -330,7 +360,7 @@ export function GameScreen() {
     runPhase === 'running' && (compulsiveSpinSkips > 0 || forcedSpinInFlight);
 
   useEffect(() => {
-    const modalBusy = rerollingReelIndex !== null || dealerIncoming || dealerPending || endingPending;
+    const modalBusy = isPowerExecuting || isDealerMode || endingPending;
     if (runPhase !== 'running' || isSpinning || modalBusy || compulsiveSpinSkips <= 0) return;
 
     // Possession cues for this forced spin: a self-pull of the lever and a random
@@ -356,7 +386,7 @@ export function GameScreen() {
         compulsiveSpinTimer.current = null;
       }
     };
-  }, [runPhase, isSpinning, rerollingReelIndex, dealerIncoming, dealerPending, endingPending, compulsiveSpinSkips]);
+  }, [runPhase, isSpinning, isPowerExecuting, isDealerMode, endingPending, compulsiveSpinSkips]);
 
   // A forced spin stops being "in flight" the instant its reels stop.
   useEffect(() => {
@@ -395,7 +425,7 @@ export function GameScreen() {
     };
   }, [compulsionActive, compulsionShake]);
 
-  const canSpin = runPhase === 'running' && !runBusy && (freeSpins > 0 || neurons >= 1);
+  const canSpin = runPhase === 'running' && !machineInputLocked && (freeSpins > 0 || neurons >= 1);
 
   // Sedative Protocol: every 3rd spin costs nothing — mirror spin()'s check.
   const sedativeNext = hasSedative(ownedUpgrades) && freeSpins === 0 && (spinCount + 1) % 3 === 0;
@@ -403,44 +433,57 @@ export function GameScreen() {
   const noNeuronCostSpin = freeSpins > 0 || decaySkips > 0 || sedativeNext;
   // Abilities blocked while game is busy, powers blocked (Pill), or no result yet
   const powersBlocked = blockPowersSpins > 0;
-  const abilitiesUsable = runPhase === 'running' && !runBusy && lastResult !== null && !powersBlocked;
+  const abilitiesUsable = runPhase === 'running' && !machineInputLocked && lastResult !== null && !powersBlocked;
 
   const hasShift  = ownedPermanents.includes('perm_shift');
   const hasMemory = ownedPermanents.includes('perm_memory');
 
   // Machine-mounted power buttons. Frame: 1 selected, 0 available, 2 unavailable.
   // Pressing the active power again cancels; pressing another switches selection.
-  const powerFrame = (
+  const powerFrame = useCallback((
     mode: Selection['mode'],
     abilityId: 'reroll' | 'shift' | 'memory',
   ): 0 | 1 | 2 =>
     selection.mode === mode ? 1
     : abilitiesUsable && !abilitiesUsed.includes(abilityId) ? 0
-    : 2;
+    : 2,
+  [selection.mode, abilitiesUsable, abilitiesUsed]);
 
-  const powers = {
+  const powers = useMemo(() => ({
     reroll: {
       visible: true,
       frame: powerFrame('reroll', 'reroll'),
-      onPress: () => setSelection(s => (s.mode === 'reroll' ? NO_SELECTION : { mode: 'reroll' })),
+      onPress: () => {
+        if (__DEV__ && DEBUG_POWER) console.log('[POWER] selecting target', 'reroll', Date.now());
+        setSelection(s => (s.mode === 'reroll' ? NO_SELECTION : { mode: 'reroll' }));
+      },
     },
     shift: {
       visible: hasShift,
       frame: powerFrame('move', 'shift'),
-      onPress: () => setSelection(s => (s.mode === 'move' ? NO_SELECTION : { mode: 'move' })),
+      onPress: () => {
+        if (__DEV__ && DEBUG_POWER) console.log('[POWER] selecting target', 'shift', Date.now());
+        setSelection(s => (s.mode === 'move' ? NO_SELECTION : { mode: 'move' }));
+      },
     },
     memory: {
       visible: hasMemory,
       frame: powerFrame('lock', 'memory'),
-      onPress: () => setSelection(s => (s.mode === 'lock' ? NO_SELECTION : { mode: 'lock' })),
+      onPress: () => {
+        if (__DEV__ && DEBUG_POWER) console.log('[POWER] selecting target', 'memory', Date.now());
+        setSelection(s => (s.mode === 'lock' ? NO_SELECTION : { mode: 'lock' }));
+      },
     },
-  };
+  }), [hasShift, hasMemory, powerFrame]);
 
   // Physical stash slots — duplicates occupy separate slots (WATER, WATER), so
   // expand copies into slots rather than stacking with a ×N badge.
-  const stashItems = [...CONSUMABLES, ...IN_RUN_ITEMS];
-  const stashSlots = buildStashSlots(runConsumables, stashItems);
-  const stashUsable = runPhase === 'running' && !runBusy && selection.mode === 'none';
+  const stashItems = useMemo(() => [...CONSUMABLES, ...IN_RUN_ITEMS], []);
+  const stashSlots = useMemo(
+    () => buildStashSlots(runConsumables, stashItems),
+    [runConsumables, stashItems],
+  );
+  const stashUsable = runPhase === 'running' && !machineInputLocked && !isSelectingTarget;
 
   // The result announcement (PAIR / TRIPLE / JACKPOT + amount) no longer lives in
   // this fixed top label — it bursts from the source reel inside the machine (see
@@ -455,13 +498,27 @@ export function GameScreen() {
     : selection.mode === 'copy_target' ? 'TAP THE REEL TO COPY ONTO'
     : null;
 
-  const selectedReels =
-    selection.mode === 'copy_target' ? [selection.sourceReel]
-    : [];
+  const selectedReels = useMemo(
+    () => selection.mode === 'copy_target' ? [selection.sourceReel] : [],
+    [selection],
+  );
 
   // In 'move' mode the shift arrows (not the reels) take the taps, so reels stay
   // non-tappable; every other targeting mode taps the reels directly.
-  const reelsTappable = selection.mode !== 'none' && selection.mode !== 'move' && !runBusy;
+  const reelsTappable = selection.mode !== 'none' && selection.mode !== 'move' && !machineInputLocked;
+
+  const handleRerollDone = useCallback(() => {
+    setRerollingReelIndex(null);
+  }, []);
+
+  const handleSelectMultiplier = useCallback((m: 1 | 2 | 3) => {
+    setBetMultiplier(m);
+  }, [setBetMultiplier]);
+
+  const isMultiplierLocked = useCallback((m: 1 | 2 | 3) =>
+    (energyLocked && m === 3) ||
+    (!noNeuronCostSpin && Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN) < m),
+  [energyLocked, noNeuronCostSpin, neurons]);
 
   // Compulsion jitter — small fast X (with a touch of Y), additive to the jackpot
   // shake but driven by its own value so the two never interfere. Created ONCE
@@ -475,6 +532,9 @@ export function GameScreen() {
 
   return (
     <Background>
+      {selection.mode === 'move' && (
+        <Pressable style={StyleSheet.absoluteFill} onPress={cancelSelection} />
+      )}
 
       {/* ── Pixel-art scene: the whole 160×320 virtual canvas as one composition —
              the machine fills it, and the HUD (win label, badges, stash, powers)
@@ -511,18 +571,13 @@ export function GameScreen() {
               selectedReels={selectedReels}
               shiftActive={selection.mode === 'move'}
               onShiftReel={handleShiftReel}
+              onShiftCancel={cancelSelection}
               reelSelectActive={selection.mode === 'reroll' || selection.mode === 'lock'}
               rerollingReelIndex={rerollingReelIndex}
-              onRerollDone={() => setRerollingReelIndex(null)}
-              multiplierInteractive={runPhase === 'running' && !runBusy}
-              onSelectMultiplier={setBetMultiplier}
-              isMultiplierLocked={(m) =>
-                // Budget-based: with N spins of neurons left you can afford a ×N
-                // bet (one spin that drains that budget), matching the on-screen
-                // "SPINS LEFT" meter. Lock ×m only when fewer than m spins remain.
-                (energyLocked && m === 3) ||
-                (!noNeuronCostSpin && Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN) < m)
-              }
+              onRerollDone={handleRerollDone}
+              multiplierInteractive={runPhase === 'running' && !machineInputLocked}
+              onSelectMultiplier={handleSelectMultiplier}
+              isMultiplierLocked={isMultiplierLocked}
               onLeverPull={handleSpin}
               leverEnabled={canSpin}
               powers={powers}
@@ -583,7 +638,7 @@ export function GameScreen() {
                     again, so no CANCEL is shown for them. The copy flow (White
                     Powder) has no such toggle, so it keeps a CANCEL escape. */}
                 {(selection.mode === 'copy_source' || selection.mode === 'copy_target') && (
-                  <Pressable style={styles.cancelBtn} onPress={() => setSelection(NO_SELECTION)}>
+                  <Pressable style={styles.cancelBtn} onPress={cancelSelection}>
                     <Text style={styles.cancelText}>CANCEL</Text>
                   </Pressable>
                 )}
@@ -609,7 +664,10 @@ export function GameScreen() {
       {/* ── Scores table button — top-right corner, clear of the centred HUD and
              the machine. Opens the read-only scores screen. ── */}
       <SafeAreaView style={styles.scoresAnchor} pointerEvents="box-none">
-        <Pressable style={styles.scoresBtn} onPress={() => router.push('/scores')}>
+        <Pressable
+          style={({ pressed }) => [styles.scoresBtn, pressed && styles.pressFeedback]}
+          onPress={() => router.push('/scores')}
+        >
           <Text style={styles.scoresText}>SCORES</Text>
         </Pressable>
       </SafeAreaView>
@@ -646,10 +704,16 @@ export function GameScreen() {
           <View style={styles.bubble}>
             <Text style={styles.bubbleText}>"I've got something for you"</Text>
             <View style={styles.bubbleBtnRow}>
-              <Pressable style={styles.bubbleYesBtn} onPress={handleDealerCome}>
+              <Pressable
+                style={({ pressed }) => [styles.bubbleYesBtn, pressed && styles.pressFeedback]}
+                onPress={handleDealerCome}
+              >
                 <Text style={styles.bubbleYesText}>COME</Text>
               </Pressable>
-              <Pressable style={styles.bubbleNoBtn} onPress={declineDealerVisit}>
+              <Pressable
+                style={({ pressed }) => [styles.bubbleNoBtn, pressed && styles.pressFeedback]}
+                onPress={declineDealerVisit}
+              >
                 <Text style={styles.bubbleNoText}>IGNORE</Text>
               </Pressable>
             </View>
@@ -708,17 +772,17 @@ export function GameScreen() {
             </>
           )}
           {lastEnding === 'wealth' && (
-            <Pressable style={styles.continueBtn} onPress={handleContinueRun}>
+            <Pressable style={({ pressed }) => [styles.continueBtn, pressed && styles.pressFeedback]} onPress={handleContinueRun}>
               <Text style={styles.continueText}>CONTINUE RUN?</Text>
             </Pressable>
           )}
-          <Pressable style={styles.restartBtn} onPress={handleNewRun}>
+          <Pressable style={({ pressed }) => [styles.restartBtn, pressed && styles.pressFeedback]} onPress={handleNewRun}>
             <Text style={styles.restartText}>START AGAIN</Text>
           </Pressable>
-          <Pressable style={styles.shopBtn} onPress={() => { commitBankIfNeeded(); router.push('/dealer'); }}>
+          <Pressable style={({ pressed }) => [styles.shopBtn, pressed && styles.pressFeedback]} onPress={() => { commitBankIfNeeded(); router.push('/dealer'); }}>
             <Text style={styles.shopText}>VISIT THE DEALER</Text>
           </Pressable>
-          <Pressable style={styles.metaShopBtn} onPress={() => { commitBankIfNeeded(); router.push('/shop'); }}>
+          <Pressable style={({ pressed }) => [styles.metaShopBtn, pressed && styles.pressFeedback]} onPress={() => { commitBankIfNeeded(); router.push('/shop'); }}>
             <Text style={styles.metaShopText}>SPEND LUCIDITY</Text>
           </Pressable>
         </View>
@@ -837,6 +901,10 @@ const styles = StyleSheet.create({
     color: '#fbbf24',
     fontSize: 11,
     letterSpacing: 2,
+  },
+  pressFeedback: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
   },
 
   // Stash tray, placed on the lower red cabinet face just under the power

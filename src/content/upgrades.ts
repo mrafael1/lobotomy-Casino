@@ -33,7 +33,7 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Shift',
     description: "Gain 1 use of Shift per run: move a reel's symbol up or down one step in the cycle.",
     category: 'positive',
-    cost: 80,
+    cost:1,
     effect: { type: 'abilityUnlock', abilityId: 'shift' },
   },
   {
@@ -41,7 +41,7 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Memory',
     description: 'Gain 1 use of Memory per run: lock one reel in its current position for the next spin.',
     category: 'positive',
-    cost: 100,
+    cost: 1,
     effect: { type: 'abilityUnlock', abilityId: 'memory' },
   },
 ];
