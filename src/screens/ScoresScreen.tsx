@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Image, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -28,11 +28,11 @@ export function ScoresScreen() {
   const history        = useMetaStore(s => s.history);
   const endingsReached = useMetaStore(s => s.endingsReached);
 
-  const rows: Array<{ label: string; value: string }> = [
+  const rows: Array<{ label: string; value: string }> = useMemo(() => [
     { label: 'BEST RUN SCORE', value: `${history.bestScoreRun}` },
     { label: 'RUNS PLAYED',    value: `${history.runsPlayed}` },
     { label: 'WEALTH REACHED', value: endingsReached.includes('wealth') ? 'YES' : '—' },
-  ];
+  ], [history.bestScoreRun, history.runsPlayed, endingsReached]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -40,7 +40,10 @@ export function ScoresScreen() {
           centred across the full width so it stays centred regardless of the
           differing back/wallet widths. */}
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+        <Pressable
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressFeedback]}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backText}>← BACK</Text>
         </Pressable>
         <View style={styles.titleWrap} pointerEvents="none">
@@ -113,6 +116,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
     borderColor: '#00e5ff44',
+  },
+  pressFeedback: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
   },
   backText: {
     color: '#00e5ff',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Pressable,
@@ -42,6 +42,9 @@ export function ShopScreen() {
   const corruptionEverUsed  = useMetaStore(s => s.corruptionEverUsed);
   const buyUpgrade          = useMetaStore(s => s.buyUpgrade);
   const buyConsumableCharge = useMetaStore(s => s.buyConsumableCharge);
+  const abilityGroups = useMemo(() => groupUpgrades(ABILITY_UPGRADES), []);
+  const corruptedGroups = useMemo(() => groupUpgrades(CORRUPTED_UPGRADES), []);
+  const positiveGroups = useMemo(() => groupUpgrades(POSITIVE_UPGRADES), []);
 
   function upgradeStatus(upgrade: Upgrade): 'owned' | 'locked' | 'tooPoor' | 'buyable' {
     if (ownedPermanents.includes(upgrade.id)) return 'owned';
@@ -170,8 +173,8 @@ export function ShopScreen() {
     );
   }
 
-  function renderSection(list: ReadonlyArray<Upgrade>, accent: string) {
-    return groupUpgrades(list).map(item =>
+  function renderSection(groups: ReadonlyArray<Upgrade | Upgrade[]>, accent: string) {
+    return groups.map(item =>
       Array.isArray(item)
         ? renderTierGroupCard(item, accent)
         : renderUpgradeCard(item, accent),
@@ -193,7 +196,7 @@ export function ShopScreen() {
           <Text style={styles.sectionNote}>
             Permanent abilities. 1 use unlocked per run.
           </Text>
-          {renderSection(ABILITY_UPGRADES, '#a855f7')}
+          {renderSection(abilityGroups, '#a855f7')}
 
           {/* ── SUPPLIES ── */}
           <Text style={[styles.sectionLabel, styles.sectionLabelCyan]}>SUPPLIES</Text>
@@ -209,18 +212,21 @@ export function ShopScreen() {
               ? 'You are already corrupted. It does not wash off.'
               : 'Everything here changes you. Permanently.'}
           </Text>
-          {renderSection(CORRUPTED_UPGRADES, '#ef4444')}
+          {renderSection(corruptedGroups, '#ef4444')}
 
           {/* ── POSITIVE ── */}
           <Text style={[styles.sectionLabel, styles.sectionLabelGold]}>POSITIVE</Text>
           <Text style={styles.sectionNote}>
             Enhancements that do not corrupt your record.
           </Text>
-          {renderSection(POSITIVE_UPGRADES, '#22c55e')}
+          {renderSection(positiveGroups, '#22c55e')}
 
         </ScrollView>
 
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+        <Pressable
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressFeedback]}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backText}>BACK TO THE MACHINE</Text>
         </Pressable>
       </SafeAreaView>
@@ -405,6 +411,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#00e5ff',
     alignItems: 'center',
+  },
+  pressFeedback: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
   },
   backText: {
     color: '#00e5ff',

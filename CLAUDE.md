@@ -47,6 +47,15 @@ git push -u origin claude/fix-reel-animation-sync
 - **Kotlin must stay below 2.1.0** (use `2.0.21`). React Native 0.81's Gradle plugin is compiled against Kotlin 1.9.x and calls `KotlinTopLevelExtension` as a class; it became an interface in Kotlin 2.1.0, so KGP ≥ 2.1 fails the Gradle config with *"Found interface … KotlinTopLevelExtension, but class was expected."*
 - Set it in **`app.json`** (`expo-build-properties` → `android.kotlinVersion`) — the source of truth — **and** in `android/gradle.properties` (`android.kotlinVersion`) so the already-generated `android/` builds without a fresh prebuild. After changing it, stop the Gradle daemon (`android/gradlew.bat --stop`) before rebuilding.
 
+## Skia / Reanimated performance (UI-thread rendering)
+
+High-frequency rendering (reel spins, gestures, fast tracking loops) must stay on the UI thread and allocation-free. Follow these or animations stutter and GC pauses show up as frame drops on low/mid-tier devices.
+
+- **Zero per-frame allocations.** Never create objects inside a render/frame callback or worklet that runs every frame — `Skia.Path.Make()`, `Skia.Paint()`, matrices, arrays, and object literals all churn the heap and trigger GC pauses. Pre-allocate them **once** (module scope or a `useMemo`/ref) and **mutate them in place** (`path.reset()` then re-add segments, `paint.setColor(...)`) instead of reallocating mid-render.
+- **Pass `SharedValue` references directly to Skia props.** Hand a Reanimated `SharedValue` (or a derived value) straight into a Skia component prop rather than reading `.value` in React render. This bypasses React's tree diffing/reconciliation entirely and keeps the update path confined to the UI thread — no JS-thread re-render per frame.
+- **Memory & texture optimization.** Watch for hardware-texture bloat and GPU VRAM clipping on low/mid-tier devices: keep offscreen/cached layers (e.g. `Picture`, image snapshots, large `Group` caches) bounded, reuse textures, and avoid allocating large surfaces per frame. Prefer sprite-sheet frames over many separate textures (see `SpriteSheetFrame`).
+- **Pure worklet execution — no stray `runOnJS`.** High-frequency interactions (gesture handlers, tracking loops) must run as pure worklets on the UI thread. Misusing `runOnJS` inside them forces JNI serialization across the bridge every frame, creating a bottleneck. Reserve `runOnJS` for low-frequency, genuinely JS-side side effects (state commits at gesture end), never per-frame.
+
 ## Verification & dev loop
 
 - Before considering work done: `npx tsc --noEmit -p tsconfig.json` (clean) and `npx jest` (all pass).

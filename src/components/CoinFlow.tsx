@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated } from 'react-native';
 import { useSettledLucidity } from '../state/useAnimatedLucidity';
+import { useRenderCount } from '../perf/useRenderCount';
 import { COIN_ICON } from '../content/uiAssets';
 import { COIN_FLIGHT_MS, COIN_STAGGER_MS } from '../content/timing';
 
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function CoinFlow({ f, onArrive, hold = false }: Props) {
+  useRenderCount('CoinFlow');
   // Settled total: frozen while spinning OR while any visual hold is active
   // (e.g. a power reroll), so coins never launch before the final reel lands.
   const lucidityCoins = useSettledLucidity(hold);

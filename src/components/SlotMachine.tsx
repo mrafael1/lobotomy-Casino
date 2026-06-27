@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import { Text } from './PixelText';
 import { ReelCellV3 } from './ReelCellV3';
@@ -9,6 +9,7 @@ import { PowerCoinFlow } from './PowerCoinFlow';
 import { ScoreBurst } from './ScoreBurst';
 import { useRunStore } from '../state/runState';
 import { useAnimatedLucidity } from '../state/useAnimatedLucidity';
+import { useRenderCount } from '../perf/useRenderCount';
 import type { SymbolId } from '../game/types';
 import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
@@ -28,6 +29,7 @@ const FALLBACK_SYMBOL: SymbolId = 'brain';
 
 // Lever pull plays frames 0 → 5 quickly, fires the spin, then snaps back to idle.
 const LEVER_FRAME_MS = 42;
+const RESULT_REVEAL_DELAY_MS = 150;
 
 // Tension: when the first two reels already match, the 3rd reel holds a touch
 // longer before stopping (a possible triple). Animation timing only — the result
@@ -40,6 +42,14 @@ interface PowerControl {
   onPress?: () => void;
 }
 
+type PowerKey = 'reroll' | 'shift' | 'memory';
+
+type PowerDef = {
+  key: PowerKey;
+  hit: typeof POWER_HITS[keyof typeof POWER_HITS];
+  state?: PowerControl;
+};
+
 interface Props {
   onAllReelsDone: () => void;
   // When set, reels are tappable (ability/lock targeting) and highlight on press.
@@ -49,6 +59,7 @@ interface Props {
   // arrows on every reel) and makes each arrow tappable to shift that reel.
   shiftActive?: boolean;
   onShiftReel?: (reelIndex: number, direction: -1 | 1) => void;
+  onShiftCancel?: () => void;
   // When true, a reroll/lock power is choosing a reel: draws the reel_selection
   // overlay (one arrow per reel), with the pressed reel's arrow lit on touch.
   reelSelectActive?: boolean;
@@ -90,12 +101,13 @@ interface Props {
   compulsionPullSignal?: number;
 }
 
-export function SlotMachine({
+export const SlotMachine = React.memo(function SlotMachine({
   onAllReelsDone,
   onReelPress,
   selectedReels = [],
   shiftActive = false,
   onShiftReel,
+  onShiftCancel,
   reelSelectActive = false,
   rerollingReelIndex = null,
   onRerollDone,
@@ -111,15 +123,17 @@ export function SlotMachine({
   forcedMultiplier = null,
   compulsionPullSignal = 0,
 }: Props) {
+  useRenderCount('SlotMachine');
   const isSpinning    = useRunStore(s => s.isSpinning);
   const lastResult    = useRunStore(s => s.lastResult);
   const lockedReels   = useRunStore(s => s.lockedReels);
   const betMultiplier = useRunStore(s => s.betMultiplier) as 1 | 2 | 3;
   const lockedReelSpins = useRunStore(s => s.lockedReelSpins);
-  // Displayed Lucidity for the objective bar climbs gradually toward the real
-  // total (state updates immediately) so big gains fill the bar smoothly. The
-  // 30-coin shake/flash is driven separately by CoinFlow off the real total.
-  const lucidityCoins = useAnimatedLucidity();
+  // NOTE: the animated Lucidity total is deliberately NOT read here. It climbs
+  // ~60fps for up to 1.5s after every gain; reading it in this (large) component
+  // would re-render the whole machine each frame. It lives in the isolated leaf
+  // <AnimatedLucidityFill> (below) and in <MachineScreenMeters>, so only those
+  // tiny nodes update per frame — the rest of the cabinet stays still.
   const neurons       = useRunStore(s => s.neurons);
   const startingN     = useRunStore(s => s.startingNeurons);
 
@@ -148,16 +162,17 @@ export function SlotMachine({
   // ignored while a pull — or a spin — is already running.
   function animateLever(onLanded?: () => void) {
     if (leverTimers.current.length > 0 || isSpinning) return;
-    for (let f = 1; f <= LEVER_FRAME_COUNT - 1; f++) {
-      leverTimers.current.push(setTimeout(() => setLeverFrame(f), LEVER_FRAME_MS * f));
+    setLeverFrame(1);
+    for (let f = 2; f <= LEVER_FRAME_COUNT - 1; f++) {
+      leverTimers.current.push(setTimeout(() => setLeverFrame(f), LEVER_FRAME_MS * (f - 1)));
     }
     if (onLanded) {
-      leverTimers.current.push(setTimeout(onLanded, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
+      leverTimers.current.push(setTimeout(onLanded, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 2)));
     }
     leverTimers.current.push(setTimeout(() => {
       setLeverFrame(0);
       leverTimers.current = [];
-    }, LEVER_FRAME_MS * LEVER_FRAME_COUNT));
+    }, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
   }
 
   function pullLever() {
@@ -240,11 +255,10 @@ export function SlotMachine({
 
   // TV bars: the top bar is the Lucidity OBJECTIVE bar — it tracks progress
   // toward the current Lucidity goal (LUCIDITY_OBJECTIVE, default 1000 L) and
-  // never resets. The 30-coin power-restore threshold is separate: it only
-  // shakes/flashes this bar (see runLucidityShake), it does NOT reset it. It
-  // reuses the wealth bar's art/slot until dedicated objective art exists. The
-  // lower bar still follows remaining neurons.
-  const lucidityRatio = Math.max(0, Math.min(1, lucidityCoins / ECONOMY.LUCIDITY_OBJECTIVE));
+  // never resets. Its animated fill lives in <AnimatedLucidityFill> so the per-
+  // frame count-up doesn't re-render this whole component. The 30-coin power-
+  // restore threshold is separate: it only shakes/flashes the bar (see
+  // runLucidityShake). The lower bar follows remaining neurons.
   const healthRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
@@ -252,12 +266,17 @@ export function SlotMachine({
     : [FALLBACK_SYMBOL, FALLBACK_SYMBOL, FALLBACK_SYMBOL];
 
   const completedRef = useRef(0);
+  const resultRevealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleReelComplete() {
     completedRef.current += 1;
     if (completedRef.current === 3) {
       completedRef.current = 0;
-      onAllReelsDone();
+      if (resultRevealTimer.current) clearTimeout(resultRevealTimer.current);
+      resultRevealTimer.current = setTimeout(() => {
+        resultRevealTimer.current = null;
+        onAllReelsDone();
+      }, RESULT_REVEAL_DELAY_MS);
     }
   }
 
@@ -266,37 +285,27 @@ export function SlotMachine({
   // pre-seed with the number of locked reels to avoid a missed completion.
   useEffect(() => {
     if (isSpinning) {
+      if (resultRevealTimer.current) {
+        clearTimeout(resultRevealTimer.current);
+        resultRevealTimer.current = null;
+      }
       completedRef.current = lockedReels.filter(Boolean).length;
     }
   }, [isSpinning]);
 
-  // Overlay frame for the shift arrows: 0 idle, else the held arrow's pressed
-  // frame (1 + reel*2 + up). Reset to idle whenever shift deactivates.
-  const [shiftFrame, setShiftFrame] = useState(0);
-  useEffect(() => {
-    if (!shiftActive) setShiftFrame(0);
-  }, [shiftActive]);
-
-  // Which reel's arrow is held in the reel-selection (reroll/lock) overlay; null =
-  // idle (all three arrows). Reset whenever reel-selection deactivates.
-  const [reelSelectPressed, setReelSelectPressed] = useState<number | null>(null);
-  useEffect(() => {
-    if (!reelSelectActive) setReelSelectPressed(null);
-  }, [reelSelectActive]);
-
-  // Cell tap-target geometry (source px → display px). A touch of vertical
-  // padding makes the small reel windows comfortably tappable.
-  const cellTapW = 17 * f;
-  const cellTapTop = (REEL_WINDOW.top - 4) * f;
-  const cellTapH = (REEL_WINDOW.height + 8) * f;
+  useEffect(() => () => {
+    if (resultRevealTimer.current) clearTimeout(resultRevealTimer.current);
+  }, []);
 
   // Machine-mounted power buttons: each art sheet + its on-canvas hit rect, paired
   // with the display state GameScreen passes in. "memory" ability uses the lock art.
-  const powerDefs = [
+  // Memoized on `powers` so the array identity is stable across unrelated re-renders
+  // — otherwise it would re-break MachineTouchOverlay's React.memo every time.
+  const powerDefs = useMemo(() => [
     { key: 'reroll', source: REROLL_V3, hit: POWER_HITS.reroll, state: powers?.reroll },
     { key: 'shift',  source: SHIFT_V3,  hit: POWER_HITS.shift,  state: powers?.shift  },
     { key: 'memory', source: LOCK_V3,   hit: POWER_HITS.lock,   state: powers?.memory },
-  ] as const;
+  ] as const, [powers]);
 
   return (
     <View style={[styles.machine, { width: machineWidth, height: machineHeight }]}>
@@ -357,14 +366,10 @@ export function SlotMachine({
         style={[StyleSheet.absoluteFill, { transform: [{ translateX: lucidityShake }] }]}
         pointerEvents="none"
       >
-        <TvFillBar
-          track={WEALTH_TRACK_V3}
-          fill={WEALTH_FILL_V3}
-          ratio={lucidityRatio}
+        <AnimatedLucidityFill
           machineWidth={machineWidth}
           machineHeight={machineHeight}
-          fillLeft={BAR_FILL.left * f}
-          fillWidth={BAR_FILL.width * f}
+          f={f}
         />
       </Animated.View>
       <TvFillBar
@@ -479,146 +484,225 @@ export function SlotMachine({
       </View>
 
       {/* 7e — Reel-selection arrows (reroll / lock targeting): full-canvas overlay,
-              one arrow per reel. Idle shows all three; the pressed reel lights its
-              arrow (frame = pressedReel + 1). */}
-      {reelSelectActive && (
+              one arrow per reel. Kept MOUNTED and shown/hidden by opacity rather
+              than conditionally mounted: Skia's useImage has no cache, so a fresh
+              mount on each power press would decode the sheet on press and make the
+              arrows pop in late. Mounting once (at machine mount) decodes it ahead
+              of time so toggling is instant. */}
+      <View
+        style={[styles.fill, reelSelectActive ? null : styles.hiddenOverlay]}
+        pointerEvents="none"
+      >
         <SpriteSheetFrame
           source={REEL_SELECT_V3}
-          frameIndex={reelSelectPressed != null ? reelSelectPressed + 1 : 0}
+          frameIndex={0}
           frameCount={REEL_SELECT_FRAME_COUNT}
           columns={REEL_SELECT_COLUMNS}
           width={machineWidth}
           height={machineHeight}
           style={styles.fill}
         />
+      </View>
+
+      {/* Shift power arrow art (up/down arrows on every reel). Visual only — all
+              touch input (incl. tap-to-cancel and the per-arrow hit zones) is
+              owned by MachineTouchOverlay below. Same always-mounted + opacity
+              treatment as the reel-selection arrows so it never decodes on press. */}
+      <View
+        style={[styles.fill, shiftActive && onShiftReel ? null : styles.hiddenOverlay]}
+        pointerEvents="none"
+      >
+        <SpriteSheetFrame
+          source={SHIFT_POWER_V3}
+          frameIndex={0}
+          frameCount={SHIFT_POWER_FRAME_COUNT}
+          columns={SHIFT_POWER_COLUMNS}
+          width={machineWidth}
+          height={machineHeight}
+          style={styles.fill}
+        />
+      </View>
+
+      <MachineTouchOverlay
+        f={f}
+        isSpinning={isSpinning}
+        rerollingReelIndex={rerollingReelIndex}
+        onReelPress={onReelPress}
+        shiftActive={shiftActive}
+        onShiftReel={onShiftReel}
+        onShiftCancel={onShiftCancel}
+        multiplierInteractive={multiplierInteractive}
+        onSelectMultiplier={onSelectMultiplier}
+        isMultiplierLocked={isMultiplierLocked}
+        powerDefs={powerDefs}
+        onLeverPull={onLeverPull ? pullLever : undefined}
+      />
+    </View>
+  );
+});
+
+// Isolated Lucidity objective fill. Calls useAnimatedLucidity() HERE (not in
+// SlotMachine) so the ~60fps count-up re-renders only this leaf — a single
+// clipped <Image> — instead of the entire cabinet. Memoized: its props (size +
+// scale) change only on an art/scale swap, so the parent re-rendering for any
+// other reason never touches it; only its own internal count-up does.
+const AnimatedLucidityFill = React.memo(function AnimatedLucidityFill({
+  machineWidth,
+  machineHeight,
+  f,
+}: {
+  machineWidth: number;
+  machineHeight: number;
+  f: number;
+}) {
+  useRenderCount('AnimatedLucidityFill');
+  const lucidityCoins = useAnimatedLucidity();
+  const ratio = Math.max(0, Math.min(1, lucidityCoins / ECONOMY.LUCIDITY_OBJECTIVE));
+  return (
+    <TvFillBar
+      track={WEALTH_TRACK_V3}
+      fill={WEALTH_FILL_V3}
+      ratio={ratio}
+      machineWidth={machineWidth}
+      machineHeight={machineHeight}
+      fillLeft={BAR_FILL.left * f}
+      fillWidth={BAR_FILL.width * f}
+    />
+  );
+});
+
+interface MachineTouchOverlayProps {
+  f: number;
+  isSpinning: boolean;
+  rerollingReelIndex: number | null;
+  onReelPress?: (reelIndex: number) => void;
+  shiftActive: boolean;
+  onShiftReel?: (reelIndex: number, direction: -1 | 1) => void;
+  onShiftCancel?: () => void;
+  multiplierInteractive: boolean;
+  onSelectMultiplier?: (m: 1 | 2 | 3) => void;
+  isMultiplierLocked?: (m: 1 | 2 | 3) => boolean;
+  powerDefs: ReadonlyArray<PowerDef>;
+  onLeverPull?: () => void;
+}
+
+// Touch layer for the cabinet — the single owner of all machine input (reels,
+// multiplier, powers, shift arrows + tap-to-cancel, lever). Pressables only, with
+// no visible overlay: press/selection feedback comes from the machine art itself
+// (power frames, lever animation, the shifted reel result). Memoized so unrelated
+// re-renders don't rebuild the hit zones.
+const MachineTouchOverlay = React.memo(function MachineTouchOverlay({
+  f,
+  isSpinning,
+  rerollingReelIndex,
+  onReelPress,
+  shiftActive,
+  onShiftReel,
+  onShiftCancel,
+  multiplierInteractive,
+  onSelectMultiplier,
+  isMultiplierLocked,
+  powerDefs,
+  onLeverPull,
+}: MachineTouchOverlayProps) {
+  useRenderCount('MachineTouchOverlay');
+
+  const cellTapW = 17 * f;
+  const cellTapTop = (REEL_WINDOW.top - 4) * f;
+  const cellTapH = (REEL_WINDOW.height + 8) * f;
+
+  return (
+    <View style={styles.fill} pointerEvents="box-none">
+      {shiftActive && onShiftCancel && (
+        <Pressable style={styles.fill} onPress={onShiftCancel} />
       )}
 
-      {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
-      <View style={styles.fill} pointerEvents="box-none">
-        {([0, 1, 2] as const).map(i => {
-          const left = REEL_CELL_CENTERS[i] * f - cellTapW / 2;
-          const selected = selectedReels.includes(i);
-          const tappable = !!onReelPress && !isSpinning && rerollingReelIndex === null;
-          return (
-            <View
-              key={i}
-              style={{ position: 'absolute', left, top: cellTapTop, width: cellTapW, height: cellTapH }}
-              pointerEvents="box-none"
-            >
-              {tappable && (
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={() => onReelPress!(i)}
-                  onPressIn={() => setReelSelectPressed(i)}
-                  onPressOut={() => setReelSelectPressed(null)}
-                />
-              )}
-              {selected && <View style={[StyleSheet.absoluteFill, styles.reelSelected]} pointerEvents="none" />}
-            </View>
-          );
-        })}
-      </View>
-
-      {/* 9 — Multiplier tap targets (above cabinet). The lock state is baked into
-             the multiplier art frames, so no overlay is drawn here. */}
-      <View style={styles.fill} pointerEvents="box-none">
-        {([1, 2, 3] as const).map(m => {
-          const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
-          const canTap = multiplierInteractive && !!onSelectMultiplier && !locked;
-          if (!canTap) return null;
-          const cx = MULT_BADGE_CENTERS[m - 1];
-          const w = 16 * f;
-          return (
-            <Pressable
-              key={m}
-              style={{
-                position: 'absolute',
-                left: cx * f - w / 2,
-                top: MULT_STRIP.top * f,
-                width: w,
-                height: MULT_STRIP.height * f,
-              }}
-              onPress={() => onSelectMultiplier!(m)}
-            />
-          );
-        })}
-      </View>
-
-      {/* 9b — Machine power tap targets. Tappable only when visible and usable
-             (frame 0/1); frame 2 (unavailable) renders no hit zone. */}
-      <View style={styles.fill} pointerEvents="box-none">
-        {powerDefs.map(p =>
-          p.state && p.state.visible && p.state.frame !== 2 && p.state.onPress ? (
-            <Pressable
-              key={p.key}
-              style={{
-                position: 'absolute',
-                left: p.hit.left * f,
-                top: p.hit.top * f,
-                width: p.hit.width * f,
-                height: p.hit.height * f,
-              }}
-              onPress={p.state.onPress}
-            />
-          ) : null,
-        )}
-      </View>
-
-      {/* 10 — Shift power: full-canvas up/down arrow overlay + per-reel hit zones.
-              Tapping a reel's arrow shifts that reel; the overlay shows its pressed
-              frame while any arrow is held. */}
-      {shiftActive && onShiftReel && (
-        <>
-          <SpriteSheetFrame
-            source={SHIFT_POWER_V3}
-            frameIndex={shiftFrame}
-            frameCount={SHIFT_POWER_FRAME_COUNT}
-            columns={SHIFT_POWER_COLUMNS}
-            width={machineWidth}
-            height={machineHeight}
-            style={styles.fill}
+      {([0, 1, 2] as const).map(i => {
+        const tappable = !!onReelPress && !isSpinning && rerollingReelIndex === null;
+        if (!tappable) return null;
+        const left = REEL_CELL_CENTERS[i] * f - cellTapW / 2;
+        return (
+          <Pressable
+            key={i}
+            style={{ position: 'absolute', left, top: cellTapTop, width: cellTapW, height: cellTapH }}
+            onPress={() => onReelPress(i)}
           />
-          {SHIFT_ARROW_HITS.map((arrows, i) =>
-            (['up', 'down'] as const).map(dir => {
-              const r = arrows[dir];
-              const frame = 1 + i * 2 + (dir === 'up' ? 1 : 0);
-              return (
-                <Pressable
-                  key={`${i}-${dir}`}
-                  style={{
-                    position: 'absolute',
-                    left: r.left * f,
-                    top: r.top * f,
-                    width: r.width * f,
-                    height: r.height * f,
-                  }}
-                  onPressIn={() => setShiftFrame(frame)}
-                  onPressOut={() => setShiftFrame(0)}
-                  onPress={() => onShiftReel(i, dir === 'up' ? 1 : -1)}
-                />
-              );
-            }),
-          )}
-        </>
+        );
+      })}
+
+      {([1, 2, 3] as const).map(m => {
+        const locked = isMultiplierLocked ? isMultiplierLocked(m) : false;
+        const canTap = multiplierInteractive && !!onSelectMultiplier && !locked;
+        if (!canTap) return null;
+        const cx = MULT_BADGE_CENTERS[m - 1];
+        const w = 16 * f;
+        return (
+          <Pressable
+            key={m}
+            style={{
+              position: 'absolute',
+              left: cx * f - w / 2,
+              top: MULT_STRIP.top * f,
+              width: w,
+              height: MULT_STRIP.height * f,
+            }}
+            onPress={() => onSelectMultiplier(m)}
+          />
+        );
+      })}
+
+      {powerDefs.map(p =>
+        p.state && p.state.visible && p.state.onPress ? (
+          <Pressable
+            key={p.key}
+            style={{
+              position: 'absolute',
+              left: p.hit.left * f,
+              top: p.hit.top * f,
+              width: p.hit.width * f,
+              height: p.hit.height * f,
+            }}
+            onPress={() => {
+              if (p.state?.frame !== 2) p.state?.onPress?.();
+            }}
+          />
+        ) : null,
       )}
 
-      {/* 11 — Lever pull hit target (rendered last so it wins the touch contest). */}
+      {shiftActive && onShiftReel && SHIFT_ARROW_HITS.map((arrows, i) =>
+        (['up', 'down'] as const).map(dir => {
+          const r = arrows[dir];
+          return (
+            <Pressable
+              key={`${i}-${dir}`}
+              style={{
+                position: 'absolute',
+                left: r.left * f,
+                top: r.top * f,
+                width: r.width * f,
+                height: r.height * f,
+              }}
+              onPress={() => onShiftReel(i, dir === 'up' ? 1 : -1)}
+            />
+          );
+        }),
+      )}
+
       {onLeverPull && (
         <Pressable
           style={{
             position: 'absolute',
-            top:    LEVER_HIT.top * f,
-            left:   LEVER_HIT.left * f,
-            width:  LEVER_HIT.width * f,
+            top: LEVER_HIT.top * f,
+            left: LEVER_HIT.left * f,
+            width: LEVER_HIT.width * f,
             height: LEVER_HIT.height * f,
           }}
-          onPress={pullLever}
-          disabled={!leverEnabled}
+          onPress={onLeverPull}
         />
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   machine: {
@@ -631,10 +715,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  reelSelected: {
-    borderWidth: 2,
-    borderColor: '#00e5ff',
-    borderRadius: 4,
+  hiddenOverlay: {
+    opacity: 0,
   },
   lockCount: {
     // Same blue as the lock art. No fontWeight: a custom pixel font has no bold
