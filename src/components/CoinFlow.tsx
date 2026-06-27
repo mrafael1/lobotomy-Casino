@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated } from 'react-native';
 import { useSettledLucidity } from '../state/useAnimatedLucidity';
 import { COIN_ICON } from '../content/uiAssets';
+import { COIN_FLIGHT_MS, COIN_STAGGER_MS } from '../content/timing';
 
 // Regular Lucidity coins. The sequence is: burst OUT of the black cash tray
 // first (pop up + scatter), THEN stream up to the goal bar/counter — they don't
@@ -17,9 +18,9 @@ const BURST_SCATTER_SRC = 26;              // horizontal spread at the burst pea
 // Cap the swarm so a huge win never spawns hundreds of sprites; the staggered
 // pour still reads as "the total is being counted out".
 const MAX_VISIBLE = 8;
-const TOTAL_MS    = 720;  // per coin: burst + collect
-const BURST_FRAC  = 0.4;  // fraction of the flight spent bursting out of the tray
-const STAGGER_MS  = 90;   // gap between coins pouring out
+const TOTAL_MS    = COIN_FLIGHT_MS;  // per coin: burst + collect (shared with the counter gate)
+const BURST_FRAC  = 0.4;             // fraction of the flight spent bursting out of the tray
+const STAGGER_MS  = COIN_STAGGER_MS; // gap between coins pouring out
 
 interface Sprite {
   id: number;

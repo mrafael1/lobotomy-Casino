@@ -40,6 +40,10 @@ export interface SpinResult {
   readonly isJackpot: boolean;
   readonly isFreeSpin: boolean;
   readonly winType: WinType;
+  // Visual-only: true when the Cocktail rarity bonus (sum of every visible
+  // symbol's rarityScore) was folded into scoreEarned this spin. Lets the UI show
+  // each reel's own score on a loss; never affects payout.
+  readonly cocktailApplied?: boolean;
 }
 
 export interface RunState {

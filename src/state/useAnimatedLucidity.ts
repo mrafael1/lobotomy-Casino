@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRunStore } from './runState';
+import { COIN_FIRST_ARRIVAL_MS } from '../content/timing';
 
 // The "settled" Lucidity total: the real total, but FROZEN while a spin's reels
 // are still turning (isSpinning), released only once they all stop. spin() banks
@@ -20,6 +21,36 @@ export function useSettledLucidity(hold = false): number {
   return settled;
 }
 
+// The "coin-arrival gated" total: the settled total, but its INCREASES are held
+// back until the first flying coin would reach the goal bar (COIN_FIRST_ARRIVAL_MS
+// after the gain settles). This is what makes the counter + objective bar wait —
+// they only start climbing when coins ARRIVE at the bar, not while coins are still
+// leaving the tray. Decreases/resets snap (we only ever count up). If the coin
+// animation is skipped, the same delay acts as a short fallback so the displayed
+// total still reconciles to the real Lucidity.
+function useCoinArrivalGatedLucidity(): number {
+  const settled = useSettledLucidity();
+  const [gated, setGated] = useState(settled);
+  const gatedRef = useRef(settled);
+
+  useEffect(() => {
+    // Decrease/reset: snap immediately (mirrors CoinFlow, which ignores decreases).
+    if (settled <= gatedRef.current) {
+      gatedRef.current = settled;
+      setGated(settled);
+      return;
+    }
+    // Increase: defer until the first coin reaches the goal bar.
+    const timer = setTimeout(() => {
+      gatedRef.current = settled;
+      setGated(settled);
+    }, COIN_FIRST_ARRIVAL_MS);
+    return () => clearTimeout(timer);
+  }, [settled]);
+
+  return gated;
+}
+
 // A displayed Lucidity value that climbs smoothly toward the real total. Gameplay
 // state (lucidityCoins) updates immediately; only this UI number lags and counts
 // up, so the goal counter (MachineScreenMeters) and the TV objective bar
@@ -36,9 +67,10 @@ const MIN_MS = 300;       // floor so tiny gains still read as a climb
 const MAX_MS = 1500;      // ceiling so big gains stay fast enough (cap the wait)
 
 export function useAnimatedLucidity(): number {
-  // Follow the settled total so the counter/bar climb only after the reels stop,
-  // in sync with the flying coins.
-  const target = useSettledLucidity();
+  // Follow the coin-arrival gated total so the counter/bar start climbing only
+  // once the first coin reaches the goal bar — not while coins are still leaving
+  // the tray (and never before the reels stop, which the settled total enforces).
+  const target = useCoinArrivalGatedLucidity();
   const [display, setDisplay] = useState(target);
   const displayRef = useRef(target);
   const rafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);

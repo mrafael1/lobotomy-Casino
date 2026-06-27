@@ -271,7 +271,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       ? result.reels.reduce((sum, sym) => sum + (SYMBOLS[sym]?.rarityScore ?? 0), 0)
       : 0;
     const finalResult: SpinResult = cocktailBonus > 0
-      ? { ...result, scoreEarned: result.scoreEarned + cocktailBonus }
+      ? { ...result, scoreEarned: result.scoreEarned + cocktailBonus, cocktailApplied: true }
       : result;
 
     // Lucidity gained is 1:1 with the score shown this spin (cocktail rarity

@@ -6,6 +6,7 @@ import { SpriteSheetFrame } from './SpriteSheetFrame';
 import { MachineScreenMeters } from './MachineScreenMeters';
 import { CoinFlow } from './CoinFlow';
 import { PowerCoinFlow } from './PowerCoinFlow';
+import { ScoreBurst } from './ScoreBurst';
 import { useRunStore } from '../state/runState';
 import { useAnimatedLucidity } from '../state/useAnimatedLucidity';
 import type { SymbolId } from '../game/types';
@@ -13,13 +14,14 @@ import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
 import {
   MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
-  REROLL_V3, SHIFT_V3, LOCK_V3, SHIFT_POWER_V3, LOCK_POWER_V3,
+  REROLL_V3, SHIFT_V3, LOCK_V3, SHIFT_POWER_V3, LOCK_POWER_V3, REEL_SELECT_V3,
   WEALTH_TRACK_V3, WEALTH_FILL_V3, HEALTH_TRACK_V3, HEALTH_FILL_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
   REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN, BAR_FILL,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT, POWER_HITS, SHIFT_ARROW_HITS,
   LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, POWER_FRAME_COUNT,
   SHIFT_POWER_FRAME_COUNT, SHIFT_POWER_COLUMNS, LOCK_POWER_FRAME_COUNT,
+  REEL_SELECT_FRAME_COUNT, REEL_SELECT_COLUMNS,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
@@ -47,6 +49,9 @@ interface Props {
   // arrows on every reel) and makes each arrow tappable to shift that reel.
   shiftActive?: boolean;
   onShiftReel?: (reelIndex: number, direction: -1 | 1) => void;
+  // When true, a reroll/lock power is choosing a reel: draws the reel_selection
+  // overlay (one arrow per reel), with the pressed reel's arrow lit on touch.
+  reelSelectActive?: boolean;
   // Single-reel reroll animation: spins only that reel, fires when done.
   rerollingReelIndex?: number | null;
   onRerollDone?: () => void;
@@ -71,6 +76,18 @@ interface Props {
   // When true, holds coin/power-coin animations until the visual result has
   // fully landed (e.g. during a power reroll animation in GameScreen).
   rewardHold?: boolean;
+  // Explicit reel the score announcement should emerge from when a power changed a
+  // reel (reroll/shift/copy). `null`/omitted means a normal spin — ScoreBurst then
+  // derives the reel from the result (pair on the first two reels → 2nd reel).
+  scoreSourceReelIndex?: 0 | 1 | 2 | null;
+  // Compulsion (Cocktail): while a forced spin runs the machine bets for itself —
+  // show this multiplier (1 or 2 only, never 3) on the readout instead of the
+  // player's selection. `null` = normal (use the player's bet).
+  forcedMultiplier?: 1 | 2 | null;
+  // Bumped (incrementing number) to make the lever self-pull as a VISUAL cue for a
+  // forced Compulsion spin. Plays the lever animation only — it never calls
+  // onLeverPull, so it cannot cause a second/duplicate spin.
+  compulsionPullSignal?: number;
 }
 
 export function SlotMachine({
@@ -79,6 +96,7 @@ export function SlotMachine({
   selectedReels = [],
   shiftActive = false,
   onShiftReel,
+  reelSelectActive = false,
   rerollingReelIndex = null,
   onRerollDone,
   onSelectMultiplier,
@@ -89,6 +107,9 @@ export function SlotMachine({
   powers,
   scale = 5,
   rewardHold = false,
+  scoreSourceReelIndex = null,
+  forcedMultiplier = null,
+  compulsionPullSignal = 0,
 }: Props) {
   const isSpinning    = useRunStore(s => s.isSpinning);
   const lastResult    = useRunStore(s => s.lastResult);
@@ -121,21 +142,40 @@ export function SlotMachine({
   const [leverFrame, setLeverFrame] = useState(0);
   const leverTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
-  function pullLever() {
-    if (!leverEnabled || !onLeverPull) return;
-    // Ignore repeated triggers while a pull (or spin) is already running.
+  // Play the lever pull (idle 0 → pulled 5 → idle). `onLanded` fires when the lever
+  // reaches the bottom of the pull; omit it to play the animation as PURE visual
+  // feedback (a Compulsion self-pull) without triggering a spin. Never stacks:
+  // ignored while a pull — or a spin — is already running.
+  function animateLever(onLanded?: () => void) {
     if (leverTimers.current.length > 0 || isSpinning) return;
     for (let f = 1; f <= LEVER_FRAME_COUNT - 1; f++) {
       leverTimers.current.push(setTimeout(() => setLeverFrame(f), LEVER_FRAME_MS * f));
     }
-    leverTimers.current.push(setTimeout(() => { onLeverPull(); }, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
+    if (onLanded) {
+      leverTimers.current.push(setTimeout(onLanded, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
+    }
     leverTimers.current.push(setTimeout(() => {
       setLeverFrame(0);
       leverTimers.current = [];
     }, LEVER_FRAME_MS * LEVER_FRAME_COUNT));
   }
 
+  function pullLever() {
+    if (!leverEnabled || !onLeverPull) return;
+    animateLever(onLeverPull);
+  }
+
   useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
+
+  // Compulsion self-pull: when the signal bumps, animate the lever as a cue that
+  // the machine is forcing its own spin. Animation only (no onLanded) — the forced
+  // spin is fired by GameScreen, so this can never double-spin.
+  const lastPullSignal = useRef(compulsionPullSignal);
+  useEffect(() => {
+    if (compulsionPullSignal === lastPullSignal.current) return;
+    lastPullSignal.current = compulsionPullSignal;
+    animateLever();
+  }, [compulsionPullSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Jackpot flash (2-frame banner) ──
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -186,11 +226,17 @@ export function SlotMachine({
   const x2Locked = isMultiplierLocked ? isMultiplierLocked(2) : false;
   const x3Locked = isMultiplierLocked ? isMultiplierLocked(3) : false;
   const affordableMult = x2Locked ? 1 : x3Locked ? 2 : 3;
-  const effectiveMult = Math.min(betMultiplier, affordableMult);
+  const baseEffectiveMult = Math.min(betMultiplier, affordableMult);
+  // During Compulsion the machine forces its own bet (x1/x2 only — never x3): show
+  // it on the readout and use it for the win-burst colour, overriding the player's
+  // selection. forcedMultiplier is null at all other times.
+  const effectiveMult = forcedMultiplier ?? baseEffectiveMult;
   const multFrame =
-    affordableMult === 1 ? 4
-    : affordableMult === 2 ? (effectiveMult === 2 ? 5 : 3)
-    :                        effectiveMult - 1;
+    forcedMultiplier != null
+      ? forcedMultiplier - 1                  // 0:×1  1:×2 (plain frame, no lock art)
+      : affordableMult === 1 ? 4
+        : affordableMult === 2 ? (baseEffectiveMult === 2 ? 5 : 3)
+        :                        baseEffectiveMult - 1;
 
   // TV bars: the top bar is the Lucidity OBJECTIVE bar — it tracks progress
   // toward the current Lucidity goal (LUCIDITY_OBJECTIVE, default 1000 L) and
@@ -230,6 +276,13 @@ export function SlotMachine({
   useEffect(() => {
     if (!shiftActive) setShiftFrame(0);
   }, [shiftActive]);
+
+  // Which reel's arrow is held in the reel-selection (reroll/lock) overlay; null =
+  // idle (all three arrows). Reset whenever reel-selection deactivates.
+  const [reelSelectPressed, setReelSelectPressed] = useState<number | null>(null);
+  useEffect(() => {
+    if (!reelSelectActive) setReelSelectPressed(null);
+  }, [reelSelectActive]);
 
   // Cell tap-target geometry (source px → display px). A touch of vertical
   // padding makes the small reel windows comfortably tappable.
@@ -412,6 +465,34 @@ export function SlotMachine({
         </React.Fragment>
       ) : null)}
 
+      {/* 7d — Result announcement: PAIR / TRIPLE / JACKPOT + amount bursts out of
+              the reel that produced the final scoring action (3rd reel for a
+              normal spin; the changed reel for a power), floats up toward the goal
+              bar and fades. Coloured by the bet multiplier. Visual only. */}
+      <View style={styles.fill} pointerEvents="none">
+        <ScoreBurst
+          f={f}
+          sourceReelIndex={scoreSourceReelIndex}
+          multiplier={Math.max(1, Math.min(3, effectiveMult)) as 1 | 2 | 3}
+          holdReveal={rerollingReelIndex !== null}
+        />
+      </View>
+
+      {/* 7e — Reel-selection arrows (reroll / lock targeting): full-canvas overlay,
+              one arrow per reel. Idle shows all three; the pressed reel lights its
+              arrow (frame = pressedReel + 1). */}
+      {reelSelectActive && (
+        <SpriteSheetFrame
+          source={REEL_SELECT_V3}
+          frameIndex={reelSelectPressed != null ? reelSelectPressed + 1 : 0}
+          frameCount={REEL_SELECT_FRAME_COUNT}
+          columns={REEL_SELECT_COLUMNS}
+          width={machineWidth}
+          height={machineHeight}
+          style={styles.fill}
+        />
+      )}
+
       {/* 8 — Reel cell overlays: targeting + lock/selection display (above cabinet) */}
       <View style={styles.fill} pointerEvents="box-none">
         {([0, 1, 2] as const).map(i => {
@@ -425,7 +506,12 @@ export function SlotMachine({
               pointerEvents="box-none"
             >
               {tappable && (
-                <Pressable style={StyleSheet.absoluteFill} onPress={() => onReelPress!(i)} />
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => onReelPress!(i)}
+                  onPressIn={() => setReelSelectPressed(i)}
+                  onPressOut={() => setReelSelectPressed(null)}
+                />
               )}
               {selected && <View style={[StyleSheet.absoluteFill, styles.reelSelected]} pointerEvents="none" />}
             </View>
