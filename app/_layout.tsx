@@ -21,7 +21,14 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
+  // Cross-fade between screens rather than a hard cut (animation: 'none').
+  // Mounting a screen (decoding its art, first layout) costs a few frames, and
+  // with no transition that shows up as a frozen snap — it reads as a stutter.
+  // A short fade gives immediate, deliberate motion that masks the mount hitch,
+  // so navigation feels smooth even though the underlying work is unchanged.
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+    <Stack
+      screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 220 }}
+    />
   );
 }

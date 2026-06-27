@@ -153,34 +153,53 @@ export const SlotMachine = React.memo(function SlotMachine({
   };
 
   // ── Lever animation (idle 0 → pulled 5) ──
+  // Driven off elapsed wall-clock time via requestAnimationFrame instead of a
+  // chain of per-frame setTimeouts. Right after a scene transition the JS thread
+  // is still busy, so those timers bunched up and fired together — React batched
+  // the setState calls and the pull visibly jumped straight to the last frame
+  // ("only 2 frames play"). Mapping the displayed frame from elapsed time means a
+  // dropped tick self-corrects (the next tick shows the correct frame) and the
+  // pull always plays through, however janky the thread is.
   const [leverFrame, setLeverFrame] = useState(0);
-  const leverTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-
-  // Play the lever pull (idle 0 → pulled 5 → idle). `onLanded` fires when the lever
-  // reaches the bottom of the pull; omit it to play the animation as PURE visual
-  // feedback (a Compulsion self-pull) without triggering a spin. Never stacks:
-  // ignored while a pull — or a spin — is already running.
-  function animateLever(onLanded?: () => void) {
-    if (leverTimers.current.length > 0 || isSpinning) return;
-    setLeverFrame(1);
-    for (let f = 2; f <= LEVER_FRAME_COUNT - 1; f++) {
-      leverTimers.current.push(setTimeout(() => setLeverFrame(f), LEVER_FRAME_MS * (f - 1)));
-    }
-    if (onLanded) {
-      leverTimers.current.push(setTimeout(onLanded, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 2)));
-    }
-    leverTimers.current.push(setTimeout(() => {
-      setLeverFrame(0);
-      leverTimers.current = [];
-    }, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
-  }
+  const leverRaf = useRef<number | null>(null);
 
   function pullLever() {
     if (!leverEnabled || !onLeverPull) return;
-    animateLever(onLeverPull);
+    // Ignore repeated triggers while a pull (or spin) is already running.
+    if (leverRaf.current !== null || isSpinning) return;
+
+    const lastFrame = LEVER_FRAME_COUNT - 1;      // 5: fully pulled
+    const pullMs    = LEVER_FRAME_MS * lastFrame; // time to reach the bottom
+    let start = 0;
+    let shown = -1;
+    let fired = false;
+
+    const tick = (now: number) => {
+      if (start === 0) start = now;
+      const elapsed = now - start;
+      const frame = Math.min(lastFrame, Math.floor(elapsed / LEVER_FRAME_MS));
+      if (frame !== shown) { shown = frame; setLeverFrame(frame); }
+
+      // Fire the spin once the pull has bottomed out.
+      if (!fired && elapsed >= pullMs) {
+        fired = true;
+        onLeverPull();
+      }
+
+      // Hold the bottom frame one beat, then snap back to idle and finish.
+      if (elapsed >= pullMs + LEVER_FRAME_MS) {
+        setLeverFrame(0);
+        leverRaf.current = null;
+        return;
+      }
+      leverRaf.current = requestAnimationFrame(tick);
+    };
+    leverRaf.current = requestAnimationFrame(tick);
   }
 
-  useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
+  useEffect(() => () => {
+    if (leverRaf.current !== null) cancelAnimationFrame(leverRaf.current);
+  }, []);
 
   // Compulsion self-pull: when the signal bumps, animate the lever as a cue that
   // the machine is forcing its own spin. Animation only (no onLanded) — the forced
@@ -189,7 +208,7 @@ export const SlotMachine = React.memo(function SlotMachine({
   useEffect(() => {
     if (compulsionPullSignal === lastPullSignal.current) return;
     lastPullSignal.current = compulsionPullSignal;
-    animateLever();
+    pullLever();
   }, [compulsionPullSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Jackpot flash (2-frame banner) ──
