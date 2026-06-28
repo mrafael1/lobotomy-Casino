@@ -361,12 +361,19 @@ export function GameScreen() {
     interactionMode === 'modal' ||
     isForcedSpinQueued;
 
-  // Compulsion is active while forced spins are pending OR one is still animating
-  // (the last forced spin zeroes the counter at its start, so the in-flight flag
-  // carries the visuals through it). Purely derived → it tracks the real spin
-  // lifecycle exactly and can never lag on or get stuck.
+  // Compulsion possession visuals (vibration, forced-bet readout, screen jitter).
+  // It must NOT switch on during the 3rd boosted spin: the store raises
+  // compulsiveSpinSkips at the START of that spin (the moment its reels begin
+  // turning), so keying purely off the counter made the machine start shaking
+  // mid-spin — "too early". Instead it's active only:
+  //   • while a forced spin is actually animating (forcedSpinInFlight), or
+  //   • once spins are pending AND no spin is in flight — i.e. AFTER the boosted
+  //     spin's result lands and during each pause before the next forced spin.
+  // (forcedSpinInFlight carries the visuals through the last forced spin, which
+  // zeroes the counter at its own start.)
   const compulsionActive =
-    runPhase === 'running' && (compulsiveSpinSkips > 0 || forcedSpinInFlight);
+    runPhase === 'running' &&
+    (forcedSpinInFlight || (compulsiveSpinSkips > 0 && !isSpinning));
 
   useEffect(() => {
     const modalBusy = isPowerExecuting || isDealerMode || endingPending;
@@ -383,16 +390,12 @@ export function GameScreen() {
     }
     compulsiveSpinTimer.current = setTimeout(() => {
       compulsiveSpinTimer.current = null;
-<<<<<<< HEAD
-      // Mark the forced spin in flight so the visuals stay through the LAST one
-      // (its counter is already 0). Only if it actually started (else don't stick).
-      const fired = useRunStore.getState().spin({ compulsive: true });
-      setForcedSpinInFlight(fired !== null);
-    }, 450);
-=======
+      // Mark the forced spin in flight BEFORE it starts so the possession visuals
+      // carry through it (the last one zeroes compulsiveSpinSkips at its start);
+      // it's cleared the instant the reels stop (effect below).
+      setForcedSpinInFlight(true);
       useRunStore.getState().spin({ compulsive: true });
     }, COMPULSIVE_SPIN_DELAY_MS);
->>>>>>> c36d1fe (fix(cocktail): hold compulsion auto-spin until the result lands)
 
     return () => {
       if (compulsiveSpinTimer.current) {

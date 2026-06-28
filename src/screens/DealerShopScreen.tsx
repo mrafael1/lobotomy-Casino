@@ -296,6 +296,7 @@ export function DealerShopScreen() {
         source={require('../../assets/images/dealer_shop_bg.png')}
         style={{ position: 'absolute', ...sceneFrame }}
         resizeMode="contain"
+        fadeDuration={0}
       />
 
       {/* ── LAYER 2: Dealer (2-frame sheet, slide to reveal one frame). Each
@@ -315,6 +316,7 @@ export function DealerShopScreen() {
             height: fitH,
           }}
           resizeMode="stretch"
+          fadeDuration={0}
         />
       </Animated.View>
 
@@ -323,6 +325,7 @@ export function DealerShopScreen() {
         source={DEALER_SHOP_COUNTER}
         style={{ position: 'absolute', ...sceneFrame }}
         resizeMode="contain"
+        fadeDuration={0}
       />
 
       {/* ── TV — drawn after the counter art (the TV graphic lives there). ── */}
@@ -380,7 +383,7 @@ export function DealerShopScreen() {
                 pointerEvents="none"
               >
                 <Text style={styles.priceText}>{shopCost}</Text>
-                <Image source={COIN_ICON} style={styles.priceCoin} resizeMode="contain" />
+                <Image source={COIN_ICON} style={styles.priceCoin} resizeMode="contain" fadeDuration={0} />
               </View>
             )}
 
@@ -451,7 +454,7 @@ export function DealerShopScreen() {
               up here. Normal shop keeps its wallet readout (Lucidity + coin). */}
           {!runMode && (
             <View style={styles.walletPill}>
-              <Image source={COIN_ICON} style={styles.walletCoin} resizeMode="contain" />
+              <Image source={COIN_ICON} style={styles.walletCoin} resizeMode="contain" fadeDuration={0} />
               <Text style={styles.wallet}>{lucidityWallet}</Text>
             </View>
           )}
@@ -517,7 +520,7 @@ function DraggableCounterItem({
       {...responder.panHandlers}
       style={[boxStyle, { transform: pan.getTranslateTransform() }]}
     >
-      <Image source={itemIcon(iconId)} style={styles.consIcon} resizeMode="contain" />
+      <Image source={itemIcon(iconId)} style={styles.consIcon} resizeMode="contain" fadeDuration={0} />
     </Animated.View>
   );
 }

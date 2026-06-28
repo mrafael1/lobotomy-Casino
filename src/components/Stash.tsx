@@ -40,7 +40,7 @@ export function Stash({
 
   return (
     <View style={{ width, height }}>
-      <Image source={STASH_TRAY} style={styles.tray} resizeMode="contain" />
+      <Image source={STASH_TRAY} style={styles.tray} resizeMode="contain" fadeDuration={0} />
       {SLOTS.map((slot, i) => {
         const item = items[i] ?? null;
         const sx = width * slot.left;
@@ -76,7 +76,7 @@ export function Stash({
           >
             {item ? (
               <>
-                <Image source={itemIcon(item.id)} style={styles.icon} resizeMode="contain" />
+                <Image source={itemIcon(item.id)} style={styles.icon} resizeMode="contain" fadeDuration={0} />
                 {item.charges > 1 && (
                   <Text style={styles.charge}>×{item.charges}</Text>
                 )}
@@ -149,7 +149,7 @@ function DraggableSlot({ item, left, top, width, height, onThrow, dropTest }: Dr
         { left, top, width, height, transform: pan.getTranslateTransform() },
       ]}
     >
-      <Image source={itemIcon(item.id)} style={styles.icon} resizeMode="contain" />
+      <Image source={itemIcon(item.id)} style={styles.icon} resizeMode="contain" fadeDuration={0} />
       {item.charges > 1 && <Text style={styles.charge}>×{item.charges}</Text>}
     </Animated.View>
   );

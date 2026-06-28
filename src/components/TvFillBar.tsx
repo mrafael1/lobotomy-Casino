@@ -15,7 +15,7 @@ interface Props {
 // Renders a TV bar as a static track plus a fill revealed left→right by ratio.
 // Both art frames are full-canvas; the fill is clipped to [fillLeft, +ratio·width]
 // so it lines up with the cabinet exactly. Avoids the giant 36-frame sheets.
-export function TvFillBar({ track, fill, ratio, machineWidth, machineHeight, fillLeft, fillWidth }: Props) {
+function TvFillBarImpl({ track, fill, ratio, machineWidth, machineHeight, fillLeft, fillWidth }: Props) {
   const r = Math.max(0, Math.min(1, ratio));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -33,3 +33,7 @@ export function TvFillBar({ track, fill, ratio, machineWidth, machineHeight, fil
     </View>
   );
 }
+
+// Props are primitives + stable sources — memoized so it only re-renders when the
+// fill ratio (or geometry) actually changes, not on every parent re-render.
+export const TvFillBar = React.memo(TvFillBarImpl);

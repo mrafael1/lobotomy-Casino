@@ -60,7 +60,7 @@ interface Props {
 // is already authored at the x5 runtime size. On stop it shows the exact
 // resolved symbol via its per-symbol sprite — covering all 7 symbols, including
 // vial/book which the sheet doesn't contain.
-export function ReelCellV3({
+function ReelCellV3Impl({
   finalSymbol,
   spinning,
   locked = false,
@@ -185,3 +185,10 @@ export function ReelCellV3({
     </View>
   );
 }
+
+// Memoized: a reel only needs to re-render when its own result/spin/lock state
+// changes. Without this, every SlotMachine re-render (jackpot flash, bet/lock
+// changes, arrow-press feedback, lucidity ticks) re-rendered all three reels and
+// re-rasterized their symbol canvases. For the gate to work, SlotMachine passes a
+// STABLE `hole` (memoized) and a STABLE `onComplete` (useCallback).
+export const ReelCellV3 = React.memo(ReelCellV3Impl);
