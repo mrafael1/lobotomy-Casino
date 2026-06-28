@@ -35,10 +35,11 @@ const SHIFT_ARROW_HITS := [
 	{ "up": { "left": 97.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 97.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
 ]
 
-# Set true to grant the Shift/Memory permanents + a couple of test consumables at
-# run start, so powers and the stash can be exercised before the M3 shop/dealer
-# exist. Leave false for faithful play.
-const DEBUG_GRANT := true
+const SHOP_SCENE := "res://scenes/shop_scene.tscn"
+
+# Debug-grant Shift/Memory + test consumables when a run is started standalone
+# (machine opened directly, not via the shop). The shop is the real source now.
+const DEBUG_GRANT := false
 
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
@@ -46,6 +47,7 @@ const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 var _reel_sprites: Array[Sprite2D] = []
 var _hud_labels := {}
 var _overlay: Control = null
+var _dealer_overlay: Control = null
 var _spin_button: Button = null
 var _bet_button: Button = null
 var _power_buttons := {}      # id -> Button
@@ -74,7 +76,7 @@ func _ready() -> void:
 	_build_power_buttons()
 	_build_stash()
 	RunStateStore.state_changed.connect(_update_hud)
-	_start_run()
+	_enter_run()
 
 # ── asset loading (absolute path into ../assets) ──────────────────────────────────
 
@@ -174,12 +176,14 @@ func _build_spin_button() -> void:
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
 
-func _start_run() -> void:
-	if _overlay != null:
-		_overlay.queue_free()
-		_overlay = null
-	_clear_targeting()
+# Entered from the shop (which already started the run) or standalone. If no run is
+# in progress, begin one from meta so the machine works on its own too.
+func _enter_run() -> void:
+	if RunStateStore.runPhase != "running":
+		_begin_fresh_run()
+	_sync_visuals()
 
+func _begin_fresh_run() -> void:
 	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
 	var consumables: Dictionary = MetaStateStore.get_pending_consumables().duplicate(true)
 	if DEBUG_GRANT:
@@ -188,11 +192,22 @@ func _start_run() -> void:
 				permanents.append(p)
 		if consumables.is_empty():
 			consumables = { "cons_focus": 1, "item_water": 1 }
-
 	RunStateStore.start_new_run(permanents, consumables)
-	for i in 3:
-		_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
+
+func _sync_visuals() -> void:
+	if _overlay != null:
+		_overlay.queue_free()
+		_overlay = null
+	_clear_targeting()
+	if RunStateStore.lastResult != null:
+		_refresh_reels_from_state()
+	else:
+		for i in 3:
+			_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
 	_update_hud()
+
+func _to_shop() -> void:
+	get_tree().change_scene_to_file(SHOP_SCENE)
 
 func _do_spin() -> void:
 	if _spinning_anim:
@@ -227,7 +242,12 @@ func _on_reveal_complete() -> void:
 	RunStateStore.set_spinning(false)
 	_update_hud()
 	_spin_button.disabled = false
-	_check_ending()
+	if _check_ending():
+		return
+	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
+	RunStateStore.check_dealer_trigger()
+	if RunStateStore.dealerIncoming:
+		_show_dealer_incoming()
 
 func _update_hud() -> void:
 	if _hud_labels.is_empty():
@@ -398,7 +418,7 @@ func _on_stash_pressed(slot_index: int) -> void:
 	RunStateStore.use_consumable(slots[slot_index])
 	_refresh_reels_from_state()
 
-func _check_ending() -> void:
+func _check_ending() -> bool:
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -406,15 +426,19 @@ func _check_ending() -> void:
 	}
 	var ending: Variant = Endings.check_ending(run, {})
 	if ending == null:
-		return
+		return false
 	if ending == "wealth" and RunStateStore.wealthContinued:
-		return
+		return false
 	_show_ending(String(ending), run)
+	return true
 
 func _show_ending(ending: String, run: Dictionary) -> void:
 	RunStateStore.end_run(ending)
 	MetaStateStore.mark_ending_reached(ending)
-	MetaStateStore.bank_run(run, ending)
+	# Wealth banking is deferred until the player chooses to leave (so Continue can
+	# resume and bank the full total at the real flatline end — no double-bank).
+	if ending != "wealth":
+		MetaStateStore.bank_run(run, ending)
 
 	_overlay = Control.new()
 	_overlay.position = Vector2.ZERO
@@ -444,12 +468,120 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	wallet.text = "WALLET %d" % MetaStateStore.lucidityWallet
 	_overlay.add_child(wallet)
 
-	var restart := Button.new()
-	restart.text = "NEW RUN"
-	restart.position = Vector2(40, 175)
-	restart.size = Vector2(80, 20)
-	restart.add_theme_font_size_override("font_size", 9)
+	var to_shop := Button.new()
+	to_shop.text = "BANK & LEAVE" if ending == "wealth" else "SHOP"
+	to_shop.position = Vector2(30, 175)
+	to_shop.size = Vector2(100, 20)
+	to_shop.add_theme_font_size_override("font_size", 9)
 	if _font != null:
-		restart.add_theme_font_override("font", _font)
-	restart.pressed.connect(_start_run)
-	_overlay.add_child(restart)
+		to_shop.add_theme_font_override("font", _font)
+	# Non-wealth already banked above; wealth banks here on leave.
+	to_shop.pressed.connect(_bank_and_shop.bind(run, ending) if ending == "wealth" else _to_shop)
+	_overlay.add_child(to_shop)
+
+	if ending == "wealth":
+		var cont := Button.new()
+		cont.text = "CONTINUE"
+		cont.position = Vector2(40, 200)
+		cont.size = Vector2(80, 18)
+		cont.add_theme_font_size_override("font_size", 9)
+		if _font != null:
+			cont.add_theme_font_override("font", _font)
+		cont.pressed.connect(_continue_from_wealth)
+		_overlay.add_child(cont)
+
+func _continue_from_wealth() -> void:
+	RunStateStore.continue_run()
+	_sync_visuals()
+
+func _bank_and_shop(run: Dictionary, ending: String) -> void:
+	MetaStateStore.bank_run(run, ending)
+	_to_shop()
+
+# ── dealer flow ────────────────────────────────────────────────────────────────────
+
+func _make_dealer_modal() -> Control:
+	if _dealer_overlay != null:
+		_dealer_overlay.queue_free()
+	_dealer_overlay = Control.new()
+	_dealer_overlay.size = Vector2(SRC_W, SRC_H) # default mouse_filter STOP -> modal, blocks spin
+	add_child(_dealer_overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.0, 0.08, 0.8)
+	dim.size = Vector2(SRC_W, SRC_H)
+	_dealer_overlay.add_child(dim)
+	var portrait := _load_texture("ui/dealer_portrait.png")
+	if portrait != null:
+		var p := TextureRect.new()
+		p.texture = portrait
+		p.position = Vector2(50, 30)
+		p.size = Vector2(60, 60)
+		p.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_dealer_overlay.add_child(p)
+	return _dealer_overlay
+
+func _dealer_label(parent: Control, text: String, pos: Vector2, size: int, color: Color) -> void:
+	var l := Label.new()
+	l.text = text
+	l.position = pos
+	l.add_theme_font_size_override("font_size", size)
+	if _font != null:
+		l.add_theme_font_override("font", _font)
+	l.add_theme_color_override("font_color", color)
+	parent.add_child(l)
+
+func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable) -> void:
+	var b := Button.new()
+	b.text = text
+	b.position = pos
+	b.size = size
+	b.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
+	b.pressed.connect(cb)
+	parent.add_child(b)
+
+func _show_dealer_incoming() -> void:
+	var m := _make_dealer_modal()
+	_dealer_label(m, "THE DEALER\nAPPROACHES", Vector2(20, 100), 11, Color(0.9, 0.7, 1.0))
+	_dealer_button(m, "VISIT", Vector2(20, 150), Vector2(55, 20), _dealer_visit)
+	_dealer_button(m, "WAVE OFF", Vector2(85, 150), Vector2(55, 20), _dealer_wave_off)
+
+func _dealer_visit() -> void:
+	RunStateStore.reveal_dealer()
+	_show_dealer_offers()
+
+func _dealer_wave_off() -> void:
+	RunStateStore.decline_dealer_visit()
+	_close_dealer()
+
+func _show_dealer_offers() -> void:
+	var offers: Variant = RunStateStore.dealerOfferIds
+	if offers == null:
+		_close_dealer()
+		return
+	var m := _make_dealer_modal()
+	_dealer_label(m, "TAKE ONE:", Vector2(20, 96), 10, Color(0.9, 0.8, 0.6))
+	var imap := InRunItems.map()
+	var y := 116.0
+	for id in offers:
+		var item: Variant = imap.get(id, null)
+		var name := String(item["name"]) if item != null else String(id)
+		_dealer_button(m, name, Vector2(20, y), Vector2(120, 20), _dealer_take.bind(String(id)))
+		y += 26.0
+	_dealer_button(m, "LEAVE", Vector2(40, y + 4.0), Vector2(80, 18), _dealer_leave)
+
+func _dealer_take(item_id: String) -> void:
+	RunStateStore.accept_dealer_offer(item_id)
+	_close_dealer()
+
+func _dealer_leave() -> void:
+	RunStateStore.decline_dealer_offer()
+	_close_dealer()
+
+func _close_dealer() -> void:
+	if _dealer_overlay != null:
+		_dealer_overlay.queue_free()
+		_dealer_overlay = null
+	_update_hud()

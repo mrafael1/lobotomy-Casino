@@ -70,32 +70,37 @@ from re-measured source-pixel constants (see the Expo `machineAssets.ts` discipl
 
 ## Running the game
 
-`scenes/machine_scene.tscn` is the main scene (set in `project.godot`). Open the
+`scenes/shop_scene.tscn` is the main scene (set in `project.godot`). Open the
 project in Godot and press Play, or:
 
 ```sh
 godot --path godot
 ```
 
-It loads the machine art by absolute path from `../assets` (so the Expo project
-stays the single source of art) and runs the full run loop via `RunStateStore`:
-spin → reel/result reveal → HUD → **powers (reroll/shift/memory) with reel/arrow
-targeting** → **bet ×1/×2/×3** → **consumable stash** → flatline/wealth ending →
-bank → new run.
+The loop hub is the **shop**: spend wallet Lucidity on upgrades / pre-run
+consumables, review run history, then **START RUN** → the machine scene. The machine
+runs the full loop via `RunStateStore`: spin → reel/result reveal → HUD → **powers
+(reroll/shift/memory) with reel/arrow targeting** → **bet ×1/×2/×3** → **consumable
+stash** → **dealer visits** (offers in-run items) → flatline/wealth ending → bank →
+back to shop. Wealth shows Continue (defer banking) or Bank & Leave.
 
-`DEBUG_GRANT` (top of `machine_scene.gd`, default **true**) grants the Shift/Memory
-permanents and a couple of test consumables at run start so powers and the stash can
-be exercised before the M3 shop/dealer exist. Set it to `false` for faithful play.
-The dealer and the 6-frame lever animation are later increments.
+Art loads by absolute path from `../assets` (Expo stays the single source). The
+shop's `DEBUG +200` button (flag in `shop_scene.gd`) tops up the wallet so upgrades
+are buyable before runs have banked much; `DEBUG_GRANT` in `machine_scene.gd`
+(default **false**) only applies when the machine is opened standalone.
 
 ## Status
 
 - ✅ **M1** — Rules/content port + parity harness green against `../parity/vectors`.
 - ✅ `user://` save with v2-canonical schema + empty migration seam (Step 4).
-- 🔨 **M2** — playable run loop in `scenes/machine_scene.gd`: spin, free spins,
-  neurons, lucidity, **powers, bet, consumables**, endings, banking. Remaining for
-  full M2: white-powder copy targeting + lever/power-button art frames.
-- ⏳ M3 (dealer/shop/scores/save flows) and M4 (Android polish) after M2.
+- ✅ **M2** — playable run loop: spin, free spins, neurons, lucidity, powers, bet,
+  consumables, endings, banking.
+- 🔨 **M3** — shop (upgrades/consumables) + scores/history panel + dealer scene
+  (incoming → visit → take/leave), all through `MetaStateStore`/`RunStateStore`.
+  `MetaStateStore` persists to `user://` on every change → **saves survive restart**
+  (verify by buying, quitting, relaunching). Remaining: white-powder copy targeting,
+  art polish.
+- ⏳ M4 (Android scaling/touch/performance/final parity pass) after M3.
 
 > This GDScript was authored against the frozen Expo reference but **not executed in the
 > authoring environment** (no Godot binary there). The headless harness is the gate:
