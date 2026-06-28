@@ -44,6 +44,18 @@ const DEBUG_GRANT := false
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 
+# Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
+const ITEM_ICONS := {
+	"cons_focus": "items/focus_serum.png",
+	"cons_white_powder": "items/white_powder.png",
+	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_tea": "items/herbal_tea.png",
+	"item_energy_drink": "items/energy_drink.png",
+	"item_cocktail": "items/cocktail.png",
+	"item_water": "items/water.png",
+	"item_pill": "items/pill.png",
+}
+
 var _reel_sprites: Array[Sprite2D] = []
 var _hud_labels := {}
 var _overlay: Control = null
@@ -53,6 +65,7 @@ var _bet_button: Button = null
 var _power_buttons := {}      # id -> Button
 var _stash_buttons: Array[Button] = []
 var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
+var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
 var _font: FontFile = null
 var _tex_cache := {}
 
@@ -213,6 +226,7 @@ func _do_spin() -> void:
 	if _spinning_anim:
 		return
 	_clear_targeting()
+	_copy_source = -1 # abandon any half-armed white-powder copy
 	var result: Variant = RunStateStore.spin()
 	if result == null:
 		return
@@ -339,13 +353,19 @@ func _refresh_controls() -> void:
 		var b := _stash_buttons[i]
 		if i < slots.size():
 			b.text = _short_name(slots[i])
+			b.icon = _icon_for(slots[i])
+			b.expand_icon = true
 			b.disabled = not RunStateStore._can_act()
 		else:
 			b.text = "--"
+			b.icon = null
 			b.disabled = true
 
 func _short_name(consumable_id: String) -> String:
 	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
+
+func _icon_for(id: String) -> Texture2D:
+	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
 
 # ── power targeting ────────────────────────────────────────────────────────────────
 
@@ -356,9 +376,12 @@ func _on_power_pressed(id: String) -> void:
 	if id == "shift":
 		_arm_shift_targets()
 	else:
-		_arm_reel_targets(id) # reroll / memory pick a single reel
+		# reroll / memory pick a single reel.
+		_arm_reel_picker(_apply_reel_power.bind(id))
 
-func _arm_reel_targets(power_id: String) -> void:
+# Builds a per-reel picker overlay; each reel button calls cb(reel_index).
+func _arm_reel_picker(cb: Callable) -> void:
+	_clear_targeting()
 	_targeting_layer = Control.new()
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
@@ -372,7 +395,7 @@ func _arm_reel_targets(power_id: String) -> void:
 		b.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			b.add_theme_font_override("font", _font)
-		b.pressed.connect(_apply_reel_power.bind(power_id, i))
+		b.pressed.connect(cb.bind(i))
 		_targeting_layer.add_child(b)
 
 func _arm_shift_targets() -> void:
@@ -415,8 +438,34 @@ func _on_stash_pressed(slot_index: int) -> void:
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return
-	RunStateStore.use_consumable(slots[slot_index])
+	var id: String = slots[slot_index]
+	if id == "cons_white_powder":
+		_begin_white_powder()
+		return
+	RunStateStore.use_consumable(id)
 	_refresh_reels_from_state()
+
+# White Powder: consume the charge, then pick a source reel and a target reel to
+# copy onto. copy_reel() applies the copy and its side effect (consume a random
+# other supply, or -20 neurons). Needs a spin result to copy from.
+func _begin_white_powder() -> void:
+	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
+		return
+	if not RunStateStore.use_consumable("cons_white_powder"):
+		return
+	_copy_source = -1
+	_arm_reel_picker(_on_copy_pick)
+
+func _on_copy_pick(reel_index: int) -> void:
+	if _copy_source < 0:
+		_copy_source = reel_index # source chosen; re-arm to pick the target
+		_arm_reel_picker(_on_copy_pick)
+	else:
+		var src := _copy_source
+		_copy_source = -1
+		RunStateStore.copy_reel(src, reel_index)
+		_clear_targeting()
+		_refresh_reels_from_state()
 
 func _check_ending() -> bool:
 	var run := {
@@ -531,7 +580,7 @@ func _dealer_label(parent: Control, text: String, pos: Vector2, size: int, color
 	l.add_theme_color_override("font_color", color)
 	parent.add_child(l)
 
-func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable) -> void:
+func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable, icon: Texture2D = null) -> void:
 	var b := Button.new()
 	b.text = text
 	b.position = pos
@@ -539,6 +588,9 @@ func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, 
 	b.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		b.add_theme_font_override("font", _font)
+	if icon != null:
+		b.icon = icon
+		b.expand_icon = true
 	b.pressed.connect(cb)
 	parent.add_child(b)
 
@@ -567,9 +619,10 @@ func _show_dealer_offers() -> void:
 	var y := 116.0
 	for id in offers:
 		var item: Variant = imap.get(id, null)
-		var name := String(item["name"]) if item != null else String(id)
-		_dealer_button(m, name, Vector2(20, y), Vector2(120, 20), _dealer_take.bind(String(id)))
-		y += 26.0
+		var item_name := String(item["name"]) if item != null else String(id)
+		var icon := _icon_for(String(id))
+		_dealer_button(m, item_name, Vector2(20, y), Vector2(120, 22), _dealer_take.bind(String(id)), icon)
+		y += 28.0
 	_dealer_button(m, "LEAVE", Vector2(40, y + 4.0), Vector2(80, 18), _dealer_leave)
 
 func _dealer_take(item_id: String) -> void:

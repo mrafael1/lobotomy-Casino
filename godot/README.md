@@ -95,11 +95,11 @@ are buyable before runs have banked much; `DEBUG_GRANT` in `machine_scene.gd`
 - ✅ `user://` save with v2-canonical schema + empty migration seam (Step 4).
 - ✅ **M2** — playable run loop: spin, free spins, neurons, lucidity, powers, bet,
   consumables, endings, banking.
-- 🔨 **M3** — shop (upgrades/consumables) + scores/history panel + dealer scene
-  (incoming → visit → take/leave), all through `MetaStateStore`/`RunStateStore`.
-  `MetaStateStore` persists to `user://` on every change → **saves survive restart**
-  (verify by buying, quitting, relaunching). Remaining: white-powder copy targeting,
-  art polish.
+- ✅ **M3** — shop (upgrades/consumables, item icons) + dedicated scores screen +
+  dealer scene (incoming → visit → take/leave with item icons) + **white-powder
+  copy-reel targeting** (source→target → `copy_reel`), all through
+  `MetaStateStore`/`RunStateStore`. `MetaStateStore` persists to `user://` on every
+  change → **saves survive restart** (verify by buying, quitting, relaunching).
 - ⏳ M4 (Android scaling/touch/performance/final parity pass) after M3.
 
 > This GDScript was authored against the frozen Expo reference but **not executed in the

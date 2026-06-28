@@ -7,11 +7,20 @@ extends Control
 ## (the M3 save QA gate). This scene is the loop hub: shop -> run -> bank -> shop.
 
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
+const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 
 # Debug: a wallet top-up so the shop is exercisable before runs have banked much.
 const DEBUG := true
 
+const ITEM_ICONS := {
+	"cons_focus": "items/focus_serum.png",
+	"cons_white_powder": "items/white_powder.png",
+	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_tea": "items/herbal_tea.png",
+}
+
 var _font: FontFile = null
+var _tex_cache := {}
 var _header: Label = null
 var _endings: Label = null
 var _list: VBoxContainer = null
@@ -30,6 +39,17 @@ func _load_font(rel: String) -> FontFile:
 	if f.load_dynamic_font(path) != OK:
 		return null
 	return f
+
+func _load_texture(rel: String) -> Texture2D:
+	if _tex_cache.has(rel):
+		return _tex_cache[rel]
+	var path := ProjectSettings.globalize_path("res://").path_join("../assets/images").path_join(rel)
+	var img := Image.new()
+	if img.load(path) != OK:
+		return null
+	var tex := ImageTexture.create_from_image(img)
+	_tex_cache[rel] = tex
+	return tex
 
 func _label(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -82,6 +102,10 @@ func _build() -> void:
 	_list.add_child(_label("— CONSUMABLES —", 8, Color(1.0, 0.7, 0.5)))
 	for c in Consumables.LIST:
 		var b := _styled_button("", 8)
+		var icon := _load_texture(ITEM_ICONS.get(String(c["id"]), "items/consumable_placeholder.png"))
+		if icon != null:
+			b.icon = icon
+			b.expand_icon = true
 		b.pressed.connect(_buy_consumable.bind(String(c["id"])))
 		_list.add_child(b)
 		_rows["C:" + String(c["id"])] = b
@@ -92,6 +116,9 @@ func _build() -> void:
 	var start := _styled_button("START RUN", 10)
 	start.pressed.connect(_start_run)
 	footer.add_child(start)
+	var scores := _styled_button("SCORES", 8)
+	scores.pressed.connect(func(): get_tree().change_scene_to_file(SCORES_SCENE))
+	footer.add_child(scores)
 	if DEBUG:
 		var dbg := _styled_button("+200", 8)
 		dbg.pressed.connect(_debug_add_lucidity)
