@@ -20,7 +20,7 @@ interface Props {
 // standard dark reel tile; otherwise it falls back to the Skia vector drawing,
 // which paints its own tile. Sprites are authored transparent — the tile here is
 // the shared backing so every symbol reads against the same field.
-export function Symbol({ symbol, size = SYMBOL_SIZE, tile = true }: Props) {
+function SymbolImpl({ symbol, size = SYMBOL_SIZE, tile = true }: Props) {
   const sprite = SYMBOL_SPRITES[symbol];
 
   if (!sprite) {
@@ -46,6 +46,10 @@ export function Symbol({ symbol, size = SYMBOL_SIZE, tile = true }: Props) {
     </View>
   );
 }
+
+// Pure function of (symbol, size, tile) — memoized so a parent re-render that
+// didn't touch these props doesn't re-render (and re-rasterize) the symbol.
+export const Symbol = React.memo(SymbolImpl);
 
 const styles = StyleSheet.create({
   tile: {

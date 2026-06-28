@@ -50,7 +50,7 @@ export function ScoresScreen() {
           <Text style={styles.title}>SCORES</Text>
         </View>
         <View style={styles.walletPill}>
-          <Image source={COIN_ICON} style={styles.walletCoin} resizeMode="contain" />
+          <Image source={COIN_ICON} style={styles.walletCoin} resizeMode="contain" fadeDuration={0} />
           <Text style={styles.walletText}>{lucidityWallet}</Text>
         </View>
       </View>
