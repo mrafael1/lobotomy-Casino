@@ -1,0 +1,222 @@
+{
+  "description": "bankRunToMeta(run, meta, ending) with Date.now() frozen to `now`. Keeps floor(coins*0.10); sets *At only on first reach.",
+  "lucidityKept": 0.1,
+  "cases": [
+    {
+      "label": "flatline-basic",
+      "now": 1700000000000,
+      "ending": "flatline",
+      "run": {
+        "lucidityCoins": 150,
+        "scoreEarned": 320
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 0,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 0,
+          "bestScoreRun": 0
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 15,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "flatline"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 1,
+          "bestScoreRun": 320
+        }
+      }
+    },
+    {
+      "label": "wealth-first",
+      "now": 1700000000000,
+      "ending": "wealth",
+      "run": {
+        "lucidityCoins": 999,
+        "scoreEarned": 1000
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 0,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 0,
+          "bestScoreRun": 0
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 99,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "wealth"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 1,
+          "bestScoreRun": 1000,
+          "wealthEndingReachedAt": 1700000000000
+        }
+      }
+    },
+    {
+      "label": "wealth-already-reached",
+      "now": 1700000000000,
+      "ending": "wealth",
+      "run": {
+        "lucidityCoins": 500,
+        "scoreEarned": 1200
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 0,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "wealth"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 3,
+          "bestScoreRun": 1100,
+          "wealthEndingReachedAt": 111
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 50,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "wealth"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 4,
+          "bestScoreRun": 1200,
+          "wealthEndingReachedAt": 111
+        }
+      }
+    },
+    {
+      "label": "exit-first",
+      "now": 1700000000000,
+      "ending": "exit",
+      "run": {
+        "lucidityCoins": 800,
+        "scoreEarned": 400
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 50,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 0,
+          "bestScoreRun": 0
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 130,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "exit"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 1,
+          "bestScoreRun": 400,
+          "exitEndingReachedAt": 1700000000000
+        }
+      }
+    },
+    {
+      "label": "flatline-keeps-best",
+      "now": 1700000000000,
+      "ending": "flatline",
+      "run": {
+        "lucidityCoins": 73,
+        "scoreEarned": 90
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 0,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 9,
+          "bestScoreRun": 500
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 7,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "flatline"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 10,
+          "bestScoreRun": 500
+        }
+      }
+    },
+    {
+      "label": "rounding-floor",
+      "now": 1700000000000,
+      "ending": "flatline",
+      "run": {
+        "lucidityCoins": 155,
+        "scoreEarned": 200
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 7,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 0,
+          "bestScoreRun": 0
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 22,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "flatline"
+        ],
+        "pendingConsumables": {},
+        "history": {
+          "runsPlayed": 1,
+          "bestScoreRun": 200
+        }
+      }
+    }
+  ]
+}

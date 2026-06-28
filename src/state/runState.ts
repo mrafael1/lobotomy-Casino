@@ -15,7 +15,13 @@ import {
 } from '../game/economy';
 import { ECONOMY } from '../content/economy';
 import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, totalConsumableCopies } from '../content/consumables';
-import { IN_RUN_ITEMS, IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import { IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import {
+  DEALER_MAX_COUNT,
+  DEALER_MIN_SPIN_GAP,
+  evaluateDealerTrigger,
+  pickDealerItems,
+} from '../game/dealer';
 import { SYMBOLS } from '../content/symbols';
 import { SYMBOL_WEIGHTS } from '../content/symbols';
 import type { ReelResult } from '../game/types';
@@ -23,14 +29,9 @@ import type { ReelResult } from '../game/types';
 export type RunPhase = 'idle' | 'running' | 'over';
 export type SpinOptions = { readonly compulsive?: boolean };
 
-// Dealer appearance config
-const DEALER_THRESHOLD_HIGH = 0.65;
-const DEALER_THRESHOLD_LOW  = 0.35;
-const DEALER_PROC_CHANCE    = 0.15;
-const DEALER_MAX_COUNT      = 3;
-const DEALER_MIN_SPIN_GAP   = 3;
-
-const DEALER_ITEM_IDS = IN_RUN_ITEMS.map(item => item.id);
+// Dealer trigger thresholds and offer selection now live in ../game/dealer
+// (pure + deterministic, exported as golden parity vectors). The store keeps the
+// scene/phase gating and supplies the seeds.
 
 export interface RunStore extends RunState {
   runPhase: RunPhase;
@@ -125,17 +126,6 @@ function canUseAbility(state: RunStore): boolean {
 export function canStoreRunConsumable(runConsumables: Partial<Record<string, number>>, itemId: string): boolean {
   void itemId;
   return totalConsumableCopies(runConsumables) < MAX_CONSUMABLE_SLOTS;
-}
-
-function pickDealerItems(spinCount: number): [string, string] | null {
-  const rng = createRNG(((Date.now() ^ (spinCount * 0x6b43c7f)) >>> 0));
-  // Duplicates are allowed in the stash now, so offer any two distinct items
-  // for variety regardless of what's already held (a full stash is rejected on
-  // take, with a dealer message).
-  const candidates = DEALER_ITEM_IDS;
-  if (candidates.length < 2) return null;
-  const shuffled = [...candidates].sort(() => rng() - 0.5);
-  return [shuffled[0], shuffled[1]];
 }
 
 // Apply a Lucidity gain and IMMEDIATELY restore one random spent power per 50-coin
@@ -662,32 +652,29 @@ export const useRunStore = create<RunStore>((set, get) => ({
   checkDealerTrigger(): void {
     const state = get();
     if (state.runPhase !== 'running' || state.dealerPending || state.dealerIncoming) return;
+    // Hard gates kept here so the safety flags are left untouched when blocked
+    // (matches evaluateDealerTrigger's short-circuit, but avoids a redundant call).
     if (state.startingNeurons <= 0) return;
     if (state.dealerCount >= DEALER_MAX_COUNT) return;
     if (state.spinCount - state.dealerLastSpinCount < DEALER_MIN_SPIN_GAP) return;
 
-    const ratio = state.neurons / state.startingNeurons;
-    let shouldTrigger = false;
-    let new65Fired = state.dealer65SafetyFired;
-    let new35Fired = state.dealer35SafetyFired;
+    const decision = evaluateDealerTrigger({
+      neurons:             state.neurons,
+      startingNeurons:     state.startingNeurons,
+      spinCount:           state.spinCount,
+      dealerCount:         state.dealerCount,
+      dealerLastSpinCount: state.dealerLastSpinCount,
+      dealer65SafetyFired: state.dealer65SafetyFired,
+      dealer35SafetyFired: state.dealer35SafetyFired,
+      procSeed:            ((Date.now() ^ (state.spinCount * 0x9e3779b9 + 0xdeadbeef)) >>> 0),
+    });
 
-    if (!state.dealer65SafetyFired && ratio <= DEALER_THRESHOLD_HIGH) {
-      new65Fired = true;
-      if (state.dealerCount === 0) shouldTrigger = true;
-    }
-
-    if (!state.dealer35SafetyFired && ratio <= DEALER_THRESHOLD_LOW) {
-      new35Fired = true;
-      if (state.dealerCount === 1) shouldTrigger = true;
-    }
-
-    if (!shouldTrigger) {
-      const rng = createRNG(((Date.now() ^ (state.spinCount * 0x9e3779b9 + 0xdeadbeef)) >>> 0));
-      if (rng() < DEALER_PROC_CHANCE) shouldTrigger = true;
-    }
+    const { shouldTrigger } = decision;
+    const new65Fired = decision.dealer65SafetyFired;
+    const new35Fired = decision.dealer35SafetyFired;
 
     if (shouldTrigger) {
-      const offerIds = pickDealerItems(state.spinCount);
+      const offerIds = pickDealerItems(((Date.now() ^ (state.spinCount * 0x6b43c7f)) >>> 0));
       if (!offerIds) {
         set({ dealer65SafetyFired: new65Fired, dealer35SafetyFired: new35Fired });
         return;

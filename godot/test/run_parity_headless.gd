@@ -1,0 +1,24 @@
+extends SceneTree
+
+## No-dependency parity runner — verify the GDScript rules core against the golden
+## vectors WITHOUT installing GUT.
+##
+##   godot --headless --path godot -s res://test/run_parity_headless.gd
+##
+## Exits 0 when every parity vector + sacred-rule invariant matches, 1 otherwise.
+## This is the canonical Milestone-1 gate; the GUT suite (test/test_*.gd) wraps the
+## same checks for editor/CI integration.
+
+func _initialize() -> void:
+	var failures: Array = []
+	failures.append_array(ParityChecks.run_all())
+	failures.append_array(SacredRules.run_all())
+
+	if failures.is_empty():
+		print("✓ Parity + sacred-rule checks PASSED (rules/content port matches the Expo golden vectors).")
+		quit(0)
+	else:
+		for f in failures:
+			printerr("✗ ", f)
+		printerr("\nFAILED: %d check(s) diverged from the Expo reference." % failures.size())
+		quit(1)

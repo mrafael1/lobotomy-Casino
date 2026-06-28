@@ -1,0 +1,1895 @@
+{
+  "description": "evaluate(SpinInput) — rng rebuilt from `seed` via createRNG. Result is seed+config determined.",
+  "cases": [
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "brain",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "syringe",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "vial",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "brain",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "syringe",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "vial",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 50,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 1,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": true,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 50,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": true,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "brain"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 20,
+        "coinsEarned": 20,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "flatline",
+          "eye"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          true,
+          false,
+          false
+        ],
+        "previousReels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "flatline",
+          "eye"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "brain",
+          "pill"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "pill"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "brain",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "brain"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 200,
+        "coinsEarned": 200,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 1,
+        "freeSpinsAfter": 1,
+        "isJackpot": true,
+        "isFreeSpin": false,
+        "winType": "jackpot"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 18,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "brain",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "brain",
+          "syringe"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "syringe",
+          "flatline"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "syringe"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "flatline",
+          "book"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 13,
+        "coinsEarned": 13,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "book",
+          "pill",
+          "flatline"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 13,
+        "coinsEarned": 13,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "brain",
+          "eye"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.25,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 7,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": false,
+        "learningActive": true
+      },
+      "expect": {
+        "reels": [
+          "book",
+          "eye",
+          "flatline"
+        ],
+        "scoreMultiplier": 1.25,
+        "scoreEarned": 13,
+        "coinsEarned": 13,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 3,
+        "coinsEarned": 3,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "syringe",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "syringe"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 5,
+        "coinsEarned": 5,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "flatline"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 7,
+        "coinsEarned": 7,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 50,
+        "coinsEarned": 50,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "triple"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": true,
+        "pattern23Triple": false,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "vial"
+        ],
+        "scoreMultiplier": 1,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 1,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "vial",
+          "brain",
+          "syringe"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 42,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "syringe",
+          "syringe",
+          "flatline"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 16,
+        "coinsEarned": 16,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 7777,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "syringe"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 16,
+        "coinsEarned": 16,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 123456,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "pill",
+          "vial",
+          "flatline"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 3735928559,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    },
+    {
+      "seed": 0,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 31,
+        "coinsEarned": 31,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "pair"
+      }
+    },
+    {
+      "seed": 4294967295,
+      "input": {
+        "neurons": 100,
+        "neuronDecayAmount": 3,
+        "freeSpinsRemaining": 0,
+        "maxFreeSpins": 1,
+        "lucidityMultiplier": 1.5625,
+        "isFreeSpin": false,
+        "lockedReels": [
+          false,
+          false,
+          false
+        ],
+        "previousReels": null,
+        "bookWeight": 0,
+        "brainWeightBonus": 0,
+        "guaranteedWin": false,
+        "pattern23Triple": true,
+        "learningActive": false
+      },
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "vial"
+        ],
+        "scoreMultiplier": 1.5625,
+        "scoreEarned": 0,
+        "coinsEarned": 0,
+        "neuronsAfter": 97,
+        "freeSpinsGranted": 0,
+        "freeSpinsAfter": 0,
+        "isJackpot": false,
+        "isFreeSpin": false,
+        "winType": "miss"
+      }
+    }
+  ]
+}

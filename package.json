@@ -9,6 +9,8 @@
     "web": "expo start --web",
     "test": "jest",
     "simulate": "npx ts-node scripts/simulate.ts",
+    "vectors:export": "ts-node --skip-project -O \"{\\\"module\\\":\\\"commonjs\\\",\\\"moduleResolution\\\":\\\"node\\\",\\\"esModuleInterop\\\":true,\\\"resolveJsonModule\\\":true,\\\"target\\\":\\\"ES2019\\\"}\" scripts/export-parity-vectors.ts",
+    "vectors:check": "ts-node --skip-project -O \"{\\\"module\\\":\\\"commonjs\\\",\\\"moduleResolution\\\":\\\"node\\\",\\\"esModuleInterop\\\":true,\\\"resolveJsonModule\\\":true,\\\"target\\\":\\\"ES2019\\\"}\" scripts/check-parity-vectors.ts",
     "assets:compose": "node scripts/compose-runtime-assets.js"
   },
   "dependencies": {

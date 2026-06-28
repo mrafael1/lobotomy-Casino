@@ -1,0 +1,37 @@
+; Godot 4 project for the lobotomy-Casino port.
+; Built against the frozen Expo reference via the golden parity vectors in
+; ../parity/vectors. Rules/content live in res://rules; state singletons in
+; res://autoload; the parity harness in res://test.
+
+config_version=5
+
+[application]
+
+config/name="lobotomy-Casino"
+config/description="Godot 4 port of the lobotomy-Casino slot machine. Rules verified against ../parity/vectors."
+run/main_scene=""
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[autoload]
+
+MetaStateStore="*res://autoload/meta_state_store.gd"
+RunStateStore="*res://autoload/run_state_store.gd"
+
+[display]
+
+; Mirror the 160x320 virtual canvas convention. canvas_items stretch + keep aspect
+; scales the composition to the device; portrait orientation for Android-first.
+window/size/viewport_width=160
+window/size/viewport_height=320
+window/size/window_width_override=400
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation="portrait"
+
+[rendering]
+
+; Nearest-neighbour by default so pixel art stays crisp when scaled.
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
