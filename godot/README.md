@@ -78,17 +78,23 @@ godot --path godot
 ```
 
 It loads the machine art by absolute path from `../assets` (so the Expo project
-stays the single source of art), wires the spin button to `RunStateStore`, and runs
-the loop: spin → reel/result reveal → HUD update → flatline/wealth ending → bank →
-new run. The 6-frame lever, power controls, dealer, and stash are later increments.
+stays the single source of art) and runs the full run loop via `RunStateStore`:
+spin → reel/result reveal → HUD → **powers (reroll/shift/memory) with reel/arrow
+targeting** → **bet ×1/×2/×3** → **consumable stash** → flatline/wealth ending →
+bank → new run.
+
+`DEBUG_GRANT` (top of `machine_scene.gd`, default **true**) grants the Shift/Memory
+permanents and a couple of test consumables at run start so powers and the stash can
+be exercised before the M3 shop/dealer exist. Set it to `false` for faithful play.
+The dealer and the 6-frame lever animation are later increments.
 
 ## Status
 
 - ✅ **M1** — Rules/content port + parity harness green against `../parity/vectors`.
 - ✅ `user://` save with v2-canonical schema + empty migration seam (Step 4).
-- 🔨 **M2** — main slot-machine scene + reel/result reveal + HUD, wired to
-  `RunStateStore` (`scenes/machine_scene.gd`). First playable increment; powers,
-  consumables, dealer, and lever animation still to come.
+- 🔨 **M2** — playable run loop in `scenes/machine_scene.gd`: spin, free spins,
+  neurons, lucidity, **powers, bet, consumables**, endings, banking. Remaining for
+  full M2: white-powder copy targeting + lever/power-button art frames.
 - ⏳ M3 (dealer/shop/scores/save flows) and M4 (Android polish) after M2.
 
 > This GDScript was authored against the frozen Expo reference but **not executed in the

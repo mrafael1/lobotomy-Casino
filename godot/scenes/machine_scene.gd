@@ -22,6 +22,24 @@ const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
 const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
 const SYMBOL_TARGET_H := 26.0 # fit within the ~30px reel hole
 
+# Machine-mounted power button hit rects (source px).
+const POWER_HITS := {
+	"reroll": { "left": 21.0, "top": 223.0, "width": 15.0, "height": 15.0 },
+	"shift": { "left": 36.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"memory": { "left": 49.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+}
+# Per-reel up/down shift-arrow hit rects (source px).
+const SHIFT_ARROW_HITS := [
+	{ "up": { "left": 33.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 33.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+	{ "up": { "left": 65.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 65.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+	{ "up": { "left": 97.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 97.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+]
+
+# Set true to grant the Shift/Memory permanents + a couple of test consumables at
+# run start, so powers and the stash can be exercised before the M3 shop/dealer
+# exist. Leave false for faithful play.
+const DEBUG_GRANT := true
+
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 
@@ -29,6 +47,10 @@ var _reel_sprites: Array[Sprite2D] = []
 var _hud_labels := {}
 var _overlay: Control = null
 var _spin_button: Button = null
+var _bet_button: Button = null
+var _power_buttons := {}      # id -> Button
+var _stash_buttons: Array[Button] = []
+var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
 var _font: FontFile = null
 var _tex_cache := {}
 
@@ -48,6 +70,9 @@ func _ready() -> void:
 	_build_full_canvas_sprite("machine new view/final_machine.png")
 	_build_hud()
 	_build_spin_button()
+	_build_bet_button()
+	_build_power_buttons()
+	_build_stash()
 	RunStateStore.state_changed.connect(_update_hud)
 	_start_run()
 
@@ -153,7 +178,18 @@ func _start_run() -> void:
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
-	RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables())
+	_clear_targeting()
+
+	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
+	var consumables: Dictionary = MetaStateStore.get_pending_consumables().duplicate(true)
+	if DEBUG_GRANT:
+		for p in ["perm_shift", "perm_memory"]:
+			if not permanents.has(p):
+				permanents.append(p)
+		if consumables.is_empty():
+			consumables = { "cons_focus": 1, "item_water": 1 }
+
+	RunStateStore.start_new_run(permanents, consumables)
 	for i in 3:
 		_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
 	_update_hud()
@@ -161,6 +197,7 @@ func _start_run() -> void:
 func _do_spin() -> void:
 	if _spinning_anim:
 		return
+	_clear_targeting()
 	var result: Variant = RunStateStore.spin()
 	if result == null:
 		return
@@ -199,6 +236,167 @@ func _update_hud() -> void:
 	_hud_labels["score"].text = "SCORE %d" % RunStateStore.scoreEarned
 	_hud_labels["lucidity"].text = "LUCID %d" % RunStateStore.lucidityCoins
 	_hud_labels["free"].text = "FREE %d" % RunStateStore.freeSpinsRemaining
+	_refresh_controls()
+
+func _refresh_reels_from_state() -> void:
+	var lr: Variant = RunStateStore.lastResult
+	if lr == null:
+		return
+	for i in 3:
+		_set_reel_symbol(i, String(lr["reels"][i]))
+
+# ── bet / powers / stash controls ─────────────────────────────────────────────────
+
+func _build_bet_button() -> void:
+	_bet_button = Button.new()
+	_bet_button.position = Vector2(4, LEVER_HIT["top"])
+	_bet_button.size = Vector2(28, 14)
+	_bet_button.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_bet_button.add_theme_font_override("font", _font)
+	_bet_button.pressed.connect(_cycle_bet)
+	add_child(_bet_button)
+
+func _cycle_bet() -> void:
+	if not RunStateStore._can_act():
+		return
+	RunStateStore.set_bet_multiplier((RunStateStore.betMultiplier % 3) + 1)
+
+func _build_power_buttons() -> void:
+	for id in ["reroll", "shift", "memory"]:
+		var hit: Dictionary = POWER_HITS[id]
+		var b := Button.new()
+		b.text = id.substr(0, 1).to_upper()
+		b.position = Vector2(hit["left"], hit["top"])
+		b.size = Vector2(maxf(hit["width"], 11.0), hit["height"])
+		b.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(_on_power_pressed.bind(id))
+		add_child(b)
+		_power_buttons[id] = b
+
+func _build_stash() -> void:
+	var y := 240.0
+	for i in Consumables.MAX_CONSUMABLE_SLOTS:
+		var b := Button.new()
+		b.position = Vector2(95.0 + i * 30.0, y)
+		b.size = Vector2(28, 14)
+		b.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(_on_stash_pressed.bind(i))
+		add_child(b)
+		_stash_buttons.append(b)
+
+# Snapshot of the stash expanded to one entry per copy (matches buildStashSlots).
+func _stash_slots() -> Array:
+	var slots: Array = []
+	var stash: Dictionary = RunStateStore.runConsumables
+	for entry in stash:
+		var copies := int(stash[entry])
+		for _k in copies:
+			if slots.size() < Consumables.MAX_CONSUMABLE_SLOTS:
+				slots.append(String(entry))
+	return slots
+
+func _refresh_controls() -> void:
+	if _bet_button != null:
+		_bet_button.text = "x%d" % RunStateStore.betMultiplier
+		_bet_button.disabled = not RunStateStore._can_act()
+
+	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim \
+		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0
+	if not _power_buttons.is_empty():
+		var used: Array = RunStateStore.abilitiesUsed
+		var owned: Array = RunStateStore.ownedUpgrades
+		_power_buttons["reroll"].disabled = not (can_use and not used.has("reroll"))
+		_power_buttons["shift"].disabled = not (can_use and owned.has("perm_shift") and not used.has("shift"))
+		_power_buttons["memory"].disabled = not (can_use and owned.has("perm_memory") and not used.has("memory"))
+
+	var slots := _stash_slots()
+	for i in _stash_buttons.size():
+		var b := _stash_buttons[i]
+		if i < slots.size():
+			b.text = _short_name(slots[i])
+			b.disabled = not RunStateStore._can_act()
+		else:
+			b.text = "--"
+			b.disabled = true
+
+func _short_name(consumable_id: String) -> String:
+	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
+
+# ── power targeting ────────────────────────────────────────────────────────────────
+
+func _on_power_pressed(id: String) -> void:
+	if _targeting_layer != null:
+		_clear_targeting()
+		return
+	if id == "shift":
+		_arm_shift_targets()
+	else:
+		_arm_reel_targets(id) # reroll / memory pick a single reel
+
+func _arm_reel_targets(power_id: String) -> void:
+	_targeting_layer = Control.new()
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	add_child(_targeting_layer)
+	var cy := REEL_WINDOW["top"]
+	for i in 3:
+		var b := Button.new()
+		b.text = str(i + 1)
+		b.position = Vector2(REEL_CELL_CENTERS[i] - 10.0, cy)
+		b.size = Vector2(20, REEL_WINDOW["height"])
+		b.add_theme_font_size_override("font_size", 8)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(_apply_reel_power.bind(power_id, i))
+		_targeting_layer.add_child(b)
+
+func _arm_shift_targets() -> void:
+	_targeting_layer = Control.new()
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	add_child(_targeting_layer)
+	for i in 3:
+		for dir_key in ["up", "down"]:
+			var hit: Dictionary = SHIFT_ARROW_HITS[i][dir_key]
+			var b := Button.new()
+			b.text = "^" if dir_key == "up" else "v"
+			b.position = Vector2(hit["left"], hit["top"])
+			b.size = Vector2(hit["width"], hit["height"])
+			b.add_theme_font_size_override("font_size", 8)
+			if _font != null:
+				b.add_theme_font_override("font", _font)
+			b.pressed.connect(_apply_shift.bind(i, 1 if dir_key == "up" else -1))
+			_targeting_layer.add_child(b)
+
+func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if power_id == "reroll":
+		RunStateStore.reroll_reel(reel_index)
+	elif power_id == "memory":
+		RunStateStore.lock_reel(reel_index)
+	_clear_targeting()
+	_refresh_reels_from_state()
+
+func _apply_shift(reel_index: int, direction: int) -> void:
+	RunStateStore.move_reel(reel_index, direction)
+	_clear_targeting()
+	_refresh_reels_from_state()
+
+func _clear_targeting() -> void:
+	if _targeting_layer != null:
+		_targeting_layer.queue_free()
+		_targeting_layer = null
+
+func _on_stash_pressed(slot_index: int) -> void:
+	var slots := _stash_slots()
+	if slot_index >= slots.size():
+		return
+	RunStateStore.use_consumable(slots[slot_index])
+	_refresh_reels_from_state()
 
 func _check_ending() -> void:
 	var run := {
