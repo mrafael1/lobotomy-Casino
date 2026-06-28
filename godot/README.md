@@ -68,11 +68,28 @@ the pixel-art PNGs from `../assets` / `../aseprite`, also set per-texture:
 Mirror the 160×320 virtual-canvas convention; position app-rendered overlays/tap zones
 from re-measured source-pixel constants (see the Expo `machineAssets.ts` discipline).
 
+## Running the game
+
+`scenes/machine_scene.tscn` is the main scene (set in `project.godot`). Open the
+project in Godot and press Play, or:
+
+```sh
+godot --path godot
+```
+
+It loads the machine art by absolute path from `../assets` (so the Expo project
+stays the single source of art), wires the spin button to `RunStateStore`, and runs
+the loop: spin → reel/result reveal → HUD update → flatline/wealth ending → bank →
+new run. The 6-frame lever, power controls, dealer, and stash are later increments.
+
 ## Status
 
-- ✅ Rules/content port + parity harness (this milestone — run the harness to confirm).
+- ✅ **M1** — Rules/content port + parity harness green against `../parity/vectors`.
 - ✅ `user://` save with v2-canonical schema + empty migration seam (Step 4).
-- ⏳ Scenes (Step 5) — built only after the core is green against the harness.
+- 🔨 **M2** — main slot-machine scene + reel/result reveal + HUD, wired to
+  `RunStateStore` (`scenes/machine_scene.gd`). First playable increment; powers,
+  consumables, dealer, and lever animation still to come.
+- ⏳ M3 (dealer/shop/scores/save flows) and M4 (Android polish) after M2.
 
 > This GDScript was authored against the frozen Expo reference but **not executed in the
 > authoring environment** (no Godot binary there). The headless harness is the gate:
