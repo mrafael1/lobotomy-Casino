@@ -21,7 +21,25 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
+  // Cross-fade between screens rather than a hard cut (animation: 'none').
+  // Mounting a screen (decoding its art, first layout) costs a few frames, and
+  // with no transition that shows up as a frozen snap — it reads as a stutter.
+  // A short fade gives immediate, deliberate motion that masks the mount hitch.
+  // Kept short (120ms) so the switch feels near-immediate; the mount hitch it
+  // used to mask is now largely gone because the machine sprite sheets are
+  // decoded once into the persistent Skia cache (see skiaImageCache) instead of
+  // re-decoding on every remount.
+  //
+  // freezeOnBlur: false — react-native-screens freezes a blurred screen (react-
+  // freeze suspends its renders) and, on return, replays a single full re-render
+  // of the whole subtree. For the machine that means every Skia <Canvas> (3 reels,
+  // lever, multiplier/jackpot/shift/lock/reel-select sheets, TV bars) re-rasterizes
+  // in one burst — a long freeze (~1s on mid-tier Android) when coming back from
+  // the dealer or scores. The machine is idle while covered, so keeping it live
+  // costs nothing and makes the return instant.
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+    <Stack
+      screenOptions={{ headerShown: false, animation: 'fade', animationDuration: 120, freezeOnBlur: false }}
+    />
   );
 }

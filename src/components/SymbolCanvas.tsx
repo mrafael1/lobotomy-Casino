@@ -10,7 +10,7 @@ interface Props {
   size?: number;
 }
 
-export function SymbolCanvas({ symbol, size = SYMBOL_SIZE }: Props) {
+function SymbolCanvasImpl({ symbol, size = SYMBOL_SIZE }: Props) {
   const s = size / SYMBOL_SIZE; // scale factor
   const C = size / 2;           // center
 
@@ -145,3 +145,7 @@ export function SymbolCanvas({ symbol, size = SYMBOL_SIZE }: Props) {
     </Canvas>
   );
 }
+
+// Pure function of (symbol, size) — memoized so it isn't re-rasterized on a
+// parent re-render that didn't change its props.
+export const SymbolCanvas = React.memo(SymbolCanvasImpl);

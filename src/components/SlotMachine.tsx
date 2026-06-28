@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Image, Pressable, StyleSheet, Animated } from 'react-native';
 import { Text } from './PixelText';
 import { ReelCellV3 } from './ReelCellV3';
 import { SpriteSheetFrame } from './SpriteSheetFrame';
+import { LeverSprite } from './LeverSprite';
 import { MachineScreenMeters } from './MachineScreenMeters';
 import { CoinFlow } from './CoinFlow';
 import { PowerCoinFlow } from './PowerCoinFlow';
@@ -14,21 +15,19 @@ import type { SymbolId } from '../game/types';
 import { TvFillBar } from './TvFillBar';
 import { ECONOMY } from '../content/economy';
 import {
-  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, LEVER_V3, JACKPOT_V3,
+  MACHINE_V3, REEL_BG_V3, MULTIPLIER_V3, JACKPOT_V3,
   REROLL_V3, SHIFT_V3, LOCK_V3, SHIFT_POWER_V3, LOCK_POWER_V3, REEL_SELECT_V3,
   WEALTH_TRACK_V3, WEALTH_FILL_V3, HEALTH_TRACK_V3, HEALTH_FILL_V3,
   MACHINE_SRC_W, MACHINE_ASPECT,
   REEL_WINDOW, REEL_CELL_CENTERS, REEL_HOLES, TV_SCREEN, BAR_FILL,
   MULT_STRIP, MULT_BADGE_CENTERS, LEVER_HIT, POWER_HITS, SHIFT_ARROW_HITS,
-  LEVER_FRAME_COUNT, MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, POWER_FRAME_COUNT,
+  MULTIPLIER_FRAME_COUNT, JACKPOT_FRAME_COUNT, POWER_FRAME_COUNT,
   SHIFT_POWER_FRAME_COUNT, SHIFT_POWER_COLUMNS, LOCK_POWER_FRAME_COUNT,
   REEL_SELECT_FRAME_COUNT, REEL_SELECT_COLUMNS,
 } from '../content/machineAssets';
 
 const FALLBACK_SYMBOL: SymbolId = 'brain';
 
-// Lever pull plays frames 0 → 5 quickly, fires the spin, then snaps back to idle.
-const LEVER_FRAME_MS = 42;
 const RESULT_REVEAL_DELAY_MS = 150;
 
 // Tension: when the first two reels already match, the 3rd reel holds a touch
@@ -152,45 +151,33 @@ export const SlotMachine = React.memo(function SlotMachine({
     ]).start();
   };
 
-  // ── Lever animation (idle 0 → pulled 5) ──
-  const [leverFrame, setLeverFrame] = useState(0);
-  const leverTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-
-  // Play the lever pull (idle 0 → pulled 5 → idle). `onLanded` fires when the lever
-  // reaches the bottom of the pull; omit it to play the animation as PURE visual
-  // feedback (a Compulsion self-pull) without triggering a spin. Never stacks:
-  // ignored while a pull — or a spin — is already running.
-  function animateLever(onLanded?: () => void) {
-    if (leverTimers.current.length > 0 || isSpinning) return;
-    setLeverFrame(1);
-    for (let f = 2; f <= LEVER_FRAME_COUNT - 1; f++) {
-      leverTimers.current.push(setTimeout(() => setLeverFrame(f), LEVER_FRAME_MS * (f - 1)));
-    }
-    if (onLanded) {
-      leverTimers.current.push(setTimeout(onLanded, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 2)));
-    }
-    leverTimers.current.push(setTimeout(() => {
-      setLeverFrame(0);
-      leverTimers.current = [];
-    }, LEVER_FRAME_MS * (LEVER_FRAME_COUNT - 1)));
-  }
-
+  // ── Lever pull ──
+  // The animation itself lives in <LeverSprite> (below) so its per-frame state
+  // churn never re-renders this heavy tree. Here we only fire the SIGNAL: a tap
+  // bumps manualPullSignal, which the sprite turns into a pull that also fires the
+  // spin at the bottom. (The Compulsion self-pull rides compulsionPullSignal,
+  // passed straight through to the sprite — visual only, no spin.)
+  const [manualPullSignal, setManualPullSignal] = useState(0);
   function pullLever() {
     if (!leverEnabled || !onLeverPull) return;
-    animateLever(onLeverPull);
+    setManualPullSignal(n => n + 1);
   }
 
-  useEffect(() => () => { leverTimers.current.forEach(clearTimeout); }, []);
+  // ── Arrow press feedback ──
+  // The shift + reel-selection overlays draw their pressed state from sheet
+  // frames; tapping an arrow has to swap to that frame INSTANTLY (on press-in,
+  // before the shift/reroll executes). Both default to frame 0 (idle, all arrows
+  // shown). A single setState on press is far below per-frame cost, so plain
+  // state is fine here. They're reset whenever their mode turns off, in case a
+  // press-out is missed (e.g. the selection is cancelled mid-press).
+  //
+  // Shift sheet frame = 1 + reel*2 + (up ? 1 : 0); 0 = nothing held.
+  const [shiftPressFrame, setShiftPressFrame] = useState(0);
+  // Reel-selection sheet frame = pressedReel + 1; 0 = nothing held.
+  const [reelSelectPressFrame, setReelSelectPressFrame] = useState(0);
 
-  // Compulsion self-pull: when the signal bumps, animate the lever as a cue that
-  // the machine is forcing its own spin. Animation only (no onLanded) — the forced
-  // spin is fired by GameScreen, so this can never double-spin.
-  const lastPullSignal = useRef(compulsionPullSignal);
-  useEffect(() => {
-    if (compulsionPullSignal === lastPullSignal.current) return;
-    lastPullSignal.current = compulsionPullSignal;
-    animateLever();
-  }, [compulsionPullSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!shiftActive) setShiftPressFrame(0); }, [shiftActive]);
+  useEffect(() => { if (!reelSelectActive) setReelSelectPressFrame(0); }, [reelSelectActive]);
 
   // ── Jackpot flash (2-frame banner) ──
   const [jackpotFlash, setJackpotFlash] = useState(false);
@@ -231,6 +218,19 @@ export const SlotMachine = React.memo(function SlotMachine({
   // spin-blur frames do (~58% of the hole width, matching the previous look).
   const symbolSize = Math.round(REEL_HOLES[0].width * f * 0.58);
 
+  // Reel hole rects in display px. Memoized on the scale so each reel gets a
+  // STABLE object reference — otherwise the inline literal would break ReelCellV3's
+  // memo on every render.
+  const reelHoles = useMemo(
+    () => ([0, 1, 2] as const).map(i => ({
+      left:   REEL_HOLES[i].left * f,
+      top:    REEL_HOLES[i].top * f,
+      width:  REEL_HOLES[i].width * f,
+      height: REEL_HOLES[i].height * f,
+    })),
+    [f],
+  );
+
   // Multiplier frame encodes the EFFECTIVE bet + which bets are locked. Only
   // x3-locked and x2+x3-locked combos occur (cost/energy lock x3 before x2),
   // matching the art:
@@ -268,17 +268,23 @@ export const SlotMachine = React.memo(function SlotMachine({
   const completedRef = useRef(0);
   const resultRevealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function handleReelComplete() {
+  // Stable across renders (deps are stable) so ReelCellV3's memo isn't broken by a
+  // fresh onComplete identity every render.
+  const scheduleReveal = useCallback(() => {
+    if (resultRevealTimer.current) clearTimeout(resultRevealTimer.current);
+    resultRevealTimer.current = setTimeout(() => {
+      resultRevealTimer.current = null;
+      onAllReelsDone();
+    }, RESULT_REVEAL_DELAY_MS);
+  }, [onAllReelsDone]);
+
+  const handleReelComplete = useCallback(() => {
     completedRef.current += 1;
     if (completedRef.current === 3) {
       completedRef.current = 0;
-      if (resultRevealTimer.current) clearTimeout(resultRevealTimer.current);
-      resultRevealTimer.current = setTimeout(() => {
-        resultRevealTimer.current = null;
-        onAllReelsDone();
-      }, RESULT_REVEAL_DELAY_MS);
+      scheduleReveal();
     }
-  }
+  }, [scheduleReveal]);
 
   // Reset completed counter when a new spin starts. Locked reels fire their
   // onComplete before this effect runs (child effects before parent), so
@@ -289,7 +295,17 @@ export const SlotMachine = React.memo(function SlotMachine({
         clearTimeout(resultRevealTimer.current);
         resultRevealTimer.current = null;
       }
-      completedRef.current = lockedReels.filter(Boolean).length;
+      const lockedCount = lockedReels.filter(Boolean).length;
+      completedRef.current = lockedCount;
+      // All three reels locked → none of them will call handleReelComplete after
+      // this reset (locked reels finish instantly, in their child effect, before
+      // this parent effect runs — and we just cleared the timer they scheduled).
+      // Nothing would ever fire the reveal, so the machine would spin forever.
+      // Schedule it directly for that case.
+      if (lockedCount === 3) {
+        completedRef.current = 0;
+        scheduleReveal();
+      }
     }
   }, [isSpinning]);
 
@@ -335,23 +351,19 @@ export const SlotMachine = React.memo(function SlotMachine({
               extraStopMs={pairTension}
               machineWidth={machineWidth}
               machineHeight={machineHeight}
-              hole={{
-                left: REEL_HOLES[i].left * f,
-                top: REEL_HOLES[i].top * f,
-                width: REEL_HOLES[i].width * f,
-                height: REEL_HOLES[i].height * f,
-              }}
+              hole={reelHoles[i]}
               symbolSize={symbolSize}
             />
           );
         })}
       </View>
 
-      {/* 3 — Lever (current frame), drawn behind the cabinet body. */}
-      <SpriteSheetFrame
-        source={LEVER_V3}
-        frameIndex={leverFrame}
-        frameCount={LEVER_FRAME_COUNT}
+      {/* 3 — Lever (animates on its own isolated component), behind the cabinet. */}
+      <LeverSprite
+        manualPullSignal={manualPullSignal}
+        compulsionPullSignal={compulsionPullSignal}
+        isSpinning={isSpinning}
+        onLeverPull={onLeverPull}
         width={machineWidth}
         height={machineHeight}
         style={styles.fill}
@@ -495,7 +507,7 @@ export const SlotMachine = React.memo(function SlotMachine({
       >
         <SpriteSheetFrame
           source={REEL_SELECT_V3}
-          frameIndex={0}
+          frameIndex={reelSelectPressFrame}
           frameCount={REEL_SELECT_FRAME_COUNT}
           columns={REEL_SELECT_COLUMNS}
           width={machineWidth}
@@ -514,7 +526,7 @@ export const SlotMachine = React.memo(function SlotMachine({
       >
         <SpriteSheetFrame
           source={SHIFT_POWER_V3}
-          frameIndex={0}
+          frameIndex={shiftPressFrame}
           frameCount={SHIFT_POWER_FRAME_COUNT}
           columns={SHIFT_POWER_COLUMNS}
           width={machineWidth}
@@ -536,6 +548,8 @@ export const SlotMachine = React.memo(function SlotMachine({
         isMultiplierLocked={isMultiplierLocked}
         powerDefs={powerDefs}
         onLeverPull={onLeverPull ? pullLever : undefined}
+        onShiftPressFrame={setShiftPressFrame}
+        onReelSelectPressFrame={setReelSelectPressFrame}
       />
     </View>
   );
@@ -584,6 +598,11 @@ interface MachineTouchOverlayProps {
   isMultiplierLocked?: (m: 1 | 2 | 3) => boolean;
   powerDefs: ReadonlyArray<PowerDef>;
   onLeverPull?: () => void;
+  // Press feedback drivers: report the sheet frame to show on press-in (a value
+  // computed from the reel + direction) and 0 on release. Stable setState
+  // setters, so passing them keeps this component's memo intact.
+  onShiftPressFrame?: (frame: number) => void;
+  onReelSelectPressFrame?: (frame: number) => void;
 }
 
 // Touch layer for the cabinet — the single owner of all machine input (reels,
@@ -604,6 +623,8 @@ const MachineTouchOverlay = React.memo(function MachineTouchOverlay({
   isMultiplierLocked,
   powerDefs,
   onLeverPull,
+  onShiftPressFrame,
+  onReelSelectPressFrame,
 }: MachineTouchOverlayProps) {
   useRenderCount('MachineTouchOverlay');
 
@@ -625,6 +646,8 @@ const MachineTouchOverlay = React.memo(function MachineTouchOverlay({
           <Pressable
             key={i}
             style={{ position: 'absolute', left, top: cellTapTop, width: cellTapW, height: cellTapH }}
+            onPressIn={() => onReelSelectPressFrame?.(i + 1)}
+            onPressOut={() => onReelSelectPressFrame?.(0)}
             onPress={() => onReelPress(i)}
           />
         );
@@ -682,6 +705,8 @@ const MachineTouchOverlay = React.memo(function MachineTouchOverlay({
                 width: r.width * f,
                 height: r.height * f,
               }}
+              onPressIn={() => onShiftPressFrame?.(1 + i * 2 + (dir === 'up' ? 1 : 0))}
+              onPressOut={() => onShiftPressFrame?.(0)}
               onPress={() => onShiftReel(i, dir === 'up' ? 1 : -1)}
             />
           );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import type { ImageSourcePropType, StyleProp, ViewStyle } from 'react-native';
 import {
@@ -8,6 +8,7 @@ import {
   MipmapMode,
   useImage,
 } from '@shopify/react-native-skia';
+import { getCachedSkiaImage } from '../perf/skiaImageCache';
 
 interface Props {
   source: ImageSourcePropType;
@@ -48,9 +49,14 @@ function SpriteSheetFrameImpl({
   height,
   style,
 }: Props) {
-  // useImage caches by source, so repeats of the same sheet share one decode
-  // and frame changes never reload. Returns null until the first decode lands.
-  const image = useImage(source as Parameters<typeof useImage>[0]);
+  // Prefer the persistent Skia cache (decoded once at preload, kept across scene
+  // remounts) so a warm mount draws on the first frame — no async pop-in. On a
+  // cache miss (cold start, before preload lands) fall back to useImage, which
+  // decodes per-mount starting from null. Passing null to useImage when cached
+  // skips the redundant async decode.
+  const cached = useMemo(() => getCachedSkiaImage(source), [source]);
+  const loaded = useImage((cached ? null : source) as Parameters<typeof useImage>[0]);
+  const image = cached ?? loaded;
 
   const idx = Math.max(0, Math.min(frameCount - 1, frameIndex));
 

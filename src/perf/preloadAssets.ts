@@ -27,8 +27,26 @@ import {
   SYMBOLS_SHEET_V3,
 } from '../content/machineAssets';
 import { afterInteractions } from './interaction';
+import { preloadSkiaImages } from './skiaImageCache';
 
 let didPreload = false;
+
+// Sprite sheets drawn through SpriteSheetFrame (Skia). Decoded once into the
+// persistent Skia cache so they don't re-decode (and pop in late) every time the
+// machine scene remounts — e.g. on the first lever pull or returning from the
+// dealer. The plain RN <Image> layers (cabinet, reel bg, TV bars) are handled by
+// Image.prefetch below.
+const SKIA_SHEETS = [
+  LEVER_V3,
+  MULTIPLIER_V3,
+  JACKPOT_V3,
+  REROLL_V3,
+  SHIFT_V3,
+  LOCK_V3,
+  SHIFT_POWER_V3,
+  LOCK_POWER_V3,
+  REEL_SELECT_V3,
+] as const;
 
 const ASSETS = [
   require('../../assets/images/bg_black.png'),
@@ -67,5 +85,7 @@ export function preloadGameImages(): void {
       const resolved = Image.resolveAssetSource(source);
       if (resolved?.uri) Image.prefetch(resolved.uri).catch(() => undefined);
     });
+    // Decode the Skia sprite sheets into the persistent cache too.
+    preloadSkiaImages(SKIA_SHEETS).catch(() => undefined);
   });
 }

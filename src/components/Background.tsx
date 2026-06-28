@@ -52,6 +52,7 @@ export function Background({ children }: Props) {
         source={require('../../assets/images/bg_black.png')}
         style={[styles.backgroundImage, backgroundFrame]}
         resizeMode="stretch"
+        fadeDuration={0}
       />
       <Animated.Image
         source={require('../../assets/images/bg_black.png')}
