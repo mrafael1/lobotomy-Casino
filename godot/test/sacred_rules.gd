@@ -55,7 +55,7 @@ static func run_all() -> Array:
 	# 5) A jackpot on a REGULAR spin grants exactly BASE_MAX_FREE_SPINS.
 	var r5 := Evaluate.evaluate(_base_input({ "rng": FixedRNG.new(BRAIN) }))
 	_check(out, bool(r5["isJackpot"]), "regular brain triple is a jackpot")
-	_check(out, int(r5["freeSpinsGranted"]) == EconomyConst.JACKPOT_FREE_SPIN_GRANT, "regular jackpot grants 1 free spin")
+	_check(out, int(r5["freeSpinsGranted"]) == Payouts.JACKPOT_FREE_SPIN_GRANT, "regular jackpot grants 1 free spin")
 	_check(out, int(r5["freeSpinsAfter"]) == EconomyConst.BASE_MAX_FREE_SPINS, "free spins capped at max")
 
 	# 6) Exit blocked by corruption regardless of banked Lucidity.

@@ -439,7 +439,7 @@ func check_dealer_trigger() -> void:
 	dealer65SafetyFired = decision["dealer65SafetyFired"]
 	dealer35SafetyFired = decision["dealer35SafetyFired"]
 	if decision["shouldTrigger"]:
-		var offers := Dealer.pick_dealer_items(_seed(spinCount * 0x6b43c7f))
+		var offers: Variant = Dealer.pick_dealer_items(_seed(spinCount * 0x6b43c7f))
 		if offers == null:
 			_commit()
 			return

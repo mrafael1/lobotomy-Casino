@@ -1,5 +1,8 @@
 extends SceneTree
 
+const ParityChecks := preload("res://test/parity_checks.gd")
+const SacredRules := preload("res://test/sacred_rules.gd")
+
 ## No-dependency parity runner — verify the GDScript rules core against the golden
 ## vectors WITHOUT installing GUT.
 ##
@@ -9,9 +12,12 @@ extends SceneTree
 ## This is the canonical Milestone-1 gate; the GUT suite (test/test_*.gd) wraps the
 ## same checks for editor/CI integration.
 
-func _initialize() -> void:
+func _init() -> void:
+	print("Starting Godot parity harness...")
 	var failures: Array = []
+	print("Running parity vector checks...")
 	failures.append_array(ParityChecks.run_all())
+	print("Running sacred-rule checks...")
 	failures.append_array(SacredRules.run_all())
 
 	if failures.is_empty():

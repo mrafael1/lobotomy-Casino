@@ -115,7 +115,7 @@ static func check_abilities(out: Array) -> void:
 static func check_dealer(out: Array) -> void:
 	var data: Dictionary = _load("dealer_vectors.json")
 	for c in data["pickDealerItems"]:
-		var got := Dealer.pick_dealer_items(int(c["seed"]))
+		var got: Variant = Dealer.pick_dealer_items(int(c["seed"]))
 		if not deep_equal(got, c["expect"]):
 			_fail(out, "pickDealerItems seed=%d" % int(c["seed"]), got, c["expect"])
 	for c in data["evaluateDealerTrigger"]:
@@ -148,7 +148,7 @@ static func check_endings(out: Array) -> void:
 	var data: Dictionary = _load("endings.json")
 	for c in data["checkEnding"]:
 		var run := { "neurons": int(c["input"]["neurons"]), "scoreEarned": int(c["input"]["scoreEarned"]), "lucidityCoins": 0 }
-		var got := Endings.check_ending(run, {})
+		var got: Variant = Endings.check_ending(run, {})
 		if not deep_equal(got, c["expect"]):
 			_fail(out, "checkEnding " + str(c["input"]), got, c["expect"])
 	for c in data["checkExitEligibility"]:
