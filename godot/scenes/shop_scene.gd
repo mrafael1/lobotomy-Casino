@@ -8,9 +8,11 @@ extends Control
 
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
+const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 
-# Debug: a wallet top-up so the shop is exercisable before runs have banked much.
-const DEBUG := true
+# Debug top-up is disabled for Android polish builds; parity/dev fixtures can
+# still seed wallet state through MetaStateStore or save JSON when needed.
+const DEBUG := false
 
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
@@ -27,29 +29,44 @@ var _list: VBoxContainer = null
 var _rows := {} # id -> Button
 
 func _ready() -> void:
-	_font = _load_font("font/DTM-Mono.otf")
+	_font = _load_font("font/DTM-Sans.otf")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build()
 	MetaStateStore.meta_changed.connect(_refresh)
 	_refresh()
 
 func _load_font(rel: String) -> FontFile:
-	var path := ProjectSettings.globalize_path("res://").path_join("../assets").path_join(rel)
-	var f := FontFile.new()
-	if f.load_dynamic_font(path) != OK:
-		return null
-	return f
+	return Assets.font(rel)
 
-func _load_texture(rel: String) -> Texture2D:
-	if _tex_cache.has(rel):
-		return _tex_cache[rel]
-	var path := ProjectSettings.globalize_path("res://").path_join("../assets/images").path_join(rel)
-	var img := Image.new()
-	if img.load(path) != OK:
+func _load_texture(rel: String, mipmaps := false) -> Texture2D:
+	return Assets.texture(rel, mipmaps)
+
+func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
+	var tex := _load_texture(rel, true)
+	if tex == null:
 		return null
-	var tex := ImageTexture.create_from_image(img)
-	_tex_cache[rel] = tex
-	return tex
+	var spr := Sprite2D.new()
+	spr.texture = tex
+	spr.hframes = hframes
+	spr.frame = frame
+	spr.centered = false
+	spr.position = Vector2.ZERO
+	var frame_w := float(tex.get_width()) / float(hframes)
+	spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	add_child(spr)
+	return spr
+
+func _build_shop_art_background() -> void:
+	_build_full_canvas_sheet("dealer_shop_bg.png", 1)
+	_build_full_canvas_sheet("dealer_portrait.png", 2)
+	_build_full_canvas_sheet("dealer_shop_counter.png", 1)
+
+	var readability := ColorRect.new()
+	readability.color = Color(0.02, 0.015, 0.035, 0.68)
+	readability.position = Vector2(3, 3)
+	readability.size = Vector2(154, 286)
+	add_child(readability)
 
 func _label(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -69,10 +86,7 @@ func _styled_button(text: String, size: int) -> Button:
 	return b
 
 func _build() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.04, 0.07)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	_build_shop_art_background()
 
 	var root := VBoxContainer.new()
 	root.position = Vector2(6, 6)
@@ -119,6 +133,10 @@ func _build() -> void:
 	var scores := _styled_button("SCORES", 8)
 	scores.pressed.connect(func(): get_tree().change_scene_to_file(SCORES_SCENE))
 	footer.add_child(scores)
+	var back := _styled_button("MENU", 8)
+	Assets.skin_negative_button(back)
+	back.pressed.connect(func(): get_tree().change_scene_to_file(MENU_SCENE))
+	footer.add_child(back)
 	if DEBUG:
 		var dbg := _styled_button("+200", 8)
 		dbg.pressed.connect(_debug_add_lucidity)
@@ -127,7 +145,7 @@ func _build() -> void:
 # ── refresh ────────────────────────────────────────────────────────────────────────
 
 func _refresh() -> void:
-	_header.text = "WALLET %d   RUNS %d   BEST %d" % [
+	_header.text = "CREDITS %d   RUNS %d   BEST %d" % [
 		MetaStateStore.lucidityWallet,
 		int(MetaStateStore.history.get("runsPlayed", 0)),
 		int(MetaStateStore.history.get("bestScoreRun", 0)),

@@ -31,6 +31,7 @@ var ownedUpgrades: Array = []
 var spinCount := 0
 var isFreeSpin := false
 var betMultiplier := 1
+var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
 var dealerCount := 0
 var dealerLastSpinCount := 0
 var dealer65SafetyFired := false
@@ -145,6 +146,7 @@ func spin(compulsive := false) -> Variant:
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
+	lastEffectiveBet = clampi(eff_bet, 1, 3)
 	spinCount += 1
 	nextSpinLucidityMultiplier = 1.0
 	if stasis:
@@ -237,6 +239,13 @@ func continue_run() -> void:
 # Public: delegate to the parity-verified pure planner (run action surface).
 func plan_lucidity_gain(prev_coins: int, gain: int, abilities: Array, seed: int) -> Dictionary:
 	return Lucidity.plan_gain(prev_coins, gain, abilities, seed)
+
+func commit_power_restore(power_id: String) -> void:
+	var idx := pendingPowerRestores.find(power_id)
+	if idx < 0:
+		return
+	pendingPowerRestores.remove_at(idx)
+	_commit()
 
 # ── abilities ──────────────────────────────────────────────────────────────────────
 
