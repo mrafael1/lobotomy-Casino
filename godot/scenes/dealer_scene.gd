@@ -24,10 +24,11 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 # Counter geometry: Expo coords (1280x2560) / 8 -> the 160x320 canvas.
 const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
 # Consumables stand on the white round dots of the counter (measured centre y ~= 206
-# source px). Icons are 20px (issue #25) and rest with their base on the dot.
-const PRE_RUN_OFFER_ICON := 20.0
-const RUN_OFFER_ICON := 20.0
-const STASH_ICON := 20.0      # matches the in-run stash scale (in_run_dealer_offer)
+# source px). Icons are small (issue #24 follow-up: they read as objects on the counter,
+# not giant badges) and rest with their base on the dot. Stash icons reuse the shared
+# Assets.STASH_ICON_SIZE so they match the machine scene stash.
+const PRE_RUN_OFFER_ICON := 16.0
+const RUN_OFFER_ICON := 16.0
 const COUNTER_DOT_CY := 206.0 # measured centre of the counter's white round dots
 const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # icon base sits on the dot
 const TV := { "left": 2.0, "top": 126.0, "width": 49.0, "height": 26.0 }
@@ -147,8 +148,10 @@ func _mk_label(pos: Vector2, size: int, color: Color) -> Label:
 
 func _build_tv() -> void:
 	# TV shows ONLY the green (+) / red (-) hints; the item NAME goes under its icon.
-	_tv_pos = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 6.0), 8, Color(0.13, 0.77, 0.37))
-	_tv_neg = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 15.0), 8, Color(0.94, 0.27, 0.27))
+	# Same X as before; nudged up ~3.5px so the pair reads more vertically centred in the
+	# TV window (issue #24 follow-up).
+	_tv_pos = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 2.5), 8, Color(0.13, 0.77, 0.37))
+	_tv_neg = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 11.5), 8, Color(0.94, 0.27, 0.27))
 	_build_instruction_bubble()
 	_message = _mk_label(Vector2(34.0, 50.0), 7, Color(1.0, 0.6, 0.6))
 	_message.text = ""
@@ -178,8 +181,10 @@ func _build_instruction_bubble() -> void:
 	_instruction_bubble.add_child(graphic)
 	_instruction = Label.new()
 	_instruction.text = "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
-	_instruction.size = Vector2(BUBBLE_W - 12.0, BUBBLE_H - 8.0)
-	_instruction.position = Vector2(6.0, 4.0)
+	# Fill the whole bubble and centre both ways so the text sits dead centre of the
+	# bubble asset (issue #24 follow-up).
+	_instruction.size = _instruction_bubble.size
+	_instruction.position = Vector2.ZERO
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_instruction.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_instruction.add_theme_font_size_override("font_size", 8)
@@ -196,7 +201,7 @@ func _offer_icon_size() -> float:
 	return PRE_RUN_OFFER_ICON if _pre_run else RUN_OFFER_ICON
 
 func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, icon_size := -1.0) -> void:
-	var size_px := STASH_ICON if kind == "stash" else _offer_icon_size()
+	var size_px := Assets.STASH_ICON_SIZE if kind == "stash" else _offer_icon_size()
 	if icon_size > 0.0:
 		size_px = icon_size
 	var t := TextureRect.new()
@@ -243,7 +248,7 @@ func _build_stash() -> void:
 	add_child(_stash_holder)
 	var slots := _stash_slots()
 	for i in slots.size():
-		_make_drag_icon(String(slots[i]), "stash", Vector2(4.0 + i * 24.0, 292.0), _stash_holder, STASH_ICON)
+		_make_drag_icon(String(slots[i]), "stash", Vector2(4.0 + i * 24.0, 292.0), _stash_holder, Assets.STASH_ICON_SIZE)
 
 # Pre-run pockets are the wallet-purchased pending consumables; in-run they are
 # the live run stash.
@@ -272,11 +277,15 @@ func _build_hud() -> void:
 	add_child(back)
 	if _pre_run:
 		# Begin the run with whatever was bought; back/leave is a separate action.
-		# START rides on the arrow asset, vertically centred and tucked hard against
-		# the right border (a 3px safe margin so it never touches the edge).
+		# START rides on the arrow asset (issue #24 follow-up: the art is now 39x24 and
+		# narrower). Size the button to the asset's real bounds so it is never stretched,
+		# vertically centred and tucked against the right border with a 3px safe margin.
+		# Right-edge placement is parametric on size.x, so it stays correct on art swaps.
+		const ARROW_W := 39.0
+		const ARROW_H := 24.0
 		var start := Button.new()
 		start.text = "START"
-		start.size = Vector2(48.0, 24.0)
+		start.size = Vector2(ARROW_W, ARROW_H)
 		start.position = Vector2(160.0 - start.size.x - 3.0, (320.0 - start.size.y) * 0.5)
 		start.add_theme_font_size_override("font_size", 8)
 		if _font != null:

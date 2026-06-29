@@ -9,6 +9,13 @@ extends Node
 var _tex := {}
 var _fonts := {}
 
+## Shared stash consumable icon size (virtual px). Single source of truth so the
+## dealer scene, in-run dealer overlay, and shop stash never drift apart (issue #24).
+## Tuned to match the machine scene stash's on-screen icon footprint — there the slots
+## are 22px default-theme Buttons whose theme padding shrinks the icon, so a bare
+## TextureRect needs a smaller box to read at the same size.
+const STASH_ICON_SIZE := 16.0
+
 func _ready() -> void:
 	if OS.has_feature("android"):
 		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)

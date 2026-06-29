@@ -14,8 +14,10 @@ const DEALER_CENTER_Y := 160.0 # vertical centre of the rotated portrait
 const DEALER_FILL := 0.92      # portrait width fills ~92% of canvas height when rotated
 const HEAD_POKE := 60.0        # how far the head tip reaches in from the border
 const HANDS_SCALE := 1.0
-const ICON_SIZE := 32.0
-const STASH_ICON_SIZE := 20.0
+# Offered items are small so they read as objects the dealer is holding out, not giant
+# badges (issue #24 follow-up). Stash icons reuse the shared Assets.STASH_ICON_SIZE so
+# they match the machine scene stash.
+const ICON_SIZE := 16.0
 const TAP_WAIT := 0.25
 const TAP_FINAL_WAIT := 0.35
 const ITEM_ICONS := {
@@ -191,7 +193,10 @@ func _build_base() -> void:
 	_bubble_graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_bubble_graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_speech_bubble.add_child(_bubble_graphic)
-	_speech_label = _make_label_on(_speech_bubble, "I've got something for ya", Vector2(8.0, 5.0), Vector2(84.0, 22.0), 6, Color(0.12, 0.06, 0.16), HORIZONTAL_ALIGNMENT_CENTER)
+	# Centre the text in the bubble BODY: full width, and the top ~30px (the bottom ~8px
+	# is the tail, excluded) so it reads dead centre of the rounded box (issue #24
+	# follow-up). _make_label_on already vertical-centres.
+	_speech_label = _make_label_on(_speech_bubble, "I've got something for ya", Vector2(0.0, 0.0), Vector2(_speech_bubble.size.x, 30.0), 6, Color(0.12, 0.06, 0.16), HORIZONTAL_ALIGNMENT_CENTER)
 	_speech_bubble.visible = false
 
 	_message_label = _make_label("", Vector2(8.0, 219.0), Vector2(144.0, 19.0), 6, Color(1.0, 0.6, 0.6), HORIZONTAL_ALIGNMENT_CENTER)
@@ -276,7 +281,9 @@ func _setup_items(items: Array) -> void:
 		_make_drag_icon(id, "offer", anchors[i])
 
 func _item_anchors() -> Array:
-	return [Vector2(28.0, 137.0), Vector2(100.0, 137.0), Vector2(64.0, 166.0)]
+	# Shifted +8px from the old 32px-icon anchors so the now-smaller 16px icons keep the
+	# same on-screen centres (issue #24 follow-up).
+	return [Vector2(36.0, 145.0), Vector2(108.0, 145.0), Vector2(72.0, 174.0)]
 
 func _make_drag_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
 	var icon := TextureRect.new()
@@ -298,11 +305,12 @@ func _rebuild_stash(stash_items: Array) -> void:
 	for child in _stash_layer.get_children():
 		child.queue_free()
 	var gap := 4.0
-	var total_w := float(stash_items.size()) * STASH_ICON_SIZE + maxf(0.0, float(stash_items.size() - 1)) * gap
+	var icon := Assets.STASH_ICON_SIZE
+	var total_w := float(stash_items.size()) * icon + maxf(0.0, float(stash_items.size() - 1)) * gap
 	var start_x := (SRC_W - total_w) * 0.5
-	var y := SRC_H - STASH_ICON_SIZE - 6.0
+	var y := SRC_H - icon - 6.0
 	for i in stash_items.size():
-		_make_drag_icon(String(stash_items[i]), "stash", Vector2(start_x + float(i) * (STASH_ICON_SIZE + gap), y), STASH_ICON_SIZE)
+		_make_drag_icon(String(stash_items[i]), "stash", Vector2(start_x + float(i) * (icon + gap), y), icon)
 
 func _clear_offer_items() -> void:
 	if _item_layer != null:

@@ -1707,7 +1707,7 @@ func _build_dealer_stash(parent: Control) -> void:
 		var icon := TextureRect.new()
 		icon.texture = _icon_for(id)
 		icon.position = Vector2(start_x + float(i) * 24.0, 296.0)
-		icon.size = Vector2(20.0, 20.0)
+		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
