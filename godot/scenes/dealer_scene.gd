@@ -1,3 +1,4 @@
+@tool
 extends Control
 
 ## In-run dealer scene (M3 polish) — port of src/screens/DealerShopScreen.tsx (run
@@ -92,7 +93,7 @@ var _press_pos := Vector2.ZERO
 func _ready() -> void:
 	_font = Assets.font()
 	# No run in progress => this is the pre-run shop, not the in-run dealer visit.
-	_pre_run = RunStateStore.runPhase != "running"
+	_pre_run = true if Engine.is_editor_hint() else RunStateStore.runPhase != "running"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_art()
 	_build_tv()
@@ -100,7 +101,7 @@ func _ready() -> void:
 	_build_stash()
 	_build_hud()
 	_select("") # show instruction
-	if _pre_run:
+	if _pre_run and not Engine.is_editor_hint():
 		MetaStateStore.meta_changed.connect(_refresh_credits)
 		_refresh_credits()
 
@@ -247,12 +248,15 @@ func _build_stash() -> void:
 	_stash_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stash_holder)
 	var slots := _stash_slots()
+	# Bottom-right corner, shared layout so every scene's stash lines up (issue #26).
 	for i in slots.size():
-		_make_drag_icon(String(slots[i]), "stash", Vector2(4.0 + i * 24.0, 292.0), _stash_holder, Assets.STASH_ICON_SIZE)
+		_make_drag_icon(String(slots[i]), "stash", Assets.stash_slot_pos(i, STASH_SLOTS), _stash_holder, Assets.STASH_ICON_SIZE)
 
 # Pre-run pockets are the wallet-purchased pending consumables; in-run they are
 # the live run stash.
 func _stash_source() -> Dictionary:
+	if Engine.is_editor_hint():
+		return { "cons_focus": 1, "cons_white_powder": 1 }
 	return MetaStateStore.pendingConsumables if _pre_run else RunStateStore.runConsumables
 
 func _stash_slots() -> Array:
@@ -294,6 +298,8 @@ func _build_hud() -> void:
 		start.pressed.connect(_start_run)
 		add_child(start)
 		_build_credits_display()
+		if Engine.is_editor_hint():
+			_refresh_credits()
 
 # Bottom-centre wallet readout (issue #25): the Lucidity coin icon followed by the
 # amount, replacing the old "L" suffix. A CenterContainer keeps it centred as the
@@ -327,7 +333,7 @@ func _build_credits_display() -> void:
 
 func _refresh_credits() -> void:
 	if _credits_label != null:
-		_credits_label.text = "%d" % MetaStateStore.lucidityWallet
+		_credits_label.text = "0" if Engine.is_editor_hint() else "%d" % MetaStateStore.lucidityWallet
 
 # ── selection + TV ────────────────────────────────────────────────────────────────
 
@@ -373,6 +379,8 @@ func _item_cost(id: String) -> int:
 # ── drag handling ───────────────────────────────────────────────────────────────────
 
 func _on_item_input(event: InputEvent, node: Control, id: String, kind: String) -> void:
+	if Engine.is_editor_hint():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _drag_active:
 		_drag_active = true
 		_drag_node = node
@@ -386,6 +394,8 @@ func _on_item_input(event: InputEvent, node: Control, id: String, kind: String) 
 		node.modulate = Color(1.2, 1.2, 1.2)    # brighten while held
 
 func _input(event: InputEvent) -> void:
+	if Engine.is_editor_hint():
+		return
 	if not _drag_active:
 		return
 	if event is InputEventMouseMotion:
@@ -468,11 +478,15 @@ func _react_then_return() -> void:
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
 func _start_run() -> void:
+	if Engine.is_editor_hint():
+		return
 	# Carry the purchased consumables into the run and hand off to the machine.
 	RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables())
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
 func _on_leave() -> void:
+	if Engine.is_editor_hint():
+		return
 	if _pre_run:
 		get_tree().change_scene_to_file(MENU_SCENE) # back to the menu hub
 		return

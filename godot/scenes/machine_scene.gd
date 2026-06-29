@@ -149,7 +149,7 @@ var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
 var _lock_count_labels: Array[Label] = []
-var _stash_buttons: Array[Button] = []
+var _stash_icons: Array[TextureRect] = []  # bottom-right tap-to-use stash (issue #26)
 var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
 var _spin_reel_sprites: Array[Sprite2D] = []
@@ -1178,17 +1178,38 @@ func _build_power_buttons() -> void:
 		_power_buttons[id] = b
 
 func _build_stash() -> void:
-	var y := 240.0
+	# Bottom-right corner, shared layout + scale so the stash matches the dealer, shop,
+	# and in-run overlay stashes (issue #26). Bare TextureRects (tap to use) keep the
+	# icons crisp and the same size as the drag stashes in the other scenes.
 	for i in Consumables.MAX_CONSUMABLE_SLOTS:
-		var b := Button.new()
-		b.position = Vector2(95.0 + i * 30.0, y)
-		b.size = Vector2(22, 22)
-		b.add_theme_font_size_override("font_size", 7)
-		if _font != null:
-			b.add_theme_font_override("font", _font)
-		b.pressed.connect(_on_stash_pressed.bind(i))
-		add_child(b)
-		_stash_buttons.append(b)
+		var icon := TextureRect.new()
+		icon.position = Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS)
+		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_STOP
+		icon.gui_input.connect(_on_stash_input.bind(i))
+		add_child(icon)
+		_stash_icons.append(icon)
+
+# Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
+# stash). Gated by the same can-act check the refresh uses, so disabled slots ignore taps.
+func _on_stash_input(event: InputEvent, slot_index: int) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
+		return
+	if not RunStateStore._can_act() or _reroll_anim_active:
+		return
+	_on_stash_pressed(slot_index)
+
+# Hidden while the in-run dealer overlay is up so its stash is the only one on screen
+# (no duplicate, issue #26).
+func _set_stash_visible(v: bool) -> void:
+	for icon in _stash_icons:
+		icon.visible = v
 
 # Snapshot of the stash expanded to one entry per copy (matches buildStashSlots).
 func _stash_slots() -> Array:
@@ -1225,17 +1246,15 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	for i in _stash_buttons.size():
-		var b := _stash_buttons[i]
+	var usable := RunStateStore._can_act() and not _reroll_anim_active
+	for i in _stash_icons.size():
+		var icon := _stash_icons[i]
 		if i < slots.size():
-			b.text = "" # icon-only stash slot
-			b.icon = _icon_for(slots[i])
-			b.expand_icon = true
-			b.disabled = not RunStateStore._can_act() or _reroll_anim_active
+			icon.texture = _icon_for(slots[i])
+			icon.modulate = Color.WHITE if usable else Color(1.0, 1.0, 1.0, 0.4)
 		else:
-			b.text = ""
-			b.icon = null
-			b.disabled = true
+			icon.texture = null # empty slot draws nothing
+			icon.modulate = Color.WHITE
 
 func _power_owned(id: String, owned: Array) -> bool:
 	if id == "reroll":
@@ -1680,6 +1699,7 @@ func _show_dealer_offers() -> void:
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
+	_set_stash_visible(false) # overlay shows its own stash — avoid a duplicate (issue #26)
 	_dealer_offer_popup.start_offer((offers as Array).duplicate(), _stash_slots())
 
 func _dealer_offer_button(parent: Control, item_id: String, text: String, pos: Vector2, icon: Texture2D) -> void:
@@ -1827,4 +1847,5 @@ func _close_dealer() -> void:
 	_dealer_drag_node = null
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
+	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
 	_update_hud()

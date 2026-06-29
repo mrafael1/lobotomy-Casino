@@ -304,13 +304,11 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_S
 func _rebuild_stash(stash_items: Array) -> void:
 	for child in _stash_layer.get_children():
 		child.queue_free()
-	var gap := 4.0
-	var icon := Assets.STASH_ICON_SIZE
-	var total_w := float(stash_items.size()) * icon + maxf(0.0, float(stash_items.size() - 1)) * gap
-	var start_x := (SRC_W - total_w) * 0.5
-	var y := SRC_H - icon - 6.0
+	# Bottom-right corner, shared layout (issue #26). The machine's own stash is hidden
+	# while this overlay is up, so this is the only stash visible and it sits in the same
+	# spot — no duplicate.
 	for i in stash_items.size():
-		_make_drag_icon(String(stash_items[i]), "stash", Vector2(start_x + float(i) * (icon + gap), y), icon)
+		_make_drag_icon(String(stash_items[i]), "stash", Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS), Assets.STASH_ICON_SIZE)
 
 func _clear_offer_items() -> void:
 	if _item_layer != null:

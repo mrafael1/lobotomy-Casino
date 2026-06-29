@@ -1,3 +1,4 @@
+@tool
 extends Node
 
 ## Autoload "Assets" — process-wide cache for textures and fonts loaded by absolute
@@ -10,11 +11,24 @@ var _tex := {}
 var _fonts := {}
 
 ## Shared stash consumable icon size (virtual px). Single source of truth so the
-## dealer scene, in-run dealer overlay, and shop stash never drift apart (issue #24).
-## Tuned to match the machine scene stash's on-screen icon footprint — there the slots
-## are 22px default-theme Buttons whose theme padding shrinks the icon, so a bare
-## TextureRect needs a smaller box to read at the same size.
+## dealer scene, in-run dealer overlay, shop, and machine stash never drift apart
+## (issues #24, #26). Every scene renders the stash as bare TextureRects this size so
+## icons read identically; the row is anchored bottom-right via stash_slot_pos().
 const STASH_ICON_SIZE := 16.0
+const STASH_EDGE_MARGIN := 6.0  # px gap from the right and bottom screen edges
+const STASH_SLOT_GAP := 4.0     # px between adjacent stash slots
+const CANVAS_W := 160.0
+const CANVAS_H := 320.0
+
+## Top-left position of stash slot `index` (0 = leftmost) in a bottom-right anchored row
+## of `total` slots, on the shared 160x320 canvas (issue #26). All scenes call this so
+## the stash sits in the same corner at the same scale everywhere; pass the fixed slot
+## count (Consumables.MAX_CONSUMABLE_SLOTS) so positions stay stable as copies change.
+func stash_slot_pos(index: int, total: int) -> Vector2:
+	var row_w := float(total) * STASH_ICON_SIZE + maxf(0.0, float(total - 1)) * STASH_SLOT_GAP
+	var x0 := CANVAS_W - STASH_EDGE_MARGIN - row_w
+	var y := CANVAS_H - STASH_EDGE_MARGIN - STASH_ICON_SIZE
+	return Vector2(x0 + float(index) * (STASH_ICON_SIZE + STASH_SLOT_GAP), y)
 
 func _ready() -> void:
 	if OS.has_feature("android"):

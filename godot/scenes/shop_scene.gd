@@ -27,6 +27,7 @@ var _header: Label = null
 var _endings: Label = null
 var _list: VBoxContainer = null
 var _rows := {} # id -> Button
+var _stash_holder: Control = null # bottom-right held-consumables stash (issue #26)
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
@@ -100,7 +101,7 @@ func _build() -> void:
 	root.add_child(_endings)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(148, 230)
+	scroll.custom_minimum_size = Vector2(148, 196)
 	root.add_child(scroll)
 	_list = VBoxContainer.new()
 	_list.custom_minimum_size = Vector2(146, 0)
@@ -124,8 +125,10 @@ func _build() -> void:
 		_list.add_child(b)
 		_rows["C:" + String(c["id"])] = b
 
+	# Footer sits well above the bottom-right stash row (issue #26) so the wide button
+	# row never overlaps the corner stash icons.
 	var footer := HBoxContainer.new()
-	footer.position = Vector2(6, 296)
+	footer.position = Vector2(6, 262)
 	add_child(footer)
 	var start := _styled_button("START RUN", 10)
 	start.pressed.connect(_start_run)
@@ -178,6 +181,31 @@ func _refresh() -> void:
 		var held := int(pending.get(id, 0))
 		b.text = "%s  %dL  x%d" % [String(c["name"]), cost, held]
 		b.disabled = slots_full or MetaStateStore.lucidityWallet < cost
+
+	_build_stash(pending)
+
+# Read-only held-consumables stash, bottom-right, shared layout + scale (issue #26).
+# Rebuilt on every refresh since buying changes the pending pockets.
+func _build_stash(pending: Dictionary) -> void:
+	if _stash_holder != null:
+		_stash_holder.queue_free()
+	_stash_holder = Control.new()
+	_stash_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_stash_holder)
+	var slots: Array = []
+	for id in pending:
+		for _k in int(pending[id]):
+			if slots.size() < Consumables.MAX_CONSUMABLE_SLOTS:
+				slots.append(String(id))
+	for i in slots.size():
+		var icon := TextureRect.new()
+		icon.texture = _load_texture(ITEM_ICONS.get(slots[i], "items/consumable_placeholder.png"))
+		icon.position = Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS)
+		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_stash_holder.add_child(icon)
 
 # ── actions ──────────────────────────────────────────────────────────────────────────
 
