@@ -70,6 +70,7 @@ const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 # Pre-run pool only (Consumables.LIST) — see item_hints note (issue #31).
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
+	"cons_cigarette": "items/cigarette.png",
 	"cons_white_powder": "items/white_powder.png",
 	"cons_syringe": "items/consumable_placeholder.png",
 	"cons_tea": "items/herbal_tea.png",
