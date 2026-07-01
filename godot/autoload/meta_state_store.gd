@@ -160,4 +160,7 @@ func _migrate(record: Dictionary) -> Dictionary:
 		var fn: Callable = _MIGRATIONS[version]
 		current = fn.call(current)
 		version = int(current.get("schemaVersion", version))
+	if int(current.get("schemaVersion", 0)) != CANONICAL_SCHEMA_VERSION:
+		current = current.duplicate(true)
+		current["schemaVersion"] = CANONICAL_SCHEMA_VERSION
 	return current

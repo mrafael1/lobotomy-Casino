@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://c3vxhedx3155q"]
+
+[ext_resource type="Script" uid="uid://cxdov68i0eq5u" path="res://scenes/dealer_scene.gd" id="1_dealer"]
+
+[node name="DealerScene" type="Control" unique_id=413026863]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_dealer")

@@ -4,3 +4,6 @@
 *.import/
 export_presets.cfg
 *.tmp
+# Android build outputs
+*.apk
+*.apk.idsig
