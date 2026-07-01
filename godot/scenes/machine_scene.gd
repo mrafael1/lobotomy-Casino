@@ -151,6 +151,7 @@ const ITEM_ICONS := {
 ## Per-item +/- hint vocabulary shown when a stash item is used in-run. Mirrors
 ## the dealer scenes' pools (issue #31) so the same item reads the same way.
 @export var use_hints: Dictionary = {
+	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
 	"cons_white_powder": { "pos": "COPY", "neg": "LOSE" },
 	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
 	"cons_syringe": { "pos": "BRAINS", "neg": "NO POWER" },
@@ -168,6 +169,8 @@ const ITEM_ICONS := {
 # results, OR the run_spin_length hard cap, ends the run (added alongside neurons<=0).
 @export_group("Machine Reactions")
 @export var fatal_flatline_count: int = 3
+## GDD game-over flatline title (issue #38) — byte-for-byte, so never .to_upper()'d.
+const FATAL_ENDING_TITLE := "this time, it's fatal. No coming back"
 @export var run_spin_length: int = 35          # NEW hard run-length cap (added, not a replacement)
 @export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
 @export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
@@ -2105,13 +2108,18 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 	_spawn_reaction_flash(color, label)
 	_update_hud()
 
-## Instant death: too many flatline results this run routes to the #38 fatal text.
+## Instant death: too many flatline results ends THIS RUN through the normal
+## flatline ending (banks lucidity, shows the #38 fatal text, offers CONTINUE
+## while campaign neurons remain) — it does not fail the whole campaign.
 func _check_flatline_instant_death() -> bool:
 	if RunStateStore.flatlineResultCount < fatal_flatline_count:
 		return false
-	_stop_flatline_countdown()
-	RunStateStore.end_run("flatline")
-	_show_campaign_failed()
+	var run := {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	}
+	_show_ending("flatline", run)
 	return true
 
 ## New hard run-length cap (issue #35): reaching run_spin_length ends the run like a
@@ -2221,12 +2229,20 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.add_child(dim)
 
 	var title := Label.new()
-	title.position = Vector2(20, 74 if ending == "flatline" else 120)
-	title.add_theme_font_size_override("font_size", 16)
+	if ending == "flatline":
+		title.text = FATAL_ENDING_TITLE
+		title.position = Vector2(20, 70)
+		title.size = Vector2(120, 28)
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 9)
+	else:
+		title.text = ending.to_upper()
+		title.position = Vector2(20, 120)
+		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
 		title.add_theme_font_override("font", _font)
 	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if ending == "flatline" else Color(0.5, 1, 0.6))
-	title.text = ending.to_upper()
 	_overlay.add_child(title)
 
 	if ending == "flatline":

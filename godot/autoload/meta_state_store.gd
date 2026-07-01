@@ -264,6 +264,13 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["campaignNeuronsMax"] = EconomyConst.CAMPAIGN_STARTING_NEURONS
 	if not current.has("campaignNeuronsLeft"):
 		current["campaignNeuronsLeft"] = int(current["campaignNeuronsMax"])
+	# Campaign rebalance (issue #38): reclamp saves from the 12-neuron era down to
+	# the new starting count; neurons-left may never exceed the reclamped max.
+	if int(current["campaignNeuronsMax"]) > EconomyConst.CAMPAIGN_STARTING_NEURONS:
+		current["campaignNeuronsMax"] = EconomyConst.CAMPAIGN_STARTING_NEURONS
+	current["campaignNeuronsLeft"] = clampi(
+		int(current["campaignNeuronsLeft"]), 0, int(current["campaignNeuronsMax"])
+	)
 	if not current.has("campaignActive"):
 		current["campaignActive"] = true
 	if not current.has("campaignFailed"):

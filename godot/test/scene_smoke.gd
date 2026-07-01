@@ -1089,8 +1089,23 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 		machine._apply_machine_reactions(false)
 	if int(run_store.flatlineResultCount) != 3:
 		failures.append("issue35: flatline results did not accumulate")
+	# Instant death routes through the normal flatline ending (banks the run), so
+	# snapshot the meta store and restore it after the overlay assertions.
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
 	if not machine._check_flatline_instant_death():
 		failures.append("issue35: fatal flatline count did not trigger instant death")
+	if machine._overlay == null:
+		failures.append("issue35: instant death did not show the flatline ending overlay")
+	else:
+		var fatal_found := false
+		for child in machine._overlay.get_children():
+			if child is Label and (child as Label).text == "this time, it's fatal. No coming back":
+				fatal_found = true
+		if not fatal_found:
+			failures.append("issue38: flatline ending is missing the byte-exact fatal title")
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 	# Restore mutated state.
 	run_store.lastResult = prev_last
