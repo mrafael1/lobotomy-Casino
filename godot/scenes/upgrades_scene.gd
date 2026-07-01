@@ -29,6 +29,13 @@ const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
 const COIN_ASSET := "ui/coin.png"
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+## Corrupted upgrades render their NAME in purple (issue #37). This is an explicit
+## per-upgrade flag, DECOUPLED from the mechanical "corrupted" category: Hallucination
+## is a positive-category upgrade but must read as corrupted, while other
+## category-corrupted upgrades (e.g. Sedative Protocol, Euphoria Spiral) are NOT flagged.
+const CORRUPTED_NAME_IDS: Array[String] = ["corr_pattern_23", HALLUCINATION_UPGRADE_ID,
+	"corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"]
+@export var corrupt_name_color: Color = Color(0.66, 0.33, 0.86)
 const EDITOR_HITBOX_FILL := Color(0.13, 0.77, 0.37, 0.18)
 const EDITOR_HITBOX_BORDER := Color(0.13, 0.77, 0.37, 0.85)
 const BUBBLES_REST_FRAME := 12
@@ -636,7 +643,7 @@ func _describe_row(row: Control) -> void:
 	if row == null or not row.has_meta("upgrade_id"):
 		return
 	var upgrade_id := String(row.get_meta("upgrade_id"))
-	_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true)
+	_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true, upgrade_id)
 	_set_description(String(DESCRIPTIONS.get(upgrade_id, "")))
 
 func _inspect_row(event: InputEvent, row: Control) -> void:
@@ -657,18 +664,27 @@ func _refresh_power_name_box() -> void:
 		return
 	if _selected_upgrade_row != null and _selected_upgrade_row.has_meta("upgrade_id") and _is_selected_row_panel_open(_selected_upgrade_row):
 		var upgrade_id := String(_selected_upgrade_row.get_meta("upgrade_id"))
-		_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true)
+		_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true, upgrade_id)
 		return
 	if _is_eye_open() or _is_memory_open() or Engine.is_editor_hint():
 		_set_power_name("SELECT POWER", true)
 	else:
 		_set_power_name("", false)
 
-func _set_power_name(text: String, visible: bool) -> void:
+func _set_power_name(text: String, visible: bool, upgrade_id := "") -> void:
 	if _power_name_box != null:
 		_power_name_box.visible = visible
 	if _power_name_label != null:
 		_power_name_label.text = text
+		# Corrupted upgrades read in purple; anything else falls back to the authored
+		# scene colour (remove restores it — no structural UI change). Issue #37.
+		if _is_corrupted_upgrade(upgrade_id):
+			_power_name_label.add_theme_color_override(&"font_color", corrupt_name_color)
+		else:
+			_power_name_label.remove_theme_color_override(&"font_color")
+
+func _is_corrupted_upgrade(upgrade_id: String) -> bool:
+	return CORRUPTED_NAME_IDS.has(upgrade_id)
 
 func _set_description(text: String) -> void:
 	if _description_label != null:
