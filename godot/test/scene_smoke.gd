@@ -53,6 +53,7 @@ func _run() -> void:
 	_check_issue27_overlay_layout(failures)
 	_check_issue27_machine_stash_drag(machine, run_store, failures)
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
+	_check_consumable_roster_32(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -68,7 +69,7 @@ func _run() -> void:
 
 	# Offer pool branches on _pre_run (set in _ready from the mode above).
 	dealer._pre_run = true
-	if dealer._offer_ids() != ["cons_focus", "cons_white_powder", "cons_syringe", "cons_tea"]:
+	if dealer._offer_ids() != ["cons_cigarette", "cons_focus", "cons_white_powder", "cons_syringe", "cons_tea"]:
 		failures.append("pre-run offers wrong: %s" % str(dealer._offer_ids()))
 	dealer._pre_run = false
 	run_store.dealerOfferIds = ["item_water", "item_pill"]
@@ -531,6 +532,61 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 
 	overlay.queue_free()
 
+func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
+	# issue #32: using each roster item sets its effect state (mirrors the TS tests).
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.lastResult = { "reels": ["eye", "pill", "vial"], "isFreeSpin": false }
+
+	# Serum: guaranteeSymbolSpins + banBrainSpins.
+	run_store.runConsumables = { "cons_focus": 1 }
+	if not run_store.use_consumable("cons_focus"):
+		failures.append("issue32: Serum use rejected")
+	if int(run_store.guaranteeSymbolSpins) != 1 or int(run_store.banBrainSpins) != 2:
+		failures.append("issue32: Serum did not set guarantee/ban counters")
+
+	# Tobacco: pair boost + hidden reel.
+	run_store.runConsumables = { "cons_cigarette": 1 }
+	run_store.use_consumable("cons_cigarette")
+	if int(run_store.pairBoostSpins) != 3 or int(run_store.pairBoostMult) != 3 or int(run_store.pairBoostHiddenReels) != 1:
+		failures.append("issue32: Tobacco did not set pair-boost counters")
+
+	# Potion: restores all powers + potionSpins.
+	run_store.abilitiesUsed = ["reroll", "shift"]
+	run_store.runConsumables = { "cons_syringe": 1 }
+	run_store.use_consumable("cons_syringe")
+	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
+		failures.append("issue32: Potion did not reset powers / set potionSpins")
+
+	# Tea with no used abilities grants fallback free spins.
+	run_store.abilitiesUsed = []
+	run_store.freeSpinsRemaining = 0
+	run_store.maxFreeSpins = 10
+	run_store.runConsumables = { "cons_tea": 1 }
+	if not run_store.use_consumable("cons_tea"):
+		failures.append("issue32: Tea use rejected with no abilities")
+	if int(run_store.freeSpinsRemaining) != 3:
+		failures.append("issue32: Tea did not grant fallback free spins")
+
+	# Red Pill: force flatline then triple.
+	run_store.runConsumables = { "item_pill": 1 }
+	run_store.use_consumable("item_pill")
+	if int(run_store.forceFlatlineSpins) != 1 or int(run_store.guaranteedTripleSpins) != 1:
+		failures.append("issue32: Red Pill did not set flatline/triple counters")
+
+	# Pill spin 1 forces all flatlines; spin 2 forces a non-flatline triple.
+	run_store.neurons = 100
+	var r1: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if r1 == null or String(r1["reels"][0]) != "flatline" or String(r1["reels"][1]) != "flatline":
+		failures.append("issue32: Red Pill first spin was not an all-flatline result")
+	var r2: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if r2 == null or String(r2["reels"][0]) != String(r2["reels"][1]) or String(r2["reels"][0]) == "flatline":
+		failures.append("issue32: Red Pill second spin was not a non-flatline triple")
+
+	run_store.reset_run_state()
+
 func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
 	overlay._apply_side("left")
 	var offers: Array[String] = ["item_water"]
@@ -549,7 +605,7 @@ func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
 		failures.append("issue27: item click emitted purchase selection")
 	var hint_layer := overlay.get_node("SpeechBubble/HintLayer") as Control
 	var pos_hint := overlay.get_node("SpeechBubble/HintLayer/PositiveHint") as Label
-	if not hint_layer.visible or pos_hint.text != "+ CLEAR":
+	if not hint_layer.visible or pos_hint.text != "+ refreshing":
 		failures.append("issue27: item click did not reveal hint text")
 	overlay._begin_item_press(icon, "item_water", "offer", Vector2(36.0, 23.0))
 	overlay._update_drag_position(Vector2(60.0, 170.0))

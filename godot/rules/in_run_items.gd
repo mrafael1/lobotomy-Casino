@@ -5,14 +5,14 @@ extends RefCounted
 ## pinned in dealer_vectors.json -> inRunItems.
 
 const LIST := [
-	{ "id": "item_energy_drink", "name": "Energy Drink",
-	  "effect": { "type": "skipDecay", "spins": 5, "forcedRandomBetSpins": 5 } },
+	{ "id": "item_energy_drink", "name": "Energy Drink", "corrupt": true,
+	  "effect": { "type": "skipDecay", "spins": 5, "blockBet": "x3" } },
 	{ "id": "item_cocktail", "name": "Cocktail",
 	  "effect": { "type": "cocktailBoost", "spins": 3, "compulsiveSpins": 2 } },
 	{ "id": "item_water", "name": "Water",
 	  "effect": { "type": "addLucidity", "amount": 40 } },
-	{ "id": "item_pill", "name": "Red Pill",
-	  "effect": { "type": "guaranteedWin", "spins": 3, "blockPowersSpins": 5 } },
+	{ "id": "item_pill", "name": "Red Pill", "corrupt": true,
+	  "effect": { "type": "forceFlatlinesThenTriple", "flatSpins": 1, "guaranteedTripleNext": true } },
 ]
 
 static func ids() -> Array:

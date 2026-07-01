@@ -1,4 +1,4 @@
-import { SYMBOL_WEIGHTS } from '../content/symbols';
+import { SYMBOL_WEIGHTS, BASE_SYMBOL_CYCLE } from '../content/symbols';
 import {
   JACKPOT_SCORE,
   JACKPOT_FREE_SPIN_GRANT,
@@ -50,8 +50,30 @@ export function scoreReels(
   allowFreeSpinGrant: boolean,
   pattern23Triple = false,
   learningActive = false,
+  pairScoreMult = 1,      // Tobacco (issue #32): multiply pair payouts
+  hiddenReelCount = 0,    // Tobacco (issue #32): score only the visible reels
 ): ReelScore {
   const [a, b, c] = reels;
+
+  // Tobacco: one or more reels go dark and only the visible remainder scores — no
+  // triples, and any visible pair pays at pairScoreMult. Gated so the default path
+  // (hiddenReelCount === 0) is byte-for-byte the pinned behaviour.
+  if (hiddenReelCount > 0) {
+    const visible = reels.slice(0, Math.max(1, reels.length - hiddenReelCount));
+    const vBook = learningActive
+      ? visible.filter(r => r === 'book').length * BOOK_BONUS_PER_VISIBLE
+      : 0;
+    let matched: SymbolId | null = null;
+    for (let i = 0; i < visible.length - 1; i++) {
+      if (visible[i] === visible[i + 1]) { matched = visible[i]; break; }
+    }
+    if (matched !== null) {
+      const s = Math.round(((PAIR_SCORE[matched] ?? 0) * pairScoreMult + vBook) * lucidityMultiplier);
+      return { winType: 'pair', scoreEarned: s, coinsEarned: s, freeSpinsGranted: 0 };
+    }
+    const ms = vBook > 0 ? Math.round(vBook * lucidityMultiplier) : 0;
+    return { winType: 'miss', scoreEarned: ms, coinsEarned: ms, freeSpinsGranted: 0 };
+  }
 
   const bookBonus = learningActive
     ? reels.filter(r => r === 'book').length * BOOK_BONUS_PER_VISIBLE
@@ -119,6 +141,13 @@ export function scoreReels(
   };
 }
 
+// Deterministic non-excluded reel symbol (issue #32, Serum). Picks along the
+// canonical visible cycle so it never lands on `book` or the excluded symbol.
+function pickNonExcluded(excluded: SymbolId, rng: () => number): SymbolId {
+  const pool = BASE_SYMBOL_CYCLE.filter(s => s !== excluded);
+  return pool[Math.floor(rng() * pool.length)] ?? pool[0];
+}
+
 // evaluate() is the single source of truth for a spin's outcome.
 // Call it synchronously BEFORE starting any animation.
 export function evaluate(input: SpinInput): SpinResult {
@@ -137,6 +166,14 @@ export function evaluate(input: SpinInput): SpinResult {
     guaranteedWin,
     pattern23Triple,
     learningActive,
+    forceAllSymbol = null,
+    forceTripleFrom = null,
+    excludeSymbol = null,
+    banExcluded = false,
+    guaranteeNonExcluded = false,
+    symbolToBrainCount = 0,
+    pairScoreMult = 1,
+    hiddenReelCount = 0,
   } = input;
 
   const weights = buildWeights(brainWeightBonus, bookWeight);
@@ -155,12 +192,30 @@ export function evaluate(input: SpinInput): SpinResult {
     }
   }
 
+  // Consumable reel transforms (issue #32) — all gated, no-op at defaults.
+  if (forceAllSymbol) {
+    reels = [forceAllSymbol, forceAllSymbol, forceAllSymbol];
+  } else if (forceTripleFrom && forceTripleFrom.length > 0) {
+    const pick = forceTripleFrom[Math.floor(rng() * forceTripleFrom.length)];
+    reels = [pick, pick, pick];
+  } else {
+    if (banExcluded && excludeSymbol) {
+      reels = reels.map(r => (r === excludeSymbol ? pickNonExcluded(excludeSymbol, rng) : r)) as ReelResult;
+    }
+    if (symbolToBrainCount > 0) {
+      reels = reels.map((r, i) => (i < symbolToBrainCount ? 'brain' : r)) as ReelResult;
+    }
+    if (guaranteeNonExcluded && excludeSymbol && reels.every(r => r === excludeSymbol)) {
+      reels = [pickNonExcluded(excludeSymbol, rng), reels[1], reels[2]];
+    }
+  }
+
   const neuronsAfter = isFreeSpin
     ? neurons
     : Math.max(0, neurons - neuronDecayAmount);
 
   // Free spins NEVER generate free spins (structural enforcement)
-  const score = scoreReels(reels, lucidityMultiplier, !isFreeSpin, pattern23Triple, learningActive);
+  const score = scoreReels(reels, lucidityMultiplier, !isFreeSpin, pattern23Triple, learningActive, pairScoreMult, hiddenReelCount);
 
   const freeSpinsAfter = isFreeSpin
     ? Math.max(0, freeSpinsRemaining - 1)

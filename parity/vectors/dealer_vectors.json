@@ -369,7 +369,7 @@
       "effect": {
         "type": "skipDecay",
         "spins": 5,
-        "forcedRandomBetSpins": 5
+        "blockBet": "x3"
       }
     },
     {
@@ -390,9 +390,9 @@
     {
       "id": "item_pill",
       "effect": {
-        "type": "guaranteedWin",
-        "spins": 3,
-        "blockPowersSpins": 5
+        "type": "forceFlatlinesThenTriple",
+        "flatSpins": 1,
+        "guaranteedTripleNext": true
       }
     }
   ]

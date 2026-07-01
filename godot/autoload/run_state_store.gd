@@ -59,6 +59,18 @@ var cocktailBoostSpins := 0
 var compulsiveSpinSkips := 0
 var pendingCompulsiveSpinSkips := 0
 var decaySkips := 0
+# Consumable roster effects (issue #32).
+var pairBoostSpins := 0          # Tobacco: hidden reel + pair multiplier active
+var pairBoostMult := 1           # Tobacco: pair payout multiplier while active
+var pairBoostHiddenReels := 0    # Tobacco: reels hidden from scoring while active
+var guaranteeSymbolSpins := 0    # Serum: force a non-excluded symbol to appear
+var banBrainSpins := 0           # Serum: brain banned from the reels
+var potionSpins := 0             # Potion: one random pool effect per spin
+var forceFlatlineSpins := 0      # Pill: force an all-flatline spin
+var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatline
+var hideResultSpins := 0         # White Powder: hide the next spin's result
+
+const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
 
 # RunStore extras
 var runPhase := "idle" # idle | running | over
@@ -116,13 +128,35 @@ func spin(compulsive := false) -> Variant:
 	var base_mult := lucidityMultiplier * nextSpinLucidityMultiplier * eff_bet
 	var eff_mult: float = base_mult * 0.5 if brainBoostSpins > 0 else base_mult
 
+	# Potion (issue #32): roll one equal-weight pool effect for this spin, with a
+	# dedicated seed so the pick is independent of the reel roll.
+	var potion_mult := 1.0
+	var potion_lucidity_delta := 0
+	var potion_symbol_to_brain := 0
+	var potion_free_reroll := false
+	if potionSpins > 0:
+		var p_rng := LobRNG.new((seed ^ 0x50710000) & M32)
+		var pool: Array = Consumables.POTION_RANDOM_POOL
+		var pick: Dictionary = pool[int(p_rng.next() * pool.size())]
+		match String(pick["kind"]):
+			"multNextSpin": potion_mult = float(pick["multiplier"])
+			"lucidity": potion_lucidity_delta = int(pick["amount"])
+			"symbolToBrain": potion_symbol_to_brain = 1
+			"freeReroll": potion_free_reroll = true
+
+	# Consumable reel transforms (issue #32). Pill forces a flatline spin, then a
+	# guaranteed non-flatline triple the spin after; Serum bans/guarantees a symbol.
+	var force_all: Variant = "flatline" if forceFlatlineSpins > 0 else null
+	var force_triple: Variant = NON_FLATLINE_SYMBOLS if (forceFlatlineSpins <= 0 and guaranteedTripleSpins > 0) else null
+	var pair_boost_active := pairBoostSpins > 0
+
 	var book_w := Economy.compute_book_weight(ownedUpgrades)
 	var result := Evaluate.evaluate({
 		"neurons": neurons,
 		"neuronDecayAmount": decay_amt,
 		"freeSpinsRemaining": freeSpinsRemaining,
 		"maxFreeSpins": maxFreeSpins,
-		"lucidityMultiplier": eff_mult,
+		"lucidityMultiplier": eff_mult * potion_mult,
 		"isFreeSpin": is_free,
 		"lockedReels": lockedReels,
 		"previousReels": (lastResult["reels"] if lastResult != null else null),
@@ -132,6 +166,14 @@ func spin(compulsive := false) -> Variant:
 		"guaranteedWin": guaranteedWinSpins > 0,
 		"pattern23Triple": Economy.has_pattern23_triple(ownedUpgrades),
 		"learningActive": book_w > 0,
+		"forceAllSymbol": force_all,
+		"forceTripleFrom": force_triple,
+		"excludeSymbol": ("brain" if (banBrainSpins > 0 or guaranteeSymbolSpins > 0) else null),
+		"banExcluded": banBrainSpins > 0,
+		"guaranteeNonExcluded": guaranteeSymbolSpins > 0,
+		"symbolToBrainCount": potion_symbol_to_brain,
+		"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
+		"hiddenReelCount": (pairBoostHiddenReels if pair_boost_active else 0),
 	})
 
 	var cocktail_bonus := 0
@@ -148,10 +190,16 @@ func spin(compulsive := false) -> Variant:
 
 	var was_cocktail_last: bool = cocktailBoostSpins == 1
 
+	# Potion pool side effects (issue #32): ± lucidity and a free reroll (restore the
+	# reroll ability) resolve after the score plan.
+	var new_abilities: Array = plan["abilitiesUsed"]
+	if potion_free_reroll:
+		new_abilities = new_abilities.filter(func(a): return String(a) != "reroll")
+
 	neurons = int(final_result["neuronsAfter"])
 	scoreEarned += int(final_result["scoreEarned"])
-	lucidityCoins = int(plan["lucidityCoins"])
-	abilitiesUsed = plan["abilitiesUsed"]
+	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
+	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
 	freeSpinsRemaining = int(final_result["freeSpinsAfter"])
 	isFreeSpin = bool(final_result["isFreeSpin"])
@@ -171,6 +219,15 @@ func spin(compulsive := false) -> Variant:
 	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if is_compulsive else compulsiveSpinSkips) \
 		+ (pendingCompulsiveSpinSkips if was_cocktail_last else 0)
 	pendingCompulsiveSpinSkips = 0 if was_cocktail_last else pendingCompulsiveSpinSkips
+	pairBoostSpins = maxi(0, pairBoostSpins - 1)
+	guaranteeSymbolSpins = maxi(0, guaranteeSymbolSpins - 1)
+	banBrainSpins = maxi(0, banBrainSpins - 1)
+	potionSpins = maxi(0, potionSpins - 1)
+	# Keep the pending triple until the flatline spin is spent, then consume it.
+	var flatline_was_active := forceFlatlineSpins > 0
+	forceFlatlineSpins = maxi(0, forceFlatlineSpins - 1)
+	guaranteedTripleSpins = guaranteedTripleSpins if flatline_was_active else maxi(0, guaranteedTripleSpins - 1)
+	hideResultSpins = maxi(0, hideResultSpins - 1)
 
 	_commit()
 	return final_result
@@ -229,6 +286,15 @@ func reset_run_state() -> void:
 	compulsiveSpinSkips = 0
 	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
+	pairBoostSpins = 0
+	pairBoostMult = 1
+	pairBoostHiddenReels = 0
+	guaranteeSymbolSpins = 0
+	banBrainSpins = 0
+	potionSpins = 0
+	forceFlatlineSpins = 0
+	guaranteedTripleSpins = 0
+	hideResultSpins = 0
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -275,6 +341,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	compulsiveSpinSkips = 0
 	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
+	pairBoostSpins = 0
+	pairBoostMult = 1
+	pairBoostHiddenReels = 0
+	guaranteeSymbolSpins = 0
+	banBrainSpins = 0
+	potionSpins = 0
+	forceFlatlineSpins = 0
+	guaranteedTripleSpins = 0
+	hideResultSpins = 0
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
@@ -441,8 +516,10 @@ func use_consumable(consumable_id: String) -> bool:
 		var e: Dictionary = in_run["effect"]
 		match String(e["type"]):
 			"skipDecay":
+				# Energy Drink: neurons preserved for N spins; blockBet "x3" locks the
+				# x3 bet for those spins (reuses the forced-random-bet demotion).
 				decaySkips += int(e["spins"])
-				forcedRandomBetSpins += int(e["forcedRandomBetSpins"])
+				forcedRandomBetSpins += int(e["spins"])
 				if betMultiplier == 3:
 					betMultiplier = 2
 			"addLucidity":
@@ -453,41 +530,42 @@ func use_consumable(consumable_id: String) -> bool:
 			"cocktailBoost":
 				cocktailBoostSpins += int(e["spins"])
 				pendingCompulsiveSpinSkips += int(e["compulsiveSpins"])
-			"guaranteedWin":
-				guaranteedWinSpins += int(e["spins"])
-				blockPowersSpins += int(e["blockPowersSpins"])
+			"forceFlatlinesThenTriple":
+				# Red Pill: force flatlines for flatSpins, then a guaranteed triple.
+				forceFlatlineSpins += int(e["flatSpins"])
+				guaranteedTripleSpins += 1 if bool(e["guaranteedTripleNext"]) else 0
 		_commit()
 		return true
 
 	var ce: Dictionary = consumable["effect"]
 	match String(ce["type"]):
-		"skipDecay":
-			decaySkips += int(ce["spins"])
-		"lucidityMultiplierNextSpin":
-			nextSpinLucidityMultiplier = float(ce["multiplier"])
-			hideNeuronsSpins += int(ce.get("hideNeuronsSpins", 0))
-		"restoreAbility":
+		"hideReelPairBoost":
+			# Tobacco: hide a reel and boost pairs for N spins.
+			pairBoostSpins = int(ce["spins"])
+			pairBoostMult = int(ce["pairMult"])
+			pairBoostHiddenReels = int(ce["hiddenReels"])
+		"guaranteeSymbol":
+			# Serum: guarantee a non-brain symbol for appearSpins, ban brain for banSpins.
+			guaranteeSymbolSpins += int(ce["appearSpins"])
+			banBrainSpins += int(ce["banSpins"])
+		"scrambleThenHide":
+			# White Powder: the scramble is the copy_reel UI flow; hide the next spin.
+			hideResultSpins += 1 if bool(ce["hideNextSpin"]) else 0
+		"resetPowersRandomEffect":
+			# Potion: restore ALL powers now, then roll a random pool effect per spin.
+			abilitiesUsed = []
+			potionSpins += int(ce["spins"])
+		"restoreAbilityOrSpins":
+			# Tea: restore a used ability, or grant fallback free spins if none used.
 			if abilitiesUsed.is_empty():
-				return false
-			var rng := LobRNG.new(_seed(spinCount * 0xdeadbeef))
-			var idx := floori(rng.next() * abilitiesUsed.size())
-			var restored_id := String(abilitiesUsed[idx])
-			abilitiesUsed = abilitiesUsed.duplicate()
-			abilitiesUsed.remove_at(idx)
-			pendingPowerRestores.append(restored_id)
-		"brainBoost":
-			var all_abilities := ["reroll", "shift", "memory"]
-			var available := []
-			for a in all_abilities:
-				if not abilitiesUsed.has(a):
-					available.append(a)
-			abilitiesUsed = abilitiesUsed.duplicate()
-			if available.size() > 0:
-				var rng := LobRNG.new(_seed(spinCount))
-				abilitiesUsed.append(available[floori(rng.next() * available.size())])
-			brainBoostSpins = int(ce["spins"])
-		"copyReel":
-			pass # handled via copy_reel UI flow
+				freeSpinsRemaining = mini(freeSpinsRemaining + int(ce["fallbackSpins"]), maxFreeSpins)
+			else:
+				var rng := LobRNG.new(_seed(spinCount * 0xdeadbeef))
+				var idx := floori(rng.next() * abilitiesUsed.size())
+				var restored_id := String(abilitiesUsed[idx])
+				abilitiesUsed = abilitiesUsed.duplicate()
+				abilitiesUsed.remove_at(idx)
+				pendingPowerRestores.append(restored_id)
 	_commit()
 	return true
 

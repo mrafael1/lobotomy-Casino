@@ -5,15 +5,30 @@ extends RefCounted
 
 const MAX_CONSUMABLE_SLOTS := 2
 
+## Potion (resetPowersRandomEffect) rolls ONE of these per boosted spin, equal-weight
+## with a deterministic per-spin seed (issue #32). Mirrors POTION_RANDOM_POOL in
+## src/content/consumables.ts.
+const POTION_RANDOM_POOL := [
+	{ "kind": "multNextSpin", "multiplier": 0.75 },
+	{ "kind": "multNextSpin", "multiplier": 1.25 },
+	{ "kind": "multNextSpin", "multiplier": 1.5 },
+	{ "kind": "lucidity", "amount": 10 },
+	{ "kind": "lucidity", "amount": -5 },
+	{ "kind": "freeReroll" },
+	{ "kind": "symbolToBrain" },
+]
+
 const LIST := [
-	{ "id": "cons_focus", "name": "Serum", "shopCost": 12,
-	  "effect": { "type": "lucidityMultiplierNextSpin", "multiplier": 3.0, "hideNeuronsSpins": 5 } },
-	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 14,
-	  "effect": { "type": "copyReel" } },
-	{ "id": "cons_syringe", "name": "potion", "shopCost": 18,
-	  "effect": { "type": "brainBoost", "spins": 5 } },
-	{ "id": "cons_tea", "name": "Tea", "shopCost": 10,
-	  "effect": { "type": "restoreAbility" } },
+	{ "id": "cons_cigarette", "name": "Tobacco", "shopCost": 20, "corrupt": true,
+	  "effect": { "type": "hideReelPairBoost", "spins": 3, "hiddenReels": 1, "pairMult": 3 } },
+	{ "id": "cons_focus", "name": "Serum", "shopCost": 15,
+	  "effect": { "type": "guaranteeSymbol", "excludes": ["brain"], "appearSpins": 1, "banSpins": 2 } },
+	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 10, "corrupt": true,
+	  "effect": { "type": "scrambleThenHide", "hideNextSpin": true } },
+	{ "id": "cons_syringe", "name": "Potion", "shopCost": 40,
+	  "effect": { "type": "resetPowersRandomEffect", "spins": 3, "pool": POTION_RANDOM_POOL } },
+	{ "id": "cons_tea", "name": "Tea", "shopCost": 8,
+	  "effect": { "type": "restoreAbilityOrSpins", "fallbackSpins": 3 } },
 ]
 
 static func map() -> Dictionary:

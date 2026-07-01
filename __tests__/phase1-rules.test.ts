@@ -127,7 +127,8 @@ test('applyMoveColumn: wraps around the cycle in both directions', () => {
 // ─────────────────────────────────────────────
 test('no consumable can ever add neurons', () => {
   const allowed = new Set([
-    'skipDecay', 'lucidityMultiplierNextSpin', 'copyReel', 'brainBoost', 'restoreAbility',
+    'hideReelPairBoost', 'guaranteeSymbol', 'scrambleThenHide',
+    'resetPowersRandomEffect', 'restoreAbilityOrSpins',
   ]);
   for (const c of CONSUMABLES) {
     expect(allowed.has(c.effect.type)).toBe(true);
@@ -145,26 +146,25 @@ function totalConsumableCharges(runConsumables: Partial<Record<string, number>>)
   return Object.values(runConsumables).reduce<number>((sum, n) => sum + (n ?? 0), 0);
 }
 
-test('store: Focus Serum — sets nextSpinLucidityMultiplier to 3', () => {
+test('store: Serum — guarantees a non-brain symbol then bans brain (issue #32)', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(1);
 
   useRunStore.getState().useConsumable('cons_focus');
-  expect(useRunStore.getState().nextSpinLucidityMultiplier).toBe(3.0);
+  expect(useRunStore.getState().guaranteeSymbolSpins).toBe(1);
+  expect(useRunStore.getState().banBrainSpins).toBe(2);
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(0);
 });
 
-test('store: Focus Serum side effect — neurons hidden for 5 spins, then visible', () => {
+test('store: Serum ban never leaves a brain on the reels while active (issue #32)', () => {
   freshRun({ cons_focus: 1 });
   useRunStore.getState().useConsumable('cons_focus');
-  expect(useRunStore.getState().hideNeuronsSpins).toBe(5);
-
-  for (let i = 5; i > 0; i--) {
-    useRunStore.getState().spin();
+  // banBrainSpins = 2: the next two spins must contain no brain.
+  for (let i = 0; i < 2; i++) {
+    const result = useRunStore.getState().spin();
     useRunStore.getState().setSpinning(false);
-    expect(useRunStore.getState().hideNeuronsSpins).toBe(i - 1);
+    expect(result?.reels.includes('brain')).toBe(false);
   }
-  expect(useRunStore.getState().hideNeuronsSpins).toBe(0);
 });
 
 test('store: consumable rejected when no charges remain', () => {
@@ -319,9 +319,13 @@ test('store: Tea restores a used ability', () => {
   expect(useRunStore.getState().abilitiesUsed).not.toContain('reroll');
 });
 
-test('store: Tea rejected when no abilities have been used', () => {
+test('store: Tea grants fallback free spins when no abilities were used (issue #32)', () => {
   freshRun({ cons_tea: 1 });
-  expect(useRunStore.getState().useConsumable('cons_tea')).toBe(false);
+  const before = useRunStore.getState().freeSpinsRemaining;
+  expect(useRunStore.getState().useConsumable('cons_tea')).toBe(true);
+  // fallbackSpins = 3, clamped to maxFreeSpins.
+  const expected = Math.min(before + 3, useRunStore.getState().maxFreeSpins);
+  expect(useRunStore.getState().freeSpinsRemaining).toBe(expected);
 });
 
 test('store: REROLL ability is 1-use per run — second call rejected', () => {
