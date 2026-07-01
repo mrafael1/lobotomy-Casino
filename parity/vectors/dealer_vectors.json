@@ -1,0 +1,399 @@
+{
+  "description": "Deterministic dealer: pickDealerItems(seed), evaluateDealerTrigger(input), and the in-run item effect table.",
+  "pickDealerItems": [
+    {
+      "seed": 1,
+      "expect": [
+        "item_pill",
+        "item_cocktail"
+      ]
+    },
+    {
+      "seed": 42,
+      "expect": [
+        "item_energy_drink",
+        "item_pill"
+      ]
+    },
+    {
+      "seed": 7777,
+      "expect": [
+        "item_pill",
+        "item_water"
+      ]
+    },
+    {
+      "seed": 123456,
+      "expect": [
+        "item_energy_drink",
+        "item_pill"
+      ]
+    },
+    {
+      "seed": 3735928559,
+      "expect": [
+        "item_water",
+        "item_cocktail"
+      ]
+    },
+    {
+      "seed": 99,
+      "expect": [
+        "item_energy_drink",
+        "item_pill"
+      ]
+    },
+    {
+      "seed": 1000,
+      "expect": [
+        "item_energy_drink",
+        "item_cocktail"
+      ]
+    },
+    {
+      "seed": 0,
+      "expect": [
+        "item_pill",
+        "item_water"
+      ]
+    },
+    {
+      "seed": 4294967295,
+      "expect": [
+        "item_water",
+        "item_cocktail"
+      ]
+    },
+    {
+      "seed": 31337,
+      "expect": [
+        "item_pill",
+        "item_cocktail"
+      ]
+    }
+  ],
+  "evaluateDealerTrigger": [
+    {
+      "input": {
+        "neurons": 70,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false
+      }
+    },
+    {
+      "input": {
+        "neurons": 65,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": true,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": false
+      }
+    },
+    {
+      "input": {
+        "neurons": 64,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 1,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": false
+      }
+    },
+    {
+      "input": {
+        "neurons": 35,
+        "startingNeurons": 100,
+        "spinCount": 8,
+        "dealerCount": 1,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": true,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 34,
+        "startingNeurons": 100,
+        "spinCount": 8,
+        "dealerCount": 2,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 90,
+        "startingNeurons": 100,
+        "spinCount": 2,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false
+      }
+    },
+    {
+      "input": {
+        "neurons": 50,
+        "startingNeurons": 100,
+        "spinCount": 10,
+        "dealerCount": 3,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 50,
+        "startingNeurons": 0,
+        "spinCount": 10,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": false,
+        "dealer35SafetyFired": false
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 1
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 2
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 3
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 7
+      },
+      "expect": {
+        "shouldTrigger": true,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 42
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 100
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 7777
+      },
+      "expect": {
+        "shouldTrigger": true,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 123456
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    },
+    {
+      "input": {
+        "neurons": 80,
+        "startingNeurons": 100,
+        "spinCount": 5,
+        "dealerCount": 0,
+        "dealerLastSpinCount": 0,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true,
+        "procSeed": 3735928559
+      },
+      "expect": {
+        "shouldTrigger": false,
+        "dealer65SafetyFired": true,
+        "dealer35SafetyFired": true
+      }
+    }
+  ],
+  "inRunItems": [
+    {
+      "id": "item_energy_drink",
+      "effect": {
+        "type": "skipDecay",
+        "spins": 5,
+        "forcedRandomBetSpins": 5
+      }
+    },
+    {
+      "id": "item_cocktail",
+      "effect": {
+        "type": "cocktailBoost",
+        "spins": 3,
+        "compulsiveSpins": 2
+      }
+    },
+    {
+      "id": "item_water",
+      "effect": {
+        "type": "addLucidity",
+        "amount": 40
+      }
+    },
+    {
+      "id": "item_pill",
+      "effect": {
+        "type": "guaranteedWin",
+        "spins": 3,
+        "blockPowersSpins": 5
+      }
+    }
+  ]
+}

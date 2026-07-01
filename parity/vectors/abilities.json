@@ -1,0 +1,5985 @@
+{
+  "description": "applyReroll/applyMoveColumn/applyCopyReel → AbilityOutcome. reroll rng from `seed`.",
+  "cases": [
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 6,
+        "coinsDelta": 6,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 8,
+        "coinsDelta": 8,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -16,
+        "coinsDelta": -16,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -16,
+        "coinsDelta": -16,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 10,
+        "coinsDelta": 10,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 15,
+        "coinsDelta": 15,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "vial"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "vial"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "vial"
+        ],
+        "scoreDelta": -16,
+        "coinsDelta": -16,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": -16,
+        "coinsDelta": -16,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -16,
+        "coinsDelta": -16,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 3,
+        "coinsDelta": 3,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 4,
+        "coinsDelta": 4,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "syringe",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "syringe",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "syringe",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "brain",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "brain",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "brain",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 3,
+        "coinsDelta": 3,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 4,
+        "coinsDelta": 4,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "vial",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": -8,
+        "coinsDelta": -8,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 1,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 42,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "reroll",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "seed": 7777,
+      "lucidityMultiplier": 1.5625,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 7,
+        "coinsDelta": 7,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": 10,
+        "coinsDelta": 10,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": 18,
+        "coinsDelta": 18,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 7,
+        "coinsDelta": 7,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "vial"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 40,
+        "coinsDelta": 40,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 70,
+        "coinsDelta": 70,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 10,
+        "coinsDelta": 10,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 17,
+        "coinsDelta": 17,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": -18,
+        "coinsDelta": -18,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -18,
+        "coinsDelta": -18,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "scoreDelta": -10,
+        "coinsDelta": -10,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "pill"
+        ],
+        "scoreDelta": -18,
+        "coinsDelta": -18,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 7,
+        "coinsDelta": 7,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 50,
+        "coinsDelta": 50,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 88,
+        "coinsDelta": 88,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 7,
+        "coinsDelta": 7,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 3,
+        "coinsDelta": 3,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "syringe",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "syringe",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 3,
+        "coinsDelta": 3,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -9,
+        "coinsDelta": -9,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 0,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -9,
+        "coinsDelta": -9,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "flatline",
+          "eye"
+        ],
+        "scoreDelta": -5,
+        "coinsDelta": -5,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "flatline",
+          "eye"
+        ],
+        "scoreDelta": -9,
+        "coinsDelta": -9,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 5,
+        "coinsDelta": 5,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": -1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "brain"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "pill"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 2,
+      "direction": 1,
+      "lucidityMultiplier": 1.75,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "pill"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 0,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "syringe"
+        ],
+        "scoreDelta": 13,
+        "coinsDelta": 13,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 0,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 1,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 1,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 2,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "syringe",
+          "pill",
+          "syringe"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "sourceReel": 2,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 6,
+        "coinsDelta": 6,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "brain",
+          "eye"
+        ],
+        "scoreDelta": 12,
+        "coinsDelta": 12,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "brain"
+        ],
+        "scoreDelta": -13,
+        "coinsDelta": -13,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 50,
+        "coinsDelta": 50,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 50,
+        "coinsDelta": 50,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 63,
+        "coinsDelta": 63,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "pill",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "pill"
+        ],
+        "scoreDelta": 9,
+        "coinsDelta": 9,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 63,
+        "coinsDelta": 63,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 0,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 0,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 1,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "vial",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 4,
+        "coinsDelta": 4,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 1,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "vial"
+        ],
+        "scoreDelta": 4,
+        "coinsDelta": 4,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 2,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "vial",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "sourceReel": 2,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 0,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "book"
+        ],
+        "scoreDelta": 13,
+        "coinsDelta": 13,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 1,
+      "targetReel": 2,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "book",
+          "book"
+        ],
+        "scoreDelta": 13,
+        "coinsDelta": 13,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 0,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "book",
+          "eye"
+        ],
+        "scoreDelta": -6,
+        "coinsDelta": -6,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "copy",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "sourceReel": 2,
+      "targetReel": 1,
+      "lucidityMultiplier": 1.25,
+      "pattern23Triple": false,
+      "learningActive": false,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 7,
+        "coinsDelta": 7,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "syringe"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.5,
+      "pattern23Triple": true,
+      "learningActive": true,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "syringe"
+        ],
+        "scoreDelta": 15,
+        "coinsDelta": 15,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "brain",
+        "eye",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.5,
+      "pattern23Triple": true,
+      "learningActive": true,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "brain",
+          "pill",
+          "eye"
+        ],
+        "scoreDelta": -30,
+        "coinsDelta": -30,
+        "isJackpot": false,
+        "winType": "miss",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "eye",
+        "pill",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.5,
+      "pattern23Triple": true,
+      "learningActive": true,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "eye",
+          "syringe",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "flatline",
+        "vial",
+        "flatline"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.5,
+      "pattern23Triple": true,
+      "learningActive": true,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "flatline",
+          "flatline",
+          "flatline"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "triple",
+        "freeSpinsGranted": 0
+      }
+    },
+    {
+      "op": "move",
+      "reels": [
+        "book",
+        "book",
+        "eye"
+      ],
+      "reelIndex": 1,
+      "direction": 1,
+      "lucidityMultiplier": 1.5,
+      "pattern23Triple": true,
+      "learningActive": true,
+      "allowFreeSpinGrant": true,
+      "expect": {
+        "reels": [
+          "book",
+          "eye",
+          "eye"
+        ],
+        "scoreDelta": 0,
+        "coinsDelta": 0,
+        "isJackpot": false,
+        "winType": "pair",
+        "freeSpinsGranted": 0
+      }
+    }
+  ]
+}

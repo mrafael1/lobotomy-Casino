@@ -1,0 +1,905 @@
+{
+  "description": "Math.round(value * multiplier) — JS half-up. Mirror with floor(x + 0.5).",
+  "cases": [
+    {
+      "value": 0,
+      "multiplier": 0.5,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.1,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.15,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.25,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.4,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.5,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.5625,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 1.75,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 2,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 2.5,
+      "expect": 0
+    },
+    {
+      "value": 0,
+      "multiplier": 3,
+      "expect": 0
+    },
+    {
+      "value": 3,
+      "multiplier": 0.5,
+      "expect": 2
+    },
+    {
+      "value": 3,
+      "multiplier": 1,
+      "expect": 3
+    },
+    {
+      "value": 3,
+      "multiplier": 1.1,
+      "expect": 3
+    },
+    {
+      "value": 3,
+      "multiplier": 1.15,
+      "expect": 3
+    },
+    {
+      "value": 3,
+      "multiplier": 1.25,
+      "expect": 4
+    },
+    {
+      "value": 3,
+      "multiplier": 1.4,
+      "expect": 4
+    },
+    {
+      "value": 3,
+      "multiplier": 1.5,
+      "expect": 5
+    },
+    {
+      "value": 3,
+      "multiplier": 1.5625,
+      "expect": 5
+    },
+    {
+      "value": 3,
+      "multiplier": 1.75,
+      "expect": 5
+    },
+    {
+      "value": 3,
+      "multiplier": 2,
+      "expect": 6
+    },
+    {
+      "value": 3,
+      "multiplier": 2.5,
+      "expect": 8
+    },
+    {
+      "value": 3,
+      "multiplier": 3,
+      "expect": 9
+    },
+    {
+      "value": 5,
+      "multiplier": 0.5,
+      "expect": 3
+    },
+    {
+      "value": 5,
+      "multiplier": 1,
+      "expect": 5
+    },
+    {
+      "value": 5,
+      "multiplier": 1.1,
+      "expect": 6
+    },
+    {
+      "value": 5,
+      "multiplier": 1.15,
+      "expect": 6
+    },
+    {
+      "value": 5,
+      "multiplier": 1.25,
+      "expect": 6
+    },
+    {
+      "value": 5,
+      "multiplier": 1.4,
+      "expect": 7
+    },
+    {
+      "value": 5,
+      "multiplier": 1.5,
+      "expect": 8
+    },
+    {
+      "value": 5,
+      "multiplier": 1.5625,
+      "expect": 8
+    },
+    {
+      "value": 5,
+      "multiplier": 1.75,
+      "expect": 9
+    },
+    {
+      "value": 5,
+      "multiplier": 2,
+      "expect": 10
+    },
+    {
+      "value": 5,
+      "multiplier": 2.5,
+      "expect": 13
+    },
+    {
+      "value": 5,
+      "multiplier": 3,
+      "expect": 15
+    },
+    {
+      "value": 7,
+      "multiplier": 0.5,
+      "expect": 4
+    },
+    {
+      "value": 7,
+      "multiplier": 1,
+      "expect": 7
+    },
+    {
+      "value": 7,
+      "multiplier": 1.1,
+      "expect": 8
+    },
+    {
+      "value": 7,
+      "multiplier": 1.15,
+      "expect": 8
+    },
+    {
+      "value": 7,
+      "multiplier": 1.25,
+      "expect": 9
+    },
+    {
+      "value": 7,
+      "multiplier": 1.4,
+      "expect": 10
+    },
+    {
+      "value": 7,
+      "multiplier": 1.5,
+      "expect": 11
+    },
+    {
+      "value": 7,
+      "multiplier": 1.5625,
+      "expect": 11
+    },
+    {
+      "value": 7,
+      "multiplier": 1.75,
+      "expect": 12
+    },
+    {
+      "value": 7,
+      "multiplier": 2,
+      "expect": 14
+    },
+    {
+      "value": 7,
+      "multiplier": 2.5,
+      "expect": 18
+    },
+    {
+      "value": 7,
+      "multiplier": 3,
+      "expect": 21
+    },
+    {
+      "value": 10,
+      "multiplier": 0.5,
+      "expect": 5
+    },
+    {
+      "value": 10,
+      "multiplier": 1,
+      "expect": 10
+    },
+    {
+      "value": 10,
+      "multiplier": 1.1,
+      "expect": 11
+    },
+    {
+      "value": 10,
+      "multiplier": 1.15,
+      "expect": 12
+    },
+    {
+      "value": 10,
+      "multiplier": 1.25,
+      "expect": 13
+    },
+    {
+      "value": 10,
+      "multiplier": 1.4,
+      "expect": 14
+    },
+    {
+      "value": 10,
+      "multiplier": 1.5,
+      "expect": 15
+    },
+    {
+      "value": 10,
+      "multiplier": 1.5625,
+      "expect": 16
+    },
+    {
+      "value": 10,
+      "multiplier": 1.75,
+      "expect": 18
+    },
+    {
+      "value": 10,
+      "multiplier": 2,
+      "expect": 20
+    },
+    {
+      "value": 10,
+      "multiplier": 2.5,
+      "expect": 25
+    },
+    {
+      "value": 10,
+      "multiplier": 3,
+      "expect": 30
+    },
+    {
+      "value": 11,
+      "multiplier": 0.5,
+      "expect": 6
+    },
+    {
+      "value": 11,
+      "multiplier": 1,
+      "expect": 11
+    },
+    {
+      "value": 11,
+      "multiplier": 1.1,
+      "expect": 12
+    },
+    {
+      "value": 11,
+      "multiplier": 1.15,
+      "expect": 13
+    },
+    {
+      "value": 11,
+      "multiplier": 1.25,
+      "expect": 14
+    },
+    {
+      "value": 11,
+      "multiplier": 1.4,
+      "expect": 15
+    },
+    {
+      "value": 11,
+      "multiplier": 1.5,
+      "expect": 17
+    },
+    {
+      "value": 11,
+      "multiplier": 1.5625,
+      "expect": 17
+    },
+    {
+      "value": 11,
+      "multiplier": 1.75,
+      "expect": 19
+    },
+    {
+      "value": 11,
+      "multiplier": 2,
+      "expect": 22
+    },
+    {
+      "value": 11,
+      "multiplier": 2.5,
+      "expect": 28
+    },
+    {
+      "value": 11,
+      "multiplier": 3,
+      "expect": 33
+    },
+    {
+      "value": 13,
+      "multiplier": 0.5,
+      "expect": 7
+    },
+    {
+      "value": 13,
+      "multiplier": 1,
+      "expect": 13
+    },
+    {
+      "value": 13,
+      "multiplier": 1.1,
+      "expect": 14
+    },
+    {
+      "value": 13,
+      "multiplier": 1.15,
+      "expect": 15
+    },
+    {
+      "value": 13,
+      "multiplier": 1.25,
+      "expect": 16
+    },
+    {
+      "value": 13,
+      "multiplier": 1.4,
+      "expect": 18
+    },
+    {
+      "value": 13,
+      "multiplier": 1.5,
+      "expect": 20
+    },
+    {
+      "value": 13,
+      "multiplier": 1.5625,
+      "expect": 20
+    },
+    {
+      "value": 13,
+      "multiplier": 1.75,
+      "expect": 23
+    },
+    {
+      "value": 13,
+      "multiplier": 2,
+      "expect": 26
+    },
+    {
+      "value": 13,
+      "multiplier": 2.5,
+      "expect": 33
+    },
+    {
+      "value": 13,
+      "multiplier": 3,
+      "expect": 39
+    },
+    {
+      "value": 15,
+      "multiplier": 0.5,
+      "expect": 8
+    },
+    {
+      "value": 15,
+      "multiplier": 1,
+      "expect": 15
+    },
+    {
+      "value": 15,
+      "multiplier": 1.1,
+      "expect": 17
+    },
+    {
+      "value": 15,
+      "multiplier": 1.15,
+      "expect": 17
+    },
+    {
+      "value": 15,
+      "multiplier": 1.25,
+      "expect": 19
+    },
+    {
+      "value": 15,
+      "multiplier": 1.4,
+      "expect": 21
+    },
+    {
+      "value": 15,
+      "multiplier": 1.5,
+      "expect": 23
+    },
+    {
+      "value": 15,
+      "multiplier": 1.5625,
+      "expect": 23
+    },
+    {
+      "value": 15,
+      "multiplier": 1.75,
+      "expect": 26
+    },
+    {
+      "value": 15,
+      "multiplier": 2,
+      "expect": 30
+    },
+    {
+      "value": 15,
+      "multiplier": 2.5,
+      "expect": 38
+    },
+    {
+      "value": 15,
+      "multiplier": 3,
+      "expect": 45
+    },
+    {
+      "value": 17,
+      "multiplier": 0.5,
+      "expect": 9
+    },
+    {
+      "value": 17,
+      "multiplier": 1,
+      "expect": 17
+    },
+    {
+      "value": 17,
+      "multiplier": 1.1,
+      "expect": 19
+    },
+    {
+      "value": 17,
+      "multiplier": 1.15,
+      "expect": 20
+    },
+    {
+      "value": 17,
+      "multiplier": 1.25,
+      "expect": 21
+    },
+    {
+      "value": 17,
+      "multiplier": 1.4,
+      "expect": 24
+    },
+    {
+      "value": 17,
+      "multiplier": 1.5,
+      "expect": 26
+    },
+    {
+      "value": 17,
+      "multiplier": 1.5625,
+      "expect": 27
+    },
+    {
+      "value": 17,
+      "multiplier": 1.75,
+      "expect": 30
+    },
+    {
+      "value": 17,
+      "multiplier": 2,
+      "expect": 34
+    },
+    {
+      "value": 17,
+      "multiplier": 2.5,
+      "expect": 43
+    },
+    {
+      "value": 17,
+      "multiplier": 3,
+      "expect": 51
+    },
+    {
+      "value": 20,
+      "multiplier": 0.5,
+      "expect": 10
+    },
+    {
+      "value": 20,
+      "multiplier": 1,
+      "expect": 20
+    },
+    {
+      "value": 20,
+      "multiplier": 1.1,
+      "expect": 22
+    },
+    {
+      "value": 20,
+      "multiplier": 1.15,
+      "expect": 23
+    },
+    {
+      "value": 20,
+      "multiplier": 1.25,
+      "expect": 25
+    },
+    {
+      "value": 20,
+      "multiplier": 1.4,
+      "expect": 28
+    },
+    {
+      "value": 20,
+      "multiplier": 1.5,
+      "expect": 30
+    },
+    {
+      "value": 20,
+      "multiplier": 1.5625,
+      "expect": 31
+    },
+    {
+      "value": 20,
+      "multiplier": 1.75,
+      "expect": 35
+    },
+    {
+      "value": 20,
+      "multiplier": 2,
+      "expect": 40
+    },
+    {
+      "value": 20,
+      "multiplier": 2.5,
+      "expect": 50
+    },
+    {
+      "value": 20,
+      "multiplier": 3,
+      "expect": 60
+    },
+    {
+      "value": 23,
+      "multiplier": 0.5,
+      "expect": 12
+    },
+    {
+      "value": 23,
+      "multiplier": 1,
+      "expect": 23
+    },
+    {
+      "value": 23,
+      "multiplier": 1.1,
+      "expect": 25
+    },
+    {
+      "value": 23,
+      "multiplier": 1.15,
+      "expect": 26
+    },
+    {
+      "value": 23,
+      "multiplier": 1.25,
+      "expect": 29
+    },
+    {
+      "value": 23,
+      "multiplier": 1.4,
+      "expect": 32
+    },
+    {
+      "value": 23,
+      "multiplier": 1.5,
+      "expect": 35
+    },
+    {
+      "value": 23,
+      "multiplier": 1.5625,
+      "expect": 36
+    },
+    {
+      "value": 23,
+      "multiplier": 1.75,
+      "expect": 40
+    },
+    {
+      "value": 23,
+      "multiplier": 2,
+      "expect": 46
+    },
+    {
+      "value": 23,
+      "multiplier": 2.5,
+      "expect": 58
+    },
+    {
+      "value": 23,
+      "multiplier": 3,
+      "expect": 69
+    },
+    {
+      "value": 25,
+      "multiplier": 0.5,
+      "expect": 13
+    },
+    {
+      "value": 25,
+      "multiplier": 1,
+      "expect": 25
+    },
+    {
+      "value": 25,
+      "multiplier": 1.1,
+      "expect": 28
+    },
+    {
+      "value": 25,
+      "multiplier": 1.15,
+      "expect": 29
+    },
+    {
+      "value": 25,
+      "multiplier": 1.25,
+      "expect": 31
+    },
+    {
+      "value": 25,
+      "multiplier": 1.4,
+      "expect": 35
+    },
+    {
+      "value": 25,
+      "multiplier": 1.5,
+      "expect": 38
+    },
+    {
+      "value": 25,
+      "multiplier": 1.5625,
+      "expect": 39
+    },
+    {
+      "value": 25,
+      "multiplier": 1.75,
+      "expect": 44
+    },
+    {
+      "value": 25,
+      "multiplier": 2,
+      "expect": 50
+    },
+    {
+      "value": 25,
+      "multiplier": 2.5,
+      "expect": 63
+    },
+    {
+      "value": 25,
+      "multiplier": 3,
+      "expect": 75
+    },
+    {
+      "value": 35,
+      "multiplier": 0.5,
+      "expect": 18
+    },
+    {
+      "value": 35,
+      "multiplier": 1,
+      "expect": 35
+    },
+    {
+      "value": 35,
+      "multiplier": 1.1,
+      "expect": 39
+    },
+    {
+      "value": 35,
+      "multiplier": 1.15,
+      "expect": 40
+    },
+    {
+      "value": 35,
+      "multiplier": 1.25,
+      "expect": 44
+    },
+    {
+      "value": 35,
+      "multiplier": 1.4,
+      "expect": 49
+    },
+    {
+      "value": 35,
+      "multiplier": 1.5,
+      "expect": 53
+    },
+    {
+      "value": 35,
+      "multiplier": 1.5625,
+      "expect": 55
+    },
+    {
+      "value": 35,
+      "multiplier": 1.75,
+      "expect": 61
+    },
+    {
+      "value": 35,
+      "multiplier": 2,
+      "expect": 70
+    },
+    {
+      "value": 35,
+      "multiplier": 2.5,
+      "expect": 88
+    },
+    {
+      "value": 35,
+      "multiplier": 3,
+      "expect": 105
+    },
+    {
+      "value": 50,
+      "multiplier": 0.5,
+      "expect": 25
+    },
+    {
+      "value": 50,
+      "multiplier": 1,
+      "expect": 50
+    },
+    {
+      "value": 50,
+      "multiplier": 1.1,
+      "expect": 55
+    },
+    {
+      "value": 50,
+      "multiplier": 1.15,
+      "expect": 57
+    },
+    {
+      "value": 50,
+      "multiplier": 1.25,
+      "expect": 63
+    },
+    {
+      "value": 50,
+      "multiplier": 1.4,
+      "expect": 70
+    },
+    {
+      "value": 50,
+      "multiplier": 1.5,
+      "expect": 75
+    },
+    {
+      "value": 50,
+      "multiplier": 1.5625,
+      "expect": 78
+    },
+    {
+      "value": 50,
+      "multiplier": 1.75,
+      "expect": 88
+    },
+    {
+      "value": 50,
+      "multiplier": 2,
+      "expect": 100
+    },
+    {
+      "value": 50,
+      "multiplier": 2.5,
+      "expect": 125
+    },
+    {
+      "value": 50,
+      "multiplier": 3,
+      "expect": 150
+    },
+    {
+      "value": 200,
+      "multiplier": 0.5,
+      "expect": 100
+    },
+    {
+      "value": 200,
+      "multiplier": 1,
+      "expect": 200
+    },
+    {
+      "value": 200,
+      "multiplier": 1.1,
+      "expect": 220
+    },
+    {
+      "value": 200,
+      "multiplier": 1.15,
+      "expect": 230
+    },
+    {
+      "value": 200,
+      "multiplier": 1.25,
+      "expect": 250
+    },
+    {
+      "value": 200,
+      "multiplier": 1.4,
+      "expect": 280
+    },
+    {
+      "value": 200,
+      "multiplier": 1.5,
+      "expect": 300
+    },
+    {
+      "value": 200,
+      "multiplier": 1.5625,
+      "expect": 313
+    },
+    {
+      "value": 200,
+      "multiplier": 1.75,
+      "expect": 350
+    },
+    {
+      "value": 200,
+      "multiplier": 2,
+      "expect": 400
+    },
+    {
+      "value": 200,
+      "multiplier": 2.5,
+      "expect": 500
+    },
+    {
+      "value": 200,
+      "multiplier": 3,
+      "expect": 600
+    }
+  ]
+}

@@ -1,0 +1,205 @@
+{
+  "description": "planLucidityGain(prevCoins, gain, abilitiesUsed, seed). Restores one spent power per 50-coin crossing; list shrinks each crossing.",
+  "coinsPerRestore": 50,
+  "cases": [
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 0,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 1
+      },
+      "expect": {
+        "lucidityCoins": 0,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "restores": []
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 49,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 1
+      },
+      "expect": {
+        "lucidityCoins": 49,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "restores": []
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 50,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 1
+      },
+      "expect": {
+        "lucidityCoins": 50,
+        "abilitiesUsed": [
+          "reroll",
+          "memory"
+        ],
+        "restores": [
+          "shift"
+        ]
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 49,
+        "gain": 1,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 42
+      },
+      "expect": {
+        "lucidityCoins": 50,
+        "abilitiesUsed": [
+          "reroll",
+          "memory"
+        ],
+        "restores": [
+          "shift"
+        ]
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 40,
+        "gain": 120,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 7777
+      },
+      "expect": {
+        "lucidityCoins": 160,
+        "abilitiesUsed": [],
+        "restores": [
+          "reroll",
+          "shift",
+          "memory"
+        ]
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 200,
+        "abilitiesUsed": [
+          "reroll"
+        ],
+        "seed": 123
+      },
+      "expect": {
+        "lucidityCoins": 200,
+        "abilitiesUsed": [],
+        "restores": [
+          "reroll"
+        ]
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 100,
+        "abilitiesUsed": [],
+        "seed": 9
+      },
+      "expect": {
+        "lucidityCoins": 100,
+        "abilitiesUsed": [],
+        "restores": []
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 95,
+        "gain": 10,
+        "abilitiesUsed": [
+          "shift",
+          "memory"
+        ],
+        "seed": 555
+      },
+      "expect": {
+        "lucidityCoins": 105,
+        "abilitiesUsed": [
+          "shift"
+        ],
+        "restores": [
+          "memory"
+        ]
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 10,
+        "gain": -5,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "seed": 1
+      },
+      "expect": {
+        "lucidityCoins": 5,
+        "abilitiesUsed": [
+          "reroll",
+          "shift",
+          "memory"
+        ],
+        "restores": []
+      }
+    },
+    {
+      "input": {
+        "prevCoins": 0,
+        "gain": 150,
+        "abilitiesUsed": [
+          "reroll",
+          "reroll",
+          "shift"
+        ],
+        "seed": 8888
+      },
+      "expect": {
+        "lucidityCoins": 150,
+        "abilitiesUsed": [],
+        "restores": [
+          "reroll",
+          "reroll",
+          "shift"
+        ]
+      }
+    }
+  ]
+}

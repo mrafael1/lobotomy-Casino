@@ -1,0 +1,640 @@
+extends Node2D
+
+## Main slot-machine scene (Milestone 2, first increment): the playable run loop —
+## start run -> spin -> reel/result reveal -> HUD update -> ending -> bank/restart,
+## driven entirely by RunStateStore (which delegates rules to the parity-verified
+## core). Built programmatically so every position comes straight from the
+## documented source-pixel constants in src/content/machineAssets.ts (alignment is
+## correct by construction, mirroring the Expo renderer).
+##
+## Coordinate space is the 160x320 virtual canvas (project stretch scales it to the
+## device). Art is loaded by absolute path from ../assets so the Expo project stays
+## the single source of art (no duplication).
+
+const SRC_W := 160.0
+const SRC_H := 320.0
+const ASSET_SCALE := 8.0 # machine PNGs are 8x the 160x320 source (1280x2560)
+
+# Geometry mirrored from src/content/machineAssets.ts (source px).
+const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
+const REEL_WINDOW := { "top": 170.0, "height": 30.0 }
+const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
+const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
+const SYMBOL_TARGET_H := 26.0 # fit within the ~30px reel hole
+
+# Machine-mounted power button hit rects (source px).
+const POWER_HITS := {
+	"reroll": { "left": 21.0, "top": 223.0, "width": 15.0, "height": 15.0 },
+	"shift": { "left": 36.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"memory": { "left": 49.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+}
+# Per-reel up/down shift-arrow hit rects (source px).
+const SHIFT_ARROW_HITS := [
+	{ "up": { "left": 33.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 33.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+	{ "up": { "left": 65.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 65.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+	{ "up": { "left": 97.0, "top": 153.0, "width": 21.0, "height": 15.0 }, "down": { "left": 97.0, "top": 204.0, "width": 21.0, "height": 15.0 } },
+]
+
+const SHOP_SCENE := "res://scenes/shop_scene.tscn"
+
+# Debug-grant Shift/Memory + test consumables when a run is started standalone
+# (machine opened directly, not via the shop). The shop is the real source now.
+const DEBUG_GRANT := false
+
+# Visible (non-book) symbols used for the spin-blur animation.
+const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
+
+# Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
+const ITEM_ICONS := {
+	"cons_focus": "items/focus_serum.png",
+	"cons_white_powder": "items/white_powder.png",
+	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_tea": "items/herbal_tea.png",
+	"item_energy_drink": "items/energy_drink.png",
+	"item_cocktail": "items/cocktail.png",
+	"item_water": "items/water.png",
+	"item_pill": "items/pill.png",
+}
+
+var _reel_sprites: Array[Sprite2D] = []
+var _hud_labels := {}
+var _overlay: Control = null
+var _dealer_overlay: Control = null
+var _spin_button: Button = null
+var _bet_button: Button = null
+var _power_buttons := {}      # id -> Button
+var _stash_buttons: Array[Button] = []
+var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
+var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
+var _font: FontFile = null
+var _tex_cache := {}
+
+# Reveal animation state
+var _spinning_anim := false
+var _anim_elapsed := 0.0
+var _blur_accum := 0.0
+var _final_reels: Array = []
+var _reel_stop_times := [0.55, 0.8, 1.05]
+
+func _ready() -> void:
+	_font = _load_font("font/DTM-Mono.otf")
+	# Draw order (back -> front): reel background -> symbols -> cabinet (with
+	# transparent holes that mask symbol overflow) -> HUD -> spin button.
+	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
+	_build_reels()
+	_build_full_canvas_sprite("machine new view/final_machine.png")
+	_build_hud()
+	_build_spin_button()
+	_build_bet_button()
+	_build_power_buttons()
+	_build_stash()
+	RunStateStore.state_changed.connect(_update_hud)
+	_enter_run()
+
+# ── asset loading (absolute path into ../assets) ──────────────────────────────────
+
+static func _assets_dir() -> String:
+	return ProjectSettings.globalize_path("res://").path_join("../assets/images")
+
+func _load_texture(rel: String, mipmaps := false) -> Texture2D:
+	if _tex_cache.has(rel):
+		return _tex_cache[rel]
+	var path := _assets_dir().path_join(rel)
+	var img := Image.new()
+	if img.load(path) != OK:
+		push_warning("Missing art: " + path)
+		return null
+	if mipmaps:
+		img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_tex_cache[rel] = tex
+	return tex
+
+func _load_font(rel: String) -> FontFile:
+	var path := ProjectSettings.globalize_path("res://").path_join("../assets").path_join(rel)
+	var f := FontFile.new()
+	if f.load_dynamic_font(path) != OK:
+		push_warning("Missing font: " + path)
+		return null
+	return f
+
+# ── scene construction ────────────────────────────────────────────────────────────
+
+func _build_full_canvas_sprite(rel: String) -> void:
+	var tex := _load_texture(rel, true)
+	if tex == null:
+		# Only the cabinet gets a visible fallback so the scene isn't blank.
+		if rel.ends_with("/final_machine.png"):
+			var fallback := ColorRect.new()
+			fallback.color = Color(0.06, 0.05, 0.08)
+			fallback.size = Vector2(SRC_W, SRC_H)
+			add_child(fallback)
+		return
+	var spr := Sprite2D.new()
+	spr.texture = tex
+	spr.centered = false
+	spr.position = Vector2.ZERO
+	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	# Linear+mipmaps so the 8x art downscales crisply rather than aliasing.
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	add_child(spr)
+
+func _build_reels() -> void:
+	var cy := REEL_WINDOW["top"] + REEL_WINDOW["height"] * 0.5
+	for i in 3:
+		var s := Sprite2D.new()
+		s.centered = true
+		s.position = Vector2(REEL_CELL_CENTERS[i], cy)
+		s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(s)
+		_reel_sprites.append(s)
+
+func _set_reel_symbol(index: int, symbol_id: String) -> void:
+	var tex := _load_texture("symbols/%s.png" % symbol_id)
+	var s := _reel_sprites[index]
+	if tex == null:
+		return
+	s.texture = tex
+	var k := SYMBOL_TARGET_H / tex.get_height()
+	s.scale = Vector2(k, k)
+
+func _build_hud() -> void:
+	var lines := ["neurons", "score", "lucidity", "free"]
+	var labels := ["NEURONS", "SCORE", "LUCID", "FREE"]
+	var y := TV_SCREEN["top"] + 4.0
+	for i in lines.size():
+		var l := Label.new()
+		l.position = Vector2(TV_SCREEN["left"] + 4.0, y)
+		l.add_theme_font_size_override("font_size", 8)
+		if _font != null:
+			l.add_theme_font_override("font", _font)
+		l.add_theme_color_override("font_color", Color(0.7, 1.0, 0.85))
+		l.text = "%s --" % labels[i]
+		add_child(l)
+		_hud_labels[lines[i]] = l
+		y += 11.0
+
+func _build_spin_button() -> void:
+	# A plain SPIN button over the lever hit area so the loop is testable now;
+	# the 6-frame lever animation is later polish.
+	_spin_button = Button.new()
+	_spin_button.text = "SPIN"
+	_spin_button.position = Vector2(LEVER_HIT["left"] - 10.0, LEVER_HIT["top"])
+	_spin_button.size = Vector2(SRC_W - (LEVER_HIT["left"] - 10.0) - 2.0, LEVER_HIT["height"])
+	_spin_button.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_spin_button.add_theme_font_override("font", _font)
+	_spin_button.pressed.connect(_do_spin)
+	add_child(_spin_button)
+
+# ── run loop ──────────────────────────────────────────────────────────────────────
+
+# Entered from the shop (which already started the run) or standalone. If no run is
+# in progress, begin one from meta so the machine works on its own too.
+func _enter_run() -> void:
+	if RunStateStore.runPhase != "running":
+		_begin_fresh_run()
+	_sync_visuals()
+
+func _begin_fresh_run() -> void:
+	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
+	var consumables: Dictionary = MetaStateStore.get_pending_consumables().duplicate(true)
+	if DEBUG_GRANT:
+		for p in ["perm_shift", "perm_memory"]:
+			if not permanents.has(p):
+				permanents.append(p)
+		if consumables.is_empty():
+			consumables = { "cons_focus": 1, "item_water": 1 }
+	RunStateStore.start_new_run(permanents, consumables)
+
+func _sync_visuals() -> void:
+	if _overlay != null:
+		_overlay.queue_free()
+		_overlay = null
+	_clear_targeting()
+	if RunStateStore.lastResult != null:
+		_refresh_reels_from_state()
+	else:
+		for i in 3:
+			_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
+	_update_hud()
+
+func _to_shop() -> void:
+	get_tree().change_scene_to_file(SHOP_SCENE)
+
+func _do_spin() -> void:
+	if _spinning_anim:
+		return
+	_clear_targeting()
+	_copy_source = -1 # abandon any half-armed white-powder copy
+	var result: Variant = RunStateStore.spin()
+	if result == null:
+		return
+	_final_reels = result["reels"]
+	_spinning_anim = true
+	_anim_elapsed = 0.0
+	_blur_accum = 0.0
+	_spin_button.disabled = true
+
+func _process(delta: float) -> void:
+	if not _spinning_anim:
+		return
+	_anim_elapsed += delta
+	_blur_accum += delta
+	if _blur_accum >= 0.05:
+		_blur_accum = 0.0
+		for i in 3:
+			if _anim_elapsed < _reel_stop_times[i]:
+				_set_reel_symbol(i, VISIBLE_SYMBOLS[randi() % VISIBLE_SYMBOLS.size()])
+	if _anim_elapsed >= _reel_stop_times[2]:
+		for i in 3:
+			_set_reel_symbol(i, String(_final_reels[i]))
+		_spinning_anim = false
+		_on_reveal_complete()
+
+func _on_reveal_complete() -> void:
+	RunStateStore.set_spinning(false)
+	_update_hud()
+	_spin_button.disabled = false
+	if _check_ending():
+		return
+	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
+	RunStateStore.check_dealer_trigger()
+	if RunStateStore.dealerIncoming:
+		_show_dealer_incoming()
+
+func _update_hud() -> void:
+	if _hud_labels.is_empty():
+		return
+	_hud_labels["neurons"].text = "NEURONS %d" % RunStateStore.neurons
+	_hud_labels["score"].text = "SCORE %d" % RunStateStore.scoreEarned
+	_hud_labels["lucidity"].text = "LUCID %d" % RunStateStore.lucidityCoins
+	_hud_labels["free"].text = "FREE %d" % RunStateStore.freeSpinsRemaining
+	_refresh_controls()
+
+func _refresh_reels_from_state() -> void:
+	var lr: Variant = RunStateStore.lastResult
+	if lr == null:
+		return
+	for i in 3:
+		_set_reel_symbol(i, String(lr["reels"][i]))
+
+# ── bet / powers / stash controls ─────────────────────────────────────────────────
+
+func _build_bet_button() -> void:
+	_bet_button = Button.new()
+	_bet_button.position = Vector2(4, LEVER_HIT["top"])
+	_bet_button.size = Vector2(28, 14)
+	_bet_button.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_bet_button.add_theme_font_override("font", _font)
+	_bet_button.pressed.connect(_cycle_bet)
+	add_child(_bet_button)
+
+func _cycle_bet() -> void:
+	if not RunStateStore._can_act():
+		return
+	RunStateStore.set_bet_multiplier((RunStateStore.betMultiplier % 3) + 1)
+
+func _build_power_buttons() -> void:
+	for id in ["reroll", "shift", "memory"]:
+		var hit: Dictionary = POWER_HITS[id]
+		var b := Button.new()
+		b.text = id.substr(0, 1).to_upper()
+		b.position = Vector2(hit["left"], hit["top"])
+		b.size = Vector2(maxf(hit["width"], 11.0), hit["height"])
+		b.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(_on_power_pressed.bind(id))
+		add_child(b)
+		_power_buttons[id] = b
+
+func _build_stash() -> void:
+	var y := 240.0
+	for i in Consumables.MAX_CONSUMABLE_SLOTS:
+		var b := Button.new()
+		b.position = Vector2(95.0 + i * 30.0, y)
+		b.size = Vector2(28, 14)
+		b.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(_on_stash_pressed.bind(i))
+		add_child(b)
+		_stash_buttons.append(b)
+
+# Snapshot of the stash expanded to one entry per copy (matches buildStashSlots).
+func _stash_slots() -> Array:
+	var slots: Array = []
+	var stash: Dictionary = RunStateStore.runConsumables
+	for entry in stash:
+		var copies := int(stash[entry])
+		for _k in copies:
+			if slots.size() < Consumables.MAX_CONSUMABLE_SLOTS:
+				slots.append(String(entry))
+	return slots
+
+func _refresh_controls() -> void:
+	if _bet_button != null:
+		_bet_button.text = "x%d" % RunStateStore.betMultiplier
+		_bet_button.disabled = not RunStateStore._can_act()
+
+	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim \
+		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0
+	if not _power_buttons.is_empty():
+		var used: Array = RunStateStore.abilitiesUsed
+		var owned: Array = RunStateStore.ownedUpgrades
+		_power_buttons["reroll"].disabled = not (can_use and not used.has("reroll"))
+		_power_buttons["shift"].disabled = not (can_use and owned.has("perm_shift") and not used.has("shift"))
+		_power_buttons["memory"].disabled = not (can_use and owned.has("perm_memory") and not used.has("memory"))
+
+	var slots := _stash_slots()
+	for i in _stash_buttons.size():
+		var b := _stash_buttons[i]
+		if i < slots.size():
+			b.text = _short_name(slots[i])
+			b.icon = _icon_for(slots[i])
+			b.expand_icon = true
+			b.disabled = not RunStateStore._can_act()
+		else:
+			b.text = "--"
+			b.icon = null
+			b.disabled = true
+
+func _short_name(consumable_id: String) -> String:
+	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
+
+func _icon_for(id: String) -> Texture2D:
+	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+
+# ── power targeting ────────────────────────────────────────────────────────────────
+
+func _on_power_pressed(id: String) -> void:
+	if _targeting_layer != null:
+		_clear_targeting()
+		return
+	if id == "shift":
+		_arm_shift_targets()
+	else:
+		# reroll / memory pick a single reel.
+		_arm_reel_picker(_apply_reel_power.bind(id))
+
+# Builds a per-reel picker overlay; each reel button calls cb(reel_index).
+func _arm_reel_picker(cb: Callable) -> void:
+	_clear_targeting()
+	_targeting_layer = Control.new()
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	add_child(_targeting_layer)
+	var cy := REEL_WINDOW["top"]
+	for i in 3:
+		var b := Button.new()
+		b.text = str(i + 1)
+		b.position = Vector2(REEL_CELL_CENTERS[i] - 10.0, cy)
+		b.size = Vector2(20, REEL_WINDOW["height"])
+		b.add_theme_font_size_override("font_size", 8)
+		if _font != null:
+			b.add_theme_font_override("font", _font)
+		b.pressed.connect(cb.bind(i))
+		_targeting_layer.add_child(b)
+
+func _arm_shift_targets() -> void:
+	_targeting_layer = Control.new()
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	add_child(_targeting_layer)
+	for i in 3:
+		for dir_key in ["up", "down"]:
+			var hit: Dictionary = SHIFT_ARROW_HITS[i][dir_key]
+			var b := Button.new()
+			b.text = "^" if dir_key == "up" else "v"
+			b.position = Vector2(hit["left"], hit["top"])
+			b.size = Vector2(hit["width"], hit["height"])
+			b.add_theme_font_size_override("font_size", 8)
+			if _font != null:
+				b.add_theme_font_override("font", _font)
+			b.pressed.connect(_apply_shift.bind(i, 1 if dir_key == "up" else -1))
+			_targeting_layer.add_child(b)
+
+func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if power_id == "reroll":
+		RunStateStore.reroll_reel(reel_index)
+	elif power_id == "memory":
+		RunStateStore.lock_reel(reel_index)
+	_clear_targeting()
+	_refresh_reels_from_state()
+
+func _apply_shift(reel_index: int, direction: int) -> void:
+	RunStateStore.move_reel(reel_index, direction)
+	_clear_targeting()
+	_refresh_reels_from_state()
+
+func _clear_targeting() -> void:
+	if _targeting_layer != null:
+		_targeting_layer.queue_free()
+		_targeting_layer = null
+
+func _on_stash_pressed(slot_index: int) -> void:
+	var slots := _stash_slots()
+	if slot_index >= slots.size():
+		return
+	var id: String = slots[slot_index]
+	if id == "cons_white_powder":
+		_begin_white_powder()
+		return
+	RunStateStore.use_consumable(id)
+	_refresh_reels_from_state()
+
+# White Powder: consume the charge, then pick a source reel and a target reel to
+# copy onto. copy_reel() applies the copy and its side effect (consume a random
+# other supply, or -20 neurons). Needs a spin result to copy from.
+func _begin_white_powder() -> void:
+	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
+		return
+	if not RunStateStore.use_consumable("cons_white_powder"):
+		return
+	_copy_source = -1
+	_arm_reel_picker(_on_copy_pick)
+
+func _on_copy_pick(reel_index: int) -> void:
+	if _copy_source < 0:
+		_copy_source = reel_index # source chosen; re-arm to pick the target
+		_arm_reel_picker(_on_copy_pick)
+	else:
+		var src := _copy_source
+		_copy_source = -1
+		RunStateStore.copy_reel(src, reel_index)
+		_clear_targeting()
+		_refresh_reels_from_state()
+
+func _check_ending() -> bool:
+	var run := {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	}
+	var ending: Variant = Endings.check_ending(run, {})
+	if ending == null:
+		return false
+	if ending == "wealth" and RunStateStore.wealthContinued:
+		return false
+	_show_ending(String(ending), run)
+	return true
+
+func _show_ending(ending: String, run: Dictionary) -> void:
+	RunStateStore.end_run(ending)
+	MetaStateStore.mark_ending_reached(ending)
+	# Wealth banking is deferred until the player chooses to leave (so Continue can
+	# resume and bank the full total at the real flatline end — no double-bank).
+	if ending != "wealth":
+		MetaStateStore.bank_run(run, ending)
+
+	_overlay = Control.new()
+	_overlay.position = Vector2.ZERO
+	_overlay.size = Vector2(SRC_W, SRC_H)
+	add_child(_overlay)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.7)
+	dim.size = Vector2(SRC_W, SRC_H)
+	_overlay.add_child(dim)
+
+	var title := Label.new()
+	title.position = Vector2(20, 120)
+	title.add_theme_font_size_override("font_size", 16)
+	if _font != null:
+		title.add_theme_font_override("font", _font)
+	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if ending == "flatline" else Color(0.5, 1, 0.6))
+	title.text = ending.to_upper()
+	_overlay.add_child(title)
+
+	var wallet := Label.new()
+	wallet.position = Vector2(20, 145)
+	wallet.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		wallet.add_theme_font_override("font", _font)
+	wallet.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
+	wallet.text = "WALLET %d" % MetaStateStore.lucidityWallet
+	_overlay.add_child(wallet)
+
+	var to_shop := Button.new()
+	to_shop.text = "BANK & LEAVE" if ending == "wealth" else "SHOP"
+	to_shop.position = Vector2(30, 175)
+	to_shop.size = Vector2(100, 20)
+	to_shop.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		to_shop.add_theme_font_override("font", _font)
+	# Non-wealth already banked above; wealth banks here on leave.
+	to_shop.pressed.connect(_bank_and_shop.bind(run, ending) if ending == "wealth" else _to_shop)
+	_overlay.add_child(to_shop)
+
+	if ending == "wealth":
+		var cont := Button.new()
+		cont.text = "CONTINUE"
+		cont.position = Vector2(40, 200)
+		cont.size = Vector2(80, 18)
+		cont.add_theme_font_size_override("font_size", 9)
+		if _font != null:
+			cont.add_theme_font_override("font", _font)
+		cont.pressed.connect(_continue_from_wealth)
+		_overlay.add_child(cont)
+
+func _continue_from_wealth() -> void:
+	RunStateStore.continue_run()
+	_sync_visuals()
+
+func _bank_and_shop(run: Dictionary, ending: String) -> void:
+	MetaStateStore.bank_run(run, ending)
+	_to_shop()
+
+# ── dealer flow ────────────────────────────────────────────────────────────────────
+
+func _make_dealer_modal() -> Control:
+	if _dealer_overlay != null:
+		_dealer_overlay.queue_free()
+	_dealer_overlay = Control.new()
+	_dealer_overlay.size = Vector2(SRC_W, SRC_H) # default mouse_filter STOP -> modal, blocks spin
+	add_child(_dealer_overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.0, 0.08, 0.8)
+	dim.size = Vector2(SRC_W, SRC_H)
+	_dealer_overlay.add_child(dim)
+	var portrait := _load_texture("ui/dealer_portrait.png")
+	if portrait != null:
+		var p := TextureRect.new()
+		p.texture = portrait
+		p.position = Vector2(50, 30)
+		p.size = Vector2(60, 60)
+		p.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_dealer_overlay.add_child(p)
+	return _dealer_overlay
+
+func _dealer_label(parent: Control, text: String, pos: Vector2, size: int, color: Color) -> void:
+	var l := Label.new()
+	l.text = text
+	l.position = pos
+	l.add_theme_font_size_override("font_size", size)
+	if _font != null:
+		l.add_theme_font_override("font", _font)
+	l.add_theme_color_override("font_color", color)
+	parent.add_child(l)
+
+func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable, icon: Texture2D = null) -> void:
+	var b := Button.new()
+	b.text = text
+	b.position = pos
+	b.size = size
+	b.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
+	if icon != null:
+		b.icon = icon
+		b.expand_icon = true
+	b.pressed.connect(cb)
+	parent.add_child(b)
+
+func _show_dealer_incoming() -> void:
+	var m := _make_dealer_modal()
+	_dealer_label(m, "THE DEALER\nAPPROACHES", Vector2(20, 100), 11, Color(0.9, 0.7, 1.0))
+	_dealer_button(m, "VISIT", Vector2(20, 150), Vector2(55, 20), _dealer_visit)
+	_dealer_button(m, "WAVE OFF", Vector2(85, 150), Vector2(55, 20), _dealer_wave_off)
+
+func _dealer_visit() -> void:
+	RunStateStore.reveal_dealer()
+	_show_dealer_offers()
+
+func _dealer_wave_off() -> void:
+	RunStateStore.decline_dealer_visit()
+	_close_dealer()
+
+func _show_dealer_offers() -> void:
+	var offers: Variant = RunStateStore.dealerOfferIds
+	if offers == null:
+		_close_dealer()
+		return
+	var m := _make_dealer_modal()
+	_dealer_label(m, "TAKE ONE:", Vector2(20, 96), 10, Color(0.9, 0.8, 0.6))
+	var imap := InRunItems.map()
+	var y := 116.0
+	for id in offers:
+		var item: Variant = imap.get(id, null)
+		var item_name := String(item["name"]) if item != null else String(id)
+		var icon := _icon_for(String(id))
+		_dealer_button(m, item_name, Vector2(20, y), Vector2(120, 22), _dealer_take.bind(String(id)), icon)
+		y += 28.0
+	_dealer_button(m, "LEAVE", Vector2(40, y + 4.0), Vector2(80, 18), _dealer_leave)
+
+func _dealer_take(item_id: String) -> void:
+	RunStateStore.accept_dealer_offer(item_id)
+	_close_dealer()
+
+func _dealer_leave() -> void:
+	RunStateStore.decline_dealer_offer()
+	_close_dealer()
+
+func _close_dealer() -> void:
+	if _dealer_overlay != null:
+		_dealer_overlay.queue_free()
+		_dealer_overlay = null
+	_update_hud()
