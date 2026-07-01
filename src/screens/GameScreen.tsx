@@ -120,6 +120,10 @@ export function GameScreen() {
   const bankRun                = useMetaStore(s => s.bankRun);
   const markEndingReached      = useMetaStore(s => s.markEndingReached);
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
+  const endRunKeptFraction = ownedPermanents.includes(ECONOMY.SMART_SAVE_UPGRADE_ID)
+    ? ECONOMY.SMART_SAVE_LUCIDITY_KEPT
+    : ECONOMY.END_OF_RUN_LUCIDITY_KEPT;
+  const endRunKeptPercent = Math.round(endRunKeptFraction * 100);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
@@ -773,7 +777,7 @@ export function GameScreen() {
                 You have everything.{'\n'}It isn't enough.
               </Text>
               <Text style={styles.overlayBody}>
-                {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
+                {Math.floor(lucidityCoins * endRunKeptFraction)} Lucidity kept ({endRunKeptPercent}% of {lucidityCoins})
               </Text>
             </>
           ) : (
@@ -784,7 +788,7 @@ export function GameScreen() {
                   kept the real 10% when the run ended. */}
               <FlatlineKeptCountdown
                 total={lucidityCoins}
-                keptFraction={ECONOMY.END_OF_RUN_LUCIDITY_KEPT}
+                keptFraction={endRunKeptFraction}
               />
             </>
           )}

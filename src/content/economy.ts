@@ -34,6 +34,8 @@ export const ECONOMY = {
   // End-of-run retention: the player keeps this fraction of the Lucidity they
   // accumulated during the run (banked to the wallet). The rest is burned off.
   END_OF_RUN_LUCIDITY_KEPT: 0.10,
+  SMART_SAVE_LUCIDITY_KEPT: 0.20,
+  SMART_SAVE_UPGRADE_ID: 'pos_smart_save',
 } as const;
 
 // The Nth coin (50, 100, 150, …) is a "power coin": when it reaches the counter it

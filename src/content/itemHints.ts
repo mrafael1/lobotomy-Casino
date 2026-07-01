@@ -14,52 +14,52 @@ export type ConsumableDisplayHints = {
 export const ITEM_HINTS: Record<string, ConsumableDisplayHints> = {
   // ── The three new item assets (water / tablet / white powder) ──
   item_water: {
-    positiveHint: 'CLEAR',
-    negativeHint: 'WEAK',
-    flavorText: 'Still water. Still hands.',
+    positiveHint: 'MYSTERY',
+    negativeHint: 'THIN',
+    flavorText: 'A mysterious liquid. Too quiet.',
   },
   item_pill: { // Red Pill — the "tablet" asset
-    positiveHint: 'SLOW FALL',
+    positiveHint: 'LUCK?',
     negativeHint: 'NUMB',
-    flavorText: 'Quiet hands. Heavy thoughts.',
+    flavorText: 'Smells like luck. Tastes like sleep.',
   },
   cons_white_powder: {
-    positiveHint: 'RUSH',
-    negativeHint: 'CRASH',
-    flavorText: 'Bright. Then gone.',
+    positiveHint: 'BRIGHT',
+    negativeHint: 'GONE',
+    flavorText: 'A flash in a folded packet.',
   },
 
   // ── Other run / shop consumables (short hints so the TV is never blank) ──
   // Keep every hint short enough to fit the TV on one line at a fixed size.
   item_energy_drink: {
-    positiveHint: 'FREE',
+    positiveHint: 'SPARKS',
     negativeHint: 'SHAKY',
-    flavorText: "Wired. Won't hold.",
+    flavorText: 'The can hums in your hand.',
   },
   item_cocktail: {
-    positiveHint: 'EASY',
-    negativeHint: 'STEALS',
-    flavorText: 'Sweet now. Costs later.',
+    positiveHint: 'LUCKY',
+    negativeHint: 'STICKY',
+    flavorText: 'Smells like luck and old fruit.',
   },
   cons_focus: {
-    positiveHint: 'BIG PAY',
-    negativeHint: 'BLIND',
-    flavorText: 'Sharp eyes. Blind count.',
+    positiveHint: 'SHARP',
+    negativeHint: 'HIDDEN',
+    flavorText: 'A thin serum with a staring shine.',
   },
   cons_syringe: {
-    positiveHint: 'BRAINS',
+    positiveHint: 'WARM',
     negativeHint: 'DULL',
-    flavorText: 'Smarter. Slower.',
+    flavorText: 'Warm glass. Unclear promise.',
   },
   cons_tea: {
-    positiveHint: 'RESTORE',
+    positiveHint: 'OLD',
     negativeHint: 'RANDOM',
-    flavorText: 'Warmth returns. Who knows what.',
+    flavorText: 'Steam curls into familiar shapes.',
   },
 };
 
 export const FALLBACK_HINTS: ConsumableDisplayHints = {
-  positiveHint: 'GIFT',
+  positiveHint: 'ODD',
   negativeHint: 'PRICE',
   flavorText: 'Everything costs something.',
 };

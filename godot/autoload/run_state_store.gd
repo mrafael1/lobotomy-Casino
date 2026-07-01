@@ -12,6 +12,17 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
+@export_group("Run Balance")
+@export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
+@export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
+
+@export_group("Dealer Interruptions")
+@export var dealer_max_count: int = Dealer.MAX_COUNT
+@export var dealer_min_spin_gap: int = Dealer.MIN_SPIN_GAP
+@export_range(0.0, 1.0, 0.01) var dealer_high_threshold: float = Dealer.THRESHOLD_HIGH
+@export_range(0.0, 1.0, 0.01) var dealer_low_threshold: float = Dealer.THRESHOLD_LOW
+@export_range(0.0, 1.0, 0.01) var dealer_proc_chance: float = Dealer.PROC_CHANCE
+
 # RunState fields (mirror types.ts RunState)
 var neurons := 0
 var startingNeurons := 0
@@ -133,7 +144,7 @@ func spin(compulsive := false) -> Variant:
 		final_result["scoreEarned"] = int(result["scoreEarned"]) + cocktail_bonus
 		final_result["cocktailApplied"] = true
 
-	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed)
+	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
 	var was_cocktail_last: bool = cocktailBoostSpins == 1
 
@@ -182,7 +193,54 @@ func set_bet_multiplier(m: int) -> void:
 
 # ── run lifecycle ──────────────────────────────────────────────────────────────────
 
-func start_new_run(owned_permanents: Array, pending_consumables: Dictionary) -> void:
+func reset_run_state() -> void:
+	neurons = 0
+	startingNeurons = 0
+	scoreEarned = 0
+	lucidityCoins = 0
+	freeSpinsRemaining = 0
+	maxFreeSpins = EconomyConst.BASE_MAX_FREE_SPINS
+	lucidityMultiplier = EconomyConst.BASE_LUCIDITY_MULTIPLIER
+	nextSpinLucidityMultiplier = 1.0
+	isSpinning = false
+	lastResult = null
+	lockedReels = [false, false, false]
+	lockedReelSpins = [0, 0, 0]
+	runConsumables = {}
+	abilitiesUsed = []
+	ownedUpgrades = []
+	spinCount = 0
+	isFreeSpin = false
+	betMultiplier = 1
+	lastEffectiveBet = 1
+	dealerCount = 0
+	dealerLastSpinCount = 0
+	dealer65SafetyFired = false
+	dealer35SafetyFired = false
+	dealerIncoming = false
+	dealerPending = false
+	dealerOfferIds = null
+	brainBoostSpins = 0
+	forcedRandomBetSpins = 0
+	guaranteedWinSpins = 0
+	blockPowersSpins = 0
+	hideNeuronsSpins = 0
+	cocktailBoostSpins = 0
+	compulsiveSpinSkips = 0
+	pendingCompulsiveSpinSkips = 0
+	decaySkips = 0
+	pendingPowerRestores = []
+	runPhase = "idle"
+	lastEnding = null
+	wealthContinued = false
+	_commit()
+
+func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
+	if runPhase == "running":
+		return true
+	if consume_campaign_neuron and not MetaStateStore.consume_campaign_neuron_for_run():
+		_commit()
+		return false
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	scoreEarned = 0
@@ -222,6 +280,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary) -> 
 	lastEnding = null
 	wealthContinued = false
 	_commit()
+	return true
 
 func end_run(ending: String) -> void:
 	runPhase = "over"
@@ -238,7 +297,7 @@ func continue_run() -> void:
 
 # Public: delegate to the parity-verified pure planner (run action surface).
 func plan_lucidity_gain(prev_coins: int, gain: int, abilities: Array, seed: int) -> Dictionary:
-	return Lucidity.plan_gain(prev_coins, gain, abilities, seed)
+	return Lucidity.plan_gain(prev_coins, gain, abilities, seed, coins_per_power_restore)
 
 func commit_power_restore(power_id: String) -> void:
 	var idx := pendingPowerRestores.find(power_id)
@@ -264,7 +323,7 @@ func _weights_with_bonuses(brain_bonus: int, book_weight: int) -> Array:
 	return weights
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
-	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed)
+	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed, coins_per_power_restore)
 	var free_after := mini(freeSpinsRemaining + int(outcome["freeSpinsGranted"]), maxFreeSpins)
 	abilitiesUsed = plan["abilitiesUsed"]
 	scoreEarned = maxi(0, scoreEarned + int(outcome["scoreDelta"]))
@@ -387,7 +446,7 @@ func use_consumable(consumable_id: String) -> bool:
 				if betMultiplier == 3:
 					betMultiplier = 2
 			"addLucidity":
-				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed, _seed(spinCount * 0x2545f491))
+				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed, _seed(spinCount * 0x2545f491), coins_per_power_restore)
 				lucidityCoins = int(plan["lucidityCoins"])
 				abilitiesUsed = plan["abilitiesUsed"]
 				pendingPowerRestores.append_array(plan["restores"])
@@ -412,8 +471,10 @@ func use_consumable(consumable_id: String) -> bool:
 				return false
 			var rng := LobRNG.new(_seed(spinCount * 0xdeadbeef))
 			var idx := floori(rng.next() * abilitiesUsed.size())
+			var restored_id := String(abilitiesUsed[idx])
 			abilitiesUsed = abilitiesUsed.duplicate()
 			abilitiesUsed.remove_at(idx)
+			pendingPowerRestores.append(restored_id)
 		"brainBoost":
 			var all_abilities := ["reroll", "shift", "memory"]
 			var available := []
@@ -435,15 +496,20 @@ func check_dealer_trigger() -> void:
 		return
 	if startingNeurons <= 0:
 		return
-	if dealerCount >= Dealer.MAX_COUNT:
+	if dealerCount >= dealer_max_count:
 		return
-	if spinCount - dealerLastSpinCount < Dealer.MIN_SPIN_GAP:
+	if spinCount - dealerLastSpinCount < dealer_min_spin_gap:
 		return
 	var decision := Dealer.evaluate_dealer_trigger({
 		"neurons": neurons, "startingNeurons": startingNeurons, "spinCount": spinCount,
 		"dealerCount": dealerCount, "dealerLastSpinCount": dealerLastSpinCount,
 		"dealer65SafetyFired": dealer65SafetyFired, "dealer35SafetyFired": dealer35SafetyFired,
 		"procSeed": _seed(spinCount * 0x9e3779b9 + 0xdeadbeef),
+		"maxCount": dealer_max_count,
+		"minSpinGap": dealer_min_spin_gap,
+		"highThreshold": dealer_high_threshold,
+		"lowThreshold": dealer_low_threshold,
+		"procChance": dealer_proc_chance,
 	})
 	dealer65SafetyFired = decision["dealer65SafetyFired"]
 	dealer35SafetyFired = decision["dealer35SafetyFired"]
@@ -472,6 +538,9 @@ func decline_dealer_visit() -> void:
 	_commit()
 
 func accept_dealer_offer(item_id: String) -> void:
+	accept_dealer_offer_with_limit(item_id, max_consumable_slots)
+
+func accept_dealer_offer_with_limit(item_id: String, slot_limit: int) -> void:
 	if not dealerPending or dealerOfferIds == null:
 		return
 	if not (dealerOfferIds as Array).has(item_id):
@@ -482,7 +551,7 @@ func accept_dealer_offer(item_id: String) -> void:
 		dealerOfferIds = null
 		_commit()
 		return
-	if Consumables.total_copies(runConsumables) >= Consumables.MAX_CONSUMABLE_SLOTS:
+	if Consumables.total_copies(runConsumables) >= maxi(1, slot_limit):
 		dealerPending = false
 		dealerOfferIds = null
 		_commit()

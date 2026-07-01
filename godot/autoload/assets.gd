@@ -91,6 +91,7 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 #   2 -> [normal, pressed]   3 -> [normal, hover, pressed]   4 -> [+ disabled]
 const _RED_BUTTON_REL := "ui/red_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
+const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
 # Per-state -> frame index for a sheet of `frames` frames.
 func _sheet_state_frames(frames: int) -> Dictionary:
@@ -124,6 +125,7 @@ func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
 		var sb := StyleBoxTexture.new()
 		sb.texture = tex
 		sb.region_rect = Rect2(float(sf[state]) * fw, 0.0, fw, fh)
+		sb.content_margin_bottom = _BUTTON_TEXT_BOTTOM_MARGIN
 		if state == "pressed":
 			sb.content_margin_top = _PRESS_DROP # text sinks on press
 		b.add_theme_stylebox_override(state, sb)

@@ -19,6 +19,7 @@ const EMPTY_META: MetaState = {
   corruptionEverUsed: false,
   endingsReached:     [],
   pendingConsumables: {},
+  is_first_launch:    false,
   history: { runsPlayed: 0, bestScoreRun: 0 },
 };
 

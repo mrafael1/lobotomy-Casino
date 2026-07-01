@@ -113,14 +113,14 @@ test('lucidity_restore.json matches planLucidityGain', () => {
 
 test('endings.json matches checkEnding / checkExitEligibility', () => {
   const data = load('endings.json');
-  const emptyMeta: MetaState = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: false, endingsReached: [], pendingConsumables: {}, history: { runsPlayed: 0, bestScoreRun: 0 } };
+  const emptyMeta: MetaState = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: false, endingsReached: [], pendingConsumables: {}, is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 } };
   for (const c of data.checkEnding) {
     const run = baseRun({ neurons: c.input.neurons, scoreEarned: c.input.scoreEarned });
     expect(checkEnding(run, emptyMeta)).toBe(c.expect);
   }
   for (const c of data.checkExitEligibility) {
     const run = baseRun({ lucidityCoins: c.input.lucidityCoins });
-    const meta = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: c.input.corruptionEverUsed, endingsReached: [], pendingConsumables: {}, history: { runsPlayed: 0, bestScoreRun: 0 } } as MetaState;
+    const meta = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: c.input.corruptionEverUsed, endingsReached: [], pendingConsumables: {}, is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 } } as MetaState;
     expect(checkExitEligibility(run, meta)).toBe(c.expect);
   }
 });

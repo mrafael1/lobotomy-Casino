@@ -324,7 +324,7 @@ function baseMeta(overrides: Partial<MetaState> = {}): MetaState {
   return {
     schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [],
     corruptionEverUsed: false, endingsReached: [], pendingConsumables: {},
-    history: { runsPlayed: 0, bestScoreRun: 0 }, ...overrides,
+    is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 }, ...overrides,
   };
 }
 

@@ -70,5 +70,9 @@ static func run_all() -> Array:
 	_check(out, int(banked["lucidityWallet"]) == 20, "banks 10% of run Lucidity (200 -> 20)")
 	_check(out, int(banked["history"]["bestScoreRun"]) == 500, "best score recorded")
 	_check(out, int(banked["history"]["runsPlayed"]) == 1, "runsPlayed incremented")
+	var smart_meta := meta.duplicate(true)
+	smart_meta["ownedPermanents"] = [EconomyConst.SMART_SAVE_UPGRADE_ID]
+	var smart_banked := Endings.bank_run_to_meta(bank_run, smart_meta, "flatline", 1700000000000)
+	_check(out, int(smart_banked["lucidityWallet"]) == 40, "Smart Save banks 20% of run Lucidity (200 -> 40)")
 
 	return out

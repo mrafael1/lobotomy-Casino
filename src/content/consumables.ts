@@ -20,14 +20,14 @@ export interface Consumable {
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
     id: 'cons_focus',
-    name: 'Focus Serum',
+    name: 'Serum',
     description: 'Next spin earns 3× Lucidity. Side effect: your neuron count is hidden for 5 spins.',
     shopCost: 12,
     effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0, hideNeuronsSpins: 5 },
   },
   {
     id: 'cons_white_powder',
-    name: 'White Powder',
+    name: 'Powder',
     description: 'Copy one reel\'s symbol onto another. Side effect: consume a random other supply or lose 20 neurons.',
     shopCost: 14,
     effect: { type: 'copyReel' },
@@ -41,7 +41,7 @@ export const CONSUMABLES: ReadonlyArray<Consumable> = [
   },
   {
     id: 'cons_tea',
-    name: 'Herbal Tea',
+    name: 'Tea',
     description: 'Restore a random ability you have already used this run.',
     shopCost: 10,
     effect: { type: 'restoreAbility' },

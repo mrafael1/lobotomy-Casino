@@ -61,6 +61,7 @@ function baseMetaState(overrides: Partial<MetaState> = {}): MetaState {
     corruptionEverUsed: false,
     endingsReached:     [],
     pendingConsumables: {},
+    is_first_launch:    false,
     history: { runsPlayed: 0, bestScoreRun: 0 },
     ...overrides,
   };
@@ -225,6 +226,17 @@ test('Rule 7: bankRunToMeta transfers Lucidity and history, nothing else', () =>
   expect('lucidityMultiplier' in banked).toBe(false);
   expect('scoreEarned' in banked).toBe(false);
   expect('lucidityCoins' in banked).toBe(false);
+});
+
+test('Rule 7: Smart Save banks 20% of run Lucidity', () => {
+  const run = baseRunState({ neurons: 42, lucidityCoins: 200, spinCount: 77 });
+  const meta = baseMetaState({
+    lucidityWallet: 50,
+    ownedPermanents: [ECONOMY.SMART_SAVE_UPGRADE_ID],
+  });
+  const banked = bankRunToMeta(run, meta, 'flatline');
+
+  expect(banked.lucidityWallet).toBe(90);
 });
 
 test('Rule 7: history.runsPlayed increments by exactly 1 per run end', () => {

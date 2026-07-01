@@ -81,7 +81,11 @@ const SHIFT_ARROW_HITS := [
 # (issue #22). The in-run dealer is shown inline (no full-scene route), so the full
 # dealer scene is only used for the pre-run shop, reached from the menu.
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
+const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
+const UPGRADES_SCENE := "res://scenes/upgrades_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
+const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
+const SETTINGS_ASSET := "ui/settings.png"
 
 # Debug-grant Shift/Memory + test consumables when a run is started standalone
 # (machine opened directly, not via the shop). The shop is the real source now.
@@ -103,6 +107,7 @@ const JACKPOT_GOLD := Color(1.0, 0.84, 0.18) # jackpot burst is ALWAYS golden (i
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
+const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 const COIN_TARGET := Vector2(76.0, 75.0)
 const COIN_SIZE := 6.0
 const POWER_COIN_SIZE := 8.0
@@ -111,6 +116,11 @@ const COIN_STAGGER_TIME := 0.09
 const COIN_BURST_FRAC := 0.4
 const COIN_BURST_RISE := 24.0
 const COIN_BURST_SCATTER := 26.0
+const COIN_TRAY_POP_TIME := 0.26
+const COIN_FALL_STAGGER_TIME := 0.035
+const COIN_TRAY_HOLD_TIME := 0.12
+const COIN_TRAY_PILE_SCATTER := 22.0
+const COIN_TRAY_PILE_DEPTH := 8.0
 const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
 const POWER_PULSE_TIME := 0.36
@@ -127,6 +137,15 @@ const ITEM_ICONS := {
 	"item_pill": "items/pill.png",
 }
 
+@export_group("Run Balance")
+@export var starting_spin_counter: int = DISPLAY_SPIN_BUDGET
+@export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
+@export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
+@export var default_run_power_ids: Array[String] = ["reroll"]
+
+@export_group("Feedback")
+@export_range(0.0, 5.0, 0.1) var consumable_feedback_hold_seconds: float = 1.5
+
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
@@ -138,6 +157,8 @@ var _dealer_offer_popup: Control = null
 var _dealer_message_label: Label = null
 var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
+var _options_button: TextureButton = null
+var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
 var _spin_button: Button = null
 var _multiplier_buttons: Array[Button] = []
@@ -176,6 +197,8 @@ var _jackpot_flash_tween: Tween = null
 var _jackpot_flashing := false
 var _font: FontFile = null
 var _tex_cache := {}
+var _sequence_lock_active := false
+var _post_spin_sequence_active := false
 
 # Reveal animation state
 var _spinning_anim := false
@@ -199,9 +222,14 @@ var _flatline_kept := 0
 var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
+var _campaign_label: Label = null
+var _neuron_spend_label: Label = null
+var _consumable_feedback_label: Label = null
+var _consumable_feedback_tween: Tween = null
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
+	_apply_balance_exports()
 	# Draw order (back -> front): reel background -> symbols -> cabinet (with
 	# transparent holes that mask symbol overflow) -> HUD -> spin button.
 	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
@@ -218,9 +246,17 @@ func _ready() -> void:
 	_build_stash()
 	_build_burst_layer()
 	_build_coin_layer()
+	_build_options_controls()
+	_restore_options_overlay_if_requested()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_init_burst_tracking()
+
+func _apply_balance_exports() -> void:
+	if Engine.is_editor_hint():
+		return
+	RunStateStore.max_consumable_slots = maxi(1, max_consumable_slots)
+	RunStateStore.coins_per_power_restore = maxi(1, coins_per_power_restore)
 
 # ── asset loading (absolute path into ../assets) ──────────────────────────────────
 
@@ -235,6 +271,76 @@ func _load_font(rel: String) -> FontFile:
 
 # ── scene construction ────────────────────────────────────────────────────────────
 
+func _authored_sprite(name: String) -> Sprite2D:
+	return get_node_or_null(name) as Sprite2D
+
+func _authored_button(name: String) -> Button:
+	return get_node_or_null(name) as Button
+
+func _authored_texture_button(name: String) -> TextureButton:
+	return get_node_or_null(name) as TextureButton
+
+func _authored_control(name: String) -> Control:
+	return get_node_or_null(name) as Control
+
+func _full_canvas_name(rel: String) -> String:
+	if rel.ends_with("reel_final_machine.png"):
+		return "ReelBacking"
+	if rel.ends_with("final_machine.png"):
+		return "Cabinet"
+	return ""
+
+func _full_canvas_sheet_name(rel: String, frame: int) -> String:
+	if rel.ends_with("wealth_track_final_machine.png"):
+		return "WealthTrack"
+	if rel.ends_with("health_track_final_machine.png"):
+		return "HealthTrack"
+	if rel.ends_with("multiplier_final_machine.png"):
+		return "Multiplier"
+	if rel.ends_with("lever_final_machine.png"):
+		return "Lever"
+	if rel.ends_with("jackpot_final_machine.png"):
+		return "Jackpot"
+	if rel.ends_with("lock_power.png"):
+		return "LockPower%d" % frame
+	if rel.ends_with("reroll_final_machine.png"):
+		return "RerollPower"
+	if rel.ends_with("shift_final_machine.png"):
+		return "ShiftPower"
+	if rel.ends_with("lock_final_machine.png"):
+		return "MemoryPower"
+	return ""
+
+func _region_sprite_name(rel: String, rect: Dictionary) -> String:
+	if rel.ends_with("wealth_fill_final_machine.png"):
+		return "WealthFill"
+	if rel.ends_with("health_fill_final_machine.png"):
+		return "HealthFill"
+	if rel.ends_with("reel_final_machine.png"):
+		for i in REEL_HOLES.size():
+			if float(rect["left"]) == float(REEL_HOLES[i]["left"]) and float(rect["top"]) == float(REEL_HOLES[i]["top"]):
+				return "ReelCover%d" % i
+	return ""
+
+func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transform := true) -> void:
+	spr.texture = tex
+	spr.centered = false
+	if apply_transform:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
+	spr.texture = tex
+	spr.hframes = hframes
+	spr.frame = frame
+	spr.centered = false
+	var frame_w := float(tex.get_width()) / float(hframes)
+	if apply_transform:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
 func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
 	if tex == null:
@@ -245,29 +351,29 @@ func _build_full_canvas_sprite(rel: String) -> void:
 			fallback.size = Vector2(SRC_W, SRC_H)
 			add_child(fallback)
 		return
-	var spr := Sprite2D.new()
-	spr.texture = tex
-	spr.centered = false
-	spr.position = Vector2.ZERO
-	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	# Linear+mipmaps so the 8x art downscales crisply rather than aliasing.
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
+	var name := _full_canvas_name(rel)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
+	_configure_full_canvas_sprite(spr, tex, not authored)
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		return null
-	var spr := Sprite2D.new()
-	spr.texture = tex
-	spr.hframes = hframes
-	spr.frame = frame
-	spr.centered = false
-	spr.position = Vector2.ZERO
-	var frame_w := float(tex.get_width()) / float(hframes)
-	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
+	var name := _full_canvas_sheet_name(rel, frame)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
+	_configure_full_canvas_sheet(spr, tex, hframes, frame, not authored)
 	return spr
 
 func _build_full_canvas_grid_sheet(rel: String, hframes: int, vframes: int, frame: int = 0) -> Sprite2D:
@@ -292,10 +398,18 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		return null
-	var spr := Sprite2D.new()
+	var name := _region_sprite_name(rel, rect)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
 	spr.texture = tex
 	spr.centered = false
-	spr.position = Vector2(rect["left"], rect["top"])
+	if not authored:
+		spr.position = Vector2(rect["left"], rect["top"])
 	spr.region_enabled = true
 	spr.region_rect = Rect2(
 		rect["left"] * ASSET_SCALE,
@@ -303,9 +417,9 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 		rect["width"] * ASSET_SCALE,
 		rect["height"] * ASSET_SCALE
 	)
-	spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
+	if not authored:
+		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
 	return spr
 
 func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: int = 0) -> Sprite2D:
@@ -351,15 +465,20 @@ func _build_reel_animation_art() -> void:
 	if tex == null:
 		return
 	for i in 3:
-		var spr := Sprite2D.new()
+		var spr := _authored_sprite("SpinReel%d" % i)
+		var authored := spr != null
+		if spr == null:
+			spr = Sprite2D.new()
+			spr.name = "SpinReel%d" % i
+			add_child(spr)
 		spr.texture = tex
 		spr.centered = false
 		spr.region_enabled = true
-		spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
-		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
+		if not authored:
+			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
+			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
 		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		spr.visible = false
-		add_child(spr)
 		_spin_reel_sprites.append(spr)
 		_set_spin_reel_frame(i, 0)
 
@@ -403,9 +522,15 @@ func _build_machine_control_art() -> void:
 		if lock != null:
 			lock.visible = false
 		_lock_sprites.append(lock)
-		var count := Label.new()
-		count.position = Vector2(REEL_CELL_CENTERS[i] - 6.0, REEL_WINDOW["top"] + REEL_WINDOW["height"] + 1.0)
-		count.size = Vector2(12.0, 8.0)
+		var count := get_node_or_null("LockCount%d" % i) as Label
+		var authored_count := count != null
+		if count == null:
+			count = Label.new()
+			count.name = "LockCount%d" % i
+			add_child(count)
+		if not authored_count:
+			count.position = Vector2(REEL_CELL_CENTERS[i] - 6.0, REEL_WINDOW["top"] + REEL_WINDOW["height"] + 1.0)
+			count.size = Vector2(12.0, 8.0)
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		count.add_theme_font_size_override("font_size", 7)
 		if _font != null:
@@ -413,7 +538,6 @@ func _build_machine_control_art() -> void:
 		count.add_theme_color_override("font_color", Color(1.0, 0.86, 0.28))
 		count.text = ""
 		count.visible = false
-		add_child(count)
 		_lock_count_labels.append(count)
 	for id in ["reroll", "shift", "memory"]:
 		_power_sprites[id] = _build_full_canvas_sheet(String(POWER_SHEETS[id]), 3, POWER_FRAME_DISABLED)
@@ -423,15 +547,30 @@ func _transparent_button_style() -> StyleBoxEmpty:
 
 func _make_hit_button(rect: Dictionary, cb: Callable) -> Button:
 	var b := Button.new()
+	_configure_hit_button(b, rect, cb)
+	return b
+
+func _configure_hit_button(b: Button, rect: Dictionary, cb: Callable, apply_rect := true) -> void:
 	b.text = ""
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
-	b.position = Vector2(rect["left"], rect["top"])
-	b.size = Vector2(rect["width"], rect["height"])
+	if apply_rect:
+		b.position = Vector2(rect["left"], rect["top"])
+		b.size = Vector2(rect["width"], rect["height"])
 	var empty := _transparent_button_style()
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(state, empty)
-	b.pressed.connect(cb)
+	if not b.pressed.is_connected(cb):
+		b.pressed.connect(cb)
+
+func _make_or_bind_hit_button(name: String, rect: Dictionary, cb: Callable) -> Button:
+	var b := _authored_button(name)
+	var authored := b != null
+	if b == null:
+		b = Button.new()
+		b.name = name
+		add_child(b)
+	_configure_hit_button(b, rect, cb, not authored)
 	return b
 
 # Per-reel reel-background patches, drawn above the spin-blur sheet and below the
@@ -455,15 +594,23 @@ func _reveal_reel(index: int) -> void:
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
 
-func _new_reel_sprite(pos: Vector2, alpha: float) -> Sprite2D:
-	var s := Sprite2D.new()
+func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
 	s.centered = true
-	s.position = pos
+	if apply_position:
+		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
 	# Symbols are authored large and drawn at 12-16px, so downscale with
 	# linear+mipmaps (supersampled, crisp) rather than nearest (aliased).
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(s)
+
+func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
+	var s := _authored_sprite(name)
+	var authored := s != null
+	if s == null:
+		s = Sprite2D.new()
+		s.name = name
+		add_child(s)
+	_configure_reel_sprite(s, pos, alpha, not authored)
 	return s
 
 func _build_reels() -> void:
@@ -471,9 +618,9 @@ func _build_reels() -> void:
 	for i in 3:
 		var cx: float = REEL_CELL_CENTERS[i]
 		# Add neighbours first, centre last so it draws on top where they meet.
-		_reel_top_sprites.append(_new_reel_sprite(Vector2(cx, cy - STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_bottom_sprites.append(_new_reel_sprite(Vector2(cx, cy + STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_sprites.append(_new_reel_sprite(Vector2(cx, cy), 1.0))
+		_reel_top_sprites.append(_new_reel_sprite("Reel%dTop" % i, Vector2(cx, cy - STRIP_OFFSET), STRIP_ADJ_ALPHA))
+		_reel_bottom_sprites.append(_new_reel_sprite("Reel%dBottom" % i, Vector2(cx, cy + STRIP_OFFSET), STRIP_ADJ_ALPHA))
+		_reel_sprites.append(_new_reel_sprite("Reel%dCenter" % i, Vector2(cx, cy), 1.0))
 
 func _set_reel_visible(index: int, visible: bool) -> void:
 	_reel_sprites[index].visible = visible
@@ -512,38 +659,162 @@ func _set_reel_symbol(index: int, symbol_id: String) -> void:
 
 func _build_hud() -> void:
 	_build_score_button()
+	_build_campaign_label()
+	_build_consumable_feedback_label()
 	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
 
 func _build_score_button() -> void:
-	_score_button = Button.new()
+	_score_button = _authored_button("ScoreButton")
+	var authored := _score_button != null
+	if _score_button == null:
+		_score_button = Button.new()
+		_score_button.name = "ScoreButton"
+		add_child(_score_button)
 	_score_button.text = "SCORES"
-	_score_button.size = Vector2(41.0, 15.0)
-	# Pulled off the top-right corner so it isn't glued to the edge.
-	_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
+	if not authored:
+		_score_button.size = Vector2(41.0, 15.0)
+		# Pulled off the top-right corner so it isn't glued to the edge.
+		_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
 	_score_button.flat = false
 	_score_button.focus_mode = Control.FOCUS_NONE
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
 	Assets.skin_negative_button(_score_button)
-	_score_button.pressed.connect(_show_score_table)
-	add_child(_score_button)
+	if not _score_button.pressed.is_connected(_show_score_table):
+		_score_button.pressed.connect(_show_score_table)
+
+func _build_options_controls() -> void:
+	_options_button = _authored_texture_button("options")
+	if _options_button == null:
+		_options_button = TextureButton.new()
+		_options_button.name = "options"
+		_options_button.position = Vector2(9.0, 9.0)
+		_options_button.size = Vector2(20.0, 18.0)
+		add_child(_options_button)
+	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+	if not _options_button.pressed.is_connected(_toggle_options_overlay):
+		_options_button.pressed.connect(_toggle_options_overlay)
+	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
+	if _options_overlay == null:
+		_options_overlay = OPTIONS_OVERLAY_SCENE.instantiate() as OptionsOverlay
+		_options_overlay.name = "OptionsOverlay"
+		add_child(_options_overlay)
+
+func _toggle_options_overlay() -> void:
+	if _options_overlay == null:
+		return
+	_options_overlay.toggle_overlay()
+
+func _restore_options_overlay_if_requested() -> void:
+	if Engine.is_editor_hint() or _options_overlay == null:
+		return
+	if SceneNav.consume_restore_options(String(scene_file_path)):
+		_options_overlay.call_deferred("show_overlay")
+
+func _set_score_button_locked(locked: bool) -> void:
+	if _score_button == null:
+		return
+	_score_button.disabled = locked
+	_score_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if locked else Control.MOUSE_FILTER_STOP
+
+func _set_sequence_lock(locked: bool) -> void:
+	_sequence_lock_active = locked
+	if locked:
+		_clear_targeting()
+	_refresh_score_button_lock()
+	_refresh_controls()
+
+func _refresh_score_button_lock() -> void:
+	_set_score_button_locked(_sequence_lock_active or _dealer_offer_popup != null)
+
+func _build_campaign_label() -> void:
+	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
+	if bottom_hud == null:
+		bottom_hud = Control.new()
+		bottom_hud.name = "BottomHudLayer"
+		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bottom_hud.z_index = 120
+		add_child(bottom_hud)
+	_campaign_label = bottom_hud.get_node_or_null("neuron_number") as Label
+	var legacy_label := get_node_or_null("neuron_number") as Label
+	if _campaign_label == null and legacy_label != null:
+		legacy_label.reparent(bottom_hud)
+		_campaign_label = legacy_label
+	if _campaign_label == null:
+		_campaign_label = Label.new()
+		_campaign_label.name = "neuron_number"
+		bottom_hud.add_child(_campaign_label)
+		_campaign_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_campaign_label.offset_left = -46.5
+		_campaign_label.offset_top = -14.0
+		_campaign_label.offset_right = 46.5
+		_campaign_label.offset_bottom = -4.0
+	_campaign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_campaign_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_campaign_label.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		_campaign_label.add_theme_font_override("font", _font)
+	_campaign_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
+	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_campaign_label.add_theme_constant_override("outline_size", 1)
+	_campaign_label.text = ""
+
+func _build_consumable_feedback_label() -> void:
+	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
+	if bottom_hud == null:
+		return
+	_consumable_feedback_label = bottom_hud.get_node_or_null("ConsumableFeedback") as Label
+	if _consumable_feedback_label == null:
+		_consumable_feedback_label = Label.new()
+		_consumable_feedback_label.name = "ConsumableFeedback"
+		bottom_hud.add_child(_consumable_feedback_label)
+		_consumable_feedback_label.set_anchors_preset(Control.PRESET_CENTER)
+		_consumable_feedback_label.offset_left = -60.0
+		_consumable_feedback_label.offset_top = -12.0
+		_consumable_feedback_label.offset_right = 60.0
+		_consumable_feedback_label.offset_bottom = 4.0
+	_consumable_feedback_label.visible = false
+	_consumable_feedback_label.text = ""
+	_consumable_feedback_label.modulate.a = 0.0
+	_consumable_feedback_label.scale = Vector2.ONE
+	_consumable_feedback_label.pivot_offset = _consumable_feedback_label.size * 0.5
+	_consumable_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_consumable_feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_consumable_feedback_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_consumable_feedback_label.z_index = 20
+	_consumable_feedback_label.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_consumable_feedback_label.add_theme_font_override("font", _font)
+	_consumable_feedback_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.75))
+	_consumable_feedback_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_consumable_feedback_label.add_theme_constant_override("outline_size", 1)
 
 func _build_bar_label(id: String, pos: Vector2, color: Color) -> void:
-	var l := Label.new()
-	l.position = pos
+	var node_name := "GoalLabel" if id == "goal" else "HealthLabel"
+	var l := get_node_or_null(node_name) as Label
+	var authored := l != null
+	if l == null:
+		l = Label.new()
+		l.name = node_name
+		add_child(l)
+	if not authored:
+		l.position = pos
+	if id == "life" and not authored:
+		l.size = Vector2(float(TV_SCREEN["left"]) + float(TV_SCREEN["width"]) - pos.x, 10.0)
 	l.add_theme_font_size_override("font_size", 6)
 	if _font != null:
 		l.add_theme_font_override("font", _font)
 	l.add_theme_color_override("font_color", color)
 	l.text = ""
-	add_child(l)
 	_bar_labels[id] = l
 
 func _build_spin_button() -> void:
-	_spin_button = _make_hit_button(LEVER_HIT, _do_spin)
-	add_child(_spin_button)
+	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
 
@@ -551,10 +822,14 @@ func _build_spin_button() -> void:
 # in progress, begin one from meta so the machine works on its own too.
 func _enter_run() -> void:
 	if RunStateStore.runPhase != "running":
-		_begin_fresh_run()
+		if not _begin_fresh_run():
+			_show_campaign_failed()
+			return
 	_sync_visuals()
+	if MetaStateStore.consume_neuron_spend_feedback():
+		_show_neuron_spend_feedback()
 
-func _begin_fresh_run() -> void:
+func _begin_fresh_run() -> bool:
 	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
 	var consumables: Dictionary = MetaStateStore.get_pending_consumables().duplicate(true)
 	if DEBUG_GRANT:
@@ -563,7 +838,7 @@ func _begin_fresh_run() -> void:
 				permanents.append(p)
 		if consumables.is_empty():
 			consumables = { "cons_focus": 1, "item_water": 1 }
-	RunStateStore.start_new_run(permanents, consumables)
+	return RunStateStore.start_new_run(permanents, consumables)
 
 func _sync_visuals() -> void:
 	if _overlay != null:
@@ -591,8 +866,16 @@ func _sync_visuals() -> void:
 func _to_menu() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE)
 
+func _to_dealer() -> void:
+	get_tree().change_scene_to_file(DEALER_SCENE)
+
+func _to_lab() -> void:
+	get_tree().change_scene_to_file(UPGRADES_SCENE)
+
 func _do_spin() -> void:
-	if _spinning_anim or _reroll_anim_active:
+	if _spinning_anim or _reroll_anim_active or _sequence_lock_active:
+		return
+	if _dealer_offer_popup != null:
 		return
 	_clear_targeting()
 	_close_score_table()
@@ -682,22 +965,73 @@ func _step_lever(delta: float) -> void:
 	_set_sheet_frame(_lever_sprite, frame)
 
 func _on_reveal_complete() -> void:
+	if _post_spin_sequence_active:
+		return
+	_post_spin_sequence_active = true
+	_run_post_reveal_sequence()
+
+func _run_post_reveal_sequence() -> void:
 	RunStateStore.set_spinning(false)
+	_set_sequence_lock(true)
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp()
-	_emit_score_burst(null) # normal spin: source reel derived from the result
-	_spin_button.disabled = false
-	if _check_ending():
-		return
+	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
-	if RunStateStore.dealerIncoming:
+	var dealer_pending := RunStateStore.dealerIncoming
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	if _check_ending():
+		_post_spin_sequence_active = false
+		_set_sequence_lock(false)
+		return
+	if dealer_pending:
 		_show_dealer_incoming()
+	else:
+		_set_sequence_lock(false)
+	_post_spin_sequence_active = false
 
 func _update_hud() -> void:
 	_refresh_tv_indicators()
+	_refresh_campaign_label()
 	_refresh_controls()
+
+func _refresh_campaign_label() -> void:
+	if _campaign_label != null:
+		_campaign_label.text = MetaStateStore.campaign_status_text()
+
+func _show_neuron_spend_feedback() -> void:
+	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
+		_neuron_spend_label.queue_free()
+	var feedback_parent: Node = get_node_or_null("BottomHudLayer") as Control
+	if feedback_parent == null:
+		feedback_parent = self
+	var label_position := Vector2(28.0, 104.0)
+	if _campaign_label != null:
+		var label_center := _campaign_label.position + _campaign_label.size * 0.5
+		label_position = label_center - Vector2(35.0, 6.0)
+	_neuron_spend_label = Label.new()
+	_neuron_spend_label.name = "NeuronSpendFeedback"
+	_neuron_spend_label.text = "-1 NEURON"
+	_neuron_spend_label.position = label_position
+	_neuron_spend_label.size = Vector2(70.0, 12.0)
+	_neuron_spend_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_neuron_spend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_neuron_spend_label.z_index = 10
+	_neuron_spend_label.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_neuron_spend_label.add_theme_font_override("font", _font)
+	_neuron_spend_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.45))
+	_neuron_spend_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_neuron_spend_label.add_theme_constant_override("outline_size", 1)
+	feedback_parent.add_child(_neuron_spend_label)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(_neuron_spend_label, "position:y", label_position.y - 14.0, 0.8)
+	tw.tween_property(_neuron_spend_label, "modulate:a", 0.0, 0.8)
+	tw.set_parallel(false)
+	tw.tween_callback(Callable(_neuron_spend_label, "queue_free"))
 
 func _refresh_reels_from_state() -> void:
 	var lr: Variant = RunStateStore.lastResult
@@ -730,12 +1064,13 @@ func _refresh_tv_indicators() -> void:
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, EconomyConst.LUCIDITY_OBJECTIVE]
 	if _bar_labels.has("life"):
-		_bar_labels["life"].text = str(_display_remaining_spins(life_ratio))
+		_bar_labels["life"].text = "SPINS LEFT: %d" % _display_remaining_spins(life_ratio)
 
 func _display_remaining_spins(life_ratio: float) -> int:
 	if RunStateStore.neurons <= 0:
 		return 0
-	return clampi(int(ceili(life_ratio * float(DISPLAY_SPIN_BUDGET))), 1, DISPLAY_SPIN_BUDGET)
+	var spin_budget := maxi(1, starting_spin_counter)
+	return clampi(int(ceili(life_ratio * float(spin_budget))), 1, spin_budget)
 
 func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 	if spr == null:
@@ -813,16 +1148,22 @@ func _nudge(strength: float) -> void:
 # ── score bursts (visual only — mirrors src/components/ScoreBurst.tsx) ──────────────
 
 func _build_burst_layer() -> void:
-	_burst_layer = Control.new()
+	_burst_layer = _authored_control("BurstLayer")
+	if _burst_layer == null:
+		_burst_layer = Control.new()
+		_burst_layer.name = "BurstLayer"
+		add_child(_burst_layer)
 	_burst_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_burst_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_burst_layer)
 
 func _build_coin_layer() -> void:
-	_coin_layer = Control.new()
+	_coin_layer = _authored_control("CoinLayer")
+	if _coin_layer == null:
+		_coin_layer = Control.new()
+		_coin_layer.name = "CoinLayer"
+		add_child(_coin_layer)
 	_coin_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_coin_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_coin_layer)
 
 # Sync the "already announced" markers to the current result so returning from the
 # dealer/scores never replays an old burst, and a power then computes its true gain.
@@ -850,10 +1191,11 @@ func _solo_reel(reels: Array) -> int:
 	return -1
 
 # source_reel: int for a power override, or null for a normal spin (derive it).
-func _emit_score_burst(source_reel) -> void:
+func _emit_score_burst(source_reel) -> float:
 	var lr: Variant = RunStateStore.lastResult
 	if lr == null:
-		return
+		return 0.0
+	var reward_time := 0.0
 	var spin_count := int(RunStateStore.spinCount)
 	var is_new_spin := spin_count != _burst_prev_spin
 	var score := int(lr["scoreEarned"])
@@ -867,15 +1209,14 @@ func _emit_score_burst(source_reel) -> void:
 	var lucidity_gain := maxi(0, int(RunStateStore.lucidityCoins) - _coin_prev_lucidity)
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
 	if lucidity_gain > 0:
-		var visible_coins := _spawn_lucidity_coins(lucidity_gain)
-		_start_lucidity_countup(RunStateStore.lucidityCoins, visible_coins, _coin_flight_time_for_count(visible_coins))
+		reward_time = maxf(reward_time, _spawn_lucidity_coins(lucidity_gain, int(RunStateStore.lucidityCoins)))
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
 		for i in 3:
 			_spawn_burst("", int(Symbols.RARITY.get(String(reels[i]), 0)), COCKTAIL_COLOR, i)
 		_nudge(0.8)
-		return
+		return maxf(reward_time, BURST_TIME)
 
 	# A rescore that doesn't increase the score must NOT pop (gain <= 0).
 	if gain > 0 and win_type != "miss":
@@ -885,16 +1226,18 @@ func _emit_score_burst(source_reel) -> void:
 			_spawn_jackpot_burst(score)
 			_flash_jackpot_lamp()
 			_nudge(2.2)
-			return
+			return maxf(reward_time, maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME))
 		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" else "BONUS")
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
+		reward_time = maxf(reward_time, BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
 			if solo != -1:
 				_spawn_burst("", int(Symbols.RARITY.get(String(reels[solo]), 0)), COCKTAIL_COLOR, solo)
+	return reward_time
 
 func _burst_text(text: String, size: int, color: Color, width: float) -> Label:
 	var l := Label.new()
@@ -978,32 +1321,54 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 		o = 1.0 - (t - 0.7) / 0.3
 	burst.modulate.a = clampf(o, 0.0, 1.0)
 
-func _spawn_lucidity_coins(gain: int) -> int:
+func _spawn_lucidity_coins(gain: int, target_lucidity: int) -> float:
 	if _coin_layer == null:
-		return 0
+		_set_display_lucidity(target_lucidity)
+		return 0.0
 	var tex := _load_texture("ui/coin.png", true)
 	if tex == null:
-		return 0
+		_set_display_lucidity(target_lucidity)
+		return 0.0
 	var count := mini(MAX_VISIBLE_COINS, gain)
+	if count <= 0:
+		_set_display_lucidity(target_lucidity)
+		return 0.0
+	var stagger_time := _coin_fall_stagger_time_for_count(count)
+	var fall_phase_time := float(count - 1) * stagger_time + COIN_TRAY_POP_TIME
+	var travel_start_time := fall_phase_time + COIN_TRAY_HOLD_TIME
 	var flight_time := _coin_flight_time_for_count(count)
-	var stagger_time := _coin_stagger_time_for_count(count)
+	var total_time := travel_start_time + flight_time
+	var cash_tray := COIN_TRAY + CASH_COIN_TRAY_OFFSET
 	for i in count:
 		var coin := Sprite2D.new()
 		coin.texture = tex
 		coin.centered = true
-		coin.position = COIN_TRAY
+		var start_pos := cash_tray
+		var pile_pos := cash_tray + Vector2(
+			(randf() - 0.5) * COIN_TRAY_PILE_SCATTER,
+			-randf() * COIN_TRAY_PILE_DEPTH
+		)
+		var burst_pos := Vector2(
+			cash_tray.x + (randf() - 0.5) * COIN_BURST_SCATTER,
+			cash_tray.y - COIN_BURST_RISE
+		)
+		coin.position = start_pos
 		var coin_scale := COIN_SIZE / float(maxi(1, tex.get_width()))
 		coin.scale = Vector2(coin_scale, coin_scale)
 		coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		coin.modulate.a = 0.0
 		_coin_layer.add_child(coin)
-		var jitter := randf() - 0.5
-		var burst_pos := Vector2(COIN_TRAY.x + jitter * COIN_BURST_SCATTER, COIN_TRAY.y - COIN_BURST_RISE)
+		var fall_delay := float(i) * stagger_time
 		var tw := create_tween()
-		tw.tween_interval(float(i) * stagger_time)
-		tw.tween_method(_drive_lucidity_coin.bind(coin, COIN_TRAY, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
+		tw.tween_interval(fall_delay)
+		tw.tween_method(_drive_lucidity_coin_tray_pop.bind(coin, start_pos, pile_pos), 0.0, 1.0, COIN_TRAY_POP_TIME)
+		tw.tween_interval(maxf(0.0, travel_start_time - fall_delay - COIN_TRAY_POP_TIME))
+		tw.tween_method(_drive_lucidity_coin.bind(coin, pile_pos, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
 		tw.tween_callback(coin.queue_free)
-	return count
+	var value_tw := create_tween()
+	value_tw.tween_interval(total_time)
+	value_tw.tween_callback(_set_display_lucidity.bind(target_lucidity))
+	return total_time
 
 func _coin_flight_time_for_count(count: int) -> float:
 	var pressure := clampf(float(maxi(0, count - 8)) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
@@ -1014,6 +1379,20 @@ func _coin_stagger_time_for_count(count: int) -> float:
 		return COIN_STAGGER_TIME
 	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
 	return lerpf(COIN_STAGGER_TIME, 0.018, pressure)
+
+func _coin_fall_stagger_time_for_count(count: int) -> float:
+	if count <= 8:
+		return COIN_FALL_STAGGER_TIME
+	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
+	return lerpf(COIN_FALL_STAGGER_TIME, 0.012, pressure)
+
+func _drive_lucidity_coin_tray_pop(t: float, coin: Sprite2D, from_pos: Vector2, pile_pos: Vector2) -> void:
+	if not is_instance_valid(coin):
+		return
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	var pop := sin(t * PI) * 6.0
+	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
+	coin.modulate.a = minf(t / 0.12, 1.0)
 
 func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos: Vector2, to_pos: Vector2) -> void:
 	if not is_instance_valid(coin):
@@ -1032,7 +1411,7 @@ func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos
 		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
 
 func _try_start_power_coin_flow() -> void:
-	if _power_coin_active or _spinning_anim or _reroll_anim_active:
+	if _power_coin_active or _spinning_anim or _reroll_anim_active or _sequence_lock_active:
 		return
 	if RunStateStore.pendingPowerRestores.is_empty():
 		return
@@ -1084,7 +1463,7 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
-func _finish_power_coin_flow(power_id: String, coin: TextureRect, target: Vector2) -> void:
+func _finish_power_coin_flow(power_id: String, coin: Node, target: Vector2) -> void:
 	if is_instance_valid(coin):
 		coin.queue_free()
 	RunStateStore.commit_power_restore(power_id)
@@ -1117,16 +1496,17 @@ func _drive_power_pulse(t: float, pulse: ColorRect) -> void:
 func _build_multiplier_buttons() -> void:
 	for m in [1, 2, 3]:
 		var cx := float(MULT_BADGE_CENTERS[m - 1])
-		var b := _make_hit_button({
+		var b := _make_or_bind_hit_button("MultiplierButton%d" % m, {
 			"left": cx - 8.0,
 			"top": MULT_STRIP["top"],
 			"width": 16.0,
 			"height": MULT_STRIP["height"],
 		}, _select_bet_multiplier.bind(m))
-		add_child(b)
 		_multiplier_buttons.append(b)
 
 func _select_bet_multiplier(m: int) -> void:
+	if _sequence_lock_active:
+		return
 	if not RunStateStore._can_act():
 		return
 	if _is_multiplier_locked(m):
@@ -1150,7 +1530,8 @@ func _is_multiplier_locked(m: int) -> bool:
 	return m > _highest_affordable_multiplier()
 
 func _refresh_multiplier_controls() -> void:
-	var can_act := RunStateStore._can_act() and not _spinning_anim and not _reroll_anim_active
+	var can_act := RunStateStore._can_act() and not _spinning_anim and not _reroll_anim_active \
+		and _dealer_offer_popup == null and not _sequence_lock_active
 	for i in _multiplier_buttons.size():
 		var m := i + 1
 		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
@@ -1168,40 +1549,87 @@ func _refresh_multiplier_controls() -> void:
 func _build_power_buttons() -> void:
 	for id in ["reroll", "shift", "memory"]:
 		var hit: Dictionary = POWER_HITS[id]
-		var b := _make_hit_button({
+		var node_name := "PowerButton%s" % id.capitalize()
+		var b := _make_or_bind_hit_button(node_name, {
 			"left": hit["left"],
 			"top": hit["top"],
 			"width": maxf(hit["width"], 11.0),
 			"height": hit["height"],
 		}, _on_power_pressed.bind(id))
-		add_child(b)
 		_power_buttons[id] = b
 
 func _build_stash() -> void:
 	# Bottom-right corner, shared layout + scale so the stash matches the dealer, shop,
 	# and in-run overlay stashes (issue #26). Bare TextureRects (tap to use) keep the
 	# icons crisp and the same size as the drag stashes in the other scenes.
-	for i in Consumables.MAX_CONSUMABLE_SLOTS:
-		var icon := TextureRect.new()
-		icon.position = Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS)
-		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_stash_icons.clear()
+	for i in maxi(1, max_consumable_slots):
+		var slot := _stash_slot_node(i)
+		var icon := _stash_icon_for_slot(slot, i)
+		var authored := slot != null
+		if icon == null:
+			icon = TextureRect.new()
+			icon.name = "StashSlot%d" % i
+			add_child(icon)
+		if not authored:
+			icon.position = Assets.stash_slot_pos(i, max_consumable_slots)
+			icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		elif icon.has_meta("_machine_generated_stash_icon"):
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_STOP
-		icon.gui_input.connect(_on_stash_input.bind(i))
-		add_child(icon)
+		var cb := _on_stash_input.bind(icon, i)
+		if not icon.gui_input.is_connected(cb):
+			icon.gui_input.connect(cb)
 		_stash_icons.append(icon)
+
+func _stash_slot_node(index: int) -> Control:
+	var one_based := index + 1
+	for path in [
+		"stash/StashSlot%d" % one_based,
+		"CoinLayer/stash/StashSlot%d" % one_based,
+		"StashSlot%d" % index,
+		"StashSlot%d" % one_based,
+	]:
+		var slot := get_node_or_null(path) as Control
+		if slot != null:
+			return slot
+	return null
+
+func _stash_icon_for_slot(slot: Control, index: int) -> TextureRect:
+	if slot == null:
+		return null
+	if slot is TextureRect:
+		return slot as TextureRect
+	var icon := slot.get_node_or_null("Icon") as TextureRect
+	if icon == null:
+		icon = TextureRect.new()
+		icon.name = "Icon"
+		icon.set_meta("_machine_generated_stash_icon", true)
+		icon.position = Vector2.ZERO
+		icon.size = slot.size
+		slot.add_child(icon)
+	return icon
 
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
 # stash). Gated by the same can-act check the refresh uses, so disabled slots ignore taps.
-func _on_stash_input(event: InputEvent, slot_index: int) -> void:
+func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
 	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
 		return
-	if not RunStateStore._can_act() or _reroll_anim_active:
+	var slots := _stash_slots()
+	if slot_index >= slots.size():
+		return
+	if _dealer_offer_popup != null:
+		_begin_dealer_drag(node, String(slots[slot_index]), "stash")
+		return
+	if _sequence_lock_active or not RunStateStore._can_act() or _reroll_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -1218,7 +1646,7 @@ func _stash_slots() -> Array:
 	for entry in stash:
 		var copies := int(stash[entry])
 		for _k in copies:
-			if slots.size() < Consumables.MAX_CONSUMABLE_SLOTS:
+			if slots.size() < max_consumable_slots:
 				slots.append(String(entry))
 	return slots
 
@@ -1226,7 +1654,11 @@ func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
 	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim and not _reroll_anim_active \
-		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0
+		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0 \
+		and _dealer_offer_popup == null and not _sequence_lock_active
+	if _spin_button != null:
+		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
+			or _spinning_anim or _reroll_anim_active or _sequence_lock_active
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -1246,7 +1678,8 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := RunStateStore._can_act() and not _reroll_anim_active
+	var usable := (RunStateStore._can_act() and not _reroll_anim_active and not _sequence_lock_active) \
+		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
 		if i < slots.size():
@@ -1258,7 +1691,7 @@ func _refresh_controls() -> void:
 
 func _power_owned(id: String, owned: Array) -> bool:
 	if id == "reroll":
-		return true
+		return default_run_power_ids.has("reroll")
 	if id == "shift":
 		return owned.has("perm_shift")
 	if id == "memory":
@@ -1274,6 +1707,8 @@ func _icon_for(id: String) -> Texture2D:
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
+	if _sequence_lock_active:
+		return
 	if _targeting_layer != null:
 		_clear_targeting()
 		_refresh_controls()
@@ -1325,6 +1760,8 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if _sequence_lock_active:
+		return
 	if power_id == "reroll":
 		if RunStateStore.reroll_reel(reel_index):
 			_clear_targeting()
@@ -1365,15 +1802,24 @@ func _step_reroll(delta: float) -> void:
 			_spin_button.disabled = false
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_emit_score_burst(rerolled) # reroll burst pops from the rerolled reel
+		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
+	if _sequence_lock_active:
+		return
 	RunStateStore.move_reel(reel_index, direction)
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
-	_emit_score_burst(reel_index) # shift burst pops from the shifted reel
+	_play_reward_sequence(reel_index) # shift burst pops from the shifted reel
+
+func _play_reward_sequence(source_reel: int) -> void:
+	_set_sequence_lock(true)
+	var reward_time := _emit_score_burst(source_reel)
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
 	if _targeting_layer != null:
@@ -1397,6 +1843,10 @@ func _score_label(parent: Control, text: String, pos: Vector2, size: int, color:
 	return l
 
 func _show_score_table() -> void:
+	if _sequence_lock_active:
+		return
+	if _dealer_offer_popup != null:
+		return
 	if _score_overlay != null:
 		_close_score_table()
 		return
@@ -1475,13 +1925,73 @@ func _on_stash_pressed(slot_index: int) -> void:
 	if id == "cons_white_powder":
 		_begin_white_powder()
 		return
-	RunStateStore.use_consumable(id)
+	var lucidity_before := int(RunStateStore.lucidityCoins)
+	if not RunStateStore.use_consumable(id):
+		return
 	_refresh_reels_from_state()
+	_update_hud()
+	_show_consumable_feedback(id)
+	_play_consumable_lucidity_feedback(lucidity_before)
+	if id == "cons_tea":
+		_try_start_power_coin_flow()
+
+func _consumable_feedback_text(id: String) -> String:
+	match id:
+		"cons_tea":
+			return "RESTORE"
+		"item_pill":
+			return "WIN GUARANTEED"
+		"item_cocktail":
+			return "ONLY GAIN"
+		"item_energy_drink":
+			return "FREE SPINS"
+		_:
+			return ""
+
+func _show_consumable_feedback(id: String) -> void:
+	var text := _consumable_feedback_text(id)
+	if text.is_empty():
+		return
+	if _consumable_feedback_label == null or not is_instance_valid(_consumable_feedback_label):
+		_build_consumable_feedback_label()
+	if _consumable_feedback_label == null:
+		return
+	if _consumable_feedback_tween != null and _consumable_feedback_tween.is_running():
+		_consumable_feedback_tween.kill()
+	_consumable_feedback_label.text = text
+	_consumable_feedback_label.visible = true
+	_consumable_feedback_label.modulate.a = 1.0
+	_consumable_feedback_label.scale = Vector2(0.9, 0.9)
+	_consumable_feedback_tween = create_tween()
+	_consumable_feedback_tween.tween_property(_consumable_feedback_label, "scale", Vector2.ONE, 0.12)
+	_consumable_feedback_tween.tween_interval(consumable_feedback_hold_seconds)
+	_consumable_feedback_tween.tween_property(_consumable_feedback_label, "modulate:a", 0.0, 0.28)
+	_consumable_feedback_tween.tween_callback(_hide_consumable_feedback)
+
+func _hide_consumable_feedback() -> void:
+	if _consumable_feedback_label == null or not is_instance_valid(_consumable_feedback_label):
+		return
+	_consumable_feedback_label.visible = false
+	_consumable_feedback_label.scale = Vector2.ONE
+
+func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
+	var target_lucidity := int(RunStateStore.lucidityCoins)
+	var lucidity_gain := maxi(0, target_lucidity - lucidity_before)
+	if lucidity_gain <= 0:
+		return
+	_coin_prev_lucidity = target_lucidity
+	_set_sequence_lock(true)
+	var reward_time := _spawn_lucidity_coins(lucidity_gain, target_lucidity)
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	_set_sequence_lock(false)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. copy_reel() applies the copy and its side effect (consume a random
 # other supply, or -20 neurons). Needs a spin result to copy from.
 func _begin_white_powder() -> void:
+	if _sequence_lock_active:
+		return
 	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
 		return
 	if not RunStateStore.use_consumable("cons_white_powder"):
@@ -1490,6 +2000,8 @@ func _begin_white_powder() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
 func _on_copy_pick(reel_index: int) -> void:
+	if _sequence_lock_active:
+		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
 		_arm_reel_picker(func(target_index: int) -> void: _on_copy_pick(target_index))
@@ -1501,7 +2013,7 @@ func _on_copy_pick(reel_index: int) -> void:
 		_refresh_reels_from_state()
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_emit_score_burst(reel_index) # copy burst pops from the target reel
+		_play_reward_sequence(reel_index) # copy burst pops from the target reel
 
 func _check_ending() -> bool:
 	var run := {
@@ -1558,7 +2070,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_overlay.add_child(wallet)
 
 	var to_menu := Button.new()
-	to_menu.text = "BANK & LEAVE" if ending == "wealth" else "MENU"
+	to_menu.text = "BANK & LAB" if ending == "wealth" else _flatline_action_text()
 	to_menu.position = Vector2(30, 238 if ending == "flatline" else 175)
 	to_menu.size = Vector2(100, 20)
 	to_menu.add_theme_font_size_override("font_size", 9)
@@ -1566,7 +2078,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		to_menu.add_theme_font_override("font", _font)
 	# Non-wealth already banked above; wealth banks here on leave.
 	Assets.skin_negative_button(to_menu)
-	to_menu.pressed.connect(_bank_and_menu.bind(run, ending) if ending == "wealth" else _to_menu)
+	to_menu.pressed.connect(_bank_and_lab.bind(run, ending) if ending == "wealth" else _on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
 	if ending == "wealth":
@@ -1580,9 +2092,55 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		cont.pressed.connect(_continue_from_wealth)
 		_overlay.add_child(cont)
 
+func _show_campaign_failed() -> void:
+	_stop_flatline_countdown()
+	if _overlay != null:
+		_overlay.queue_free()
+	_overlay = Control.new()
+	_overlay.position = Vector2.ZERO
+	_overlay.size = Vector2(SRC_W, SRC_H)
+	add_child(_overlay)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.82)
+	dim.size = Vector2(SRC_W, SRC_H)
+	_overlay.add_child(dim)
+
+	_score_label(_overlay, "FLATLINE", Vector2(20.0, 82.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "THE MACHINE", Vector2(20.0, 120.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "REMEMBERS YOU", Vector2(20.0, 134.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+
+	var fresh := Button.new()
+	fresh.text = "START FRESH AGAIN"
+	fresh.position = Vector2(20.0, 188.0)
+	fresh.size = Vector2(120.0, 22.0)
+	fresh.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		fresh.add_theme_font_override("font", _font)
+	Assets.skin_negative_button(fresh)
+	fresh.pressed.connect(_start_fresh_again)
+	_overlay.add_child(fresh)
+
+func _start_fresh_again() -> void:
+	MetaStateStore.start_new_campaign()
+	RunStateStore.reset_run_state()
+	_to_menu()
+
+func _flatline_action_text() -> String:
+	return "CONTINUE" if _has_campaign_neurons_remaining() else "MENU"
+
+func _on_flatline_action_pressed() -> void:
+	if _has_campaign_neurons_remaining():
+		_to_dealer()
+	else:
+		_to_menu()
+
+func _has_campaign_neurons_remaining() -> bool:
+	return int(MetaStateStore.campaignNeuronsLeft) > 0
+
 func _build_flatline_countdown(run: Dictionary) -> void:
 	_flatline_total = int(run["lucidityCoins"])
-	_flatline_kept = floori(float(_flatline_total) * EconomyConst.END_OF_RUN_LUCIDITY_KEPT)
+	_flatline_kept = floori(float(_flatline_total) * _end_run_lucidity_kept_fraction())
 	_flatline_display = _flatline_total
 	_flatline_countdown_elapsed = 0.0
 	_flatline_countdown_active = _flatline_kept < _flatline_total
@@ -1621,56 +2179,20 @@ func _stop_flatline_countdown() -> void:
 	_flatline_score_label = null
 	_flatline_lost_label = null
 
+func _end_run_lucidity_kept_fraction() -> float:
+	return EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
+		if MetaStateStore.ownedPermanents.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
+		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
+
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
 	_sync_visuals()
 
-func _bank_and_menu(run: Dictionary, ending: String) -> void:
+func _bank_and_lab(run: Dictionary, ending: String) -> void:
 	MetaStateStore.bank_run(run, ending)
-	_to_menu()
+	_to_lab()
 
 # ── dealer flow ────────────────────────────────────────────────────────────────────
-
-func _make_dealer_modal(show_portrait := true) -> Control:
-	if _dealer_overlay != null:
-		_dealer_overlay.queue_free()
-	_dealer_message_label = null
-	_dealer_portrait_sprite = null
-	_dealer_overlay = Control.new()
-	_dealer_overlay.size = Vector2(SRC_W, SRC_H) # default mouse_filter STOP -> modal, blocks spin
-	add_child(_dealer_overlay)
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.0, 0.05, 0.18)
-	dim.size = Vector2(SRC_W, SRC_H)
-	_dealer_overlay.add_child(dim)
-	if show_portrait:
-		_dealer_portrait_sprite = _build_control_sheet_on(_dealer_overlay, "dealer_portrait.png", 2)
-	return _dealer_overlay
-
-func _dealer_label(parent: Control, text: String, pos: Vector2, size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.position = pos
-	l.add_theme_font_size_override("font_size", size)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", color)
-	parent.add_child(l)
-	return l
-
-func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable, icon: Texture2D = null) -> void:
-	var b := Button.new()
-	b.text = text
-	b.position = pos
-	b.size = size
-	b.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	if icon != null:
-		b.icon = icon
-		b.expand_icon = true
-	b.pressed.connect(cb)
-	parent.add_child(b)
 
 func _show_dealer_incoming() -> void:
 	_dealer_visit()
@@ -1681,67 +2203,26 @@ func _dealer_visit() -> void:
 	# machine; the full dealer scene is reserved for the pre-run shop flow.
 	_show_dealer_offers()
 
-func _dealer_wave_off() -> void:
-	RunStateStore.decline_dealer_visit()
-	_close_dealer()
-
 func _show_dealer_offers() -> void:
 	var offers: Variant = RunStateStore.dealerOfferIds
 	if offers == null:
 		_close_dealer()
 		return
+	_set_sequence_lock(true)
+	_clear_targeting()
 	if _dealer_overlay != null:
 		_dealer_overlay.queue_free()
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
 	_dealer_overlay = _dealer_offer_popup
 	add_child(_dealer_offer_popup)
+	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
-	_set_stash_visible(false) # overlay shows its own stash — avoid a duplicate (issue #26)
-	_dealer_offer_popup.start_offer((offers as Array).duplicate(), _stash_slots())
-
-func _dealer_offer_button(parent: Control, item_id: String, text: String, pos: Vector2, icon: Texture2D) -> void:
-	var card := Control.new()
-	card.position = pos
-	card.size = Vector2(56.0, 38.0)
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.gui_input.connect(_on_dealer_offer_input.bind(card, item_id))
-	parent.add_child(card)
-	var icon_rect := TextureRect.new()
-	icon_rect.texture = icon
-	icon_rect.position = Vector2(16.0, 2.0)
-	icon_rect.size = Vector2(24.0, 24.0)
-	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(icon_rect)
-
-func _build_dealer_stash(parent: Control) -> void:
-	var slots := _stash_slots()
-	var start_x := 58.0 if slots.size() == 1 else 47.0
-	for i in slots.size():
-		var id := String(slots[i])
-		var icon := TextureRect.new()
-		icon.texture = _icon_for(id)
-		icon.position = Vector2(start_x + float(i) * 24.0, 296.0)
-		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		icon.mouse_filter = Control.MOUSE_FILTER_STOP
-		icon.gui_input.connect(_on_dealer_stash_input.bind(icon, id))
-		parent.add_child(icon)
-
-func _on_dealer_stash_input(event: InputEvent, node: Control, id: String) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _dealer_drag_active:
-		_begin_dealer_drag(node, id, "stash")
-
-func _on_dealer_offer_input(event: InputEvent, node: Control, id: String) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _dealer_drag_active:
-		_begin_dealer_drag(node, id, "offer")
+	_set_stash_visible(true)
+	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [])
+	_refresh_controls()
 
 func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	_dealer_drag_active = true
@@ -1772,6 +2253,8 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	var kind := _dealer_drag_kind
 	var node := _dealer_drag_node
 	var dropped_on_dealer := release_pos.y < 214.0
+	if _dealer_offer_popup != null:
+		dropped_on_dealer = _dealer_offer_popup.has_dealer_drop_point(release_pos)
 	_dealer_drag_active = false
 	_dealer_drag_node = null
 	_dealer_drag_id = ""
@@ -1790,7 +2273,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 			_dealer_take(id)
 		elif kind == "stash":
 			RunStateStore.discard_run_consumable(id)
-			_show_dealer_offers()
+			_update_hud()
 
 func _dealer_full_stash_feedback() -> void:
 	if _dealer_offer_popup != null:
@@ -1821,10 +2304,10 @@ func _dealer_take(item_id: String) -> void:
 
 func _dealer_discard_stash(item_id: String) -> void:
 	RunStateStore.discard_run_consumable(item_id)
-	if _dealer_offer_popup != null:
-		_dealer_offer_popup.set_stash_items(_stash_slots())
-	else:
+	if _dealer_offer_popup == null:
 		_show_dealer_offers()
+	else:
+		_update_hud()
 
 func _dealer_leave() -> void:
 	RunStateStore.decline_dealer_offer()
@@ -1848,4 +2331,5 @@ func _close_dealer() -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	_set_sequence_lock(false)
 	_update_hud()

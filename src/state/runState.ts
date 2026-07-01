@@ -444,8 +444,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
         if (state.abilitiesUsed.length === 0) return false;
         const rng = createRNG(((Date.now() ^ (state.spinCount * 0xdeadbeef)) >>> 0));
         const idx = Math.floor(rng() * state.abilitiesUsed.length);
+        const restored = state.abilitiesUsed[idx] as AbilityId;
         const newUsed = state.abilitiesUsed.filter((_, i) => i !== idx);
-        set({ runConsumables: newRunConsumables, abilitiesUsed: newUsed as ReadonlyArray<AbilityId> });
+        set({
+          runConsumables: newRunConsumables,
+          abilitiesUsed: newUsed as ReadonlyArray<AbilityId>,
+          pendingPowerRestores: [...state.pendingPowerRestores, restored],
+        });
         return true;
       }
 

@@ -100,6 +100,7 @@ export interface MetaState {
   readonly endingsReached: ReadonlyArray<EndingType>;
   readonly history: RunHistory;
   readonly pendingConsumables: Partial<Record<string, number>>;
+  readonly is_first_launch: boolean;
 }
 
 export interface SaveSlot {

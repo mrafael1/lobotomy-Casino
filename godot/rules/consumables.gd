@@ -6,13 +6,13 @@ extends RefCounted
 const MAX_CONSUMABLE_SLOTS := 2
 
 const LIST := [
-	{ "id": "cons_focus", "name": "Focus Serum", "shopCost": 12,
+	{ "id": "cons_focus", "name": "Serum", "shopCost": 12,
 	  "effect": { "type": "lucidityMultiplierNextSpin", "multiplier": 3.0, "hideNeuronsSpins": 5 } },
 	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 14,
 	  "effect": { "type": "copyReel" } },
-	{ "id": "cons_syringe", "name": "Syringe", "shopCost": 18,
+	{ "id": "cons_syringe", "name": "test", "shopCost": 18,
 	  "effect": { "type": "brainBoost", "spins": 5 } },
-	{ "id": "cons_tea", "name": "Herbal Tea", "shopCost": 10,
+	{ "id": "cons_tea", "name": "Tea", "shopCost": 10,
 	  "effect": { "type": "restoreAbility" } },
 ]
 

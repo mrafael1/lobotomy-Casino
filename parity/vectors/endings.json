@@ -15,7 +15,7 @@
         "neurons": -1,
         "scoreEarned": 2000
       },
-      "expect": "flatline"
+      "expect": "wealth"
     },
     {
       "input": {

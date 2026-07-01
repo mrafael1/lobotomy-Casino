@@ -1,0 +1,111 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/collection_scene.gd" id="1_collection"]
+[ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(0.055, 0.03, 0.11, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.92, 0.86, 0.56, 0.82)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.02, 0.01, 0.04, 1)
+
+[node name="CollectionScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_collection")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 28.0
+offset_right = 152.0
+offset_bottom = 292.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Rows" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Panel/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 11
+text = "COLLECTION"
+horizontal_alignment = 1
+
+[node name="Grid" type="GridContainer" parent="Panel/Rows"]
+layout_mode = 2
+theme_override_constants/h_separation = 5
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="BackButton" type="Button" parent="Panel/Rows"]
+custom_minimum_size = Vector2(112, 20)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "BACK"
+
+[node name="UnlockModal" type="PanelContainer" parent="."]
+visible = false
+z_index = 50
+layout_mode = 0
+offset_left = 18.0
+offset_top = 104.0
+offset_right = 142.0
+offset_bottom = 209.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Rows" type="VBoxContainer" parent="UnlockModal"]
+layout_mode = 2
+theme_override_constants/separation = 7
+alignment = 1
+
+[node name="NameLabel" type="Label" parent="UnlockModal/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 9
+text = "POWER"
+horizontal_alignment = 1
+
+[node name="DescriptionLabel" type="Label" parent="UnlockModal/Rows"]
+custom_minimum_size = Vector2(104, 34)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 7
+text = "Requires 350 Lucidity Coins."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="CloseButton" type="Button" parent="UnlockModal/Rows"]
+custom_minimum_size = Vector2(86, 18)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "CLOSE"

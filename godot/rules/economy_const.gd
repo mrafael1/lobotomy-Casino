@@ -21,6 +21,9 @@ const EXIT_LUCIDITY_THRESHOLD := 750
 const LUCIDITY_OBJECTIVE := 1000
 const LUCIDITY_COINS_PER_RESTORE := 50
 const END_OF_RUN_LUCIDITY_KEPT := 0.10
+const SMART_SAVE_LUCIDITY_KEPT := 0.20
+const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
+const CAMPAIGN_STARTING_NEURONS := 12
 
 # The Nth coin (50, 100, …) is a "power coin". Pass the total AFTER counting it.
 static func is_power_coin(total_after_coin: int) -> bool:

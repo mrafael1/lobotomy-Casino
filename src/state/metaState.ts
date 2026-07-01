@@ -12,6 +12,7 @@ export interface MetaStore extends MetaState {
   buyConsumableCharge: (consumableId: string) => void;
   discardPendingConsumable: (consumableId: string) => void;
   markEndingReached: (ending: EndingType) => void;
+  markTutorialSeen: () => void;
   getPendingConsumables: () => Partial<Record<string, number>>;
 }
 
@@ -22,6 +23,7 @@ const INITIAL_META_STATE: MetaState = {
   corruptionEverUsed: false,
   endingsReached:     [],
   pendingConsumables: {},
+  is_first_launch: true,
   history: {
     runsPlayed:   0,
     bestScoreRun: 0,
@@ -48,6 +50,7 @@ export const useMetaStore = create<MetaStore>()(
           corruptionEverUsed: state.corruptionEverUsed,
           endingsReached:     state.endingsReached,
           pendingConsumables: state.pendingConsumables,
+          is_first_launch:    state.is_first_launch,
           history:            state.history,
         };
         const next = bankRunToMeta(run, metaSnapshot, ending);
@@ -128,6 +131,11 @@ export const useMetaStore = create<MetaStore>()(
                 : state.history.exitEndingReachedAt,
           },
         });
+      },
+
+      markTutorialSeen(): void {
+        if (!get().is_first_launch) return;
+        set({ is_first_launch: false });
       },
 
       getPendingConsumables(): Partial<Record<string, number>> {
