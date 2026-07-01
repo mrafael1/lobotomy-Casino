@@ -36,6 +36,8 @@ const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
 const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
 const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
 const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
+## Purple corrupted-name colour, shared with the dealer/upgrade rule (issue #33/#7).
+const CORRUPT_NAME_COLOR := Color(0.66, 0.33, 0.86)
 # In-run pool only (InRunItems.LIST). Pre-run cons_* hints live in
 # dealer_scene.gd — the two scenes own separate pools (issue #31).
 const ITEM_HINTS := {
@@ -89,6 +91,7 @@ var _speech_bubble: Control = null
 var _bubble_graphic: TextureRect = null
 var _speech_label: Label = null
 var _speech_hint_layer: Control = null
+var _speech_name_hint: Label = null  # item name, purple when corrupted (issue #33)
 var _speech_pos_hint: Label = null
 var _speech_neg_hint: Label = null
 var _tap_label: Label = null
@@ -372,6 +375,7 @@ func _bind_authored_base() -> bool:
 	_bubble_graphic = get_node_or_null("SpeechBubble/BubbleGraphic") as TextureRect
 	_speech_label = get_node_or_null("SpeechBubble/SpeechLabel") as Label
 	_speech_hint_layer = get_node_or_null("SpeechBubble/HintLayer") as Control
+	_speech_name_hint = get_node_or_null("SpeechBubble/HintLayer/NameHint") as Label
 	_speech_pos_hint = get_node_or_null("SpeechBubble/HintLayer/PositiveHint") as Label
 	_speech_neg_hint = get_node_or_null("SpeechBubble/HintLayer/NegativeHint") as Label
 	_message_label = get_node_or_null("MessageLabel") as Label
@@ -741,13 +745,16 @@ func _ensure_speech_hint_layer() -> void:
 		_speech_hint_layer.size = Vector2(_speech_bubble.size.x, 30.0)
 		_speech_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_speech_bubble.add_child(_speech_hint_layer)
+	if _speech_name_hint == null:
+		_speech_name_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 1.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, BUBBLE_TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_speech_name_hint.name = "NameHint"
 	if _speech_pos_hint == null:
-		_speech_pos_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 2.0), Vector2(_speech_bubble.size.x - 16.0, 12.0), 8, TV_POSITIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+		_speech_pos_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 12.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, TV_POSITIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 		_speech_pos_hint.name = "PositiveHint"
 	if _speech_neg_hint == null:
-		_speech_neg_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 13.0), Vector2(_speech_bubble.size.x - 16.0, 12.0), 8, TV_NEGATIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+		_speech_neg_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 23.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, TV_NEGATIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 		_speech_neg_hint.name = "NegativeHint"
-	var hint_labels: Array[Label] = [_speech_pos_hint, _speech_neg_hint]
+	var hint_labels: Array[Label] = [_speech_name_hint, _speech_pos_hint, _speech_neg_hint]
 	for label: Label in hint_labels:
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.add_theme_font_size_override("font_size", 8)
@@ -774,9 +781,22 @@ func _set_speech_hints(item_id: String, backing_text := "Interested in one?") ->
 		_set_speech_text(backing_text)
 		return
 	var hints: Dictionary = ITEM_HINTS.get(item_id, FALLBACK_HINT)
+	_speech_name_hint.text = _item_name(item_id)
+	_speech_name_hint.add_theme_color_override(
+		"font_color", CORRUPT_NAME_COLOR if HintLabel.item_is_corrupted(item_id) else BUBBLE_TEXT_COLOR
+	)
 	_speech_pos_hint.text = "+ %s" % String(hints["pos"])
 	_speech_neg_hint.text = "- %s" % String(hints["neg"])
 	_speech_hint_layer.visible = true
+
+func _item_name(id: String) -> String:
+	var imap := InRunItems.map()
+	if imap.has(id):
+		return String(imap[id]["name"]).to_upper()
+	var cmap := Consumables.map()
+	if cmap.has(id):
+		return String(cmap[id]["name"]).to_upper()
+	return id.to_upper()
 
 func _string_items(items: Array) -> Array[String]:
 	var out: Array[String] = []

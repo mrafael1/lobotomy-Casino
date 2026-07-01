@@ -144,7 +144,21 @@ const ITEM_ICONS := {
 @export var default_run_power_ids: Array[String] = ["reroll"]
 
 @export_group("Feedback")
-@export_range(0.0, 5.0, 0.1) var consumable_feedback_hold_seconds: float = 1.5
+## Grow-then-fade duration of the on-use +/- hint (issue #33). The animated
+## HintLabel owns the +/- and corrupt colours; this only drives its lifetime.
+@export_range(0.0, 5.0, 0.1) var hint_grow_time: float = 1.5
+## Per-item +/- hint vocabulary shown when a stash item is used in-run. Mirrors
+## the dealer scenes' pools (issue #31) so the same item reads the same way.
+@export var use_hints: Dictionary = {
+	"cons_white_powder": { "pos": "COPY", "neg": "LOSE" },
+	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
+	"cons_syringe": { "pos": "BRAINS", "neg": "NO POWER" },
+	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
+	"item_water": { "pos": "REFRESHING", "neg": "WEAK" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
+	"item_energy_drink": { "pos": "FREE", "neg": "LIMITED" },
+	"item_cocktail": { "pos": "EASY", "neg": "COMPULSIVE" },
+}
 
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
@@ -224,8 +238,7 @@ var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
 var _neuron_spend_label: Label = null
-var _consumable_feedback_label: Label = null
-var _consumable_feedback_tween: Tween = null
+var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
@@ -660,7 +673,7 @@ func _set_reel_symbol(index: int, symbol_id: String) -> void:
 func _build_hud() -> void:
 	_build_score_button()
 	_build_campaign_label()
-	_build_consumable_feedback_label()
+	_build_hint_layer()
 	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
 
@@ -764,35 +777,18 @@ func _build_campaign_label() -> void:
 	_campaign_label.add_theme_constant_override("outline_size", 1)
 	_campaign_label.text = ""
 
-func _build_consumable_feedback_label() -> void:
+func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
 	if bottom_hud == null:
 		return
-	_consumable_feedback_label = bottom_hud.get_node_or_null("ConsumableFeedback") as Label
-	if _consumable_feedback_label == null:
-		_consumable_feedback_label = Label.new()
-		_consumable_feedback_label.name = "ConsumableFeedback"
-		bottom_hud.add_child(_consumable_feedback_label)
-		_consumable_feedback_label.set_anchors_preset(Control.PRESET_CENTER)
-		_consumable_feedback_label.offset_left = -60.0
-		_consumable_feedback_label.offset_top = -12.0
-		_consumable_feedback_label.offset_right = 60.0
-		_consumable_feedback_label.offset_bottom = 4.0
-	_consumable_feedback_label.visible = false
-	_consumable_feedback_label.text = ""
-	_consumable_feedback_label.modulate.a = 0.0
-	_consumable_feedback_label.scale = Vector2.ONE
-	_consumable_feedback_label.pivot_offset = _consumable_feedback_label.size * 0.5
-	_consumable_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_consumable_feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_consumable_feedback_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_consumable_feedback_label.z_index = 20
-	_consumable_feedback_label.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		_consumable_feedback_label.add_theme_font_override("font", _font)
-	_consumable_feedback_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.75))
-	_consumable_feedback_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_consumable_feedback_label.add_theme_constant_override("outline_size", 1)
+	_hint_layer = bottom_hud.get_node_or_null("HintLayer") as Control
+	if _hint_layer == null:
+		_hint_layer = Control.new()
+		_hint_layer.name = "HintLayer"
+		bottom_hud.add_child(_hint_layer)
+		_hint_layer.set_anchors_preset(Control.PRESET_CENTER)
+		_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hint_layer.z_index = 20
 
 func _build_bar_label(id: String, pos: Vector2, color: Color) -> void:
 	var node_name := "GoalLabel" if id == "goal" else "HealthLabel"
@@ -1935,44 +1931,33 @@ func _on_stash_pressed(slot_index: int) -> void:
 	if id == "cons_tea":
 		_try_start_power_coin_flow()
 
-func _consumable_feedback_text(id: String) -> String:
-	match id:
-		"cons_tea":
-			return "RESTORE"
-		"item_pill":
-			return "WIN GUARANTEED"
-		"item_cocktail":
-			return "ONLY GAIN"
-		"item_energy_drink":
-			return "FREE SPINS"
-		_:
-			return ""
+func _item_display_name(id: String) -> String:
+	var imap := InRunItems.map()
+	if imap.has(id):
+		return String(imap[id]["name"]).to_upper()
+	var cmap := Consumables.map()
+	if cmap.has(id):
+		return String(cmap[id]["name"]).to_upper()
+	return id.to_upper()
 
+## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
+## HintLabel; the item name renders purple when the item is flagged corrupted.
 func _show_consumable_feedback(id: String) -> void:
-	var text := _consumable_feedback_text(id)
-	if text.is_empty():
+	var hint: Dictionary = use_hints.get(id, {})
+	if hint.is_empty():
 		return
-	if _consumable_feedback_label == null or not is_instance_valid(_consumable_feedback_label):
-		_build_consumable_feedback_label()
-	if _consumable_feedback_label == null:
+	if _hint_layer == null or not is_instance_valid(_hint_layer):
+		_build_hint_layer()
+	if _hint_layer == null:
 		return
-	if _consumable_feedback_tween != null and _consumable_feedback_tween.is_running():
-		_consumable_feedback_tween.kill()
-	_consumable_feedback_label.text = text
-	_consumable_feedback_label.visible = true
-	_consumable_feedback_label.modulate.a = 1.0
-	_consumable_feedback_label.scale = Vector2(0.9, 0.9)
-	_consumable_feedback_tween = create_tween()
-	_consumable_feedback_tween.tween_property(_consumable_feedback_label, "scale", Vector2.ONE, 0.12)
-	_consumable_feedback_tween.tween_interval(consumable_feedback_hold_seconds)
-	_consumable_feedback_tween.tween_property(_consumable_feedback_label, "modulate:a", 0.0, 0.28)
-	_consumable_feedback_tween.tween_callback(_hide_consumable_feedback)
-
-func _hide_consumable_feedback() -> void:
-	if _consumable_feedback_label == null or not is_instance_valid(_consumable_feedback_label):
-		return
-	_consumable_feedback_label.visible = false
-	_consumable_feedback_label.scale = Vector2.ONE
+	var hint_label := HintLabel.new()
+	hint_label.grow_time = hint_grow_time
+	hint_label.set_font(_font)
+	_hint_layer.add_child(hint_label)
+	hint_label.play(
+		String(hint["pos"]), String(hint["neg"]),
+		_item_display_name(id), HintLabel.item_is_corrupted(id)
+	)
 
 func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	var target_lucidity := int(RunStateStore.lucidityCoins)
