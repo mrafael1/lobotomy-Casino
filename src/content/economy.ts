@@ -18,7 +18,7 @@ export const ECONOMY = {
   BASE_LUCIDITY_MULTIPLIER: 1.0,
 
   // Ending thresholds
-  WEALTH_SCORE_THRESHOLD:   1000, // score needed to trigger the wealth ending
+  WEALTH_SCORE_THRESHOLD:   2000, // score needed to trigger the wealth ending
   EXIT_LUCIDITY_THRESHOLD:   750, // lucidity wallet needed for a voluntary exit
 
   // The main Lucidity objective shown by the machine TV bar (progress, no reset).
