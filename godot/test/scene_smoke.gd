@@ -356,12 +356,13 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	var expected := {
 		"cons_tea": "RESTORE",
 		"item_pill": "WIN GUARANTEED",
-		"item_cocktail": "ONLY GAIN",
-		"item_energy_drink": "FREE SPINS",
+		"item_cocktail": "EASY",
+		"item_energy_drink": "FREE",
 	}
 	for id in expected:
-		if machine._consumable_feedback_text(String(id)) != String(expected[id]):
-			failures.append("machine consumable feedback: wrong text for %s" % String(id))
+		var hint: Dictionary = machine.use_hints.get(String(id), {})
+		if hint.is_empty() or String(hint.get("pos", "")) != String(expected[id]):
+			failures.append("machine consumable feedback: wrong hint for %s" % String(id))
 
 	var previous_phase := String(run_store.runPhase)
 	var previous_spinning := bool(run_store.isSpinning)
@@ -384,17 +385,23 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	machine._power_coin_active = false
 
 	machine._on_stash_pressed(0)
-	var feedback := machine.get_node_or_null("BottomHudLayer/ConsumableFeedback") as Label
-	if feedback == null or feedback.text != "RESTORE":
-		failures.append("machine consumable feedback: Tea did not show RESTORE popup")
+	var hint_layer := machine.get_node_or_null("BottomHudLayer/HintLayer") as Control
+	var spawned: Node = null
+	if hint_layer != null and hint_layer.get_child_count() > 0:
+		spawned = hint_layer.get_child(hint_layer.get_child_count() - 1)
+	if spawned == null or not (spawned is HintLabel):
+		failures.append("machine consumable feedback: Tea did not spawn a hint")
+	elif (spawned as HintLabel)._pos_label == null or (spawned as HintLabel)._pos_label.text != "+ RESTORE":
+		failures.append("machine consumable feedback: Tea hint missing '+ RESTORE' line")
 	if not machine._power_coin_active and run_store.pendingPowerRestores.is_empty():
 		failures.append("machine consumable feedback: Tea did not start/queue power coin restore")
 	await create_timer(1.0).timeout
-	if feedback != null and (not feedback.visible or feedback.modulate.a < 0.95):
-		failures.append("machine consumable feedback: popup faded before the 1.5s hold")
-	if machine._consumable_feedback_tween != null and machine._consumable_feedback_tween.is_running():
-		machine._consumable_feedback_tween.kill()
-	machine._hide_consumable_feedback()
+	if spawned == null or not is_instance_valid(spawned):
+		failures.append("machine consumable feedback: hint disappeared before the 1.5s hold")
+	elif (spawned as HintLabel).modulate.a < 0.95:
+		failures.append("machine consumable feedback: hint faded before the 1.5s hold")
+	if spawned != null and is_instance_valid(spawned):
+		spawned.queue_free()
 
 	machine._set_sequence_lock(false)
 	machine._power_coin_active = false
@@ -605,8 +612,11 @@ func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
 		failures.append("issue27: item click emitted purchase selection")
 	var hint_layer := overlay.get_node("SpeechBubble/HintLayer") as Control
 	var pos_hint := overlay.get_node("SpeechBubble/HintLayer/PositiveHint") as Label
+	var name_hint := overlay.get_node("SpeechBubble/HintLayer/NameHint") as Label
 	if not hint_layer.visible or pos_hint.text != "+ refreshing":
 		failures.append("issue27: item click did not reveal hint text")
+	if name_hint.text != "WATER":
+		failures.append("issue33: item click did not reveal item name in hint")
 	overlay._begin_item_press(icon, "item_water", "offer", Vector2(36.0, 23.0))
 	overlay._update_drag_position(Vector2(60.0, 170.0))
 	overlay._end_drag(Vector2(20.0, 170.0))

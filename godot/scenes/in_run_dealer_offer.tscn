@@ -176,15 +176,27 @@ vertical_alignment = 1
 visible = false
 anchors_preset = 0
 offset_right = 100.0
-offset_bottom = 30.0
+offset_bottom = 36.0
 mouse_filter = 2
+
+[node name="NameHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1904050071]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 1.0
+offset_right = 92.0
+offset_bottom = 11.0
+theme_override_colors/font_color = Color(0.12, 0.06, 0.16, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="PositiveHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1755181344]
 layout_mode = 0
 offset_left = 8.0
-offset_top = 6.0
+offset_top = 12.0
 offset_right = 92.0
-offset_bottom = 18.0
+offset_bottom = 22.0
 theme_override_colors/font_color = Color(0.13, 0.77, 0.37, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
@@ -194,9 +206,9 @@ vertical_alignment = 1
 [node name="NegativeHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1303275031]
 layout_mode = 0
 offset_left = 8.5
-offset_top = 17.0
+offset_top = 23.0
 offset_right = 92.5
-offset_bottom = 29.0
+offset_bottom = 33.0
 theme_override_colors/font_color = Color(0.94, 0.27, 0.27, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8

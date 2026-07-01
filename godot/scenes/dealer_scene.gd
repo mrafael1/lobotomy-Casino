@@ -53,6 +53,12 @@ const DRAG_SLOP := 4.0
 }
 const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 
+## Corrupted item names render purple (issue #33), sharing the #7/#37 rule and
+## colour. The flagged-id set lives on HintLabel so both dealer scenes agree.
+@export var corrupt_name_color: Color = Color(0.66, 0.33, 0.86)
+## Authored name colour restored for non-corrupted items.
+@export var name_color: Color = Color(0.0, 0.9, 1.0)
+
 # New UI assets (issue #25). The settings sheet is 2 frames (normal, pressed).
 const BUBBLE_ASSET := "ui/standard_bubble_text.png"
 const SETTINGS_ASSET := "ui/settings.png"
@@ -725,6 +731,9 @@ func _select(id: String) -> void:
 	# Name under the selected item's icon, centred on its counter circle. Pre-run
 	# prices are separate tags above each consumable.
 	_name_label.text = _item_name(id)
+	_name_label.add_theme_color_override(
+		&"font_color", corrupt_name_color if HintLabel.item_is_corrupted(id) else name_color
+	)
 	if _offer_slots_by_id.has(id):
 		var slot: Control = _offer_slots_by_id[id]
 		_name_label.position = Vector2(
