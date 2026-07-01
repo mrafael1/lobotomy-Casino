@@ -11,19 +11,19 @@ visuals.** Nothing downstream is trusted until the rules match the Expo referenc
 godot/
   project.godot            # autoloads, portrait, 160x320 virtual canvas, nearest filter
   rules/                   # pure rules/content port (mirrors src/game + src/content)
-    rng.gd                 #   Mulberry32 — bit-exact, proven (see Day-1 gate below)
-    symbols.gd payouts.gd economy_const.gd economy.gd
-    evaluate.gd abilities.gd endings.gd dealer.gd lucidity.gd
-    consumables.gd in_run_items.gd upgrades.gd
+	rng.gd                 #   Mulberry32 — bit-exact, proven (see Day-1 gate below)
+	symbols.gd payouts.gd economy_const.gd economy.gd
+	evaluate.gd abilities.gd endings.gd dealer.gd lucidity.gd
+	consumables.gd in_run_items.gd upgrades.gd
   autoload/                # state singletons exposing the Expo action API
-    run_state_store.gd     #   RunStateStore (spin/reroll/move/lock/copy/dealer/…)
-    meta_state_store.gd    #   MetaStateStore (bank/buy/… + user:// save, Step 4)
+	run_state_store.gd     #   RunStateStore (spin/reroll/move/lock/copy/dealer/…)
+	meta_state_store.gd    #   MetaStateStore (bank/buy/… + user:// save, Step 4)
   test/                    # parity + sacred-rule harness
-    parity_checks.gd       #   loads ../parity/vectors/*.json, asserts the core matches
-    sacred_rules.gd        #   native re-statement of the 7 sacred rules
-    run_parity_headless.gd #   no-dependency runner (canonical Milestone-1 gate)
-    test_parity.gd test_sacred_rules.gd  # GUT wrappers (editor/CI)
-    fixed_rng.gd           #   constant-RNG stub for sacred tests
+	parity_checks.gd       #   loads ../parity/vectors/*.json, asserts the core matches
+	sacred_rules.gd        #   native re-statement of the 7 sacred rules
+	run_parity_headless.gd #   no-dependency runner (canonical Milestone-1 gate)
+	test_parity.gd test_sacred_rules.gd  # GUT wrappers (editor/CI)
+	fixed_rng.gd           #   constant-RNG stub for sacred tests
 ```
 
 ## Verifying the port (Milestone 1 gate)

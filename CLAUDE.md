@@ -1,5 +1,8 @@
 # lobotomy-Casino — Claude Code Guidelines
 
+You are an expert game developer specializing in Godot Engine 4.x and GDScript 2.0.
+Your primary goal is to write clean, performant, and modern Godot 4 code.
+
 ## Branching workflow
 
 **Always create a dedicated branch before making any changes.** Never push directly to `main` or the current session's base branch.
@@ -47,16 +50,45 @@ git push -u origin claude/fix-reel-animation-sync
 - **Kotlin must stay below 2.1.0** (use `2.0.21`). React Native 0.81's Gradle plugin is compiled against Kotlin 1.9.x and calls `KotlinTopLevelExtension` as a class; it became an interface in Kotlin 2.1.0, so KGP ≥ 2.1 fails the Gradle config with *"Found interface … KotlinTopLevelExtension, but class was expected."*
 - Set it in **`app.json`** (`expo-build-properties` → `android.kotlinVersion`) — the source of truth — **and** in `android/gradle.properties` (`android.kotlinVersion`) so the already-generated `android/` builds without a fresh prebuild. After changing it, stop the Gradle daemon (`android/gradlew.bat --stop`) before rebuilding.
 
-## Skia / Reanimated performance (UI-thread rendering)
-
-High-frequency rendering (reel spins, gestures, fast tracking loops) must stay on the UI thread and allocation-free. Follow these or animations stutter and GC pauses show up as frame drops on low/mid-tier devices.
-
-- **Zero per-frame allocations.** Never create objects inside a render/frame callback or worklet that runs every frame — `Skia.Path.Make()`, `Skia.Paint()`, matrices, arrays, and object literals all churn the heap and trigger GC pauses. Pre-allocate them **once** (module scope or a `useMemo`/ref) and **mutate them in place** (`path.reset()` then re-add segments, `paint.setColor(...)`) instead of reallocating mid-render.
-- **Pass `SharedValue` references directly to Skia props.** Hand a Reanimated `SharedValue` (or a derived value) straight into a Skia component prop rather than reading `.value` in React render. This bypasses React's tree diffing/reconciliation entirely and keeps the update path confined to the UI thread — no JS-thread re-render per frame.
-- **Memory & texture optimization.** Watch for hardware-texture bloat and GPU VRAM clipping on low/mid-tier devices: keep offscreen/cached layers (e.g. `Picture`, image snapshots, large `Group` caches) bounded, reuse textures, and avoid allocating large surfaces per frame. Prefer sprite-sheet frames over many separate textures (see `SpriteSheetFrame`).
-- **Pure worklet execution — no stray `runOnJS`.** High-frequency interactions (gesture handlers, tracking loops) must run as pure worklets on the UI thread. Misusing `runOnJS` inside them forces JNI serialization across the bridge every frame, creating a bottleneck. Reserve `runOnJS` for low-frequency, genuinely JS-side side effects (state commits at gesture end), never per-frame.
-
 ## Verification & dev loop
 
 - Before considering work done: `npx tsc --noEmit -p tsconfig.json` (clean) and `npx jest` (all pass).
 - Debug builds load JS from the Metro dev server, so **JS/TS-only changes just need a Metro reload (`r`)** — no native rebuild. A native rebuild is only required for native/config changes (new native modules, `app.json`/gradle, Kotlin version, etc.).
+
+## Core Directives & Syntax (CRITICAL)
+
+- NO GODOT 3 SYNTAX. You must strictly use Godot 4.x syntax.
+- Exports: Use @export instead of the outdated export keyword.
+- Onready: Use @onready instead of the outdated onready keyword.
+-Coroutines: Use await instead of the outdated yield.
+- Super: Use super() instead of .function_name().
+- Setgets: Use the modern properties syntax (set(value):, get:) instead of setget.
+
+## Static Typing (Mandatory)
+
+- Always use strict static typing for variables, parameters, and return types.
+- Example: var health: int = 100 instead of var health = 100.
+- Example: func calculate_damage(base: float, multiplier: float) -> float:
+- Use := for inferred typing where the type is entirely obvious from the right-hand side (e.g., var player := $Player as CharacterBody2D).
+- Always cast nodes fetched from the scene tree: var weapon = $Weapon as Node2D.
+
+## Signals
+
+- NEVER use string-based signal connections.
+- Use the modern callable syntax: button.pressed.connect(_on_button_pressed) instead of button.connect("pressed", self, "_on_button_pressed").
+- When declaring custom signals, use the standard syntax: signal health_changed(new_health: int).
+
+## Architecture & Best Practices
+
+- Composition over Inheritance: Favor breaking behaviors down into modular, reusable Nodes (e.g., a HealthComponent node) rather than deep inheritance trees.
+- Node Paths: Prefer exporting Node paths (@export var player_node: Node2D) or using %UniqueName over hardcoded relative paths like $../../Player.
+- StringNames: Use StringName (prefix with &) for input actions, animations, and dictionary keys to save memory and improve performance. Example: Input.is_action_just_pressed(&"jump").
+- Lifecycle: Do not use _process or _physics_process unless strictly necessary. If a node only needs to react to events, rely on signals instead of polling every frame.
+
+## Code Style
+
+- Follow the official GDScript style guide.
+- Use snake_case for variables and functions.
+- Use PascalCase for class names and node names.
+- Use CONSTANT_CASE for constants.
+- Include brief docstrings (##) for complex functions and classes.

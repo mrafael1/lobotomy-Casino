@@ -1,37 +1,47 @@
-; Godot 4 project for the lobotomy-Casino port.
-; Built against the frozen Expo reference via the golden parity vectors in
-; ../parity/vectors. Rules/content live in res://rules; state singletons in
-; res://autoload; the parity harness in res://test.
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
 config/name="lobotomy-Casino"
 config/description="Godot 4 port of the lobotomy-Casino slot machine. Rules verified against ../parity/vectors."
-run/main_scene="res://scenes/shop_scene.tscn"
-config/features=PackedStringArray("4.3", "GL Compatibility")
+run/main_scene="res://scenes/start_menu_scene.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
+Assets="*res://autoload/assets.gd"
 MetaStateStore="*res://autoload/meta_state_store.gd"
 RunStateStore="*res://autoload/run_state_store.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
-; Mirror the 160x320 virtual canvas convention. canvas_items stretch + keep aspect
-; scales the composition to the device; portrait orientation for Android-first.
 window/size/viewport_width=160
 window/size/viewport_height=320
 window/size/window_width_override=400
 window/size/window_height_override=800
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
 window/handheld/orientation="portrait"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 [rendering]
 
-; Nearest-neighbour by default so pixel art stays crisp when scaled.
 textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

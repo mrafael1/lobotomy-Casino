@@ -2,6 +2,7 @@ extends SceneTree
 
 const ParityChecks := preload("res://test/parity_checks.gd")
 const SacredRules := preload("res://test/sacred_rules.gd")
+const SaveChecks := preload("res://test/save_checks.gd")
 
 ## No-dependency parity runner — verify the GDScript rules core against the golden
 ## vectors WITHOUT installing GUT.
@@ -19,6 +20,8 @@ func _init() -> void:
 	failures.append_array(ParityChecks.run_all())
 	print("Running sacred-rule checks...")
 	failures.append_array(SacredRules.run_all())
+	print("Running save/migration checks...")
+	failures.append_array(SaveChecks.run_all())
 
 	if failures.is_empty():
 		print("✓ Parity + sacred-rule checks PASSED (rules/content port matches the Expo golden vectors).")
