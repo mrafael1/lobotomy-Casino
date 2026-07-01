@@ -41,16 +41,14 @@ const DRAG_SLOP := 4.0
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 
+# Pre-run pool only (Consumables.LIST). In-run item_* hints live in
+# in_run_dealer_offer.gd — the two scenes own separate pools (issue #31).
 @export_group("Vague Item Hints")
 @export var item_hints: Dictionary = {
-	"item_water": { "pos": "MYSTERY", "neg": "THIN" },
-	"item_pill": { "pos": "LUCK?", "neg": "NUMB" },
-	"cons_white_powder": { "pos": "BRIGHT", "neg": "GONE" },
-	"item_energy_drink": { "pos": "SPARKS", "neg": "SHAKY" },
-	"item_cocktail": { "pos": "LUCKY", "neg": "STICKY" },
+	"cons_white_powder": { "pos": "COPY", "neg": "LOSE" },
 	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
-	"cons_syringe": { "pos": "WARM", "neg": "DULL" },
-	"cons_tea": { "pos": "OLD", "neg": "RANDOM" },
+	"cons_syringe": { "pos": "BRAINS", "neg": "NO POWER" },
+	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
 }
 const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 
@@ -62,15 +60,12 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
+# Pre-run pool only (Consumables.LIST) — see item_hints note (issue #31).
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
 	"cons_white_powder": "items/white_powder.png",
 	"cons_syringe": "items/consumable_placeholder.png",
 	"cons_tea": "items/herbal_tea.png",
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
 }
 
 var _font: FontFile = null

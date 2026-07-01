@@ -36,21 +36,17 @@ const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
 const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
 const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
 const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
+# In-run pool only (InRunItems.LIST). Pre-run cons_* hints live in
+# dealer_scene.gd — the two scenes own separate pools (issue #31).
 const ITEM_HINTS := {
-	"item_water": { "pos": "CLEAR", "neg": "WEAK" },
-	"item_pill": { "pos": "SLOW FALL", "neg": "NUMB" },
-	"cons_white_powder": { "pos": "RUSH", "neg": "CRASH" },
-	"item_energy_drink": { "pos": "FREE", "neg": "SHAKY" },
-	"item_cocktail": { "pos": "EASY", "neg": "STEALS" },
-	"cons_focus": { "pos": "BIG PAY", "neg": "BLIND" },
-	"cons_syringe": { "pos": "BRAINS", "neg": "DULL" },
-	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
+	"item_water": { "pos": "refreshing", "neg": "WEAK" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
+	"item_energy_drink": { "pos": "FREE", "neg": "LIMITED" },
+	"item_cocktail": { "pos": "EASY", "neg": "compulsive" },
 }
 const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
+# In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
 	"item_energy_drink": "items/energy_drink.png",
 	"item_cocktail": "items/cocktail.png",
 	"item_water": "items/water.png",

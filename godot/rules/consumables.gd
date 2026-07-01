@@ -10,7 +10,7 @@ const LIST := [
 	  "effect": { "type": "lucidityMultiplierNextSpin", "multiplier": 3.0, "hideNeuronsSpins": 5 } },
 	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 14,
 	  "effect": { "type": "copyReel" } },
-	{ "id": "cons_syringe", "name": "test", "shopCost": 18,
+	{ "id": "cons_syringe", "name": "potion", "shopCost": 18,
 	  "effect": { "type": "brainBoost", "spins": 5 } },
 	{ "id": "cons_tea", "name": "Tea", "shopCost": 10,
 	  "effect": { "type": "restoreAbility" } },
