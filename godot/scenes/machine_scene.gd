@@ -160,6 +160,25 @@ const ITEM_ICONS := {
 	"item_cocktail": { "pos": "EASY", "neg": "COMPULSIVE" },
 }
 
+# ── machine reactions (issue #35) ────────────────────────────────────────────────
+# The GDD "flatline result" is a REEL outcome (3 flatline symbols); the pinned
+# "flatline" ENDING (neurons <= 0) keeps its serialized name for parity — only this
+# new reel event is called flatline_result. Reaching fatal_flatline_count flatline
+# results, OR the run_spin_length hard cap, ends the run (added alongside neurons<=0).
+@export_group("Machine Reactions")
+@export var fatal_flatline_count: int = 3
+@export var run_spin_length: int = 35          # NEW hard run-length cap (added, not a replacement)
+@export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
+@export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
+@export_group("Triple Overlays", "triple_")
+@export var triple_brain_color: Color = Color(1.0, 0.84, 0.0)    # gold
+@export var triple_eye_color: Color = Color(0.66, 0.33, 0.86)    # purple
+@export var triple_pill_color: Color = Color(1.0, 0.55, 0.75)    # pink
+@export var triple_syringe_color: Color = Color(1.0, 0.9, 0.2)   # yellow
+@export var triple_vial_color: Color = Color(0.95, 0.25, 0.25)   # red
+@export var triple_brain_free_spins: int = 1
+@export var triple_vial_free_spins: int = 3
+
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
@@ -239,6 +258,11 @@ var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
+# Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
+# and a pending eye-triple reveal for the next spin.
+var _last_reacted_reels: Array = []
+var _last_reacted_spin := -1
+var _reveal_reel_next_spin := -1
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
@@ -843,6 +867,9 @@ func _sync_visuals() -> void:
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
+	_last_reacted_reels = []
+	_last_reacted_spin = -1
+	_reveal_reel_next_spin = -1
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -885,6 +912,11 @@ func _do_spin() -> void:
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
 	_reel_stop_times = [0.55, 0.8, 1.05 + tension]
+	# Eye triple (issue #35): peek one non-final reel early on the next spin. Reel 2
+	# is excluded so it stays the last to stop (reveal-complete keys off its time).
+	if _reveal_reel_next_spin == 0 or _reveal_reel_next_spin == 1:
+		_reel_stop_times[_reveal_reel_next_spin] = 0.2
+	_reveal_reel_next_spin = -1
 	_start_lever_pull()
 	_start_reel_spin_animation(locked_before)
 	_spinning_anim = true
@@ -972,15 +1004,24 @@ func _run_post_reveal_sequence() -> void:
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp()
+	_apply_machine_reactions(false)  # flatline-result / triple reactions (issue #35)
 	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
 	var dealer_pending := RunStateStore.dealerIncoming
 	if reward_time > 0.0:
 		await get_tree().create_timer(reward_time).timeout
+	# Instant death from stacked flatline results takes precedence (issue #35).
+	if _check_flatline_instant_death():
+		_post_spin_sequence_active = false
+		return
 	if _check_ending():
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
+		return
+	# New hard run-length cap ends the run after the wealth/neuron checks.
+	if _check_spin_cap_ending():
+		_post_spin_sequence_active = false
 		return
 	if dealer_pending:
 		_show_dealer_incoming()
@@ -1798,6 +1839,9 @@ func _step_reroll(delta: float) -> void:
 			_spin_button.disabled = false
 		_update_hud()
 		_refresh_jackpot_lamp()
+		_apply_machine_reactions(true)  # reroll may form a triple (issue #35)
+		if _check_flatline_instant_death():
+			return
 		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
@@ -1808,6 +1852,9 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
+	_apply_machine_reactions(true)  # shift may form a triple (issue #35)
+	if _check_flatline_instant_death():
+		return
 	_play_reward_sequence(reel_index) # shift burst pops from the shifted reel
 
 func _play_reward_sequence(source_reel: int) -> void:
@@ -1999,6 +2046,145 @@ func _on_copy_pick(reel_index: int) -> void:
 		_update_hud()
 		_refresh_jackpot_lamp()
 		_play_reward_sequence(reel_index) # copy burst pops from the target reel
+
+# ── machine reactions (issue #35) ────────────────────────────────────────────────
+# All reactions run in this presentation layer AFTER the parity-pinned spin()/power
+# results, so they never touch evaluate()/spin() outputs or the pinned vectors.
+
+## Reacts to the just-settled reels. `power_triggered` is true when a power (reroll/
+## shift) produced them, so the brains triple still grants a spin even though the
+## pinned evaluate only grants free spins on a natural, non-free spin.
+func _apply_machine_reactions(power_triggered: bool) -> void:
+	var lr: Variant = RunStateStore.lastResult
+	if lr == null:
+		return
+	var reels: Array = lr["reels"]
+	if reels.size() < 3:
+		return
+	# One reaction per distinct reel configuration (a power can make a new one).
+	if reels == _last_reacted_reels and RunStateStore.spinCount == _last_reacted_spin:
+		return
+	_last_reacted_reels = reels.duplicate()
+	_last_reacted_spin = RunStateStore.spinCount
+	var a := String(reels[0])
+	if not (a == String(reels[1]) and a == String(reels[2])):
+		return
+	if a == "flatline":
+		var count := RunStateStore.register_flatline_result()
+		_show_flatline_result_reaction(count)
+	else:
+		_apply_symbol_triple(a, int(lr.get("freeSpinsGranted", 0)), power_triggered)
+
+func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_triggered: bool) -> void:
+	var color := flatline_result_color
+	var label := ""
+	match symbol:
+		"brain":
+			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
+			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
+			if free_spins_granted <= 0:
+				RunStateStore.grant_free_spins(triple_brain_free_spins)
+			color = triple_brain_color
+			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
+		"eye":
+			_reveal_reel_next_spin = randi() % 2  # peek reel 0 or 1 next spin
+			color = triple_eye_color
+			label = "REVEAL"
+		"pill":
+			RunStateStore.restore_all_powers()
+			color = triple_pill_color
+			label = "POWERS BACK"
+		"syringe":
+			color = triple_syringe_color
+			label = "RECOVERED" if RunStateStore.recover_last_consumable(maxi(1, max_consumable_slots)) else "SYRINGE"
+		"vial":
+			RunStateStore.grant_free_spins(triple_vial_free_spins)
+			color = triple_vial_color
+			label = "+%d SPINS" % triple_vial_free_spins
+	_spawn_reaction_flash(color, label)
+	_update_hud()
+
+## Instant death: too many flatline results this run routes to the #38 fatal text.
+func _check_flatline_instant_death() -> bool:
+	if RunStateStore.flatlineResultCount < fatal_flatline_count:
+		return false
+	_stop_flatline_countdown()
+	RunStateStore.end_run("flatline")
+	_show_campaign_failed()
+	return true
+
+## New hard run-length cap (issue #35): reaching run_spin_length ends the run like a
+## neuron flatline (banks lucidity), added alongside the neurons<=0 ending.
+func _check_spin_cap_ending() -> bool:
+	if RunStateStore.spinCount < run_spin_length:
+		return false
+	var run := {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	}
+	_show_ending("flatline", run)
+	return true
+
+func _show_flatline_result_reaction(count: int) -> void:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.z_index = 30
+	add_child(host)
+	var cy := REEL_WINDOW["top"] + REEL_WINDOW["height"] * 0.5
+	var line := ColorRect.new()
+	line.color = flatline_result_color
+	line.size = Vector2(0.0, 2.0)
+	line.position = Vector2(0.0, cy - 1.0)
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(line)
+	var text := "CLOSE CALL" if count < fatal_flatline_count else "FLATLINE"
+	var label := _reaction_label(host, "%s  %d/%d" % [text, count, fatal_flatline_count],
+		Vector2(0.0, cy + 8.0), 10, flatline_result_color)
+	label.pivot_offset = Vector2(SRC_W * 0.5, 6.0)
+	var tw := create_tween()
+	tw.tween_property(line, "size:x", float(SRC_W), reaction_flash_time * 0.5)
+	tw.tween_interval(reaction_flash_time * 0.3)
+	tw.tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.3)
+	tw.tween_callback(host.queue_free)
+
+func _spawn_reaction_flash(color: Color, text: String) -> void:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.z_index = 30
+	add_child(host)
+	var flash := ColorRect.new()
+	flash.color = Color(color.r, color.g, color.b, 0.0)
+	flash.size = Vector2(SRC_W, SRC_H)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(flash)
+	var label := _reaction_label(host, text, Vector2(0.0, 150.0), 14, color)
+	label.pivot_offset = Vector2(SRC_W * 0.5, 10.0)
+	label.scale = Vector2(0.7, 0.7)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(flash, "color:a", 0.32, reaction_flash_time * 0.25)
+	tw.tween_property(label, "scale", Vector2.ONE, reaction_flash_time * 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(reaction_flash_time * 0.4)
+	tw.chain().tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.35)
+	tw.chain().tween_callback(host.queue_free)
+
+func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.position = pos
+	label.size = Vector2(SRC_W, 20.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", font_size)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	parent.add_child(label)
+	return label
 
 func _check_ending() -> bool:
 	var run := {

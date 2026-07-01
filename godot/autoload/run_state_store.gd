@@ -72,6 +72,12 @@ var hideResultSpins := 0         # White Powder: hide the next spin's result
 
 const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
 
+# Machine-reaction state (issue #35). Additive run-flow fields updated by the
+# machine's post-reveal reactions AFTER the parity-pinned spin()/power results —
+# they never feed evaluate()/spin(), so the pinned vectors stay untouched.
+var flatlineResultCount := 0    # count of 3-flatline reel outcomes seen this run
+var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumable"
+
 # RunStore extras
 var runPhase := "idle" # idle | running | over
 var lastEnding: Variant = null
@@ -295,6 +301,8 @@ func reset_run_state() -> void:
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
+	flatlineResultCount = 0
+	lastUsedConsumableId = ""
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -350,6 +358,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
+	flatlineResultCount = 0
+	lastUsedConsumableId = ""
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
@@ -369,6 +379,41 @@ func continue_run() -> void:
 	lastEnding = null
 	wealthContinued = true
 	_commit()
+
+# ── machine reactions (issue #35) ────────────────────────────────────────────────
+# Additive effects the machine applies AFTER a spin/power result. They are NOT part
+# of the parity-pinned spin()/evaluate() path, so they never shift the vectors.
+
+## Records one 3-flatline reel outcome and returns the new running count.
+func register_flatline_result() -> int:
+	flatlineResultCount += 1
+	_commit()
+	return flatlineResultCount
+
+## Adds free spins (clamped to maxFreeSpins). Used by the brains/vial triples.
+func grant_free_spins(count: int) -> void:
+	if count <= 0:
+		return
+	freeSpinsRemaining = mini(freeSpinsRemaining + count, maxFreeSpins)
+	_commit()
+
+## Pill triple: makes every power usable again this spin.
+func restore_all_powers() -> void:
+	if abilitiesUsed.is_empty():
+		return
+	abilitiesUsed = []
+	_commit()
+
+## Syringe triple: puts the last-used consumable back if a stash slot is free.
+func recover_last_consumable(max_slots: int) -> bool:
+	if lastUsedConsumableId == "":
+		return false
+	if Consumables.total_copies(runConsumables) >= max_slots:
+		return false
+	runConsumables = runConsumables.duplicate(true)
+	runConsumables[lastUsedConsumableId] = int(runConsumables.get(lastUsedConsumableId, 0)) + 1
+	_commit()
+	return true
 
 # Public: delegate to the parity-verified pure planner (run action surface).
 func plan_lucidity_gain(prev_coins: int, gain: int, abilities: Array, seed: int) -> Dictionary:
@@ -509,6 +554,7 @@ func use_consumable(consumable_id: String) -> bool:
 	var charges := int(runConsumables.get(consumable_id, 0))
 	if charges < 1:
 		return false
+	lastUsedConsumableId = consumable_id  # syringe-triple recovery target (issue #35)
 	runConsumables = runConsumables.duplicate(true)
 	runConsumables[consumable_id] = charges - 1
 
