@@ -14,8 +14,9 @@ import {
   hasPattern23Triple,
 } from '../game/economy';
 import { ECONOMY } from '../content/economy';
-import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, totalConsumableCopies } from '../content/consumables';
+import { CONSUMABLE_MAP, MAX_CONSUMABLE_SLOTS, totalConsumableCopies, POTION_RANDOM_POOL } from '../content/consumables';
 import { IN_RUN_ITEM_MAP } from '../content/inRunItems';
+import { BASE_SYMBOL_CYCLE } from '../content/symbols';
 import {
   DEALER_MAX_COUNT,
   DEALER_MIN_SPIN_GAP,
@@ -110,7 +111,19 @@ const INITIAL_RUN_STATE: RunState = {
   compulsiveSpinSkips:        0,
   pendingCompulsiveSpinSkips: 0,
   decaySkips:                 0,
+  pairBoostSpins:             0,
+  pairBoostMult:              1,
+  pairBoostHiddenReels:       0,
+  guaranteeSymbolSpins:       0,
+  banBrainSpins:              0,
+  potionSpins:                0,
+  forceFlatlineSpins:         0,
+  guaranteedTripleSpins:      0,
+  hideResultSpins:            0,
 };
+
+// Non-flatline reel symbols for the Pill guaranteed triple (issue #32).
+const NON_FLATLINE_SYMBOLS = BASE_SYMBOL_CYCLE.filter(s => s !== 'flatline');
 
 function canAct(state: RunStore): boolean {
   return state.runPhase === 'running' && !state.isSpinning;
@@ -239,12 +252,34 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const learningOn  = bookWeight > 0;
     const guaranteedWin = state.guaranteedWinSpins > 0;
 
+    // Potion (issue #32): roll one equal-weight pool effect for this spin, with a
+    // dedicated deterministic seed so parity is reproducible across TS/Godot.
+    let potionMult = 1;
+    let potionLucidityDelta = 0;
+    let potionSymbolToBrain = 0;
+    let potionFreeReroll = false;
+    if (state.potionSpins > 0) {
+      const pRng = createRNG(((seed ^ 0x50710000) >>> 0));
+      const pick = POTION_RANDOM_POOL[Math.floor(pRng() * POTION_RANDOM_POOL.length)];
+      if (pick.kind === 'multNextSpin') potionMult = pick.multiplier;
+      else if (pick.kind === 'lucidity') potionLucidityDelta = pick.amount;
+      else if (pick.kind === 'symbolToBrain') potionSymbolToBrain = 1;
+      else if (pick.kind === 'freeReroll') potionFreeReroll = true;
+    }
+
+    // Consumable reel transforms (issue #32). Pill forces a flatline spin, then a
+    // guaranteed non-flatline triple the spin after. Serum bans/guarantees a symbol.
+    const forceAllSymbol = state.forceFlatlineSpins > 0 ? 'flatline' : null;
+    const forceTripleFrom = (state.forceFlatlineSpins <= 0 && state.guaranteedTripleSpins > 0)
+      ? NON_FLATLINE_SYMBOLS : null;
+    const pairBoostActive = state.pairBoostSpins > 0;
+
     const result = evaluate({
       neurons:            state.neurons,
       neuronDecayAmount,
       freeSpinsRemaining: state.freeSpinsRemaining,
       maxFreeSpins:       state.maxFreeSpins,
-      lucidityMultiplier: effectiveMultiplier,
+      lucidityMultiplier: effectiveMultiplier * potionMult,
       isFreeSpin,
       lockedReels:        state.lockedReels,
       previousReels:      state.lastResult?.reels ?? null,
@@ -254,6 +289,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
       guaranteedWin,
       pattern23Triple:    pattern23,
       learningActive:     learningOn,
+      forceAllSymbol,
+      forceTripleFrom,
+      excludeSymbol:      (state.banBrainSpins > 0 || state.guaranteeSymbolSpins > 0) ? 'brain' : null,
+      banExcluded:        state.banBrainSpins > 0,
+      guaranteeNonExcluded: state.guaranteeSymbolSpins > 0,
+      symbolToBrainCount: potionSymbolToBrain,
+      pairScoreMult:      pairBoostActive ? state.pairBoostMult : 1,
+      hiddenReelCount:    pairBoostActive ? state.pairBoostHiddenReels : 0,
     });
 
     // Cocktail rarity bonus goes to score only (it's already a multiplied variable)
@@ -272,11 +315,17 @@ export const useRunStore = create<RunStore>((set, get) => ({
       state.lucidityCoins, finalResult.scoreEarned, state.abilitiesUsed, seed,
     );
 
+    // Potion pool side effects (issue #32): ± lucidity and a free reroll (restore
+    // the reroll ability) resolve after the score plan.
+    const potionAbilities = potionFreeReroll
+      ? plan.abilitiesUsed.filter(a => a !== 'reroll')
+      : plan.abilitiesUsed;
+
     set({
       neurons:                    finalResult.neuronsAfter,
       scoreEarned:                state.scoreEarned + finalResult.scoreEarned,
-      lucidityCoins:              plan.lucidityCoins,
-      abilitiesUsed:              plan.abilitiesUsed,
+      lucidityCoins:              Math.max(0, plan.lucidityCoins + potionLucidityDelta),
+      abilitiesUsed:              potionAbilities,
       pendingPowerRestores:       [...state.pendingPowerRestores, ...plan.restores],
       freeSpinsRemaining:         finalResult.freeSpinsAfter,
       isFreeSpin:                 finalResult.isFreeSpin,
@@ -295,6 +344,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
         (isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips) +
         (state.cocktailBoostSpins === 1 ? state.pendingCompulsiveSpinSkips : 0),
       pendingCompulsiveSpinSkips: state.cocktailBoostSpins === 1 ? 0 : state.pendingCompulsiveSpinSkips,
+      pairBoostSpins:             Math.max(0, state.pairBoostSpins - 1),
+      guaranteeSymbolSpins:       Math.max(0, state.guaranteeSymbolSpins - 1),
+      banBrainSpins:              Math.max(0, state.banBrainSpins - 1),
+      potionSpins:                Math.max(0, state.potionSpins - 1),
+      // Keep the pending triple until the flatline spin is spent, then consume it.
+      forceFlatlineSpins:         Math.max(0, state.forceFlatlineSpins - 1),
+      guaranteedTripleSpins:      state.forceFlatlineSpins > 0
+        ? state.guaranteedTripleSpins
+        : Math.max(0, state.guaranteedTripleSpins - 1),
+      hideResultSpins:            Math.max(0, state.hideResultSpins - 1),
     });
 
     return finalResult;
@@ -383,11 +442,22 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
       switch (effect.type) {
         case 'skipDecay':
+          // Energy Drink: neurons preserved for N spins; blockBet 'x3' locks the
+          // x3 bet for those spins (reuses the forced-random-bet demotion).
           set({
             runConsumables: newRunConsumables,
             decaySkips: state.decaySkips + effect.spins,
-            forcedRandomBetSpins: state.forcedRandomBetSpins + effect.forcedRandomBetSpins,
+            forcedRandomBetSpins: state.forcedRandomBetSpins + effect.spins,
             betMultiplier: state.betMultiplier === 3 ? 2 : state.betMultiplier,
+          });
+          return true;
+
+        case 'forceFlatlinesThenTriple':
+          // Red Pill: force flatlines for flatSpins, then a guaranteed triple.
+          set({
+            runConsumables: newRunConsumables,
+            forceFlatlineSpins: state.forceFlatlineSpins + effect.flatSpins,
+            guaranteedTripleSpins: state.guaranteedTripleSpins + (effect.guaranteedTripleNext ? 1 : 0),
           });
           return true;
 
@@ -414,34 +484,57 @@ export const useRunStore = create<RunStore>((set, get) => ({
             pendingCompulsiveSpinSkips: state.pendingCompulsiveSpinSkips + effect.compulsiveSpins,
           });
           return true;
-
-        case 'guaranteedWin':
-          set({
-            runConsumables: newRunConsumables,
-            guaranteedWinSpins: state.guaranteedWinSpins + effect.spins,
-            blockPowersSpins: state.blockPowersSpins + effect.blockPowersSpins,
-          });
-          return true;
       }
     }
 
     const effect = consumable!.effect;
 
     switch (effect.type) {
-      case 'skipDecay':
-        set({ runConsumables: newRunConsumables, decaySkips: state.decaySkips + effect.spins });
-        return true;
-
-      case 'lucidityMultiplierNextSpin':
+      case 'hideReelPairBoost':
+        // Tobacco: hide a reel and boost pairs for N spins.
         set({
           runConsumables: newRunConsumables,
-          nextSpinLucidityMultiplier: effect.multiplier,
-          hideNeuronsSpins: state.hideNeuronsSpins + (effect.hideNeuronsSpins ?? 0),
+          pairBoostSpins: effect.spins,
+          pairBoostMult: effect.pairMult,
+          pairBoostHiddenReels: effect.hiddenReels,
         });
         return true;
 
-      case 'restoreAbility': {
-        if (state.abilitiesUsed.length === 0) return false;
+      case 'guaranteeSymbol':
+        // Serum: guarantee a non-brain symbol for appearSpins, ban brain for banSpins.
+        set({
+          runConsumables: newRunConsumables,
+          guaranteeSymbolSpins: state.guaranteeSymbolSpins + effect.appearSpins,
+          banBrainSpins: state.banBrainSpins + effect.banSpins,
+        });
+        return true;
+
+      case 'scrambleThenHide':
+        // White Powder: the scramble is the copyReel UI flow; hide the next spin.
+        set({
+          runConsumables: newRunConsumables,
+          hideResultSpins: state.hideResultSpins + (effect.hideNextSpin ? 1 : 0),
+        });
+        return true;
+
+      case 'resetPowersRandomEffect':
+        // Potion: restore ALL powers now, then roll a random pool effect per spin.
+        set({
+          runConsumables: newRunConsumables,
+          abilitiesUsed: [],
+          potionSpins: state.potionSpins + effect.spins,
+        });
+        return true;
+
+      case 'restoreAbilityOrSpins': {
+        // Tea: restore a used ability, or grant fallback free spins if none used.
+        if (state.abilitiesUsed.length === 0) {
+          set({
+            runConsumables: newRunConsumables,
+            freeSpinsRemaining: Math.min(state.freeSpinsRemaining + effect.fallbackSpins, state.maxFreeSpins),
+          });
+          return true;
+        }
         const rng = createRNG(((Date.now() ^ (state.spinCount * 0xdeadbeef)) >>> 0));
         const idx = Math.floor(rng() * state.abilitiesUsed.length);
         const restored = state.abilitiesUsed[idx] as AbilityId;
@@ -453,29 +546,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
         });
         return true;
       }
-
-      case 'brainBoost': {
-        const allAbilities: AbilityId[] = ['reroll', 'shift', 'memory'];
-        const available = allAbilities.filter(a => !state.abilitiesUsed.includes(a));
-        const toBlock: AbilityId[] = available.length > 0
-          ? (() => {
-              const rng = createRNG(((Date.now() ^ state.spinCount) >>> 0));
-              const pick = available[Math.floor(rng() * available.length)];
-              return [pick];
-            })()
-          : [];
-
-        set({
-          runConsumables: newRunConsumables,
-          brainBoostSpins: effect.spins,
-          abilitiesUsed: [...state.abilitiesUsed, ...toBlock] as ReadonlyArray<AbilityId>,
-        });
-        return true;
-      }
-
-      case 'copyReel':
-        set({ runConsumables: newRunConsumables });
-        return true;
     }
   },
 

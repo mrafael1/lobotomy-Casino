@@ -32,7 +32,10 @@ function baseRun(overrides: Partial<RunState> = {}): RunState {
     dealerPending: false, dealerOfferIds: null, brainBoostSpins: 0,
     forcedRandomBetSpins: 0, guaranteedWinSpins: 0, blockPowersSpins: 0,
     hideNeuronsSpins: 0, cocktailBoostSpins: 0, compulsiveSpinSkips: 0,
-    pendingCompulsiveSpinSkips: 0, decaySkips: 0, ...overrides,
+    pendingCompulsiveSpinSkips: 0, decaySkips: 0,
+    pairBoostSpins: 0, pairBoostMult: 1, pairBoostHiddenReels: 0, guaranteeSymbolSpins: 0,
+    banBrainSpins: 0, potionSpins: 0, forceFlatlineSpins: 0, guaranteedTripleSpins: 0, hideResultSpins: 0,
+    ...overrides,
   };
 }
 

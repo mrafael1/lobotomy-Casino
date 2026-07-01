@@ -1,17 +1,38 @@
+// Potion (resetPowersRandomEffect) rolls ONE of these per boosted spin, equal-weight
+// with a deterministic per-spin seed so parity stays reproducible (issue #32).
+export type PotionRandomEffect =
+  | { kind: 'multNextSpin'; multiplier: number } // 0.75 / 1.25 / 1.5× lucidity next spin
+  | { kind: 'lucidity';     amount: number }     // +10 / -5 lucidity
+  | { kind: 'freeReroll' }                       // grant a free reroll ability charge
+  | { kind: 'symbolToBrain' };                   // convert one reel symbol to brain
+
 export type ConsumableEffect =
-  | { type: 'skipDecay';                  spins: number }
-  | { type: 'lucidityMultiplierNextSpin'; multiplier: number; hideNeuronsSpins?: number }
-  | { type: 'copyReel' }                    // White Powder: copy one reel symbol to another via UI
-  | { type: 'brainBoost';                 spins: number }  // Syringe: brain 5× more likely for N spins
-  | { type: 'restoreAbility' };             // Tea: restore one random used ability
+  | { type: 'hideReelPairBoost';        spins: number; hiddenReels: number; pairMult: number } // Tobacco
+  | { type: 'guaranteeSymbol';          excludes: string[]; appearSpins: number; banSpins: number } // Serum
+  | { type: 'scrambleThenHide';         hideNextSpin: boolean }                                 // White Powder
+  | { type: 'resetPowersRandomEffect';  spins: number; pool: PotionRandomEffect[] }             // Potion
+  | { type: 'restoreAbilityOrSpins';    fallbackSpins: number };                                // Tea
 
 export interface Consumable {
   readonly id: string;
   readonly name: string;
   readonly description: string;
   readonly shopCost: number; // paid with wallet lucidity before the run
+  readonly corrupt?: boolean; // renders in the corrupt (purple) hint colour (issue #33)
   readonly effect: ConsumableEffect;
 }
+
+// Shared equal-weight Potion pool (issue #32): 0.75/1.25/1.5× mult, +10/-5 lucidity,
+// free reroll, symbol→brain.
+export const POTION_RANDOM_POOL: ReadonlyArray<PotionRandomEffect> = [
+  { kind: 'multNextSpin', multiplier: 0.75 },
+  { kind: 'multNextSpin', multiplier: 1.25 },
+  { kind: 'multNextSpin', multiplier: 1.5 },
+  { kind: 'lucidity', amount: 10 },
+  { kind: 'lucidity', amount: -5 },
+  { kind: 'freeReroll' },
+  { kind: 'symbolToBrain' },
+];
 
 // Pre-run consumables: bought in the shop with wallet Lucidity before a run.
 // The stash holds up to MAX_CONSUMABLE_SLOTS copies total; the same item may take
@@ -19,32 +40,41 @@ export interface Consumable {
 // the run starts and are lost at run end.
 export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
+    id: 'cons_cigarette',
+    name: 'Tobacco',
+    description: 'For 3 spins one reel goes dark (scored on the two you can see) and pairs pay 3×.',
+    shopCost: 20,
+    corrupt: true,
+    effect: { type: 'hideReelPairBoost', spins: 3, hiddenReels: 1, pairMult: 3 },
+  },
+  {
     id: 'cons_focus',
     name: 'Serum',
-    description: 'Next spin earns 3× Lucidity. Side effect: your neuron count is hidden for 5 spins.',
-    shopCost: 12,
-    effect: { type: 'lucidityMultiplierNextSpin', multiplier: 3.0, hideNeuronsSpins: 5 },
+    description: 'Next spin is guaranteed a non-brain symbol; brain is then banned for 2 spins.',
+    shopCost: 15,
+    effect: { type: 'guaranteeSymbol', excludes: ['brain'], appearSpins: 1, banSpins: 2 },
   },
   {
     id: 'cons_white_powder',
-    name: 'Powder',
-    description: 'Copy one reel\'s symbol onto another. Side effect: consume a random other supply or lose 20 neurons.',
-    shopCost: 14,
-    effect: { type: 'copyReel' },
+    name: 'White Powder',
+    description: 'Scramble one reel onto another, then your next spin is hidden.',
+    shopCost: 10,
+    corrupt: true,
+    effect: { type: 'scrambleThenHide', hideNextSpin: true },
   },
   {
     id: 'cons_syringe',
-    name: 'Syringe',
-    description: 'Brain is 5× more likely for 5 spins. Reduced Lucidity and no abilities during boost. Permanently blocks a random ability.',
-    shopCost: 18,
-    effect: { type: 'brainBoost', spins: 5 },
+    name: 'Potion',
+    description: 'Restores all powers and rolls a random effect each spin for 3 spins.',
+    shopCost: 40,
+    effect: { type: 'resetPowersRandomEffect', spins: 3, pool: [...POTION_RANDOM_POOL] },
   },
   {
     id: 'cons_tea',
     name: 'Tea',
-    description: 'Restore a random ability you have already used this run.',
-    shopCost: 10,
-    effect: { type: 'restoreAbility' },
+    description: 'Restore a used ability, or gain 3 free spins if none were used.',
+    shopCost: 8,
+    effect: { type: 'restoreAbilityOrSpins', fallbackSpins: 3 },
   },
 ];
 

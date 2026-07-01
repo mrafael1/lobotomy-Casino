@@ -21,9 +21,19 @@ export interface SpinInput {
   readonly rng: () => number;
   readonly bookWeight: number;          // 0 = no book; >0 = Learning owned, book active
   readonly brainWeightBonus: number;    // extra weight for brain (upgrades + Syringe boost)
-  readonly guaranteedWin: boolean;      // Pill: force at least a pair this spin
+  readonly guaranteedWin: boolean;      // Pill (legacy): force at least a pair this spin
   readonly pattern23Triple: boolean;    // Pattern Fabrication: 2/3 match -> doubled pair payout
   readonly learningActive: boolean;     // Learning: book pays out and +10/book visible
+  // Consumable reel transforms (issue #32). All optional and no-op at their defaults,
+  // so every pinned vector (which omits them) scores exactly as before.
+  readonly forceAllSymbol?: SymbolId | null;              // Pill: force every reel to this symbol
+  readonly forceTripleFrom?: ReadonlyArray<SymbolId> | null; // Pill: force a triple from these
+  readonly excludeSymbol?: SymbolId | null;               // Serum: the banned / guaranteed-absent symbol
+  readonly banExcluded?: boolean;                         // Serum: replace excludeSymbol reels
+  readonly guaranteeNonExcluded?: boolean;                // Serum: ensure >=1 non-excluded reel
+  readonly symbolToBrainCount?: number;                   // Potion: convert first N reels to brain
+  readonly pairScoreMult?: number;                        // Tobacco: multiply pair payout
+  readonly hiddenReelCount?: number;                      // Tobacco: score only the visible remainder
 }
 
 export interface SpinResult {
@@ -83,6 +93,16 @@ export interface RunState {
   readonly compulsiveSpinSkips: number;
   readonly pendingCompulsiveSpinSkips: number;
   readonly decaySkips: number;
+  // Consumable roster effects (issue #32).
+  readonly pairBoostSpins: number;          // Tobacco: hidden reel + pair multiplier active
+  readonly pairBoostMult: number;           // Tobacco: pair payout multiplier while active
+  readonly pairBoostHiddenReels: number;    // Tobacco: reels hidden from scoring while active
+  readonly guaranteeSymbolSpins: number;    // Serum: force a non-excluded symbol to appear
+  readonly banBrainSpins: number;           // Serum: brain banned from the reels
+  readonly potionSpins: number;             // Potion: one random pool effect per spin
+  readonly forceFlatlineSpins: number;      // Pill: force an all-flatline spin
+  readonly guaranteedTripleSpins: number;   // Pill: force a triple the spin after the flatline
+  readonly hideResultSpins: number;         // White Powder: hide the next spin's result
 }
 
 export interface RunHistory {

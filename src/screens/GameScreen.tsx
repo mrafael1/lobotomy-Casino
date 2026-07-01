@@ -324,9 +324,9 @@ export function GameScreen() {
   const handleConsumable = useCallback((id: string) => {
     const consumable = CONSUMABLES.find(c => c.id === id);
 
-    if (consumable?.effect.type === 'copyReel') {
-      // White Powder: enter selection without consuming the charge yet.
-      // The charge is consumed only when source + target are both confirmed.
+    if (consumable?.effect.type === 'scrambleThenHide') {
+      // White Powder: enter reel-scramble selection without consuming the charge
+      // yet. The charge is consumed only when source + target are both confirmed.
       setSelection({ mode: 'copy_source', consumableId: id });
     } else {
       useConsumable(id);

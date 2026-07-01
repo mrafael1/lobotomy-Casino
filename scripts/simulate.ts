@@ -72,6 +72,15 @@ for (let r = 0; r < RUNS; r++) {
     compulsiveSpinSkips:       0,
     pendingCompulsiveSpinSkips: 0,
     decaySkips:                0,
+    pairBoostSpins:            0,
+    pairBoostMult:             1,
+    pairBoostHiddenReels:      0,
+    guaranteeSymbolSpins:      0,
+    banBrainSpins:             0,
+    potionSpins:               0,
+    forceFlatlineSpins:        0,
+    guaranteedTripleSpins:     0,
+    hideResultSpins:           0,
   };
 
   while (run.neurons > 0) {
