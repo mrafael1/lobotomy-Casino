@@ -54,6 +54,7 @@ func _run() -> void:
 	_check_issue27_machine_stash_drag(machine, run_store, failures)
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
 	_check_consumable_roster_32(run_store, failures)
+	_check_machine_reactions_35(machine, run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -1017,3 +1018,87 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 	await create_timer(coin_duration + 0.05).timeout
 	if machine._display_lucidity != 3:
 		failures.append("issue28: wealth display did not update after coin contact")
+
+func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array) -> void:
+	# Save the state this check mutates.
+	var prev_phase := String(run_store.runPhase)
+	var prev_last: Variant = run_store.lastResult
+	var prev_spin := int(run_store.spinCount)
+	var prev_free := int(run_store.freeSpinsRemaining)
+	var prev_maxfree := int(run_store.maxFreeSpins)
+	var prev_flat := int(run_store.flatlineResultCount)
+	var prev_abilities: Array = run_store.abilitiesUsed.duplicate()
+	var prev_cons: Dictionary = run_store.runConsumables.duplicate(true)
+	var prev_lastused := String(run_store.lastUsedConsumableId)
+
+	run_store.runPhase = "running"
+	run_store.maxFreeSpins = 10
+	run_store.freeSpinsRemaining = 0
+	run_store.abilitiesUsed = ["reroll"]
+
+	# grant_free_spins adds then clamps to maxFreeSpins.
+	run_store.grant_free_spins(3)
+	if int(run_store.freeSpinsRemaining) != 3:
+		failures.append("issue35: grant_free_spins did not add spins")
+	run_store.grant_free_spins(100)
+	if int(run_store.freeSpinsRemaining) != 10:
+		failures.append("issue35: grant_free_spins did not clamp to maxFreeSpins")
+
+	# restore_all_powers clears the used-abilities list.
+	run_store.restore_all_powers()
+	if not run_store.abilitiesUsed.is_empty():
+		failures.append("issue35: restore_all_powers did not clear abilities")
+
+	# recover_last_consumable honours the last-used id and the slot cap.
+	run_store.runConsumables = {}
+	run_store.lastUsedConsumableId = "cons_tea"
+	if not run_store.recover_last_consumable(2) or int(run_store.runConsumables.get("cons_tea", 0)) != 1:
+		failures.append("issue35: recover_last_consumable did not restore a copy")
+	run_store.runConsumables = { "cons_tea": 1, "cons_focus": 1 }
+	if run_store.recover_last_consumable(2):
+		failures.append("issue35: recover_last_consumable ignored the slot cap")
+
+	# Brains triple grants a spin when power-triggered (pinned evaluate granted none)...
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = 5
+	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 0 }
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(true)
+	if int(run_store.freeSpinsRemaining) < 1:
+		failures.append("issue35: brains triple did not grant a free spin when power-triggered")
+
+	# ...but must NOT double-grant on a natural brains triple (evaluate already granted).
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = 6
+	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 2 }
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(false)
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue35: brains triple double-granted on a natural spin")
+
+	# Three flatline results accumulate and route to the instant-death fatal path.
+	run_store.flatlineResultCount = 0
+	machine.fatal_flatline_count = 3
+	for i in 3:
+		run_store.spinCount = 10 + i
+		run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "freeSpinsGranted": 0 }
+		machine._last_reacted_reels = []
+		machine._last_reacted_spin = -1
+		machine._apply_machine_reactions(false)
+	if int(run_store.flatlineResultCount) != 3:
+		failures.append("issue35: flatline results did not accumulate")
+	if not machine._check_flatline_instant_death():
+		failures.append("issue35: fatal flatline count did not trigger instant death")
+
+	# Restore mutated state.
+	run_store.lastResult = prev_last
+	run_store.spinCount = prev_spin
+	run_store.freeSpinsRemaining = prev_free
+	run_store.maxFreeSpins = prev_maxfree
+	run_store.flatlineResultCount = prev_flat
+	run_store.abilitiesUsed = prev_abilities
+	run_store.runConsumables = prev_cons
+	run_store.lastUsedConsumableId = prev_lastused
+	run_store.runPhase = prev_phase
