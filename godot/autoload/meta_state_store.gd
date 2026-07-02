@@ -28,6 +28,11 @@ var is_first_launch: bool = true
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 
+# Campaign rebalance (issue #38): the starting neuron count is tunable; the const
+# stays the canonical default so parity/sacred rules pin the shipped value.
+@export_group("Campaign")
+@export var campaign_starting_neurons: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
+
 var _campaign_neuron_spend_feedback_pending := false
 
 signal meta_changed
@@ -201,7 +206,7 @@ func start_new_campaign(save_immediately := true) -> void:
 	ownedPermanents = []
 	corruptionEverUsed = false
 	pendingConsumables = {}
-	campaignNeuronsMax = EconomyConst.CAMPAIGN_STARTING_NEURONS
+	campaignNeuronsMax = campaign_starting_neurons
 	campaignNeuronsLeft = campaignNeuronsMax
 	campaignActive = true
 	campaignFailed = false
@@ -280,4 +285,8 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["wealthEndingReached"] = reached.has("wealth")
 	if not current.has("is_first_launch"):
 		current["is_first_launch"] = true
+	# Campaign rebalance (issue #38): saves from the 12-neuron era reclamp down to
+	# the current starting count, and Left re-clamps to the new Max.
+	current["campaignNeuronsMax"] = mini(int(current["campaignNeuronsMax"]), campaign_starting_neurons)
+	current["campaignNeuronsLeft"] = mini(int(current["campaignNeuronsLeft"]), int(current["campaignNeuronsMax"]))
 	return current

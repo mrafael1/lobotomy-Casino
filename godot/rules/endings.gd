@@ -5,8 +5,11 @@ extends RefCounted
 ## ending-timestamp fields are deterministic for parity (the store injects the real
 ## clock). Returns null from check_ending when no ending applies.
 
-static func check_ending(run: Dictionary, _meta: Dictionary) -> Variant:
-	if int(run["scoreEarned"]) >= EconomyConst.WEALTH_SCORE_THRESHOLD:
+# `wealth_threshold` is the campaign goal — @export-tunable from the machine scene
+# (issue #38); the default keeps every pinned vector on the parity-locked constant.
+static func check_ending(run: Dictionary, _meta: Dictionary,
+		wealth_threshold: int = EconomyConst.WEALTH_SCORE_THRESHOLD) -> Variant:
+	if int(run["scoreEarned"]) >= wealth_threshold:
 		return "wealth"
 	if int(run["neurons"]) <= 0:
 		return "flatline"

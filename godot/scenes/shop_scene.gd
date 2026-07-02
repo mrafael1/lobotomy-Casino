@@ -26,6 +26,7 @@ const ITEM_ICONS := {
 var _font: FontFile = null
 var _tex_cache := {}
 var _header: Label = null
+var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _endings: Label = null
 var _list: VBoxContainer = null
 var _rows := {} # id -> Button
@@ -264,8 +265,12 @@ func _refresh() -> void:
 		int(history.get("runsPlayed", 0)),
 		int(history.get("bestScoreRun", 0)),
 	]
-	if not Engine.is_editor_hint():
-		_header.text += "   %s" % MetaStateStore.campaign_status_text()
+	# Issue #38: the campaign readout is the neuron meter, docked at the header's
+	# right edge instead of the old appended "NEURONS: n/n" text. It renders at
+	# native px (no resampling), so it sizes itself; right-align it to the column.
+	if not Engine.is_editor_hint() and _campaign_meter == null:
+		_campaign_meter = NeuronMeter.attach(_header, Vector2.ZERO)
+		_campaign_meter.position = Vector2(148.0 - _campaign_meter.size.x, -2.0)
 	_endings.text = "REACHED: %s" % ("none" if reached.is_empty() else ", ".join(PackedStringArray(reached)))
 
 	var owned: Array = [] if Engine.is_editor_hint() else MetaStateStore.ownedPermanents
