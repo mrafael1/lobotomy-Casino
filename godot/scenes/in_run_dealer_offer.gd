@@ -763,13 +763,14 @@ func _ensure_speech_hint_layer() -> void:
 		label.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			label.add_theme_font_override("font", _font)
-	# Item names no longer show in the bubble — the two hint lines centre in the
-	# bubble body so they fit nicely on their own.
+	# Item names no longer show in the bubble. The two hint lines keep their
+	# original left alignment (the +/- prefixes line up), centred vertically in
+	# the bubble body.
 	_speech_name_hint.visible = false
-	_speech_pos_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_speech_neg_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_speech_pos_hint.position.y = 4.0
-	_speech_neg_hint.position.y = 16.0
+	_speech_pos_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_speech_neg_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_speech_pos_hint.position = Vector2(8.0, 4.0)
+	_speech_neg_hint.position = Vector2(8.0, 16.0)
 	_speech_pos_hint.add_theme_color_override("font_color", TV_POSITIVE_COLOR)
 	_speech_neg_hint.add_theme_color_override("font_color", TV_NEGATIVE_COLOR)
 	_speech_hint_layer.visible = false

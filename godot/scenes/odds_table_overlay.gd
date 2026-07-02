@@ -1,13 +1,13 @@
 class_name OddsTableOverlay
 extends Control
 
-## Dealer odds table (issue #36) — the post-run "what's next?" phase. Lists every
-## reel-cycle symbol with its PAIR/TRIPLE payout and lets the player spend the
-## per-phase token budget on PERMANENT odds levels (max 5 per symbol, shown as five
-## vertical bars that fill yellow). Purchases are staged and undoable (-/+) while
-## the screen is open; DONE commits them through RunStateStore.finalize_odds_phase()
-## and locks the screen until the next run. All purchases go through RunStateStore,
-## so the parity-locked base weights in Symbols are never touched
+## Dealer odds table (issue #36) — the post-run "what's next?" phase. One compact
+## "SYMBOL | LVL" row per reel-cycle symbol: a small icon, five vertical level bars
+## that fill yellow per PERMANENT upgrade (max 5), and -/+ controls with the token
+## cost between them. Purchases are staged and undoable (-/+) while the screen is
+## open; DONE commits them through RunStateStore.finalize_odds_phase() and locks
+## the screen until the next run. All purchases go through RunStateStore, so the
+## parity-locked base weights in Symbols are never touched
 ## (see Evaluate._build_weights).
 
 signal closed
@@ -15,35 +15,32 @@ signal closed
 const SRC_W := 160.0
 const SRC_H := 320.0
 const PANEL_RECT := Rect2(6.0, 22.0, 148.0, 272.0)
-const TABLE_TOP := 78.0
+const TABLE_TOP := 80.0
 const ROW_H := 26.0
-const ICON_SIZE := 12.0  # small, matching the machine reels' centre symbols
-const BAR_W := 3.0
-const BAR_GAP := 1.0
-const BAR_H := 9.0
-const BARS_X := 112.0
-const CONTROL_BTN := Vector2(9.0, 9.0)
-
-@export_group("Odds Table Copy")
-## Short triple-effect blurbs shown under each symbol name (display only).
-@export var effect_text: Dictionary = {
-	"brain": "3X JACKPOT +FREE",
-	"eye": "3X REVEALS A REEL",
-	"pill": "3X POWERS BACK",
-	"syringe": "3X ITEM BACK",
-	"vial": "3X FREE SPINS",
-	"flatline": "3X KILLS YOU",
-}
+const SYMBOL_BOX := Rect2(14.0, 0.0, 24.0, 24.0)
+const SYMBOL_BOX_COLOR := Color(0.085, 0.105, 0.16, 0.95)
+const ICON_SIZE := 14.0
+# Video-game stat-upgrade row: [ - ]  ▮▮▮▯▯  [ + ] — big square buttons flanking
+# the five level bars, cost centered underneath.
+const BAR_W := 5.0
+const BAR_GAP := 2.0
+const BAR_H := 12.0
+const BARS_X := 64.0
+const CONTROL_MINUS_X := 44.0
+const CONTROL_PLUS_X := 101.0
+const CONTROL_BTN := Vector2(16.0, 16.0)
+const GLYPH_LEN := 8.0
+const GLYPH_THICK := 2.0
 
 @export_group("Odds Table Colors")
 @export var title_color: Color = Color(1.0, 0.82, 0.28)
 @export var header_color: Color = Color(0.0, 0.9, 1.0)
-@export var name_color: Color = Color(0.86, 0.9, 0.96)
 @export var effect_color: Color = Color(0.58, 0.64, 0.72)
-@export var score_color: Color = Color(0.75, 1.0, 0.8)
 @export var token_color: Color = Color(0.92, 0.86, 0.56)
 @export var bar_fill_color: Color = Color(1.0, 0.86, 0.2)
 @export var bar_empty_color: Color = Color(0.2, 0.2, 0.28)
+@export var minus_color: Color = Color(0.94, 0.27, 0.27)
+@export var plus_color: Color = Color(0.13, 0.77, 0.37)
 
 var _font: FontFile = null
 var _tokens_label: Label = null
@@ -112,17 +109,14 @@ func _rebuild() -> void:
 	_mk_label(self, "SPEND TOKENS TO RAISE", Vector2(14.0, 48.0), 6, effect_color)
 	_mk_label(self, "A SYMBOL'S ODDS FOR GOOD", Vector2(14.0, 56.0), 6, effect_color)
 
+	var bars_w := _bars_width()
 	_mk_label(self, "SYMBOL", Vector2(14.0, TABLE_TOP - 10.0), 6, header_color)
-	_mk_label(self, "PAIR", Vector2(62.0, TABLE_TOP - 10.0), 6, header_color, 20.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_mk_label(self, "3X", Vector2(84.0, TABLE_TOP - 10.0), 6, header_color, 20.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_mk_label(self, "LVL", Vector2(BARS_X, TABLE_TOP - 10.0), 6, header_color, 34.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_mk_label(self, "LVL", Vector2(BARS_X, TABLE_TOP - 10.0), 6, header_color, bars_w, HORIZONTAL_ALIGNMENT_CENTER)
 
 	var y := TABLE_TOP
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		_build_row(String(sym), y)
 		y += ROW_H
-
-	_mk_label(self, "BRAIN 3X = JACKPOT", Vector2(14.0, y + 2.0), 6, effect_color)
 
 	var done := Button.new()
 	done.text = "DONE"
@@ -137,62 +131,120 @@ func _rebuild() -> void:
 
 	_refresh()
 
+func _bars_width() -> float:
+	var max_level := maxi(1, RunStateStore.odds_max_level)
+	return float(max_level) * BAR_W + float(max_level - 1) * BAR_GAP
+
+## One compact "SYMBOL | LVL" row: small icon, five level bars, -/+ with the cost
+## between them. No names, no payout columns.
 func _build_row(symbol_id: String, y: float) -> void:
-	var icon := TextureRect.new()
-	icon.texture = Assets.texture("symbols/%s.png" % symbol_id, true)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	icon.position = Vector2(12.0, y + 1.0)
-	icon.size = Vector2(ICON_SIZE, ICON_SIZE)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(icon)
+	var box := ColorRect.new()
+	box.color = SYMBOL_BOX_COLOR
+	box.position = Vector2(SYMBOL_BOX.position.x, y + SYMBOL_BOX.position.y)
+	box.size = SYMBOL_BOX.size
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(box)
+	_add_symbol_icon(symbol_id, box.position + box.size * 0.5)
 
-	_mk_label(self, symbol_id.to_upper(), Vector2(27.0, y), 7, name_color)
-	_mk_label(self, String(effect_text.get(symbol_id, "")), Vector2(27.0, y + 10.0), 5, effect_color)
-
-	var pair := int(Payouts.PAIR_SCORE.get(symbol_id, 0))
-	var triple := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-	_mk_label(self, "+%d" % pair, Vector2(62.0, y), 7, score_color, 20.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_mk_label(self, "+%d" % triple, Vector2(84.0, y), 7,
-		Color(1.0, 0.33, 0.58) if symbol_id == "brain" else score_color, 20.0, HORIZONTAL_ALIGNMENT_RIGHT)
-
-	# 5 vertical level bars, one filled yellow per permanent upgrade.
+	# 5 vertical level bars, one filled yellow per permanent upgrade, flanked by
+	# the big -/+ buttons (stat-upgrade style); the cost sits centered below.
 	var max_level := maxi(1, RunStateStore.odds_max_level)
 	var bars: Array = []
-	var bars_w := float(max_level) * BAR_W + float(max_level - 1) * BAR_GAP
-	var bars_left := BARS_X + (34.0 - bars_w) * 0.5
+	var bars_y := y + 3.0
 	for i in max_level:
 		var bar := ColorRect.new()
-		bar.position = Vector2(bars_left + float(i) * (BAR_W + BAR_GAP), y)
+		bar.position = Vector2(BARS_X + float(i) * (BAR_W + BAR_GAP), bars_y)
 		bar.size = Vector2(BAR_W, BAR_H)
 		bar.color = bar_empty_color
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.z_index = 1
 		add_child(bar)
 		bars.append(bar)
 	_level_bars[symbol_id] = bars
 
-	# -/+ controls under the bars, with the token cost between them (plain number).
-	var controls_y := y + BAR_H + 2.0
-	var minus := _control_button("-", Vector2(BARS_X + 1.0, controls_y))
+	# Buttons vertically centered on the bars; the cost is centered below them.
+	var controls_y := bars_y + BAR_H * 0.5 - CONTROL_BTN.y * 0.5
+	var minus := _control_button("minus", Vector2(CONTROL_MINUS_X, controls_y))
 	minus.pressed.connect(_on_minus_pressed.bind(symbol_id))
 	_minus_buttons[symbol_id] = minus
-	_mk_label(self, str(RunStateStore.odds_token_cost(symbol_id)), Vector2(BARS_X + 10.0, controls_y), 6,
-		token_color, 14.0, HORIZONTAL_ALIGNMENT_CENTER)
-	var plus := _control_button("+", Vector2(BARS_X + 24.0, controls_y))
+	var bars_w := _bars_width()
+	var cost := _mk_label(self, str(RunStateStore.odds_token_cost(symbol_id)),
+		Vector2(BARS_X, bars_y + BAR_H + 2.0), 6, token_color, bars_w,
+		HORIZONTAL_ALIGNMENT_CENTER)
+	cost.z_index = 2
+	var plus := _control_button("plus", Vector2(CONTROL_PLUS_X, controls_y))
 	plus.pressed.connect(_on_plus_pressed.bind(symbol_id))
 	_plus_buttons[symbol_id] = plus
 
-func _control_button(text: String, pos: Vector2) -> Button:
+func _add_symbol_icon(symbol_id: String, center: Vector2) -> void:
+	var tex := Assets.texture("symbols/%s.png" % symbol_id, true)
+	if tex == null:
+		return
+	var icon := Sprite2D.new()
+	icon.texture = tex
+	icon.centered = true
+	icon.position = center
+	icon.scale = Vector2.ONE * (ICON_SIZE / float(maxi(tex.get_width(), tex.get_height())))
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.z_index = 2
+	add_child(icon)
+
+## Big boxed stat-upgrade button. `kind` is "minus" (red) or "plus" (green); the
+## glyph is drawn from ColorRects so it stays chunky and pixel-crisp at any size.
+func _control_button(kind: String, pos: Vector2) -> Button:
+	var accent := minus_color if kind == "minus" else plus_color
 	var b := Button.new()
-	b.text = text
 	b.position = pos
 	b.size = CONTROL_BTN
-	b.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
+	b.custom_minimum_size = CONTROL_BTN
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.z_index = 3
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.11, 0.09, 0.17)
+	normal.border_color = accent
+	normal.set_border_width_all(1)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.17, 0.14, 0.25)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = accent.darkened(0.55)
+	var disabled := normal.duplicate() as StyleBoxFlat
+	disabled.bg_color = Color(0.09, 0.08, 0.13)
+	disabled.border_color = Color(0.3, 0.3, 0.38)
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("disabled", disabled)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	# Drawn glyph: a fat horizontal bar, plus a vertical one for "+".
+	var glyph_h := ColorRect.new()
+	glyph_h.name = "GlyphH"
+	glyph_h.color = accent
+	glyph_h.position = (CONTROL_BTN - Vector2(GLYPH_LEN, GLYPH_THICK)) * 0.5
+	glyph_h.size = Vector2(GLYPH_LEN, GLYPH_THICK)
+	glyph_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(glyph_h)
+	if kind == "plus":
+		var glyph_v := ColorRect.new()
+		glyph_v.name = "GlyphV"
+		glyph_v.color = accent
+		glyph_v.position = (CONTROL_BTN - Vector2(GLYPH_THICK, GLYPH_LEN)) * 0.5
+		glyph_v.size = Vector2(GLYPH_THICK, GLYPH_LEN)
+		glyph_v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(glyph_v)
 	add_child(b)
 	return b
+
+## Dims a control button's drawn glyph to match its disabled state.
+func _sync_control_glyphs(b: Button) -> void:
+	if b == null:
+		return
+	var alpha := 0.35 if b.disabled else 1.0
+	for child in b.get_children():
+		if child is ColorRect:
+			(child as ColorRect).modulate = Color(1.0, 1.0, 1.0, alpha)
 
 func _on_plus_pressed(symbol_id: String) -> void:
 	if RunStateStore.buy_odds_upgrade(symbol_id):
@@ -214,6 +266,8 @@ func _refresh() -> void:
 		if plus != null:
 			plus.disabled = level >= RunStateStore.odds_max_level \
 				or RunStateStore.odds_token_cost(String(symbol_id)) > RunStateStore.oddsTokensRemaining
+			_sync_control_glyphs(plus)
 		var minus := _minus_buttons.get(symbol_id) as Button
 		if minus != null:
 			minus.disabled = int(RunStateStore.oddsPendingUpgrades.get(symbol_id, 0)) <= 0
+			_sync_control_glyphs(minus)

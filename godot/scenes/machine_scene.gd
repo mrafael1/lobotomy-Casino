@@ -84,7 +84,6 @@ const SHIFT_ARROW_HITS := [
 # dealer scene is only used for the pre-run shop, reached from the menu.
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
-const UPGRADES_SCENE := "res://scenes/upgrades_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const SETTINGS_ASSET := "ui/settings.png"
@@ -916,8 +915,9 @@ func _enter_run() -> void:
 			_show_campaign_failed()
 			return
 	_sync_visuals()
-	if MetaStateStore.consume_neuron_spend_feedback():
-		_show_neuron_spend_feedback()
+	# The "-1 NEURON" popup belongs to the flatline overlay only — it no longer
+	# fires during normal machine play (the pending flag is just cleared here).
+	MetaStateStore.consume_neuron_spend_feedback()
 
 func _begin_fresh_run() -> bool:
 	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
@@ -964,9 +964,6 @@ func _to_menu() -> void:
 func _to_dealer() -> void:
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
-func _to_lab() -> void:
-	get_tree().change_scene_to_file(UPGRADES_SCENE)
-
 func _do_spin() -> void:
 	if _spinning_anim or _reroll_anim_active or _sequence_lock_active:
 		return
@@ -988,10 +985,14 @@ func _do_spin() -> void:
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
 	_reel_stop_times = [0.55, 0.8, 1.05 + tension]
-	# Eye triple (issue #35): peek one non-final reel early on the next spin. Reel 2
-	# is excluded so it stays the last to stop (reveal-complete keys off its time).
-	if _reveal_reel_next_spin == 0 or _reveal_reel_next_spin == 1:
-		_reel_stop_times[_reveal_reel_next_spin] = 0.2
+	# Eye triple (issue #35): the player-picked reel's result reveals early on this
+	# spin — a popup names the symbol over that reel, and reels 0/1 also stop early
+	# (reel 2 stays last to stop: reveal-complete keys off its time). Presentation
+	# only: spin() already computed the result above, parity untouched.
+	if _reveal_reel_next_spin >= 0:
+		if _reveal_reel_next_spin < 2:
+			_reel_stop_times[_reveal_reel_next_spin] = 0.2
+		_show_eye_reveal_popup(_reveal_reel_next_spin, String(_final_reels[_reveal_reel_next_spin]))
 	_reveal_reel_next_spin = -1
 	_start_lever_pull()
 	_start_reel_spin_animation(locked_before)
@@ -1118,16 +1119,14 @@ func _refresh_campaign_label() -> void:
 	if _campaign_label != null:
 		_campaign_label.text = ""
 
-func _show_neuron_spend_feedback() -> void:
+# "-1 NEURON" popup — flatline/neuron-loss overlay only. Spawns above the overlay's
+# neuron meter, timed with its losing pop.
+func _show_neuron_spend_feedback(feedback_parent: Control, center: Vector2) -> void:
+	if feedback_parent == null:
+		return
 	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
 		_neuron_spend_label.queue_free()
-	var feedback_parent: Node = get_node_or_null("BottomHudLayer") as Control
-	if feedback_parent == null:
-		feedback_parent = self
-	var label_position := Vector2(28.0, 104.0)
-	if _campaign_label != null:
-		var label_center := _campaign_label.position + _campaign_label.size * 0.5
-		label_position = label_center - Vector2(35.0, 6.0)
+	var label_position := center - Vector2(35.0, 6.0)
 	_neuron_spend_label = Label.new()
 	_neuron_spend_label.name = "NeuronSpendFeedback"
 	_neuron_spend_label.text = "-1 NEURON"
@@ -1144,9 +1143,10 @@ func _show_neuron_spend_feedback() -> void:
 	_neuron_spend_label.add_theme_constant_override("outline_size", 1)
 	feedback_parent.add_child(_neuron_spend_label)
 	var tw := create_tween()
+	tw.tween_interval(NeuronMeter.LOSS_ANIM_DELAY) # rises as the meter pops its frame
 	tw.set_parallel(true)
-	tw.tween_property(_neuron_spend_label, "position:y", label_position.y - 14.0, 0.8)
-	tw.tween_property(_neuron_spend_label, "modulate:a", 0.0, 0.8)
+	tw.tween_property(_neuron_spend_label, "position:y", label_position.y - 14.0, 1.0)
+	tw.tween_property(_neuron_spend_label, "modulate:a", 0.0, 1.0).set_delay(0.35)
 	tw.set_parallel(false)
 	tw.tween_callback(Callable(_neuron_spend_label, "queue_free"))
 
@@ -1173,13 +1173,15 @@ func _refresh_lock_art() -> void:
 func _refresh_tv_indicators() -> void:
 	if RunStateStore.lucidityCoins < _display_lucidity:
 		_set_display_lucidity(RunStateStore.lucidityCoins)
-	var goal_ratio := clampf(float(_display_lucidity) / float(EconomyConst.LUCIDITY_OBJECTIVE), 0.0, 1.0)
+	# The wealth bar targets the campaign wealth goal (2000) — the same threshold
+	# the wealth ending checks — not the old lucidity objective.
+	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
 	var start_n := maxi(1, RunStateStore.startingNeurons)
 	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, life_ratio)
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, EconomyConst.LUCIDITY_OBJECTIVE]
+		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 	if _bar_labels.has("life"):
 		_bar_labels["life"].text = "SPINS LEFT: %d" % _display_remaining_spins(life_ratio)
 
@@ -1204,8 +1206,8 @@ func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 func _set_display_lucidity(value: int) -> void:
 	_display_lucidity = maxi(0, value)
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, EconomyConst.LUCIDITY_OBJECTIVE]
-	var goal_ratio := clampf(float(_display_lucidity) / float(EconomyConst.LUCIDITY_OBJECTIVE), 0.0, 1.0)
+		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
+	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
 
 func _start_lucidity_countup(target: int, visible_coin_count: int, first_arrival_time: float) -> void:
@@ -2427,9 +2429,11 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 			color = triple_brain_color
 			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
 		"eye":
-			_reveal_reel_next_spin = randi() % 2  # peek reel 0 or 1 next spin
+			# The player picks the reel to reveal (issue follow-up): the reel-selection
+			# UI arms and the chosen reel's NEXT spin result pops up when it lands.
 			color = triple_eye_color
-			label = "REVEAL"
+			label = "PICK A REEL"
+			call_deferred("_arm_eye_reveal_picker")
 		"pill":
 			RunStateStore.restore_all_powers()
 			color = triple_pill_color
@@ -2443,6 +2447,67 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 			label = "+%d SPINS" % triple_vial_free_spins
 	_spawn_reaction_flash(color, label)
 	_update_hud()
+
+# ── 3x eye reveal (player-picked reel) ───────────────────────────────────────────
+# Reuses the shared reel-selection UI; the pick is presentation-only state
+# (_reveal_reel_next_spin) consumed by the next _do_spin.
+
+const EYE_REVEAL_POPUP_TIME := 1.6
+
+func _arm_eye_reveal_picker() -> void:
+	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
+
+func _on_eye_reveal_pick(reel_index: int) -> void:
+	_reveal_reel_next_spin = reel_index
+	_clear_targeting()
+	_spawn_reaction_flash(triple_eye_color, "REEL %d" % (reel_index + 1))
+
+## Popup over the picked reel naming its just-rolled symbol while the reels are
+## still spinning — the "reveal that reel's next spin" beat of the eye triple.
+func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
+	var w := 34.0
+	var h := 34.0
+	var popup := Control.new()
+	popup.z_index = 40
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cx := float(REEL_CELL_CENTERS[reel_index])
+	popup.position = Vector2(clampf(cx - w * 0.5, 2.0, SRC_W - w - 2.0), float(REEL_WINDOW["top"]) - h - 6.0)
+	popup.size = Vector2(w, h)
+	add_child(popup)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.03, 0.1, 0.92)
+	bg.size = popup.size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.add_child(bg)
+
+	var title := _reaction_label(popup, "REEL %d" % (reel_index + 1), Vector2(0.0, 2.0), 6, triple_eye_color)
+	title.size = Vector2(w, 8.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var tex := _load_texture("symbols/%s.png" % symbol_id, true)
+	if tex != null:
+		var icon := TextureRect.new()
+		icon.texture = tex
+		icon.position = Vector2((w - 16.0) * 0.5, 13.0)
+		icon.size = Vector2(16.0, 16.0)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		popup.add_child(icon)
+	else:
+		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 16.0), 7, Color(0.9, 0.95, 1.0))
+		sym.size = Vector2(w, 10.0)
+		sym.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	popup.pivot_offset = popup.size * 0.5
+	popup.scale = Vector2(0.4, 0.4)
+	var tw := popup.create_tween()
+	tw.tween_property(popup, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(EYE_REVEAL_POPUP_TIME)
+	tw.tween_property(popup, "modulate:a", 0.0, 0.3)
+	tw.tween_callback(popup.queue_free)
 
 ## Instant death: too many flatline results ends THIS RUN through the normal
 ## flatline ending (banks lucidity, shows the #38 fatal text, offers CONTINUE
@@ -2559,7 +2624,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the dimmed overlay.
-	_set_stash_tray_visible(ending != "flatline")
+	_set_stash_tray_visible(false)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -2590,6 +2655,9 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	if ending == "flatline":
 		_build_flatline_countdown(run)
+	elif ending == "wealth":
+		_build_wealth_screen(run)
+		return
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(20, 145)
@@ -2601,27 +2669,45 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_overlay.add_child(wallet)
 
 	var to_menu := Button.new()
-	to_menu.text = "BANK & LAB" if ending == "wealth" else _flatline_action_text()
+	to_menu.text = _flatline_action_text()
 	to_menu.position = Vector2(30, 238 if ending == "flatline" else 175)
 	to_menu.size = Vector2(100, 20)
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		to_menu.add_theme_font_override("font", _font)
-	# Non-wealth already banked above; wealth banks here on leave.
 	Assets.skin_negative_button(to_menu)
-	to_menu.pressed.connect(_bank_and_lab.bind(run, ending) if ending == "wealth" else _on_flatline_action_pressed)
+	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
-	if ending == "wealth":
-		var cont := Button.new()
-		cont.text = "CONTINUE"
-		cont.position = Vector2(40, 200)
-		cont.size = Vector2(80, 18)
-		cont.add_theme_font_size_override("font_size", 9)
-		if _font != null:
-			cont.add_theme_font_override("font", _font)
-		cont.pressed.connect(_continue_from_wealth)
-		_overlay.add_child(cont)
+## Dedicated wealth-ending screen: CONTINUE keeps playing under the existing
+## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
+## continue can still bank the full total later) and returns to the menu hub.
+func _build_wealth_screen(run: Dictionary) -> void:
+	_score_label(_overlay, "YOU MADE IT OUT RICH", Vector2(20.0, 148.0), 8,
+		Color(0.9, 0.95, 0.85), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "SCORE %d" % int(run["scoreEarned"]), Vector2(20.0, 162.0), 8,
+		Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+
+	var cont := Button.new()
+	cont.text = "CONTINUE"
+	cont.position = Vector2(30.0, 192.0)
+	cont.size = Vector2(100.0, 20.0)
+	cont.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		cont.add_theme_font_override("font", _font)
+	cont.pressed.connect(_continue_from_wealth)
+	_overlay.add_child(cont)
+
+	var exit := Button.new()
+	exit.text = "EXIT CASINO"
+	exit.position = Vector2(30.0, 218.0)
+	exit.size = Vector2(100.0, 20.0)
+	exit.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		exit.add_theme_font_override("font", _font)
+	Assets.skin_negative_button(exit)
+	exit.pressed.connect(_exit_casino.bind(run))
+	_overlay.add_child(exit)
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
@@ -2691,9 +2777,11 @@ func _build_flatline_countdown(run: Dictionary) -> void:
 	_update_flatline_countdown_labels()
 
 	# Neuron meter above the continue button, playing the losing pop: the frame
-	# switches to reflect the neuron this run just cost.
+	# switches to reflect the neuron this run just cost. The "-1 NEURON" popup
+	# rides the same beat, rising off the meter.
 	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
 	_flatline_meter.play_loss_animation()
+	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
 
 func _step_flatline_countdown(delta: float) -> void:
 	_flatline_countdown_elapsed += delta
@@ -2741,9 +2829,11 @@ func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
 	_sync_visuals()
 
-func _bank_and_lab(run: Dictionary, ending: String) -> void:
-	MetaStateStore.bank_run(run, ending)
-	_to_lab()
+## Wealth screen EXIT CASINO: bank the run (wealth banking is deferred until the
+## player leaves) and return to the menu hub.
+func _exit_casino(run: Dictionary) -> void:
+	MetaStateStore.bank_run(run, "wealth")
+	_to_menu()
 
 # ── dealer flow ────────────────────────────────────────────────────────────────────
 
