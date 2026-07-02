@@ -59,6 +59,8 @@ func _run() -> void:
 	_check_odds_table_36(run_store, failures)
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
+	_check_wealth_screen(machine, run_store, failures)
+	await _check_eye_reveal(machine, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -257,12 +259,9 @@ func _check_global_options_layout(failures: Array) -> void:
 		if neuron_number.text != "":
 			failures.append("machine: neuron_number should render no text (meter replaces it)")
 		_check_neuron_meter_absent("machine", bottom_hud, failures)
-		machine._show_neuron_spend_feedback()
-		var spend_feedback := machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") as Label
-		if spend_feedback == null:
-			failures.append("machine: neuron spend feedback is not parented to the bottom HUD")
-		elif spend_feedback.position.y < 290.0:
-			failures.append("machine: neuron spend feedback does not pop from the bottom counter")
+		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
+		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
+			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
 	if health_label == null:
 		failures.append("machine: HealthLabel spins counter is missing")
 	else:
@@ -439,10 +438,10 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 		failures.append("machine ending flow: could not read machine_scene.gd")
 		return
 	var source := file.get_as_text()
-	if not source.contains("BANK & LAB"):
-		failures.append("machine ending flow: wealth bank action should go to lab")
-	if source.contains("_bank_and_menu"):
-		failures.append("machine ending flow: wealth still has old bank-and-menu path")
+	if not source.contains("EXIT CASINO"):
+		failures.append("machine ending flow: wealth screen should offer EXIT CASINO")
+	if source.contains("BANK & LAB"):
+		failures.append("machine ending flow: old bank/lab wealth transition still present")
 
 func _check_flatline_action_text(machine: Node, meta_store: Node, failures: Array) -> void:
 	var previous_neurons := int(meta_store.campaignNeuronsLeft)
@@ -848,6 +847,8 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 			failures.append("flatline: 'lucidity' should not appear on the overlay")
 	if not texts.has("10% kept"):
 		failures.append("flatline: retained percent line missing ('10% kept')")
+	if not texts.has("-1 NEURON"):
+		failures.append("flatline: -1 NEURON popup missing from the neuron-loss screen")
 	var flat_meter := _find_neuron_meter(machine._overlay)
 	if flat_meter == null:
 		failures.append("flatline: overlay is missing the neuron meter")
@@ -873,6 +874,71 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+# Dedicated wealth-ending screen: CONTINUE + EXIT CASINO, no bank/lab button, and
+# the wealth bar targets the 2000 campaign goal.
+func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	var run := { "neurons": 5, "scoreEarned": 2000, "lucidityCoins": 300 }
+
+	# Wealth bar readout targets the campaign goal, not the old 1000 objective.
+	machine._set_display_lucidity(300)
+	if machine._bar_labels.has("goal"):
+		var goal_text := String((machine._bar_labels["goal"] as Label).text)
+		if not goal_text.ends_with("/2000"):
+			failures.append("wealth: goal bar reads '%s', expected x/2000" % goal_text)
+
+	run_store.runPhase = "running"
+	machine._show_ending("wealth", run)
+	var wallet_before := int(meta_store.lucidityWallet)
+	var continue_button: Button = null
+	var exit_button: Button = null
+	for child in machine._overlay.get_children():
+		if child is Button:
+			var b := child as Button
+			if b.text == "CONTINUE":
+				continue_button = b
+			elif b.text == "EXIT CASINO":
+				exit_button = b
+			elif b.text == "BANK & LAB":
+				failures.append("wealth: bank/lab button still on the wealth screen")
+	if continue_button == null:
+		failures.append("wealth: CONTINUE button missing from the wealth screen")
+	if exit_button == null:
+		failures.append("wealth: EXIT CASINO button missing from the wealth screen")
+	if int(meta_store.lucidityWallet) != wallet_before:
+		failures.append("wealth: run banked before the player chose to leave")
+	# CONTINUE resumes the run under the existing wealth-continue rules.
+	machine._continue_from_wealth()
+	if String(run_store.runPhase) != "running" or not bool(run_store.wealthContinued):
+		failures.append("wealth: CONTINUE did not resume the run (wealth-continue rules)")
+	run_store.reset_run_state()
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._set_stash_tray_visible(true)
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+# 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
+# the popup names the picked reel's rolled symbol.
+func _check_eye_reveal(machine: Node, failures: Array) -> void:
+	machine._reveal_reel_next_spin = -1
+	machine._apply_symbol_triple("eye", 0, false)
+	await process_frame # the picker arms deferred
+	if machine._targeting_layer == null:
+		failures.append("eye: 3x eye did not arm the reel-selection UI")
+	machine._on_eye_reveal_pick(1)
+	if int(machine._reveal_reel_next_spin) != 1:
+		failures.append("eye: picking a reel did not store the reveal target")
+	if machine._targeting_layer != null:
+		failures.append("eye: picking a reel did not clear the selection UI")
+	var before := machine.get_child_count()
+	machine._show_eye_reveal_popup(1, "eye")
+	if machine.get_child_count() <= before:
+		failures.append("eye: reveal popup did not spawn")
+	machine._reveal_reel_next_spin = -1
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
