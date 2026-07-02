@@ -31,7 +31,6 @@ const ENTRY_EASE := Tween.EASE_OUT
 const ENTRY_TIME := 0.32
 const ITEM_VISUAL_SIZE := Vector2(16.0, 16.0)
 const OFFER_SLOT_SIZE := Vector2(32.0, 32.0)
-const DRAG_SLOP := 4.0
 const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
 const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
 const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
@@ -116,13 +115,9 @@ var _bubble_right_pos := Vector2(52.0, 70.0)
 var _hands_rest_position := Vector2.ZERO
 var _hands_entry_position := Vector2.ZERO
 var _finishing := false
-var _drag_active := false
-var _drag_node: Control = null
-var _drag_id := ""
-var _drag_kind := ""
-var _drag_home := Vector2.ZERO
-var _drag_press := Vector2.ZERO
-var _drag_moved := false
+var _items_stage := false        # hands/items shown; look button doubles as TAKE
+var _selected_offer_id := ""     # tapped item — TAKE buys this one
+var _offer_icons := {}           # offer id -> icon Control (selection highlight)
 var _current_offer_ids: Array[String] = []
 
 func _ready() -> void:
@@ -152,6 +147,8 @@ func _draw() -> void:
 func start_offer(items: Array, stash_items: Array = []) -> void:
 	visible = true
 	_finishing = false
+	_items_stage = false
+	_selected_offer_id = ""
 	_choose_side()
 	_clear_offer_items()
 	_rebuild_stash(stash_items)
@@ -170,6 +167,8 @@ func start_offer(items: Array, stash_items: Array = []) -> void:
 	if _ignore_button != null:
 		_ignore_button.visible = false
 	if _look_text_button != null:
+		_look_text_button.text = "look"
+		_look_text_button.disabled = false
 		_look_text_button.visible = false
 	if _ignore_action_button != null:
 		_ignore_action_button.text = "ignore"
@@ -220,7 +219,6 @@ func finish_offer() -> void:
 	if _finishing:
 		return
 	_finishing = true
-	_drag_active = false
 	_speech_bubble.visible = false
 	if _speech_hint_layer != null:
 		_speech_hint_layer.visible = false
@@ -652,9 +650,9 @@ func _setup_items(items: Array) -> void:
 		var id := String(items[i])
 		if i < _offer_slots.size():
 			var slot := _offer_slots[i]
-			_make_drag_icon_on(slot, id, "offer", _item_position_in_slot(slot), ITEM_VISUAL_SIZE.x)
+			_make_item_icon_on(slot, id, "offer", _item_position_in_slot(slot), ITEM_VISUAL_SIZE.x)
 		else:
-			_make_drag_icon(id, "offer", anchors[i] + item_offset)
+			_make_item_icon(id, "offer", anchors[i] + item_offset)
 
 func _item_anchors() -> Array:
 	if not _offer_slots.is_empty():
@@ -680,21 +678,24 @@ func _authored_anchor_position(node_name: String, fallback: Vector2) -> Vector2:
 func _item_position_in_slot(slot: Control) -> Vector2:
 	return (slot.size - ITEM_VISUAL_SIZE) * 0.5 + item_offset
 
-func _make_drag_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
-	return _make_drag_icon_on(_stash_layer if kind == "stash" else _item_layer, id, kind, pos, icon_size)
+func _make_item_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
+	return _make_item_icon_on(_stash_layer if kind == "stash" else _item_layer, id, kind, pos, icon_size)
 
-func _make_drag_icon_on(parent: Control, id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
+func _make_item_icon_on(parent: Control, id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
 	var icon := TextureRect.new()
 	icon.set_meta("_in_run_dealer_dynamic_icon", true)
 	icon.texture = _icon_for(id)
 	icon.position = pos
 	icon.size = Vector2(icon_size, icon_size)
+	icon.pivot_offset = Vector2(icon_size, icon_size) * 0.5
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_STOP
-	icon.gui_input.connect(_on_drag_icon_input.bind(icon, id, kind))
+	icon.gui_input.connect(_on_offer_icon_input.bind(id, kind))
 	parent.add_child(icon)
+	if kind == "offer":
+		_offer_icons[id] = icon
 	return icon
 
 func _rebuild_stash(_stash_items: Array) -> void:
@@ -705,6 +706,8 @@ func _rebuild_stash(_stash_items: Array) -> void:
 	# spot — no duplicate.
 
 func _clear_offer_items() -> void:
+	_offer_icons.clear()
+	_selected_offer_id = ""
 	if _item_layer != null:
 		_clear_dynamic_icons(_item_layer)
 
@@ -760,6 +763,13 @@ func _ensure_speech_hint_layer() -> void:
 		label.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			label.add_theme_font_override("font", _font)
+	# Item names no longer show in the bubble — the two hint lines centre in the
+	# bubble body so they fit nicely on their own.
+	_speech_name_hint.visible = false
+	_speech_pos_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_speech_neg_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_speech_pos_hint.position.y = 4.0
+	_speech_neg_hint.position.y = 16.0
 	_speech_pos_hint.add_theme_color_override("font_color", TV_POSITIVE_COLOR)
 	_speech_neg_hint.add_theme_color_override("font_color", TV_NEGATIVE_COLOR)
 	_speech_hint_layer.visible = false
@@ -780,11 +790,9 @@ func _set_speech_hints(item_id: String, backing_text := "Interested in one?") ->
 	if _speech_hint_layer == null:
 		_set_speech_text(backing_text)
 		return
+	# No item name in the bubble — just the two hint lines, so they fit nicely.
 	var hints: Dictionary = ITEM_HINTS.get(item_id, FALLBACK_HINT)
-	_speech_name_hint.text = _item_name(item_id)
-	_speech_name_hint.add_theme_color_override(
-		"font_color", CORRUPT_NAME_COLOR if HintLabel.item_is_corrupted(item_id) else BUBBLE_TEXT_COLOR
-	)
+	_speech_name_hint.visible = false
 	_speech_pos_hint.text = "+ %s" % String(hints["pos"])
 	_speech_neg_hint.text = "- %s" % String(hints["neg"])
 	_speech_hint_layer.visible = true
@@ -807,9 +815,18 @@ func _string_items(items: Array) -> Array[String]:
 func _on_ignore_pressed() -> void:
 	dealer_ignored.emit()
 
+# The green button doubles up: "look" reveals the items, then it becomes "take"
+# in the old look position (above leave) and buys the selected item.
 func _on_look_pressed() -> void:
+	if _items_stage:
+		if _selected_offer_id != "":
+			item_selected.emit(_selected_offer_id)
+		return
+	_items_stage = true
 	if _look_text_button != null:
-		_look_text_button.visible = false
+		_look_text_button.text = "take"
+		_look_text_button.disabled = true # enabled once an item is tapped
+		_look_text_button.visible = true
 	if _look_button != null:
 		_look_button.visible = false
 	_position_item_stage_buttons()
@@ -836,84 +853,33 @@ func _play_hands_entry() -> void:
 	await tw.finished
 	_layout_offer_slots()
 
+# Still used by the machine's stash-discard drag (drop a stash item on the dealer).
 func has_dealer_drop_point(global_pos: Vector2) -> bool:
 	return _dealer_hit_rect().has_point(global_pos)
 
-func _on_drag_icon_input(event: InputEvent, node: Control, id: String, kind: String) -> void:
-	if Engine.is_editor_hint():
+# Offers are tap-to-select (no drag-to-buy): tapping shows the item's hints and
+# arms the TAKE button with that item.
+func _on_offer_icon_input(event: InputEvent, id: String, kind: String) -> void:
+	if Engine.is_editor_hint() or kind != "offer":
 		return
+	var pressed := false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed and not _drag_active:
-			_begin_item_press(node, id, kind, get_global_mouse_position())
+		pressed = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
 	elif event is InputEventScreenTouch:
-		var touch_event := event as InputEventScreenTouch
-		if touch_event.pressed and not _drag_active:
-			_begin_item_press(node, id, kind, touch_event.position)
+		pressed = (event as InputEventScreenTouch).pressed
+	if pressed:
+		_select_offer(id)
 
-func _begin_item_press(node: Control, id: String, kind: String, press_pos: Vector2) -> void:
-	_drag_active = true
-	_drag_node = node
-	_drag_id = id
-	_drag_kind = kind
-	_drag_home = node.position
-	_drag_press = press_pos
-	_drag_moved = false
-
-func _begin_drag_visual() -> void:
-	if _drag_node == null:
-		return
-	_drag_node.z_index = 30
-	_drag_node.scale = Vector2(1.18, 1.18)
-	_drag_node.modulate = Color(1.2, 1.2, 1.2)
-
-func _update_drag_position(pos: Vector2) -> void:
-	if _drag_node == null:
-		return
-	if not _drag_moved and pos.distance_to(_drag_press) > DRAG_SLOP:
-		_drag_moved = true
-		_begin_drag_visual()
-	if _drag_moved:
-		_drag_node.global_position = pos - _drag_node.size * 0.5
-
-func _input(event: InputEvent) -> void:
-	if Engine.is_editor_hint():
-		return
-	if not _drag_active:
-		return
-	if event is InputEventMouseMotion:
-		_update_drag_position(get_global_mouse_position())
-	elif event is InputEventScreenDrag:
-		var drag_event := event as InputEventScreenDrag
-		_update_drag_position(drag_event.position)
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_end_drag(get_global_mouse_position())
-	elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
-		_end_drag((event as InputEventScreenTouch).position)
-
-func _end_drag(release_pos: Vector2) -> void:
-	var id := _drag_id
-	var kind := _drag_kind
-	var node := _drag_node
-	var dropped_on_dealer := _dealer_hit_rect().has_point(release_pos)
-	_drag_active = false
-	_drag_node = null
-	_drag_id = ""
-	_drag_kind = ""
-	if node != null:
-		node.z_index = 0
-		node.position = _drag_home
-		node.scale = Vector2.ONE
-		node.modulate = Color.WHITE
-	if not _drag_moved:
-		if kind == "offer" and id != "":
-			_set_speech_hints(id)
-		return
-	if dropped_on_dealer and id != "":
-		if kind == "offer":
-			item_selected.emit(id)
-		elif kind == "stash":
-			item_discarded.emit(id)
+func _select_offer(id: String) -> void:
+	_selected_offer_id = id
+	for offer_id in _offer_icons:
+		var icon := _offer_icons[offer_id] as Control
+		if icon != null and is_instance_valid(icon):
+			icon.scale = Vector2(1.18, 1.18) if String(offer_id) == id else Vector2.ONE
+	_set_speech_hints(id)
+	if _items_stage and _look_text_button != null:
+		_look_text_button.disabled = false
 
 func _dealer_hit_rect() -> Rect2:
 	if _side == "left":

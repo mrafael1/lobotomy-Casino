@@ -24,6 +24,9 @@ var campaignActive: bool = true
 var campaignFailed: bool = false
 var wealthEndingReached: bool = false
 var is_first_launch: bool = true
+# Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
+# phase, applied to every run, and only reset with a fresh campaign.
+var oddsUpgrades: Dictionary = {}
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -58,6 +61,7 @@ func _as_dict() -> Dictionary:
 		"campaignFailed": campaignFailed,
 		"wealthEndingReached": wealthEndingReached,
 		"is_first_launch": is_first_launch,
+		"oddsUpgrades": oddsUpgrades.duplicate(true),
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -78,6 +82,7 @@ func _apply(meta: Dictionary) -> void:
 	campaignFailed = bool(meta.get("campaignFailed", false))
 	wealthEndingReached = bool(meta.get("wealthEndingReached", endingsReached.has("wealth")))
 	is_first_launch = bool(meta.get("is_first_launch", true))
+	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	meta_changed.emit()
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
@@ -165,6 +170,22 @@ func mark_ending_reached(ending: String) -> void:
 func get_pending_consumables() -> Dictionary:
 	return pendingConsumables.duplicate(true)
 
+# ── permanent dealer-odds upgrades ─────────────────────────────────────────────────
+
+func odds_upgrade_level(symbol: String) -> int:
+	return int(oddsUpgrades.get(symbol, 0))
+
+## Commits finalized odds purchases (symbol -> bought levels), clamped to max_level.
+func add_odds_upgrades(bought: Dictionary, max_level: int) -> void:
+	if bought.is_empty():
+		return
+	oddsUpgrades = oddsUpgrades.duplicate(true)
+	for symbol in bought:
+		var next_level := int(oddsUpgrades.get(symbol, 0)) + int(bought[symbol])
+		oddsUpgrades[symbol] = clampi(next_level, 0, maxi(0, max_level))
+	meta_changed.emit()
+	save_state()
+
 func campaign_status_text() -> String:
 	return "NEURONS: %d/%d" % [campaignNeuronsLeft, campaignNeuronsMax]
 
@@ -211,6 +232,7 @@ func start_new_campaign(save_immediately := true) -> void:
 	campaignActive = true
 	campaignFailed = false
 	wealthEndingReached = false
+	oddsUpgrades = {}
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -285,6 +307,8 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["wealthEndingReached"] = reached.has("wealth")
 	if not current.has("is_first_launch"):
 		current["is_first_launch"] = true
+	if not current.has("oddsUpgrades"):
+		current["oddsUpgrades"] = {}
 	# Campaign rebalance (issue #38): saves from the 12-neuron era reclamp down to
 	# the current starting count, and Left re-clamps to the new Max.
 	current["campaignNeuronsMax"] = mini(int(current["campaignNeuronsMax"]), campaign_starting_neurons)

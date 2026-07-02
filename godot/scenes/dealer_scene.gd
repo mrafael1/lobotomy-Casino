@@ -92,7 +92,6 @@ var _portrait_frame := 0
 var _pre_run := false            # true => start-of-run consumable shop (issue #21)
 var _post_run := false           # true => arrived from a finished run (issue #36)
 var _odds_overlay: OddsTableOverlay = null # dealer odds table (issue #36)
-var _odds_button: Button = null  # re-opens the table mid-phase (keeps purchases)
 var _credits_label: Label = null # wallet readout, pre-run only
 var _background_sprite: Sprite2D = null
 var _counter_sprite: Sprite2D = null
@@ -106,7 +105,6 @@ var _start_label: Label = null
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
 var _campaign_label: Label = null
-var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _offer_slots := []
 var _stash_slot_nodes := []
 var _offer_slots_by_id := {}
@@ -340,33 +338,20 @@ func _instruction_text() -> String:
 	return "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
 
 # ── dealer odds table (issue #36) ─────────────────────────────────────────────────
-# Post-run only: the overlay opens on arrival with the fresh token budget; the ODDS
-# button re-opens it mid-phase without re-granting tokens (purchases kept).
+# Post-run only: the overlay opens on arrival with the fresh token budget. Once the
+# player closes it the phase is finalized — it cannot be reopened until after the
+# next run (upgrades are committed permanently on close).
 
 func _setup_odds_phase() -> void:
+	if not Engine.is_editor_hint() and RunStateStore.oddsPhaseCompleted:
+		return
 	_odds_overlay = ODDS_OVERLAY_SCENE.instantiate() as OddsTableOverlay
 	add_child(_odds_overlay)
 	_odds_overlay.closed.connect(_on_odds_overlay_closed)
-	_odds_button = Button.new()
-	_odds_button.text = "ODDS"
-	_odds_button.position = Vector2(122.0, 15.0)
-	_odds_button.size = Vector2(30.0, 14.0)
-	_odds_button.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		_odds_button.add_theme_font_override("font", _font)
-	_odds_button.visible = false
-	_odds_button.pressed.connect(_reopen_odds_overlay)
-	add_child(_odds_button)
 	_odds_overlay.call_deferred("open_overlay")
 
 func _on_odds_overlay_closed() -> void:
-	if _odds_button != null:
-		_odds_button.visible = true
 	_dealer_react()
-
-func _reopen_odds_overlay() -> void:
-	if _odds_overlay != null:
-		_odds_overlay.reopen_overlay()
 
 func _icon_tex(id: String) -> Texture2D:
 	return Assets.texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
@@ -615,14 +600,8 @@ func _build_campaign_label() -> void:
 	_campaign_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
 	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_campaign_label.add_theme_constant_override("outline_size", 1)
-	# Issue #38: the neuron meter replaces the text; the label stays as its anchor.
-	if not Engine.is_editor_hint() and _campaign_meter == null:
-		var label_center := _campaign_label.get_rect().get_center() \
-			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
-		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center)
-		# Native-scale art is taller than the old text line: keep it bottom-anchored
-		# and fully on-canvas.
-		_campaign_meter.position.y = 318.0 - _campaign_meter.size.y
+	# The neuron meter no longer shows on the dealer HUD — it lives on the start
+	# menu and the flatline overlay. The label stays as an editor placeholder.
 	_refresh_campaign_label()
 
 func _configure_lab_button() -> void:
@@ -749,13 +728,11 @@ func _refresh_credits() -> void:
 
 # ── selection + TV ────────────────────────────────────────────────────────────────
 
-# Issue #38: the meter is the campaign readout; the label renders no runtime text
-# (and the editor no longer calls the placeholder MetaStateStore autoload).
+# The label renders no runtime text (and the editor no longer calls the
+# placeholder MetaStateStore autoload); the neuron meter lives on the start menu.
 func _refresh_campaign_label() -> void:
 	if _campaign_label != null:
 		_campaign_label.text = "NEURONS" if Engine.is_editor_hint() else ""
-	if _campaign_meter != null:
-		_campaign_meter.refresh()
 
 func _item_name(id: String) -> String:
 	var imap := InRunItems.map()

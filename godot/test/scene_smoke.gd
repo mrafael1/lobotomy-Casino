@@ -57,6 +57,8 @@ func _run() -> void:
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
 	_check_odds_table_36(run_store, failures)
+	await _check_neuron_meter_on_menu(failures)
+	_check_flatline_overlay_meter(machine, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -219,7 +221,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
 		if dealer_neuron_number.text != "":
 			failures.append("dealer: neuron_number should render no text (meter replaces it)")
-	_check_neuron_meter_38("dealer", dealer_bottom_hud, failures)
+	_check_neuron_meter_absent("dealer", dealer_bottom_hud, failures)
 	dealer.queue_free()
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
@@ -254,7 +256,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
 		if neuron_number.text != "":
 			failures.append("machine: neuron_number should render no text (meter replaces it)")
-		_check_neuron_meter_38("machine", bottom_hud, failures)
+		_check_neuron_meter_absent("machine", bottom_hud, failures)
 		machine._show_neuron_spend_feedback()
 		var spend_feedback := machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") as Label
 		if spend_feedback == null:
@@ -523,8 +525,12 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 
 	overlay._on_look_pressed()
 	var hands := overlay.get_node("Hands") as Sprite2D
-	if look.visible:
-		failures.append("issue27: look button still visible after look")
+	if not look.visible or look.text != "take":
+		failures.append("issue27: look button did not become the take button")
+	if not look.disabled:
+		failures.append("issue27: take button should be disabled before selecting an item")
+	if look.position.y >= ignore_button.position.y:
+		failures.append("issue27: take button is not above the leave button")
 	if not ignore_button.visible or ignore_button.text != "leave":
 		failures.append("issue27: ignore button did not become leave")
 	if absf((ignore_button.position.x + ignore_button.size.x * 0.5) - 80.0) > 0.5:
@@ -542,7 +548,7 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 	overlay.set_stash_items(["cons_focus", "cons_white_powder"])
 	if overlay.get_node("StashLayer").get_child_count() != 0:
 		failures.append("issue27: overlay built a duplicate stash")
-	_check_dealer_offer_click_vs_drag(overlay, failures)
+	_check_dealer_offer_take_flow(overlay, failures)
 
 	overlay.queue_free()
 
@@ -601,17 +607,34 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 
 	run_store.reset_run_state()
 
-# Issue #38: the pixel-art neuron meter replaces the campaign text readout.
-func _check_neuron_meter_38(scene_name: String, hud: Control, failures: Array) -> void:
+# The neuron meter no longer lives on the in-run HUDs — it belongs to the start
+# menu and the flatline overlay only.
+func _check_neuron_meter_absent(scene_name: String, hud: Control, failures: Array) -> void:
 	if hud == null:
 		return
-	var meter: NeuronMeter = null
 	for child in hud.get_children():
 		if child is NeuronMeter:
-			meter = child
-			break
+			failures.append("%s: neuron meter should not be on the in-run HUD" % scene_name)
+			return
+
+func _find_neuron_meter(node: Node) -> NeuronMeter:
+	if node is NeuronMeter:
+		return node
+	for child in node.get_children():
+		var found := _find_neuron_meter(child)
+		if found != null:
+			return found
+	return null
+
+# Start menu keeps the meter, now with a numeric "left/max" count under the art.
+func _check_neuron_meter_on_menu(failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(start_menu)
+	var meter := _find_neuron_meter(start_menu)
 	if meter == null:
-		failures.append("%s: issue38 neuron meter is missing from the HUD" % scene_name)
+		failures.append("menu: neuron meter is missing from the start menu")
+		start_menu.queue_free()
 		return
 	var sprite: Sprite2D = null
 	for child in meter.get_children():
@@ -619,23 +642,35 @@ func _check_neuron_meter_38(scene_name: String, hud: Control, failures: Array) -
 			sprite = child
 			break
 	if sprite == null:
-		failures.append("%s: issue38 neuron meter built no sprite (sheet missing?)" % scene_name)
-		return
-	if sprite.hframes != meter.frame_count:
-		failures.append("%s: issue38 meter hframes do not match frame_count" % scene_name)
-	var meta_store: Node = get_root().get_node("MetaStateStore")
-	var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
-	if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
-		failures.append("%s: issue38 meter frame is not wired to neurons lost" % scene_name)
-	# One neuron lost desaturates exactly one more cell.
-	if int(meta_store.campaignNeuronsLeft) > 0:
-		var prev_frame := int(sprite.frame)
-		meta_store.campaignNeuronsLeft -= 1
-		meta_store.meta_changed.emit()
-		if int(sprite.frame) != prev_frame + 1:
-			failures.append("%s: issue38 meter did not advance one frame per lost neuron" % scene_name)
-		meta_store.campaignNeuronsLeft += 1
-		meta_store.meta_changed.emit()
+		failures.append("menu: neuron meter built no sprite (sheet missing?)")
+	else:
+		if sprite.hframes != meter.frame_count:
+			failures.append("menu: meter hframes do not match frame_count")
+		var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
+		if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
+			failures.append("menu: meter frame is not wired to neurons lost")
+	var count := meter.get_node_or_null("CountLabel") as Label
+	if count == null:
+		failures.append("menu: meter is missing the numeric neuron count")
+	else:
+		var expected := "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]
+		if count.text != expected:
+			failures.append("menu: neuron count reads '%s', expected '%s'" % [count.text, expected])
+		# Count updates when neurons change.
+		if int(meta_store.campaignNeuronsLeft) > 0:
+			meta_store.campaignNeuronsLeft -= 1
+			meta_store.meta_changed.emit()
+			if count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
+				failures.append("menu: neuron count did not update on meta change")
+			meta_store.campaignNeuronsLeft += 1
+			meta_store.meta_changed.emit()
+	# The whole menu column fits the 160x320 virtual canvas.
+	var col := start_menu.get_node_or_null("MenuColumn") as VBoxContainer
+	if col != null:
+		await process_frame
+		if col.position.y < 0.0 or col.position.y + col.size.y > 320.0:
+			failures.append("menu: menu column clips the 160x320 canvas: y %s h %s" % [col.position.y, col.size.y])
+	start_menu.queue_free()
 
 # Issue #38: campaign rebalance — save reclamp, exact fatal text, goal threshold.
 func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
@@ -672,7 +707,12 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 		machine._overlay = null
 
 func _check_odds_table_36(run_store: Node, failures: Array) -> void:
-	# issue #36: post-run odds-buying — 4-token cap, per-symbol costs, per-run scope.
+	# issue #36 (permanent rework): post-run odds-buying — per-symbol costs, staged
+	# purchases undoable while open, committed permanently on finalize, 5-level cap,
+	# and a screen lock until the next run.
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.oddsUpgrades = {}
 	run_store.reset_run_state()
 
 	run_store.begin_odds_phase()
@@ -680,14 +720,19 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		failures.append("issue36: begin_odds_phase did not grant the token budget")
 	if not run_store.buy_odds_upgrade("brain"):
 		failures.append("issue36: brain (cost 4) rejected with a full budget")
-	if int(run_store.oddsTokensRemaining) != 0 or int(run_store.oddsWeightOverrides.get("brain", 0)) != int(run_store.probability_increase_per_upgrade):
-		failures.append("issue36: brain buy did not spend 4 tokens for one bump")
+	if int(run_store.oddsTokensRemaining) != 0 or run_store.odds_upgrade_level("brain") != 1:
+		failures.append("issue36: brain buy did not spend 4 tokens for one level")
 	if run_store.buy_odds_upgrade("eye"):
 		failures.append("issue36: cap ignored — bought eye with 0 tokens")
 
-	run_store.begin_odds_phase()
-	if not run_store.oddsWeightOverrides.is_empty():
-		failures.append("issue36: begin_odds_phase kept previous purchases")
+	# Undo refunds staged purchases while the screen is still open.
+	if not run_store.undo_odds_upgrade("brain"):
+		failures.append("issue36: could not undo a staged purchase")
+	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget) or run_store.odds_upgrade_level("brain") != 0:
+		failures.append("issue36: undo did not refund the staged purchase")
+	if run_store.undo_odds_upgrade("brain"):
+		failures.append("issue36: undo went below zero staged purchases")
+
 	if not run_store.buy_odds_upgrade("eye"):
 		failures.append("issue36: eye (cost 3) rejected with a full budget")
 	if run_store.buy_odds_upgrade("pill") or run_store.buy_odds_upgrade("vial"):
@@ -695,10 +740,24 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if run_store.buy_odds_upgrade("book") or run_store.buy_odds_upgrade("nonsense"):
 		failures.append("issue36: bought a symbol outside the reel cycle")
 
-	# Purchases survive into the run, unspent tokens are void, buying locks.
+	# Finalize commits permanently and locks the phase until the next run.
+	run_store.finalize_odds_phase()
+	if int(meta_store.odds_upgrade_level("eye")) != 1:
+		failures.append("issue36: finalize did not commit the eye level to meta")
+	if not run_store.oddsPhaseCompleted:
+		failures.append("issue36: finalize did not lock the odds phase")
+	if run_store.undo_odds_upgrade("eye"):
+		failures.append("issue36: undid a purchase after finalize")
+	run_store.begin_odds_phase()
+	if int(run_store.oddsTokensRemaining) != 0:
+		failures.append("issue36: begin_odds_phase re-granted tokens after finalize")
+	if run_store.buy_odds_upgrade("vial"):
+		failures.append("issue36: bought odds after the phase was finalized")
+
+	# Permanent levels survive into the run as weight overrides; buying stays locked.
 	run_store.start_new_run([], {}, false)
-	if int(run_store.oddsWeightOverrides.get("eye", 0)) < 1:
-		failures.append("issue36: start_new_run dropped the purchased overrides")
+	if int(run_store.oddsWeightOverrides.get("eye", 0)) != int(run_store.probability_increase_per_upgrade):
+		failures.append("issue36: start_new_run did not derive overrides from meta levels")
 	if int(run_store.oddsTokensRemaining) != 0:
 		failures.append("issue36: start_new_run kept unspent tokens")
 	if run_store.buy_odds_upgrade("vial"):
@@ -708,15 +767,25 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		failures.append("issue36: spin failed with overrides active")
 	run_store.set_spinning(false)
 
-	# end_run keeps overrides (wealth-continue resumes the same run); reset clears.
+	# Upgrades persist across runs: a reset keeps the meta levels for the next run.
 	run_store.end_run("wealth")
-	if int(run_store.oddsWeightOverrides.get("eye", 0)) < 1:
-		failures.append("issue36: end_run cleared overrides — wealth continue loses them")
 	run_store.reset_run_state()
-	if not run_store.oddsWeightOverrides.is_empty() or int(run_store.oddsTokensRemaining) != 0:
-		failures.append("issue36: reset_run_state left odds state behind")
+	if int(meta_store.odds_upgrade_level("eye")) != 1:
+		failures.append("issue36: reset_run_state wiped the permanent odds levels")
+	run_store.start_new_run([], {}, false)
+	if int(run_store.oddsWeightOverrides.get("eye", 0)) < 1:
+		failures.append("issue36: odds levels did not persist into the next run")
+	run_store.reset_run_state()
 
-	# The odds overlay scene instantiates and honours the store's budget readout.
+	# The 5-level cap holds even with tokens to spare.
+	meta_store.oddsUpgrades = { "vial": 5 }
+	run_store.begin_odds_phase()
+	if run_store.buy_odds_upgrade("vial"):
+		failures.append("issue36: bought past the 5-level cap")
+	meta_store.oddsUpgrades = {}
+	run_store.reset_run_state()
+
+	# The odds overlay scene: +/- controls, level bars, close finalizes.
 	var overlay_ps := load("res://scenes/odds_table_overlay.tscn") as PackedScene
 	var overlay: Node = overlay_ps.instantiate()
 	get_root().add_child(overlay)
@@ -725,56 +794,123 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		failures.append("issue36: overlay not visible after open_overlay")
 	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget):
 		failures.append("issue36: open_overlay did not begin the odds phase")
-	var buy_buttons: Dictionary = overlay._buy_buttons
-	if buy_buttons.size() != 6:
+	var plus_buttons: Dictionary = overlay._plus_buttons
+	var level_bars: Dictionary = overlay._level_bars
+	if plus_buttons.size() != 6 or level_bars.size() != 6:
 		failures.append("issue36: overlay should list all 6 reel-cycle symbols")
-	elif (buy_buttons["vial"] as Button).disabled:
-		failures.append("issue36: affordable buy button is disabled")
-	overlay._on_buy_pressed("brain")
-	if int(run_store.oddsWeightOverrides.get("brain", 0)) < 1:
-		failures.append("issue36: overlay buy did not reach the store")
-	if not (buy_buttons["vial"] as Button).disabled:
-		failures.append("issue36: unaffordable buy button stayed enabled")
+	elif (level_bars["vial"] as Array).size() != int(run_store.odds_max_level):
+		failures.append("issue36: overlay rows should show 5 level bars")
+	elif (plus_buttons["vial"] as Button).disabled:
+		failures.append("issue36: affordable + button is disabled")
+	overlay._on_plus_pressed("brain")
+	if run_store.odds_upgrade_level("brain") != 1:
+		failures.append("issue36: overlay + did not reach the store")
+	var brain_bars: Array = level_bars["brain"]
+	if (brain_bars[0] as ColorRect).color != overlay.bar_fill_color:
+		failures.append("issue36: bought level did not fill a bar yellow")
+	if not (plus_buttons["vial"] as Button).disabled:
+		failures.append("issue36: unaffordable + button stayed enabled")
+	overlay._on_minus_pressed("brain")
+	if run_store.odds_upgrade_level("brain") != 0:
+		failures.append("issue36: overlay - did not undo the staged purchase")
 	overlay._close()
 	if bool(overlay.visible):
 		failures.append("issue36: overlay still visible after close")
+	if not run_store.oddsPhaseCompleted:
+		failures.append("issue36: overlay close did not finalize the phase")
 	overlay.queue_free()
 	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
-func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
+# Flatline overlay polish: retained-percent copy only, no FINAL CREDITS line, the
+# neuron meter above the continue button, and fatal copy ONLY when the campaign
+# is actually out of neurons.
+func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	var run := { "neurons": 0, "scoreEarned": 10, "lucidityCoins": 100 }
+
+	meta_store.campaignNeuronsLeft = 5
+	meta_store.ownedPermanents = [] # base retention => "10% kept"
+	run_store.runPhase = "running"
+	machine._show_ending("flatline", run)
+	var texts := _overlay_label_texts(machine._overlay)
+	if texts.has("this time, it's fatal. No coming back"):
+		failures.append("flatline: fatal copy shown with campaign neurons remaining")
+	if not texts.has("FLATLINE"):
+		failures.append("flatline: non-fatal overlay is missing the FLATLINE title")
+	for t in texts:
+		if String(t).begins_with("FINAL CREDITS"):
+			failures.append("flatline: FINAL CREDITS line should be gone")
+		if String(t).contains("LUCIDITY"):
+			failures.append("flatline: 'lucidity' should not appear on the overlay")
+	if not texts.has("10% kept"):
+		failures.append("flatline: retained percent line missing ('10% kept')")
+	var flat_meter := _find_neuron_meter(machine._overlay)
+	if flat_meter == null:
+		failures.append("flatline: overlay is missing the neuron meter")
+	elif flat_meter.position.y + flat_meter.size.y > 238.0:
+		failures.append("flatline: neuron meter is not above the continue button")
+	var tray := machine.get_node_or_null("stash") as Control
+	if tray != null and tray.visible:
+		failures.append("flatline: stash tray still renders over the overlay")
+	machine._overlay.queue_free()
+	machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	# Fatal copy shows when the campaign is actually exhausted.
+	meta_store.campaignNeuronsLeft = 0
+	run_store.runPhase = "running"
+	machine._show_ending("flatline", run)
+	if not _overlay_label_texts(machine._overlay).has("this time, it's fatal. No coming back"):
+		failures.append("flatline: fatal copy missing when neurons are exhausted")
+	machine._overlay.queue_free()
+	machine._overlay = null
+	machine._stop_flatline_countdown()
+	machine._set_stash_tray_visible(true)
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+func _overlay_label_texts(overlay: Control) -> Array:
+	var out: Array = []
+	if overlay == null:
+		return out
+	for child in overlay.get_children():
+		if child is Label:
+			out.append((child as Label).text)
+	return out
+
+# Button-based taking: a tap selects (hints, no name, no purchase); TAKE buys the
+# selected item. Drag-to-buy is gone.
+func _check_dealer_offer_take_flow(overlay: Node, failures: Array) -> void:
 	overlay._apply_side("left")
 	var offers: Array[String] = ["item_water"]
 	overlay._current_offer_ids = offers
 	overlay._clear_offer_items()
 	overlay._setup_items(offers)
-	var slot := overlay.get_node("ItemLayer/OfferSlot1") as Control
-	var icon := slot.get_child(slot.get_child_count() - 1) as Control
 	var selected: Array[String] = []
 	overlay.item_selected.connect(func(item_id: String) -> void:
 		selected.append(item_id)
 	)
-	overlay._begin_item_press(icon, "item_water", "offer", Vector2(36.0, 23.0))
-	overlay._end_drag(Vector2(36.0, 23.0))
+	overlay._select_offer("item_water")
 	if not selected.is_empty():
-		failures.append("issue27: item click emitted purchase selection")
+		failures.append("take-flow: tapping an item bought it directly")
 	var hint_layer := overlay.get_node("SpeechBubble/HintLayer") as Control
 	var pos_hint := overlay.get_node("SpeechBubble/HintLayer/PositiveHint") as Label
 	var name_hint := overlay.get_node("SpeechBubble/HintLayer/NameHint") as Label
 	if not hint_layer.visible or pos_hint.text != "+ refreshing":
-		failures.append("issue27: item click did not reveal hint text")
-	if name_hint.text != "WATER":
-		failures.append("issue33: item click did not reveal item name in hint")
-	overlay._begin_item_press(icon, "item_water", "offer", Vector2(36.0, 23.0))
-	overlay._update_drag_position(Vector2(60.0, 170.0))
-	overlay._end_drag(Vector2(20.0, 170.0))
+		failures.append("take-flow: item tap did not reveal hint text")
+	if name_hint.visible:
+		failures.append("take-flow: item name should no longer show in the bubble")
+	var take := overlay.get_node("LookButton") as Button
+	if take.disabled or take.text != "take":
+		failures.append("take-flow: selecting an item did not arm the take button")
+	overlay._on_look_pressed()
 	if selected != ["item_water"]:
-		failures.append("issue27: drag-drop did not emit purchase selection")
-	selected.clear()
-	overlay._begin_item_press(icon, "item_water", "offer", Vector2(36.0, 23.0))
-	overlay._update_drag_position(Vector2(64.0, 112.0))
-	overlay._end_drag(Vector2(64.0, 112.0))
-	if selected != ["item_water"]:
-		failures.append("issue27: drag-drop on dealer head did not emit purchase selection")
+		failures.append("take-flow: take button did not buy the selected item")
 
 func _check_base_scene_parity(failures: Array) -> void:
 	for scene_path in [
@@ -1239,6 +1375,8 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	# snapshot the meta store and restore it after the overlay assertions.
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
+	# The fatal title only shows when the campaign is truly out of neurons.
+	meta_store.campaignNeuronsLeft = 0
 	if not machine._check_flatline_instant_death():
 		failures.append("issue35: fatal flatline count did not trigger instant death")
 	if machine._overlay == null:

@@ -16,7 +16,11 @@ const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const CANVAS_W := 160.0
 const MENU_W := 148.0
-const MENU_Y := 96.0
+# Title sits high so the whole column (titles, meter + count, hint, buttons) fits
+# the 160x320 canvas without clipping.
+const MENU_Y := 44.0
+const MENU_SEPARATION := 6
+const TITLE_SPACER_H := 8.0
 const CAMPAIGN_HINT_H := 18.0
 
 @export_group("First Launch Tutorial")
@@ -153,7 +157,7 @@ func _build_menu() -> void:
 	col.position = Vector2((CANVAS_W - MENU_W) * 0.5, MENU_Y)
 	col.size = Vector2(MENU_W, 0.0)
 	col.custom_minimum_size = Vector2(MENU_W, 0.0)
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", MENU_SEPARATION)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_child(col)
 
@@ -161,7 +165,7 @@ func _build_menu() -> void:
 	col.add_child(_label("CASINO", 16, Color(0.85, 0.9, 1.0)))
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0.0, 18.0)
+	spacer.custom_minimum_size = Vector2(0.0, TITLE_SPACER_H)
 	col.add_child(spacer)
 	_campaign_label = _label("", 8, Color(0.8, 0.95, 1.0))
 	_campaign_label.name = "CampaignLabel"
@@ -208,6 +212,10 @@ func _layout_menu_column() -> void:
 	col.position = Vector2((CANVAS_W - MENU_W) * 0.5, MENU_Y)
 	col.custom_minimum_size = Vector2(MENU_W, 0.0)
 	col.size.x = MENU_W
+	col.add_theme_constant_override("separation", MENU_SEPARATION)
+	var spacer := col.get_node_or_null("TitleSpacer") as Control
+	if spacer != null:
+		spacer.custom_minimum_size = Vector2(0.0, TITLE_SPACER_H)
 
 func _refresh_start_button() -> void:
 	if _start_button == null:

@@ -30,6 +30,8 @@ const M32 := 0xFFFFFFFF
 @export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3 }
 @export var odds_default_token_cost: int = 2
 @export var probability_increase_per_upgrade: int = 1
+## Permanent odds upgrades cap out at this many levels per symbol.
+@export var odds_max_level: int = 5
 
 # RunState fields (mirror types.ts RunState)
 var neurons := 0
@@ -89,12 +91,16 @@ var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumabl
 # machine can announce it. Never feeds evaluate()/spin() inputs — parity untouched.
 var lastPotionEffect: Variant = null
 
-# Dealer odds table (issue #36): per-run additive weight overrides bought with a
-# token budget at the post-run "what's next?" phase. Applied at pick time only —
-# the parity-locked base weights in Symbols are never mutated, and the pinned
-# vectors (which pass no overrides) are untouched.
+# Dealer odds table (issue #36): additive weight overrides bought with a token
+# budget at the post-run "what's next?" phase. Upgrades are PERMANENT — staged
+# purchases commit into MetaStateStore.oddsUpgrades when the phase is finalized,
+# and every run derives oddsWeightOverrides from the persisted levels. Applied at
+# pick time only — the parity-locked base weights in Symbols are never mutated,
+# and the pinned vectors (which pass no overrides) are untouched.
 var oddsTokensRemaining := 0
 var oddsWeightOverrides: Dictionary = {}
+var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until finalized
+var oddsPhaseCompleted := false           # closed screens stay closed until the next run
 
 # RunStore extras
 var runPhase := "idle" # idle | running | over
@@ -328,6 +334,8 @@ func reset_run_state() -> void:
 	lastPotionEffect = null
 	oddsTokensRemaining = 0
 	oddsWeightOverrides = {}
+	oddsPendingUpgrades = {}
+	oddsPhaseCompleted = false
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -386,8 +394,13 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	flatlineResultCount = 0
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
-	# Odds bought at the "what's next?" phase apply to THIS run; unspent tokens are void.
+	# Odds upgrades are permanent: every run derives its overrides from the
+	# persisted levels. Unspent phase tokens are void; the screen unlocks again
+	# for the phase after this run.
 	oddsTokensRemaining = 0
+	oddsPendingUpgrades = {}
+	oddsPhaseCompleted = false
+	oddsWeightOverrides = _odds_overrides_from_meta()
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
@@ -635,36 +648,79 @@ func use_consumable(consumable_id: String) -> bool:
 	return true
 
 # ── dealer odds table (issue #36) ──────────────────────────────────────────────────
-# Post-run "what's next?" phase: a fresh token budget buys additive weight bumps
-# for the NEXT run's draws. Base weights stay parity-locked (see Evaluate._build_weights).
+# Post-run "what's next?" phase: a fresh token budget buys PERMANENT odds levels.
+# Purchases are staged (undoable) while the screen is open, then committed into
+# MetaStateStore.oddsUpgrades on finalize. Base weights stay parity-locked
+# (see Evaluate._build_weights).
 
-## Opens the odds phase between runs: grants the token budget and clears any
-## overrides left from the previous run. No-op while a run is live.
+## Opens the odds phase between runs: grants the token budget and clears staged
+## purchases. No-op while a run is live or once this phase was already finalized.
 func begin_odds_phase() -> void:
-	if runPhase == "running":
+	if runPhase == "running" or oddsPhaseCompleted:
 		return
 	oddsTokensRemaining = maxi(0, odds_budget)
-	oddsWeightOverrides = {}
+	oddsPendingUpgrades = {}
 	_commit()
 
 func odds_token_cost(symbol: String) -> int:
 	return int(odds_token_costs.get(symbol, odds_default_token_cost))
 
-## Spends tokens on one +probability_increase_per_upgrade weight bump for `symbol`.
-## Only reel-cycle symbols are buyable; returns false when unaffordable.
+## Persisted level + purchases staged in the currently open odds screen.
+func odds_upgrade_level(symbol: String) -> int:
+	return int(MetaStateStore.odds_upgrade_level(symbol)) + int(oddsPendingUpgrades.get(symbol, 0))
+
+## Stages one permanent level for `symbol`. Only reel-cycle symbols are buyable;
+## returns false when unaffordable, capped, or outside the odds phase.
 func buy_odds_upgrade(symbol: String) -> bool:
-	if runPhase == "running":
+	if runPhase == "running" or oddsPhaseCompleted:
 		return false
 	if not Symbols.BASE_SYMBOL_CYCLE.has(symbol):
+		return false
+	if odds_upgrade_level(symbol) >= odds_max_level:
 		return false
 	var cost := odds_token_cost(symbol)
 	if cost <= 0 or oddsTokensRemaining < cost:
 		return false
 	oddsTokensRemaining -= cost
-	oddsWeightOverrides = oddsWeightOverrides.duplicate()
-	oddsWeightOverrides[symbol] = int(oddsWeightOverrides.get(symbol, 0)) + probability_increase_per_upgrade
+	oddsPendingUpgrades = oddsPendingUpgrades.duplicate()
+	oddsPendingUpgrades[symbol] = int(oddsPendingUpgrades.get(symbol, 0)) + 1
 	_commit()
 	return true
+
+## Undoes one purchase staged THIS phase (refunds its cost). Levels committed in
+## previous runs can never be undone.
+func undo_odds_upgrade(symbol: String) -> bool:
+	if oddsPhaseCompleted:
+		return false
+	if int(oddsPendingUpgrades.get(symbol, 0)) <= 0:
+		return false
+	oddsPendingUpgrades = oddsPendingUpgrades.duplicate()
+	oddsPendingUpgrades[symbol] = int(oddsPendingUpgrades[symbol]) - 1
+	if int(oddsPendingUpgrades[symbol]) <= 0:
+		oddsPendingUpgrades.erase(symbol)
+	oddsTokensRemaining += odds_token_cost(symbol)
+	_commit()
+	return true
+
+## Commits the staged purchases permanently and locks the screen until the next run.
+func finalize_odds_phase() -> void:
+	if oddsPhaseCompleted:
+		return
+	if not oddsPendingUpgrades.is_empty():
+		MetaStateStore.add_odds_upgrades(oddsPendingUpgrades, odds_max_level)
+	oddsPendingUpgrades = {}
+	oddsTokensRemaining = 0
+	oddsPhaseCompleted = true
+	_commit()
+
+## Weight overrides for a new run, derived from the persisted permanent levels.
+func _odds_overrides_from_meta() -> Dictionary:
+	var out: Dictionary = {}
+	for symbol in Symbols.BASE_SYMBOL_CYCLE:
+		var level := int(MetaStateStore.odds_upgrade_level(String(symbol)))
+		if level > 0:
+			out[String(symbol)] = level * probability_increase_per_upgrade
+	return out
 
 func check_dealer_trigger() -> void:
 	if runPhase != "running" or dealerPending or dealerIncoming:

@@ -50,10 +50,10 @@ color = Color(0.17346174, 3.85046e-07, 0.10095719, 1)
 [node name="MenuColumn" type="VBoxContainer" parent="." unique_id=1415123311]
 layout_mode = 0
 offset_left = 6.0
-offset_top = 96.0
+offset_top = 44.0
 offset_right = 154.0
-offset_bottom = 250.0
-theme_override_constants/separation = 10
+offset_bottom = 254.0
+theme_override_constants/separation = 6
 alignment = 1
 
 [node name="TitleTop" type="Label" parent="MenuColumn" unique_id=363480086]
@@ -73,7 +73,7 @@ text = "CASINO"
 horizontal_alignment = 1
 
 [node name="TitleSpacer" type="Control" parent="MenuColumn" unique_id=433103646]
-custom_minimum_size = Vector2(0, 18)
+custom_minimum_size = Vector2(0, 8)
 layout_mode = 2
 
 [node name="StartButton" type="Button" parent="MenuColumn" unique_id=2061044717]

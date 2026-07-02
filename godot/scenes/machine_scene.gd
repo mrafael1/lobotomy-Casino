@@ -31,6 +31,8 @@ const HEALTH_BAR := { "left": 43.0, "top": 94.0, "width": 66.0, "height": 5.0 }
 const MULT_STRIP := { "top": 119.0, "height": 16.0 }
 const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
 const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
+# Centre of the reel window — consumable-use hint popups originate here.
+const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
 # Landed reel strip (mirrors Expo's ReelCellV3): a smaller centre symbol with dim
 # 0.9x neighbours peeking above/below, clipped by the cabinet hole.
@@ -169,8 +171,6 @@ const ITEM_ICONS := {
 # results, OR the run_spin_length hard cap, ends the run (added alongside neurons<=0).
 @export_group("Machine Reactions")
 @export var fatal_flatline_count: int = 3
-## GDD game-over flatline title (issue #38) — byte-for-byte, so never .to_upper()'d.
-const FATAL_ENDING_TITLE := "this time, it's fatal. No coming back"
 @export var run_spin_length: int = 35          # NEW hard run-length cap (added, not a replacement)
 @export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
 @export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
@@ -308,7 +308,7 @@ var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
-var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
+var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 # Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
@@ -866,14 +866,8 @@ func _build_campaign_label() -> void:
 	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_campaign_label.add_theme_constant_override("outline_size", 1)
 	_campaign_label.text = ""
-	# Issue #38: the neuron meter renders where the label box sits (centre bottom).
-	if not Engine.is_editor_hint() and _campaign_meter == null:
-		var label_center := _campaign_label.get_rect().get_center() \
-			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
-		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center)
-		# Native-scale art is taller than the old text line: keep it bottom-anchored
-		# and fully on-canvas.
-		_campaign_meter.position.y = 318.0 - _campaign_meter.size.y
+	# The neuron meter no longer lives on the in-run HUD — it shows on the start
+	# menu and the flatline overlay only. The label stays as the feedback anchor.
 
 func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
@@ -884,7 +878,9 @@ func _build_hint_layer() -> void:
 		_hint_layer = Control.new()
 		_hint_layer.name = "HintLayer"
 		bottom_hud.add_child(_hint_layer)
-		_hint_layer.set_anchors_preset(Control.PRESET_CENTER)
+		# Consumable popups originate from the machine centre (the reel window's
+		# midpoint), not the HUD anchor.
+		_hint_layer.position = MACHINE_HINT_CENTER
 		_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_hint_layer.z_index = 20
 
@@ -938,6 +934,7 @@ func _sync_visuals() -> void:
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
+	_set_stash_tray_visible(true)
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
@@ -1115,13 +1112,11 @@ func _update_hud() -> void:
 	_refresh_controls()
 	_refresh_consumable_fx()
 
-# Issue #38: the campaign readout is the pixel-art neuron meter; the authored
-# neuron_number Label stays as its anchor/editor placeholder and renders no text.
+# The authored neuron_number Label stays as an anchor/editor placeholder and
+# renders no text; the neuron meter lives on the start menu / flatline overlay.
 func _refresh_campaign_label() -> void:
 	if _campaign_label != null:
 		_campaign_label.text = ""
-	if _campaign_meter != null:
-		_campaign_meter.refresh()
 
 func _show_neuron_spend_feedback() -> void:
 	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
@@ -2563,6 +2558,8 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
+	# The stash tray draws at z 50 and would float over the dimmed overlay.
+	_set_stash_tray_visible(ending != "flatline")
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -2571,15 +2568,20 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	var title := Label.new()
 	if ending == "flatline":
-		title.text = FATAL_ENDING_TITLE
-		title.position = Vector2(20, 70)
+		# The fatal copy only applies when the campaign is truly over — a routine
+		# flatline with neurons left just reads FLATLINE.
+		var fatal := not _has_campaign_neurons_remaining()
+		title.text = fatal_flatline_text if fatal else "FLATLINE"
+		title.position = Vector2(20, 58)
 		title.size = Vector2(120, 28)
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.add_theme_font_size_override("font_size", 9)
+		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
 	else:
 		title.text = ending.to_upper()
 		title.position = Vector2(20, 120)
+		title.size = Vector2(120, 20)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
 		title.add_theme_font_override("font", _font)
@@ -2629,21 +2631,25 @@ func _show_campaign_failed() -> void:
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
+	_set_stash_tray_visible(false)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.82)
 	dim.size = Vector2(SRC_W, SRC_H)
 	_overlay.add_child(dim)
 
-	_score_label(_overlay, "FLATLINE", Vector2(20.0, 82.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "FLATLINE", Vector2(20.0, 58.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# Issue #38: exact GDD fatal copy, kept byte-for-byte in one label (autowrapped).
-	var fatal := _score_label(_overlay, fatal_flatline_text, Vector2(20.0, 120.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	var fatal := _score_label(_overlay, fatal_flatline_text, Vector2(20.0, 84.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	fatal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	fatal.size = Vector2(120.0, 40.0)
 
+	# The campaign-failed screen keeps the neuron meter (fully desaturated mind).
+	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 162.0))
+
 	var fresh := Button.new()
 	fresh.text = "START FRESH AGAIN"
-	fresh.position = Vector2(20.0, 188.0)
+	fresh.position = Vector2(20.0, 208.0)
 	fresh.size = Vector2(120.0, 22.0)
 	fresh.add_theme_font_size_override("font_size", 8)
 	if _font != null:
@@ -2676,11 +2682,18 @@ func _build_flatline_countdown(run: Dictionary) -> void:
 	_flatline_countdown_elapsed = 0.0
 	_flatline_countdown_active = _flatline_kept < _flatline_total
 
-	_score_label(_overlay, "LUCIDITY - 10% KEPT", Vector2(20.0, 100.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 116.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 154.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "FINAL CREDITS %d" % MetaStateStore.lucidityWallet, Vector2(20.0, 182.0), 8, Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	# Retained-percent line only ("10% kept", or "20% kept" with Smart Saving);
+	# the draining number below it is the whole story.
+	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
+	_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	_update_flatline_countdown_labels()
+
+	# Neuron meter above the continue button, playing the losing pop: the frame
+	# switches to reflect the neuron this run just cost.
+	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
+	_flatline_meter.play_loss_animation()
 
 func _step_flatline_countdown(delta: float) -> void:
 	_flatline_countdown_elapsed += delta
@@ -2709,6 +2722,15 @@ func _stop_flatline_countdown() -> void:
 	_flatline_display = 0
 	_flatline_score_label = null
 	_flatline_lost_label = null
+	_flatline_meter = null
+
+# The stash tray (z 50) would draw over full-screen ending overlays; hide it while
+# one is up and restore it when the run visuals resync.
+func _set_stash_tray_visible(v: bool) -> void:
+	var tray := get_node_or_null("stash") as Control
+	if tray != null:
+		tray.visible = v
+	_set_stash_visible(v)
 
 func _end_run_lucidity_kept_fraction() -> float:
 	return EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
