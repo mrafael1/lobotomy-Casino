@@ -223,6 +223,16 @@ const FATAL_ENDING_TITLE := "this time, it's fatal. No coming back"
 @export var hidden_cover_color: Color = Color(0.04, 0.03, 0.06, 0.94)
 @export var hidden_glyph_color: Color = Color(0.85, 0.8, 1.0)
 
+# ── campaign rebalance (issue #38) ───────────────────────────────────────────────
+@export_group("Campaign")
+## Score that triggers the wealth ending — the campaign goal. Defaults to the
+## parity-locked constant; the pinned vectors always use the default.
+@export var campaign_goal_score: int = EconomyConst.WEALTH_SCORE_THRESHOLD
+## On-screen size (source px) of the bottom-HUD neuron meter.
+@export var campaign_meter_size: float = 12.0
+## Game-over flatline copy — byte-for-byte from the GDD.
+@export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
+
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
@@ -300,6 +310,7 @@ var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
+var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 # Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
@@ -857,6 +868,11 @@ func _build_campaign_label() -> void:
 	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_campaign_label.add_theme_constant_override("outline_size", 1)
 	_campaign_label.text = ""
+	# Issue #38: the neuron meter renders where the label box sits (centre bottom).
+	if not Engine.is_editor_hint() and _campaign_meter == null:
+		var label_center := _campaign_label.get_rect().get_center() \
+			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
+		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center, campaign_meter_size)
 
 func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
@@ -1098,9 +1114,13 @@ func _update_hud() -> void:
 	_refresh_controls()
 	_refresh_consumable_fx()
 
+# Issue #38: the campaign readout is the pixel-art neuron meter; the authored
+# neuron_number Label stays as its anchor/editor placeholder and renders no text.
 func _refresh_campaign_label() -> void:
 	if _campaign_label != null:
-		_campaign_label.text = MetaStateStore.campaign_status_text()
+		_campaign_label.text = ""
+	if _campaign_meter != null:
+		_campaign_meter.refresh()
 
 func _show_neuron_spend_feedback() -> void:
 	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
@@ -2521,7 +2541,7 @@ func _check_ending() -> bool:
 		"scoreEarned": RunStateStore.scoreEarned,
 		"lucidityCoins": RunStateStore.lucidityCoins,
 	}
-	var ending: Variant = Endings.check_ending(run, {})
+	var ending: Variant = Endings.check_ending(run, {}, campaign_goal_score)
 	if ending == null:
 		return false
 	if ending == "wealth" and RunStateStore.wealthContinued:
@@ -2615,8 +2635,10 @@ func _show_campaign_failed() -> void:
 	_overlay.add_child(dim)
 
 	_score_label(_overlay, "FLATLINE", Vector2(20.0, 82.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "THE MACHINE", Vector2(20.0, 120.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "REMEMBERS YOU", Vector2(20.0, 134.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	# Issue #38: exact GDD fatal copy, kept byte-for-byte in one label (autowrapped).
+	var fatal := _score_label(_overlay, fatal_flatline_text, Vector2(20.0, 120.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	fatal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fatal.size = Vector2(120.0, 40.0)
 
 	var fresh := Button.new()
 	fresh.text = "START FRESH AGAIN"

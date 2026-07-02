@@ -23,7 +23,7 @@ const CAMPAIGN_HINT_H := 18.0
 @export var tutorial_pauses_tree: bool = true
 @export var tutorial_title_text: String = "HOW TO PLAY"
 @export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 12 neurons -> attain wealth before hitting 0.
+- Run 10 neurons -> attain wealth before hitting 0.
 
 [color=#f2d37c][b]Dealer Scene[/b][/color]
 - Buy consumables for your run.
@@ -41,11 +41,19 @@ const CAMPAIGN_HINT_H := 18.0
 - You always start with the "Reroll" power.
 - 1 random power restores every 50 coins obtained."""
 
+# ── campaign rebalance (issue #38) ────────────────────────────────────────────────
+@export_group("Campaign")
+## On-screen size (source px) of the menu's neuron meter.
+@export var campaign_meter_size: float = 16.0
+## Game-over flatline copy — byte-for-byte from the GDD.
+@export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
+
 var _font: FontFile = null
 var _background: Sprite2D = null
 var _start_button: Button = null
 var _scores_button: Button = null
 var _campaign_label: Label = null
+var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
 var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
@@ -223,12 +231,18 @@ func _refresh_campaign_ui() -> void:
 	if _campaign_label == null or _campaign_hint == null:
 		return
 	if Engine.is_editor_hint():
-		_campaign_label.text = "NEURONS: 12/12"
+		_campaign_label.text = "NEURONS"
 		_campaign_hint.text = "EACH RETURN COSTS ONE"
 		return
-	_campaign_label.text = MetaStateStore.campaign_status_text()
+	# Issue #38: the neuron meter replaces the text; the label holds its menu slot.
+	_campaign_label.text = ""
+	if _campaign_meter == null:
+		_campaign_label.custom_minimum_size = Vector2(0.0, campaign_meter_size)
+		_campaign_meter = NeuronMeter.attach(_campaign_label,
+			Vector2(MENU_W * 0.5, campaign_meter_size * 0.5), campaign_meter_size)
+	_campaign_meter.refresh()
 	if MetaStateStore.campaignFailed:
-		_campaign_hint.text = "FLATLINE. THE MACHINE REMEMBERS YOU."
+		_campaign_hint.text = fatal_flatline_text
 	elif MetaStateStore.wealthEndingReached:
 		_campaign_hint.text = "WEALTH ENDING REACHED."
 	elif MetaStateStore.campaignNeuronsLeft <= 0:

@@ -55,6 +55,7 @@ func _run() -> void:
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
+	_check_campaign_rebalance_38(machine, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -214,8 +215,10 @@ func _check_global_options_layout(failures: Array) -> void:
 			failures.append("dealer: neuron_number is not positioned at the bottom edge")
 		if dealer_neuron_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
 			failures.append("dealer: neuron_number is not centered inside its label box")
-		if not dealer_neuron_number.text.begins_with("NEURONS:"):
-			failures.append("dealer: neuron_number is not bound to campaign neurons")
+		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
+		if dealer_neuron_number.text != "":
+			failures.append("dealer: neuron_number should render no text (meter replaces it)")
+	_check_neuron_meter_38("dealer", dealer_bottom_hud, failures)
 	dealer.queue_free()
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
@@ -247,8 +250,10 @@ func _check_global_options_layout(failures: Array) -> void:
 			failures.append("machine: neuron_number is not positioned at the bottom edge")
 		if neuron_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
 			failures.append("machine: neuron_number is not centered inside its label box")
-		if not neuron_number.text.begins_with("NEURONS:"):
-			failures.append("machine: neuron_number is not bound to campaign neurons")
+		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
+		if neuron_number.text != "":
+			failures.append("machine: neuron_number should render no text (meter replaces it)")
+		_check_neuron_meter_38("machine", bottom_hud, failures)
 		machine._show_neuron_spend_feedback()
 		var spend_feedback := machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") as Label
 		if spend_feedback == null:
@@ -594,6 +599,76 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		failures.append("issue32: Red Pill second spin was not a non-flatline triple")
 
 	run_store.reset_run_state()
+
+# Issue #38: the pixel-art neuron meter replaces the campaign text readout.
+func _check_neuron_meter_38(scene_name: String, hud: Control, failures: Array) -> void:
+	if hud == null:
+		return
+	var meter: NeuronMeter = null
+	for child in hud.get_children():
+		if child is NeuronMeter:
+			meter = child
+			break
+	if meter == null:
+		failures.append("%s: issue38 neuron meter is missing from the HUD" % scene_name)
+		return
+	var sprite: Sprite2D = null
+	for child in meter.get_children():
+		if child is Sprite2D:
+			sprite = child
+			break
+	if sprite == null:
+		failures.append("%s: issue38 neuron meter built no sprite (sheet missing?)" % scene_name)
+		return
+	if sprite.hframes != meter.frame_count:
+		failures.append("%s: issue38 meter hframes do not match frame_count" % scene_name)
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
+	if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
+		failures.append("%s: issue38 meter frame is not wired to neurons lost" % scene_name)
+	# One neuron lost desaturates exactly one more cell.
+	if int(meta_store.campaignNeuronsLeft) > 0:
+		var prev_frame := int(sprite.frame)
+		meta_store.campaignNeuronsLeft -= 1
+		meta_store.meta_changed.emit()
+		if int(sprite.frame) != prev_frame + 1:
+			failures.append("%s: issue38 meter did not advance one frame per lost neuron" % scene_name)
+		meta_store.campaignNeuronsLeft += 1
+		meta_store.meta_changed.emit()
+
+# Issue #38: campaign rebalance — save reclamp, exact fatal text, goal threshold.
+func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	# Saves from the 12-neuron era reclamp to the current starting count.
+	var migrated: Dictionary = meta_store._migrate({
+		"schemaVersion": 3, "campaignNeuronsMax": 12, "campaignNeuronsLeft": 12,
+	})
+	if int(migrated["campaignNeuronsMax"]) != int(meta_store.campaign_starting_neurons) \
+			or int(migrated["campaignNeuronsLeft"]) != int(migrated["campaignNeuronsMax"]):
+		failures.append("issue38: 12-neuron save did not reclamp to the new starting count")
+	if int(meta_store.campaign_starting_neurons) != 10:
+		failures.append("issue38: campaigns should start at 10 neurons")
+	# Wealth ending fires at the (default 2000) goal; the @export override threads through.
+	if Endings.check_ending({ "scoreEarned": 2000, "neurons": 5 }, {}) != "wealth":
+		failures.append("issue38: 2000 score did not trigger the wealth ending")
+	if Endings.check_ending({ "scoreEarned": 1999, "neurons": 5 }, {}) != null:
+		failures.append("issue38: sub-goal score triggered an ending")
+	if Endings.check_ending({ "scoreEarned": 2500, "neurons": 5 }, {}, 3000) != null:
+		failures.append("issue38: raised campaign_goal_score was ignored")
+	# Exact GDD fatal copy on the campaign-failed overlay, byte-for-byte.
+	machine._show_campaign_failed()
+	var overlay: Control = machine._overlay
+	var found_fatal := false
+	if overlay != null:
+		for child in overlay.get_children():
+			if child is Label and (child as Label).text == "this time, it's fatal. No coming back":
+				found_fatal = true
+				break
+	if not found_fatal:
+		failures.append("issue38: campaign-failed overlay is missing the exact fatal text")
+	if overlay != null:
+		overlay.queue_free()
+		machine._overlay = null
 
 func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
 	overlay._apply_side("left")
