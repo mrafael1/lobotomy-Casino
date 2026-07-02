@@ -77,6 +77,9 @@ const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
 # they never feed evaluate()/spin(), so the pinned vectors stay untouched.
 var flatlineResultCount := 0    # count of 3-flatline reel outcomes seen this run
 var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumable"
+# Presentation-only (issue #34): the Potion pool pick rolled for the last spin, so the
+# machine can announce it. Never feeds evaluate()/spin() inputs — parity untouched.
+var lastPotionEffect: Variant = null
 
 # RunStore extras
 var runPhase := "idle" # idle | running | over
@@ -140,10 +143,12 @@ func spin(compulsive := false) -> Variant:
 	var potion_lucidity_delta := 0
 	var potion_symbol_to_brain := 0
 	var potion_free_reroll := false
+	var potion_pick: Variant = null
 	if potionSpins > 0:
 		var p_rng := LobRNG.new((seed ^ 0x50710000) & M32)
 		var pool: Array = Consumables.POTION_RANDOM_POOL
 		var pick: Dictionary = pool[int(p_rng.next() * pool.size())]
+		potion_pick = pick
 		match String(pick["kind"]):
 			"multNextSpin": potion_mult = float(pick["multiplier"])
 			"lucidity": potion_lucidity_delta = int(pick["amount"])
@@ -211,6 +216,7 @@ func spin(compulsive := false) -> Variant:
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
+	lastPotionEffect = potion_pick
 	lastEffectiveBet = clampi(eff_bet, 1, 3)
 	spinCount += 1
 	nextSpinLucidityMultiplier = 1.0
@@ -303,6 +309,7 @@ func reset_run_state() -> void:
 	hideResultSpins = 0
 	flatlineResultCount = 0
 	lastUsedConsumableId = ""
+	lastPotionEffect = null
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -360,6 +367,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	hideResultSpins = 0
 	flatlineResultCount = 0
 	lastUsedConsumableId = ""
+	lastPotionEffect = null
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
