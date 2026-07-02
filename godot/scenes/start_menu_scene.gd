@@ -43,8 +43,6 @@ const CAMPAIGN_HINT_H := 18.0
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")
-## On-screen size (source px) of the menu's neuron meter.
-@export var campaign_meter_size: float = 16.0
 ## Game-over flatline copy — byte-for-byte from the GDD.
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
@@ -237,9 +235,12 @@ func _refresh_campaign_ui() -> void:
 	# Issue #38: the neuron meter replaces the text; the label holds its menu slot.
 	_campaign_label.text = ""
 	if _campaign_meter == null:
-		_campaign_label.custom_minimum_size = Vector2(0.0, campaign_meter_size)
-		_campaign_meter = NeuronMeter.attach(_campaign_label,
-			Vector2(MENU_W * 0.5, campaign_meter_size * 0.5), campaign_meter_size)
+		_campaign_meter = NeuronMeter.attach(_campaign_label, Vector2(MENU_W * 0.5, 0.0))
+		# The meter sizes itself to the authored art; reserve that height in the menu
+		# column and re-centre now that the size is known.
+		_campaign_label.custom_minimum_size = Vector2(0.0, _campaign_meter.size.y)
+		_campaign_meter.position = Vector2(MENU_W * 0.5, _campaign_meter.size.y * 0.5) \
+			- _campaign_meter.size * 0.5
 	_campaign_meter.refresh()
 	if MetaStateStore.campaignFailed:
 		_campaign_hint.text = fatal_flatline_text

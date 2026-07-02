@@ -228,8 +228,6 @@ const FATAL_ENDING_TITLE := "this time, it's fatal. No coming back"
 ## Score that triggers the wealth ending — the campaign goal. Defaults to the
 ## parity-locked constant; the pinned vectors always use the default.
 @export var campaign_goal_score: int = EconomyConst.WEALTH_SCORE_THRESHOLD
-## On-screen size (source px) of the bottom-HUD neuron meter.
-@export var campaign_meter_size: float = 12.0
 ## Game-over flatline copy — byte-for-byte from the GDD.
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
@@ -872,7 +870,7 @@ func _build_campaign_label() -> void:
 	if not Engine.is_editor_hint() and _campaign_meter == null:
 		var label_center := _campaign_label.get_rect().get_center() \
 			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
-		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center, campaign_meter_size)
+		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center)
 
 func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control

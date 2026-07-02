@@ -7,13 +7,17 @@ extends Control
 ## The frame is wired to campaign neurons LOST (campaignNeuronsMax - Left) and
 ## self-refreshes on MetaStateStore.meta_changed.
 ##
+## The art renders at its AUTHORED scale — never resampled. The sheet is drawn at
+## the project's 8x asset convention, so each frame maps 1:1 to device texels when
+## the 160x320 canvas is presented at 8x (frame px / asset_scale on the canvas).
+##
 ## Autoloads are resolved through /root (not bare identifiers): this script is a
 ## registered global class, so it can be compiled before the autoloads exist
 ## (e.g. by the headless test runner).
 
 @export var frame_count: int = 11
-## On-screen size in source px (the 160x320 canvas).
-@export var meter_size: float = 12.0
+## Authored scale of the sheet relative to the 160x320 source canvas (8x art).
+@export var asset_scale: float = 8.0
 @export var sheet_asset: String = "neurons_meter.png"
 @export var tint: Color = Color.WHITE
 
@@ -21,13 +25,11 @@ var _sprite: Sprite2D = null
 
 ## Builds a meter centred on `center` (source px) and parents it. The scenes keep
 ## their authored `neuron_number` Label as the editor placeholder; this rides on top
-## at runtime.
-static func attach(parent: Node, center: Vector2, size_px := 12.0) -> NeuronMeter:
+## at runtime. Size comes from the art (authored px / asset_scale), never a target.
+static func attach(parent: Node, center: Vector2) -> NeuronMeter:
 	var m := NeuronMeter.new()
-	m.meter_size = size_px
-	m.position = center - Vector2(size_px, size_px) * 0.5
-	m.size = Vector2(size_px, size_px)
-	parent.add_child(m)
+	parent.add_child(m) # _ready sizes the control to the authored frame
+	m.position = center - m.size * 0.5
 	return m
 
 func _ready() -> void:
@@ -44,9 +46,11 @@ func _ready() -> void:
 	_sprite.centered = false
 	_sprite.modulate = tint
 	var frame_w := float(tex.get_width()) / float(maxi(1, frame_count))
-	_sprite.scale = Vector2(meter_size / frame_w, meter_size / float(tex.get_height()))
-	# Large source art downscaled onto the canvas: mipmaps + linear keep it crisp.
-	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# 1:1 texel mapping at presentation scale: only the authored-scale division,
+	# no resampling to a target size. NEAREST keeps the pixels exact.
+	_sprite.scale = Vector2.ONE / maxf(1.0, asset_scale)
+	size = Vector2(frame_w, float(tex.get_height())) / maxf(1.0, asset_scale)
+	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(_sprite)
 	var meta := get_node_or_null("/root/MetaStateStore")
 	if meta != null and not Engine.is_editor_hint():

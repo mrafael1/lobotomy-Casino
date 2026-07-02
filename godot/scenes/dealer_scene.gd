@@ -40,8 +40,6 @@ const DRAG_SLOP := 4.0
 # One-word TV hints (display only) — ports src/content/itemHints.ts.
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
-## On-screen size (source px) of the bottom-HUD neuron meter (issue #38).
-@export var campaign_meter_size: float = 12.0
 
 # Pre-run pool only (Consumables.LIST). In-run item_* hints live in
 # in_run_dealer_offer.gd — the two scenes own separate pools (issue #31).
@@ -578,7 +576,7 @@ func _build_campaign_label() -> void:
 	if not Engine.is_editor_hint() and _campaign_meter == null:
 		var label_center := _campaign_label.get_rect().get_center() \
 			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
-		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center, campaign_meter_size)
+		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center)
 	_refresh_campaign_label()
 
 func _configure_lab_button() -> void:
