@@ -27,6 +27,15 @@ static func run_all() -> Array:
 	_check(out, bool(migrated["campaignActive"]), "migration starts an active campaign")
 	_check(out, not bool(migrated["campaignFailed"]), "migration does not fail campaign")
 	_check(out, not bool(migrated["wealthEndingReached"]), "migration does not force wealth ending")
+	# Issue #38 rebalance: saves from the 12-neuron era reclamp down to the new max.
+	var twelve_era := {
+		"schemaVersion": store.CANONICAL_SCHEMA_VERSION,
+		"campaignNeuronsMax": 12,
+		"campaignNeuronsLeft": 12,
+	}
+	var reclamped: Dictionary = store._migrate(twelve_era)
+	_check(out, int(reclamped["campaignNeuronsMax"]) == EconomyConst.CAMPAIGN_STARTING_NEURONS, "reclamp lowers 12-era campaign max")
+	_check(out, int(reclamped["campaignNeuronsLeft"]) == EconomyConst.CAMPAIGN_STARTING_NEURONS, "reclamp lowers 12-era neurons left")
 	store._apply(migrated)
 	_check(out, store.consume_campaign_neuron_for_run(false), "first run consumes a campaign neuron")
 	_check(out, store.campaignNeuronsLeft == EconomyConst.CAMPAIGN_STARTING_NEURONS - 1, "campaign neuron consumed exactly once")
