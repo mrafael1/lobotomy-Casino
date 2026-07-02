@@ -577,6 +577,9 @@ func _build_campaign_label() -> void:
 		var label_center := _campaign_label.get_rect().get_center() \
 			if _campaign_label.size != Vector2.ZERO else Vector2(80.0, 311.0)
 		_campaign_meter = NeuronMeter.attach(bottom_hud, label_center)
+		# Native-scale art is taller than the old text line: keep it bottom-anchored
+		# and fully on-canvas.
+		_campaign_meter.position.y = 318.0 - _campaign_meter.size.y
 	_refresh_campaign_label()
 
 func _configure_lab_button() -> void:
