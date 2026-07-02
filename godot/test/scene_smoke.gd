@@ -170,17 +170,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: dealer options button is not top-left")
 	if dealer.get_node_or_null("BackButton") != null:
 		failures.append("options: dealer scene still has BackButton node")
-	var lab_button := dealer.get_node_or_null("LabButton") as Button
-	var lab_label := dealer.get_node_or_null("LabButtonLabel") as Label
-	if lab_button == null or lab_label == null:
-		failures.append("options: dealer LAB button/label split is missing")
-	else:
-		if lab_button.text != "":
-			failures.append("options: dealer LAB text still lives on the rotated Button")
-		if lab_label.scale != Vector2.ONE or not is_zero_approx(lab_label.rotation):
-			failures.append("options: dealer LAB label inherits a mirrored transform")
-		if lab_label.text != "LAB":
-			failures.append("options: dealer LAB label text is wrong")
+	_check_dealer_scene_revamp_55(dealer, failures)
 	if dealer.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: dealer scene missing shared OptionsOverlay")
 	var credits_row := dealer.get_node_or_null("CreditsRow") as HBoxContainer
@@ -606,6 +596,71 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		failures.append("issue32: Red Pill second spin was not a non-flatline triple")
 
 	run_store.reset_run_state()
+
+# Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
+# text bubble, outlined feedback messages above the dealer, no 1-Lucidity
+# placeholder slot.
+func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
+	var lab_button := dealer.get_node_or_null("LabButton") as Button
+	var lab_art := dealer.get_node_or_null("LabButtonArt") as Sprite2D
+	if lab_button == null or lab_art == null:
+		failures.append("issue55: dealer LAB button/art pair is missing")
+	else:
+		if lab_button.text != "":
+			failures.append("issue55: lab hit button should render no text over the art")
+		if lab_art.hframes != 2:
+			failures.append("issue55: lab button art is not a 2-frame sheet")
+		if lab_art.position != Vector2.ZERO:
+			failures.append("issue55: lab art lost its dealer-canvas-relative position")
+		lab_button.button_down.emit()
+		if lab_art.frame != 1:
+			failures.append("issue55: lab press did not switch to the pressed frame")
+		lab_button.button_up.emit()
+		if lab_art.frame != 0:
+			failures.append("issue55: lab release did not restore the default frame")
+	var start_button := dealer.get_node_or_null("StartButton") as Button
+	var machine_art := dealer.get_node_or_null("MachineButtonArt") as Sprite2D
+	if start_button == null or machine_art == null:
+		failures.append("issue55: dealer machine button/art pair is missing")
+	else:
+		if machine_art.hframes != 2:
+			failures.append("issue55: machine button art is not a 2-frame sheet")
+		if machine_art.position != Vector2.ZERO:
+			failures.append("issue55: machine art lost its dealer-canvas-relative position")
+		if start_button.position.x < 100.0:
+			failures.append("issue55: machine hit button is not over the top-right art")
+		start_button.button_down.emit()
+		if machine_art.frame != 1:
+			failures.append("issue55: machine press did not switch to the pressed frame")
+		start_button.button_up.emit()
+		if machine_art.frame != 0:
+			failures.append("issue55: machine release did not restore the default frame")
+	if dealer.get_node_or_null("InstructionBubble") != null:
+		failures.append("issue55: dealer text bubble should be removed")
+	if _find_label_with_text(dealer, "DRAG TO BUY") != null:
+		failures.append("issue55: 'DRAG TO BUY' text should be removed")
+	var message := dealer.get_node_or_null("Message") as Label
+	if message == null:
+		failures.append("issue55: dealer Message label is missing")
+	else:
+		if message.get_theme_constant("outline_size") < 1:
+			failures.append("issue55: dealer message has no black outline")
+		if message.get_theme_color("font_outline_color") != Color.BLACK:
+			failures.append("issue55: dealer message outline is not black")
+		# Just above the dealer's head (y~131) and inside the canvas.
+		if message.position.y < 100.0 or message.position.y + message.size.y > 131.0:
+			failures.append("issue55: dealer message is not just above the dealer: %s" % message.position)
+	if dealer.get_node_or_null("OfferSlot6") != null:
+		failures.append("issue55: the 1-Lucidity placeholder offer slot should be gone")
+
+func _find_label_with_text(node: Node, text: String) -> Label:
+	if node is Label and (node as Label).text == text:
+		return node
+	for child in node.get_children():
+		var found := _find_label_with_text(child, text)
+		if found != null:
+			return found
+	return null
 
 # The neuron meter no longer lives on the in-run HUDs — it belongs to the start
 # menu and the flatline overlay only.
