@@ -23,6 +23,14 @@ const M32 := 0xFFFFFFFF
 @export_range(0.0, 1.0, 0.01) var dealer_low_threshold: float = Dealer.THRESHOLD_LOW
 @export_range(0.0, 1.0, 0.01) var dealer_proc_chance: float = Dealer.PROC_CHANCE
 
+# Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
+# probability_increase_per_upgrade is @export by explicit GDD requirement.
+@export_group("Dealer Odds Table")
+@export var odds_budget: int = 4
+@export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3 }
+@export var odds_default_token_cost: int = 2
+@export var probability_increase_per_upgrade: int = 1
+
 # RunState fields (mirror types.ts RunState)
 var neurons := 0
 var startingNeurons := 0
@@ -80,6 +88,13 @@ var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumabl
 # Presentation-only (issue #34): the Potion pool pick rolled for the last spin, so the
 # machine can announce it. Never feeds evaluate()/spin() inputs — parity untouched.
 var lastPotionEffect: Variant = null
+
+# Dealer odds table (issue #36): per-run additive weight overrides bought with a
+# token budget at the post-run "what's next?" phase. Applied at pick time only —
+# the parity-locked base weights in Symbols are never mutated, and the pinned
+# vectors (which pass no overrides) are untouched.
+var oddsTokensRemaining := 0
+var oddsWeightOverrides: Dictionary = {}
 
 # RunStore extras
 var runPhase := "idle" # idle | running | over
@@ -185,6 +200,7 @@ func spin(compulsive := false) -> Variant:
 		"symbolToBrainCount": potion_symbol_to_brain,
 		"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
 		"hiddenReelCount": (pairBoostHiddenReels if pair_boost_active else 0),
+		"weightOverrides": oddsWeightOverrides,
 	})
 
 	var cocktail_bonus := 0
@@ -310,6 +326,8 @@ func reset_run_state() -> void:
 	flatlineResultCount = 0
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
+	oddsTokensRemaining = 0
+	oddsWeightOverrides = {}
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -368,6 +386,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	flatlineResultCount = 0
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
+	# Odds bought at the "what's next?" phase apply to THIS run; unspent tokens are void.
+	oddsTokensRemaining = 0
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
@@ -436,19 +456,10 @@ func commit_power_restore(power_id: String) -> void:
 
 # ── abilities ──────────────────────────────────────────────────────────────────────
 
+# Reroll draws share the spin's weight pipeline, so purchased odds (issue #36)
+# apply to every draw of the run — delegating keeps the two paths identical.
 func _weights_with_bonuses(brain_bonus: int, book_weight: int) -> Array:
-	var weights := Symbols.symbol_weights()
-	if brain_bonus > 0:
-		var nw := []
-		for w in weights:
-			if w["value"] == "brain":
-				nw.append({ "weight": int(w["weight"]) + brain_bonus, "value": "brain" })
-			else:
-				nw.append(w)
-		weights = nw
-	if book_weight > 0:
-		weights.append({ "weight": book_weight, "value": "book" })
-	return weights
+	return Evaluate._build_weights(brain_bonus, book_weight, oddsWeightOverrides)
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed, coins_per_power_restore)
@@ -620,6 +631,38 @@ func use_consumable(consumable_id: String) -> bool:
 				abilitiesUsed = abilitiesUsed.duplicate()
 				abilitiesUsed.remove_at(idx)
 				pendingPowerRestores.append(restored_id)
+	_commit()
+	return true
+
+# ── dealer odds table (issue #36) ──────────────────────────────────────────────────
+# Post-run "what's next?" phase: a fresh token budget buys additive weight bumps
+# for the NEXT run's draws. Base weights stay parity-locked (see Evaluate._build_weights).
+
+## Opens the odds phase between runs: grants the token budget and clears any
+## overrides left from the previous run. No-op while a run is live.
+func begin_odds_phase() -> void:
+	if runPhase == "running":
+		return
+	oddsTokensRemaining = maxi(0, odds_budget)
+	oddsWeightOverrides = {}
+	_commit()
+
+func odds_token_cost(symbol: String) -> int:
+	return int(odds_token_costs.get(symbol, odds_default_token_cost))
+
+## Spends tokens on one +probability_increase_per_upgrade weight bump for `symbol`.
+## Only reel-cycle symbols are buyable; returns false when unaffordable.
+func buy_odds_upgrade(symbol: String) -> bool:
+	if runPhase == "running":
+		return false
+	if not Symbols.BASE_SYMBOL_CYCLE.has(symbol):
+		return false
+	var cost := odds_token_cost(symbol)
+	if cost <= 0 or oddsTokensRemaining < cost:
+		return false
+	oddsTokensRemaining -= cost
+	oddsWeightOverrides = oddsWeightOverrides.duplicate()
+	oddsWeightOverrides[symbol] = int(oddsWeightOverrides.get(symbol, 0)) + probability_increase_per_upgrade
 	_commit()
 	return true
 

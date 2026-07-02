@@ -19,19 +19,26 @@ static func _pick_non_excluded(excluded: String, rng: LobRNG) -> String:
 		return excluded
 	return String(pool[int(rng.next() * pool.size())])
 
-# Mirrors buildWeights(brainWeightBonus, bookWeight).
-static func _build_weights(brain_bonus: int, book_weight: int) -> Array:
+# Mirrors buildWeights(brainWeightBonus, bookWeight). `overrides` (issue #36, dealer
+# odds table) is a per-run additive { symbol: bonus } map layered on at build time —
+# the parity-locked base in Symbols stays untouched, and an empty map reproduces the
+# pinned vectors exactly.
+static func _build_weights(brain_bonus: int, book_weight: int, overrides: Dictionary = {}) -> Array:
 	var weights := Symbols.symbol_weights() # fresh array each call
-	if brain_bonus > 0:
+	if brain_bonus > 0 or not overrides.is_empty():
 		var nw := []
 		for w in weights:
-			if w["value"] == "brain":
-				nw.append({ "weight": int(w["weight"]) + brain_bonus, "value": "brain" })
+			var sym := String(w["value"])
+			var bonus := int(overrides.get(sym, 0))
+			if sym == "brain":
+				bonus += brain_bonus
+			if bonus > 0:
+				nw.append({ "weight": int(w["weight"]) + bonus, "value": sym })
 			else:
 				nw.append(w)
 		weights = nw
 	if book_weight > 0:
-		weights.append({ "weight": book_weight, "value": "book" })
+		weights.append({ "weight": book_weight + int(overrides.get("book", 0)), "value": "book" })
 	return weights
 
 # scoreReels(reels, lucidityMultiplier, allowFreeSpinGrant, pattern23Triple, learningActive)
@@ -132,8 +139,11 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var symbol_to_brain_count := int(input.get("symbolToBrainCount", 0))
 	var pair_score_mult := float(input.get("pairScoreMult", 1.0))
 	var hidden_reel_count := int(input.get("hiddenReelCount", 0))
+	# Dealer odds table (issue #36) — optional additive per-symbol weight overrides;
+	# every pinned vector omits the key, so the default {} scores exactly as before.
+	var weight_overrides: Dictionary = input.get("weightOverrides", {})
 
-	var weights := _build_weights(brain_weight_bonus, book_weight)
+	var weights := _build_weights(brain_weight_bonus, book_weight, weight_overrides)
 
 	var reels := [
 		prev[0] if (bool(locked[0]) and prev != null) else LobRNG.weighted_pick(weights, rng),
