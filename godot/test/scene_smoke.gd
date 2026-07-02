@@ -56,6 +56,7 @@ func _run() -> void:
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
+	_check_odds_table_36(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -669,6 +670,76 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 	if overlay != null:
 		overlay.queue_free()
 		machine._overlay = null
+
+func _check_odds_table_36(run_store: Node, failures: Array) -> void:
+	# issue #36: post-run odds-buying — 4-token cap, per-symbol costs, per-run scope.
+	run_store.reset_run_state()
+
+	run_store.begin_odds_phase()
+	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget):
+		failures.append("issue36: begin_odds_phase did not grant the token budget")
+	if not run_store.buy_odds_upgrade("brain"):
+		failures.append("issue36: brain (cost 4) rejected with a full budget")
+	if int(run_store.oddsTokensRemaining) != 0 or int(run_store.oddsWeightOverrides.get("brain", 0)) != int(run_store.probability_increase_per_upgrade):
+		failures.append("issue36: brain buy did not spend 4 tokens for one bump")
+	if run_store.buy_odds_upgrade("eye"):
+		failures.append("issue36: cap ignored — bought eye with 0 tokens")
+
+	run_store.begin_odds_phase()
+	if not run_store.oddsWeightOverrides.is_empty():
+		failures.append("issue36: begin_odds_phase kept previous purchases")
+	if not run_store.buy_odds_upgrade("eye"):
+		failures.append("issue36: eye (cost 3) rejected with a full budget")
+	if run_store.buy_odds_upgrade("pill") or run_store.buy_odds_upgrade("vial"):
+		failures.append("issue36: per-symbol cost ignored — 1 token bought pill/vial")
+	if run_store.buy_odds_upgrade("book") or run_store.buy_odds_upgrade("nonsense"):
+		failures.append("issue36: bought a symbol outside the reel cycle")
+
+	# Purchases survive into the run, unspent tokens are void, buying locks.
+	run_store.start_new_run([], {}, false)
+	if int(run_store.oddsWeightOverrides.get("eye", 0)) < 1:
+		failures.append("issue36: start_new_run dropped the purchased overrides")
+	if int(run_store.oddsTokensRemaining) != 0:
+		failures.append("issue36: start_new_run kept unspent tokens")
+	if run_store.buy_odds_upgrade("vial"):
+		failures.append("issue36: bought odds while a run was live")
+	run_store.neurons = 100
+	if run_store.spin() == null:
+		failures.append("issue36: spin failed with overrides active")
+	run_store.set_spinning(false)
+
+	# end_run keeps overrides (wealth-continue resumes the same run); reset clears.
+	run_store.end_run("wealth")
+	if int(run_store.oddsWeightOverrides.get("eye", 0)) < 1:
+		failures.append("issue36: end_run cleared overrides — wealth continue loses them")
+	run_store.reset_run_state()
+	if not run_store.oddsWeightOverrides.is_empty() or int(run_store.oddsTokensRemaining) != 0:
+		failures.append("issue36: reset_run_state left odds state behind")
+
+	# The odds overlay scene instantiates and honours the store's budget readout.
+	var overlay_ps := load("res://scenes/odds_table_overlay.tscn") as PackedScene
+	var overlay: Node = overlay_ps.instantiate()
+	get_root().add_child(overlay)
+	overlay.open_overlay()
+	if not bool(overlay.visible):
+		failures.append("issue36: overlay not visible after open_overlay")
+	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget):
+		failures.append("issue36: open_overlay did not begin the odds phase")
+	var buy_buttons: Dictionary = overlay._buy_buttons
+	if buy_buttons.size() != 6:
+		failures.append("issue36: overlay should list all 6 reel-cycle symbols")
+	elif (buy_buttons["vial"] as Button).disabled:
+		failures.append("issue36: affordable buy button is disabled")
+	overlay._on_buy_pressed("brain")
+	if int(run_store.oddsWeightOverrides.get("brain", 0)) < 1:
+		failures.append("issue36: overlay buy did not reach the store")
+	if not (buy_buttons["vial"] as Button).disabled:
+		failures.append("issue36: unaffordable buy button stayed enabled")
+	overlay._close()
+	if bool(overlay.visible):
+		failures.append("issue36: overlay still visible after close")
+	overlay.queue_free()
+	run_store.reset_run_state()
 
 func _check_dealer_offer_click_vs_drag(overlay: Node, failures: Array) -> void:
 	overlay._apply_side("left")

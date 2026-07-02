@@ -22,6 +22,7 @@ extends Control
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const UPGRADES_SCENE := "res://scenes/upgrades_scene.tscn"
+const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 
 # Counter geometry: Expo coords (1280x2560) / 8 -> the 160x320 canvas.
 const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
@@ -89,6 +90,9 @@ var _stash_holder: Control = null
 var _portrait_sprite: Sprite2D = null
 var _portrait_frame := 0
 var _pre_run := false            # true => start-of-run consumable shop (issue #21)
+var _post_run := false           # true => arrived from a finished run (issue #36)
+var _odds_overlay: OddsTableOverlay = null # dealer odds table (issue #36)
+var _odds_button: Button = null  # re-opens the table mid-phase (keeps purchases)
 var _credits_label: Label = null # wallet readout, pre-run only
 var _background_sprite: Sprite2D = null
 var _counter_sprite: Sprite2D = null
@@ -120,6 +124,8 @@ func _ready() -> void:
 	_font = Assets.font()
 	# No run in progress => this is the pre-run shop, not the in-run dealer visit.
 	_pre_run = true if Engine.is_editor_hint() else RunStateStore.runPhase != "running"
+	# A run just ended => this visit is the "what's next?" phase (issue #36).
+	_post_run = (not Engine.is_editor_hint()) and _pre_run and RunStateStore.runPhase == "over"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bind_scene_nodes()
 	_build_art()
@@ -129,6 +135,8 @@ func _ready() -> void:
 	_build_hud()
 	_restore_options_overlay_if_requested()
 	_select("") # show instruction
+	if _post_run:
+		_setup_odds_phase()
 	if not Engine.is_editor_hint():
 		if not MetaStateStore.meta_changed.is_connected(_refresh_campaign_label):
 			MetaStateStore.meta_changed.connect(_refresh_campaign_label)
@@ -289,7 +297,7 @@ func _build_instruction_bubble() -> void:
 			graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if _instruction != null:
-			_instruction.text = "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
+			_instruction.text = _instruction_text()
 			_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_instruction.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			_style_scene_label(_instruction, 8, Color(0.12, 0.06, 0.16))
@@ -311,7 +319,7 @@ func _build_instruction_bubble() -> void:
 	graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_instruction_bubble.add_child(graphic)
 	_instruction = Label.new()
-	_instruction.text = "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
+	_instruction.text = _instruction_text()
 	# Fill the whole bubble and centre both ways so the text sits dead centre of the
 	# bubble asset (issue #24 follow-up).
 	_instruction.size = _instruction_bubble.size
@@ -324,6 +332,41 @@ func _build_instruction_bubble() -> void:
 	_instruction.add_theme_color_override("font_color", Color(0.12, 0.06, 0.16))
 	_instruction.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_instruction_bubble.add_child(_instruction)
+
+# The dealer's line for this visit: post-run he asks "what's next?" (issue #36).
+func _instruction_text() -> String:
+	if _post_run:
+		return "WHAT'S NEXT?"
+	return "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
+
+# ── dealer odds table (issue #36) ─────────────────────────────────────────────────
+# Post-run only: the overlay opens on arrival with the fresh token budget; the ODDS
+# button re-opens it mid-phase without re-granting tokens (purchases kept).
+
+func _setup_odds_phase() -> void:
+	_odds_overlay = ODDS_OVERLAY_SCENE.instantiate() as OddsTableOverlay
+	add_child(_odds_overlay)
+	_odds_overlay.closed.connect(_on_odds_overlay_closed)
+	_odds_button = Button.new()
+	_odds_button.text = "ODDS"
+	_odds_button.position = Vector2(122.0, 15.0)
+	_odds_button.size = Vector2(30.0, 14.0)
+	_odds_button.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		_odds_button.add_theme_font_override("font", _font)
+	_odds_button.visible = false
+	_odds_button.pressed.connect(_reopen_odds_overlay)
+	add_child(_odds_button)
+	_odds_overlay.call_deferred("open_overlay")
+
+func _on_odds_overlay_closed() -> void:
+	if _odds_button != null:
+		_odds_button.visible = true
+	_dealer_react()
+
+func _reopen_odds_overlay() -> void:
+	if _odds_overlay != null:
+		_odds_overlay.reopen_overlay()
 
 func _icon_tex(id: String) -> Texture2D:
 	return Assets.texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
