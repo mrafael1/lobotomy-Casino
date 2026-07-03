@@ -642,7 +642,7 @@ animations = [{
 "speed": 12.5
 }]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_rjwqt"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_id1iw"]
 bg_color = Color(0.13, 0.77, 0.37, 0.18)
 border_width_left = 1
 border_width_top = 1
@@ -666,40 +666,52 @@ corner_radius_top_right = 1
 corner_radius_bottom_right = 1
 corner_radius_bottom_left = 1
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8rhqh"]
-content_margin_bottom = 3.0
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8ym08"]
+content_margin_bottom = 2.0
 texture = ExtResource("69_sjg8e")
 region_rect = Rect2(0, 0, 24, 12)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_id1iw"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_awwow"]
 content_margin_top = 2.0
 content_margin_bottom = 2.0
 texture = ExtResource("69_sjg8e")
 region_rect = Rect2(48, 0, 24, 12)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8ym08"]
-content_margin_bottom = 2.0
-texture = ExtResource("69_sjg8e")
-region_rect = Rect2(24, 0, 24, 12)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_awwow"]
-content_margin_bottom = 2.0
-texture = ExtResource("69_sjg8e")
-region_rect = Rect2(72, 0, 24, 12)
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_hdhev"]
 content_margin_bottom = 2.0
 texture = ExtResource("69_sjg8e")
-region_rect = Rect2(0, 0, 24, 12)
+region_rect = Rect2(24, 0, 24, 12)
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_i0xj1"]
+content_margin_bottom = 2.0
+texture = ExtResource("69_sjg8e")
+region_rect = Rect2(72, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gpvjq"]
+content_margin_bottom = 2.0
+texture = ExtResource("69_sjg8e")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_gv5j0"]
+atlas = ExtResource("71_settings")
+region = Rect2(0, 0, 25, 23)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_wecsn"]
+atlas = ExtResource("71_settings")
+region = Rect2(25, 0, 25, 23)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_p46ef"]
+atlas = ExtResource("71_settings")
+region = Rect2(25, 0, 25, 23)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8qc3m"]
 content_margin_left = 0.0
 content_margin_right = 0.0
 content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(0, 0, 24, 12)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gpvjq"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vghv0"]
 content_margin_left = 0.0
 content_margin_top = 2.0
 content_margin_right = 0.0
@@ -707,34 +719,26 @@ content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(48, 0, 24, 12)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_tjjpl"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_k4sc5"]
 content_margin_left = 0.0
 content_margin_right = 0.0
 content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(24, 0, 24, 12)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_2jo3a"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_12143"]
 content_margin_left = 0.0
 content_margin_right = 0.0
 content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(72, 0, 24, 12)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_v121g"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_nmygh"]
 content_margin_left = 0.0
 content_margin_right = 0.0
 content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(0, 0, 24, 12)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_options_normal"]
-atlas = ExtResource("71_settings")
-region = Rect2(0, 0, 25, 23)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_options_pressed"]
-atlas = ExtResource("71_settings")
-region = Rect2(25, 0, 25, 23)
 
 [node name="UpgradesScene" type="Control" unique_id=862142156]
 custom_minimum_size = Vector2(160, 320)
@@ -759,6 +763,7 @@ z_index = -90
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_xpyfk")
+frame = 4
 centered = false
 
 [node name="upgrades_scene_bubbles" type="AnimatedSprite2D" parent="." unique_id=1310398641]
@@ -766,7 +771,7 @@ z_index = -80
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_l63ny")
-frame = 1
+frame = 12
 centered = false
 
 [node name="upgrades_scene_eye_brain_overlay" type="AnimatedSprite2D" parent="." unique_id=2131746615]
@@ -774,6 +779,7 @@ z_index = -70
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_ldexa")
+frame = 4
 centered = false
 
 [node name="upgrade_scene_memory_brain_overlay" type="AnimatedSprite2D" parent="." unique_id=1897146953]
@@ -781,6 +787,7 @@ z_index = -70
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_6rvdd")
+frame = 4
 centered = false
 
 [node name="upgrades_scene_cables" type="AnimatedSprite2D" parent="." unique_id=1101404169]
@@ -788,7 +795,6 @@ z_index = -60
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_a45bq")
-frame = 5
 centered = false
 
 [node name="upgrades_scene_layer" type="Sprite2D" parent="." unique_id=1137107050]
@@ -825,6 +831,7 @@ z_index = 30
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_n06un")
+frame = 6
 centered = false
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1221533778]
@@ -879,10 +886,10 @@ offset_bottom = 50.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_override_fonts/font = ExtResource("13_font")
-theme_override_styles/normal = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/hover = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/focus = SubResource("StyleBoxFlat_rjwqt")
+theme_override_styles/normal = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/hover = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/focus = SubResource("StyleBoxFlat_id1iw")
 
 [node name="MemoryComputerHitbox" type="Button" parent="CanvasLayer/UI_Container" unique_id=1310966568]
 layout_mode = 0
@@ -893,10 +900,10 @@ offset_bottom = 55.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_override_fonts/font = ExtResource("13_font")
-theme_override_styles/normal = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/hover = SubResource("StyleBoxFlat_rjwqt")
-theme_override_styles/focus = SubResource("StyleBoxFlat_rjwqt")
+theme_override_styles/normal = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/hover = SubResource("StyleBoxFlat_id1iw")
+theme_override_styles/focus = SubResource("StyleBoxFlat_id1iw")
 
 [node name="EyeUpgradePanel" type="Control" parent="CanvasLayer/UI_Container" unique_id=328122031]
 anchors_preset = 0
@@ -911,6 +918,7 @@ anchors_preset = 0
 offset_right = 18.0
 offset_bottom = 16.0
 metadata/upgrade_id = "perm_shift"
+metadata/concept_category = "Machine Manipulations"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/perm_shift" unique_id=765019588]
 visible = false
@@ -932,6 +940,7 @@ offset_top = 14.0
 offset_right = 18.0
 offset_bottom = 23.0
 metadata/upgrade_id = "corr_pattern_23"
+metadata/concept_category = "Machine Manipulations"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/corr_pattern_23" unique_id=1462269001]
 visible = false
@@ -953,6 +962,7 @@ offset_top = 23.0
 offset_right = 18.0
 offset_bottom = 39.0
 metadata/upgrade_id = "pos_learning"
+metadata/concept_category = "Machine Manipulations"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/pos_learning" unique_id=765469071]
 visible = false
@@ -974,6 +984,7 @@ offset_left = 22.0
 offset_right = 42.0
 offset_bottom = 16.0
 metadata/upgrade_id = "pos_enlightenment"
+metadata/concept_category = "Gain Boosts"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment" unique_id=1663424587]
 visible = false
@@ -1002,8 +1013,8 @@ offset_left = 12.0
 offset_top = 2.0
 offset_right = 25.0
 offset_bottom = 15.0
-mouse_filter = 1
 metadata/upgrade_id = "perm_memory"
+metadata/concept_category = "Machine Manipulations"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory" unique_id=355578482]
 visible = false
@@ -1025,8 +1036,8 @@ offset_left = 12.0
 offset_top = 16.0
 offset_right = 25.0
 offset_bottom = 26.0
-mouse_filter = 1
 metadata/upgrade_id = "corr_reward_amp_1"
+metadata/concept_category = "Gain Boosts"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp" unique_id=1194144507]
 visible = false
@@ -1047,8 +1058,8 @@ offset_left = 12.0
 offset_top = 28.0
 offset_right = 25.0
 offset_bottom = 40.0
-mouse_filter = 1
 metadata/upgrade_id = "pos_smart_save"
+metadata/concept_category = "Gain Boosts"
 
 [node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/pos_smart_save" unique_id=1984541469]
 visible = false
@@ -1081,7 +1092,6 @@ theme_override_constants/separation = 3
 custom_minimum_size = Vector2(86, 13)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 1
 theme_override_fonts/font = ExtResource("13_font")
@@ -1130,7 +1140,7 @@ offset_right = 155.0
 offset_bottom = 301.0
 mouse_filter = 2
 
-[node name="DescriptionCenter" type="CenterContainer" parent="CanvasLayer/UI_Container/DescriptionBubble"]
+[node name="DescriptionCenter" type="CenterContainer" parent="CanvasLayer/UI_Container/DescriptionBubble" unique_id=845963978]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -1167,11 +1177,11 @@ theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
 theme_override_fonts/font = ExtResource("13_font")
 theme_override_font_sizes/font_size = 8
-theme_override_styles/normal = SubResource("StyleBoxTexture_8rhqh")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_id1iw")
-theme_override_styles/hover = SubResource("StyleBoxTexture_8ym08")
-theme_override_styles/disabled = SubResource("StyleBoxTexture_awwow")
-theme_override_styles/focus = SubResource("StyleBoxTexture_hdhev")
+theme_override_styles/normal = SubResource("StyleBoxTexture_8ym08")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_awwow")
+theme_override_styles/hover = SubResource("StyleBoxTexture_hdhev")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_i0xj1")
+theme_override_styles/focus = SubResource("StyleBoxTexture_gpvjq")
 text = "RETURN TO BAR"
 
 [node name="options" type="TextureButton" parent="CanvasLayer/UI_Container" unique_id=745851225]
@@ -1182,9 +1192,9 @@ offset_left = 131.0
 offset_top = 9.0
 offset_right = 151.0
 offset_bottom = 27.0
-texture_normal = SubResource("AtlasTexture_options_normal")
-texture_pressed = SubResource("AtlasTexture_options_pressed")
-texture_hover = SubResource("AtlasTexture_options_pressed")
+texture_normal = SubResource("AtlasTexture_gv5j0")
+texture_pressed = SubResource("AtlasTexture_wecsn")
+texture_hover = SubResource("AtlasTexture_p46ef")
 ignore_texture_size = true
 stretch_mode = 5
 
@@ -1204,11 +1214,11 @@ theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
 theme_override_fonts/font = ExtResource("13_font")
 theme_override_font_sizes/font_size = 6
-theme_override_styles/normal = SubResource("StyleBoxTexture_i0xj1")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_gpvjq")
-theme_override_styles/hover = SubResource("StyleBoxTexture_tjjpl")
-theme_override_styles/disabled = SubResource("StyleBoxTexture_2jo3a")
-theme_override_styles/focus = SubResource("StyleBoxTexture_v121g")
+theme_override_styles/normal = SubResource("StyleBoxTexture_8qc3m")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_vghv0")
+theme_override_styles/hover = SubResource("StyleBoxTexture_k4sc5")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_12143")
+theme_override_styles/focus = SubResource("StyleBoxTexture_nmygh")
 text = "BUY"
 
-[node name="OptionsOverlay" parent="CanvasLayer" instance=ExtResource("72_options")]
+[node name="OptionsOverlay" parent="CanvasLayer" unique_id=1808016757 instance=ExtResource("72_options")]
