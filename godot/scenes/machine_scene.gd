@@ -55,6 +55,7 @@ const LEVER_REEL_START_DELAY := 0.22
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
+const REEL_STOP_SFX_LEAD_TIME := 0.1
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
@@ -325,7 +326,8 @@ var _spin_frame := 0
 var _final_reels: Array = []
 var _locked_reels_during_spin := [false, false, false]
 var _use_full_spin_sheet := true
-var _reel_stop_times := [0.55, 0.925, 1.3]
+var _reel_stop_times := [0.55, 1, 1.4]
+var _reel_stop_sfx_played := [false, false, false]
 var _lever_anim_active := false
 var _lever_anim_elapsed := 0.0
 var _reroll_anim_active := false
@@ -763,11 +765,19 @@ func _set_reel_cover(index: int, visible: bool) -> void:
 	if index < _reel_covers.size() and _reel_covers[index] != null:
 		_reel_covers[index].visible = visible
 
+func _play_reel_stop_sfx(index: int) -> void:
+	if index < 0 or index >= _reel_stop_sfx_played.size():
+		return
+	if bool(_reel_stop_sfx_played[index]):
+		return
+	_reel_stop_sfx_played[index] = true
+	_play_sfx(&"reel_stop")
+
 # A reel lands: mask its blur, show its final symbol, stop animating that reel.
 func _reveal_reel(index: int) -> void:
 	var was_visible := _reel_sprites[index].visible
 	if not was_visible:
-		_play_sfx(&"reel_stop")
+		_play_reel_stop_sfx(index)
 	_set_spin_reel_visible(index, false)
 	_set_reel_cover(index, true)
 	_set_reel_symbol(index, String(_final_reels[index]))
@@ -1073,7 +1083,7 @@ func _do_spin(compulsive := false) -> void:
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
-	_reel_stop_times = [0.55, 0.925, 1.3 + tension]
+	_reel_stop_times = [0.55, 1, 1.4 + tension]
 	# Eye triple: the revealed reel was already committed at tap time (issue #53);
 	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
@@ -1111,6 +1121,10 @@ func _process(delta: float) -> void:
 			if not bool(_locked_reels_during_spin[i]) and _anim_elapsed < float(_reel_stop_times[i]):
 				_set_spin_reel_frame(i, _spin_frame)
 	for i in 3:
+		var stop_sfx_time := maxf(0.0, float(_reel_stop_times[i]) - REEL_STOP_SFX_LEAD_TIME)
+		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= stop_sfx_time:
+			_play_reel_stop_sfx(i)
+	for i in 3:
 		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= float(_reel_stop_times[i]) and not _reel_sprites[i].visible:
 			_reveal_reel(i)
 	if _anim_elapsed >= _reel_stop_times[2]:
@@ -1133,6 +1147,7 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_spin_sheet_sprite.visible = false
 	for i in 3:
 		var locked := bool(_locked_reels_during_spin[i])
+		_reel_stop_sfx_played[i] = locked
 		_set_reel_visible(i, locked)
 		_set_reel_cover(i, locked)
 		_set_spin_reel_frame(i, _spin_frame)
@@ -2073,6 +2088,7 @@ func _start_reroll_animation(reel_index: int) -> void:
 	_reroll_elapsed = 0.0
 	_reroll_accum = 0.0
 	_spin_frame = 0
+	_reel_stop_sfx_played[reel_index] = false
 	_play_sfx(&"reel_spin")
 	for i in 3:
 		var active := i == reel_index
@@ -2090,9 +2106,11 @@ func _step_reroll(delta: float) -> void:
 		_reroll_accum = 0.0
 		_spin_frame = (_spin_frame + 1) % SPIN_FRAME_COUNT
 		_set_spin_reel_frame(_reroll_reel_index, _spin_frame)
+	if _reroll_elapsed >= maxf(0.0, REROLL_REEL_DURATION - REEL_STOP_SFX_LEAD_TIME):
+		_play_reel_stop_sfx(_reroll_reel_index)
 	if _reroll_elapsed >= REROLL_REEL_DURATION:
 		_stop_sfx(&"reel_spin")
-		_play_sfx(&"reel_stop")
+		_play_reel_stop_sfx(_reroll_reel_index)
 		_reroll_anim_active = false
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
