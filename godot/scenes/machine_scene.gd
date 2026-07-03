@@ -94,6 +94,8 @@ const SFX_FILES := {
 	&"pair_win": "pair-bonus.mp3",
 	&"triple_win": "triple-bonus.mp3",
 	&"jackpot_win": "jackpot-bonus.mp3",
+	&"coin_fall": "coin-falling.mp3",
+	&"coin_fall_end": "coin-falling-end.mp3",
 }
 
 # Debug-grant Shift/Memory + test consumables when a run is started standalone
@@ -1612,6 +1614,10 @@ func _spawn_lucidity_coins(gain: int, target_lucidity: int) -> float:
 	var flight_time := _coin_flight_time_for_count(count)
 	var total_time := travel_start_time + flight_time
 	var cash_tray := COIN_TRAY + CASH_COIN_TRAY_OFFSET
+	_play_sfx(&"coin_fall")
+	var fall_sfx_tw := create_tween()
+	fall_sfx_tw.tween_interval(fall_phase_time)
+	fall_sfx_tw.tween_callback(_play_sfx.bind(&"coin_fall_end"))
 	for i in count:
 		var coin := Sprite2D.new()
 		coin.texture = tex
