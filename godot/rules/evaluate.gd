@@ -121,6 +121,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var max_free_spins := int(input["maxFreeSpins"])
 	var lucidity_multiplier := float(input["lucidityMultiplier"])
 	var is_free_spin: bool = input["isFreeSpin"]
+	var free_spin_cost := maxi(1, int(input.get("freeSpinCost", 1)))
 	var locked: Array = input["lockedReels"]
 	var prev: Variant = input["previousReels"]
 	var rng: LobRNG = input["rng"]
@@ -202,7 +203,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 
 	var free_spins_after: int
 	if is_free_spin:
-		free_spins_after = maxi(0, free_spins_remaining - 1)
+		free_spins_after = maxi(0, free_spins_remaining - free_spin_cost)
 	else:
 		free_spins_after = mini(free_spins_remaining + int(score["freeSpinsGranted"]), max_free_spins)
 
