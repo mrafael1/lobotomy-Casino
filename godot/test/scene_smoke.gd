@@ -614,6 +614,11 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 # text bubble, outlined feedback messages above the dealer, no 1-Lucidity
 # placeholder slot.
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
+	# Exported builds (APK) only ship res:// — Assets.texture's ../assets filesystem
+	# fallback does not exist on device, so shipped art MUST resolve as a resource.
+	for rel in ["dealer_scene_LAB_BUTTON.png", "dealer_scene_machine_BUTTON.png"]:
+		if not ResourceLoader.exists("res://assets/images/" + String(rel)):
+			failures.append("issue55: %s not in godot/assets/images — missing from exported builds (APK)" % rel)
 	var lab_button := dealer.get_node_or_null("LabButton") as Button
 	var lab_art := dealer.get_node_or_null("LabButtonArt") as Sprite2D
 	if lab_button == null or lab_art == null:
