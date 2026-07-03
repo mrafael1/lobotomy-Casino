@@ -1991,13 +1991,17 @@ func _refresh_controls() -> void:
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
+		# A restored power stays in its unavailable state until the restore coin
+		# lands on the button (commit_power_restore fires the refresh), so the
+		# unlock animation always plays before the button reads as usable (issue #54).
+		var pending: Array = RunStateStore.pendingPowerRestores
 		for id in ["reroll", "shift", "memory"]:
 			var visible := _power_owned(id, owned)
 			var b: Button = _power_buttons[id]
 			b.visible = visible
 			b.disabled = not visible
 			if visible:
-				b.disabled = not (can_use and not used.has(id))
+				b.disabled = not (can_use and not used.has(id) and not pending.has(id))
 			var frame := POWER_FRAME_DISABLED if b.disabled else POWER_FRAME_AVAILABLE
 			if id == _targeting_power_id and not b.disabled:
 				frame = POWER_FRAME_SELECTED
