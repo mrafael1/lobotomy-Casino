@@ -2895,7 +2895,12 @@ func _check_ending() -> bool:
 	if ending == null:
 		return false
 	if ending == "wealth" and RunStateStore.wealthContinued:
-		return false
+		# check_ending short-circuits on the score, so a wealth-continued run that
+		# runs out of neurons would otherwise never flatline — the spin button dies
+		# and nothing re-checks endings, a softlock (issue #62).
+		if int(RunStateStore.neurons) > 0:
+			return false
+		ending = "flatline"
 	_show_ending(String(ending), run)
 	return true
 
@@ -2984,6 +2989,9 @@ func _build_wealth_screen(run: Dictionary) -> void:
 	cont.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		cont.add_theme_font_override("font", _font)
+	# Continuing with no possible next spin (0 neurons/free spins, or the hard
+	# spin cap already hit) would strand a dead machine (issue #62).
+	cont.disabled = not _can_resume_after_wealth()
 	cont.pressed.connect(_continue_from_wealth)
 	_overlay.add_child(cont)
 
@@ -3114,9 +3122,28 @@ func _end_run_lucidity_kept_fraction() -> float:
 		if MetaStateStore.ownedPermanents.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
 		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
 
+## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
+## neurons (or free spins) remain and the hard spin cap isn't reached (issue #62).
+func _can_resume_after_wealth() -> bool:
+	return (int(RunStateStore.neurons) >= 1 or int(RunStateStore.freeSpinsRemaining) > 0) \
+		and int(RunStateStore.spinCount) < run_spin_length
+
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
-	_sync_visuals()
+	if _can_resume_after_wealth():
+		_sync_visuals()
+		return
+	# Defensive: no spin can follow, so end the run through the flatline flow
+	# (banks lucidity, offers the campaign continue/menu action) instead of
+	# stranding a dead machine (issue #62).
+	if _overlay != null:
+		_overlay.queue_free()
+		_overlay = null
+	_show_ending("flatline", {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	})
 
 ## Wealth screen EXIT CASINO: bank the run (wealth banking is deferred until the
 ## player leaves) and return to the menu hub.
