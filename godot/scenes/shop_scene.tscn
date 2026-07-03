@@ -181,7 +181,7 @@ theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
 text = "White Powder  14L  x0"
 
-[node name="Consumable_cons_syringe" type="Button" parent="Root/Scroll/List"]
+[node name="Consumable_cons_potion" type="Button" parent="Root/Scroll/List"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8

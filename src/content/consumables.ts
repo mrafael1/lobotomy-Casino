@@ -8,7 +8,7 @@ export type PotionRandomEffect =
 
 export type ConsumableEffect =
   | { type: 'hideReelPairBoost';        spins: number; hiddenReels: number; pairMult: number } // Tobacco
-  | { type: 'guaranteeSymbol';          excludes: string[]; appearSpins: number; banSpins: number } // Serum
+  | { type: 'guaranteeSymbol';          excludes: string[]; appearSpins: number; blurSpins: number } // Serum
   | { type: 'scrambleThenHide';         hideNextSpin: boolean }                                 // White Powder
   | { type: 'resetPowersRandomEffect';  spins: number; pool: PotionRandomEffect[] }             // Potion
   | { type: 'restoreAbilityOrSpins';    fallbackSpins: number };                                // Tea
@@ -42,17 +42,17 @@ export const CONSUMABLES: ReadonlyArray<Consumable> = [
   {
     id: 'cons_cigarette',
     name: 'Tobacco',
-    description: 'For 3 spins one reel goes dark (scored on the two you can see) and pairs pay 3×.',
+    description: 'For 2 spins one reel goes fully dark (scored on the two you can see), 3× effects are blocked, and pairs pay 3× on top of your bet.',
     shopCost: 20,
     corrupt: true,
-    effect: { type: 'hideReelPairBoost', spins: 3, hiddenReels: 1, pairMult: 3 },
+    effect: { type: 'hideReelPairBoost', spins: 2, hiddenReels: 1, pairMult: 3 },
   },
   {
     id: 'cons_focus',
     name: 'Serum',
-    description: 'Next spin is guaranteed a non-brain symbol; brain is then banned for 2 spins.',
+    description: 'Pick a non-brain symbol: it appears at least once next spin. The spin after shows blurry reels.',
     shopCost: 15,
-    effect: { type: 'guaranteeSymbol', excludes: ['brain'], appearSpins: 1, banSpins: 2 },
+    effect: { type: 'guaranteeSymbol', excludes: ['brain'], appearSpins: 1, blurSpins: 1 },
   },
   {
     id: 'cons_white_powder',
@@ -63,7 +63,7 @@ export const CONSUMABLES: ReadonlyArray<Consumable> = [
     effect: { type: 'scrambleThenHide', hideNextSpin: true },
   },
   {
-    id: 'cons_syringe',
+    id: 'cons_potion',
     name: 'Potion',
     description: 'Restores all powers and rolls a random effect each spin for 3 spins.',
     shopCost: 40,

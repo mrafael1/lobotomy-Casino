@@ -20,12 +20,12 @@ const POTION_RANDOM_POOL := [
 
 const LIST := [
 	{ "id": "cons_cigarette", "name": "Tobacco", "shopCost": 20, "corrupt": true,
-	  "effect": { "type": "hideReelPairBoost", "spins": 3, "hiddenReels": 1, "pairMult": 3 } },
+	  "effect": { "type": "hideReelPairBoost", "spins": 2, "hiddenReels": 1, "pairMult": 3 } },
 	{ "id": "cons_focus", "name": "Serum", "shopCost": 15,
-	  "effect": { "type": "guaranteeSymbol", "excludes": ["brain"], "appearSpins": 1, "banSpins": 2 } },
+	  "effect": { "type": "guaranteeSymbol", "excludes": ["brain"], "appearSpins": 1, "blurSpins": 1 } },
 	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 10, "corrupt": true,
 	  "effect": { "type": "scrambleThenHide", "hideNextSpin": true } },
-	{ "id": "cons_syringe", "name": "Potion", "shopCost": 40,
+	{ "id": "cons_potion", "name": "Potion", "shopCost": 40,
 	  "effect": { "type": "resetPowersRandomEffect", "spins": 3, "pool": POTION_RANDOM_POOL } },
 	{ "id": "cons_tea", "name": "Tea", "shopCost": 8,
 	  "effect": { "type": "restoreAbilityOrSpins", "fallbackSpins": 3 } },

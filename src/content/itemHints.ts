@@ -46,7 +46,7 @@ export const ITEM_HINTS: Record<string, ConsumableDisplayHints> = {
     negativeHint: 'HIDDEN',
     flavorText: 'A thin serum with a staring shine.',
   },
-  cons_syringe: {
+  cons_potion: {
     positiveHint: 'WARM',
     negativeHint: 'DULL',
     flavorText: 'Warm glass. Unclear promise.',

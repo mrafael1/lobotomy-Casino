@@ -76,7 +76,7 @@ func _run() -> void:
 
 	# Offer pool branches on _pre_run (set in _ready from the mode above).
 	dealer._pre_run = true
-	if dealer._offer_ids() != ["cons_cigarette", "cons_focus", "cons_white_powder", "cons_syringe", "cons_tea"]:
+	if dealer._offer_ids() != ["cons_cigarette", "cons_focus", "cons_white_powder", "cons_potion", "cons_tea"]:
 		failures.append("pre-run offers wrong: %s" % str(dealer._offer_ids()))
 	dealer._pre_run = false
 	run_store.dealerOfferIds = ["item_water", "item_pill"]
@@ -547,23 +547,37 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.start_new_run([], {}, false)
 	run_store.lastResult = { "reels": ["eye", "pill", "vial"], "isFreeSpin": false }
 
-	# Serum: guaranteeSymbolSpins + banBrainSpins.
+	# Serum (issue #53): the picked symbol is guaranteed; blur queues for after.
 	run_store.runConsumables = { "cons_focus": 1 }
-	if not run_store.use_consumable("cons_focus"):
+	if not run_store.use_consumable("cons_focus", "vial"):
 		failures.append("issue32: Serum use rejected")
-	if int(run_store.guaranteeSymbolSpins) != 1 or int(run_store.banBrainSpins) != 2:
-		failures.append("issue32: Serum did not set guarantee/ban counters")
+	if int(run_store.guaranteeSymbolSpins) != 1 or String(run_store.guaranteeSymbolId) != "vial" \
+			or int(run_store.pendingBlurSpins) != 1 or int(run_store.banBrainSpins) != 0:
+		failures.append("issue53: Serum did not set guarantee/blur state")
+	# The guaranteed spin contains the picked symbol, then the next spin is blurry.
+	run_store.neurons = 100
+	var serum_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if serum_spin == null or not (serum_spin["reels"] as Array).has("vial"):
+		failures.append("issue53: Serum guaranteed spin did not contain the picked symbol")
+	if int(run_store.blurReelsSpins) != 1 or int(run_store.pendingBlurSpins) != 0:
+		failures.append("issue53: blur did not queue for the spin after the guarantee")
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.blurReelsSpins) != 0:
+		failures.append("issue53: blur did not clear after its spin")
 
-	# Tobacco: pair boost + hidden reel.
+	# Tobacco (issue #53): pair boost + hidden reel for 2 spins.
 	run_store.runConsumables = { "cons_cigarette": 1 }
 	run_store.use_consumable("cons_cigarette")
-	if int(run_store.pairBoostSpins) != 3 or int(run_store.pairBoostMult) != 3 or int(run_store.pairBoostHiddenReels) != 1:
+	if int(run_store.pairBoostSpins) != 2 or int(run_store.pairBoostMult) != 3 or int(run_store.pairBoostHiddenReels) != 1:
 		failures.append("issue32: Tobacco did not set pair-boost counters")
+	run_store.pairBoostSpins = 0 # cleared so later spins in this check score normally
 
-	# Potion: restores all powers + potionSpins.
+	# Potion (renamed cons_potion, issue #53): restores all powers + potionSpins.
 	run_store.abilitiesUsed = ["reroll", "shift"]
-	run_store.runConsumables = { "cons_syringe": 1 }
-	run_store.use_consumable("cons_syringe")
+	run_store.runConsumables = { "cons_potion": 1 }
+	run_store.use_consumable("cons_potion")
 	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
 		failures.append("issue32: Potion did not reset powers / set potionSpins")
 
@@ -979,21 +993,37 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
 # the popup names the picked reel's rolled symbol.
 func _check_eye_reveal(machine: Node, failures: Array) -> void:
+	# Issue #53: tapping a reel reveals its next-spin symbol INSTANTLY, and the
+	# next spin honours the revealed promise.
+	var run_store: Node = get_root().get_node("RunStateStore")
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.neurons = 100
 	machine._reveal_reel_next_spin = -1
 	machine._apply_symbol_triple("eye", 0, false)
 	await process_frame # the picker arms deferred
 	if machine._targeting_layer == null:
 		failures.append("eye: 3x eye did not arm the reel-selection UI")
+	var before := machine.get_child_count()
 	machine._on_eye_reveal_pick(1)
+	var revealed := String(run_store.eyeRevealSymbol)
+	if revealed == "" or int(run_store.eyeRevealReel) != 1:
+		failures.append("eye: tap did not roll/commit the next-spin symbol instantly")
 	if int(machine._reveal_reel_next_spin) != 1:
-		failures.append("eye: picking a reel did not store the reveal target")
+		failures.append("eye: picking a reel did not store the early-stop target")
 	if machine._targeting_layer != null:
 		failures.append("eye: picking a reel did not clear the selection UI")
-	var before := machine.get_child_count()
-	machine._show_eye_reveal_popup(1, "eye")
 	if machine.get_child_count() <= before:
-		failures.append("eye: reveal popup did not spawn")
+		failures.append("eye: reveal popup did not spawn at tap time")
+	# The next spin's reel shows exactly the revealed symbol.
+	var result: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if result == null or String(result["reels"][1]) != revealed:
+		failures.append("eye: next spin did not honour the revealed symbol")
+	if int(run_store.eyeRevealReel) != -1 or String(run_store.eyeRevealSymbol) != "":
+		failures.append("eye: reveal commitment was not consumed by the spin")
 	machine._reveal_reel_next_spin = -1
+	run_store.reset_run_state()
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
@@ -1464,7 +1494,7 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	# Brains triple grants a spin when power-triggered (pinned evaluate granted none)...
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 5
-	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 0 }
+	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 0, "winType": "jackpot" }
 	machine._last_reacted_reels = []
 	machine._last_reacted_spin = -1
 	machine._apply_machine_reactions(true)
@@ -1474,7 +1504,7 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	# ...but must NOT double-grant on a natural brains triple (evaluate already granted).
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 6
-	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 2 }
+	run_store.lastResult = { "reels": ["brain", "brain", "brain"], "freeSpinsGranted": 2, "winType": "jackpot" }
 	machine._last_reacted_reels = []
 	machine._last_reacted_spin = -1
 	machine._apply_machine_reactions(false)
@@ -1486,7 +1516,7 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	machine.fatal_flatline_count = 3
 	for i in 3:
 		run_store.spinCount = 10 + i
-		run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "freeSpinsGranted": 0 }
+		run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "freeSpinsGranted": 0, "winType": "triple" }
 		machine._last_reacted_reels = []
 		machine._last_reacted_spin = -1
 		machine._apply_machine_reactions(false)
