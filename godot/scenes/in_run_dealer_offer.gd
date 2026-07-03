@@ -42,8 +42,8 @@ const CORRUPT_NAME_COLOR := Color(0.66, 0.33, 0.86)
 const ITEM_HINTS := {
 	"item_water": { "pos": "refreshing", "neg": "WEAK" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
-	"item_energy_drink": { "pos": "FREE", "neg": "LIMITED" },
-	"item_cocktail": { "pos": "EASY", "neg": "compulsive" },
+	"item_energy_drink": { "pos": "FREE", "neg": "compulsive" },
+	"item_cocktail": { "pos": "EASY", "neg": "sticky" },
 }
 const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
 # In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).

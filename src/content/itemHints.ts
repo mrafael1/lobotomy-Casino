@@ -33,7 +33,7 @@ export const ITEM_HINTS: Record<string, ConsumableDisplayHints> = {
   // Keep every hint short enough to fit the TV on one line at a fixed size.
   item_energy_drink: {
     positiveHint: 'SPARKS',
-    negativeHint: 'SHAKY',
+    negativeHint: 'COMPULSIVE',
     flavorText: 'The can hums in your hand.',
   },
   item_cocktail: {

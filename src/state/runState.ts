@@ -347,14 +347,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
       cocktailBoostSpins:         Math.max(0, state.cocktailBoostSpins - 1),
       compulsiveSpinSkips:
         (isCompulsive ? Math.max(0, state.compulsiveSpinSkips - 1) : state.compulsiveSpinSkips) +
-        (state.cocktailBoostSpins === 1 ? state.pendingCompulsiveSpinSkips : 0),
-      pendingCompulsiveSpinSkips: state.cocktailBoostSpins === 1 ? 0 : state.pendingCompulsiveSpinSkips,
+        (stasisActive && state.decaySkips === 1 ? state.pendingCompulsiveSpinSkips : 0),
+      pendingCompulsiveSpinSkips: stasisActive && state.decaySkips === 1 ? 0 : state.pendingCompulsiveSpinSkips,
       pairBoostSpins:             Math.max(0, state.pairBoostSpins - 1),
       guaranteeSymbolSpins:       Math.max(0, state.guaranteeSymbolSpins - 1),
       guaranteeSymbolId:          state.guaranteeSymbolSpins - 1 > 0 ? state.guaranteeSymbolId : null,
       // Serum blur (issue #53): the spin AFTER the guaranteed one renders blurry —
-      // queued blur moves in when the guarantee is consumed (same pattern as the
-      // cocktail's pending compulsive skips).
+      // queued blur moves in when the guarantee is consumed.
       blurReelsSpins:             state.guaranteeSymbolSpins === 1
         ? state.pendingBlurSpins
         : Math.max(0, state.blurReelsSpins - 1),
@@ -456,11 +455,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
       switch (effect.type) {
         case 'skipDecay':
           // Energy Drink: neurons preserved for N spins; blockBet 'x3' locks the
-          // x3 bet for those spins (reuses the forced-random-bet demotion).
+          // x3 bet for those spins, then queues the forced x1 spin.
           set({
             runConsumables: newRunConsumables,
             decaySkips: state.decaySkips + effect.spins,
             forcedRandomBetSpins: state.forcedRandomBetSpins + effect.spins,
+            pendingCompulsiveSpinSkips: state.pendingCompulsiveSpinSkips + effect.compulsiveSpins,
             betMultiplier: state.betMultiplier === 3 ? 2 : state.betMultiplier,
           });
           return true;
@@ -494,7 +494,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
           set({
             runConsumables: newRunConsumables,
             cocktailBoostSpins: state.cocktailBoostSpins + effect.spins,
-            pendingCompulsiveSpinSkips: state.pendingCompulsiveSpinSkips + effect.compulsiveSpins,
           });
           return true;
       }
@@ -703,20 +702,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
       pattern23, learningOn, !state.lastResult.isFreeSpin,
     );
 
-    const otherConsumables = Object.entries(state.runConsumables)
-      .filter(([id, charges]) => id !== 'cons_white_powder' && (charges ?? 0) > 0);
-
-    let newRunConsumables = { ...state.runConsumables };
-    let neuronsAfter = state.neurons;
-
-    if (otherConsumables.length > 0) {
-      const rng = createRNG(((Date.now() ^ state.spinCount) >>> 0));
-      const [victimId, victimCharges] = otherConsumables[Math.floor(rng() * otherConsumables.length)];
-      newRunConsumables = { ...newRunConsumables, [victimId]: (victimCharges ?? 1) - 1 };
-    } else {
-      neuronsAfter = Math.max(0, state.neurons - 20);
-    }
-
     const copySeed = ((Date.now() ^ (state.spinCount * 0x165667b1)) >>> 0);
     const plan = planLucidityGain(
       state.lucidityCoins, outcome.coinsDelta, state.abilitiesUsed, copySeed,
@@ -724,8 +709,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const freeSpinsAfter = Math.min(
       state.freeSpinsRemaining + outcome.freeSpinsGranted, state.maxFreeSpins);
     set({
-      runConsumables: newRunConsumables,
-      neurons: neuronsAfter,
       abilitiesUsed: plan.abilitiesUsed,
       scoreEarned:   Math.max(0, state.scoreEarned + outcome.scoreDelta),
       lucidityCoins: plan.lucidityCoins,

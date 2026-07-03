@@ -231,7 +231,7 @@ func spin(compulsive := false) -> Variant:
 
 	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
-	var was_cocktail_last: bool = cocktailBoostSpins == 1
+	var was_energy_last: bool = stasis and decaySkips == 1
 
 	# Potion pool side effects (issue #32): ± lucidity and a free reroll (restore the
 	# reroll ability) resolve after the score plan.
@@ -261,11 +261,11 @@ func spin(compulsive := false) -> Variant:
 	hideNeuronsSpins = maxi(0, hideNeuronsSpins - 1)
 	cocktailBoostSpins = maxi(0, cocktailBoostSpins - 1)
 	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if is_compulsive else compulsiveSpinSkips) \
-		+ (pendingCompulsiveSpinSkips if was_cocktail_last else 0)
-	pendingCompulsiveSpinSkips = 0 if was_cocktail_last else pendingCompulsiveSpinSkips
+		+ (pendingCompulsiveSpinSkips if was_energy_last else 0)
+	pendingCompulsiveSpinSkips = 0 if was_energy_last else pendingCompulsiveSpinSkips
 	pairBoostSpins = maxi(0, pairBoostSpins - 1)
 	# Serum (issue #53): the spin AFTER the guaranteed one renders blurry — queued
-	# blur moves in when the guarantee is consumed (mirrors the cocktail pattern).
+	# blur moves in when the guarantee is consumed.
 	var guarantee_was_last := guaranteeSymbolSpins == 1
 	guaranteeSymbolSpins = maxi(0, guaranteeSymbolSpins - 1)
 	if guaranteeSymbolSpins <= 0:
@@ -602,18 +602,6 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 	var outcome := Abilities.apply_copy_reel(lastResult["reels"], source_reel, target_reel, float(lastResult["scoreMultiplier"]),
 		Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]))
 
-	var others := []
-	for id in runConsumables:
-		if id != "cons_white_powder" and int(runConsumables[id]) > 0:
-			others.append(id)
-	runConsumables = runConsumables.duplicate(true)
-	if others.size() > 0:
-		var rng := LobRNG.new(_seed(spinCount))
-		var victim: String = others[floori(rng.next() * others.size())]
-		runConsumables[victim] = int(runConsumables[victim]) - 1
-	else:
-		neurons = maxi(0, neurons - 20)
-
 	var seed := _seed(spinCount * 0x165667b1)
 	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed)
 	_commit()
@@ -647,9 +635,10 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 		match String(e["type"]):
 			"skipDecay":
 				# Energy Drink: neurons preserved for N spins; blockBet "x3" locks the
-				# x3 bet for those spins (reuses the forced-random-bet demotion).
+				# x3 bet for those spins, then queues the forced x1 spin.
 				decaySkips += int(e["spins"])
 				forcedRandomBetSpins += int(e["spins"])
+				pendingCompulsiveSpinSkips += int(e["compulsiveSpins"])
 				if betMultiplier == 3:
 					betMultiplier = 2
 			"addLucidity":
@@ -659,7 +648,6 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				pendingPowerRestores.append_array(plan["restores"])
 			"cocktailBoost":
 				cocktailBoostSpins += int(e["spins"])
-				pendingCompulsiveSpinSkips += int(e["compulsiveSpins"])
 			"forceFlatlinesThenTriple":
 				# Red Pill: force flatlines for flatSpins, then a guaranteed triple.
 				forceFlatlineSpins += int(e["flatSpins"])

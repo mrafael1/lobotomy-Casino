@@ -153,14 +153,14 @@ const ITEM_ICONS := {
 ## the dealer scenes' pools (issue #31) so the same item reads the same way.
 @export var use_hints: Dictionary = {
 	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
-	"cons_white_powder": { "pos": "COPY", "neg": "LOSE" },
+	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
 	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
 	"cons_potion": { "pos": "BRAINS", "neg": "NO POWER" },
 	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
 	"item_water": { "pos": "REFRESHING", "neg": "WEAK" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
-	"item_energy_drink": { "pos": "FREE", "neg": "LIMITED" },
-	"item_cocktail": { "pos": "EASY", "neg": "COMPULSIVE" },
+	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
+	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
 }
 
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
@@ -227,7 +227,7 @@ const ITEM_ICONS := {
 ## symbols stay readable, just harder.
 @export var blur_cover_color: Color = Color(0.82, 0.86, 0.95, 0.55)
 @export_subgroup("Compulsive", "compulsive_")
-## Cocktail (issue #53): the machine spins by itself once the boost ends — heavy
+## Energy Drink: the machine spins by itself once the no-decay rush ends — heavy
 ## vibration + red overlay while it takes over.
 @export var compulsive_fx_enabled: bool = true
 @export var compulsive_overlay_color: Color = Color(0.85, 0.08, 0.08, 0.28)
@@ -341,7 +341,7 @@ var _hide_result_active := false           # the displayed result is hidden
 var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
 var _blur_result_active := false           # the displayed result renders blurry
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
-var _compulsive_queued := false            # cocktail auto-spin pending (issue #53)
+var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
 func _ready() -> void:
@@ -1127,13 +1127,13 @@ func _run_post_reveal_sequence() -> void:
 		_show_dealer_incoming()
 	else:
 		_set_sequence_lock(false)
-		# Cocktail (issue #53): once the boost ends the machine takes the compulsive
+		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
 		# spin by itself — heavy vibration + red overlay, no player input needed.
 		if RunStateStore.compulsiveSpinSkips > 0:
 			_queue_compulsive_spin()
 	_post_spin_sequence_active = false
 
-# ── cocktail compulsive takeover (issue #53) ─────────────────────────────────────
+# ── compulsive takeover ──────────────────────────────────────────────────────────
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -2354,8 +2354,7 @@ func _play_tea_flight(slot_index: int) -> void:
 		pulse.tween_property(spins_label, "scale", Vector2.ONE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
-# copy onto. copy_reel() applies the copy and its side effect (consume a random
-# other supply, or -20 neurons). Needs a spin result to copy from.
+# copy onto. Needs a spin result to copy from.
 func _begin_white_powder() -> void:
 	if _sequence_lock_active:
 		return
