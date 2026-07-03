@@ -99,6 +99,9 @@ const SFX_FILES := {
 	&"coin_fall": "coin-falling.mp3",
 	&"coin_fall_end": "coin-falling-end.mp3",
 }
+const SFX_POLYPHONY := {
+	&"reel_stop": 3,
+}
 
 # Debug-grant Shift/Memory + test consumables when a run is started standalone
 # (machine opened directly, not via the shop). The shop is the real source now.
@@ -421,6 +424,7 @@ func _build_sfx_players() -> void:
 		var player := AudioStreamPlayer.new()
 		player.name = "Sfx%s" % String(id).capitalize().replace("_", "")
 		player.stream = stream
+		player.max_polyphony = int(SFX_POLYPHONY.get(id, 1))
 		player.volume_db = _sfx_volume_db()
 		add_child(player)
 		_sfx_players[id] = player
@@ -432,7 +436,8 @@ func _play_sfx(id: StringName) -> void:
 	if player == null:
 		return
 	player.volume_db = _sfx_volume_db()
-	player.stop()
+	if player.max_polyphony <= 1:
+		player.stop()
 	player.play()
 
 func _stop_sfx(id: StringName) -> void:
