@@ -469,13 +469,20 @@ func register_flatline_result() -> int:
 	_commit()
 	return flatlineResultCount
 
-## Adds free spins. Used by the brains/vial triples. Unclamped (issue #66): the
-## 3x vial reward is "+3 spins" and must land in full — maxFreeSpins only caps
-## the parity-pinned in-spin jackpot grant, not these machine-reaction rewards.
+## Adds real free-spin credits. Used by brain triples when the pure spin result
+## did not already grant one.
 func grant_free_spins(count: int) -> void:
 	if count <= 0:
 		return
 	freeSpinsRemaining += count
+	_commit()
+
+## Restores normal spins-left budget by replenishing neurons.
+func restore_spins(count: int) -> void:
+	if count <= 0:
+		return
+	var decay := maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+	neurons += count * decay
 	_commit()
 
 ## Pill triple: makes every power usable again this spin.
@@ -694,10 +701,9 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 			abilitiesUsed = []
 			potionSpins += int(ce["spins"])
 		"restoreAbilityOrSpins":
-			# Tea: restore a used ability, or grant fallback free spins if none used.
-			# Unclamped (issue #66): the fallback reward is "+3 spins" in full.
+			# Tea: restore a used ability, or restore normal spins if none were used.
 			if abilitiesUsed.is_empty():
-				freeSpinsRemaining += int(ce["fallbackSpins"])
+				restore_spins(int(ce["fallbackSpins"]))
 			else:
 				var rng := LobRNG.new(_seed(spinCount * 0xdeadbeef))
 				var idx := floori(rng.next() * abilitiesUsed.size())

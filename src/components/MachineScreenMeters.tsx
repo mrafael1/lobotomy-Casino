@@ -34,10 +34,12 @@ function MachineScreenMetersImpl({ width, height, f }: Props) {
   // already updated); shared with the TV objective bar so they animate together.
   const lucidityCoins = useAnimatedLucidity();
   const neurons       = useRunStore(s => s.neurons);
+  const freeSpins     = useRunStore(s => s.freeSpinsRemaining);
 
   // Spins remaining at the BASE per-spin cost — independent of the selected bet
   // so changing the multiplier doesn't yank the number around.
-  const spinsLeft = Math.max(0, Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN));
+  const baseSpinsLeft = neurons > 0 ? Math.max(1, Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN)) : 0;
+  const spinsLeft = Math.max(0, baseSpinsLeft + freeSpins);
 
   const fontSize = Math.max(5, Math.round(width * 0.07));
   const coinSize = Math.round(fontSize * 1.15);

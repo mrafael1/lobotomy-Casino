@@ -585,15 +585,18 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
 		failures.append("issue32: Potion did not reset powers / set potionSpins")
 
-	# Tea with no used abilities grants fallback free spins.
+	# Tea with no used abilities restores normal spins.
 	run_store.abilitiesUsed = []
 	run_store.freeSpinsRemaining = 0
 	run_store.maxFreeSpins = 10
+	var tea_neurons_before := int(run_store.neurons)
 	run_store.runConsumables = { "cons_tea": 1 }
 	if not run_store.use_consumable("cons_tea"):
 		failures.append("issue32: Tea use rejected with no abilities")
-	if int(run_store.freeSpinsRemaining) != 3:
-		failures.append("issue32: Tea did not grant fallback free spins")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue32: Tea created fallback free-spin credits")
+	if int(run_store.neurons) != tea_neurons_before + 3 * int(Economy.compute_neuron_decay(run_store.ownedUpgrades)):
+		failures.append("issue32: Tea did not restore normal spins")
 
 	# Red Pill: force flatline then triple.
 	run_store.runConsumables = { "item_pill": 1 }
@@ -1174,7 +1177,7 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.neurons = 10
-	run_store.startingNeurons = 10
+	run_store.startingNeurons = 105
 	run_store.freeSpinsRemaining = 0
 	# The REAL base cap (1): the user-reported bug was +3 grants clamping to +1.
 	run_store.maxFreeSpins = 1
@@ -1186,21 +1189,29 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 		failures.append("issue66: spins-left label missing")
 		return
 	var before_n := String(label.text).get_slice(":", 1).to_int()
+	var life_fill := machine._life_fill_sprite as Sprite2D
+	var before_bar_width := 0.0
+	if life_fill != null:
+		before_bar_width = life_fill.region_rect.size.x
 
-	# 3x vial still grants +3 spins, spawns the fly-in, and holds the counter.
+	# 3x vial restores +3 normal spins, spawns the fly-in, and holds the counter.
 	machine._apply_symbol_triple("vial", 0, false)
-	if int(run_store.freeSpinsRemaining) != 3:
-		failures.append("issue66: 3x vial no longer grants +3 spins")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue66: 3x vial created free-spin credits instead of restoring spins")
 	if machine.get_node_or_null("SpinGainFx") == null:
 		failures.append("issue66: vial grant did not spawn the +3 fly-in")
 	if String(label.text).get_slice(":", 1).to_int() != before_n:
 		failures.append("issue66: counter ticked before the vial fly-in landed")
+	if life_fill != null and not is_equal_approx(life_fill.region_rect.size.x, before_bar_width):
+		failures.append("issue66: spins bar filled before the vial fly-in landed")
 	await create_timer(1.3).timeout
 	if int(machine._pending_spin_gain) != 0:
 		failures.append("issue66: pending spin gain never landed")
 	var after_n := String(label.text).get_slice(":", 1).to_int()
 	if after_n != before_n + 3:
 		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
+	if life_fill != null and life_fill.region_rect.size.x <= before_bar_width:
+		failures.append("issue66: spins bar did not refill with the +3 vial grant")
 
 	# Tea with no used powers restores +3 spins through the same fly-in.
 	run_store.isSpinning = false
@@ -1216,8 +1227,8 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	machine._update_hud()
 	var tea_before := String(label.text).get_slice(":", 1).to_int()
 	machine._on_stash_pressed(0)
-	if int(run_store.freeSpinsRemaining) != 3:
-		failures.append("issue66: tea fallback no longer grants +3 spins")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue66: tea fallback created free-spin credits instead of restoring spins")
 	if machine.get_node_or_null("SpinGainFx") == null:
 		failures.append("issue66: tea restore did not spawn the +3 fly-in")
 	if String(label.text).get_slice(":", 1).to_int() != tea_before:

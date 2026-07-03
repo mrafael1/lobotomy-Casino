@@ -549,11 +549,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
         return true;
 
       case 'restoreAbilityOrSpins': {
-        // Tea: restore a used ability, or grant fallback free spins if none used.
+        // Tea: restore a used ability, or restore normal spins if none were used.
         if (state.abilitiesUsed.length === 0) {
+          const restoredNeurons = effect.fallbackSpins * computeNeuronDecay(state.ownedUpgrades);
           set({
             runConsumables: newRunConsumables,
-            freeSpinsRemaining: Math.min(state.freeSpinsRemaining + effect.fallbackSpins, state.maxFreeSpins),
+            neurons: state.neurons + restoredNeurons,
           });
           return true;
         }

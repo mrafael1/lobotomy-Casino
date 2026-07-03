@@ -1359,11 +1359,13 @@ func _refresh_tv_indicators() -> void:
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
 	var start_n := maxi(1, RunStateStore.startingNeurons)
 	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
-	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, life_ratio)
+	var spins_left := _display_spins_left(life_ratio)
+	var spins_ratio := clampf(float(spins_left) / float(maxi(1, starting_spin_counter)), 0.0, 1.0)
+	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 	if _bar_labels.has("life"):
-		_bar_labels["life"].text = "SPINS LEFT: %d" % _display_spins_left(life_ratio)
+		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
 
 ## Issue #66: free spins are real extra spins (no neuron cost), so grants (+3 vial
 ## triple, Tea's fallback) visibly move the counter. Gains still in flight are held
@@ -1371,6 +1373,11 @@ func _refresh_tv_indicators() -> void:
 func _display_spins_left(life_ratio: float) -> int:
 	return maxi(0, _display_remaining_spins(life_ratio)
 		+ int(RunStateStore.freeSpinsRemaining) - _pending_spin_gain)
+
+func _current_display_spins_left() -> int:
+	var start_n := maxi(1, RunStateStore.startingNeurons)
+	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
+	return _display_spins_left(life_ratio)
 
 func _display_remaining_spins(life_ratio: float) -> int:
 	if RunStateStore.neurons <= 0:
@@ -2291,7 +2298,7 @@ func _triple_effect_text(symbol_id: String) -> String:
 		"syringe":
 			return "LAST ITEM BACK"
 		"vial":
-			return "+%d FREE SPINS" % triple_vial_free_spins
+			return "+%d SPINS" % triple_vial_free_spins
 		"flatline":
 			return "KILLS YOU"
 	return ""
@@ -2313,7 +2320,7 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_begin_serum() # Serum (issue #53): pick the guaranteed symbol first
 		return
 	var lucidity_before := int(RunStateStore.lucidityCoins)
-	var free_spins_before := int(RunStateStore.freeSpinsRemaining)
+	var spins_before := _current_display_spins_left()
 	if not RunStateStore.use_consumable(id):
 		return
 	_refresh_reels_from_state()
@@ -2325,7 +2332,7 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_try_start_power_coin_flow()
 		# Tea (issue #53): restored spins fly from the stash to the spins counter,
 		# with a "+N" fly-in that ticks the counter on landing (issue #66).
-		var spins_gained := int(RunStateStore.freeSpinsRemaining) - free_spins_before
+		var spins_gained := _current_display_spins_left() - spins_before
 		if spins_gained > 0:
 			_play_tea_flight(slot_index)
 			_play_spin_gain_fx(spins_gained,
@@ -2878,17 +2885,16 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_triggered: bool) -> void:
 	var color := flatline_result_color
 	var label := ""
-	# Grants fly a "+N" into the spins counter (issue #66); the fx uses the spins
-	# ACTUALLY gained (grant_free_spins clamps at maxFreeSpins), so the counter
-	# never dips below its landed value.
-	var spins_before := int(RunStateStore.freeSpinsRemaining)
+	# Spin restores fly a "+N" into the spins counter (issue #66); the fx uses the
+	# visible spins-left delta, so the bar and label land together.
+	var spins_before := _current_display_spins_left()
 	match symbol:
 		"brain":
 			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
 			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
 			if free_spins_granted <= 0:
 				RunStateStore.grant_free_spins(triple_brain_free_spins)
-				_play_spin_gain_fx(int(RunStateStore.freeSpinsRemaining) - spins_before,
+				_play_spin_gain_fx(_current_display_spins_left() - spins_before,
 					_reel_window_center())
 			color = triple_brain_color
 			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
@@ -2906,8 +2912,8 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 			color = triple_syringe_color
 			label = "RECOVERED" if RunStateStore.recover_last_consumable(maxi(1, max_consumable_slots)) else "SYRINGE"
 		"vial":
-			RunStateStore.grant_free_spins(triple_vial_free_spins)
-			_play_spin_gain_fx(int(RunStateStore.freeSpinsRemaining) - spins_before,
+			RunStateStore.restore_spins(triple_vial_free_spins)
+			_play_spin_gain_fx(_current_display_spins_left() - spins_before,
 				_reel_window_center())
 			color = triple_vial_color
 			label = "+%d SPINS" % triple_vial_free_spins
