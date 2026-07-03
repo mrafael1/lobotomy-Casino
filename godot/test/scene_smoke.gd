@@ -1175,7 +1175,8 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.neurons = 10
 	run_store.startingNeurons = 10
 	run_store.freeSpinsRemaining = 0
-	run_store.maxFreeSpins = 10
+	# The REAL base cap (1): the user-reported bug was +3 grants clamping to +1.
+	run_store.maxFreeSpins = 1
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
 	machine._update_hud()
@@ -1748,13 +1749,17 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	run_store.freeSpinsRemaining = 0
 	run_store.abilitiesUsed = ["reroll"]
 
-	# grant_free_spins adds then clamps to maxFreeSpins.
+	# grant_free_spins adds in full — reaction rewards ignore maxFreeSpins, which
+	# only caps the parity-pinned in-spin jackpot grant (issue #66).
 	run_store.grant_free_spins(3)
 	if int(run_store.freeSpinsRemaining) != 3:
 		failures.append("issue35: grant_free_spins did not add spins")
-	run_store.grant_free_spins(100)
-	if int(run_store.freeSpinsRemaining) != 10:
-		failures.append("issue35: grant_free_spins did not clamp to maxFreeSpins")
+	run_store.maxFreeSpins = 1
+	run_store.grant_free_spins(3)
+	if int(run_store.freeSpinsRemaining) != 6:
+		failures.append("issue66: grant_free_spins clamped a reaction reward")
+	run_store.maxFreeSpins = 10
+	run_store.freeSpinsRemaining = 0
 
 	# restore_all_powers clears the used-abilities list.
 	run_store.restore_all_powers()
