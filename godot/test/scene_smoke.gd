@@ -61,6 +61,7 @@ func _run() -> void:
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
+	_check_score_table_51(machine, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -1024,6 +1025,47 @@ func _check_eye_reveal(machine: Node, failures: Array) -> void:
 		failures.append("eye: reveal commitment was not consumed by the spin")
 	machine._reveal_reel_next_spin = -1
 	run_store.reset_run_state()
+
+# Issue #51: TABLES overlay — no run stats, SYMBOL|LVL|PAIR|TRIPLE columns with
+# bonus-effect blurbs, downscalable icons, no symbol names.
+func _check_score_table_51(machine: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.oddsUpgrades = { "eye": 2 }
+	machine._set_sequence_lock(false)
+	machine._close_score_table()
+	machine._show_score_table()
+	var overlay: Control = machine._score_overlay
+	if overlay == null:
+		failures.append("issue51: score table did not open")
+		meta_store._apply(meta_before)
+		meta_store.save_state()
+		return
+	if machine._score_button != null and machine._score_button.text != "TABLES":
+		failures.append("issue51: score button is not renamed TABLES")
+	var texts := _overlay_label_texts(overlay)
+	if not texts.has("TABLES"):
+		failures.append("issue51: overlay title is not TABLES")
+	for stat in ["BEST", "RUNS", "CREDITS"]:
+		if texts.has(stat):
+			failures.append("issue51: '%s' stat should be removed from the table" % stat)
+	if not texts.has("LVL"):
+		failures.append("issue51: LVL column header missing")
+	for symbol_name in ["BRAIN", "EYE", "PILL", "SYRINGE", "VIAL", "FLATLINE"]:
+		if texts.has(symbol_name):
+			failures.append("issue51: symbol names should be removed")
+			break
+	if not texts.has("REVEALS A REEL"):
+		failures.append("issue51: triple bonus-effect blurbs missing")
+	if not texts.has("2"):
+		failures.append("issue51: LVL column does not show the symbol's odds level")
+	for child in overlay.get_children():
+		if child is TextureRect and (child as TextureRect).expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
+			failures.append("issue51: table icons cannot scale down (expand mode)")
+			break
+	machine._close_score_table()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
