@@ -869,6 +869,11 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	run_store.begin_odds_phase()
 	if not run_store.buy_odds_upgrade("vial"):
 		failures.append("issue50: vial (cost 2) rejected with a full budget")
+	# Re-entering the phase before DONE (dealer scene reopen) keeps staged picks.
+	run_store.begin_odds_phase()
+	if int(run_store.oddsPendingUpgrades.get("vial", 0)) != 1 \
+			or int(run_store.oddsTokensRemaining) != int(run_store.odds_budget) - 2:
+		failures.append("issue50: reopening the odds phase dropped staged picks")
 	run_store.finalize_odds_phase()
 	if int(meta_store.oddsTokensBanked) != int(run_store.odds_budget) - 2:
 		failures.append("issue50: leftover tokens were not banked on finalize (got %d)" % int(meta_store.oddsTokensBanked))

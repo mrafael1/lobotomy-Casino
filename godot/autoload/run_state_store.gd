@@ -719,6 +719,10 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 func begin_odds_phase() -> void:
 	if runPhase == "running" or oddsPhaseCompleted:
 		return
+	# Re-entering the dealer scene before DONE re-opens the same phase: keep the
+	# staged picks (and the tokens already spent on them) instead of resetting.
+	if not oddsPendingUpgrades.is_empty():
+		return
 	oddsTokensRemaining = int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget)
 	oddsPendingUpgrades = {}
 	_commit()
