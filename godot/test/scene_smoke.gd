@@ -1043,6 +1043,10 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	machine._continue_from_wealth()
 	if str(run_store.runPhase) == "running":
 		failures.append("issue62: forced continue left a running run with no possible spin")
+	elif str(run_store.lastEnding) != "flatline":
+		failures.append("issue62: forced continue ended as %s, expected flatline" % str(run_store.lastEnding))
+	if machine._overlay == null:
+		failures.append("issue62: forced continue left no ending overlay on screen")
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
@@ -1071,6 +1075,18 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	run_store.neurons = 5
 	if machine._check_ending():
 		failures.append("issue62: wealth-continued run with neurons left ended early")
+
+	# Post-continue with neurons left but the hard spin cap reached, the cap
+	# ending (checked after _check_ending) still closes the run.
+	run_store.spinCount = int(machine.run_spin_length)
+	if not machine._check_spin_cap_ending():
+		failures.append("issue62: wealth-continued run at the spin cap did not end")
+	elif str(run_store.lastEnding) != "flatline":
+		failures.append("issue62: spin-cap post-continue ended as %s, expected flatline" % str(run_store.lastEnding))
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
 
 	machine._set_stash_tray_visible(true)
 	run_store.reset_run_state()
