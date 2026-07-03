@@ -1735,7 +1735,12 @@ func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos
 		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
 
 func _try_start_power_coin_flow() -> void:
-	if _power_coin_active or _spinning_anim or _reroll_anim_active or _sequence_lock_active:
+	# _spin_launch_pending covers the lever-pull window: the spin (and its restore)
+	# is already committed, but the score isn't validated yet. Holding the coin here
+	# means it only launches after the reward sequence (score burst + lucidity coins
+	# reaching the wealth bar) releases the sequence lock (issue #54).
+	if _power_coin_active or _spinning_anim or _spin_launch_pending \
+			or _reroll_anim_active or _sequence_lock_active:
 		return
 	if RunStateStore.pendingPowerRestores.is_empty():
 		return
