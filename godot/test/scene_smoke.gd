@@ -63,6 +63,7 @@ func _run() -> void:
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
+	await _check_spin_gain_fx_66(machine, run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -1164,6 +1165,68 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+# Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
+# spins-left counter; the counter includes free spins and only ticks up when the
+# fly-in lands (value in sync with the effect).
+func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.neurons = 10
+	run_store.startingNeurons = 10
+	run_store.freeSpinsRemaining = 0
+	run_store.maxFreeSpins = 10
+	machine._pending_spin_gain = 0
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+	var label := machine._bar_labels.get("life") as Label
+	if label == null:
+		failures.append("issue66: spins-left label missing")
+		return
+	var before_n := String(label.text).get_slice(":", 1).to_int()
+
+	# 3x vial still grants +3 spins, spawns the fly-in, and holds the counter.
+	machine._apply_symbol_triple("vial", 0, false)
+	if int(run_store.freeSpinsRemaining) != 3:
+		failures.append("issue66: 3x vial no longer grants +3 spins")
+	if machine.get_node_or_null("SpinGainFx") == null:
+		failures.append("issue66: vial grant did not spawn the +3 fly-in")
+	if String(label.text).get_slice(":", 1).to_int() != before_n:
+		failures.append("issue66: counter ticked before the vial fly-in landed")
+	await create_timer(1.3).timeout
+	if int(machine._pending_spin_gain) != 0:
+		failures.append("issue66: pending spin gain never landed")
+	var after_n := String(label.text).get_slice(":", 1).to_int()
+	if after_n != before_n + 3:
+		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
+
+	# Tea with no used powers restores +3 spins through the same fly-in.
+	run_store.isSpinning = false
+	run_store.dealerIncoming = false
+	run_store.dealerPending = false
+	run_store.freeSpinsRemaining = 0
+	run_store.runConsumables = { "cons_tea": 1 }
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = []
+	machine._pending_spin_gain = 0
+	machine._power_coin_active = false
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+	var tea_before := String(label.text).get_slice(":", 1).to_int()
+	machine._on_stash_pressed(0)
+	if int(run_store.freeSpinsRemaining) != 3:
+		failures.append("issue66: tea fallback no longer grants +3 spins")
+	if machine.get_node_or_null("SpinGainFx") == null:
+		failures.append("issue66: tea restore did not spawn the +3 fly-in")
+	if String(label.text).get_slice(":", 1).to_int() != tea_before:
+		failures.append("issue66: counter ticked before the tea fly-in landed")
+	await create_timer(1.3).timeout
+	if String(label.text).get_slice(":", 1).to_int() != tea_before + 3:
+		failures.append("issue66: tea +3 did not land in the spins counter")
+
+	machine._pending_spin_gain = 0
+	machine._set_sequence_lock(false)
+	run_store.reset_run_state()
 
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
 # the popup names the picked reel's rolled symbol.

@@ -350,6 +350,9 @@ var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 var _last_reacted_reels: Array = []
 var _last_reacted_spin := -1
 var _reveal_reel_next_spin := -1
+# Spin-gain fly-ins in flight (issue #66): the spins-left counter is held back by
+# this amount until each "+N" popup lands, so the number ticks up in sync.
+var _pending_spin_gain := 0
 # Consumable visuals (issue #34).
 var _fx_layer: Control = null              # host for all consumable effect nodes
 var _tobacco_covers: Array = []            # per-reel dark cover while smoked out
@@ -1037,6 +1040,7 @@ func _sync_visuals() -> void:
 	_last_reacted_reels = []
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
+	_pending_spin_gain = 0
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1359,7 +1363,14 @@ func _refresh_tv_indicators() -> void:
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 	if _bar_labels.has("life"):
-		_bar_labels["life"].text = "SPINS LEFT: %d" % _display_remaining_spins(life_ratio)
+		_bar_labels["life"].text = "SPINS LEFT: %d" % _display_spins_left(life_ratio)
+
+## Issue #66: free spins are real extra spins (no neuron cost), so grants (+3 vial
+## triple, Tea's fallback) visibly move the counter. Gains still in flight are held
+## back so the number ticks up exactly when the "+N" popup lands.
+func _display_spins_left(life_ratio: float) -> int:
+	return maxi(0, _display_remaining_spins(life_ratio)
+		+ int(RunStateStore.freeSpinsRemaining) - _pending_spin_gain)
 
 func _display_remaining_spins(life_ratio: float) -> int:
 	if RunStateStore.neurons <= 0:
@@ -2309,9 +2320,13 @@ func _on_stash_pressed(slot_index: int) -> void:
 	_play_consumable_lucidity_feedback(lucidity_before)
 	if id == "cons_tea":
 		_try_start_power_coin_flow()
-		# Tea (issue #53): restored spins fly from the stash to the spins counter.
-		if int(RunStateStore.freeSpinsRemaining) > free_spins_before:
+		# Tea (issue #53): restored spins fly from the stash to the spins counter,
+		# with a "+N" fly-in that ticks the counter on landing (issue #66).
+		var spins_gained := int(RunStateStore.freeSpinsRemaining) - free_spins_before
+		if spins_gained > 0:
 			_play_tea_flight(slot_index)
+			_play_spin_gain_fx(spins_gained,
+				Assets.stash_slot_pos(slot_index, max_consumable_slots) - Vector2(0.0, 10.0))
 
 func _item_display_name(id: String) -> String:
 	var imap := InRunItems.map()
@@ -2460,10 +2475,51 @@ func _play_tea_flight(slot_index: int) -> void:
 	var tw := create_tween()
 	tw.tween_property(icon, "position", target, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(icon.queue_free)
+	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
+	# travels alongside this icon and lands on the same beat.
+
+## Issue #66: a "+N" popup pops in at `origin` and flies into the spins-left
+## counter. The counter's number is held back (_pending_spin_gain) while the popup
+## is in flight, then ticks up with a pulse exactly when it lands — reward visible,
+## value in sync, ~0.7s total so gameplay is not delayed.
+func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> void:
+	if amount <= 0:
+		return
+	var spins_label := _bar_labels.get("life") as Label
+	if not consumable_fx_enabled or spins_label == null or not is_inside_tree():
+		_update_hud()
+		return
+	_pending_spin_gain += amount
+	_update_hud()
+	var gain := Label.new()
+	gain.name = "SpinGainFx"
+	gain.text = "+%d" % amount
+	gain.position = origin
+	gain.z_index = 130
+	gain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gain.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		gain.add_theme_font_override("font", _font)
+	gain.add_theme_color_override("font_color", Color(0.55, 1.0, 0.6))
+	gain.add_theme_color_override("font_outline_color", Color.BLACK)
+	gain.add_theme_constant_override("outline_size", 1)
+	add_child(gain)
+	gain.pivot_offset = Vector2(6.0, 5.0)
+	gain.scale = Vector2(0.4, 0.4)
+	var tw := create_tween()
+	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(gain, "position", spins_label.position, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(_land_spin_gain.bind(amount, gain))
+
+func _land_spin_gain(amount: int, gain: Label) -> void:
+	if is_instance_valid(gain):
+		gain.queue_free()
+	_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
+	_update_hud()
+	var spins_label := _bar_labels.get("life") as Label
 	if spins_label != null:
 		spins_label.pivot_offset = spins_label.size * 0.5
 		var pulse := create_tween()
-		pulse.tween_interval(0.55)
 		pulse.tween_property(spins_label, "scale", Vector2(1.3, 1.3), 0.1)
 		pulse.tween_property(spins_label, "scale", Vector2.ONE, 0.14)
 
@@ -2819,12 +2875,18 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_triggered: bool) -> void:
 	var color := flatline_result_color
 	var label := ""
+	# Grants fly a "+N" into the spins counter (issue #66); the fx uses the spins
+	# ACTUALLY gained (grant_free_spins clamps at maxFreeSpins), so the counter
+	# never dips below its landed value.
+	var spins_before := int(RunStateStore.freeSpinsRemaining)
 	match symbol:
 		"brain":
 			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
 			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
 			if free_spins_granted <= 0:
 				RunStateStore.grant_free_spins(triple_brain_free_spins)
+				_play_spin_gain_fx(int(RunStateStore.freeSpinsRemaining) - spins_before,
+					_reel_window_center())
 			color = triple_brain_color
 			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
 		"eye":
@@ -2842,10 +2904,17 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 			label = "RECOVERED" if RunStateStore.recover_last_consumable(maxi(1, max_consumable_slots)) else "SYRINGE"
 		"vial":
 			RunStateStore.grant_free_spins(triple_vial_free_spins)
+			_play_spin_gain_fx(int(RunStateStore.freeSpinsRemaining) - spins_before,
+				_reel_window_center())
 			color = triple_vial_color
 			label = "+%d SPINS" % triple_vial_free_spins
 	_spawn_reaction_flash(color, label)
 	_update_hud()
+
+## Centre of the reel window — where triple-grant "+N" fly-ins spawn (issue #66).
+func _reel_window_center() -> Vector2:
+	return Vector2(SRC_W * 0.5 - 6.0,
+		float(REEL_WINDOW["top"]) + float(REEL_WINDOW["height"]) * 0.5)
 
 # ── 3x eye reveal (player-picked reel) ───────────────────────────────────────────
 # Reuses the shared reel-selection UI. Tapping a reel reveals its NEXT-spin symbol
