@@ -51,6 +51,7 @@ const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
 const LEVER_RETURN_TIME := 0.07
+const LEVER_REEL_START_DELAY := 0.22
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
@@ -307,6 +308,7 @@ var _tex_cache := {}
 var _sequence_lock_active := false
 var _post_spin_sequence_active := false
 var _sfx_players: Dictionary = {}
+var _spin_launch_pending := false
 
 # Reveal animation state
 var _spinning_anim := false
@@ -997,6 +999,7 @@ func _begin_fresh_run() -> bool:
 
 func _sync_visuals() -> void:
 	_stop_sfx(&"reel_spin")
+	_spin_launch_pending = false
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
@@ -1035,7 +1038,7 @@ func _to_dealer() -> void:
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
-	if _spinning_anim or _reroll_anim_active or _sequence_lock_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active:
 		return
 	if _dealer_offer_popup != null:
 		return
@@ -1065,11 +1068,17 @@ func _do_spin(compulsive := false) -> void:
 		_reel_stop_times[_reveal_reel_next_spin] = 0.2
 	_reveal_reel_next_spin = -1
 	_start_lever_pull()
+	_spin_launch_pending = true
+	_spin_button.disabled = true
+	_refresh_controls()
+	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
+	if not is_inside_tree() or not _spin_launch_pending:
+		return
+	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
 	_spinning_anim = true
 	_anim_elapsed = 0.0
 	_blur_accum = 0.0
-	_spin_button.disabled = true
 
 func _process(delta: float) -> void:
 	if _lever_anim_active:
@@ -1769,7 +1778,7 @@ func _build_multiplier_buttons() -> void:
 		_multiplier_buttons.append(b)
 
 func _select_bet_multiplier(m: int) -> void:
-	if _sequence_lock_active:
+	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if not RunStateStore._can_act():
 		return
@@ -1794,7 +1803,7 @@ func _is_multiplier_locked(m: int) -> bool:
 	return m > _highest_affordable_multiplier()
 
 func _refresh_multiplier_controls() -> void:
-	var can_act := RunStateStore._can_act() and not _spinning_anim and not _reroll_anim_active \
+	var can_act := RunStateStore._can_act() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and _dealer_offer_popup == null and not _sequence_lock_active
 	for i in _multiplier_buttons.size():
 		var m := i + 1
@@ -1893,7 +1902,7 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	if _dealer_offer_popup != null:
 		_begin_dealer_drag(node, String(slots[slot_index]), "stash")
 		return
-	if _sequence_lock_active or not RunStateStore._can_act() or _reroll_anim_active:
+	if _sequence_lock_active or _spin_launch_pending or not RunStateStore._can_act() or _reroll_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -1917,12 +1926,12 @@ func _stash_slots() -> Array:
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
-	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim and not _reroll_anim_active \
+	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0 \
 		and _dealer_offer_popup == null and not _sequence_lock_active
 	if _spin_button != null:
 		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
-			or _spinning_anim or _reroll_anim_active or _sequence_lock_active
+			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -1942,7 +1951,7 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := (RunStateStore._can_act() and not _reroll_anim_active and not _sequence_lock_active) \
+	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active and not _sequence_lock_active) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -1971,7 +1980,7 @@ func _icon_for(id: String) -> Texture2D:
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
-	if _sequence_lock_active:
+	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if _targeting_layer != null:
 		_clear_targeting()
@@ -2024,7 +2033,7 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
-	if _sequence_lock_active:
+	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if power_id == "reroll":
 		if RunStateStore.reroll_reel(reel_index):
@@ -2044,22 +2053,33 @@ func _start_reroll_animation(reel_index: int) -> void:
 	_reroll_reel_index = reel_index
 	_reroll_elapsed = 0.0
 	_reroll_accum = 0.0
-	_set_reel_visible(reel_index, true)
+	_spin_frame = 0
+	_play_sfx(&"reel_spin")
+	for i in 3:
+		var active := i == reel_index
+		_set_reel_visible(i, not active)
+		_set_reel_cover(i, not active)
+		_set_spin_reel_frame(i, _spin_frame)
+		_set_spin_reel_visible(i, active)
 	if _spin_button != null:
 		_spin_button.disabled = true
-	_set_reel_symbol(reel_index, VISIBLE_SYMBOLS[randi() % VISIBLE_SYMBOLS.size()])
 
 func _step_reroll(delta: float) -> void:
 	_reroll_elapsed += delta
 	_reroll_accum += delta
 	if _reroll_accum >= SPIN_FRAME_TIME:
 		_reroll_accum = 0.0
-		_set_reel_symbol(_reroll_reel_index, VISIBLE_SYMBOLS[randi() % VISIBLE_SYMBOLS.size()])
+		_spin_frame = (_spin_frame + 1) % SPIN_FRAME_COUNT
+		_set_spin_reel_frame(_reroll_reel_index, _spin_frame)
 	if _reroll_elapsed >= REROLL_REEL_DURATION:
+		_stop_sfx(&"reel_spin")
 		_reroll_anim_active = false
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
 			_set_reel_symbol(_reroll_reel_index, String(lr["reels"][_reroll_reel_index]))
+		_set_spin_reel_visible(_reroll_reel_index, false)
+		_set_reel_visible(_reroll_reel_index, true)
+		_set_reel_cover(_reroll_reel_index, true)
 		var rerolled := _reroll_reel_index
 		_reroll_reel_index = -1
 		if _spin_button != null:
@@ -2072,7 +2092,7 @@ func _step_reroll(delta: float) -> void:
 		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
-	if _sequence_lock_active:
+	if _sequence_lock_active or _spin_launch_pending:
 		return
 	RunStateStore.move_reel(reel_index, direction)
 	_clear_targeting()
@@ -2113,7 +2133,7 @@ func _score_label(parent: Control, text: String, pos: Vector2, size: int, color:
 	return l
 
 func _show_score_table() -> void:
-	if _sequence_lock_active:
+	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if _dealer_offer_popup != null:
 		return
