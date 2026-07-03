@@ -60,6 +60,7 @@ func _run() -> void:
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
+	_check_wealth_zero_spins_62(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	machine.queue_free()
 
@@ -964,6 +965,11 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 			failures.append("wealth: goal bar reads '%s', expected x/2000" % goal_text)
 
 	run_store.runPhase = "running"
+	# The store must mirror a continuable run (issue #62): CONTINUE is disabled
+	# when no next spin is possible, and the guard reads the store, not `run`.
+	run_store.neurons = 5
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = 10
 	machine._show_ending("wealth", run)
 	var wallet_before := int(meta_store.lucidityWallet)
 	var continue_button: Button = null
@@ -979,6 +985,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 				failures.append("wealth: bank/lab button still on the wealth screen")
 	if continue_button == null:
 		failures.append("wealth: CONTINUE button missing from the wealth screen")
+	elif continue_button.disabled:
+		failures.append("wealth: CONTINUE disabled although another spin is possible")
 	if exit_button == null:
 		failures.append("wealth: EXIT CASINO button missing from the wealth screen")
 	if int(meta_store.lucidityWallet) != wallet_before:
@@ -992,6 +1000,80 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		machine._overlay.queue_free()
 		machine._overlay = null
 	machine._set_stash_tray_visible(true)
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+# Issue #62: reaching the wealth goal with no spins left must still open the
+# wealth flow with a usable exit, and a wealth-continued run that goes dry must
+# flatline instead of softlocking (check_ending short-circuits on the score).
+func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+
+	# Goal reached on the very spin that exhausts neurons AND hits the spin cap:
+	# the wealth ending wins over the no-spins dead-end.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 2000
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = int(machine.run_spin_length)
+	if not machine._check_ending():
+		failures.append("issue62: wealth goal with 0 spins left did not end the run")
+	elif str(run_store.lastEnding) != "wealth":
+		failures.append("issue62: 0-spin goal ended as %s, expected wealth" % str(run_store.lastEnding))
+	var cont: Button = null
+	var exit_button: Button = null
+	if machine._overlay != null:
+		for child in machine._overlay.get_children():
+			if child is Button:
+				var b := child as Button
+				if b.text == "CONTINUE":
+					cont = b
+				elif b.text == "EXIT CASINO":
+					exit_button = b
+	if exit_button == null or exit_button.disabled:
+		failures.append("issue62: EXIT CASINO missing/disabled on the 0-spin wealth screen")
+	if cont == null:
+		failures.append("issue62: CONTINUE missing from the 0-spin wealth screen")
+	elif not cont.disabled:
+		failures.append("issue62: CONTINUE should be disabled when no spin can follow")
+	# Even a forced continue must not strand a dead machine: it falls through to
+	# the flatline flow (which always offers an action).
+	machine._continue_from_wealth()
+	if str(run_store.runPhase) == "running":
+		failures.append("issue62: forced continue left a running run with no possible spin")
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	# Post-continue, running out of neurons must flatline even though the score
+	# is past the goal (the wealth ending is suppressed by wealthContinued).
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 2500
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.wealthContinued = true
+	if not machine._check_ending():
+		failures.append("issue62: wealth-continued dry run did not end")
+	elif str(run_store.lastEnding) != "flatline":
+		failures.append("issue62: wealth-continued dry run ended as %s, expected flatline" % str(run_store.lastEnding))
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	# With neurons remaining, a wealth-continued run keeps playing (no ending).
+	run_store.runPhase = "running"
+	run_store.lastEnding = null
+	run_store.neurons = 5
+	if machine._check_ending():
+		failures.append("issue62: wealth-continued run with neurons left ended early")
+
+	machine._set_stash_tray_visible(true)
+	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
