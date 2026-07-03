@@ -1,11 +1,11 @@
 extends Node
 
-## Autoload singleton "MetaStateStore" — port of src/state/metaState.ts plus the
+## Autoload singleton "MetaStateStore" — port of the Godot meta state plus the
 ## persistence layer (Step 4). Persists to user:// as JSON using the same logical
 ## shape as the MMKV `lobotomy-meta` save.
 ##
-## schemaVersion: v3 adds campaign/mind fields on top of the v2 Expo meta shape.
-## A migration seam mirrors src/persistence/migrations.ts but ships empty — a
+## schemaVersion: v3 adds campaign/mind fields on top of the v2 meta shape.
+## A migration seam is kept for future save changes but ships empty — a
 ## v1->v2 migration is only added if an actual v1 payload is ever found in the wild.
 
 const SAVE_PATH := "user://lobotomy-meta.json"
@@ -99,7 +99,7 @@ func bank_run(run: Dictionary, ending: String) -> void:
 		wealthEndingReached = true
 		campaignActive = false
 		campaignFailed = false
-	pendingConsumables = {} # cleared on bank, matching the Expo store
+	pendingConsumables = {} # cleared on bank, cleared on bank
 	meta_changed.emit()
 	save_state()
 
@@ -283,7 +283,7 @@ func load_state() -> void:
 		return
 	_apply(_migrate(parsed))
 
-# Migration seam mirroring src/persistence/migrations.ts. Ships empty: v2 is the
+# Migration seam mirroring the save migration seam. Ships empty: v2 is the
 # only shape known to have shipped, so no speculative v1->v2 migration is written.
 # If a real v1 payload is ever found, register it in _MIGRATIONS keyed by version.
 const _MIGRATIONS := {}

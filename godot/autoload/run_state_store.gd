@@ -1,6 +1,6 @@
 extends Node
 
-## Autoload singleton "RunStateStore" — port of src/state/runState.ts. Exposes the
+## Autoload singleton "RunStateStore" — run state singleton. Exposes the
 ## same action API; all scoring / ability / dealer / lucidity decisions delegate to
 ## the parity-verified pure modules (Evaluate, Abilities, Dealer, Lucidity, Economy).
 ## Scenes call these methods and never mutate gameplay fields directly.

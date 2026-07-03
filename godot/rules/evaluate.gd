@@ -1,7 +1,7 @@
 class_name Evaluate
 extends RefCounted
 
-## Port of src/game/evaluate.ts — scoreReels() and evaluate(), the single source of
+## Evaluation rules — scoreReels() and evaluate(), the single source of
 ## truth for a spin. Mirrors JS Math.round (half toward +∞) with floor(x + 0.5);
 ## all scores here are non-negative so this is exact.
 

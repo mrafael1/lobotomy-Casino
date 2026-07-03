@@ -1,7 +1,7 @@
 class_name Upgrades
 extends RefCounted
 
-## Port of src/content/upgrades.ts. Ids preserved verbatim (perm_*, corr_*, pos_*).
+## Upgrade definitions. Ids preserved verbatim (perm_*, corr_*, pos_*).
 ## Each effect is a Dictionary with a "type" discriminator mirroring UpgradeEffect.
 
 const ABILITY_UPGRADES := [

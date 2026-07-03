@@ -1,7 +1,7 @@
 class_name Endings
 extends RefCounted
 
-## Port of src/game/endings.ts. bank_run_to_meta takes an explicit `now` (ms) so the
+## Ending and banking rules. bank_run_to_meta takes an explicit `now` (ms) so the
 ## ending-timestamp fields are deterministic for parity (the store injects the real
 ## clock). Returns null from check_ending when no ending applies.
 

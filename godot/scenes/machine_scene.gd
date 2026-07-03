@@ -4,18 +4,16 @@ extends Node2D
 ## start run -> spin -> reel/result reveal -> HUD update -> ending -> bank/restart,
 ## driven entirely by RunStateStore (which delegates rules to the parity-verified
 ## core). Built programmatically so every position comes straight from the
-## documented source-pixel constants in src/content/machineAssets.ts (alignment is
-## correct by construction, mirroring the Expo renderer).
+## documented source-pixel constants below.
 ##
 ## Coordinate space is the 160x320 virtual canvas (project stretch scales it to the
-## device). Art is loaded by absolute path from ../assets so the Expo project stays
-## the single source of art (no duplication).
+## device). Art is loaded from res://assets so exported builds ship every resource.
 
 const SRC_W := 160.0
 const SRC_H := 320.0
 const ASSET_SCALE := 8.0 # machine PNGs are 8x the 160x320 source (1280x2560)
 
-# Geometry mirrored from src/content/machineAssets.ts (source px).
+# Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
 const REEL_WINDOW := { "top": 170.0, "height": 30.0 }
 # Per-reel hole rects (source px) — used to mask the spin blur per reel on stop.
@@ -34,7 +32,7 @@ const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 
 # Centre of the reel window — consumable-use hint popups originate here.
 const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
-# Landed reel strip (mirrors Expo's ReelCellV3): a smaller centre symbol with dim
+# Landed reel strip (uses the reel-strip presentation): a smaller centre symbol with dim
 # 0.9x neighbours peeking above/below, clipped by the cabinet hole.
 const STRIP_CENTER_H := 16.0
 const STRIP_ADJ_H := 12.0
@@ -111,7 +109,7 @@ const DEBUG_GRANT := false
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 
-# Score-burst (port of src/components/ScoreBurst.tsx). Visual only.
+# Score-burst (score-burst presentation). Visual only.
 const BURST_TIME := 1.05
 const BURST_RISE := 28.0
 const MULT_COLORS := {
@@ -403,10 +401,7 @@ func _apply_balance_exports() -> void:
 	RunStateStore.max_consumable_slots = maxi(1, max_consumable_slots)
 	RunStateStore.coins_per_power_restore = maxi(1, coins_per_power_restore)
 
-# ── asset loading (absolute path into ../assets) ──────────────────────────────────
-
-static func _assets_dir() -> String:
-	return ProjectSettings.globalize_path("res://").path_join("../assets/images")
+# Asset loading.
 
 func _load_texture(rel: String, mipmaps := false) -> Texture2D:
 	return Assets.texture(rel, mipmaps)
@@ -1460,7 +1455,7 @@ func _nudge(strength: float) -> void:
 	_nudge_tween.tween_property(self, "position:x", -strength * 0.6, 0.04)
 	_nudge_tween.tween_property(self, "position:x", 0.0, 0.05)
 
-# ── score bursts (visual only — mirrors src/components/ScoreBurst.tsx) ──────────────
+# ── score bursts (visual only — score-burst presentation) ──────────────
 
 func _build_burst_layer() -> void:
 	_burst_layer = _authored_control("BurstLayer")

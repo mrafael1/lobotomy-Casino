@@ -2,7 +2,7 @@
 extends Node
 
 ## Autoload "Assets" — process-wide cache for textures and fonts loaded by absolute
-## path from ../assets (the Expo project stays the single source of art). Caching
+## res://assets. Caching
 ## across scene changes matters on Android: the 8x machine cabinet (1280x2560) is a
 ## ~13 MB texture, and reloading it every shop<->machine transition would hitch and
 ## churn VRAM. Loaded once here, reused everywhere.
@@ -34,12 +34,6 @@ func _ready() -> void:
 	if OS.has_feature("android"):
 		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
 
-static func _images_dir() -> String:
-	return ProjectSettings.globalize_path("res://").path_join("../assets/images")
-
-static func _assets_dir() -> String:
-	return ProjectSettings.globalize_path("res://").path_join("../assets")
-
 static func _res_image(rel: String) -> String:
 	return "res://assets/images/" + rel
 
@@ -57,16 +51,9 @@ func texture(rel: String, mipmaps := false) -> Texture2D:
 		if loaded is Texture2D:
 			_tex[key] = loaded
 			return loaded
-	var img := Image.new()
-	if img.load(_images_dir().path_join(rel)) != OK:
-		push_warning("Assets: missing texture " + rel)
-		_tex[key] = null
-		return null
-	if mipmaps:
-		img.generate_mipmaps()
-	var t := ImageTexture.create_from_image(img)
-	_tex[key] = t
-	return t
+	push_warning("Assets: missing texture " + rel)
+	_tex[key] = null
+	return null
 
 # Dynamic font under assets/<rel>. Cached. Returns null if missing.
 func font(rel := "font/DTM-Sans.otf") -> FontFile:
@@ -78,13 +65,9 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 		if loaded is FontFile:
 			_fonts[rel] = loaded
 			return loaded
-	var f := FontFile.new()
-	if f.load_dynamic_font(_assets_dir().path_join(rel)) != OK:
-		push_warning("Assets: missing font " + rel)
-		_fonts[rel] = null
-		return null
-	_fonts[rel] = f
-	return f
+	push_warning("Assets: missing font " + rel)
+	_fonts[rel] = null
+	return null
 
 # ── Skinned buttons ─────────────────────────────────────────────────────────────────
 # Button art lives in horizontal sprite sheets under ui/. Frame order by count:

@@ -1,13 +1,13 @@
 class_name Consumables
 extends RefCounted
 
-## Port of src/content/consumables.ts (pre-run shop consumables).
+## Port of this file (pre-run shop consumables).
 
 const MAX_CONSUMABLE_SLOTS := 2
 
 ## Potion (resetPowersRandomEffect) rolls ONE of these per boosted spin, equal-weight
 ## with a deterministic per-spin seed (issue #32). Mirrors POTION_RANDOM_POOL in
-## src/content/consumables.ts.
+## this file.
 const POTION_RANDOM_POOL := [
 	{ "kind": "multNextSpin", "multiplier": 0.75 },
 	{ "kind": "multNextSpin", "multiplier": 1.25 },

@@ -1,7 +1,7 @@
 class_name Dealer
 extends RefCounted
 
-## Port of src/game/dealer.ts — deterministic, seed-driven dealer logic. The
+## Deterministic dealer logic — deterministic, seed-driven dealer logic. The
 ## Fisher-Yates shuffle and seeds match the TS exactly (see dealer_vectors.json).
 
 const THRESHOLD_HIGH := 0.65

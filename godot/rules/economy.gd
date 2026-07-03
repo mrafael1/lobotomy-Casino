@@ -1,7 +1,7 @@
 class_name Economy
 extends RefCounted
 
-## Port of src/game/economy.ts — derives run parameters from owned upgrades.
+## Economy rules — derives run parameters from owned upgrades.
 
 static func _map() -> Dictionary:
 	return Upgrades.upgrade_map()

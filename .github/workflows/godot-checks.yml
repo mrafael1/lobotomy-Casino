@@ -1,0 +1,28 @@
+name: Godot Checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  godot:
+    name: Godot Headless
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.0
+          use-dotnet: false
+
+      - name: Validate project import
+        run: godot --headless --editor --quit --path godot
+
+      - name: Run parity checks
+        run: godot --headless --path godot -s res://test/run_parity_headless.gd
+
+      - name: Run scene smoke checks
+        run: godot --headless --path godot -s res://test/scene_smoke.gd
