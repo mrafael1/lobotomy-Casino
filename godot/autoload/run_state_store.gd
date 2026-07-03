@@ -30,8 +30,8 @@ const M32 := 0xFFFFFFFF
 @export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3 }
 @export var odds_default_token_cost: int = 2
 @export var probability_increase_per_upgrade: int = 1
-## Permanent odds upgrades cap out at this many levels per symbol.
-@export var odds_max_level: int = 5
+## Permanent odds upgrades cap out at this many levels per symbol (issue #50: 8 bars).
+@export var odds_max_level: int = 8
 
 # RunState fields (mirror types.ts RunState)
 var neurons := 0
@@ -425,7 +425,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
 	# Odds upgrades are permanent: every run derives its overrides from the
-	# persisted levels. Unspent phase tokens are void; the screen unlocks again
+	# persisted levels. Unspent phase tokens were banked into meta on finalize
+	# (issue #50) and carry into the next odds menu; the screen unlocks again
 	# for the phase after this run.
 	oddsTokensRemaining = 0
 	oddsPendingUpgrades = {}
@@ -712,12 +713,13 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 # MetaStateStore.oddsUpgrades on finalize. Base weights stay parity-locked
 # (see Evaluate._build_weights).
 
-## Opens the odds phase between runs: grants the token budget and clears staged
+## Opens the odds phase between runs: grants the fresh token budget on top of any
+## tokens banked unspent from previous menus (issue #50), and clears staged
 ## purchases. No-op while a run is live or once this phase was already finalized.
 func begin_odds_phase() -> void:
 	if runPhase == "running" or oddsPhaseCompleted:
 		return
-	oddsTokensRemaining = maxi(0, odds_budget)
+	oddsTokensRemaining = int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget)
 	oddsPendingUpgrades = {}
 	_commit()
 
@@ -761,12 +763,15 @@ func undo_odds_upgrade(symbol: String) -> bool:
 	_commit()
 	return true
 
-## Commits the staged purchases permanently and locks the screen until the next run.
+## Commits the staged purchases permanently and locks the screen until the next
+## run. Unspent tokens are banked into meta so the next odds menu starts with
+## them on top of its fresh budget (issue #50).
 func finalize_odds_phase() -> void:
 	if oddsPhaseCompleted:
 		return
 	if not oddsPendingUpgrades.is_empty():
 		MetaStateStore.add_odds_upgrades(oddsPendingUpgrades, odds_max_level)
+	MetaStateStore.set_odds_tokens_banked(oddsTokensRemaining)
 	oddsPendingUpgrades = {}
 	oddsTokensRemaining = 0
 	oddsPhaseCompleted = true
