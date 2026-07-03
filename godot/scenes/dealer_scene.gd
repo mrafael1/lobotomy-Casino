@@ -1,11 +1,11 @@
 @tool
 extends Control
 
-## In-run dealer scene (M3 polish) — port of src/screens/DealerShopScreen.tsx (run
+## In-run dealer scene (M3 polish) — port of the previous dealer screen (run
 ## mode). The dealer's offered items rest on the counter; you DRAG an item onto the
 ## dealer to TAKE it, and DRAG a stash item onto the dealer to DISCARD it (freeing a
 ## slot). Selecting an item shows its one-word hints on the TV: green positiveHint,
-## red negativeHint (from src/content/itemHints.ts — display only, no mechanics).
+## red negativeHint (display only — display only, no mechanics).
 ##
 ## Reached from the machine on Visit (RunStateStore.dealerPending); take/leave
 ## returns to the machine. All state goes through RunStateStore (accept/decline/
@@ -14,7 +14,7 @@ extends Control
 ## PRE-RUN MODE (issue #21): the same scene also serves as the start-of-run
 ## consumable shop, reached from the start menu BEFORE a run exists. It's detected
 ## from RunStateStore.runPhase (no active run => pre-run), so the presentation is
-## shared and only the item pool / transaction differs: offers are the Expo pre-run
+## shared and only the item pool / transaction differs: offers are the pre-run
 ## consumables (Consumables.LIST), dragging one onto the dealer BUYS it with wallet
 ## Lucidity (MetaStateStore), and LEAVE becomes START RUN — it begins the run with
 ## the purchased consumables and hands off to the machine.
@@ -24,7 +24,7 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const UPGRADES_SCENE := "res://scenes/upgrades_scene.tscn"
 const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 
-# Counter geometry: Expo coords (1280x2560) / 8 -> the 160x320 canvas.
+# Counter geometry: authored coords (1280x2560) / 8 -> the 160x320 canvas.
 const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
 # Consumables stand on the white round dots of the counter (measured centre y ~= 206
 # source px). Icons are small (issue #24 follow-up: they read as objects on the counter,
@@ -38,7 +38,7 @@ const TV := { "left": 2.0, "top": 126.0, "width": 49.0, "height": 26.0 }
 const DEALER_DROP_Y := 200.0 # release above this y = dropped "on the dealer"
 const DRAG_SLOP := 4.0
 
-# One-word TV hints (display only) — ports src/content/itemHints.ts.
+# One-word TV hints (display only) — display-only hints.
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 
@@ -394,7 +394,7 @@ func _make_offer_price_tag(id: String, pos: Vector2, parent: Control, width := 3
 	_configure_offer_price_tag(row, id, pos, width)
 	parent.add_child(row)
 
-# Pre-run: the Expo pre-run consumables (a fixed shelf). In-run: the dealer's
+# Pre-run: the pre-run consumables (a fixed shelf). In-run: the dealer's
 # vector-pinned offer for this visit.
 func _offer_ids() -> Array:
 	if _pre_run:

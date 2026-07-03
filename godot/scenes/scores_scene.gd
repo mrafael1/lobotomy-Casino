@@ -17,13 +17,6 @@ func _ready() -> void:
 	_back_button = get_node_or_null("BackButton")
 	_build()
 
-func _load_font(rel: String) -> FontFile:
-	var path := ProjectSettings.globalize_path("res://").path_join("../assets").path_join(rel)
-	var f := FontFile.new()
-	if f.load_dynamic_font(path) != OK:
-		return null
-	return f
-
 func _label(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()
 	l.text = text

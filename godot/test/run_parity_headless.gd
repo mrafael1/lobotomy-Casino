@@ -24,10 +24,10 @@ func _init() -> void:
 	failures.append_array(SaveChecks.run_all())
 
 	if failures.is_empty():
-		print("✓ Parity + sacred-rule checks PASSED (rules/content port matches the Expo golden vectors).")
+		print("✓ Parity + sacred-rule checks PASSED (rules/content matches the golden vectors).")
 		quit(0)
 	else:
 		for f in failures:
 			printerr("✗ ", f)
-		printerr("\nFAILED: %d check(s) diverged from the Expo reference." % failures.size())
+		printerr("\nFAILED: %d check(s) diverged from the golden vectors." % failures.size())
 		quit(1)

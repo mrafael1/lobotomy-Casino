@@ -1,7 +1,7 @@
 class_name InRunItems
 extends RefCounted
 
-## Port of src/content/inRunItems.ts (dealer-offered items). The effect deltas are
+## Dealer-offered items (dealer-offered items). The effect deltas are
 ## pinned in dealer_vectors.json -> inRunItems.
 
 const LIST := [

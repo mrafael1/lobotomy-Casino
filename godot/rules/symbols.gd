@@ -1,7 +1,7 @@
 class_name Symbols
 extends RefCounted
 
-## Port of src/content/symbols.ts. Symbol ids are preserved verbatim as Strings
+## Symbol definitions. Symbol ids are preserved verbatim as Strings
 ## so they match the parity JSON vectors exactly.
 
 const IDS := ["brain", "eye", "pill", "syringe", "vial", "flatline", "book"]

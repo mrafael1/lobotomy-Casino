@@ -1,7 +1,7 @@
 class_name EconomyConst
 extends RefCounted
 
-## Port of the ECONOMY constants in src/content/economy.ts. No magic numbers
+## Economy constants. No magic numbers
 ## elsewhere — only here.
 
 const STARTING_NEURONS := 100

@@ -1,7 +1,7 @@
 class_name LobRNG
 extends RefCounted
 
-## Mulberry32 — bit-exact port of src/game/rng.ts (createRNG / weightedPick).
+## Mulberry32 — bit-exact RNG plus weightedPick.
 ##
 ## GDScript int is 64-bit signed with no native uint32 or Math.imul, so every step
 ## is masked to 32 bits and imul is reimplemented. The product inside _imul

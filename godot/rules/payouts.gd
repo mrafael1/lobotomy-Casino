@@ -1,7 +1,7 @@
 class_name Payouts
 extends RefCounted
 
-## Port of src/content/payouts.ts.
+## Payout constants.
 
 const JACKPOT_SCORE := 200
 const JACKPOT_FREE_SPIN_GRANT := 1

@@ -677,7 +677,7 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 # text bubble, outlined feedback messages above the dealer, no 1-Lucidity
 # placeholder slot.
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
-	# Exported builds (APK) only ship res:// — Assets.texture's ../assets filesystem
+	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
 	for rel in ["dealer_scene_LAB_BUTTON.png", "dealer_scene_machine_BUTTON.png"]:
 		if not ResourceLoader.exists("res://assets/images/" + String(rel)):

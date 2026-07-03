@@ -1,7 +1,7 @@
 class_name Abilities
 extends RefCounted
 
-## Port of src/game/abilities.ts — pure reel transforms returning an AbilityOutcome
+## Pure reel transforms — pure reel transforms returning an AbilityOutcome
 ## Dictionary { reels, scoreDelta, coinsDelta, isJackpot, winType, freeSpinsGranted }.
 
 # SHIFT steps along the canonical base-symbol cycle.
