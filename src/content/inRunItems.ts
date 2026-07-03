@@ -2,8 +2,8 @@
 // These are never bought in the pre-run shop — they appear during gameplay.
 
 export type InRunEffect =
-  | { type: 'skipDecay';     spins: number; blockBet: 'x3' } // Energy Drink: neurons preserved, x3 bet blocked for the free spins
-  | { type: 'cocktailBoost'; spins: number; compulsiveSpins: number }
+  | { type: 'skipDecay';     spins: number; blockBet: 'x3'; compulsiveSpins: number } // Energy Drink: neurons preserved, x3 bet blocked, then a forced spin
+  | { type: 'cocktailBoost'; spins: number }
   | { type: 'addLucidity';         amount: number }
   | { type: 'forceFlatlinesThenTriple'; flatSpins: number; guaranteedTripleNext: boolean }; // Red Pill
 
@@ -19,15 +19,15 @@ export const IN_RUN_ITEMS: ReadonlyArray<InRunItem> = [
   {
     id: 'item_energy_drink',
     name: 'Energy Drink',
-    description: 'Next 2 spins cost 0 neurons. The machine jitters too hard for x3 bets.',
+    description: 'Next 2 spins cost 0 neurons. The machine jitters too hard for x3 bets, then steals 1 x1 spin.',
     corrupt: true,
-    effect: { type: 'skipDecay', spins: 2, blockBet: 'x3' },
+    effect: { type: 'skipDecay', spins: 2, blockBet: 'x3', compulsiveSpins: 1 },
   },
   {
     id: 'item_cocktail',
     name: 'Cocktail',
-    description: 'Next 2 spins gain the rarity sum of all visible symbols, even on losses. Then the machine steals 1 x1 spin.',
-    effect: { type: 'cocktailBoost', spins: 2, compulsiveSpins: 1 },
+    description: 'Next 2 spins gain the rarity sum of all visible symbols, even on losses.',
+    effect: { type: 'cocktailBoost', spins: 2 },
   },
   {
     id: 'item_water',

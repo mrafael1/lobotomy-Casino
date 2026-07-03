@@ -53,13 +53,13 @@ type InteractionMode =
 // Wealth) overlay, so the player actually sees the last result.
 const FLATLINE_REVEAL_DELAY_MS = 1000;
 
-// Cocktail "compulsion": after the 3 boosted spins, the machine spins itself a
-// couple more times. The pause before each auto-spin has to outlast the coin
+// Compulsion: after Energy Drink's no-decay rush, the machine spins itself once.
+// The pause before the auto-spin has to outlast the coin
 // reward flight (CoinFlow's ~720ms burst+collect) so the auto-spin begins AFTER
 // the spin's result has visibly come in — not while the coins are still flying.
 // That matches the natural manual rhythm: you see the result land, then it spins
-// again just as you'd reach for the lever. A shorter gap read as the compulsion
-// yanking control "too soon", before the 3rd result had resolved.
+// again just as you'd reach for the lever. A shorter gap reads as the compulsion
+// yanking control too soon, before the result has resolved.
 const COMPULSIVE_SPIN_DELAY_MS = 850;
 
 // Machine dealer-arrival portrait. The dealer-scene sheet (dealer_portrait.png,

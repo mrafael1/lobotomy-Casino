@@ -90,7 +90,7 @@ interface Props {
   // reel (reroll/shift/copy). `null`/omitted means a normal spin — ScoreBurst then
   // derives the reel from the result (pair on the first two reels → 2nd reel).
   scoreSourceReelIndex?: 0 | 1 | 2 | null;
-  // Compulsion (Cocktail): while a forced spin runs the machine bets for itself —
+  // Compulsion: while a forced spin runs the machine bets for itself —
   // show this multiplier (1 or 2 only, never 3) on the readout instead of the
   // player's selection. `null` = normal (use the player's bet).
   forcedMultiplier?: 1 | 2 | null;

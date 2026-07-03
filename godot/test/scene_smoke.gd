@@ -610,6 +610,42 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if r2 == null or String(r2["reels"][0]) != String(r2["reels"][1]) or String(r2["reels"][0]) == "flatline":
 		failures.append("issue32: Red Pill second spin was not a non-flatline triple")
 
+	# Cocktail boost no longer queues compulsion; Energy Drink owns the forced spin.
+	run_store.runConsumables = { "item_cocktail": 1 }
+	run_store.use_consumable("item_cocktail")
+	if int(run_store.cocktailBoostSpins) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 0:
+		failures.append("consumables: Cocktail still queued compulsion")
+	run_store.cocktailBoostSpins = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.compulsiveSpinSkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.decaySkips = 0
+	run_store.forcedRandomBetSpins = 0
+	run_store.runConsumables = { "item_energy_drink": 1 }
+	run_store.use_consumable("item_energy_drink")
+	if int(run_store.decaySkips) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 1:
+		failures.append("consumables: Energy Drink did not queue compulsion")
+	run_store.neurons = 100
+	run_store.spin()
+	run_store.set_spinning(false)
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.compulsiveSpinSkips) != 1 or int(run_store.pendingCompulsiveSpinSkips) != 0:
+		failures.append("consumables: Energy Drink compulsion did not unlock after no-decay spins")
+
+	# White Powder copy keeps other consumables and neurons intact after the copy.
+	run_store.runConsumables = { "cons_white_powder": 0, "item_water": 1 }
+	run_store.neurons = 80
+	run_store.lastResult = {
+		"reels": ["brain", "eye", "vial"], "scoreEarned": 0, "coinsEarned": 0,
+		"neuronsAfter": 80, "freeSpinsAfter": 0, "freeSpinsGranted": 0,
+		"isJackpot": false, "winType": "loss", "isFreeSpin": false,
+		"scoreMultiplier": 1.0,
+	}
+	run_store.copy_reel(0, 2)
+	if int(run_store.neurons) != 80 or int(run_store.runConsumables.get("item_water", 0)) != 1:
+		failures.append("consumables: White Powder copy still removed a penalty")
+
 	run_store.reset_run_state()
 
 # Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
