@@ -87,6 +87,13 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const SETTINGS_ASSET := "ui/settings.png"
+const SFX_FILES := {
+	&"lever": "lever.mp3",
+	&"reel_spin": "reel-spinning.mp3",
+	&"pair_win": "pair-bonus.mp3",
+	&"triple_win": "triple-bonus.mp3",
+	&"jackpot_win": "jackpot-bonus.mp3",
+}
 
 # Debug-grant Shift/Memory + test consumables when a run is started standalone
 # (machine opened directly, not via the shop). The shop is the real source now.
@@ -162,6 +169,10 @@ const ITEM_ICONS := {
 	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
 	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
 }
+
+@export_group("Sound")
+@export var sfx_enabled: bool = true
+@export_range(0.0, 1.0, 0.05) var sfx_volume: float = 0.8
 
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
 # The GDD "flatline result" is a REEL outcome (3 flatline symbols); the pinned
@@ -295,6 +306,7 @@ var _font: FontFile = null
 var _tex_cache := {}
 var _sequence_lock_active := false
 var _post_spin_sequence_active := false
+var _sfx_players: Dictionary = {}
 
 # Reveal animation state
 var _spinning_anim := false
@@ -361,6 +373,7 @@ func _ready() -> void:
 	_build_multiplier_buttons()
 	_build_power_buttons()
 	_build_stash()
+	_build_sfx_players()
 	_build_fx_layer() # before the burst/coin layers so rewards draw above effects
 	_build_burst_layer()
 	_build_coin_layer()
@@ -386,6 +399,40 @@ func _load_texture(rel: String, mipmaps := false) -> Texture2D:
 
 func _load_font(rel: String) -> FontFile:
 	return Assets.font(rel)
+
+func _load_sfx(rel: String) -> AudioStream:
+	return load("res://assets/sound/%s" % rel) as AudioStream
+
+func _sfx_volume_db() -> float:
+	return -80.0 if sfx_volume <= 0.0 else linear_to_db(clampf(sfx_volume, 0.0, 1.0))
+
+func _build_sfx_players() -> void:
+	for id: StringName in SFX_FILES:
+		var stream := _load_sfx(String(SFX_FILES[id]))
+		if stream == null:
+			push_warning("Missing SFX: %s" % String(SFX_FILES[id]))
+			continue
+		var player := AudioStreamPlayer.new()
+		player.name = "Sfx%s" % String(id).capitalize().replace("_", "")
+		player.stream = stream
+		player.volume_db = _sfx_volume_db()
+		add_child(player)
+		_sfx_players[id] = player
+
+func _play_sfx(id: StringName) -> void:
+	if not sfx_enabled:
+		return
+	var player := _sfx_players.get(id, null) as AudioStreamPlayer
+	if player == null:
+		return
+	player.volume_db = _sfx_volume_db()
+	player.stop()
+	player.play()
+
+func _stop_sfx(id: StringName) -> void:
+	var player := _sfx_players.get(id, null) as AudioStreamPlayer
+	if player != null:
+		player.stop()
 
 # ── scene construction ────────────────────────────────────────────────────────────
 
@@ -949,6 +996,7 @@ func _begin_fresh_run() -> bool:
 	return RunStateStore.start_new_run(permanents, consumables)
 
 func _sync_visuals() -> void:
+	_stop_sfx(&"reel_spin")
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
@@ -1054,6 +1102,7 @@ func _process(delta: float) -> void:
 		_on_reveal_complete()
 
 func _start_reel_spin_animation(locked_before: Array) -> void:
+	_play_sfx(&"reel_spin")
 	_locked_reels_during_spin = locked_before.duplicate()
 	# Play the authored spin-blur sheet as three clipped reel sprites. Each clip
 	# hides the moment that reel's final symbol lands.
@@ -1069,6 +1118,7 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_set_spin_reel_visible(i, not locked)
 
 func _start_lever_pull() -> void:
+	_play_sfx(&"lever")
 	_lever_anim_active = true
 	_lever_anim_elapsed = 0.0
 	_set_sheet_frame(_lever_sprite, 0)
@@ -1092,6 +1142,7 @@ func _step_lever(delta: float) -> void:
 	_set_sheet_frame(_lever_sprite, frame)
 
 func _on_reveal_complete() -> void:
+	_stop_sfx(&"reel_spin")
 	if _post_spin_sequence_active:
 		return
 	_post_spin_sequence_active = true
@@ -1431,11 +1482,16 @@ func _emit_score_burst(source_reel) -> float:
 		# Jackpot is special (issue #22): a large GOLDEN number rising out of the
 		# machine centre — never a reel-anchored pair/triple-style burst.
 		if win_type == "jackpot":
+			_play_sfx(&"jackpot_win")
 			_spawn_jackpot_burst(score)
 			_flash_jackpot_lamp()
 			_nudge(2.2)
 			return maxf(reward_time, maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME))
 		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" else "BONUS")
+		if win_type == "triple":
+			_play_sfx(&"triple_win")
+		elif win_type == "pair":
+			_play_sfx(&"pair_win")
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
