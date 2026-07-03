@@ -124,7 +124,7 @@ func _seed(mix: int) -> int:
 	return (_now_ms() ^ mix) & M32
 
 func _can_act() -> bool:
-	return runPhase == "running" and not isSpinning
+	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
 
 func _can_use_ability() -> bool:
 	return _can_act() and lastResult != null and blockPowersSpins <= 0
@@ -138,6 +138,8 @@ func spin(compulsive := false) -> Variant:
 	if runPhase != "running" or isSpinning:
 		return null
 	var is_compulsive: bool = compulsive and compulsiveSpinSkips > 0
+	if not is_compulsive and compulsiveSpinSkips > 0:
+		return null
 	var is_free: bool = (not is_compulsive) and freeSpinsRemaining > 0
 	if (not is_free) and neurons < 1:
 		return null
@@ -304,6 +306,8 @@ func set_spinning(v: bool) -> void:
 	_commit()
 
 func set_bet_multiplier(m: int) -> void:
+	if not _can_act():
+		return
 	if m == 3 and forcedRandomBetSpins > 0:
 		return
 	betMultiplier = m

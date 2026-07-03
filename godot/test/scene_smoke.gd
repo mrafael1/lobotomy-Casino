@@ -637,6 +637,26 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.set_spinning(false)
 	if int(run_store.compulsiveSpinSkips) != 1 or int(run_store.pendingCompulsiveSpinSkips) != 0:
 		failures.append("consumables: Energy Drink compulsion did not unlock after no-decay spins")
+	var queued_spin_count := int(run_store.spinCount)
+	var queued_neurons := int(run_store.neurons)
+	var queued_bet := int(run_store.betMultiplier)
+	run_store.runConsumables = { "item_water": 1 }
+	if run_store.spin() != null:
+		failures.append("issue61: manual spin was allowed while compulsion was queued")
+	if int(run_store.spinCount) != queued_spin_count or int(run_store.neurons) != queued_neurons or bool(run_store.isSpinning):
+		failures.append("issue61: blocked manual spin changed run state")
+	run_store.set_bet_multiplier(1)
+	if int(run_store.betMultiplier) != queued_bet:
+		failures.append("issue61: multiplier changed while compulsion was queued")
+	if run_store.reroll_reel(0):
+		failures.append("issue61: power was usable while compulsion was queued")
+	if run_store.use_consumable("item_water") or int(run_store.runConsumables.get("item_water", 0)) != 1:
+		failures.append("issue61: stash item was usable while compulsion was queued")
+	var forced_spin: Variant = run_store.spin(true)
+	if forced_spin == null:
+		failures.append("issue61: forced compulsion spin did not start")
+	else:
+		run_store.set_spinning(false)
 
 	# White Powder copy keeps other consumables and neurons intact after the copy.
 	run_store.runConsumables = { "cons_white_powder": 0, "item_water": 1 }
