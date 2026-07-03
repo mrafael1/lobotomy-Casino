@@ -27,6 +27,9 @@ var is_first_launch: bool = true
 # Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
 # phase, applied to every run, and only reset with a fresh campaign.
 var oddsUpgrades: Dictionary = {}
+# Odds-menu tokens left unspent when an odds phase was finalized (issue #50);
+# the next odds menu starts with these on top of its fresh budget.
+var oddsTokensBanked: int = 0
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -62,6 +65,7 @@ func _as_dict() -> Dictionary:
 		"wealthEndingReached": wealthEndingReached,
 		"is_first_launch": is_first_launch,
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
+		"oddsTokensBanked": oddsTokensBanked,
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -83,6 +87,7 @@ func _apply(meta: Dictionary) -> void:
 	wealthEndingReached = bool(meta.get("wealthEndingReached", endingsReached.has("wealth")))
 	is_first_launch = bool(meta.get("is_first_launch", true))
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
+	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
 	meta_changed.emit()
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
@@ -186,6 +191,13 @@ func add_odds_upgrades(bought: Dictionary, max_level: int) -> void:
 	meta_changed.emit()
 	save_state()
 
+## Banks the tokens left unspent when an odds phase closes (issue #50); the next
+## odds menu grants these on top of its fresh budget.
+func set_odds_tokens_banked(count: int) -> void:
+	oddsTokensBanked = maxi(0, count)
+	meta_changed.emit()
+	save_state()
+
 func campaign_status_text() -> String:
 	return "NEURONS: %d/%d" % [campaignNeuronsLeft, campaignNeuronsMax]
 
@@ -233,6 +245,7 @@ func start_new_campaign(save_immediately := true) -> void:
 	campaignFailed = false
 	wealthEndingReached = false
 	oddsUpgrades = {}
+	oddsTokensBanked = 0
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -309,6 +322,8 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["is_first_launch"] = true
 	if not current.has("oddsUpgrades"):
 		current["oddsUpgrades"] = {}
+	if not current.has("oddsTokensBanked"):
+		current["oddsTokensBanked"] = 0
 	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
 	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
 	if pending.has("cons_syringe"):

@@ -783,11 +783,12 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 
 func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	# issue #36 (permanent rework): post-run odds-buying — per-symbol costs, staged
-	# purchases undoable while open, committed permanently on finalize, 5-level cap,
-	# and a screen lock until the next run.
+	# purchases undoable while open, committed permanently on finalize, 8-level cap
+	# (issue #50), and a screen lock until the next run.
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
 	meta_store.oddsUpgrades = {}
+	meta_store.oddsTokensBanked = 0
 	run_store.reset_run_state()
 
 	run_store.begin_odds_phase()
@@ -852,12 +853,36 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		failures.append("issue36: odds levels did not persist into the next run")
 	run_store.reset_run_state()
 
-	# The 5-level cap holds even with tokens to spare.
-	meta_store.oddsUpgrades = { "vial": 5 }
+	# The 8-level cap (issue #50) holds even with tokens to spare.
+	if int(run_store.odds_max_level) != 8:
+		failures.append("issue50: odds upgrades should cap at 8 levels")
+	meta_store.oddsUpgrades = { "vial": 8 }
 	run_store.begin_odds_phase()
 	if run_store.buy_odds_upgrade("vial"):
-		failures.append("issue36: bought past the 5-level cap")
+		failures.append("issue36: bought past the 8-level cap")
 	meta_store.oddsUpgrades = {}
+	run_store.reset_run_state()
+
+	# Issue #50: unspent tokens are banked on finalize and carry into the next
+	# odds menu on top of the fresh budget (2 left of 4 => next menu opens at 6).
+	meta_store.oddsTokensBanked = 0
+	run_store.begin_odds_phase()
+	if not run_store.buy_odds_upgrade("vial"):
+		failures.append("issue50: vial (cost 2) rejected with a full budget")
+	# Re-entering the phase before DONE (dealer scene reopen) keeps staged picks.
+	run_store.begin_odds_phase()
+	if int(run_store.oddsPendingUpgrades.get("vial", 0)) != 1 \
+			or int(run_store.oddsTokensRemaining) != int(run_store.odds_budget) - 2:
+		failures.append("issue50: reopening the odds phase dropped staged picks")
+	run_store.finalize_odds_phase()
+	if int(meta_store.oddsTokensBanked) != int(run_store.odds_budget) - 2:
+		failures.append("issue50: leftover tokens were not banked on finalize (got %d)" % int(meta_store.oddsTokensBanked))
+	run_store.reset_run_state()
+	run_store.begin_odds_phase()
+	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget) + int(run_store.odds_budget) - 2:
+		failures.append("issue50: next odds menu did not open with banked + fresh tokens (got %d)" % int(run_store.oddsTokensRemaining))
+	meta_store.oddsUpgrades = {}
+	meta_store.oddsTokensBanked = 0
 	run_store.reset_run_state()
 
 	# The odds overlay scene: +/- controls, level bars, close finalizes.
@@ -874,12 +899,22 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if plus_buttons.size() != 6 or level_bars.size() != 6:
 		failures.append("issue36: overlay should list all 6 reel-cycle symbols")
 	elif (level_bars["vial"] as Array).size() != int(run_store.odds_max_level):
-		failures.append("issue36: overlay rows should show 5 level bars")
+		failures.append("issue36: overlay rows should show 8 level bars")
 	elif (plus_buttons["vial"] as Button).disabled:
 		failures.append("issue36: affordable + button is disabled")
+	# Issue #50: the token readout is a plain count (never "x/4"), and every row
+	# shows its live draw chance.
+	if String((overlay._tokens_label as Label).text) != "%d TOKENS" % int(run_store.odds_budget):
+		failures.append("issue50: tokens label should read '%d TOKENS', got '%s'"
+			% [int(run_store.odds_budget), String((overlay._tokens_label as Label).text)])
+	var pct_labels: Dictionary = overlay._pct_labels
+	if pct_labels.size() != 6 or not String((pct_labels["brain"] as Label).text).ends_with("%"):
+		failures.append("issue50: rows are missing the live draw-chance readout")
 	overlay._on_plus_pressed("brain")
 	if run_store.odds_upgrade_level("brain") != 1:
 		failures.append("issue36: overlay + did not reach the store")
+	if overlay.get_node_or_null("PctFeedback") == null:
+		failures.append("issue50: buying odds did not float the percent-gained feedback popup")
 	var brain_bars: Array = level_bars["brain"]
 	if (brain_bars[0] as ColorRect).color != overlay.bar_fill_color:
 		failures.append("issue36: bought level did not fill a bar yellow")
