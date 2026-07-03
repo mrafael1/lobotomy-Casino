@@ -230,11 +230,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
       effectiveBetMultiplier = 2;
     }
 
-    // When the spin costs neurons, you can't bet more spins-worth than you have
-    // left: clamp to the affordable budget so scoring matches the multiplier
-    // badge (which demotes a locked selection in SlotMachine). Free/stasis/
-    // sedative spins cost nothing, so the full selected multiplier stands.
-    if (!stasisActive && !sedativeActive && !isFreeSpin) {
+    // Free spins spend one banked spin per bet multiplier level. When the spin
+    // costs neurons, clamp to the affordable neuron budget. Stasis/sedative spins
+    // cost nothing, so the full selected multiplier stands.
+    if (isFreeSpin) {
+      effectiveBetMultiplier = Math.min(effectiveBetMultiplier, Math.max(1, state.freeSpinsRemaining)) as 1 | 2 | 3;
+    } else if (!stasisActive && !sedativeActive) {
       const spinsBudget = Math.max(1, Math.ceil(state.neurons / ECONOMY.NEURON_DECAY_PER_SPIN));
       effectiveBetMultiplier = Math.min(effectiveBetMultiplier, spinsBudget) as 1 | 2 | 3;
     }
@@ -286,6 +287,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       maxFreeSpins:       state.maxFreeSpins,
       lucidityMultiplier: effectiveMultiplier * potionMult,
       isFreeSpin,
+      freeSpinCost:       isFreeSpin ? effectiveBetMultiplier : 1,
       lockedReels:        state.lockedReels,
       previousReels:      state.lastResult?.reels ?? null,
       rng,
@@ -547,11 +549,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
         return true;
 
       case 'restoreAbilityOrSpins': {
-        // Tea: restore a used ability, or grant fallback free spins if none used.
+        // Tea: restore a used ability, or restore normal spins if none were used.
         if (state.abilitiesUsed.length === 0) {
+          const restoredNeurons = effect.fallbackSpins * computeNeuronDecay(state.ownedUpgrades);
           set({
             runConsumables: newRunConsumables,
-            freeSpinsRemaining: Math.min(state.freeSpinsRemaining + effect.fallbackSpins, state.maxFreeSpins),
+            neurons: state.neurons + restoredNeurons,
           });
           return true;
         }

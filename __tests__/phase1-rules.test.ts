@@ -7,6 +7,7 @@ import { SYMBOL_WEIGHTS } from '../src/content/symbols';
 import { useRunStore, planLucidityGain } from '../src/state/runState';
 import { CONSUMABLES } from '../src/content/consumables';
 import { PAIR_SCORE } from '../src/content/payouts';
+import { ECONOMY } from '../src/content/economy';
 import { SYMBOLS } from '../src/content/symbols';
 import { createRNG } from '../src/game/rng';
 import type { ReelResult, AbilityId } from '../src/game/types';
@@ -145,6 +146,25 @@ function freshRun(runConsumables: Partial<Record<string, number>> = {}): void {
 function totalConsumableCharges(runConsumables: Partial<Record<string, number>>): number {
   return Object.values(runConsumables).reduce<number>((sum, n) => sum + (n ?? 0), 0);
 }
+
+test('store: x3 free-spin bet consumes three banked free spins', () => {
+  freshRun();
+  useRunStore.setState({
+    freeSpinsRemaining: 3,
+    maxFreeSpins: 3,
+    betMultiplier: 3,
+  });
+
+  const neuronsBefore = useRunStore.getState().neurons;
+  const result = useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+
+  const state = useRunStore.getState();
+  expect(result?.isFreeSpin).toBe(true);
+  expect(result?.scoreMultiplier).toBe(3);
+  expect(state.freeSpinsRemaining).toBe(0);
+  expect(state.neurons).toBe(neuronsBefore);
+});
 
 test('store: Serum — picked symbol is guaranteed, blur queues for the spin after (issue #53)', () => {
   freshRun({ cons_focus: 1 });
@@ -333,13 +353,14 @@ test('store: Tea restores a used ability', () => {
   expect(useRunStore.getState().abilitiesUsed).not.toContain('reroll');
 });
 
-test('store: Tea grants fallback free spins when no abilities were used (issue #32)', () => {
+test('store: Tea restores normal spins when no abilities were used (issue #32)', () => {
   freshRun({ cons_tea: 1 });
-  const before = useRunStore.getState().freeSpinsRemaining;
+  const beforeNeurons = useRunStore.getState().neurons;
+  const beforeFreeSpins = useRunStore.getState().freeSpinsRemaining;
   expect(useRunStore.getState().useConsumable('cons_tea')).toBe(true);
-  // fallbackSpins = 3, clamped to maxFreeSpins.
-  const expected = Math.min(before + 3, useRunStore.getState().maxFreeSpins);
-  expect(useRunStore.getState().freeSpinsRemaining).toBe(expected);
+  const state = useRunStore.getState();
+  expect(state.neurons).toBe(beforeNeurons + 3 * ECONOMY.NEURON_DECAY_PER_SPIN);
+  expect(state.freeSpinsRemaining).toBe(beforeFreeSpins);
 });
 
 test('store: REROLL ability is 1-use per run — second call rejected', () => {

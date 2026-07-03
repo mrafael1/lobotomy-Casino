@@ -153,7 +153,9 @@ func spin(compulsive := false) -> Variant:
 		eff_bet = 1
 	elif forcedRandomBetSpins > 0 and eff_bet == 3:
 		eff_bet = 2
-	if (not stasis) and (not sedative) and (not is_free):
+	if is_free:
+		eff_bet = mini(eff_bet, maxi(1, freeSpinsRemaining))
+	elif (not stasis) and (not sedative):
 		var budget := maxi(1, ceili(float(neurons) / EconomyConst.NEURON_DECAY_PER_SPIN))
 		eff_bet = mini(eff_bet, budget)
 
@@ -199,6 +201,7 @@ func spin(compulsive := false) -> Variant:
 		"maxFreeSpins": maxFreeSpins,
 		"lucidityMultiplier": eff_mult * potion_mult,
 		"isFreeSpin": is_free,
+		"freeSpinCost": (eff_bet if is_free else 1),
 		"lockedReels": lockedReels,
 		"previousReels": (lastResult["reels"] if lastResult != null else null),
 		"rng": rng,
@@ -244,7 +247,11 @@ func spin(compulsive := false) -> Variant:
 	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
-	freeSpinsRemaining = int(final_result["freeSpinsAfter"])
+	# Compulsive spins don't consume banked free spins, but the parity-pinned
+	# evaluate() clamps freeSpinsAfter to maxFreeSpins on non-free spins — which
+	# would wipe banked vial/tea rewards (issue #66). Keep what the player had.
+	freeSpinsRemaining = maxi(int(final_result["freeSpinsAfter"]), freeSpinsRemaining) \
+		if is_compulsive else int(final_result["freeSpinsAfter"])
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
@@ -462,11 +469,20 @@ func register_flatline_result() -> int:
 	_commit()
 	return flatlineResultCount
 
-## Adds free spins (clamped to maxFreeSpins). Used by the brains/vial triples.
+## Adds real free-spin credits. Used by brain triples when the pure spin result
+## did not already grant one.
 func grant_free_spins(count: int) -> void:
 	if count <= 0:
 		return
-	freeSpinsRemaining = mini(freeSpinsRemaining + count, maxFreeSpins)
+	freeSpinsRemaining += count
+	_commit()
+
+## Restores normal spins-left budget by replenishing neurons.
+func restore_spins(count: int) -> void:
+	if count <= 0:
+		return
+	var decay := maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+	neurons += count * decay
 	_commit()
 
 ## Pill triple: makes every power usable again this spin.
@@ -525,7 +541,10 @@ func _weights_with_bonuses(brain_bonus: int, book_weight: int) -> Array:
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed, coins_per_power_restore)
-	var free_after := mini(freeSpinsRemaining + int(outcome["freeSpinsGranted"]), maxFreeSpins)
+	# The cap only tops up, it never cuts: banked spins above maxFreeSpins
+	# (vial/tea rewards, issue #66) survive power use.
+	var free_after := mini(freeSpinsRemaining + int(outcome["freeSpinsGranted"]),
+		maxi(freeSpinsRemaining, maxFreeSpins))
 	abilitiesUsed = plan["abilitiesUsed"]
 	scoreEarned = maxi(0, scoreEarned + int(outcome["scoreDelta"]))
 	lucidityCoins = int(plan["lucidityCoins"])
@@ -682,9 +701,9 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 			abilitiesUsed = []
 			potionSpins += int(ce["spins"])
 		"restoreAbilityOrSpins":
-			# Tea: restore a used ability, or grant fallback free spins if none used.
+			# Tea: restore a used ability, or restore normal spins if none were used.
 			if abilitiesUsed.is_empty():
-				freeSpinsRemaining = mini(freeSpinsRemaining + int(ce["fallbackSpins"]), maxFreeSpins)
+				restore_spins(int(ce["fallbackSpins"]))
 			else:
 				var rng := LobRNG.new(_seed(spinCount * 0xdeadbeef))
 				var idx := floori(rng.next() * abilitiesUsed.size())

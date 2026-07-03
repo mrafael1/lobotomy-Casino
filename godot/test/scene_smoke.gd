@@ -63,6 +63,8 @@ func _run() -> void:
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
+	await _check_spin_gain_fx_66(machine, run_store, failures)
+	_check_free_spin_multiplier_cost(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -583,15 +585,18 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
 		failures.append("issue32: Potion did not reset powers / set potionSpins")
 
-	# Tea with no used abilities grants fallback free spins.
+	# Tea with no used abilities restores normal spins.
 	run_store.abilitiesUsed = []
 	run_store.freeSpinsRemaining = 0
 	run_store.maxFreeSpins = 10
+	var tea_neurons_before := int(run_store.neurons)
 	run_store.runConsumables = { "cons_tea": 1 }
 	if not run_store.use_consumable("cons_tea"):
 		failures.append("issue32: Tea use rejected with no abilities")
-	if int(run_store.freeSpinsRemaining) != 3:
-		failures.append("issue32: Tea did not grant fallback free spins")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue32: Tea created fallback free-spin credits")
+	if int(run_store.neurons) != tea_neurons_before + 3 * int(Economy.compute_neuron_decay(run_store.ownedUpgrades)):
+		failures.append("issue32: Tea did not restore normal spins")
 
 	# Red Pill: force flatline then triple.
 	run_store.runConsumables = { "item_pill": 1 }
@@ -1165,6 +1170,100 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
+# Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
+# spins-left counter; the counter includes free spins and only ticks up when the
+# fly-in lands (value in sync with the effect).
+func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.neurons = 10
+	run_store.startingNeurons = 105
+	run_store.freeSpinsRemaining = 0
+	# The REAL base cap (1): the user-reported bug was +3 grants clamping to +1.
+	run_store.maxFreeSpins = 1
+	machine._pending_spin_gain = 0
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+	var label := machine._bar_labels.get("life") as Label
+	if label == null:
+		failures.append("issue66: spins-left label missing")
+		return
+	var before_n := String(label.text).get_slice(":", 1).to_int()
+	var life_fill := machine._life_fill_sprite as Sprite2D
+	var before_bar_width := 0.0
+	if life_fill != null:
+		before_bar_width = life_fill.region_rect.size.x
+
+	# 3x vial restores +3 normal spins, spawns the fly-in, and holds the counter.
+	machine._apply_symbol_triple("vial", 0, false)
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue66: 3x vial created free-spin credits instead of restoring spins")
+	if machine.get_node_or_null("SpinGainFx") == null:
+		failures.append("issue66: vial grant did not spawn the +3 fly-in")
+	if String(label.text).get_slice(":", 1).to_int() != before_n:
+		failures.append("issue66: counter ticked before the vial fly-in landed")
+	if life_fill != null and not is_equal_approx(life_fill.region_rect.size.x, before_bar_width):
+		failures.append("issue66: spins bar filled before the vial fly-in landed")
+	await create_timer(1.3).timeout
+	if int(machine._pending_spin_gain) != 0:
+		failures.append("issue66: pending spin gain never landed")
+	var after_n := String(label.text).get_slice(":", 1).to_int()
+	if after_n != before_n + 3:
+		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
+	if life_fill != null and life_fill.region_rect.size.x <= before_bar_width:
+		failures.append("issue66: spins bar did not refill with the +3 vial grant")
+
+	# Tea with no used powers restores +3 spins through the same fly-in.
+	run_store.isSpinning = false
+	run_store.dealerIncoming = false
+	run_store.dealerPending = false
+	run_store.freeSpinsRemaining = 0
+	run_store.runConsumables = { "cons_tea": 1 }
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = []
+	machine._pending_spin_gain = 0
+	machine._power_coin_active = false
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+	var tea_before := String(label.text).get_slice(":", 1).to_int()
+	machine._on_stash_pressed(0)
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("issue66: tea fallback created free-spin credits instead of restoring spins")
+	if machine.get_node_or_null("SpinGainFx") == null:
+		failures.append("issue66: tea restore did not spawn the +3 fly-in")
+	if String(label.text).get_slice(":", 1).to_int() != tea_before:
+		failures.append("issue66: counter ticked before the tea fly-in landed")
+	await create_timer(1.3).timeout
+	if String(label.text).get_slice(":", 1).to_int() != tea_before + 3:
+		failures.append("issue66: tea +3 did not land in the spins counter")
+
+	machine._pending_spin_gain = 0
+	machine._set_sequence_lock(false)
+	run_store.reset_run_state()
+
+func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.freeSpinsRemaining = 3
+	run_store.maxFreeSpins = 3
+	run_store.betMultiplier = 3
+	var neurons_before := int(run_store.neurons)
+	var result: Variant = run_store.spin()
+	if result == null:
+		failures.append("free-spin multiplier: x3 free spin did not spin")
+		run_store.reset_run_state()
+		return
+	run_store.set_spinning(false)
+	if not bool(result["isFreeSpin"]):
+		failures.append("free-spin multiplier: spin was not marked free")
+	if int(result["scoreMultiplier"]) != 3:
+		failures.append("free-spin multiplier: x3 did not score as x3")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("free-spin multiplier: x3 did not consume 3 free spins")
+	if int(run_store.neurons) != neurons_before:
+		failures.append("free-spin multiplier: free spin consumed neurons")
+	run_store.reset_run_state()
+
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
 # the popup names the picked reel's rolled symbol.
 func _check_eye_reveal(machine: Node, failures: Array) -> void:
@@ -1685,13 +1784,17 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	run_store.freeSpinsRemaining = 0
 	run_store.abilitiesUsed = ["reroll"]
 
-	# grant_free_spins adds then clamps to maxFreeSpins.
+	# grant_free_spins adds in full — reaction rewards ignore maxFreeSpins, which
+	# only caps the parity-pinned in-spin jackpot grant (issue #66).
 	run_store.grant_free_spins(3)
 	if int(run_store.freeSpinsRemaining) != 3:
 		failures.append("issue35: grant_free_spins did not add spins")
-	run_store.grant_free_spins(100)
-	if int(run_store.freeSpinsRemaining) != 10:
-		failures.append("issue35: grant_free_spins did not clamp to maxFreeSpins")
+	run_store.maxFreeSpins = 1
+	run_store.grant_free_spins(3)
+	if int(run_store.freeSpinsRemaining) != 6:
+		failures.append("issue66: grant_free_spins clamped a reaction reward")
+	run_store.maxFreeSpins = 10
+	run_store.freeSpinsRemaining = 0
 
 	# restore_all_powers clears the used-abilities list.
 	run_store.restore_all_powers()
