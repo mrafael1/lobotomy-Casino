@@ -61,9 +61,16 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 @export var name_color: Color = Color(0.0, 0.9, 1.0)
 
 # New UI assets (issue #25). The settings sheet is 2 frames (normal, pressed).
-const BUBBLE_ASSET := "ui/standard_bubble_text.png"
 const SETTINGS_ASSET := "ui/settings.png"
 const COIN_ASSET := "ui/coin.png"
+# Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
+# they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
+const MACHINE_BUTTON_ASSET := "dealer_scene_machine_BUTTON.png"
+const LAB_BUTTON_ASSET := "dealer_scene_LAB_BUTTON.png"
+# Opaque bounds of each button's art (source px, measured with pngjs) — the
+# invisible hit buttons cover exactly these rects.
+const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
+const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
@@ -83,8 +90,6 @@ var _tv_neg: Label = null
 var _name_label: Label = null   # selected item's name, shown UNDER its counter icon
 var _offer_cx := {}             # id -> counter-circle x (to place the name under it)
 var _item_nodes := {}           # offer id -> draggable Control (for selected highlight)
-var _instruction: Label = null
-var _instruction_bubble: Control = null # speech bubble holding the instruction text
 var _message: Label = null
 var _stash_holder: Control = null
 var _portrait_sprite: Sprite2D = null
@@ -99,9 +104,9 @@ var _dealer_drop_zone: Control = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _lab_button: Button = null
-var _lab_label: Label = null
+var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
 var _start_button: Button = null
-var _start_label: Label = null
+var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
 var _campaign_label: Label = null
@@ -151,15 +156,11 @@ func _bind_scene_nodes() -> void:
 	_tv_pos = get_node_or_null("TvPos")
 	_tv_neg = get_node_or_null("TvNeg")
 	_name_label = get_node_or_null("NameLabel")
-	_instruction_bubble = get_node_or_null("InstructionBubble")
-	_instruction = get_node_or_null("InstructionBubble/Instruction")
 	_message = get_node_or_null("Message")
 	_options_button = get_node_or_null("options")
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
 	_lab_button = get_node_or_null("LabButton")
-	_lab_label = get_node_or_null("LabButtonLabel")
 	_start_button = get_node_or_null("StartButton")
-	_start_label = get_node_or_null("StartButton/StartLabel")
 	_credits_row = get_node_or_null("CreditsRow")
 	_credits_coin = get_node_or_null("CreditsRow/Coin")
 	_credits_label = get_node_or_null("CreditsRow/CreditsLabel")
@@ -251,10 +252,7 @@ func _build_tv() -> void:
 	if _tv_pos != null or _tv_neg != null or _message != null or _name_label != null:
 		_style_scene_label(_tv_pos, 8, Color(0.13, 0.77, 0.37))
 		_style_scene_label(_tv_neg, 8, Color(0.94, 0.27, 0.27))
-		_build_instruction_bubble()
-		_style_scene_label(_message, 7, Color(1.0, 0.6, 0.6))
-		if _message != null:
-			_message.text = ""
+		_style_message_label()
 		_style_scene_label(_name_label, 6, Color(0.0, 0.9, 1.0))
 		if _name_label != null:
 			_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -265,9 +263,11 @@ func _build_tv() -> void:
 	# TV window (issue #24 follow-up).
 	_tv_pos = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 2.5), 8, Color(0.13, 0.77, 0.37))
 	_tv_neg = _mk_label(Vector2(TV["left"] + 3.0, TV["top"] + 11.5), 8, Color(0.94, 0.27, 0.27))
-	_build_instruction_bubble()
-	_message = _mk_label(Vector2(34.0, 50.0), 7, Color(1.0, 0.6, 0.6))
+	# Feedback messages sit just above the dealer's head, centred (issue #55).
+	_message = _mk_label(Vector2(10.0, 112.0), 7, Color(1.0, 0.6, 0.6))
+	_message.size = Vector2(140.0, 16.0)
 	_message.text = ""
+	_style_message_label()
 	# Name label sits under the selected counter item (centred on its circle).
 	_name_label = _mk_label(Vector2.ZERO, 6, Color(0.0, 0.9, 1.0))
 	_name_label.size = Vector2(60.0, 9.0)
@@ -282,60 +282,17 @@ func _style_scene_label(l: Label, size: int, color: Color) -> void:
 		l.add_theme_font_override("font", _font)
 	l.add_theme_color_override("font_color", color)
 
-# Top-centre "DRAG TO BUY" prompt rendered inside the standard speech-bubble asset
-# (issue #25). The graphic and the pixel-font label are siblings so the text is crisp.
-func _build_instruction_bubble() -> void:
-	if _instruction_bubble != null:
-		_instruction_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var graphic: TextureRect = get_node_or_null("InstructionBubble/BubbleGraphic")
-		if graphic != null:
-			graphic.texture = Assets.texture(BUBBLE_ASSET, true)
-			graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			graphic.stretch_mode = TextureRect.STRETCH_SCALE
-			graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if _instruction != null:
-			_instruction.text = _instruction_text()
-			_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			_instruction.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			_style_scene_label(_instruction, 8, Color(0.12, 0.06, 0.16))
-			_instruction.mouse_filter = Control.MOUSE_FILTER_IGNORE
+## "NOT ENOUGH CREDITS" / "POCKETS FULL" feedback: black-outlined, centred just
+## above the dealer (his head starts at y~131 in the portrait art).
+func _style_message_label() -> void:
+	if _message == null:
 		return
-	const BUBBLE_W := 80.0
-	const BUBBLE_H := 30.0
-	_instruction_bubble = Control.new()
-	_instruction_bubble.size = Vector2(BUBBLE_W, BUBBLE_H)
-	_instruction_bubble.position = Vector2((160.0 - BUBBLE_W) * 0.5, 10.0)
-	_instruction_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_instruction_bubble)
-	var graphic := TextureRect.new()
-	graphic.texture = Assets.texture(BUBBLE_ASSET, true)
-	graphic.size = _instruction_bubble.size
-	graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	graphic.stretch_mode = TextureRect.STRETCH_SCALE
-	graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_instruction_bubble.add_child(graphic)
-	_instruction = Label.new()
-	_instruction.text = _instruction_text()
-	# Fill the whole bubble and centre both ways so the text sits dead centre of the
-	# bubble asset (issue #24 follow-up).
-	_instruction.size = _instruction_bubble.size
-	_instruction.position = Vector2.ZERO
-	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_instruction.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_instruction.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		_instruction.add_theme_font_override("font", _font)
-	_instruction.add_theme_color_override("font_color", Color(0.12, 0.06, 0.16))
-	_instruction.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_instruction_bubble.add_child(_instruction)
-
-# The dealer's line for this visit: post-run he asks "what's next?" (issue #36).
-func _instruction_text() -> String:
-	if _post_run:
-		return "WHAT'S NEXT?"
-	return "DRAG TO BUY" if _pre_run else "DRAG ONE TO ME"
+	_style_scene_label(_message, 7, Color(1.0, 0.6, 0.6))
+	_message.text = ""
+	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_message.add_theme_color_override("font_outline_color", Color.BLACK)
+	_message.add_theme_constant_override("outline_size", 1)
 
 # ── dealer odds table (issue #36) ─────────────────────────────────────────────────
 # Post-run only: the overlay opens on arrival with the fresh token budget. Once the
@@ -522,16 +479,7 @@ func _build_hud() -> void:
 			if not _options_button.pressed.is_connected(options_cb):
 				_options_button.pressed.connect(options_cb)
 		_configure_lab_button()
-		if _start_button != null:
-			_start_button.visible = _pre_run
-			_start_button.text = "" if _start_label != null else "START"
-			_apply_button_text_margin(_start_button)
-			var start_cb := Callable(self, "_start_run")
-			if not _start_button.pressed.is_connected(start_cb):
-				_start_button.pressed.connect(start_cb)
-		if _start_label != null:
-			_start_label.visible = _pre_run
-			_start_label.text = "START"
+		_configure_machine_button()
 		if _credits_row != null:
 			_credits_row.visible = _pre_run
 		_build_credits_display()
@@ -604,35 +552,59 @@ func _build_campaign_label() -> void:
 	# menu and the flatline overlay. The label stays as an editor placeholder.
 	_refresh_campaign_label()
 
+# ── authored dealer-canvas buttons (issue #55) ─────────────────────────────────────
+# The lab/machine buttons are full-canvas 2-frame sheets (0 default, 1 pressed) that
+# self-position on the 160x320 canvas; the authored Buttons are invisible hit areas
+# over the art's opaque bounds, driving the pressed frame while held.
+
 func _configure_lab_button() -> void:
 	if _lab_button == null:
 		return
-	_lab_button.text = ""
-	_lab_button.focus_mode = Control.FOCUS_NONE
-	_lab_button.scale.x = absf(_lab_button.scale.x)
-	var lab_cb := Callable(self, "_open_lab")
-	if not _lab_button.pressed.is_connected(lab_cb):
-		_lab_button.pressed.connect(lab_cb)
-	if _lab_label == null:
-		_lab_label = Label.new()
-		_lab_label.name = "LabButtonLabel"
-		_lab_label.position = _lab_button.position
-		_lab_label.size = _lab_button.size
-		_lab_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_lab_label)
-	_lab_label.text = "LAB"
-	_lab_label.scale = Vector2.ONE
-	_lab_label.rotation = 0.0
-	_lab_label.pivot_offset = Vector2.ZERO
-	_lab_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lab_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_lab_label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		_lab_label.add_theme_font_override("font", _font)
-	_lab_label.add_theme_color_override("font_color", Color.WHITE)
-	_lab_label.position = _lab_button.position
-	_lab_label.size = _lab_button.size
-	_lab_label.z_index = _lab_button.z_index + 1
+	_lab_button.position = LAB_BUTTON_RECT.position
+	_lab_button.size = LAB_BUTTON_RECT.size
+	if _lab_button_sprite == null:
+		_lab_button_sprite = _build_button_art(LAB_BUTTON_ASSET, "LabButtonArt")
+	_wire_art_button(_lab_button, _lab_button_sprite, Callable(self, "_open_lab"))
+
+func _configure_machine_button() -> void:
+	if _start_button == null:
+		return
+	_start_button.position = MACHINE_BUTTON_RECT.position
+	_start_button.size = MACHINE_BUTTON_RECT.size
+	if _machine_button_sprite == null:
+		_machine_button_sprite = _build_button_art(MACHINE_BUTTON_ASSET, "MachineButtonArt")
+	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_start_run"))
+	_start_button.visible = _pre_run
+	if _machine_button_sprite != null:
+		_machine_button_sprite.visible = _pre_run
+
+func _build_button_art(asset: String, node_name: String) -> Sprite2D:
+	var spr := get_node_or_null(node_name) as Sprite2D
+	if spr != null:
+		return _configure_full_canvas_sprite(spr, asset, 2, 0)
+	spr = _full_canvas_sprite(asset, 2, 0)
+	if spr != null:
+		spr.name = node_name
+	return spr
+
+func _wire_art_button(button: Button, spr: Sprite2D, cb: Callable) -> void:
+	button.text = ""
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	if not button.pressed.is_connected(cb):
+		button.pressed.connect(cb)
+	if spr == null:
+		return
+	var down := Callable(self, "_set_button_art_frame").bind(spr, 1)
+	var up := Callable(self, "_set_button_art_frame").bind(spr, 0)
+	if not button.button_down.is_connected(down):
+		button.button_down.connect(down)
+	if not button.button_up.is_connected(up):
+		button.button_up.connect(up)
+
+func _set_button_art_frame(spr: Sprite2D, frame: int) -> void:
+	if spr != null and is_instance_valid(spr):
+		spr.frame = frame
 
 func _toggle_options_overlay() -> void:
 	if _options_overlay == null:
@@ -753,10 +725,8 @@ func _select(id: String) -> void:
 		_tv_pos.text = ""
 		_tv_neg.text = ""
 		_name_label.visible = false
-		_instruction_bubble.visible = true
 		_highlight_selected("")
 		return
-	_instruction_bubble.visible = false
 	_highlight_selected(id)
 	_dealer_react()
 	var h: Dictionary = item_hints.get(id, FALLBACK_HINT)
