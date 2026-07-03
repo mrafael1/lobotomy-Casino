@@ -325,7 +325,7 @@ var _spin_frame := 0
 var _final_reels: Array = []
 var _locked_reels_during_spin := [false, false, false]
 var _use_full_spin_sheet := true
-var _reel_stop_times := [0.55, 0.8, 1.05]
+var _reel_stop_times := [0.55, 0.925, 1.3]
 var _lever_anim_active := false
 var _lever_anim_elapsed := 0.0
 var _reroll_anim_active := false
@@ -1073,7 +1073,7 @@ func _do_spin(compulsive := false) -> void:
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
-	_reel_stop_times = [0.55, 0.8, 1.05 + tension]
+	_reel_stop_times = [0.55, 0.925, 1.3 + tension]
 	# Eye triple: the revealed reel was already committed at tap time (issue #53);
 	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
