@@ -131,7 +131,7 @@ const INITIAL_RUN_STATE: RunState = {
 const NON_FLATLINE_SYMBOLS = BASE_SYMBOL_CYCLE.filter(s => s !== 'flatline');
 
 function canAct(state: RunStore): boolean {
-  return state.runPhase === 'running' && !state.isSpinning;
+  return state.runPhase === 'running' && !state.isSpinning && state.compulsiveSpinSkips <= 0;
 }
 
 function canUseAbility(state: RunStore): boolean {
@@ -213,6 +213,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (state.runPhase !== 'running' || state.isSpinning) return null;
 
     const isCompulsive = options?.compulsive === true && state.compulsiveSpinSkips > 0;
+    if (!isCompulsive && state.compulsiveSpinSkips > 0) return null;
     const isFreeSpin = !isCompulsive && state.freeSpinsRemaining > 0;
     if (!isFreeSpin && state.neurons < 1) return null;
 
@@ -391,7 +392,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   setBetMultiplier(m: 1 | 2 | 3): void {
-    if (m === 3 && get().forcedRandomBetSpins > 0) return;
+    const state = get();
+    if (!canAct(state)) return;
+    if (m === 3 && state.forcedRandomBetSpins > 0) return;
     set({ betMultiplier: m });
   },
 

@@ -286,6 +286,23 @@ test('store: Energy Drink locks out x3, preserves neurons, then forces 1 x1 spin
   expect(state.compulsiveSpinSkips).toBe(1);
   expect(state.pendingCompulsiveSpinSkips).toBe(0);
 
+  const queuedSpinCount = state.spinCount;
+  const queuedNeurons = state.neurons;
+  const queuedBet = state.betMultiplier;
+  useRunStore.setState({ runConsumables: { ...state.runConsumables, item_water: 1 } });
+
+  expect(useRunStore.getState().spin()).toBeNull();
+  expect(useRunStore.getState().spinCount).toBe(queuedSpinCount);
+  expect(useRunStore.getState().neurons).toBe(queuedNeurons);
+  expect(useRunStore.getState().isSpinning).toBe(false);
+
+  useRunStore.getState().setBetMultiplier(1);
+  expect(useRunStore.getState().betMultiplier).toBe(queuedBet);
+
+  expect(useRunStore.getState().rerollReel(0)).toBe(false);
+  expect(useRunStore.getState().useConsumable('item_water')).toBe(false);
+  expect(useRunStore.getState().runConsumables.item_water).toBe(1);
+
   const beforeCompulsive = useRunStore.getState().neurons;
   useRunStore.getState().setBetMultiplier(3);
   useRunStore.getState().spin({ compulsive: true });

@@ -1068,6 +1068,8 @@ func _do_spin(compulsive := false) -> void:
 		return
 	if _dealer_offer_popup != null:
 		return
+	if not compulsive and not RunStateStore._can_act():
+		return
 	_clear_targeting()
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
@@ -1981,8 +1983,7 @@ func _stash_slots() -> Array:
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
-	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0 \
+	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and _dealer_offer_popup == null and not _sequence_lock_active
 	if _spin_button != null:
 		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
@@ -2036,6 +2037,8 @@ func _icon_for(id: String) -> Texture2D:
 
 func _on_power_pressed(id: String) -> void:
 	if _sequence_lock_active or _spin_launch_pending:
+		return
+	if not RunStateStore._can_use_ability():
 		return
 	if _targeting_layer != null:
 		_clear_targeting()
