@@ -791,7 +791,7 @@ func _build_score_button() -> void:
 		_score_button = Button.new()
 		_score_button.name = "ScoreButton"
 		add_child(_score_button)
-	_score_button.text = "SCORES"
+	_score_button.text = "TABLES"
 	if not authored:
 		_score_button.size = Vector2(41.0, 15.0)
 		# Pulled off the top-right corner so it isn't glued to the edge.
@@ -2080,40 +2080,50 @@ func _show_score_table() -> void:
 	panel.size = Vector2(142.0, 260.0)
 	_score_overlay.add_child(panel)
 
-	_score_label(_score_overlay, "SCORES", Vector2(17.0, 34.0), 12, Color(1.0, 0.82, 0.28))
-	_score_label(_score_overlay, "BEST", Vector2(17.0, 52.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(int(MetaStateStore.history.get("bestScoreRun", 0))), Vector2(63.0, 52.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "RUNS", Vector2(17.0, 64.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(int(MetaStateStore.history.get("runsPlayed", 0))), Vector2(63.0, 64.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "CREDITS", Vector2(17.0, 76.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(MetaStateStore.lucidityWallet), Vector2(63.0, 76.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
+	_score_label(_score_overlay, "TABLES", Vector2(17.0, 34.0), 12, Color(1.0, 0.82, 0.28))
 
-	_score_label(_score_overlay, "POINTS", Vector2(17.0, 99.0), 9, Color(1.0, 0.82, 0.28))
-	_score_label(_score_overlay, "SYMBOL", Vector2(19.0, 115.0), 7, Color(0.0, 0.9, 1.0))
-	_score_label(_score_overlay, "PAIR", Vector2(77.0, 115.0), 7, Color(0.0, 0.9, 1.0), 24.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "TRIPLE", Vector2(105.0, 115.0), 7, Color(0.0, 0.9, 1.0), 36.0, HORIZONTAL_ALIGNMENT_RIGHT)
+	# SYMBOL | LVL | PAIR | TRIPLE (issue #51) — no run stats, no symbol names.
+	# Columns place by measured text width: a Label can never shrink below its text
+	# (DTM-Sans is wide), so fixed-width right alignment silently overflows instead.
+	var lvl_cx := 54.0
+	var pair_right := 102.0
+	var triple_right := 146.0
+	var header_y := 56.0
+	_score_label(_score_overlay, "SYMBOL", Vector2(15.0, header_y), 7, Color(0.0, 0.9, 1.0))
+	_score_label_centered(_score_overlay, "LVL", lvl_cx, header_y, 7, Color(0.0, 0.9, 1.0))
+	_score_label_right(_score_overlay, "PAIR", pair_right, header_y, 7, Color(0.0, 0.9, 1.0))
+	_score_label_right(_score_overlay, "TRIPLE", triple_right, header_y, 7, Color(0.0, 0.9, 1.0))
 
-	var y := 130.0
+	var y := 74.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var symbol_id := String(sym)
 		var icon := TextureRect.new()
-		# ~20px icons (was 12px) so the symbols read clearly in the table; mipmaps +
-		# linear keep the large source art crisp when downscaled (issue #22).
 		icon.texture = _load_texture("symbols/%s.png" % symbol_id, true)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		icon.position = Vector2(15.0, y - 6.0)
-		icon.size = Vector2(20.0, 20.0)
-		icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		# IGNORE_SIZE must be set BEFORE size: with the default expand mode the
+		# texture's own size is the minimum, so the box silently refuses to shrink —
+		# that's what kept these icons stuck at full art size.
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.position = Vector2(15.0, y - 1.0)
+		icon.size = Vector2(20.0, 20.0)
 		_score_overlay.add_child(icon)
-		_score_label(_score_overlay, symbol_id.to_upper(), Vector2(40.0, y), 7, Color(0.86, 0.9, 0.96))
+
+		# Permanent odds level (issue #51): the same levels bought at the dealer's
+		# odds table; dimmed when the symbol was never upgraded.
+		var level := RunStateStore.odds_upgrade_level(symbol_id)
+		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7,
+			Color(1.0, 0.86, 0.2) if level > 0 else Color(0.45, 0.48, 0.58))
+
 		var pair := int(Payouts.PAIR_SCORE.get(symbol_id, 0))
 		var triple := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-		_score_label(_score_overlay, "+%d" % pair, Vector2(77.0, y), 7, Color(0.75, 1.0, 0.8), 24.0, HORIZONTAL_ALIGNMENT_RIGHT)
-		_score_label(_score_overlay, "+%d%s" % [triple, "*" if symbol_id == "brain" else ""], Vector2(105.0, y), 7, Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8), 36.0, HORIZONTAL_ALIGNMENT_RIGHT)
-		y += 20.0
-
-	_score_label(_score_overlay, "* BRAIN TRIPLE = JACKPOT", Vector2(19.0, 251.0), 6, Color(0.72, 0.76, 0.86))
+		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, Color(0.75, 1.0, 0.8))
+		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7,
+			Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8))
+		# Little bonus-effect blurb under the triple value (issue #51).
+		_score_label_right(_score_overlay, _triple_effect_text(symbol_id), triple_right, y + 12.0, 4,
+			Color(0.58, 0.64, 0.72))
+		y += 27.0
 
 	var close := Button.new()
 	close.text = "CLOSE"
@@ -2125,6 +2135,38 @@ func _show_score_table() -> void:
 	Assets.skin_negative_button(close)
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
+
+# Labels sized by their text and placed from the right edge / centre — the only
+# reliable way to align DTM-Sans columns (min size = text width, no shrinking).
+func _score_label_right(parent: Control, text: String, right_x: float, y: float,
+		font_size: int, color: Color) -> Label:
+	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
+	l.position = Vector2(right_x - l.get_minimum_size().x, y)
+	return l
+
+func _score_label_centered(parent: Control, text: String, center_x: float, y: float,
+		font_size: int, color: Color) -> Label:
+	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
+	l.position = Vector2(center_x - l.get_minimum_size().x * 0.5, y)
+	return l
+
+## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
+## Dynamic counts pull from the reaction exports so the copy never drifts.
+func _triple_effect_text(symbol_id: String) -> String:
+	match symbol_id:
+		"brain":
+			return "JACKPOT +%d SPIN" % triple_brain_free_spins
+		"eye":
+			return "REVEALS A REEL"
+		"pill":
+			return "ALL POWERS BACK"
+		"syringe":
+			return "LAST ITEM BACK"
+		"vial":
+			return "+%d FREE SPINS" % triple_vial_free_spins
+		"flatline":
+			return "KILLS YOU"
+	return ""
 
 func _close_score_table() -> void:
 	if _score_overlay != null:
