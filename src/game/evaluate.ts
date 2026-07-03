@@ -158,6 +158,7 @@ export function evaluate(input: SpinInput): SpinResult {
     maxFreeSpins,
     lucidityMultiplier,
     isFreeSpin,
+    freeSpinCost = 1,
     lockedReels,
     previousReels,
     rng,
@@ -230,8 +231,9 @@ export function evaluate(input: SpinInput): SpinResult {
   // Free spins NEVER generate free spins (structural enforcement)
   const score = scoreReels(reels, lucidityMultiplier, !isFreeSpin, pattern23Triple, learningActive, pairScoreMult, hiddenReelCount);
 
+  const freeSpinSpend = Math.max(1, Math.floor(freeSpinCost));
   const freeSpinsAfter = isFreeSpin
-    ? Math.max(0, freeSpinsRemaining - 1)
+    ? Math.max(0, freeSpinsRemaining - freeSpinSpend)
     : Math.min(freeSpinsRemaining + score.freeSpinsGranted, maxFreeSpins);
 
   return {

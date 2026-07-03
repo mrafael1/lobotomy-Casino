@@ -538,8 +538,9 @@ export function GameScreen() {
 
   const isMultiplierLocked = useCallback((m: 1 | 2 | 3) =>
     (energyLocked && m === 3) ||
+    (freeSpins > 0 && freeSpins < m) ||
     (!noNeuronCostSpin && Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN) < m),
-  [energyLocked, noNeuronCostSpin, neurons]);
+  [energyLocked, freeSpins, noNeuronCostSpin, neurons]);
 
   // Compulsion jitter — small fast X (with a touch of Y), additive to the jackpot
   // shake but driven by its own value so the two never interfere. Created ONCE

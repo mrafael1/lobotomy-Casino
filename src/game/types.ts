@@ -16,6 +16,7 @@ export interface SpinInput {
   readonly maxFreeSpins: number;
   readonly lucidityMultiplier: number; // combined from all active effects
   readonly isFreeSpin: boolean;
+  readonly freeSpinCost?: number;      // defaults to 1; bet multiplier spends multiple free-spin credits
   readonly lockedReels: ReadonlyArray<boolean>; // [r0, r1, r2] — locked reels keep previous symbol
   readonly previousReels: ReelResult | null;    // needed when lockedReels has any true
   readonly rng: () => number;

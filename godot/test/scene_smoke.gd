@@ -64,6 +64,7 @@ func _run() -> void:
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
+	_check_free_spin_multiplier_cost(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -1227,6 +1228,29 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
+	run_store.reset_run_state()
+
+func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.freeSpinsRemaining = 3
+	run_store.maxFreeSpins = 3
+	run_store.betMultiplier = 3
+	var neurons_before := int(run_store.neurons)
+	var result: Variant = run_store.spin()
+	if result == null:
+		failures.append("free-spin multiplier: x3 free spin did not spin")
+		run_store.reset_run_state()
+		return
+	run_store.set_spinning(false)
+	if not bool(result["isFreeSpin"]):
+		failures.append("free-spin multiplier: spin was not marked free")
+	if int(result["scoreMultiplier"]) != 3:
+		failures.append("free-spin multiplier: x3 did not score as x3")
+	if int(run_store.freeSpinsRemaining) != 0:
+		failures.append("free-spin multiplier: x3 did not consume 3 free spins")
+	if int(run_store.neurons) != neurons_before:
+		failures.append("free-spin multiplier: free spin consumed neurons")
 	run_store.reset_run_state()
 
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and

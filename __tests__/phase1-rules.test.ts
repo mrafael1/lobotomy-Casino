@@ -146,6 +146,25 @@ function totalConsumableCharges(runConsumables: Partial<Record<string, number>>)
   return Object.values(runConsumables).reduce<number>((sum, n) => sum + (n ?? 0), 0);
 }
 
+test('store: x3 free-spin bet consumes three banked free spins', () => {
+  freshRun();
+  useRunStore.setState({
+    freeSpinsRemaining: 3,
+    maxFreeSpins: 3,
+    betMultiplier: 3,
+  });
+
+  const neuronsBefore = useRunStore.getState().neurons;
+  const result = useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+
+  const state = useRunStore.getState();
+  expect(result?.isFreeSpin).toBe(true);
+  expect(result?.scoreMultiplier).toBe(3);
+  expect(state.freeSpinsRemaining).toBe(0);
+  expect(state.neurons).toBe(neuronsBefore);
+});
+
 test('store: Serum — picked symbol is guaranteed, blur queues for the spin after (issue #53)', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(1);

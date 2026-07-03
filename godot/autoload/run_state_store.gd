@@ -153,7 +153,9 @@ func spin(compulsive := false) -> Variant:
 		eff_bet = 1
 	elif forcedRandomBetSpins > 0 and eff_bet == 3:
 		eff_bet = 2
-	if (not stasis) and (not sedative) and (not is_free):
+	if is_free:
+		eff_bet = mini(eff_bet, maxi(1, freeSpinsRemaining))
+	elif (not stasis) and (not sedative):
 		var budget := maxi(1, ceili(float(neurons) / EconomyConst.NEURON_DECAY_PER_SPIN))
 		eff_bet = mini(eff_bet, budget)
 
@@ -199,6 +201,7 @@ func spin(compulsive := false) -> Variant:
 		"maxFreeSpins": maxFreeSpins,
 		"lucidityMultiplier": eff_mult * potion_mult,
 		"isFreeSpin": is_free,
+		"freeSpinCost": (eff_bet if is_free else 1),
 		"lockedReels": lockedReels,
 		"previousReels": (lastResult["reels"] if lastResult != null else null),
 		"rng": rng,

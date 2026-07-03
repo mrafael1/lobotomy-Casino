@@ -1832,17 +1832,20 @@ func _select_bet_multiplier(m: int) -> void:
 	_play_sfx(&"multiplier_change")
 
 func _highest_affordable_multiplier() -> int:
+	var highest := 3
 	if RunStateStore.forcedRandomBetSpins > 0:
-		return 2
+		highest = 2
+	if RunStateStore.freeSpinsRemaining > 0:
+		return mini(highest, maxi(1, int(RunStateStore.freeSpinsRemaining)))
 	var sedative_next := Economy.has_sedative(RunStateStore.ownedUpgrades) \
 		and RunStateStore.freeSpinsRemaining <= 0 and (RunStateStore.spinCount + 1) % 3 == 0
-	var no_neuron_cost := RunStateStore.freeSpinsRemaining > 0 or RunStateStore.decaySkips > 0 or sedative_next
+	var no_neuron_cost := RunStateStore.decaySkips > 0 or sedative_next
 	if no_neuron_cost:
-		return 3
+		return highest
 	var base_decay := Economy.compute_neuron_decay(RunStateStore.ownedUpgrades)
 	if base_decay <= 0:
-		return 3
-	return mini(3, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
+		return highest
+	return mini(highest, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
 
 func _is_multiplier_locked(m: int) -> bool:
 	return m > _highest_affordable_multiplier()
