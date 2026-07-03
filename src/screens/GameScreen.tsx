@@ -53,13 +53,13 @@ type InteractionMode =
 // Wealth) overlay, so the player actually sees the last result.
 const FLATLINE_REVEAL_DELAY_MS = 1000;
 
-// Cocktail "compulsion": after the 3 boosted spins, the machine spins itself a
-// couple more times. The pause before each auto-spin has to outlast the coin
+// Compulsion: after Energy Drink's no-decay rush, the machine spins itself once.
+// The pause before the auto-spin has to outlast the coin
 // reward flight (CoinFlow's ~720ms burst+collect) so the auto-spin begins AFTER
 // the spin's result has visibly come in — not while the coins are still flying.
 // That matches the natural manual rhythm: you see the result land, then it spins
-// again just as you'd reach for the lever. A shorter gap read as the compulsion
-// yanking control "too soon", before the 3rd result had resolved.
+// again just as you'd reach for the lever. A shorter gap reads as the compulsion
+// yanking control too soon, before the result has resolved.
 const COMPULSIVE_SPIN_DELAY_MS = 850;
 
 // Machine dealer-arrival portrait. The dealer-scene sheet (dealer_portrait.png,
@@ -120,6 +120,10 @@ export function GameScreen() {
   const bankRun                = useMetaStore(s => s.bankRun);
   const markEndingReached      = useMetaStore(s => s.markEndingReached);
   const getPendingConsumables  = useMetaStore(s => s.getPendingConsumables);
+  const endRunKeptFraction = ownedPermanents.includes(ECONOMY.SMART_SAVE_UPGRADE_ID)
+    ? ECONOMY.SMART_SAVE_LUCIDITY_KEPT
+    : ECONOMY.END_OF_RUN_LUCIDITY_KEPT;
+  const endRunKeptPercent = Math.round(endRunKeptFraction * 100);
 
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [rerollingReelIndex, setRerollingReelIndex] = useState<number | null>(null);
@@ -320,9 +324,9 @@ export function GameScreen() {
   const handleConsumable = useCallback((id: string) => {
     const consumable = CONSUMABLES.find(c => c.id === id);
 
-    if (consumable?.effect.type === 'copyReel') {
-      // White Powder: enter selection without consuming the charge yet.
-      // The charge is consumed only when source + target are both confirmed.
+    if (consumable?.effect.type === 'scrambleThenHide') {
+      // White Powder: enter reel-scramble selection without consuming the charge
+      // yet. The charge is consumed only when source + target are both confirmed.
       setSelection({ mode: 'copy_source', consumableId: id });
     } else {
       useConsumable(id);
@@ -534,8 +538,9 @@ export function GameScreen() {
 
   const isMultiplierLocked = useCallback((m: 1 | 2 | 3) =>
     (energyLocked && m === 3) ||
+    (freeSpins > 0 && freeSpins < m) ||
     (!noNeuronCostSpin && Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN) < m),
-  [energyLocked, noNeuronCostSpin, neurons]);
+  [energyLocked, freeSpins, noNeuronCostSpin, neurons]);
 
   // Compulsion jitter — small fast X (with a touch of Y), additive to the jackpot
   // shake but driven by its own value so the two never interfere. Created ONCE
@@ -773,7 +778,7 @@ export function GameScreen() {
                 You have everything.{'\n'}It isn't enough.
               </Text>
               <Text style={styles.overlayBody}>
-                {Math.floor(lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT)} Lucidity kept (10% of {lucidityCoins})
+                {Math.floor(lucidityCoins * endRunKeptFraction)} Lucidity kept ({endRunKeptPercent}% of {lucidityCoins})
               </Text>
             </>
           ) : (
@@ -784,7 +789,7 @@ export function GameScreen() {
                   kept the real 10% when the run ended. */}
               <FlatlineKeptCountdown
                 total={lucidityCoins}
-                keptFraction={ECONOMY.END_OF_RUN_LUCIDITY_KEPT}
+                keptFraction={endRunKeptFraction}
               />
             </>
           )}

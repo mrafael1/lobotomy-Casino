@@ -11,6 +11,7 @@ export type UpgradeEffect =
   | { type: 'sedativeBonusSpin' }                              // every 3rd spin costs no neurons
   | { type: 'pattern23Triple' }                                // any 2/3 matching reels -> doubled pair payout
   | { type: 'bookSymbol';               weight: number }       // adds book to spin pool
+  | { type: 'smartSaveRetention';       kept: number }
   | { type: 'abilityUnlock';            abilityId: string };
 
 export interface Upgrade {
@@ -31,9 +32,9 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
   {
     id: 'perm_shift',
     name: 'Shift',
-    description: "Gain 1 use of Shift per run: move a reel's symbol up or down one step in the cycle.",
+    description: "Gain 1 use of Shift per run:\nmove a reel's symbol up or down one step in the cycle.",
     category: 'positive',
-    cost:1,
+    cost: 30,
     effect: { type: 'abilityUnlock', abilityId: 'shift' },
   },
   {
@@ -41,7 +42,7 @@ export const ABILITY_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Memory',
     description: 'Gain 1 use of Memory per run: lock one reel in its current position for the next spin.',
     category: 'positive',
-    cost: 1,
+    cost: 30,
     effect: { type: 'abilityUnlock', abilityId: 'memory' },
   },
 ];
@@ -55,7 +56,7 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Reward Amplification',
     description: 'All wins pay 15% more Lucidity.',
     category: 'corrupted',
-    cost: 100,
+    cost: 15,
     effect: { type: 'rewardAmpBonus', bonus: 0.15 },
     tierGroup: 'reward_amp',
     tierLabel: 'I',
@@ -65,7 +66,7 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Reward Amplification',
     description: 'All wins pay 25% more Lucidity.',
     category: 'corrupted',
-    cost: 160,
+    cost: 25,
     requiresId: 'corr_reward_amp_1',
     effect: { type: 'rewardAmpBonus', bonus: 0.10 },
     tierGroup: 'reward_amp',
@@ -76,7 +77,7 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Reward Amplification',
     description: 'All wins pay 40% more Lucidity.',
     category: 'corrupted',
-    cost: 220,
+    cost: 50,
     requiresId: 'corr_reward_amp_2',
     effect: { type: 'rewardAmpBonus', bonus: 0.15 },
     tierGroup: 'reward_amp',
@@ -95,7 +96,7 @@ export const CORRUPTED_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Pattern Fabrication',
     description: 'Any 2 of 3 matching reels, including non-adjacent, pay double pair value. Brain matches are not jackpots.',
     category: 'corrupted',
-    cost: 200,
+    cost: 100,
     effect: { type: 'pattern23Triple' },
   },
   {
@@ -154,10 +155,10 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
   },
   {
     id: 'pos_enlightenment',
-    name: 'Enlightenment',
-    description: 'All wins pay 25% more Lucidity. Does not corrupt.',
+    name: 'Hallucination',
+    description: 'All gains pay 25% more Lucidity.',
     category: 'positive',
-    cost: 450,
+    cost: 50,
     effect: { type: 'lucidityMultiplier', multiplier: 1.25 },
   },
   {
@@ -165,8 +166,16 @@ export const POSITIVE_UPGRADES: ReadonlyArray<Upgrade> = [
     name: 'Learning',
     description: 'Adds the Book symbol to the reels. Book pair: +5 Lucidity. Book triple: +15. +10 per Book visible.',
     category: 'positive',
-    cost: 300,
+    cost: 70,
     effect: { type: 'bookSymbol', weight: 7 },
+  },
+  {
+    id: 'pos_smart_save',
+    name: 'Smart Save',
+    description: 'Keep 20% of run Lucidity on reset instead of 10%.',
+    category: 'positive',
+    cost: 30,
+    effect: { type: 'smartSaveRetention', kept: 0.20 },
   },
 ];
 

@@ -32,7 +32,11 @@ function baseRun(overrides: Partial<RunState> = {}): RunState {
     dealerPending: false, dealerOfferIds: null, brainBoostSpins: 0,
     forcedRandomBetSpins: 0, guaranteedWinSpins: 0, blockPowersSpins: 0,
     hideNeuronsSpins: 0, cocktailBoostSpins: 0, compulsiveSpinSkips: 0,
-    pendingCompulsiveSpinSkips: 0, decaySkips: 0, ...overrides,
+    pendingCompulsiveSpinSkips: 0, decaySkips: 0,
+    pairBoostSpins: 0, pairBoostMult: 1, pairBoostHiddenReels: 0, guaranteeSymbolSpins: 0,
+    guaranteeSymbolId: null, blurReelsSpins: 0, pendingBlurSpins: 0,
+    banBrainSpins: 0, potionSpins: 0, forceFlatlineSpins: 0, guaranteedTripleSpins: 0, hideResultSpins: 0,
+    ...overrides,
   };
 }
 
@@ -113,14 +117,14 @@ test('lucidity_restore.json matches planLucidityGain', () => {
 
 test('endings.json matches checkEnding / checkExitEligibility', () => {
   const data = load('endings.json');
-  const emptyMeta: MetaState = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: false, endingsReached: [], pendingConsumables: {}, history: { runsPlayed: 0, bestScoreRun: 0 } };
+  const emptyMeta: MetaState = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: false, endingsReached: [], pendingConsumables: {}, is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 } };
   for (const c of data.checkEnding) {
     const run = baseRun({ neurons: c.input.neurons, scoreEarned: c.input.scoreEarned });
     expect(checkEnding(run, emptyMeta)).toBe(c.expect);
   }
   for (const c of data.checkExitEligibility) {
     const run = baseRun({ lucidityCoins: c.input.lucidityCoins });
-    const meta = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: c.input.corruptionEverUsed, endingsReached: [], pendingConsumables: {}, history: { runsPlayed: 0, bestScoreRun: 0 } } as MetaState;
+    const meta = { schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [], corruptionEverUsed: c.input.corruptionEverUsed, endingsReached: [], pendingConsumables: {}, is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 } } as MetaState;
     expect(checkExitEligibility(run, meta)).toBe(c.expect);
   }
 });

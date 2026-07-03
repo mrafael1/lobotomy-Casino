@@ -4,13 +4,12 @@ extends Node
 ## persistence layer (Step 4). Persists to user:// as JSON using the same logical
 ## shape as the MMKV `lobotomy-meta` save.
 ##
-## schemaVersion: v2 is canonical (matches INITIAL_META_STATE.schemaVersion on the
-## Expo side; the code-constant-says-1 mismatch is resolved here in favour of v2).
+## schemaVersion: v3 adds campaign/mind fields on top of the v2 Expo meta shape.
 ## A migration seam mirrors src/persistence/migrations.ts but ships empty — a
 ## v1->v2 migration is only added if an actual v1 payload is ever found in the wild.
 
 const SAVE_PATH := "user://lobotomy-meta.json"
-const CANONICAL_SCHEMA_VERSION := 2
+const CANONICAL_SCHEMA_VERSION := 3
 
 var schemaVersion: int = CANONICAL_SCHEMA_VERSION
 var lucidityWallet: int = 0
@@ -19,6 +18,28 @@ var corruptionEverUsed: bool = false
 var endingsReached: Array = []
 var pendingConsumables: Dictionary = {}
 var history: Dictionary = { "runsPlayed": 0, "bestScoreRun": 0 }
+var campaignNeuronsMax: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
+var campaignNeuronsLeft: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
+var campaignActive: bool = true
+var campaignFailed: bool = false
+var wealthEndingReached: bool = false
+var is_first_launch: bool = true
+# Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
+# phase, applied to every run, and only reset with a fresh campaign.
+var oddsUpgrades: Dictionary = {}
+# Odds-menu tokens left unspent when an odds phase was finalized (issue #50);
+# the next odds menu starts with these on top of its fresh budget.
+var oddsTokensBanked: int = 0
+
+@export_group("Run Balance")
+@export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
+
+# Campaign rebalance (issue #38): the starting neuron count is tunable; the const
+# stays the canonical default so parity/sacred rules pin the shipped value.
+@export_group("Campaign")
+@export var campaign_starting_neurons: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
+
+var _campaign_neuron_spend_feedback_pending := false
 
 signal meta_changed
 
@@ -37,6 +58,14 @@ func _as_dict() -> Dictionary:
 		"endingsReached": endingsReached.duplicate(),
 		"pendingConsumables": pendingConsumables.duplicate(true),
 		"history": history.duplicate(true),
+		"campaignNeuronsMax": campaignNeuronsMax,
+		"campaignNeuronsLeft": campaignNeuronsLeft,
+		"campaignActive": campaignActive,
+		"campaignFailed": campaignFailed,
+		"wealthEndingReached": wealthEndingReached,
+		"is_first_launch": is_first_launch,
+		"oddsUpgrades": oddsUpgrades.duplicate(true),
+		"oddsTokensBanked": oddsTokensBanked,
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -47,6 +76,18 @@ func _apply(meta: Dictionary) -> void:
 	endingsReached = (meta.get("endingsReached", []) as Array).duplicate()
 	pendingConsumables = (meta.get("pendingConsumables", {}) as Dictionary).duplicate(true)
 	history = (meta.get("history", { "runsPlayed": 0, "bestScoreRun": 0 }) as Dictionary).duplicate(true)
+	campaignNeuronsMax = int(meta.get("campaignNeuronsMax", EconomyConst.CAMPAIGN_STARTING_NEURONS))
+	campaignNeuronsLeft = clampi(
+		int(meta.get("campaignNeuronsLeft", campaignNeuronsMax)),
+		0,
+		campaignNeuronsMax
+	)
+	campaignActive = bool(meta.get("campaignActive", true))
+	campaignFailed = bool(meta.get("campaignFailed", false))
+	wealthEndingReached = bool(meta.get("wealthEndingReached", endingsReached.has("wealth")))
+	is_first_launch = bool(meta.get("is_first_launch", true))
+	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
+	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
 	meta_changed.emit()
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
@@ -54,7 +95,12 @@ func _apply(meta: Dictionary) -> void:
 func bank_run(run: Dictionary, ending: String) -> void:
 	var next := Endings.bank_run_to_meta(run, _as_dict(), ending, _now_ms())
 	_apply(next)
+	if ending == "wealth":
+		wealthEndingReached = true
+		campaignActive = false
+		campaignFailed = false
 	pendingConsumables = {} # cleared on bank, matching the Expo store
+	meta_changed.emit()
 	save_state()
 
 func buy_upgrade(upgrade_id: String) -> void:
@@ -77,13 +123,16 @@ func buy_upgrade(upgrade_id: String) -> void:
 	save_state()
 
 func buy_consumable_charge(consumable_id: String) -> void:
+	buy_consumable_charge_with_limit(consumable_id, max_consumable_slots)
+
+func buy_consumable_charge_with_limit(consumable_id: String, slot_limit: int) -> void:
 	var cmap := Consumables.map()
 	var consumable: Variant = cmap.get(consumable_id, null)
 	if consumable == null:
 		return
 	if lucidityWallet < int(consumable["shopCost"]):
 		return
-	if Consumables.total_copies(pendingConsumables) >= Consumables.MAX_CONSUMABLE_SLOTS:
+	if Consumables.total_copies(pendingConsumables) >= maxi(1, slot_limit):
 		return
 	lucidityWallet -= int(consumable["shopCost"])
 	pendingConsumables = pendingConsumables.duplicate(true)
@@ -110,9 +159,13 @@ func mark_ending_reached(ending: String) -> void:
 	if not endingsReached.has(ending):
 		endingsReached = endingsReached.duplicate()
 		endingsReached.append(ending)
-	if ending == "wealth" and not history.has("wealthEndingReachedAt"):
-		history = history.duplicate(true)
-		history["wealthEndingReachedAt"] = _now_ms()
+	if ending == "wealth":
+		wealthEndingReached = true
+		campaignActive = false
+		campaignFailed = false
+		if not history.has("wealthEndingReachedAt"):
+			history = history.duplicate(true)
+			history["wealthEndingReachedAt"] = _now_ms()
 	elif ending == "exit" and not history.has("exitEndingReachedAt"):
 		history = history.duplicate(true)
 		history["exitEndingReachedAt"] = _now_ms()
@@ -121,6 +174,90 @@ func mark_ending_reached(ending: String) -> void:
 
 func get_pending_consumables() -> Dictionary:
 	return pendingConsumables.duplicate(true)
+
+# ── permanent dealer-odds upgrades ─────────────────────────────────────────────────
+
+func odds_upgrade_level(symbol: String) -> int:
+	return int(oddsUpgrades.get(symbol, 0))
+
+## Commits finalized odds purchases (symbol -> bought levels), clamped to max_level.
+func add_odds_upgrades(bought: Dictionary, max_level: int) -> void:
+	if bought.is_empty():
+		return
+	oddsUpgrades = oddsUpgrades.duplicate(true)
+	for symbol in bought:
+		var next_level := int(oddsUpgrades.get(symbol, 0)) + int(bought[symbol])
+		oddsUpgrades[symbol] = clampi(next_level, 0, maxi(0, max_level))
+	meta_changed.emit()
+	save_state()
+
+## Banks the tokens left unspent when an odds phase closes (issue #50); the next
+## odds menu grants these on top of its fresh budget.
+func set_odds_tokens_banked(count: int) -> void:
+	oddsTokensBanked = maxi(0, count)
+	meta_changed.emit()
+	save_state()
+
+func campaign_status_text() -> String:
+	return "NEURONS: %d/%d" % [campaignNeuronsLeft, campaignNeuronsMax]
+
+func can_start_campaign_run() -> bool:
+	return campaignActive and not campaignFailed and not wealthEndingReached and campaignNeuronsLeft > 0
+
+func consume_campaign_neuron_for_run(save_immediately := true) -> bool:
+	if not campaignActive and not wealthEndingReached:
+		start_new_campaign(false)
+	if not can_start_campaign_run():
+		if campaignNeuronsLeft <= 0 and not wealthEndingReached:
+			mark_campaign_failed(save_immediately)
+		return false
+	campaignNeuronsLeft -= 1
+	_campaign_neuron_spend_feedback_pending = true
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
+	return true
+
+func consume_neuron_spend_feedback() -> bool:
+	var pending := _campaign_neuron_spend_feedback_pending
+	_campaign_neuron_spend_feedback_pending = false
+	return pending
+
+func mark_campaign_failed(save_immediately := true) -> void:
+	if wealthEndingReached:
+		return
+	campaignActive = false
+	campaignFailed = true
+	campaignNeuronsLeft = 0
+	pendingConsumables = {}
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
+
+func start_new_campaign(save_immediately := true) -> void:
+	lucidityWallet = 0
+	ownedPermanents = []
+	corruptionEverUsed = false
+	pendingConsumables = {}
+	campaignNeuronsMax = campaign_starting_neurons
+	campaignNeuronsLeft = campaignNeuronsMax
+	campaignActive = true
+	campaignFailed = false
+	wealthEndingReached = false
+	oddsUpgrades = {}
+	oddsTokensBanked = 0
+	_campaign_neuron_spend_feedback_pending = false
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
+
+func mark_tutorial_seen(save_immediately := true) -> void:
+	if not is_first_launch:
+		return
+	is_first_launch = false
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
 
 # ── persistence (Step 4) ──────────────────────────────────────────────────────────
 
@@ -163,4 +300,40 @@ func _migrate(record: Dictionary) -> Dictionary:
 	if int(current.get("schemaVersion", 0)) != CANONICAL_SCHEMA_VERSION:
 		current = current.duplicate(true)
 		current["schemaVersion"] = CANONICAL_SCHEMA_VERSION
+	if not current.has("campaignNeuronsMax"):
+		current["campaignNeuronsMax"] = EconomyConst.CAMPAIGN_STARTING_NEURONS
+	if not current.has("campaignNeuronsLeft"):
+		current["campaignNeuronsLeft"] = int(current["campaignNeuronsMax"])
+	# Campaign rebalance (issue #38): reclamp saves from the 12-neuron era down to
+	# the new starting count; neurons-left may never exceed the reclamped max.
+	if int(current["campaignNeuronsMax"]) > EconomyConst.CAMPAIGN_STARTING_NEURONS:
+		current["campaignNeuronsMax"] = EconomyConst.CAMPAIGN_STARTING_NEURONS
+	current["campaignNeuronsLeft"] = clampi(
+		int(current["campaignNeuronsLeft"]), 0, int(current["campaignNeuronsMax"])
+	)
+	if not current.has("campaignActive"):
+		current["campaignActive"] = true
+	if not current.has("campaignFailed"):
+		current["campaignFailed"] = false
+	if not current.has("wealthEndingReached"):
+		var reached: Array = current.get("endingsReached", []) as Array
+		current["wealthEndingReached"] = reached.has("wealth")
+	if not current.has("is_first_launch"):
+		current["is_first_launch"] = true
+	if not current.has("oddsUpgrades"):
+		current["oddsUpgrades"] = {}
+	if not current.has("oddsTokensBanked"):
+		current["oddsTokensBanked"] = 0
+	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
+	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
+	if pending.has("cons_syringe"):
+		pending = pending.duplicate(true)
+		pending["cons_potion"] = int(pending.get("cons_potion", 0)) + int(pending["cons_syringe"])
+		pending.erase("cons_syringe")
+		current = current.duplicate(true)
+		current["pendingConsumables"] = pending
+	# Campaign rebalance (issue #38): saves from the 12-neuron era reclamp down to
+	# the current starting count, and Left re-clamps to the new Max.
+	current["campaignNeuronsMax"] = mini(int(current["campaignNeuronsMax"]), campaign_starting_neurons)
+	current["campaignNeuronsLeft"] = mini(int(current["campaignNeuronsLeft"]), int(current["campaignNeuronsMax"]))
 	return current

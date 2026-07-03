@@ -1,12 +1,275 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://c1dnk363lrah7"]
 
-[ext_resource type="Script" path="res://scenes/in_run_dealer_offer.gd" id="1_offer"]
+[ext_resource type="Script" uid="uid://bjj4vrqact3d4" path="res://scenes/in_run_dealer_offer.gd" id="1_offer"]
+[ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+[ext_resource type="Texture2D" uid="uid://cpsspqyhnt8lr" path="res://assets/images/dealer_portrait.png" id="3_6x38b"]
+[ext_resource type="Texture2D" uid="uid://blcjuj1ssoo2q" path="res://assets/images/dealer_hands.png" id="4_fxop8"]
+[ext_resource type="Texture2D" uid="uid://bdycexdh3bb6m" path="res://assets/images/ui/speech_bubble_normal.png" id="5_ifspb"]
+[ext_resource type="Script" uid="uid://svi836bkplk8" path="res://scenes/offer_slot_preview.gd" id="6_slot"]
+[ext_resource type="Texture2D" uid="uid://b3o4yi7e744vh" path="res://assets/images/ui/green_button.png" id="7_fxop8"]
+[ext_resource type="Texture2D" uid="uid://ckf78hj8fjggk" path="res://assets/images/ui/red_button.png" id="8_ifspb"]
 
-[node name="InRunDealerOffer" type="Control"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fxop8"]
+content_margin_bottom = 2.0
+texture = ExtResource("7_fxop8")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ifspb"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("7_fxop8")
+region_rect = Rect2(48, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_sdvb3"]
+content_margin_bottom = 2.0
+texture = ExtResource("7_fxop8")
+region_rect = Rect2(24, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qnvgc"]
+content_margin_bottom = 2.0
+texture = ExtResource("7_fxop8")
+region_rect = Rect2(72, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0w21y"]
+content_margin_bottom = 2.0
+texture = ExtResource("7_fxop8")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_w1ay1"]
+content_margin_bottom = 2.0
+texture = ExtResource("8_ifspb")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_pmmol"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("8_ifspb")
+region_rect = Rect2(48, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_4j4x1"]
+content_margin_bottom = 2.0
+texture = ExtResource("8_ifspb")
+region_rect = Rect2(24, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_kat8y"]
+content_margin_bottom = 2.0
+texture = ExtResource("8_ifspb")
+region_rect = Rect2(72, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vf3la"]
+content_margin_bottom = 2.0
+texture = ExtResource("8_ifspb")
+region_rect = Rect2(0, 0, 24, 12)
+
+[node name="InRunDealerOffer" type="Control" unique_id=806390949]
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
 script = ExtResource("1_offer")
+left_dealer_drop_rect = null
+right_dealer_drop_rect = null
+show_drop_hitbox_in_editor = null
+
+[node name="Dim" type="ColorRect" parent="." unique_id=2129441739]
+layout_mode = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+color = Color(0.02, 0, 0.05, 0.16)
+
+[node name="TapLabel" type="Label" parent="." unique_id=874943861]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 117.0
+offset_right = 102.0
+offset_bottom = 135.0
+scale = Vector2(1.15, 1.15)
+theme_override_colors/font_color = Color(0.88, 0.66, 1, 1)
+theme_override_colors/font_outline_color = Color(0.04, 0, 0.08, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 12
+text = "tap"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DealerRoot" type="Node2D" parent="." unique_id=1070296442]
+position = Vector2(-111, 204)
+
+[node name="DealerSprite" type="Sprite2D" parent="DealerRoot" unique_id=1367489461]
+texture_filter = 1
+position = Vector2(119.000015, -62)
+rotation = 1.5707964
+scale = Vector2(0.16067934, 0.182577)
+texture = ExtResource("3_6x38b")
+region_enabled = true
+region_rect = Rect2(392, 1048, 464, 640)
+
+[node name="Hands" type="Sprite2D" parent="." unique_id=547744502]
+texture_filter = 1
+position = Vector2(16, 0)
+texture = ExtResource("4_fxop8")
+centered = false
+
+[node name="ItemLayer" type="Control" parent="." unique_id=1728709395]
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="OfferSlot1" type="Control" parent="ItemLayer" unique_id=993691512]
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 7.0
+offset_right = 52.0
+offset_bottom = 39.0
+mouse_filter = 2
+script = ExtResource("6_slot")
+
+[node name="OfferSlot2" type="Control" parent="ItemLayer" unique_id=1747491054]
+anchors_preset = 0
+offset_left = 89.0
+offset_top = 8.0
+offset_right = 121.0
+offset_bottom = 40.0
+mouse_filter = 2
+script = ExtResource("6_slot")
+placeholder_item_id = "item_pill"
+
+[node name="StashLayer" type="Control" parent="." unique_id=438174678]
+visible = false
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="SpeechBubble" type="Control" parent="." unique_id=1958973861]
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 70.0
+offset_right = 108.0
+offset_bottom = 108.0
+
+[node name="BubbleGraphic" type="TextureRect" parent="SpeechBubble" unique_id=16118120]
+texture_filter = 1
+layout_mode = 0
+offset_right = 100.0
+offset_bottom = 38.0
+mouse_filter = 2
+texture = ExtResource("5_ifspb")
+expand_mode = 1
+
+[node name="SpeechLabel" type="Label" parent="SpeechBubble" unique_id=580776240]
+layout_mode = 0
+offset_right = 100.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(0.12, 0.06, 0.16, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 6
+text = "I've got something for ya"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HintLayer" type="Control" parent="SpeechBubble" unique_id=2063264808]
+visible = false
+anchors_preset = 0
+offset_right = 100.0
+offset_bottom = 36.0
+mouse_filter = 2
+
+[node name="NameHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1904050071]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 1.0
+offset_right = 92.0
+offset_bottom = 11.0
+theme_override_colors/font_color = Color(0.12, 0.06, 0.16, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PositiveHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1755181344]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 12.0
+offset_right = 92.0
+offset_bottom = 22.0
+theme_override_colors/font_color = Color(0.13, 0.77, 0.37, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "+ CLEAR"
+vertical_alignment = 1
+
+[node name="NegativeHint" type="Label" parent="SpeechBubble/HintLayer" unique_id=1303275031]
+layout_mode = 0
+offset_left = 8.5
+offset_top = 23.0
+offset_right = 92.5
+offset_bottom = 33.0
+theme_override_colors/font_color = Color(0.94, 0.27, 0.27, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "- WEAK"
+vertical_alignment = 1
+
+[node name="MessageLabel" type="Label" parent="." unique_id=2109517132]
+visible = false
+layout_mode = 0
+offset_left = 8.0
+offset_top = 219.0
+offset_right = 152.0
+offset_bottom = 238.0
+theme_override_colors/font_color = Color(1, 0.6, 0.6, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 6
+text = "YOUR POCKETS ARE FULL,
+WANNA THROW SOMETHING ?"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LookButton" type="Button" parent="." unique_id=1191675138]
+texture_filter = 1
+custom_minimum_size = Vector2(52, 16)
+layout_mode = 0
+offset_left = 54.0
+offset_top = 243.0
+offset_right = 106.0
+offset_bottom = 259.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+theme_override_styles/normal = SubResource("StyleBoxTexture_fxop8")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_ifspb")
+theme_override_styles/hover = SubResource("StyleBoxTexture_sdvb3")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_qnvgc")
+theme_override_styles/focus = SubResource("StyleBoxTexture_0w21y")
+text = "look"
+
+[node name="IgnoreButton" type="Button" parent="." unique_id=1932137487]
+texture_filter = 1
+custom_minimum_size = Vector2(52, 16)
+layout_mode = 0
+offset_left = 54.0
+offset_top = 263.0
+offset_right = 106.0
+offset_bottom = 279.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+theme_override_styles/normal = SubResource("StyleBoxTexture_w1ay1")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_pmmol")
+theme_override_styles/hover = SubResource("StyleBoxTexture_4j4x1")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_kat8y")
+theme_override_styles/focus = SubResource("StyleBoxTexture_vf3la")
+text = "ignore"

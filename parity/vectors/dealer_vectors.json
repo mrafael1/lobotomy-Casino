@@ -368,16 +368,16 @@
       "id": "item_energy_drink",
       "effect": {
         "type": "skipDecay",
-        "spins": 5,
-        "forcedRandomBetSpins": 5
+        "spins": 2,
+        "blockBet": "x3"
       }
     },
     {
       "id": "item_cocktail",
       "effect": {
         "type": "cocktailBoost",
-        "spins": 3,
-        "compulsiveSpins": 2
+        "spins": 2,
+        "compulsiveSpins": 1
       }
     },
     {
@@ -390,9 +390,9 @@
     {
       "id": "item_pill",
       "effect": {
-        "type": "guaranteedWin",
-        "spins": 3,
-        "blockPowersSpins": 5
+        "type": "forceFlatlinesThenTriple",
+        "flatSpins": 1,
+        "guaranteedTripleNext": true
       }
     }
   ]

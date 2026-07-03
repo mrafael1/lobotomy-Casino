@@ -37,11 +37,16 @@ static func evaluate_dealer_trigger(input: Dictionary) -> Dictionary:
 	var spin_count := int(input["spinCount"])
 	var dealer_count := int(input["dealerCount"])
 	var dealer_last := int(input["dealerLastSpinCount"])
+	var max_count := int(input.get("maxCount", MAX_COUNT))
+	var min_spin_gap := int(input.get("minSpinGap", MIN_SPIN_GAP))
+	var high_threshold := float(input.get("highThreshold", THRESHOLD_HIGH))
+	var low_threshold := float(input.get("lowThreshold", THRESHOLD_LOW))
+	var proc_chance := float(input.get("procChance", PROC_CHANCE))
 	var fired65: bool = input["dealer65SafetyFired"]
 	var fired35: bool = input["dealer35SafetyFired"]
 	var proc_seed := int(input["procSeed"])
 
-	if starting <= 0 or dealer_count >= MAX_COUNT or (spin_count - dealer_last) < MIN_SPIN_GAP:
+	if starting <= 0 or dealer_count >= max_count or (spin_count - dealer_last) < min_spin_gap:
 		return { "shouldTrigger": false, "dealer65SafetyFired": fired65, "dealer35SafetyFired": fired35 }
 
 	var ratio := float(neurons) / float(starting)
@@ -49,19 +54,19 @@ static func evaluate_dealer_trigger(input: Dictionary) -> Dictionary:
 	var new65 := fired65
 	var new35 := fired35
 
-	if not fired65 and ratio <= THRESHOLD_HIGH:
+	if not fired65 and ratio <= high_threshold:
 		new65 = true
 		if dealer_count == 0:
 			should_trigger = true
 
-	if not fired35 and ratio <= THRESHOLD_LOW:
+	if not fired35 and ratio <= low_threshold:
 		new35 = true
 		if dealer_count == 1:
 			should_trigger = true
 
 	if not should_trigger:
 		var rng := LobRNG.new(proc_seed & M32)
-		if rng.next() < PROC_CHANCE:
+		if rng.next() < proc_chance:
 			should_trigger = true
 
 	return { "shouldTrigger": should_trigger, "dealer65SafetyFired": new65, "dealer35SafetyFired": new35 }

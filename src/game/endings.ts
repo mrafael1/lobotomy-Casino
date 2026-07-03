@@ -2,8 +2,8 @@ import { ECONOMY } from '../content/economy';
 import type { RunState, MetaState, EndingType } from './types';
 
 export function checkEnding(run: RunState, meta: MetaState): EndingType | null {
-  if (run.neurons <= 0) return 'flatline';
   if (run.scoreEarned >= ECONOMY.WEALTH_SCORE_THRESHOLD) return 'wealth';
+  if (run.neurons <= 0) return 'flatline';
   return null;
 }
 
@@ -13,6 +13,12 @@ export function checkExitEligibility(run: RunState, meta: MetaState): boolean {
     !meta.corruptionEverUsed &&
     run.lucidityCoins >= ECONOMY.EXIT_LUCIDITY_THRESHOLD
   );
+}
+
+export function lucidityKeptFraction(meta: MetaState): number {
+  return meta.ownedPermanents.includes(ECONOMY.SMART_SAVE_UPGRADE_ID)
+    ? ECONOMY.SMART_SAVE_LUCIDITY_KEPT
+    : ECONOMY.END_OF_RUN_LUCIDITY_KEPT;
 }
 
 // The single transition point where run state crosses into meta.
@@ -30,7 +36,7 @@ export function bankRunToMeta(
     ? meta.endingsReached
     : ([...meta.endingsReached, ending] as MetaState['endingsReached']);
 
-  const keptLucidity = Math.floor(run.lucidityCoins * ECONOMY.END_OF_RUN_LUCIDITY_KEPT);
+  const keptLucidity = Math.floor(run.lucidityCoins * lucidityKeptFraction(meta));
 
   return {
     ...meta,

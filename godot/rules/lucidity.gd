@@ -9,12 +9,12 @@ const M32 := 0xFFFFFFFF
 
 # plan_gain(prevCoins, gain, abilitiesUsed, seed)
 #   -> { lucidityCoins, abilitiesUsed, restores }
-static func plan_gain(prev_coins: int, gain: int, abilities_used: Array, seed: int) -> Dictionary:
+static func plan_gain(prev_coins: int, gain: int, abilities_used: Array, seed: int, coins_per_restore := EconomyConst.LUCIDITY_COINS_PER_RESTORE) -> Dictionary:
 	var new_coins := maxi(0, prev_coins + gain)
 	if gain <= 0:
 		return { "lucidityCoins": new_coins, "abilitiesUsed": abilities_used.duplicate(), "restores": [] }
 
-	var per := EconomyConst.LUCIDITY_COINS_PER_RESTORE
+	var per := maxi(1, coins_per_restore)
 	var prev_index := floori(float(prev_coins) / per)
 	var next_index := floori(float(new_coins) / per)
 

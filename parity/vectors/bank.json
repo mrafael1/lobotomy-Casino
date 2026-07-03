@@ -17,6 +17,7 @@
         "corruptionEverUsed": false,
         "endingsReached": [],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 0,
           "bestScoreRun": 0
@@ -31,6 +32,7 @@
           "flatline"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 1,
           "bestScoreRun": 320
@@ -43,7 +45,7 @@
       "ending": "wealth",
       "run": {
         "lucidityCoins": 999,
-        "scoreEarned": 1000
+        "scoreEarned": 2000
       },
       "meta": {
         "schemaVersion": 2,
@@ -52,6 +54,7 @@
         "corruptionEverUsed": false,
         "endingsReached": [],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 0,
           "bestScoreRun": 0
@@ -66,9 +69,10 @@
           "wealth"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 1,
-          "bestScoreRun": 1000,
+          "bestScoreRun": 2000,
           "wealthEndingReachedAt": 1700000000000
         }
       }
@@ -90,6 +94,7 @@
           "wealth"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 3,
           "bestScoreRun": 1100,
@@ -105,6 +110,7 @@
           "wealth"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 4,
           "bestScoreRun": 1200,
@@ -127,6 +133,7 @@
         "corruptionEverUsed": false,
         "endingsReached": [],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 0,
           "bestScoreRun": 0
@@ -141,6 +148,7 @@
           "exit"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 1,
           "bestScoreRun": 400,
@@ -163,6 +171,7 @@
         "corruptionEverUsed": false,
         "endingsReached": [],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 9,
           "bestScoreRun": 500
@@ -177,6 +186,7 @@
           "flatline"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 10,
           "bestScoreRun": 500
@@ -198,6 +208,7 @@
         "corruptionEverUsed": false,
         "endingsReached": [],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 0,
           "bestScoreRun": 0
@@ -212,6 +223,7 @@
           "flatline"
         ],
         "pendingConsumables": {},
+        "is_first_launch": false,
         "history": {
           "runsPlayed": 1,
           "bestScoreRun": 200

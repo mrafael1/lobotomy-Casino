@@ -31,6 +31,8 @@ const HEALTH_BAR := { "left": 43.0, "top": 94.0, "width": 66.0, "height": 5.0 }
 const MULT_STRIP := { "top": 119.0, "height": 16.0 }
 const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
 const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
+# Centre of the reel window — consumable-use hint popups originate here.
+const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
 # Landed reel strip (mirrors Expo's ReelCellV3): a smaller centre symbol with dim
 # 0.9x neighbours peeking above/below, clipped by the cabinet hole.
@@ -49,9 +51,11 @@ const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
 const LEVER_RETURN_TIME := 0.07
+const LEVER_REEL_START_DELAY := 0.22
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
+const REEL_STOP_SFX_LEAD_TIME := 0.1
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
@@ -81,7 +85,24 @@ const SHIFT_ARROW_HITS := [
 # (issue #22). The in-run dealer is shown inline (no full-scene route), so the full
 # dealer scene is only used for the pre-run shop, reached from the menu.
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
+const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
+const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
+const SETTINGS_ASSET := "ui/settings.png"
+const SFX_FILES := {
+	&"lever": "lever.mp3",
+	&"reel_spin": "reel-spinning.mp3",
+	&"reel_stop": "reel-stop.mp3",
+	&"multiplier_change": "multiplier-change.mp3",
+	&"pair_win": "pair-bonus.mp3",
+	&"triple_win": "triple-bonus.mp3",
+	&"jackpot_win": "jackpot-bonus.mp3",
+	&"coin_fall": "coin-falling.mp3",
+	&"coin_fall_end": "coin-falling-end.mp3",
+}
+const SFX_POLYPHONY := {
+	&"reel_stop": 3,
+}
 
 # Debug-grant Shift/Memory + test consumables when a run is started standalone
 # (machine opened directly, not via the shop). The shop is the real source now.
@@ -103,6 +124,7 @@ const JACKPOT_GOLD := Color(1.0, 0.84, 0.18) # jackpot burst is ALWAYS golden (i
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
+const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 const COIN_TARGET := Vector2(76.0, 75.0)
 const COIN_SIZE := 6.0
 const POWER_COIN_SIZE := 8.0
@@ -111,6 +133,11 @@ const COIN_STAGGER_TIME := 0.09
 const COIN_BURST_FRAC := 0.4
 const COIN_BURST_RISE := 24.0
 const COIN_BURST_SCATTER := 26.0
+const COIN_TRAY_POP_TIME := 0.26
+const COIN_FALL_STAGGER_TIME := 0.035
+const COIN_TRAY_HOLD_TIME := 0.12
+const COIN_TRAY_PILE_SCATTER := 22.0
+const COIN_TRAY_PILE_DEPTH := 8.0
 const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
 const POWER_PULSE_TIME := 0.36
@@ -118,14 +145,122 @@ const POWER_PULSE_TIME := 0.36
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
+	"cons_cigarette": "items/cigarette.png",
 	"cons_white_powder": "items/white_powder.png",
-	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_potion": "items/consumable_placeholder.png",
 	"cons_tea": "items/herbal_tea.png",
 	"item_energy_drink": "items/energy_drink.png",
 	"item_cocktail": "items/cocktail.png",
 	"item_water": "items/water.png",
 	"item_pill": "items/pill.png",
 }
+
+@export_group("Run Balance")
+@export var starting_spin_counter: int = DISPLAY_SPIN_BUDGET
+@export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
+@export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
+@export var default_run_power_ids: Array[String] = ["reroll"]
+
+@export_group("Feedback")
+## Grow-then-fade duration of the on-use +/- hint (issue #33). The animated
+## HintLabel owns the +/- and corrupt colours; this only drives its lifetime.
+@export_range(0.0, 5.0, 0.1) var hint_grow_time: float = 1.5
+## Per-item +/- hint vocabulary shown when a stash item is used in-run. Mirrors
+## the dealer scenes' pools (issue #31) so the same item reads the same way.
+@export var use_hints: Dictionary = {
+	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
+	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
+	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
+	"cons_potion": { "pos": "BRAINS", "neg": "NO POWER" },
+	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
+	"item_water": { "pos": "REFRESHING", "neg": "WEAK" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
+	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
+	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
+}
+
+@export_group("Sound")
+@export var sfx_enabled: bool = true
+@export_range(0.0, 1.0, 0.05) var sfx_volume: float = 0.8
+
+# ── machine reactions (issue #35) ────────────────────────────────────────────────
+# The GDD "flatline result" is a REEL outcome (3 flatline symbols); the pinned
+# "flatline" ENDING (neurons <= 0) keeps its serialized name for parity — only this
+# new reel event is called flatline_result. Reaching fatal_flatline_count flatline
+# results, OR the run_spin_length hard cap, ends the run (added alongside neurons<=0).
+@export_group("Machine Reactions")
+@export var fatal_flatline_count: int = 3
+@export var run_spin_length: int = 35          # NEW hard run-length cap (added, not a replacement)
+@export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
+@export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
+@export_group("Triple Overlays", "triple_")
+@export var triple_brain_color: Color = Color(1.0, 0.84, 0.0)    # gold
+@export var triple_eye_color: Color = Color(0.66, 0.33, 0.86)    # purple
+@export var triple_pill_color: Color = Color(1.0, 0.55, 0.75)    # pink
+@export var triple_syringe_color: Color = Color(1.0, 0.9, 0.2)   # yellow
+@export var triple_vial_color: Color = Color(0.95, 0.25, 0.25)   # red
+@export var triple_brain_free_spins: int = 1
+@export var triple_vial_free_spins: int = 3
+
+# ── consumable visuals (issue #34) ───────────────────────────────────────────────
+# Per-item temporary on-machine effects. All presentation-only: they read store
+# state (never write it) and revert when the driving counter hits 0. Effects that
+# need authored art (pill heartbeat SFX, serum sniper, white-powder hallucination,
+# tea sakura) are NOT here — they wait on assets. 🎨
+@export_group("Consumable Visuals")
+@export var consumable_fx_enabled: bool = true
+@export_subgroup("Tobacco", "tobacco_")
+## Smoke + FULLY opaque cover on the reel(s) hidden from scoring (the last
+## pairBoostHiddenReels reels — mirrors evaluate.gd's slice) while Tobacco runs.
+## Issue #53: the hidden reel can't be seen at all.
+@export var tobacco_fx_enabled: bool = true
+@export var tobacco_smoke_color: Color = Color(0.78, 0.78, 0.82, 0.5)
+@export var tobacco_cover_color: Color = Color(0.05, 0.04, 0.07, 1.0)
+@export_subgroup("Cocktail", "cocktail_")
+## Whole-machine decaying shake on use (same position:x wobble as _nudge).
+@export var cocktail_fx_enabled: bool = true
+@export_range(0.2, 3.0, 0.1) var cocktail_shake_time: float = 0.9
+@export_range(0.5, 8.0, 0.5) var cocktail_shake_strength: float = 2.5
+@export_subgroup("Energy Drink", "energy_")
+## Pulsing burning edges + the spins bar/count fade out while decay is skipped,
+## restored the moment the effect ends.
+@export var energy_fx_enabled: bool = true
+@export var energy_edge_color: Color = Color(1.0, 0.45, 0.1, 0.75)
+@export_range(1.0, 8.0, 0.5) var energy_edge_thickness: float = 3.0
+@export_range(0.2, 3.0, 0.1) var energy_pulse_time: float = 0.9
+@export_range(0.1, 2.0, 0.1) var energy_fade_time: float = 0.45
+@export_subgroup("Potion", "potion_")
+## While Potion runs the machine hops on every spin and announces the rolled
+## random-pool effect (read from RunStateStore.lastPotionEffect).
+@export var potion_fx_enabled: bool = true
+@export_range(1.0, 12.0, 0.5) var potion_jump_height: float = 4.0
+@export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
+@export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
+@export_subgroup("Hidden Result", "hidden_")
+## White Powder: the spin consumed by hideResultSpins reveals "?" covers instead
+## of readable reels, until the next spin re-rolls the machine.
+@export var hidden_fx_enabled: bool = true
+@export var hidden_cover_color: Color = Color(0.04, 0.03, 0.06, 0.94)
+@export var hidden_glyph_color: Color = Color(0.85, 0.8, 1.0)
+@export_subgroup("Serum", "serum_")
+## Serum (issue #53): frost layer over the reels for the spin after the guarantee —
+## symbols stay readable, just harder.
+@export var blur_cover_color: Color = Color(0.82, 0.86, 0.95, 0.55)
+@export_subgroup("Compulsive", "compulsive_")
+## Energy Drink: the machine spins by itself once the no-decay rush ends — heavy
+## vibration + red overlay while it takes over.
+@export var compulsive_fx_enabled: bool = true
+@export var compulsive_overlay_color: Color = Color(0.85, 0.08, 0.08, 0.28)
+@export_range(1.0, 12.0, 0.5) var compulsive_shake_strength: float = 5.0
+@export_range(0.2, 3.0, 0.1) var compulsive_shake_time: float = 1.2
+
+# ── campaign rebalance (issue #38) ───────────────────────────────────────────────
+@export_group("Campaign")
+## Score that triggers the wealth ending — the campaign goal. Defaults to the
+## parity-locked constant; the pinned vectors always use the default.
+@export var campaign_goal_score: int = EconomyConst.WEALTH_SCORE_THRESHOLD
+## Game-over flatline copy — byte-for-byte from the GDD.
+@export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
@@ -138,6 +273,8 @@ var _dealer_offer_popup: Control = null
 var _dealer_message_label: Label = null
 var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
+var _options_button: TextureButton = null
+var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
 var _spin_button: Button = null
 var _multiplier_buttons: Array[Button] = []
@@ -176,6 +313,10 @@ var _jackpot_flash_tween: Tween = null
 var _jackpot_flashing := false
 var _font: FontFile = null
 var _tex_cache := {}
+var _sequence_lock_active := false
+var _post_spin_sequence_active := false
+var _sfx_players: Dictionary = {}
+var _spin_launch_pending := false
 
 # Reveal animation state
 var _spinning_anim := false
@@ -185,7 +326,8 @@ var _spin_frame := 0
 var _final_reels: Array = []
 var _locked_reels_during_spin := [false, false, false]
 var _use_full_spin_sheet := true
-var _reel_stop_times := [0.55, 0.8, 1.05]
+var _reel_stop_times := [0.55, 1, 1.4]
+var _reel_stop_sfx_played := [false, false, false]
 var _lever_anim_active := false
 var _lever_anim_elapsed := 0.0
 var _reroll_anim_active := false
@@ -199,9 +341,38 @@ var _flatline_kept := 0
 var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
+var _campaign_label: Label = null
+var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
+var _neuron_spend_label: Label = null
+var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
+# Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
+# and a pending eye-triple reveal for the next spin.
+var _last_reacted_reels: Array = []
+var _last_reacted_spin := -1
+var _reveal_reel_next_spin := -1
+# Spin-gain fly-ins in flight (issue #66): the spins-left counter is held back by
+# this amount until each "+N" popup lands, so the number ticks up in sync.
+var _pending_spin_gain := 0
+# Consumable visuals (issue #34).
+var _fx_layer: Control = null              # host for all consumable effect nodes
+var _tobacco_covers: Array = []            # per-reel dark cover while smoked out
+var _tobacco_smoke: Array = []             # per-reel CPUParticles2D smoke
+var _energy_edges: Control = null          # burning-edges frame (Energy Drink)
+var _energy_pulse_tween: Tween = null
+var _energy_fx_active := false
+var _cocktail_shake_tween: Tween = null
+var _potion_jump_tween: Tween = null
+var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
+var _hide_result_active := false           # the displayed result is hidden
+var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
+var _blur_result_active := false           # the displayed result renders blurry
+var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
+var _compulsive_queued := false            # energy-drink auto-spin pending
+var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
+	_apply_balance_exports()
 	# Draw order (back -> front): reel background -> symbols -> cabinet (with
 	# transparent holes that mask symbol overflow) -> HUD -> spin button.
 	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
@@ -216,11 +387,21 @@ func _ready() -> void:
 	_build_multiplier_buttons()
 	_build_power_buttons()
 	_build_stash()
+	_build_sfx_players()
+	_build_fx_layer() # before the burst/coin layers so rewards draw above effects
 	_build_burst_layer()
 	_build_coin_layer()
+	_build_options_controls()
+	_restore_options_overlay_if_requested()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_init_burst_tracking()
+
+func _apply_balance_exports() -> void:
+	if Engine.is_editor_hint():
+		return
+	RunStateStore.max_consumable_slots = maxi(1, max_consumable_slots)
+	RunStateStore.coins_per_power_restore = maxi(1, coins_per_power_restore)
 
 # ── asset loading (absolute path into ../assets) ──────────────────────────────────
 
@@ -233,7 +414,113 @@ func _load_texture(rel: String, mipmaps := false) -> Texture2D:
 func _load_font(rel: String) -> FontFile:
 	return Assets.font(rel)
 
+func _load_sfx(rel: String) -> AudioStream:
+	return load("res://assets/sound/%s" % rel) as AudioStream
+
+func _sfx_volume_db() -> float:
+	return -80.0 if sfx_volume <= 0.0 else linear_to_db(clampf(sfx_volume, 0.0, 1.0))
+
+func _build_sfx_players() -> void:
+	for id: StringName in SFX_FILES:
+		var stream := _load_sfx(String(SFX_FILES[id]))
+		if stream == null:
+			push_warning("Missing SFX: %s" % String(SFX_FILES[id]))
+			continue
+		var player := AudioStreamPlayer.new()
+		player.name = "Sfx%s" % String(id).capitalize().replace("_", "")
+		player.stream = stream
+		player.max_polyphony = int(SFX_POLYPHONY.get(id, 1))
+		player.volume_db = _sfx_volume_db()
+		add_child(player)
+		_sfx_players[id] = player
+
+func _play_sfx(id: StringName) -> void:
+	if not sfx_enabled:
+		return
+	var player := _sfx_players.get(id, null) as AudioStreamPlayer
+	if player == null:
+		return
+	player.volume_db = _sfx_volume_db()
+	if player.max_polyphony <= 1:
+		player.stop()
+	player.play()
+
+func _stop_sfx(id: StringName) -> void:
+	var player := _sfx_players.get(id, null) as AudioStreamPlayer
+	if player != null:
+		player.stop()
+
 # ── scene construction ────────────────────────────────────────────────────────────
+
+func _authored_sprite(name: String) -> Sprite2D:
+	return get_node_or_null(name) as Sprite2D
+
+func _authored_button(name: String) -> Button:
+	return get_node_or_null(name) as Button
+
+func _authored_texture_button(name: String) -> TextureButton:
+	return get_node_or_null(name) as TextureButton
+
+func _authored_control(name: String) -> Control:
+	return get_node_or_null(name) as Control
+
+func _full_canvas_name(rel: String) -> String:
+	if rel.ends_with("reel_final_machine.png"):
+		return "ReelBacking"
+	if rel.ends_with("final_machine.png"):
+		return "Cabinet"
+	return ""
+
+func _full_canvas_sheet_name(rel: String, frame: int) -> String:
+	if rel.ends_with("wealth_track_final_machine.png"):
+		return "WealthTrack"
+	if rel.ends_with("health_track_final_machine.png"):
+		return "HealthTrack"
+	if rel.ends_with("multiplier_final_machine.png"):
+		return "Multiplier"
+	if rel.ends_with("lever_final_machine.png"):
+		return "Lever"
+	if rel.ends_with("jackpot_final_machine.png"):
+		return "Jackpot"
+	if rel.ends_with("lock_power.png"):
+		return "LockPower%d" % frame
+	if rel.ends_with("reroll_final_machine.png"):
+		return "RerollPower"
+	if rel.ends_with("shift_final_machine.png"):
+		return "ShiftPower"
+	if rel.ends_with("lock_final_machine.png"):
+		return "MemoryPower"
+	return ""
+
+func _region_sprite_name(rel: String, rect: Dictionary) -> String:
+	if rel.ends_with("wealth_fill_final_machine.png"):
+		return "WealthFill"
+	if rel.ends_with("health_fill_final_machine.png"):
+		return "HealthFill"
+	if rel.ends_with("reel_final_machine.png"):
+		for i in REEL_HOLES.size():
+			if float(rect["left"]) == float(REEL_HOLES[i]["left"]) and float(rect["top"]) == float(REEL_HOLES[i]["top"]):
+				return "ReelCover%d" % i
+	return ""
+
+func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transform := true) -> void:
+	spr.texture = tex
+	spr.centered = false
+	if apply_transform:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
+	spr.texture = tex
+	spr.hframes = hframes
+	spr.frame = frame
+	spr.centered = false
+	var frame_w := float(tex.get_width()) / float(hframes)
+	if apply_transform:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
@@ -245,29 +532,29 @@ func _build_full_canvas_sprite(rel: String) -> void:
 			fallback.size = Vector2(SRC_W, SRC_H)
 			add_child(fallback)
 		return
-	var spr := Sprite2D.new()
-	spr.texture = tex
-	spr.centered = false
-	spr.position = Vector2.ZERO
-	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	# Linear+mipmaps so the 8x art downscales crisply rather than aliasing.
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
+	var name := _full_canvas_name(rel)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
+	_configure_full_canvas_sprite(spr, tex, not authored)
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		return null
-	var spr := Sprite2D.new()
-	spr.texture = tex
-	spr.hframes = hframes
-	spr.frame = frame
-	spr.centered = false
-	spr.position = Vector2.ZERO
-	var frame_w := float(tex.get_width()) / float(hframes)
-	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
+	var name := _full_canvas_sheet_name(rel, frame)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
+	_configure_full_canvas_sheet(spr, tex, hframes, frame, not authored)
 	return spr
 
 func _build_full_canvas_grid_sheet(rel: String, hframes: int, vframes: int, frame: int = 0) -> Sprite2D:
@@ -292,10 +579,18 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		return null
-	var spr := Sprite2D.new()
+	var name := _region_sprite_name(rel, rect)
+	var spr := _authored_sprite(name) if name != "" else null
+	var authored := spr != null
+	if spr == null:
+		spr = Sprite2D.new()
+		if name != "":
+			spr.name = name
+		add_child(spr)
 	spr.texture = tex
 	spr.centered = false
-	spr.position = Vector2(rect["left"], rect["top"])
+	if not authored:
+		spr.position = Vector2(rect["left"], rect["top"])
 	spr.region_enabled = true
 	spr.region_rect = Rect2(
 		rect["left"] * ASSET_SCALE,
@@ -303,9 +598,9 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 		rect["width"] * ASSET_SCALE,
 		rect["height"] * ASSET_SCALE
 	)
-	spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
+	if not authored:
+		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(spr)
 	return spr
 
 func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: int = 0) -> Sprite2D:
@@ -351,15 +646,20 @@ func _build_reel_animation_art() -> void:
 	if tex == null:
 		return
 	for i in 3:
-		var spr := Sprite2D.new()
+		var spr := _authored_sprite("SpinReel%d" % i)
+		var authored := spr != null
+		if spr == null:
+			spr = Sprite2D.new()
+			spr.name = "SpinReel%d" % i
+			add_child(spr)
 		spr.texture = tex
 		spr.centered = false
 		spr.region_enabled = true
-		spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
-		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
+		if not authored:
+			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
+			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
 		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		spr.visible = false
-		add_child(spr)
 		_spin_reel_sprites.append(spr)
 		_set_spin_reel_frame(i, 0)
 
@@ -403,9 +703,15 @@ func _build_machine_control_art() -> void:
 		if lock != null:
 			lock.visible = false
 		_lock_sprites.append(lock)
-		var count := Label.new()
-		count.position = Vector2(REEL_CELL_CENTERS[i] - 6.0, REEL_WINDOW["top"] + REEL_WINDOW["height"] + 1.0)
-		count.size = Vector2(12.0, 8.0)
+		var count := get_node_or_null("LockCount%d" % i) as Label
+		var authored_count := count != null
+		if count == null:
+			count = Label.new()
+			count.name = "LockCount%d" % i
+			add_child(count)
+		if not authored_count:
+			count.position = Vector2(REEL_CELL_CENTERS[i] - 6.0, REEL_WINDOW["top"] + REEL_WINDOW["height"] + 1.0)
+			count.size = Vector2(12.0, 8.0)
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		count.add_theme_font_size_override("font_size", 7)
 		if _font != null:
@@ -413,7 +719,6 @@ func _build_machine_control_art() -> void:
 		count.add_theme_color_override("font_color", Color(1.0, 0.86, 0.28))
 		count.text = ""
 		count.visible = false
-		add_child(count)
 		_lock_count_labels.append(count)
 	for id in ["reroll", "shift", "memory"]:
 		_power_sprites[id] = _build_full_canvas_sheet(String(POWER_SHEETS[id]), 3, POWER_FRAME_DISABLED)
@@ -423,15 +728,30 @@ func _transparent_button_style() -> StyleBoxEmpty:
 
 func _make_hit_button(rect: Dictionary, cb: Callable) -> Button:
 	var b := Button.new()
+	_configure_hit_button(b, rect, cb)
+	return b
+
+func _configure_hit_button(b: Button, rect: Dictionary, cb: Callable, apply_rect := true) -> void:
 	b.text = ""
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
-	b.position = Vector2(rect["left"], rect["top"])
-	b.size = Vector2(rect["width"], rect["height"])
+	if apply_rect:
+		b.position = Vector2(rect["left"], rect["top"])
+		b.size = Vector2(rect["width"], rect["height"])
 	var empty := _transparent_button_style()
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(state, empty)
-	b.pressed.connect(cb)
+	if not b.pressed.is_connected(cb):
+		b.pressed.connect(cb)
+
+func _make_or_bind_hit_button(name: String, rect: Dictionary, cb: Callable) -> Button:
+	var b := _authored_button(name)
+	var authored := b != null
+	if b == null:
+		b = Button.new()
+		b.name = name
+		add_child(b)
+	_configure_hit_button(b, rect, cb, not authored)
 	return b
 
 # Per-reel reel-background patches, drawn above the spin-blur sheet and below the
@@ -448,22 +768,43 @@ func _set_reel_cover(index: int, visible: bool) -> void:
 	if index < _reel_covers.size() and _reel_covers[index] != null:
 		_reel_covers[index].visible = visible
 
+func _play_reel_stop_sfx(index: int) -> void:
+	if index < 0 or index >= _reel_stop_sfx_played.size():
+		return
+	if bool(_reel_stop_sfx_played[index]):
+		return
+	_reel_stop_sfx_played[index] = true
+	_play_sfx(&"reel_stop")
+
 # A reel lands: mask its blur, show its final symbol, stop animating that reel.
 func _reveal_reel(index: int) -> void:
+	var was_visible := _reel_sprites[index].visible
+	if not was_visible:
+		_play_reel_stop_sfx(index)
 	_set_spin_reel_visible(index, false)
 	_set_reel_cover(index, true)
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
+	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
+	_set_blur_cover(index, _blur_result_active)   # Serum frost blurs the reveal (issue #53)
 
-func _new_reel_sprite(pos: Vector2, alpha: float) -> Sprite2D:
-	var s := Sprite2D.new()
+func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
 	s.centered = true
-	s.position = pos
+	if apply_position:
+		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
 	# Symbols are authored large and drawn at 12-16px, so downscale with
 	# linear+mipmaps (supersampled, crisp) rather than nearest (aliased).
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(s)
+
+func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
+	var s := _authored_sprite(name)
+	var authored := s != null
+	if s == null:
+		s = Sprite2D.new()
+		s.name = name
+		add_child(s)
+	_configure_reel_sprite(s, pos, alpha, not authored)
 	return s
 
 func _build_reels() -> void:
@@ -471,9 +812,9 @@ func _build_reels() -> void:
 	for i in 3:
 		var cx: float = REEL_CELL_CENTERS[i]
 		# Add neighbours first, centre last so it draws on top where they meet.
-		_reel_top_sprites.append(_new_reel_sprite(Vector2(cx, cy - STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_bottom_sprites.append(_new_reel_sprite(Vector2(cx, cy + STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_sprites.append(_new_reel_sprite(Vector2(cx, cy), 1.0))
+		_reel_top_sprites.append(_new_reel_sprite("Reel%dTop" % i, Vector2(cx, cy - STRIP_OFFSET), STRIP_ADJ_ALPHA))
+		_reel_bottom_sprites.append(_new_reel_sprite("Reel%dBottom" % i, Vector2(cx, cy + STRIP_OFFSET), STRIP_ADJ_ALPHA))
+		_reel_sprites.append(_new_reel_sprite("Reel%dCenter" % i, Vector2(cx, cy), 1.0))
 
 func _set_reel_visible(index: int, visible: bool) -> void:
 	_reel_sprites[index].visible = visible
@@ -512,38 +853,149 @@ func _set_reel_symbol(index: int, symbol_id: String) -> void:
 
 func _build_hud() -> void:
 	_build_score_button()
+	_build_campaign_label()
+	_build_hint_layer()
 	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
 
 func _build_score_button() -> void:
-	_score_button = Button.new()
-	_score_button.text = "SCORES"
-	_score_button.size = Vector2(41.0, 15.0)
-	# Pulled off the top-right corner so it isn't glued to the edge.
-	_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
+	_score_button = _authored_button("ScoreButton")
+	var authored := _score_button != null
+	if _score_button == null:
+		_score_button = Button.new()
+		_score_button.name = "ScoreButton"
+		add_child(_score_button)
+	_score_button.text = "TABLES"
+	if not authored:
+		_score_button.size = Vector2(41.0, 15.0)
+		# Pulled off the top-right corner so it isn't glued to the edge.
+		_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
 	_score_button.flat = false
 	_score_button.focus_mode = Control.FOCUS_NONE
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
 	Assets.skin_negative_button(_score_button)
-	_score_button.pressed.connect(_show_score_table)
-	add_child(_score_button)
+	if not _score_button.pressed.is_connected(_show_score_table):
+		_score_button.pressed.connect(_show_score_table)
+
+func _build_options_controls() -> void:
+	_options_button = _authored_texture_button("options")
+	if _options_button == null:
+		_options_button = TextureButton.new()
+		_options_button.name = "options"
+		_options_button.position = Vector2(9.0, 9.0)
+		_options_button.size = Vector2(20.0, 18.0)
+		add_child(_options_button)
+	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+	if not _options_button.pressed.is_connected(_toggle_options_overlay):
+		_options_button.pressed.connect(_toggle_options_overlay)
+	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
+	if _options_overlay == null:
+		_options_overlay = OPTIONS_OVERLAY_SCENE.instantiate() as OptionsOverlay
+		_options_overlay.name = "OptionsOverlay"
+		add_child(_options_overlay)
+
+func _toggle_options_overlay() -> void:
+	if _options_overlay == null:
+		return
+	_options_overlay.toggle_overlay()
+
+func _restore_options_overlay_if_requested() -> void:
+	if Engine.is_editor_hint() or _options_overlay == null:
+		return
+	if SceneNav.consume_restore_options(String(scene_file_path)):
+		_options_overlay.call_deferred("show_overlay")
+
+func _set_score_button_locked(locked: bool) -> void:
+	if _score_button == null:
+		return
+	_score_button.disabled = locked
+	_score_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if locked else Control.MOUSE_FILTER_STOP
+
+func _set_sequence_lock(locked: bool) -> void:
+	_sequence_lock_active = locked
+	if locked:
+		_clear_targeting()
+	_refresh_score_button_lock()
+	_refresh_controls()
+
+func _refresh_score_button_lock() -> void:
+	_set_score_button_locked(_sequence_lock_active or _dealer_offer_popup != null)
+
+func _build_campaign_label() -> void:
+	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
+	if bottom_hud == null:
+		bottom_hud = Control.new()
+		bottom_hud.name = "BottomHudLayer"
+		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bottom_hud.z_index = 120
+		add_child(bottom_hud)
+	_campaign_label = bottom_hud.get_node_or_null("neuron_number") as Label
+	var legacy_label := get_node_or_null("neuron_number") as Label
+	if _campaign_label == null and legacy_label != null:
+		legacy_label.reparent(bottom_hud)
+		_campaign_label = legacy_label
+	if _campaign_label == null:
+		_campaign_label = Label.new()
+		_campaign_label.name = "neuron_number"
+		bottom_hud.add_child(_campaign_label)
+		_campaign_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_campaign_label.offset_left = -46.5
+		_campaign_label.offset_top = -14.0
+		_campaign_label.offset_right = 46.5
+		_campaign_label.offset_bottom = -4.0
+	_campaign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_campaign_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_campaign_label.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		_campaign_label.add_theme_font_override("font", _font)
+	_campaign_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
+	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_campaign_label.add_theme_constant_override("outline_size", 1)
+	_campaign_label.text = ""
+	# The neuron meter no longer lives on the in-run HUD — it shows on the start
+	# menu and the flatline overlay only. The label stays as the feedback anchor.
+
+func _build_hint_layer() -> void:
+	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
+	if bottom_hud == null:
+		return
+	_hint_layer = bottom_hud.get_node_or_null("HintLayer") as Control
+	if _hint_layer == null:
+		_hint_layer = Control.new()
+		_hint_layer.name = "HintLayer"
+		bottom_hud.add_child(_hint_layer)
+		# Consumable popups originate from the machine centre (the reel window's
+		# midpoint), not the HUD anchor.
+		_hint_layer.position = MACHINE_HINT_CENTER
+		_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hint_layer.z_index = 20
 
 func _build_bar_label(id: String, pos: Vector2, color: Color) -> void:
-	var l := Label.new()
-	l.position = pos
+	var node_name := "GoalLabel" if id == "goal" else "HealthLabel"
+	var l := get_node_or_null(node_name) as Label
+	var authored := l != null
+	if l == null:
+		l = Label.new()
+		l.name = node_name
+		add_child(l)
+	if not authored:
+		l.position = pos
+	if id == "life" and not authored:
+		l.size = Vector2(float(TV_SCREEN["left"]) + float(TV_SCREEN["width"]) - pos.x, 10.0)
 	l.add_theme_font_size_override("font_size", 6)
 	if _font != null:
 		l.add_theme_font_override("font", _font)
 	l.add_theme_color_override("font_color", color)
 	l.text = ""
-	add_child(l)
 	_bar_labels[id] = l
 
 func _build_spin_button() -> void:
-	_spin_button = _make_hit_button(LEVER_HIT, _do_spin)
-	add_child(_spin_button)
+	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
 
@@ -551,10 +1003,15 @@ func _build_spin_button() -> void:
 # in progress, begin one from meta so the machine works on its own too.
 func _enter_run() -> void:
 	if RunStateStore.runPhase != "running":
-		_begin_fresh_run()
+		if not _begin_fresh_run():
+			_show_campaign_failed()
+			return
 	_sync_visuals()
+	# The "-1 NEURON" popup belongs to the flatline overlay only — it no longer
+	# fires during normal machine play (the pending flag is just cleared here).
+	MetaStateStore.consume_neuron_spend_feedback()
 
-func _begin_fresh_run() -> void:
+func _begin_fresh_run() -> bool:
 	var permanents: Array = MetaStateStore.ownedPermanents.duplicate()
 	var consumables: Dictionary = MetaStateStore.get_pending_consumables().duplicate(true)
 	if DEBUG_GRANT:
@@ -563,15 +1020,27 @@ func _begin_fresh_run() -> void:
 				permanents.append(p)
 		if consumables.is_empty():
 			consumables = { "cons_focus": 1, "item_water": 1 }
-	RunStateStore.start_new_run(permanents, consumables)
+	return RunStateStore.start_new_run(permanents, consumables)
 
 func _sync_visuals() -> void:
+	_stop_sfx(&"reel_spin")
+	_spin_launch_pending = false
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
+	_set_stash_tray_visible(true)
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
+	_set_hidden_result_active(false)
+	_set_blur_result_active(false)
+	_close_serum_picker()
+	_hide_compulsive_overlay()
+	_compulsive_queued = false
+	_last_reacted_reels = []
+	_last_reacted_spin = -1
+	_reveal_reel_next_spin = -1
+	_pending_spin_gain = 0
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -591,27 +1060,53 @@ func _sync_visuals() -> void:
 func _to_menu() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE)
 
-func _do_spin() -> void:
-	if _spinning_anim or _reroll_anim_active:
+func _to_dealer() -> void:
+	get_tree().change_scene_to_file(DEALER_SCENE)
+
+func _do_spin(compulsive := false) -> void:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active:
+		return
+	if _dealer_offer_popup != null:
+		return
+	if not compulsive and not RunStateStore._can_act():
 		return
 	_clear_targeting()
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
 	_refresh_jackpot_lamp(false)
 	var locked_before := RunStateStore.lockedReels.duplicate()
-	var result: Variant = RunStateStore.spin()
+	# White Powder (issue #34): hideResultSpins is consumed inside spin(), so read it
+	# before spinning — this spin's result reveals as "?" covers.
+	var hide_this_spin := RunStateStore.hideResultSpins > 0
+	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
+	# result renders behind the blur frost.
+	var blur_this_spin := RunStateStore.blurReelsSpins > 0
+	var result: Variant = RunStateStore.spin(compulsive)
 	if result == null:
 		return
+	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
+	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
-	_reel_stop_times = [0.55, 0.8, 1.05 + tension]
+	_reel_stop_times = [0.55, 1, 1.4 + tension]
+	# Eye triple: the revealed reel was already committed at tap time (issue #53);
+	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
+	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
+		_reel_stop_times[_reveal_reel_next_spin] = 0.2
+	_reveal_reel_next_spin = -1
 	_start_lever_pull()
+	_spin_launch_pending = true
+	_spin_button.disabled = true
+	_refresh_controls()
+	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
+	if not is_inside_tree() or not _spin_launch_pending:
+		return
+	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
 	_spinning_anim = true
 	_anim_elapsed = 0.0
 	_blur_accum = 0.0
-	_spin_button.disabled = true
 
 func _process(delta: float) -> void:
 	if _lever_anim_active:
@@ -632,6 +1127,10 @@ func _process(delta: float) -> void:
 			if not bool(_locked_reels_during_spin[i]) and _anim_elapsed < float(_reel_stop_times[i]):
 				_set_spin_reel_frame(i, _spin_frame)
 	for i in 3:
+		var stop_sfx_time := maxf(0.0, float(_reel_stop_times[i]) - REEL_STOP_SFX_LEAD_TIME)
+		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= stop_sfx_time:
+			_play_reel_stop_sfx(i)
+	for i in 3:
 		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= float(_reel_stop_times[i]) and not _reel_sprites[i].visible:
 			_reveal_reel(i)
 	if _anim_elapsed >= _reel_stop_times[2]:
@@ -644,6 +1143,7 @@ func _process(delta: float) -> void:
 		_on_reveal_complete()
 
 func _start_reel_spin_animation(locked_before: Array) -> void:
+	_play_sfx(&"reel_spin")
 	_locked_reels_during_spin = locked_before.duplicate()
 	# Play the authored spin-blur sheet as three clipped reel sprites. Each clip
 	# hides the moment that reel's final symbol lands.
@@ -653,12 +1153,14 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_spin_sheet_sprite.visible = false
 	for i in 3:
 		var locked := bool(_locked_reels_during_spin[i])
+		_reel_stop_sfx_played[i] = locked
 		_set_reel_visible(i, locked)
 		_set_reel_cover(i, locked)
 		_set_spin_reel_frame(i, _spin_frame)
 		_set_spin_reel_visible(i, not locked)
 
 func _start_lever_pull() -> void:
+	_play_sfx(&"lever")
 	_lever_anim_active = true
 	_lever_anim_elapsed = 0.0
 	_set_sheet_frame(_lever_sprite, 0)
@@ -682,22 +1184,153 @@ func _step_lever(delta: float) -> void:
 	_set_sheet_frame(_lever_sprite, frame)
 
 func _on_reveal_complete() -> void:
+	_stop_sfx(&"reel_spin")
+	if _post_spin_sequence_active:
+		return
+	_post_spin_sequence_active = true
+	_run_post_reveal_sequence()
+
+func _run_post_reveal_sequence() -> void:
 	RunStateStore.set_spinning(false)
+	_set_sequence_lock(true)
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp()
-	_emit_score_burst(null) # normal spin: source reel derived from the result
-	_spin_button.disabled = false
-	if _check_ending():
-		return
+	_apply_machine_reactions(false)  # flatline-result / triple reactions (issue #35)
+	_play_potion_spin_fx()           # potion hop + rolled-effect popup (issue #34)
+	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
-	if RunStateStore.dealerIncoming:
+	var dealer_pending := RunStateStore.dealerIncoming
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	# Instant death from stacked flatline results takes precedence (issue #35).
+	if _check_flatline_instant_death():
+		_post_spin_sequence_active = false
+		return
+	if _check_ending():
+		_post_spin_sequence_active = false
+		_set_sequence_lock(false)
+		return
+	# New hard run-length cap ends the run after the wealth/neuron checks.
+	if _check_spin_cap_ending():
+		_post_spin_sequence_active = false
+		return
+	if dealer_pending:
 		_show_dealer_incoming()
+	else:
+		_set_sequence_lock(false)
+		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
+		# spin by itself — heavy vibration + red overlay, no player input needed.
+		if RunStateStore.compulsiveSpinSkips > 0:
+			_queue_compulsive_spin()
+	_post_spin_sequence_active = false
+
+# ── compulsive takeover ──────────────────────────────────────────────────────────
+
+func _queue_compulsive_spin() -> void:
+	if _compulsive_queued or RunStateStore.runPhase != "running":
+		return
+	_compulsive_queued = true
+	_play_compulsive_takeover()
+
+func _play_compulsive_takeover() -> void:
+	await get_tree().create_timer(0.55).timeout
+	if not is_inside_tree() or RunStateStore.runPhase != "running" \
+			or RunStateStore.compulsiveSpinSkips <= 0 or _spinning_anim:
+		_compulsive_queued = false
+		_hide_compulsive_overlay()
+		return
+	if compulsive_fx_enabled:
+		_show_compulsive_overlay()
+		_play_compulsive_shake()
+		await get_tree().create_timer(0.5).timeout
+	_compulsive_queued = false
+	if not is_inside_tree() or RunStateStore.runPhase != "running":
+		_hide_compulsive_overlay()
+		return
+	_do_spin(true)
+	if _compulsive_overlay != null:
+		var tw := create_tween()
+		tw.tween_interval(1.4) # reels settle, then the red haze lifts
+		tw.tween_property(_compulsive_overlay, "modulate:a", 0.0, 0.4)
+		tw.tween_callback(_hide_compulsive_overlay)
+
+func _show_compulsive_overlay() -> void:
+	if _compulsive_overlay == null:
+		_compulsive_overlay = ColorRect.new()
+		_compulsive_overlay.name = "CompulsiveOverlay"
+		_compulsive_overlay.color = compulsive_overlay_color
+		_compulsive_overlay.size = Vector2(SRC_W, SRC_H)
+		_compulsive_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_compulsive_overlay.z_index = 90
+		add_child(_compulsive_overlay)
+	_compulsive_overlay.modulate.a = 0.0
+	_compulsive_overlay.visible = true
+	var tw := create_tween()
+	tw.tween_property(_compulsive_overlay, "modulate:a", 1.0, 0.18)
+
+func _hide_compulsive_overlay() -> void:
+	if _compulsive_overlay != null and is_instance_valid(_compulsive_overlay):
+		_compulsive_overlay.visible = false
+
+## Much harder shake than the on-use cocktail wobble — the machine is in charge.
+func _play_compulsive_shake() -> void:
+	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
+		_cocktail_shake_tween.kill()
+	if _nudge_tween != null and _nudge_tween.is_valid():
+		_nudge_tween.kill()
+	position.x = 0.0
+	_cocktail_shake_tween = create_tween()
+	var swings := 14
+	var step := compulsive_shake_time / float(swings + 1)
+	for s in swings:
+		var dir := 1.0 if s % 2 == 0 else -1.0
+		_cocktail_shake_tween.tween_property(self, "position:x", compulsive_shake_strength * dir, step)
+	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
 
 func _update_hud() -> void:
 	_refresh_tv_indicators()
+	_refresh_campaign_label()
 	_refresh_controls()
+	_refresh_consumable_fx()
+
+# The authored neuron_number Label stays as an anchor/editor placeholder and
+# renders no text; the neuron meter lives on the start menu / flatline overlay.
+func _refresh_campaign_label() -> void:
+	if _campaign_label != null:
+		_campaign_label.text = ""
+
+# "-1 NEURON" popup — flatline/neuron-loss overlay only. Spawns above the overlay's
+# neuron meter, timed with its losing pop.
+func _show_neuron_spend_feedback(feedback_parent: Control, center: Vector2) -> void:
+	if feedback_parent == null:
+		return
+	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
+		_neuron_spend_label.queue_free()
+	var label_position := center - Vector2(35.0, 6.0)
+	_neuron_spend_label = Label.new()
+	_neuron_spend_label.name = "NeuronSpendFeedback"
+	_neuron_spend_label.text = "-1 NEURON"
+	_neuron_spend_label.position = label_position
+	_neuron_spend_label.size = Vector2(70.0, 12.0)
+	_neuron_spend_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_neuron_spend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_neuron_spend_label.z_index = 10
+	_neuron_spend_label.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		_neuron_spend_label.add_theme_font_override("font", _font)
+	_neuron_spend_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.45))
+	_neuron_spend_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_neuron_spend_label.add_theme_constant_override("outline_size", 1)
+	feedback_parent.add_child(_neuron_spend_label)
+	var tw := create_tween()
+	tw.tween_interval(NeuronMeter.LOSS_ANIM_DELAY) # rises as the meter pops its frame
+	tw.set_parallel(true)
+	tw.tween_property(_neuron_spend_label, "position:y", label_position.y - 14.0, 1.0)
+	tw.tween_property(_neuron_spend_label, "modulate:a", 0.0, 1.0).set_delay(0.35)
+	tw.set_parallel(false)
+	tw.tween_callback(Callable(_neuron_spend_label, "queue_free"))
 
 func _refresh_reels_from_state() -> void:
 	var lr: Variant = RunStateStore.lastResult
@@ -722,20 +1355,37 @@ func _refresh_lock_art() -> void:
 func _refresh_tv_indicators() -> void:
 	if RunStateStore.lucidityCoins < _display_lucidity:
 		_set_display_lucidity(RunStateStore.lucidityCoins)
-	var goal_ratio := clampf(float(_display_lucidity) / float(EconomyConst.LUCIDITY_OBJECTIVE), 0.0, 1.0)
+	# The wealth bar targets the campaign wealth goal (2000) — the same threshold
+	# the wealth ending checks — not the old lucidity objective.
+	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
 	var start_n := maxi(1, RunStateStore.startingNeurons)
 	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
-	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, life_ratio)
+	var spins_left := _display_spins_left(life_ratio)
+	var spins_ratio := clampf(float(spins_left) / float(maxi(1, starting_spin_counter)), 0.0, 1.0)
+	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, EconomyConst.LUCIDITY_OBJECTIVE]
+		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 	if _bar_labels.has("life"):
-		_bar_labels["life"].text = str(_display_remaining_spins(life_ratio))
+		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
+
+## Issue #66: free spins are real extra spins (no neuron cost), so grants (+3 vial
+## triple, Tea's fallback) visibly move the counter. Gains still in flight are held
+## back so the number ticks up exactly when the "+N" popup lands.
+func _display_spins_left(life_ratio: float) -> int:
+	return maxi(0, _display_remaining_spins(life_ratio)
+		+ int(RunStateStore.freeSpinsRemaining) - _pending_spin_gain)
+
+func _current_display_spins_left() -> int:
+	var start_n := maxi(1, RunStateStore.startingNeurons)
+	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
+	return _display_spins_left(life_ratio)
 
 func _display_remaining_spins(life_ratio: float) -> int:
 	if RunStateStore.neurons <= 0:
 		return 0
-	return clampi(int(ceili(life_ratio * float(DISPLAY_SPIN_BUDGET))), 1, DISPLAY_SPIN_BUDGET)
+	var spin_budget := maxi(1, starting_spin_counter)
+	return clampi(int(ceili(life_ratio * float(spin_budget))), 1, spin_budget)
 
 func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 	if spr == null:
@@ -752,8 +1402,8 @@ func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 func _set_display_lucidity(value: int) -> void:
 	_display_lucidity = maxi(0, value)
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, EconomyConst.LUCIDITY_OBJECTIVE]
-	var goal_ratio := clampf(float(_display_lucidity) / float(EconomyConst.LUCIDITY_OBJECTIVE), 0.0, 1.0)
+		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
+	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
 
 func _start_lucidity_countup(target: int, visible_coin_count: int, first_arrival_time: float) -> void:
@@ -813,16 +1463,22 @@ func _nudge(strength: float) -> void:
 # ── score bursts (visual only — mirrors src/components/ScoreBurst.tsx) ──────────────
 
 func _build_burst_layer() -> void:
-	_burst_layer = Control.new()
+	_burst_layer = _authored_control("BurstLayer")
+	if _burst_layer == null:
+		_burst_layer = Control.new()
+		_burst_layer.name = "BurstLayer"
+		add_child(_burst_layer)
 	_burst_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_burst_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_burst_layer)
 
 func _build_coin_layer() -> void:
-	_coin_layer = Control.new()
+	_coin_layer = _authored_control("CoinLayer")
+	if _coin_layer == null:
+		_coin_layer = Control.new()
+		_coin_layer.name = "CoinLayer"
+		add_child(_coin_layer)
 	_coin_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_coin_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_coin_layer)
 
 # Sync the "already announced" markers to the current result so returning from the
 # dealer/scores never replays an old burst, and a power then computes its true gain.
@@ -850,10 +1506,11 @@ func _solo_reel(reels: Array) -> int:
 	return -1
 
 # source_reel: int for a power override, or null for a normal spin (derive it).
-func _emit_score_burst(source_reel) -> void:
+func _emit_score_burst(source_reel) -> float:
 	var lr: Variant = RunStateStore.lastResult
 	if lr == null:
-		return
+		return 0.0
+	var reward_time := 0.0
 	var spin_count := int(RunStateStore.spinCount)
 	var is_new_spin := spin_count != _burst_prev_spin
 	var score := int(lr["scoreEarned"])
@@ -867,34 +1524,40 @@ func _emit_score_burst(source_reel) -> void:
 	var lucidity_gain := maxi(0, int(RunStateStore.lucidityCoins) - _coin_prev_lucidity)
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
 	if lucidity_gain > 0:
-		var visible_coins := _spawn_lucidity_coins(lucidity_gain)
-		_start_lucidity_countup(RunStateStore.lucidityCoins, visible_coins, _coin_flight_time_for_count(visible_coins))
+		reward_time = maxf(reward_time, _spawn_lucidity_coins(lucidity_gain, int(RunStateStore.lucidityCoins)))
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
 		for i in 3:
 			_spawn_burst("", int(Symbols.RARITY.get(String(reels[i]), 0)), COCKTAIL_COLOR, i)
 		_nudge(0.8)
-		return
+		return maxf(reward_time, BURST_TIME)
 
 	# A rescore that doesn't increase the score must NOT pop (gain <= 0).
 	if gain > 0 and win_type != "miss":
 		# Jackpot is special (issue #22): a large GOLDEN number rising out of the
 		# machine centre — never a reel-anchored pair/triple-style burst.
 		if win_type == "jackpot":
+			_play_sfx(&"jackpot_win")
 			_spawn_jackpot_burst(score)
 			_flash_jackpot_lamp()
 			_nudge(2.2)
-			return
+			return maxf(reward_time, maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME))
 		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" else "BONUS")
+		if win_type == "triple":
+			_play_sfx(&"triple_win")
+		elif win_type == "pair":
+			_play_sfx(&"pair_win")
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
+		reward_time = maxf(reward_time, BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
 			if solo != -1:
 				_spawn_burst("", int(Symbols.RARITY.get(String(reels[solo]), 0)), COCKTAIL_COLOR, solo)
+	return reward_time
 
 func _burst_text(text: String, size: int, color: Color, width: float) -> Label:
 	var l := Label.new()
@@ -978,32 +1641,58 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 		o = 1.0 - (t - 0.7) / 0.3
 	burst.modulate.a = clampf(o, 0.0, 1.0)
 
-func _spawn_lucidity_coins(gain: int) -> int:
+func _spawn_lucidity_coins(gain: int, target_lucidity: int) -> float:
 	if _coin_layer == null:
-		return 0
+		_set_display_lucidity(target_lucidity)
+		return 0.0
 	var tex := _load_texture("ui/coin.png", true)
 	if tex == null:
-		return 0
+		_set_display_lucidity(target_lucidity)
+		return 0.0
 	var count := mini(MAX_VISIBLE_COINS, gain)
+	if count <= 0:
+		_set_display_lucidity(target_lucidity)
+		return 0.0
+	var stagger_time := _coin_fall_stagger_time_for_count(count)
+	var fall_phase_time := float(count - 1) * stagger_time + COIN_TRAY_POP_TIME
+	var travel_start_time := fall_phase_time + COIN_TRAY_HOLD_TIME
 	var flight_time := _coin_flight_time_for_count(count)
-	var stagger_time := _coin_stagger_time_for_count(count)
+	var total_time := travel_start_time + flight_time
+	var cash_tray := COIN_TRAY + CASH_COIN_TRAY_OFFSET
+	_play_sfx(&"coin_fall")
+	var fall_sfx_tw := create_tween()
+	fall_sfx_tw.tween_interval(fall_phase_time)
+	fall_sfx_tw.tween_callback(_play_sfx.bind(&"coin_fall_end"))
 	for i in count:
 		var coin := Sprite2D.new()
 		coin.texture = tex
 		coin.centered = true
-		coin.position = COIN_TRAY
+		var start_pos := cash_tray
+		var pile_pos := cash_tray + Vector2(
+			(randf() - 0.5) * COIN_TRAY_PILE_SCATTER,
+			-randf() * COIN_TRAY_PILE_DEPTH
+		)
+		var burst_pos := Vector2(
+			cash_tray.x + (randf() - 0.5) * COIN_BURST_SCATTER,
+			cash_tray.y - COIN_BURST_RISE
+		)
+		coin.position = start_pos
 		var coin_scale := COIN_SIZE / float(maxi(1, tex.get_width()))
 		coin.scale = Vector2(coin_scale, coin_scale)
 		coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		coin.modulate.a = 0.0
 		_coin_layer.add_child(coin)
-		var jitter := randf() - 0.5
-		var burst_pos := Vector2(COIN_TRAY.x + jitter * COIN_BURST_SCATTER, COIN_TRAY.y - COIN_BURST_RISE)
+		var fall_delay := float(i) * stagger_time
 		var tw := create_tween()
-		tw.tween_interval(float(i) * stagger_time)
-		tw.tween_method(_drive_lucidity_coin.bind(coin, COIN_TRAY, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
+		tw.tween_interval(fall_delay)
+		tw.tween_method(_drive_lucidity_coin_tray_pop.bind(coin, start_pos, pile_pos), 0.0, 1.0, COIN_TRAY_POP_TIME)
+		tw.tween_interval(maxf(0.0, travel_start_time - fall_delay - COIN_TRAY_POP_TIME))
+		tw.tween_method(_drive_lucidity_coin.bind(coin, pile_pos, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
 		tw.tween_callback(coin.queue_free)
-	return count
+	var value_tw := create_tween()
+	value_tw.tween_interval(total_time)
+	value_tw.tween_callback(_set_display_lucidity.bind(target_lucidity))
+	return total_time
 
 func _coin_flight_time_for_count(count: int) -> float:
 	var pressure := clampf(float(maxi(0, count - 8)) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
@@ -1014,6 +1703,20 @@ func _coin_stagger_time_for_count(count: int) -> float:
 		return COIN_STAGGER_TIME
 	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
 	return lerpf(COIN_STAGGER_TIME, 0.018, pressure)
+
+func _coin_fall_stagger_time_for_count(count: int) -> float:
+	if count <= 8:
+		return COIN_FALL_STAGGER_TIME
+	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
+	return lerpf(COIN_FALL_STAGGER_TIME, 0.012, pressure)
+
+func _drive_lucidity_coin_tray_pop(t: float, coin: Sprite2D, from_pos: Vector2, pile_pos: Vector2) -> void:
+	if not is_instance_valid(coin):
+		return
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	var pop := sin(t * PI) * 6.0
+	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
+	coin.modulate.a = minf(t / 0.12, 1.0)
 
 func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos: Vector2, to_pos: Vector2) -> void:
 	if not is_instance_valid(coin):
@@ -1032,7 +1735,7 @@ func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos
 		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
 
 func _try_start_power_coin_flow() -> void:
-	if _power_coin_active or _spinning_anim or _reroll_anim_active:
+	if _power_coin_active or _spinning_anim or _reroll_anim_active or _sequence_lock_active:
 		return
 	if RunStateStore.pendingPowerRestores.is_empty():
 		return
@@ -1084,7 +1787,7 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
-func _finish_power_coin_flow(power_id: String, coin: TextureRect, target: Vector2) -> void:
+func _finish_power_coin_flow(power_id: String, coin: Node, target: Vector2) -> void:
 	if is_instance_valid(coin):
 		coin.queue_free()
 	RunStateStore.commit_power_restore(power_id)
@@ -1117,40 +1820,48 @@ func _drive_power_pulse(t: float, pulse: ColorRect) -> void:
 func _build_multiplier_buttons() -> void:
 	for m in [1, 2, 3]:
 		var cx := float(MULT_BADGE_CENTERS[m - 1])
-		var b := _make_hit_button({
+		var b := _make_or_bind_hit_button("MultiplierButton%d" % m, {
 			"left": cx - 8.0,
 			"top": MULT_STRIP["top"],
 			"width": 16.0,
 			"height": MULT_STRIP["height"],
 		}, _select_bet_multiplier.bind(m))
-		add_child(b)
 		_multiplier_buttons.append(b)
 
 func _select_bet_multiplier(m: int) -> void:
+	if _sequence_lock_active or _spin_launch_pending:
+		return
 	if not RunStateStore._can_act():
 		return
 	if _is_multiplier_locked(m):
 		return
+	if RunStateStore.betMultiplier == m:
+		return
 	RunStateStore.set_bet_multiplier(m)
+	_play_sfx(&"multiplier_change")
 
 func _highest_affordable_multiplier() -> int:
+	var highest := 3
 	if RunStateStore.forcedRandomBetSpins > 0:
-		return 2
+		highest = 2
+	if RunStateStore.freeSpinsRemaining > 0:
+		return mini(highest, maxi(1, int(RunStateStore.freeSpinsRemaining)))
 	var sedative_next := Economy.has_sedative(RunStateStore.ownedUpgrades) \
 		and RunStateStore.freeSpinsRemaining <= 0 and (RunStateStore.spinCount + 1) % 3 == 0
-	var no_neuron_cost := RunStateStore.freeSpinsRemaining > 0 or RunStateStore.decaySkips > 0 or sedative_next
+	var no_neuron_cost := RunStateStore.decaySkips > 0 or sedative_next
 	if no_neuron_cost:
-		return 3
+		return highest
 	var base_decay := Economy.compute_neuron_decay(RunStateStore.ownedUpgrades)
 	if base_decay <= 0:
-		return 3
-	return mini(3, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
+		return highest
+	return mini(highest, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
 
 func _is_multiplier_locked(m: int) -> bool:
 	return m > _highest_affordable_multiplier()
 
 func _refresh_multiplier_controls() -> void:
-	var can_act := RunStateStore._can_act() and not _spinning_anim and not _reroll_anim_active
+	var can_act := RunStateStore._can_act() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
+		and _dealer_offer_popup == null and not _sequence_lock_active
 	for i in _multiplier_buttons.size():
 		var m := i + 1
 		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
@@ -1168,40 +1879,87 @@ func _refresh_multiplier_controls() -> void:
 func _build_power_buttons() -> void:
 	for id in ["reroll", "shift", "memory"]:
 		var hit: Dictionary = POWER_HITS[id]
-		var b := _make_hit_button({
+		var node_name := "PowerButton%s" % id.capitalize()
+		var b := _make_or_bind_hit_button(node_name, {
 			"left": hit["left"],
 			"top": hit["top"],
 			"width": maxf(hit["width"], 11.0),
 			"height": hit["height"],
 		}, _on_power_pressed.bind(id))
-		add_child(b)
 		_power_buttons[id] = b
 
 func _build_stash() -> void:
 	# Bottom-right corner, shared layout + scale so the stash matches the dealer, shop,
 	# and in-run overlay stashes (issue #26). Bare TextureRects (tap to use) keep the
 	# icons crisp and the same size as the drag stashes in the other scenes.
-	for i in Consumables.MAX_CONSUMABLE_SLOTS:
-		var icon := TextureRect.new()
-		icon.position = Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS)
-		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_stash_icons.clear()
+	for i in maxi(1, max_consumable_slots):
+		var slot := _stash_slot_node(i)
+		var icon := _stash_icon_for_slot(slot, i)
+		var authored := slot != null
+		if icon == null:
+			icon = TextureRect.new()
+			icon.name = "StashSlot%d" % i
+			add_child(icon)
+		if not authored:
+			icon.position = Assets.stash_slot_pos(i, max_consumable_slots)
+			icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		elif icon.has_meta("_machine_generated_stash_icon"):
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_STOP
-		icon.gui_input.connect(_on_stash_input.bind(i))
-		add_child(icon)
+		var cb := _on_stash_input.bind(icon, i)
+		if not icon.gui_input.is_connected(cb):
+			icon.gui_input.connect(cb)
 		_stash_icons.append(icon)
+
+func _stash_slot_node(index: int) -> Control:
+	var one_based := index + 1
+	for path in [
+		"stash/StashSlot%d" % one_based,
+		"CoinLayer/stash/StashSlot%d" % one_based,
+		"StashSlot%d" % index,
+		"StashSlot%d" % one_based,
+	]:
+		var slot := get_node_or_null(path) as Control
+		if slot != null:
+			return slot
+	return null
+
+func _stash_icon_for_slot(slot: Control, index: int) -> TextureRect:
+	if slot == null:
+		return null
+	if slot is TextureRect:
+		return slot as TextureRect
+	var icon := slot.get_node_or_null("Icon") as TextureRect
+	if icon == null:
+		icon = TextureRect.new()
+		icon.name = "Icon"
+		icon.set_meta("_machine_generated_stash_icon", true)
+		icon.position = Vector2.ZERO
+		icon.size = slot.size
+		slot.add_child(icon)
+	return icon
 
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
 # stash). Gated by the same can-act check the refresh uses, so disabled slots ignore taps.
-func _on_stash_input(event: InputEvent, slot_index: int) -> void:
+func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
 	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
 		return
-	if not RunStateStore._can_act() or _reroll_anim_active:
+	var slots := _stash_slots()
+	if slot_index >= slots.size():
+		return
+	if _dealer_offer_popup != null:
+		_begin_dealer_drag(node, String(slots[slot_index]), "stash")
+		return
+	if _sequence_lock_active or _spin_launch_pending or not RunStateStore._can_act() or _reroll_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -1218,15 +1976,18 @@ func _stash_slots() -> Array:
 	for entry in stash:
 		var copies := int(stash[entry])
 		for _k in copies:
-			if slots.size() < Consumables.MAX_CONSUMABLE_SLOTS:
+			if slots.size() < max_consumable_slots:
 				slots.append(String(entry))
 	return slots
 
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
-	var can_use := RunStateStore.runPhase == "running" and not _spinning_anim and not _reroll_anim_active \
-		and RunStateStore.lastResult != null and RunStateStore.blockPowersSpins <= 0
+	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
+		and _dealer_offer_popup == null and not _sequence_lock_active
+	if _spin_button != null:
+		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
+			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -1246,7 +2007,8 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := RunStateStore._can_act() and not _reroll_anim_active
+	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active and not _sequence_lock_active) \
+		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
 		if i < slots.size():
@@ -1258,7 +2020,7 @@ func _refresh_controls() -> void:
 
 func _power_owned(id: String, owned: Array) -> bool:
 	if id == "reroll":
-		return true
+		return default_run_power_ids.has("reroll")
 	if id == "shift":
 		return owned.has("perm_shift")
 	if id == "memory":
@@ -1274,6 +2036,10 @@ func _icon_for(id: String) -> Texture2D:
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
+	if _sequence_lock_active or _spin_launch_pending:
+		return
+	if not RunStateStore._can_use_ability():
+		return
 	if _targeting_layer != null:
 		_clear_targeting()
 		_refresh_controls()
@@ -1325,6 +2091,8 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if _sequence_lock_active or _spin_launch_pending:
+		return
 	if power_id == "reroll":
 		if RunStateStore.reroll_reel(reel_index):
 			_clear_targeting()
@@ -1343,37 +2111,67 @@ func _start_reroll_animation(reel_index: int) -> void:
 	_reroll_reel_index = reel_index
 	_reroll_elapsed = 0.0
 	_reroll_accum = 0.0
-	_set_reel_visible(reel_index, true)
+	_spin_frame = 0
+	_reel_stop_sfx_played[reel_index] = false
+	_play_sfx(&"reel_spin")
+	for i in 3:
+		var active := i == reel_index
+		_set_reel_visible(i, not active)
+		_set_reel_cover(i, not active)
+		_set_spin_reel_frame(i, _spin_frame)
+		_set_spin_reel_visible(i, active)
 	if _spin_button != null:
 		_spin_button.disabled = true
-	_set_reel_symbol(reel_index, VISIBLE_SYMBOLS[randi() % VISIBLE_SYMBOLS.size()])
 
 func _step_reroll(delta: float) -> void:
 	_reroll_elapsed += delta
 	_reroll_accum += delta
 	if _reroll_accum >= SPIN_FRAME_TIME:
 		_reroll_accum = 0.0
-		_set_reel_symbol(_reroll_reel_index, VISIBLE_SYMBOLS[randi() % VISIBLE_SYMBOLS.size()])
+		_spin_frame = (_spin_frame + 1) % SPIN_FRAME_COUNT
+		_set_spin_reel_frame(_reroll_reel_index, _spin_frame)
+	if _reroll_elapsed >= maxf(0.0, REROLL_REEL_DURATION - REEL_STOP_SFX_LEAD_TIME):
+		_play_reel_stop_sfx(_reroll_reel_index)
 	if _reroll_elapsed >= REROLL_REEL_DURATION:
+		_stop_sfx(&"reel_spin")
+		_play_reel_stop_sfx(_reroll_reel_index)
 		_reroll_anim_active = false
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
 			_set_reel_symbol(_reroll_reel_index, String(lr["reels"][_reroll_reel_index]))
+		_set_spin_reel_visible(_reroll_reel_index, false)
+		_set_reel_visible(_reroll_reel_index, true)
+		_set_reel_cover(_reroll_reel_index, true)
 		var rerolled := _reroll_reel_index
 		_reroll_reel_index = -1
 		if _spin_button != null:
 			_spin_button.disabled = false
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_emit_score_burst(rerolled) # reroll burst pops from the rerolled reel
+		_apply_machine_reactions(true)  # reroll may form a triple (issue #35)
+		if _check_flatline_instant_death():
+			return
+		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
+	if _sequence_lock_active or _spin_launch_pending:
+		return
 	RunStateStore.move_reel(reel_index, direction)
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
-	_emit_score_burst(reel_index) # shift burst pops from the shifted reel
+	_apply_machine_reactions(true)  # shift may form a triple (issue #35)
+	if _check_flatline_instant_death():
+		return
+	_play_reward_sequence(reel_index) # shift burst pops from the shifted reel
+
+func _play_reward_sequence(source_reel: int) -> void:
+	_set_sequence_lock(true)
+	var reward_time := _emit_score_burst(source_reel)
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
 	if _targeting_layer != null:
@@ -1397,6 +2195,10 @@ func _score_label(parent: Control, text: String, pos: Vector2, size: int, color:
 	return l
 
 func _show_score_table() -> void:
+	if _sequence_lock_active or _spin_launch_pending:
+		return
+	if _dealer_offer_popup != null:
+		return
 	if _score_overlay != null:
 		_close_score_table()
 		return
@@ -1416,40 +2218,50 @@ func _show_score_table() -> void:
 	panel.size = Vector2(142.0, 260.0)
 	_score_overlay.add_child(panel)
 
-	_score_label(_score_overlay, "SCORES", Vector2(17.0, 34.0), 12, Color(1.0, 0.82, 0.28))
-	_score_label(_score_overlay, "BEST", Vector2(17.0, 52.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(int(MetaStateStore.history.get("bestScoreRun", 0))), Vector2(63.0, 52.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "RUNS", Vector2(17.0, 64.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(int(MetaStateStore.history.get("runsPlayed", 0))), Vector2(63.0, 64.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "CREDITS", Vector2(17.0, 76.0), 7, Color(0.68, 0.86, 1.0))
-	_score_label(_score_overlay, str(MetaStateStore.lucidityWallet), Vector2(63.0, 76.0), 7, Color(0.75, 1.0, 0.8), 72.0, HORIZONTAL_ALIGNMENT_RIGHT)
+	_score_label(_score_overlay, "TABLES", Vector2(17.0, 34.0), 12, Color(1.0, 0.82, 0.28))
 
-	_score_label(_score_overlay, "POINTS", Vector2(17.0, 99.0), 9, Color(1.0, 0.82, 0.28))
-	_score_label(_score_overlay, "SYMBOL", Vector2(19.0, 115.0), 7, Color(0.0, 0.9, 1.0))
-	_score_label(_score_overlay, "PAIR", Vector2(77.0, 115.0), 7, Color(0.0, 0.9, 1.0), 24.0, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label(_score_overlay, "TRIPLE", Vector2(105.0, 115.0), 7, Color(0.0, 0.9, 1.0), 36.0, HORIZONTAL_ALIGNMENT_RIGHT)
+	# SYMBOL | LVL | PAIR | TRIPLE (issue #51) — no run stats, no symbol names.
+	# Columns place by measured text width: a Label can never shrink below its text
+	# (DTM-Sans is wide), so fixed-width right alignment silently overflows instead.
+	var lvl_cx := 54.0
+	var pair_right := 102.0
+	var triple_right := 146.0
+	var header_y := 56.0
+	_score_label(_score_overlay, "SYMBOL", Vector2(15.0, header_y), 7, Color(0.0, 0.9, 1.0))
+	_score_label_centered(_score_overlay, "LVL", lvl_cx, header_y, 7, Color(0.0, 0.9, 1.0))
+	_score_label_right(_score_overlay, "PAIR", pair_right, header_y, 7, Color(0.0, 0.9, 1.0))
+	_score_label_right(_score_overlay, "TRIPLE", triple_right, header_y, 7, Color(0.0, 0.9, 1.0))
 
-	var y := 130.0
+	var y := 74.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var symbol_id := String(sym)
 		var icon := TextureRect.new()
-		# ~20px icons (was 12px) so the symbols read clearly in the table; mipmaps +
-		# linear keep the large source art crisp when downscaled (issue #22).
 		icon.texture = _load_texture("symbols/%s.png" % symbol_id, true)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		icon.position = Vector2(15.0, y - 6.0)
-		icon.size = Vector2(20.0, 20.0)
-		icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		# IGNORE_SIZE must be set BEFORE size: with the default expand mode the
+		# texture's own size is the minimum, so the box silently refuses to shrink —
+		# that's what kept these icons stuck at full art size.
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.position = Vector2(15.0, y - 1.0)
+		icon.size = Vector2(20.0, 20.0)
 		_score_overlay.add_child(icon)
-		_score_label(_score_overlay, symbol_id.to_upper(), Vector2(40.0, y), 7, Color(0.86, 0.9, 0.96))
+
+		# Permanent odds level (issue #51): the same levels bought at the dealer's
+		# odds table; dimmed when the symbol was never upgraded.
+		var level := RunStateStore.odds_upgrade_level(symbol_id)
+		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7,
+			Color(1.0, 0.86, 0.2) if level > 0 else Color(0.45, 0.48, 0.58))
+
 		var pair := int(Payouts.PAIR_SCORE.get(symbol_id, 0))
 		var triple := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-		_score_label(_score_overlay, "+%d" % pair, Vector2(77.0, y), 7, Color(0.75, 1.0, 0.8), 24.0, HORIZONTAL_ALIGNMENT_RIGHT)
-		_score_label(_score_overlay, "+%d%s" % [triple, "*" if symbol_id == "brain" else ""], Vector2(105.0, y), 7, Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8), 36.0, HORIZONTAL_ALIGNMENT_RIGHT)
-		y += 20.0
-
-	_score_label(_score_overlay, "* BRAIN TRIPLE = JACKPOT", Vector2(19.0, 251.0), 6, Color(0.72, 0.76, 0.86))
+		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, Color(0.75, 1.0, 0.8))
+		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7,
+			Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8))
+		# Little bonus-effect blurb under the triple value (issue #51).
+		_score_label_right(_score_overlay, _triple_effect_text(symbol_id), triple_right, y + 12.0, 4,
+			Color(0.58, 0.64, 0.72))
+		y += 27.0
 
 	var close := Button.new()
 	close.text = "CLOSE"
@@ -1461,6 +2273,38 @@ func _show_score_table() -> void:
 	Assets.skin_negative_button(close)
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
+
+# Labels sized by their text and placed from the right edge / centre — the only
+# reliable way to align DTM-Sans columns (min size = text width, no shrinking).
+func _score_label_right(parent: Control, text: String, right_x: float, y: float,
+		font_size: int, color: Color) -> Label:
+	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
+	l.position = Vector2(right_x - l.get_minimum_size().x, y)
+	return l
+
+func _score_label_centered(parent: Control, text: String, center_x: float, y: float,
+		font_size: int, color: Color) -> Label:
+	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
+	l.position = Vector2(center_x - l.get_minimum_size().x * 0.5, y)
+	return l
+
+## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
+## Dynamic counts pull from the reaction exports so the copy never drifts.
+func _triple_effect_text(symbol_id: String) -> String:
+	match symbol_id:
+		"brain":
+			return "JACKPOT +%d SPIN" % triple_brain_free_spins
+		"eye":
+			return "REVEALS A REEL"
+		"pill":
+			return "ALL POWERS BACK"
+		"syringe":
+			return "LAST ITEM BACK"
+		"vial":
+			return "+%d SPINS" % triple_vial_free_spins
+		"flatline":
+			return "KILLS YOU"
+	return ""
 
 func _close_score_table() -> void:
 	if _score_overlay != null:
@@ -1475,13 +2319,228 @@ func _on_stash_pressed(slot_index: int) -> void:
 	if id == "cons_white_powder":
 		_begin_white_powder()
 		return
-	RunStateStore.use_consumable(id)
+	if id == "cons_focus":
+		_begin_serum() # Serum (issue #53): pick the guaranteed symbol first
+		return
+	var lucidity_before := int(RunStateStore.lucidityCoins)
+	var spins_before := _current_display_spins_left()
+	if not RunStateStore.use_consumable(id):
+		return
 	_refresh_reels_from_state()
+	_update_hud()
+	_show_consumable_feedback(id)
+	_play_use_fx(id)
+	_play_consumable_lucidity_feedback(lucidity_before)
+	if id == "cons_tea":
+		_try_start_power_coin_flow()
+		# Tea (issue #53): restored spins fly from the stash to the spins counter,
+		# with a "+N" fly-in that ticks the counter on landing (issue #66).
+		var spins_gained := _current_display_spins_left() - spins_before
+		if spins_gained > 0:
+			_play_tea_flight(slot_index)
+			_play_spin_gain_fx(spins_gained,
+				Assets.stash_slot_pos(slot_index, max_consumable_slots) - Vector2(0.0, 10.0))
+
+func _item_display_name(id: String) -> String:
+	var imap := InRunItems.map()
+	if imap.has(id):
+		return String(imap[id]["name"]).to_upper()
+	var cmap := Consumables.map()
+	if cmap.has(id):
+		return String(cmap[id]["name"]).to_upper()
+	return id.to_upper()
+
+## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
+## HintLabel; the item name renders purple when the item is flagged corrupted.
+func _show_consumable_feedback(id: String) -> void:
+	var hint: Dictionary = use_hints.get(id, {})
+	if hint.is_empty():
+		return
+	if _hint_layer == null or not is_instance_valid(_hint_layer):
+		_build_hint_layer()
+	if _hint_layer == null:
+		return
+	var hint_label := HintLabel.new()
+	hint_label.grow_time = hint_grow_time
+	hint_label.set_font(_font)
+	_hint_layer.add_child(hint_label)
+	hint_label.play(
+		String(hint["pos"]), String(hint["neg"]),
+		_item_display_name(id), HintLabel.item_is_corrupted(id)
+	)
+
+func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
+	var target_lucidity := int(RunStateStore.lucidityCoins)
+	var lucidity_gain := maxi(0, target_lucidity - lucidity_before)
+	if lucidity_gain <= 0:
+		return
+	_coin_prev_lucidity = target_lucidity
+	_set_sequence_lock(true)
+	var reward_time := _spawn_lucidity_coins(lucidity_gain, target_lucidity)
+	if reward_time > 0.0:
+		await get_tree().create_timer(reward_time).timeout
+	_set_sequence_lock(false)
+
+# ── serum symbol picker (issue #53) ──────────────────────────────────────────────
+# Using Serum opens a small overlay listing every reel symbol except brain; the
+# picked one is guaranteed to appear at least once next spin (the charge is only
+# consumed on pick — tapping anywhere else cancels).
+
+const SERUM_PICKER_RECT := Rect2(14.0, 138.0, 132.0, 44.0)
+
+func _begin_serum() -> void:
+	if _sequence_lock_active or _serum_picker != null:
+		return
+	if not RunStateStore._can_act():
+		return
+	_build_serum_picker()
+
+func _build_serum_picker() -> void:
+	_serum_picker = Control.new()
+	_serum_picker.name = "SerumPicker"
+	_serum_picker.size = Vector2(SRC_W, SRC_H)
+	_serum_picker.mouse_filter = Control.MOUSE_FILTER_STOP
+	_serum_picker.z_index = 95
+	_serum_picker.gui_input.connect(_on_serum_picker_input)
+	add_child(_serum_picker)
+
+	var panel := ColorRect.new()
+	panel.color = Color(0.05, 0.03, 0.1, 0.94)
+	panel.position = SERUM_PICKER_RECT.position
+	panel.size = SERUM_PICKER_RECT.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_serum_picker.add_child(panel)
+
+	var title := _reaction_label(_serum_picker, "PICK A SYMBOL",
+		Vector2(SERUM_PICKER_RECT.position.x, SERUM_PICKER_RECT.position.y + 3.0), 7, Color(0.72, 1.0, 0.65))
+	title.size = Vector2(SERUM_PICKER_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var pool: Array = []
+	for s in Symbols.BASE_SYMBOL_CYCLE:
+		if String(s) != "brain":
+			pool.append(String(s))
+	var cell_w := SERUM_PICKER_RECT.size.x / float(maxi(1, pool.size()))
+	for i in pool.size():
+		var sym: String = pool[i]
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.position = Vector2(SERUM_PICKER_RECT.position.x + float(i) * cell_w, SERUM_PICKER_RECT.position.y + 14.0)
+		b.size = Vector2(cell_w, 26.0)
+		b.pressed.connect(_on_serum_pick.bind(sym))
+		_serum_picker.add_child(b)
+		var tex := _load_texture("symbols/%s.png" % sym, true)
+		if tex != null:
+			var icon := TextureRect.new()
+			icon.texture = tex
+			icon.position = Vector2((cell_w - 16.0) * 0.5, 4.0)
+			icon.size = Vector2(16.0, 16.0)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(icon)
+
+func _on_serum_picker_input(event: InputEvent) -> void:
+	# Any tap that no symbol button consumed cancels the pick (charge kept).
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_close_serum_picker()
+
+func _on_serum_pick(symbol_id: String) -> void:
+	_close_serum_picker()
+	var lucidity_before := int(RunStateStore.lucidityCoins)
+	if not RunStateStore.use_consumable("cons_focus", symbol_id):
+		return
+	_refresh_reels_from_state()
+	_update_hud()
+	_show_consumable_feedback("cons_focus")
+	_play_use_fx("cons_focus")
+	_play_consumable_lucidity_feedback(lucidity_before)
+
+func _close_serum_picker() -> void:
+	if _serum_picker != null and is_instance_valid(_serum_picker):
+		_serum_picker.queue_free()
+	_serum_picker = null
+
+## Tea (issue #53): the restored free spins fly from the used stash slot to the
+## spins-left counter, which pulses as the tea lands.
+func _play_tea_flight(slot_index: int) -> void:
+	if not consumable_fx_enabled:
+		return
+	var tex := _icon_for("cons_tea")
+	if tex == null:
+		return
+	var icon := TextureRect.new()
+	icon.texture = tex
+	icon.size = Vector2(12.0, 12.0)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.z_index = 130
+	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
+	add_child(icon)
+	var target := Vector2(43.0, 82.0) # spins counter fallback
+	var spins_label := _bar_labels.get("life") as Label
+	if spins_label != null:
+		target = spins_label.position
+	var tw := create_tween()
+	tw.tween_property(icon, "position", target, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(icon.queue_free)
+	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
+	# travels alongside this icon and lands on the same beat.
+
+## Issue #66: a "+N" popup pops in at `origin` and flies into the spins-left
+## counter. The counter's number is held back (_pending_spin_gain) while the popup
+## is in flight, then ticks up with a pulse exactly when it lands — reward visible,
+## value in sync, ~0.7s total so gameplay is not delayed.
+func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> void:
+	if amount <= 0:
+		return
+	var spins_label := _bar_labels.get("life") as Label
+	if not consumable_fx_enabled or spins_label == null or not is_inside_tree():
+		_update_hud()
+		return
+	_pending_spin_gain += amount
+	_update_hud()
+	var gain := Label.new()
+	gain.name = "SpinGainFx"
+	gain.text = "+%d" % amount
+	gain.position = origin
+	gain.z_index = 130
+	gain.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gain.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		gain.add_theme_font_override("font", _font)
+	gain.add_theme_color_override("font_color", Color(0.55, 1.0, 0.6))
+	gain.add_theme_color_override("font_outline_color", Color.BLACK)
+	gain.add_theme_constant_override("outline_size", 1)
+	add_child(gain)
+	gain.pivot_offset = Vector2(6.0, 5.0)
+	gain.scale = Vector2(0.4, 0.4)
+	var tw := create_tween()
+	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(gain, "position", spins_label.position, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(_land_spin_gain.bind(amount, gain))
+
+func _land_spin_gain(amount: int, gain: Label) -> void:
+	if is_instance_valid(gain):
+		gain.queue_free()
+	_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
+	_update_hud()
+	var spins_label := _bar_labels.get("life") as Label
+	if spins_label != null:
+		spins_label.pivot_offset = spins_label.size * 0.5
+		var pulse := create_tween()
+		pulse.tween_property(spins_label, "scale", Vector2(1.3, 1.3), 0.1)
+		pulse.tween_property(spins_label, "scale", Vector2.ONE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
-# copy onto. copy_reel() applies the copy and its side effect (consume a random
-# other supply, or -20 neurons). Needs a spin result to copy from.
+# copy onto. Needs a spin result to copy from.
 func _begin_white_powder() -> void:
+	if _sequence_lock_active:
+		return
 	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
 		return
 	if not RunStateStore.use_consumable("cons_white_powder"):
@@ -1490,6 +2549,8 @@ func _begin_white_powder() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
 func _on_copy_pick(reel_index: int) -> void:
+	if _sequence_lock_active:
+		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
 		_arm_reel_picker(func(target_index: int) -> void: _on_copy_pick(target_index))
@@ -1501,7 +2562,522 @@ func _on_copy_pick(reel_index: int) -> void:
 		_refresh_reels_from_state()
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_emit_score_burst(reel_index) # copy burst pops from the target reel
+		_play_reward_sequence(reel_index) # copy burst pops from the target reel
+
+# ── consumable visuals (issue #34) ───────────────────────────────────────────────
+# Presentation-only per-item effects. Duration effects (tobacco smoke, energy-drink
+# edges) derive purely from store counters via _refresh_consumable_fx() so they
+# survive scene re-entry and revert the moment the counter hits 0; one-shots
+# (cocktail shake, potion hop/popup, hidden-result covers) fire from use/spin hooks.
+
+# The cabinet's transparent reel holes are y169-203 in the art (measured with
+# pngjs), 1px taller above and 3px below REEL_HOLES — full-reel covers must span
+# the real hole or the symbol strip peeks out underneath.
+const FX_COVER_PAD_TOP := 1.0
+const FX_COVER_PAD_BOTTOM := 3.0
+
+func _fx_cover_rect(hole: Dictionary) -> Rect2:
+	return Rect2(
+		float(hole["left"]),
+		float(hole["top"]) - FX_COVER_PAD_TOP,
+		float(hole["width"]),
+		float(hole["height"]) + FX_COVER_PAD_TOP + FX_COVER_PAD_BOTTOM
+	)
+
+func _build_fx_layer() -> void:
+	_fx_layer = _authored_control("ConsumableFxLayer")
+	if _fx_layer == null:
+		_fx_layer = Control.new()
+		_fx_layer.name = "ConsumableFxLayer"
+		add_child(_fx_layer)
+	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_tobacco_fx()
+	_build_energy_edges()
+	_build_hidden_covers()
+	_build_blur_covers()
+
+## Serum frost (issue #53): translucent per-reel covers — symbols show through but
+## read harder. Reuses the hidden-cover geometry.
+func _build_blur_covers() -> void:
+	_blur_covers.clear()
+	for i in 3:
+		var cover := ColorRect.new()
+		cover.name = "BlurCover%d" % i
+		cover.color = blur_cover_color
+		var rect := _fx_cover_rect(REEL_HOLES[i])
+		cover.position = rect.position
+		cover.size = rect.size
+		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cover.visible = false
+		_fx_layer.add_child(cover)
+		_blur_covers.append(cover)
+
+func _build_tobacco_fx() -> void:
+	_tobacco_covers.clear()
+	_tobacco_smoke.clear()
+	for i in 3:
+		var hole: Dictionary = REEL_HOLES[i]
+		var cover := ColorRect.new()
+		cover.name = "TobaccoCover%d" % i
+		cover.color = tobacco_cover_color
+		var rect := _fx_cover_rect(hole)
+		cover.position = rect.position
+		cover.size = rect.size
+		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cover.visible = false
+		_fx_layer.add_child(cover)
+		_tobacco_covers.append(cover)
+		var smoke := CPUParticles2D.new()
+		smoke.name = "TobaccoSmoke%d" % i
+		smoke.amount = 14
+		smoke.lifetime = 1.8
+		smoke.preprocess = 1.2 # already smoking when it first appears
+		smoke.position = Vector2(
+			float(hole["left"]) + float(hole["width"]) * 0.5,
+			float(hole["top"]) + float(hole["height"]) * 0.75
+		)
+		smoke.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+		smoke.emission_rect_extents = Vector2(float(hole["width"]) * 0.3, 2.0)
+		smoke.direction = Vector2(0, -1)
+		smoke.spread = 18.0
+		smoke.gravity = Vector2(0, -10)
+		smoke.initial_velocity_min = 2.0
+		smoke.initial_velocity_max = 6.0
+		smoke.scale_amount_min = 1.0
+		smoke.scale_amount_max = 2.6
+		smoke.color = tobacco_smoke_color
+		smoke.emitting = false
+		smoke.visible = false
+		_fx_layer.add_child(smoke)
+		_tobacco_smoke.append(smoke)
+
+func _build_energy_edges() -> void:
+	_energy_edges = Control.new()
+	_energy_edges.name = "EnergyEdges"
+	_energy_edges.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_energy_edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_energy_edges.visible = false
+	var t := energy_edge_thickness
+	var rects := [
+		Rect2(0.0, 0.0, SRC_W, t),           # top
+		Rect2(0.0, SRC_H - t, SRC_W, t),     # bottom
+		Rect2(0.0, t, t, SRC_H - 2.0 * t),   # left
+		Rect2(SRC_W - t, t, t, SRC_H - 2.0 * t), # right
+	]
+	for r in rects:
+		var edge := ColorRect.new()
+		edge.color = energy_edge_color
+		edge.position = r.position
+		edge.size = r.size
+		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_energy_edges.add_child(edge)
+	_fx_layer.add_child(_energy_edges)
+
+func _build_hidden_covers() -> void:
+	_hidden_covers.clear()
+	for i in 3:
+		var hole: Dictionary = REEL_HOLES[i]
+		var cover := ColorRect.new()
+		cover.name = "HiddenResultCover%d" % i
+		cover.color = hidden_cover_color
+		var rect := _fx_cover_rect(hole)
+		cover.position = rect.position
+		cover.size = rect.size
+		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cover.visible = false
+		var glyph := Label.new()
+		glyph.text = "?"
+		glyph.set_anchors_preset(Control.PRESET_FULL_RECT)
+		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		glyph.add_theme_font_size_override("font_size", 12)
+		if _font != null:
+			glyph.add_theme_font_override("font", _font)
+		glyph.add_theme_color_override("font_color", hidden_glyph_color)
+		glyph.add_theme_color_override("font_outline_color", Color.BLACK)
+		glyph.add_theme_constant_override("outline_size", 1)
+		cover.add_child(glyph)
+		_fx_layer.add_child(cover)
+		_hidden_covers.append(cover)
+
+func _refresh_consumable_fx() -> void:
+	if _fx_layer == null:
+		return
+	_refresh_tobacco_fx()
+	_refresh_energy_fx()
+
+## Tobacco: evaluate.gd hides the LAST pairBoostHiddenReels reels from scoring
+## (reels.slice keeps the first ones), so smoke exactly those.
+func _refresh_tobacco_fx() -> void:
+	var active := consumable_fx_enabled and tobacco_fx_enabled and RunStateStore.pairBoostSpins > 0
+	var hidden := clampi(RunStateStore.pairBoostHiddenReels, 0, 2) if active else 0
+	for i in 3:
+		var smoked: bool = i >= 3 - hidden
+		if i < _tobacco_covers.size():
+			(_tobacco_covers[i] as ColorRect).visible = smoked
+		if i < _tobacco_smoke.size():
+			var smoke := _tobacco_smoke[i] as CPUParticles2D
+			smoke.visible = smoked
+			smoke.emitting = smoked
+
+func _refresh_energy_fx() -> void:
+	if _energy_edges == null:
+		return
+	var active := consumable_fx_enabled and energy_fx_enabled and RunStateStore.decaySkips > 0
+	if active == _energy_fx_active:
+		return
+	_energy_fx_active = active
+	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
+		_energy_pulse_tween.kill()
+		_energy_pulse_tween = null
+	_energy_edges.visible = active
+	if active:
+		_energy_edges.modulate.a = 0.35
+		_energy_pulse_tween = create_tween().set_loops()
+		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 1.0, energy_pulse_time * 0.5)
+		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 0.35, energy_pulse_time * 0.5)
+	# Fade the spins bar & count out while the drink runs; fade back on end.
+	var target_a := 0.0 if active else 1.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	for node in _spins_bar_nodes():
+		tw.tween_property(node, "modulate:a", target_a, energy_fade_time)
+
+func _spins_bar_nodes() -> Array:
+	var nodes: Array = []
+	for n in [get_node_or_null("HealthTrack"), _life_fill_sprite, _bar_labels.get("life")]:
+		if n != null and is_instance_valid(n):
+			nodes.append(n)
+	return nodes
+
+## One-shot on-use feedback. Only the Cocktail has one today; duration effects
+## light up via _refresh_consumable_fx() on the same state_changed commit.
+func _play_use_fx(id: String) -> void:
+	if not consumable_fx_enabled:
+		return
+	if id == "item_cocktail" and cocktail_fx_enabled:
+		_play_cocktail_shake()
+
+func _play_cocktail_shake() -> void:
+	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
+		_cocktail_shake_tween.kill()
+	if _nudge_tween != null and _nudge_tween.is_valid():
+		_nudge_tween.kill()
+	position.x = 0.0
+	_cocktail_shake_tween = create_tween()
+	var swings := 6
+	var step := cocktail_shake_time / float(swings + 1)
+	for s in swings:
+		var dir := 1.0 if s % 2 == 0 else -1.0
+		var decay := 1.0 - float(s) / float(swings)
+		_cocktail_shake_tween.tween_property(self, "position:x", cocktail_shake_strength * dir * decay, step)
+	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
+
+func _play_potion_spin_fx() -> void:
+	if not (consumable_fx_enabled and potion_fx_enabled):
+		return
+	var pick: Variant = RunStateStore.lastPotionEffect
+	if pick == null:
+		return
+	_play_potion_jump()
+	_show_potion_popup(_potion_effect_text(pick))
+
+func _play_potion_jump() -> void:
+	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
+		_potion_jump_tween.kill()
+	position.y = 0.0
+	_potion_jump_tween = create_tween()
+	_potion_jump_tween.tween_property(self, "position:y", -potion_jump_height, 0.09)
+	_potion_jump_tween.tween_property(self, "position:y", 0.0, 0.14) \
+		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+
+func _potion_effect_text(pick: Dictionary) -> String:
+	match String(pick.get("kind", "")):
+		"multNextSpin":
+			return "SCORE x%s" % String.num(float(pick["multiplier"]), 2)
+		"lucidity":
+			var amt := int(pick["amount"])
+			return ("+%d LUCIDITY" % amt) if amt >= 0 else ("%d LUCIDITY" % amt)
+		"freeReroll":
+			return "FREE REROLL"
+		"symbolToBrain":
+			return "BRAIN SWAP"
+	return ""
+
+func _show_potion_popup(text: String) -> void:
+	if text.is_empty() or _fx_layer == null:
+		return
+	var label := Label.new()
+	label.text = text
+	label.position = Vector2(30.0, 112.0) # between the TV and the multiplier strip
+	label.size = Vector2(100.0, 10.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", potion_popup_color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	_fx_layer.add_child(label)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(label, "position:y", label.position.y - 10.0, potion_popup_time)
+	tw.tween_property(label, "modulate:a", 0.0, potion_popup_time)
+	tw.set_parallel(false)
+	tw.tween_callback(label.queue_free)
+
+func _set_hidden_result_active(active: bool) -> void:
+	_hide_result_active = active
+	# Covers are (re)shown per reel as each reveal lands; toggling always clears.
+	for c in _hidden_covers:
+		(c as ColorRect).visible = false
+
+func _set_hidden_cover(index: int, visible_now: bool) -> void:
+	if index >= 0 and index < _hidden_covers.size():
+		(_hidden_covers[index] as ColorRect).visible = visible_now
+
+# Serum blur (issue #53): the spin after the guaranteed one lands behind a frost
+# layer — symbols stay distinguishable, just harder to read.
+func _set_blur_result_active(active: bool) -> void:
+	_blur_result_active = active
+	for c in _blur_covers:
+		(c as ColorRect).visible = false
+
+func _set_blur_cover(index: int, visible_now: bool) -> void:
+	if index >= 0 and index < _blur_covers.size():
+		(_blur_covers[index] as ColorRect).visible = visible_now
+
+# ── machine reactions (issue #35) ────────────────────────────────────────────────
+# All reactions run in this presentation layer AFTER the parity-pinned spin()/power
+# results, so they never touch evaluate()/spin() outputs or the pinned vectors.
+
+## Reacts to the just-settled reels. `power_triggered` is true when a power (reroll/
+## shift) produced them, so the brains triple still grants a spin even though the
+## pinned evaluate only grants free spins on a natural, non-free spin.
+func _apply_machine_reactions(power_triggered: bool) -> void:
+	var lr: Variant = RunStateStore.lastResult
+	if lr == null:
+		return
+	var reels: Array = lr["reels"]
+	if reels.size() < 3:
+		return
+	# One reaction per distinct reel configuration (a power can make a new one).
+	if reels == _last_reacted_reels and RunStateStore.spinCount == _last_reacted_spin:
+		return
+	_last_reacted_reels = reels.duplicate()
+	_last_reacted_spin = RunStateStore.spinCount
+	var a := String(reels[0])
+	if not (a == String(reels[1]) and a == String(reels[2])):
+		return
+	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a
+	# raw 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal,
+	# flatline strike...). Gating on the scored winType blocks exactly those spins.
+	var win_type := String(lr.get("winType", ""))
+	if win_type != "triple" and win_type != "jackpot":
+		return
+	if a == "flatline":
+		var count := RunStateStore.register_flatline_result()
+		_show_flatline_result_reaction(count)
+	else:
+		_apply_symbol_triple(a, int(lr.get("freeSpinsGranted", 0)), power_triggered)
+
+func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_triggered: bool) -> void:
+	var color := flatline_result_color
+	var label := ""
+	# Spin restores fly a "+N" into the spins counter (issue #66); the fx uses the
+	# visible spins-left delta, so the bar and label land together.
+	var spins_before := _current_display_spins_left()
+	match symbol:
+		"brain":
+			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
+			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
+			if free_spins_granted <= 0:
+				RunStateStore.grant_free_spins(triple_brain_free_spins)
+				_play_spin_gain_fx(_current_display_spins_left() - spins_before,
+					_reel_window_center())
+			color = triple_brain_color
+			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
+		"eye":
+			# The player picks the reel to reveal (issue follow-up): the reel-selection
+			# UI arms and the chosen reel's NEXT spin result pops up when it lands.
+			color = triple_eye_color
+			label = "PICK A REEL"
+			call_deferred("_arm_eye_reveal_picker")
+		"pill":
+			RunStateStore.restore_all_powers()
+			color = triple_pill_color
+			label = "POWERS BACK"
+		"syringe":
+			color = triple_syringe_color
+			label = "RECOVERED" if RunStateStore.recover_last_consumable(maxi(1, max_consumable_slots)) else "SYRINGE"
+		"vial":
+			RunStateStore.restore_spins(triple_vial_free_spins)
+			_play_spin_gain_fx(_current_display_spins_left() - spins_before,
+				_reel_window_center())
+			color = triple_vial_color
+			label = "+%d SPINS" % triple_vial_free_spins
+	_spawn_reaction_flash(color, label)
+	_update_hud()
+
+## Centre of the reel window — where triple-grant "+N" fly-ins spawn (issue #66).
+func _reel_window_center() -> Vector2:
+	return Vector2(SRC_W * 0.5 - 6.0,
+		float(REEL_WINDOW["top"]) + float(REEL_WINDOW["height"]) * 0.5)
+
+# ── 3x eye reveal (player-picked reel) ───────────────────────────────────────────
+# Reuses the shared reel-selection UI. Tapping a reel reveals its NEXT-spin symbol
+# INSTANTLY (issue #53): the store rolls it through the normal weight pipeline and
+# commits it, so the next spin's evaluate() honours the revealed promise.
+
+const EYE_REVEAL_POPUP_TIME := 1.6
+
+func _arm_eye_reveal_picker() -> void:
+	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
+
+func _on_eye_reveal_pick(reel_index: int) -> void:
+	_clear_targeting()
+	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
+	if symbol == "":
+		return
+	_reveal_reel_next_spin = reel_index # that reel also stops early next spin
+	_show_eye_reveal_popup(reel_index, symbol)
+
+## Popup over the picked reel naming its revealed next-spin symbol.
+func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
+	var w := 34.0
+	var h := 34.0
+	var popup := Control.new()
+	popup.z_index = 40
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cx := float(REEL_CELL_CENTERS[reel_index])
+	popup.position = Vector2(clampf(cx - w * 0.5, 2.0, SRC_W - w - 2.0), float(REEL_WINDOW["top"]) - h - 6.0)
+	popup.size = Vector2(w, h)
+	add_child(popup)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.03, 0.1, 0.92)
+	bg.size = popup.size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.add_child(bg)
+
+	var title := _reaction_label(popup, "REEL %d" % (reel_index + 1), Vector2(0.0, 2.0), 6, triple_eye_color)
+	title.size = Vector2(w, 8.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var tex := _load_texture("symbols/%s.png" % symbol_id, true)
+	if tex != null:
+		var icon := TextureRect.new()
+		icon.texture = tex
+		icon.position = Vector2((w - 16.0) * 0.5, 13.0)
+		icon.size = Vector2(16.0, 16.0)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		popup.add_child(icon)
+	else:
+		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 16.0), 7, Color(0.9, 0.95, 1.0))
+		sym.size = Vector2(w, 10.0)
+		sym.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	popup.pivot_offset = popup.size * 0.5
+	popup.scale = Vector2(0.4, 0.4)
+	var tw := popup.create_tween()
+	tw.tween_property(popup, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(EYE_REVEAL_POPUP_TIME)
+	tw.tween_property(popup, "modulate:a", 0.0, 0.3)
+	tw.tween_callback(popup.queue_free)
+
+## Instant death: too many flatline results ends THIS RUN through the normal
+## flatline ending (banks lucidity, shows the #38 fatal text, offers CONTINUE
+## while campaign neurons remain) — it does not fail the whole campaign.
+func _check_flatline_instant_death() -> bool:
+	if RunStateStore.flatlineResultCount < fatal_flatline_count:
+		return false
+	var run := {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	}
+	_show_ending("flatline", run)
+	return true
+
+## New hard run-length cap (issue #35): reaching run_spin_length ends the run like a
+## neuron flatline (banks lucidity), added alongside the neurons<=0 ending.
+func _check_spin_cap_ending() -> bool:
+	if RunStateStore.spinCount < run_spin_length:
+		return false
+	var run := {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	}
+	_show_ending("flatline", run)
+	return true
+
+func _show_flatline_result_reaction(count: int) -> void:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.z_index = 30
+	add_child(host)
+	var cy := REEL_WINDOW["top"] + REEL_WINDOW["height"] * 0.5
+	var line := ColorRect.new()
+	line.color = flatline_result_color
+	line.size = Vector2(0.0, 2.0)
+	line.position = Vector2(0.0, cy - 1.0)
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(line)
+	var text := "CLOSE CALL" if count < fatal_flatline_count else "FLATLINE"
+	var label := _reaction_label(host, "%s  %d/%d" % [text, count, fatal_flatline_count],
+		Vector2(0.0, cy + 8.0), 10, flatline_result_color)
+	label.pivot_offset = Vector2(SRC_W * 0.5, 6.0)
+	var tw := create_tween()
+	tw.tween_property(line, "size:x", float(SRC_W), reaction_flash_time * 0.5)
+	tw.tween_interval(reaction_flash_time * 0.3)
+	tw.tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.3)
+	tw.tween_callback(host.queue_free)
+
+func _spawn_reaction_flash(color: Color, text: String) -> void:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.z_index = 30
+	add_child(host)
+	var flash := ColorRect.new()
+	flash.color = Color(color.r, color.g, color.b, 0.0)
+	flash.size = Vector2(SRC_W, SRC_H)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(flash)
+	var label := _reaction_label(host, text, Vector2(0.0, 150.0), 14, color)
+	label.pivot_offset = Vector2(SRC_W * 0.5, 10.0)
+	label.scale = Vector2(0.7, 0.7)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(flash, "color:a", 0.32, reaction_flash_time * 0.25)
+	tw.tween_property(label, "scale", Vector2.ONE, reaction_flash_time * 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(reaction_flash_time * 0.4)
+	tw.chain().tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.35)
+	tw.chain().tween_callback(host.queue_free)
+
+func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.position = pos
+	label.size = Vector2(SRC_W, 20.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", font_size)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	parent.add_child(label)
+	return label
 
 func _check_ending() -> bool:
 	var run := {
@@ -1509,11 +3085,16 @@ func _check_ending() -> bool:
 		"scoreEarned": RunStateStore.scoreEarned,
 		"lucidityCoins": RunStateStore.lucidityCoins,
 	}
-	var ending: Variant = Endings.check_ending(run, {})
+	var ending: Variant = Endings.check_ending(run, {}, campaign_goal_score)
 	if ending == null:
 		return false
 	if ending == "wealth" and RunStateStore.wealthContinued:
-		return false
+		# check_ending short-circuits on the score, so a wealth-continued run that
+		# runs out of neurons would otherwise never flatline — the spin button dies
+		# and nothing re-checks endings, a softlock (issue #62).
+		if int(RunStateStore.neurons) > 0:
+			return false
+		ending = "flatline"
 	_show_ending(String(ending), run)
 	return true
 
@@ -1530,6 +3111,8 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
+	# The stash tray draws at z 50 and would float over the dimmed overlay.
+	_set_stash_tray_visible(false)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -1537,16 +3120,32 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.add_child(dim)
 
 	var title := Label.new()
-	title.position = Vector2(20, 74 if ending == "flatline" else 120)
-	title.add_theme_font_size_override("font_size", 16)
+	if ending == "flatline":
+		# The fatal copy only applies when the campaign is truly over — a routine
+		# flatline with neurons left just reads FLATLINE.
+		var fatal := not _has_campaign_neurons_remaining()
+		title.text = fatal_flatline_text if fatal else "FLATLINE"
+		title.position = Vector2(20, 58)
+		title.size = Vector2(120, 28)
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
+	else:
+		title.text = ending.to_upper()
+		title.position = Vector2(20, 120)
+		title.size = Vector2(120, 20)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
 		title.add_theme_font_override("font", _font)
 	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if ending == "flatline" else Color(0.5, 1, 0.6))
-	title.text = ending.to_upper()
 	_overlay.add_child(title)
 
 	if ending == "flatline":
 		_build_flatline_countdown(run)
+	elif ending == "wealth":
+		_build_wealth_screen(run)
+		return
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(20, 145)
@@ -1558,40 +3157,122 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_overlay.add_child(wallet)
 
 	var to_menu := Button.new()
-	to_menu.text = "BANK & LEAVE" if ending == "wealth" else "MENU"
+	to_menu.text = _flatline_action_text()
 	to_menu.position = Vector2(30, 238 if ending == "flatline" else 175)
 	to_menu.size = Vector2(100, 20)
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		to_menu.add_theme_font_override("font", _font)
-	# Non-wealth already banked above; wealth banks here on leave.
 	Assets.skin_negative_button(to_menu)
-	to_menu.pressed.connect(_bank_and_menu.bind(run, ending) if ending == "wealth" else _to_menu)
+	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
-	if ending == "wealth":
-		var cont := Button.new()
-		cont.text = "CONTINUE"
-		cont.position = Vector2(40, 200)
-		cont.size = Vector2(80, 18)
-		cont.add_theme_font_size_override("font_size", 9)
-		if _font != null:
-			cont.add_theme_font_override("font", _font)
-		cont.pressed.connect(_continue_from_wealth)
-		_overlay.add_child(cont)
+## Dedicated wealth-ending screen: CONTINUE keeps playing under the existing
+## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
+## continue can still bank the full total later) and returns to the menu hub.
+func _build_wealth_screen(run: Dictionary) -> void:
+	_score_label(_overlay, "YOU MADE IT OUT RICH", Vector2(20.0, 148.0), 8,
+		Color(0.9, 0.95, 0.85), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "SCORE %d" % int(run["scoreEarned"]), Vector2(20.0, 162.0), 8,
+		Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+
+	var cont := Button.new()
+	cont.text = "CONTINUE"
+	cont.position = Vector2(30.0, 192.0)
+	cont.size = Vector2(100.0, 20.0)
+	cont.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		cont.add_theme_font_override("font", _font)
+	# Continuing with no possible next spin (0 neurons/free spins, or the hard
+	# spin cap already hit) would strand a dead machine (issue #62).
+	cont.disabled = not _can_resume_after_wealth()
+	cont.pressed.connect(_continue_from_wealth)
+	_overlay.add_child(cont)
+
+	var exit := Button.new()
+	exit.text = "EXIT CASINO"
+	exit.position = Vector2(30.0, 218.0)
+	exit.size = Vector2(100.0, 20.0)
+	exit.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		exit.add_theme_font_override("font", _font)
+	Assets.skin_negative_button(exit)
+	exit.pressed.connect(_exit_casino.bind(run))
+	_overlay.add_child(exit)
+
+func _show_campaign_failed() -> void:
+	_stop_flatline_countdown()
+	if _overlay != null:
+		_overlay.queue_free()
+	_overlay = Control.new()
+	_overlay.position = Vector2.ZERO
+	_overlay.size = Vector2(SRC_W, SRC_H)
+	add_child(_overlay)
+	_set_stash_tray_visible(false)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.82)
+	dim.size = Vector2(SRC_W, SRC_H)
+	_overlay.add_child(dim)
+
+	_score_label(_overlay, "FLATLINE", Vector2(20.0, 58.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	# Issue #38: exact GDD fatal copy, kept byte-for-byte in one label (autowrapped).
+	var fatal := _score_label(_overlay, fatal_flatline_text, Vector2(20.0, 84.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	fatal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fatal.size = Vector2(120.0, 40.0)
+
+	# The campaign-failed screen keeps the neuron meter (fully desaturated mind).
+	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 162.0))
+
+	var fresh := Button.new()
+	fresh.text = "START FRESH AGAIN"
+	fresh.position = Vector2(20.0, 208.0)
+	fresh.size = Vector2(120.0, 22.0)
+	fresh.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		fresh.add_theme_font_override("font", _font)
+	Assets.skin_negative_button(fresh)
+	fresh.pressed.connect(_start_fresh_again)
+	_overlay.add_child(fresh)
+
+func _start_fresh_again() -> void:
+	MetaStateStore.start_new_campaign()
+	RunStateStore.reset_run_state()
+	_to_menu()
+
+func _flatline_action_text() -> String:
+	return "CONTINUE" if _has_campaign_neurons_remaining() else "MENU"
+
+func _on_flatline_action_pressed() -> void:
+	if _has_campaign_neurons_remaining():
+		_to_dealer()
+	else:
+		_to_menu()
+
+func _has_campaign_neurons_remaining() -> bool:
+	return int(MetaStateStore.campaignNeuronsLeft) > 0
 
 func _build_flatline_countdown(run: Dictionary) -> void:
 	_flatline_total = int(run["lucidityCoins"])
-	_flatline_kept = floori(float(_flatline_total) * EconomyConst.END_OF_RUN_LUCIDITY_KEPT)
+	_flatline_kept = floori(float(_flatline_total) * _end_run_lucidity_kept_fraction())
 	_flatline_display = _flatline_total
 	_flatline_countdown_elapsed = 0.0
 	_flatline_countdown_active = _flatline_kept < _flatline_total
 
-	_score_label(_overlay, "LUCIDITY - 10% KEPT", Vector2(20.0, 100.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 116.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 154.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "FINAL CREDITS %d" % MetaStateStore.lucidityWallet, Vector2(20.0, 182.0), 8, Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	# Retained-percent line only ("10% kept", or "20% kept" with Smart Saving);
+	# the draining number below it is the whole story.
+	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
+	_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	_update_flatline_countdown_labels()
+
+	# Neuron meter above the continue button, playing the losing pop: the frame
+	# switches to reflect the neuron this run just cost. The "-1 NEURON" popup
+	# rides the same beat, rising off the meter.
+	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
+	_flatline_meter.play_loss_animation()
+	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
 
 func _step_flatline_countdown(delta: float) -> void:
 	_flatline_countdown_elapsed += delta
@@ -1620,57 +3301,51 @@ func _stop_flatline_countdown() -> void:
 	_flatline_display = 0
 	_flatline_score_label = null
 	_flatline_lost_label = null
+	_flatline_meter = null
+
+# The stash tray (z 50) would draw over full-screen ending overlays; hide it while
+# one is up and restore it when the run visuals resync.
+func _set_stash_tray_visible(v: bool) -> void:
+	var tray := get_node_or_null("stash") as Control
+	if tray != null:
+		tray.visible = v
+	_set_stash_visible(v)
+
+func _end_run_lucidity_kept_fraction() -> float:
+	return EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
+		if MetaStateStore.ownedPermanents.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
+		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
+
+## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
+## neurons (or free spins) remain and the hard spin cap isn't reached (issue #62).
+func _can_resume_after_wealth() -> bool:
+	return (int(RunStateStore.neurons) >= 1 or int(RunStateStore.freeSpinsRemaining) > 0) \
+		and int(RunStateStore.spinCount) < run_spin_length
 
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
-	_sync_visuals()
+	if _can_resume_after_wealth():
+		_sync_visuals()
+		return
+	# Defensive: no spin can follow, so end the run through the flatline flow
+	# (banks lucidity, offers the campaign continue/menu action) instead of
+	# stranding a dead machine (issue #62).
+	if _overlay != null:
+		_overlay.queue_free()
+		_overlay = null
+	_show_ending("flatline", {
+		"neurons": RunStateStore.neurons,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"lucidityCoins": RunStateStore.lucidityCoins,
+	})
 
-func _bank_and_menu(run: Dictionary, ending: String) -> void:
-	MetaStateStore.bank_run(run, ending)
+## Wealth screen EXIT CASINO: bank the run (wealth banking is deferred until the
+## player leaves) and return to the menu hub.
+func _exit_casino(run: Dictionary) -> void:
+	MetaStateStore.bank_run(run, "wealth")
 	_to_menu()
 
 # ── dealer flow ────────────────────────────────────────────────────────────────────
-
-func _make_dealer_modal(show_portrait := true) -> Control:
-	if _dealer_overlay != null:
-		_dealer_overlay.queue_free()
-	_dealer_message_label = null
-	_dealer_portrait_sprite = null
-	_dealer_overlay = Control.new()
-	_dealer_overlay.size = Vector2(SRC_W, SRC_H) # default mouse_filter STOP -> modal, blocks spin
-	add_child(_dealer_overlay)
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.0, 0.05, 0.18)
-	dim.size = Vector2(SRC_W, SRC_H)
-	_dealer_overlay.add_child(dim)
-	if show_portrait:
-		_dealer_portrait_sprite = _build_control_sheet_on(_dealer_overlay, "dealer_portrait.png", 2)
-	return _dealer_overlay
-
-func _dealer_label(parent: Control, text: String, pos: Vector2, size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.position = pos
-	l.add_theme_font_size_override("font_size", size)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", color)
-	parent.add_child(l)
-	return l
-
-func _dealer_button(parent: Control, text: String, pos: Vector2, size: Vector2, cb: Callable, icon: Texture2D = null) -> void:
-	var b := Button.new()
-	b.text = text
-	b.position = pos
-	b.size = size
-	b.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	if icon != null:
-		b.icon = icon
-		b.expand_icon = true
-	b.pressed.connect(cb)
-	parent.add_child(b)
 
 func _show_dealer_incoming() -> void:
 	_dealer_visit()
@@ -1681,67 +3356,26 @@ func _dealer_visit() -> void:
 	# machine; the full dealer scene is reserved for the pre-run shop flow.
 	_show_dealer_offers()
 
-func _dealer_wave_off() -> void:
-	RunStateStore.decline_dealer_visit()
-	_close_dealer()
-
 func _show_dealer_offers() -> void:
 	var offers: Variant = RunStateStore.dealerOfferIds
 	if offers == null:
 		_close_dealer()
 		return
+	_set_sequence_lock(true)
+	_clear_targeting()
 	if _dealer_overlay != null:
 		_dealer_overlay.queue_free()
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
 	_dealer_overlay = _dealer_offer_popup
 	add_child(_dealer_offer_popup)
+	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
-	_set_stash_visible(false) # overlay shows its own stash — avoid a duplicate (issue #26)
-	_dealer_offer_popup.start_offer((offers as Array).duplicate(), _stash_slots())
-
-func _dealer_offer_button(parent: Control, item_id: String, text: String, pos: Vector2, icon: Texture2D) -> void:
-	var card := Control.new()
-	card.position = pos
-	card.size = Vector2(56.0, 38.0)
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.gui_input.connect(_on_dealer_offer_input.bind(card, item_id))
-	parent.add_child(card)
-	var icon_rect := TextureRect.new()
-	icon_rect.texture = icon
-	icon_rect.position = Vector2(16.0, 2.0)
-	icon_rect.size = Vector2(24.0, 24.0)
-	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(icon_rect)
-
-func _build_dealer_stash(parent: Control) -> void:
-	var slots := _stash_slots()
-	var start_x := 58.0 if slots.size() == 1 else 47.0
-	for i in slots.size():
-		var id := String(slots[i])
-		var icon := TextureRect.new()
-		icon.texture = _icon_for(id)
-		icon.position = Vector2(start_x + float(i) * 24.0, 296.0)
-		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		icon.mouse_filter = Control.MOUSE_FILTER_STOP
-		icon.gui_input.connect(_on_dealer_stash_input.bind(icon, id))
-		parent.add_child(icon)
-
-func _on_dealer_stash_input(event: InputEvent, node: Control, id: String) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _dealer_drag_active:
-		_begin_dealer_drag(node, id, "stash")
-
-func _on_dealer_offer_input(event: InputEvent, node: Control, id: String) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _dealer_drag_active:
-		_begin_dealer_drag(node, id, "offer")
+	_set_stash_visible(true)
+	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [])
+	_refresh_controls()
 
 func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	_dealer_drag_active = true
@@ -1772,6 +3406,8 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	var kind := _dealer_drag_kind
 	var node := _dealer_drag_node
 	var dropped_on_dealer := release_pos.y < 214.0
+	if _dealer_offer_popup != null:
+		dropped_on_dealer = _dealer_offer_popup.has_dealer_drop_point(release_pos)
 	_dealer_drag_active = false
 	_dealer_drag_node = null
 	_dealer_drag_id = ""
@@ -1790,7 +3426,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 			_dealer_take(id)
 		elif kind == "stash":
 			RunStateStore.discard_run_consumable(id)
-			_show_dealer_offers()
+			_update_hud()
 
 func _dealer_full_stash_feedback() -> void:
 	if _dealer_offer_popup != null:
@@ -1821,10 +3457,10 @@ func _dealer_take(item_id: String) -> void:
 
 func _dealer_discard_stash(item_id: String) -> void:
 	RunStateStore.discard_run_consumable(item_id)
-	if _dealer_offer_popup != null:
-		_dealer_offer_popup.set_stash_items(_stash_slots())
-	else:
+	if _dealer_offer_popup == null:
 		_show_dealer_offers()
+	else:
+		_update_hud()
 
 func _dealer_leave() -> void:
 	RunStateStore.decline_dealer_offer()
@@ -1848,4 +3484,5 @@ func _close_dealer() -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	_set_sequence_lock(false)
 	_update_hud()

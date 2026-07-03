@@ -1,6 +1,6 @@
 {
   "description": "checkEnding(run,meta) and checkExitEligibility(run,meta) truth tables.",
-  "wealthThreshold": 1000,
+  "wealthThreshold": 2000,
   "exitThreshold": 750,
   "checkEnding": [
     {
@@ -15,7 +15,7 @@
         "neurons": -1,
         "scoreEarned": 2000
       },
-      "expect": "flatline"
+      "expect": "wealth"
     },
     {
       "input": {
@@ -27,21 +27,21 @@
     {
       "input": {
         "neurons": 100,
-        "scoreEarned": 999
+        "scoreEarned": 1999
       },
       "expect": null
     },
     {
       "input": {
         "neurons": 100,
-        "scoreEarned": 1000
+        "scoreEarned": 2000
       },
       "expect": "wealth"
     },
     {
       "input": {
         "neurons": 100,
-        "scoreEarned": 1001
+        "scoreEarned": 2001
       },
       "expect": "wealth"
     },

@@ -1,6 +1,418 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://564kp6mg7m4v"]
 
-[ext_resource type="Script" path="res://scenes/machine_scene.gd" id="1_machine"]
+[ext_resource type="Script" uid="uid://bty2dglqk8hul" path="res://scenes/machine_scene.gd" id="1_machine"]
+[ext_resource type="Texture2D" uid="uid://cle4mx7cn42t" path="res://assets/images/machine new view/reel_final_machine.png" id="2_reel"]
+[ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
+[ext_resource type="Texture2D" uid="uid://bspdoxu578cvo" path="res://assets/images/machine new view/final_machine.png" id="4_cabinet"]
+[ext_resource type="Texture2D" uid="uid://drqwbn2hk65kl" path="res://assets/images/machine new view/wealth_track_final_machine.png" id="5_wealth_track"]
+[ext_resource type="Texture2D" uid="uid://cnl5y066ief4d" path="res://assets/images/machine new view/wealth_fill_final_machine.png" id="6_wealth_fill"]
+[ext_resource type="Texture2D" uid="uid://ojxjeqmf2wnp" path="res://assets/images/machine new view/health_track_final_machine.png" id="7_health_track"]
+[ext_resource type="Texture2D" uid="uid://dgs625hqb1ea0" path="res://assets/images/machine new view/health_fill_final_machine.png" id="8_health_fill"]
+[ext_resource type="Texture2D" uid="uid://bux7jbe7o4let" path="res://assets/images/machine new view/multiplier_final_machine.png" id="9_multiplier"]
+[ext_resource type="Texture2D" uid="uid://cqm30a5lbfy3j" path="res://assets/images/machine new view/lever_final_machine.png" id="10_lever"]
+[ext_resource type="Texture2D" uid="uid://55shcr47kjib" path="res://assets/images/machine new view/jackpot_final_machine.png" id="11_jackpot"]
+[ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
+[ext_resource type="Texture2D" uid="uid://bugvu3ivgsp1m" path="res://assets/images/machine new view/reroll_final_machine.png" id="13_reroll"]
+[ext_resource type="Texture2D" uid="uid://dllrucw0rl5oc" path="res://assets/images/machine new view/shift_final_machine.png" id="14_shift"]
+[ext_resource type="Texture2D" uid="uid://6kxesj6e2w3x" path="res://assets/images/machine new view/lock_final_machine.png" id="15_memory"]
+[ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
+[ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="17_vp1vd"]
+[ext_resource type="Texture2D" uid="uid://08wob2rti106" path="res://assets/images/ui/settings.png" id="18_settings"]
+[ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="19_options"]
 
-[node name="MachineScene" type="Node2D"]
+[sub_resource type="AtlasTexture" id="AtlasTexture_options_normal"]
+atlas = ExtResource("18_settings")
+region = Rect2(0, 0, 25, 23)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_options_pressed"]
+atlas = ExtResource("18_settings")
+region = Rect2(25, 0, 25, 23)
+
+[node name="MachineScene" type="Node2D" unique_id=322645154]
 script = ExtResource("1_machine")
+
+[node name="ReelBacking" type="Sprite2D" parent="." unique_id=1615309416]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("2_reel")
+centered = false
+
+[node name="SpinReel0" type="Sprite2D" parent="." unique_id=2118086699]
+visible = false
+position = Vector2(33, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("3_spin")
+centered = false
+region_enabled = true
+region_rect = Rect2(264, 1360, 168, 240)
+
+[node name="SpinReel1" type="Sprite2D" parent="." unique_id=201398814]
+visible = false
+position = Vector2(65, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("3_spin")
+centered = false
+region_enabled = true
+region_rect = Rect2(520, 1360, 168, 240)
+
+[node name="SpinReel2" type="Sprite2D" parent="." unique_id=257272174]
+visible = false
+position = Vector2(97, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("3_spin")
+centered = false
+region_enabled = true
+region_rect = Rect2(776, 1360, 168, 240)
+
+[node name="ReelCover0" type="Sprite2D" parent="." unique_id=831218489]
+visible = false
+position = Vector2(33, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("2_reel")
+centered = false
+region_enabled = true
+region_rect = Rect2(264, 1360, 168, 240)
+
+[node name="ReelCover1" type="Sprite2D" parent="." unique_id=1674207780]
+visible = false
+position = Vector2(65, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("2_reel")
+centered = false
+region_enabled = true
+region_rect = Rect2(520, 1360, 168, 240)
+
+[node name="ReelCover2" type="Sprite2D" parent="." unique_id=1763582380]
+visible = false
+position = Vector2(97, 170)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("2_reel")
+centered = false
+region_enabled = true
+region_rect = Rect2(776, 1360, 168, 240)
+
+[node name="Reel0Top" type="Sprite2D" parent="." unique_id=502769414]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(43.5, 171)
+
+[node name="Reel0Bottom" type="Sprite2D" parent="." unique_id=206547788]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(43.5, 199)
+
+[node name="Reel0Center" type="Sprite2D" parent="." unique_id=476669378]
+position = Vector2(43.5, 185)
+
+[node name="Reel1Top" type="Sprite2D" parent="." unique_id=513050335]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(75.5, 171)
+
+[node name="Reel1Bottom" type="Sprite2D" parent="." unique_id=2142885123]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(75.5, 199)
+
+[node name="Reel1Center" type="Sprite2D" parent="." unique_id=1925518398]
+position = Vector2(75.5, 185)
+
+[node name="Reel2Top" type="Sprite2D" parent="." unique_id=591126682]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(107.5, 171)
+
+[node name="Reel2Bottom" type="Sprite2D" parent="." unique_id=113066582]
+modulate = Color(1, 1, 1, 0.5)
+position = Vector2(107.5, 199)
+
+[node name="Reel2Center" type="Sprite2D" parent="." unique_id=325200504]
+position = Vector2(107.5, 185)
+
+[node name="Cabinet" type="Sprite2D" parent="." unique_id=1998976856]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("4_cabinet")
+centered = false
+
+[node name="WealthTrack" type="Sprite2D" parent="." unique_id=84008648]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("5_wealth_track")
+centered = false
+
+[node name="WealthFill" type="Sprite2D" parent="." unique_id=1257621117]
+position = Vector2(43, 73)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("6_wealth_fill")
+centered = false
+region_enabled = true
+region_rect = Rect2(344, 584, 528, 32)
+
+[node name="HealthTrack" type="Sprite2D" parent="." unique_id=1358964215]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("7_health_track")
+centered = false
+
+[node name="HealthFill" type="Sprite2D" parent="." unique_id=323378390]
+position = Vector2(43, 94)
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("8_health_fill")
+centered = false
+region_enabled = true
+region_rect = Rect2(344, 752, 528, 40)
+
+[node name="Multiplier" type="Sprite2D" parent="." unique_id=1960969618]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("9_multiplier")
+centered = false
+hframes = 6
+
+[node name="Lever" type="Sprite2D" parent="." unique_id=1583962497]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("10_lever")
+centered = false
+hframes = 6
+
+[node name="Jackpot" type="Sprite2D" parent="." unique_id=1717179247]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("11_jackpot")
+centered = false
+hframes = 2
+
+[node name="LockPower0" type="Sprite2D" parent="." unique_id=552656609]
+visible = false
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("12_lock_power")
+centered = false
+hframes = 3
+
+[node name="LockPower1" type="Sprite2D" parent="." unique_id=648086076]
+visible = false
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("12_lock_power")
+centered = false
+hframes = 3
+frame = 1
+
+[node name="LockPower2" type="Sprite2D" parent="." unique_id=1639337314]
+visible = false
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("12_lock_power")
+centered = false
+hframes = 3
+frame = 2
+
+[node name="LockCount0" type="Label" parent="." unique_id=1669245061]
+visible = false
+offset_left = 37.5
+offset_top = 201.0
+offset_right = 49.5
+offset_bottom = 209.0
+theme_override_colors/font_color = Color(1, 0.86, 0.28, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 7
+horizontal_alignment = 1
+
+[node name="LockCount1" type="Label" parent="." unique_id=910076671]
+visible = false
+offset_left = 69.5
+offset_top = 201.0
+offset_right = 81.5
+offset_bottom = 209.0
+theme_override_colors/font_color = Color(1, 0.86, 0.28, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 7
+horizontal_alignment = 1
+
+[node name="LockCount2" type="Label" parent="." unique_id=1337454282]
+visible = false
+offset_left = 101.5
+offset_top = 201.0
+offset_right = 113.5
+offset_bottom = 209.0
+theme_override_colors/font_color = Color(1, 0.86, 0.28, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 7
+horizontal_alignment = 1
+
+[node name="RerollPower" type="Sprite2D" parent="." unique_id=545151871]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("13_reroll")
+centered = false
+hframes = 3
+frame = 2
+
+[node name="ShiftPower" type="Sprite2D" parent="." unique_id=478848931]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("14_shift")
+centered = false
+hframes = 3
+frame = 2
+
+[node name="MemoryPower" type="Sprite2D" parent="." unique_id=788471702]
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("15_memory")
+centered = false
+hframes = 3
+frame = 2
+
+[node name="ScoreButton" type="Button" parent="." unique_id=2095995351]
+offset_left = 109.0
+offset_top = 9.0
+offset_right = 150.0
+offset_bottom = 26.0
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 7
+text = "SCORES"
+
+[node name="options" type="TextureButton" parent="." unique_id=2023517771]
+texture_filter = 1
+offset_left = 9.0
+offset_top = 9.0
+offset_right = 29.0
+offset_bottom = 27.0
+texture_normal = SubResource("AtlasTexture_options_normal")
+texture_pressed = SubResource("AtlasTexture_options_pressed")
+texture_hover = SubResource("AtlasTexture_options_pressed")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="GoalLabel" type="Label" parent="." unique_id=882746502]
+offset_left = 43.0
+offset_top = 64.0
+offset_right = 103.0
+offset_bottom = 74.0
+theme_override_colors/font_color = Color(0.9, 0.85, 0.45, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 6
+
+[node name="HealthLabel" type="Label" parent="." unique_id=1391294732]
+offset_left = 43.0
+offset_top = 85.0
+offset_right = 136.0
+offset_bottom = 95.0
+theme_override_colors/font_color = Color(0.75, 1, 0.8, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 6
+
+[node name="SpinButton" type="Button" parent="." unique_id=554475154]
+offset_left = 133.0
+offset_top = 160.0
+offset_right = 153.0
+offset_bottom = 200.0
+
+[node name="MultiplierButton1" type="Button" parent="." unique_id=578749928]
+offset_left = 39.0
+offset_top = 119.0
+offset_right = 55.0
+offset_bottom = 135.0
+
+[node name="MultiplierButton2" type="Button" parent="." unique_id=926392601]
+offset_left = 68.0
+offset_top = 119.0
+offset_right = 84.0
+offset_bottom = 135.0
+
+[node name="MultiplierButton3" type="Button" parent="." unique_id=1719380875]
+offset_left = 97.0
+offset_top = 119.0
+offset_right = 113.0
+offset_bottom = 135.0
+
+[node name="PowerButtonReroll" type="Button" parent="." unique_id=245745428]
+offset_left = 21.0
+offset_top = 224.0
+offset_right = 34.0
+offset_bottom = 237.0
+
+[node name="PowerButtonShift" type="Button" parent="." unique_id=230104019]
+offset_left = 35.0
+offset_top = 224.0
+offset_right = 48.0
+offset_bottom = 237.0
+
+[node name="PowerButtonMemory" type="Button" parent="." unique_id=1912385711]
+offset_left = 49.0
+offset_top = 224.0
+offset_right = 62.0
+offset_bottom = 237.0
+
+[node name="stash" type="TextureRect" parent="." unique_id=46112402]
+z_index = 50
+texture_filter = 1
+offset_left = 106.0
+offset_top = 290.0
+offset_right = 154.0
+offset_bottom = 316.0
+mouse_filter = 2
+texture = ExtResource("17_vp1vd")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="StashSlot1" type="Control" parent="stash" unique_id=1670430773]
+anchors_preset = 0
+offset_left = 4.0
+offset_top = 5.0
+offset_right = 20.0
+offset_bottom = 21.0
+
+[node name="Icon" type="TextureRect" parent="stash/StashSlot1" unique_id=1098456785]
+texture_filter = 1
+layout_mode = 0
+offset_right = 16.0
+offset_bottom = 16.0
+mouse_filter = 0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="StashSlot2" type="Control" parent="stash" unique_id=1765167292]
+anchors_preset = 0
+offset_left = 28.0
+offset_top = 5.0
+offset_right = 44.0
+offset_bottom = 21.0
+
+[node name="Icon" type="TextureRect" parent="stash/StashSlot2" unique_id=2040374747]
+texture_filter = 1
+layout_mode = 0
+offset_right = 16.0
+offset_bottom = 16.0
+mouse_filter = 0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="BurstLayer" type="Control" parent="." unique_id=47171462]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="CoinLayer" type="Control" parent="." unique_id=643630220]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="BottomHudLayer" type="Control" parent="." unique_id=1839195265]
+z_index = 120
+layout_mode = 3
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="neuron_number" type="Label" parent="BottomHudLayer" unique_id=1776525199]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -46.5
+offset_top = -14.0
+offset_right = 46.5
+offset_bottom = -4.0
+theme_override_colors/font_color = Color(0.8, 0.95, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("16_font")
+theme_override_font_sizes/font_size = 6
+theme_override_constants/outline_size = 1
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="OptionsOverlay" parent="." instance=ExtResource("19_options")]

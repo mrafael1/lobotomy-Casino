@@ -8,27 +8,69 @@ extends RefCounted
 static func _round(x: float) -> int:
 	return floori(x + 0.5)
 
-# Mirrors buildWeights(brainWeightBonus, bookWeight).
-static func _build_weights(brain_bonus: int, book_weight: int) -> Array:
+# Deterministic non-excluded reel symbol (issue #32, Serum). Picks along the
+# canonical visible cycle so it never lands on `book` or the excluded symbol.
+static func _pick_non_excluded(excluded: String, rng: LobRNG) -> String:
+	var pool: Array = []
+	for s in Symbols.BASE_SYMBOL_CYCLE:
+		if String(s) != excluded:
+			pool.append(String(s))
+	if pool.is_empty():
+		return excluded
+	return String(pool[int(rng.next() * pool.size())])
+
+# Mirrors buildWeights(brainWeightBonus, bookWeight). `overrides` (issue #36, dealer
+# odds table) is a per-run additive { symbol: bonus } map layered on at build time —
+# the parity-locked base in Symbols stays untouched, and an empty map reproduces the
+# pinned vectors exactly.
+static func _build_weights(brain_bonus: int, book_weight: int, overrides: Dictionary = {}) -> Array:
 	var weights := Symbols.symbol_weights() # fresh array each call
-	if brain_bonus > 0:
+	if brain_bonus > 0 or not overrides.is_empty():
 		var nw := []
 		for w in weights:
-			if w["value"] == "brain":
-				nw.append({ "weight": int(w["weight"]) + brain_bonus, "value": "brain" })
+			var sym := String(w["value"])
+			var bonus := int(overrides.get(sym, 0))
+			if sym == "brain":
+				bonus += brain_bonus
+			if bonus > 0:
+				nw.append({ "weight": int(w["weight"]) + bonus, "value": sym })
 			else:
 				nw.append(w)
 		weights = nw
 	if book_weight > 0:
-		weights.append({ "weight": book_weight, "value": "book" })
+		weights.append({ "weight": book_weight + int(overrides.get("book", 0)), "value": "book" })
 	return weights
 
 # scoreReels(reels, lucidityMultiplier, allowFreeSpinGrant, pattern23Triple, learningActive)
 static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spin_grant: bool,
-		pattern23_triple: bool = false, learning_active: bool = false) -> Dictionary:
+		pattern23_triple: bool = false, learning_active: bool = false,
+		pair_score_mult: float = 1.0, hidden_reel_count: int = 0) -> Dictionary:
 	var a := String(reels[0])
 	var b := String(reels[1])
 	var c := String(reels[2])
+
+	# Tobacco (issue #32): one or more reels go dark and only the visible remainder
+	# scores — no triples, any visible pair pays at pair_score_mult. Gated so the
+	# default path (hidden_reel_count == 0) is byte-for-byte the pinned behaviour.
+	if hidden_reel_count > 0:
+		var visible: Array = reels.slice(0, maxi(1, reels.size() - hidden_reel_count))
+		var v_book := 0
+		if learning_active:
+			var vb := 0
+			for r in visible:
+				if String(r) == "book":
+					vb += 1
+			v_book = vb * Payouts.BOOK_BONUS_PER_VISIBLE
+		var vmatch := ""
+		for i in range(visible.size() - 1):
+			if String(visible[i]) == String(visible[i + 1]):
+				vmatch = String(visible[i])
+				break
+		if vmatch != "":
+			var vs := _round((int(Payouts.PAIR_SCORE.get(vmatch, 0)) * pair_score_mult + v_book) * lucidity_multiplier)
+			return { "winType": "pair", "scoreEarned": vs, "coinsEarned": vs, "freeSpinsGranted": 0 }
+		var vms := _round(v_book * lucidity_multiplier) if v_book > 0 else 0
+		return { "winType": "miss", "scoreEarned": vms, "coinsEarned": vms, "freeSpinsGranted": 0 }
 
 	var book_bonus := 0
 	if learning_active:
@@ -79,6 +121,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var max_free_spins := int(input["maxFreeSpins"])
 	var lucidity_multiplier := float(input["lucidityMultiplier"])
 	var is_free_spin: bool = input["isFreeSpin"]
+	var free_spin_cost := maxi(1, int(input.get("freeSpinCost", 1)))
 	var locked: Array = input["lockedReels"]
 	var prev: Variant = input["previousReels"]
 	var rng: LobRNG = input["rng"]
@@ -87,8 +130,24 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var guaranteed_win: bool = input["guaranteedWin"]
 	var pattern23: bool = input["pattern23Triple"]
 	var learning: bool = input["learningActive"]
+	# Consumable reel transforms (issue #32) — all optional, no-op at their defaults so
+	# every pinned vector (which omits them) scores exactly as before.
+	var force_all_symbol: Variant = input.get("forceAllSymbol", null)
+	var force_triple_from: Variant = input.get("forceTripleFrom", null)
+	var exclude_symbol: Variant = input.get("excludeSymbol", null)
+	var ban_excluded: bool = bool(input.get("banExcluded", false))
+	var guarantee_non_excluded: bool = bool(input.get("guaranteeNonExcluded", false))
+	var symbol_to_brain_count := int(input.get("symbolToBrainCount", 0))
+	var pair_score_mult := float(input.get("pairScoreMult", 1.0))
+	var hidden_reel_count := int(input.get("hiddenReelCount", 0))
+	# Issue #53 additions — gated, no-op at their defaults like the #32 keys.
+	var guarantee_symbol_id: Variant = input.get("guaranteeSymbolId", null)
+	var force_reel_symbols: Variant = input.get("forceReelSymbols", null)
+	# Dealer odds table (issue #36) — optional additive per-symbol weight overrides;
+	# every pinned vector omits the key, so the default {} scores exactly as before.
+	var weight_overrides: Dictionary = input.get("weightOverrides", {})
 
-	var weights := _build_weights(brain_weight_bonus, book_weight)
+	var weights := _build_weights(brain_weight_bonus, book_weight, weight_overrides)
 
 	var reels := [
 		prev[0] if (bool(locked[0]) and prev != null) else LobRNG.weighted_pick(weights, rng),
@@ -101,14 +160,50 @@ static func evaluate(input: Dictionary) -> Dictionary:
 		if temp["winType"] == "miss":
 			reels = [reels[0], reels[0], reels[2]]
 
+	# Gated consumable reel transforms, mirroring evaluate.ts.
+	if force_all_symbol != null:
+		reels = [force_all_symbol, force_all_symbol, force_all_symbol]
+	elif force_triple_from != null and (force_triple_from as Array).size() > 0:
+		var pool: Array = force_triple_from
+		var pick: Variant = pool[int(rng.next() * pool.size())]
+		reels = [pick, pick, pick]
+	else:
+		if ban_excluded and exclude_symbol != null:
+			for i in 3:
+				if String(reels[i]) == String(exclude_symbol):
+					reels[i] = _pick_non_excluded(String(exclude_symbol), rng)
+		if symbol_to_brain_count > 0:
+			for i in mini(symbol_to_brain_count, 3):
+				reels[i] = "brain"
+		if guarantee_non_excluded and exclude_symbol != null:
+			var all_excluded := true
+			for r in reels:
+				if String(r) != String(exclude_symbol):
+					all_excluded = false
+					break
+			if all_excluded:
+				reels[0] = _pick_non_excluded(String(exclude_symbol), rng)
+		# Serum (issue #53): the player-picked symbol appears at least once.
+		if guarantee_symbol_id != null and String(guarantee_symbol_id) != "" \
+				and not reels.has(String(guarantee_symbol_id)):
+			reels[int(rng.next() * 3.0)] = String(guarantee_symbol_id)
+
+	# 3x eye (issue #53): reels whose symbol was already revealed to the player are
+	# committed to that symbol — the reveal is a promise, so it wins over everything.
+	if force_reel_symbols != null:
+		for idx in (force_reel_symbols as Dictionary):
+			var i := int(idx)
+			if i >= 0 and i < 3:
+				reels[i] = String((force_reel_symbols as Dictionary)[idx])
+
 	var neurons_after := neurons if is_free_spin else maxi(0, neurons - neuron_decay)
 
 	# Free spins NEVER generate free spins (structural enforcement).
-	var score := score_reels(reels, lucidity_multiplier, not is_free_spin, pattern23, learning)
+	var score := score_reels(reels, lucidity_multiplier, not is_free_spin, pattern23, learning, pair_score_mult, hidden_reel_count)
 
 	var free_spins_after: int
 	if is_free_spin:
-		free_spins_after = maxi(0, free_spins_remaining - 1)
+		free_spins_after = maxi(0, free_spins_remaining - free_spin_cost)
 	else:
 		free_spins_after = mini(free_spins_remaining + int(score["freeSpinsGranted"]), max_free_spins)
 

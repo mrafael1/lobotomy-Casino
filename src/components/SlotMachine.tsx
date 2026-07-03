@@ -90,7 +90,7 @@ interface Props {
   // reel (reroll/shift/copy). `null`/omitted means a normal spin — ScoreBurst then
   // derives the reel from the result (pair on the first two reels → 2nd reel).
   scoreSourceReelIndex?: 0 | 1 | 2 | null;
-  // Compulsion (Cocktail): while a forced spin runs the machine bets for itself —
+  // Compulsion: while a forced spin runs the machine bets for itself —
   // show this multiplier (1 or 2 only, never 3) on the readout instead of the
   // player's selection. `null` = normal (use the player's bet).
   forcedMultiplier?: 1 | 2 | null;
@@ -135,6 +135,7 @@ export const SlotMachine = React.memo(function SlotMachine({
   // tiny nodes update per frame — the rest of the cabinet stays still.
   const neurons       = useRunStore(s => s.neurons);
   const startingN     = useRunStore(s => s.startingNeurons);
+  const freeSpins     = useRunStore(s => s.freeSpinsRemaining);
 
   // Lucidity bar shake — nudged each time a flying coin lands on the counter; a
   // touch harder on a power coin. No colour wash over the bar (that used to span
@@ -258,8 +259,11 @@ export const SlotMachine = React.memo(function SlotMachine({
   // never resets. Its animated fill lives in <AnimatedLucidityFill> so the per-
   // frame count-up doesn't re-render this whole component. The 30-coin power-
   // restore threshold is separate: it only shakes/flashes the bar (see
-  // runLucidityShake). The lower bar follows remaining neurons.
-  const healthRatio = startingN > 0 ? Math.max(0, Math.min(1, neurons / startingN)) : 0;
+  // runLucidityShake). The lower bar follows total spins left: base neuron-funded
+  // spins plus banked free spins, capped at a full bar.
+  const startingSpins = Math.max(1, Math.ceil(startingN / ECONOMY.NEURON_DECAY_PER_SPIN));
+  const baseSpinsLeft = neurons > 0 ? Math.max(1, Math.ceil(neurons / ECONOMY.NEURON_DECAY_PER_SPIN)) : 0;
+  const healthRatio = Math.max(0, Math.min(1, (baseSpinsLeft + freeSpins) / startingSpins));
 
   const reels: [SymbolId, SymbolId, SymbolId] = lastResult
     ? lastResult.reels

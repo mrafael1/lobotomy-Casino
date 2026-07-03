@@ -5,16 +5,25 @@ extends RefCounted
 ## ending-timestamp fields are deterministic for parity (the store injects the real
 ## clock). Returns null from check_ending when no ending applies.
 
-static func check_ending(run: Dictionary, _meta: Dictionary) -> Variant:
+# `wealth_threshold` is the campaign goal — @export-tunable from the machine scene
+# (issue #38); the default keeps every pinned vector on the parity-locked constant.
+static func check_ending(run: Dictionary, _meta: Dictionary,
+		wealth_threshold: int = EconomyConst.WEALTH_SCORE_THRESHOLD) -> Variant:
+	if int(run["scoreEarned"]) >= wealth_threshold:
+		return "wealth"
 	if int(run["neurons"]) <= 0:
 		return "flatline"
-	if int(run["scoreEarned"]) >= EconomyConst.WEALTH_SCORE_THRESHOLD:
-		return "wealth"
 	return null
 
 static func check_exit_eligibility(run: Dictionary, meta: Dictionary) -> bool:
 	return (not bool(meta["corruptionEverUsed"])) \
 		and int(run["lucidityCoins"]) >= EconomyConst.EXIT_LUCIDITY_THRESHOLD
+
+static func lucidity_kept_fraction(meta: Dictionary) -> float:
+	var owned := meta.get("ownedPermanents", []) as Array
+	return EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
+		if owned.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
+		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
 
 # bankRunToMeta(run, meta, ending) with Date.now() supplied as `now`.
 static func bank_run_to_meta(run: Dictionary, meta: Dictionary, ending: String, now: int) -> Dictionary:
@@ -22,7 +31,7 @@ static func bank_run_to_meta(run: Dictionary, meta: Dictionary, ending: String, 
 	if not endings.has(ending):
 		endings.append(ending)
 
-	var kept := floori(float(run["lucidityCoins"]) * EconomyConst.END_OF_RUN_LUCIDITY_KEPT)
+	var kept := floori(float(run["lucidityCoins"]) * lucidity_kept_fraction(meta))
 
 	var mh: Dictionary = meta["history"]
 	var hist := {

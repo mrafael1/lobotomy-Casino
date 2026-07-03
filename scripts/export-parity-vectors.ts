@@ -316,7 +316,11 @@ function baseRun(overrides: Partial<RunState> = {}): RunState {
     dealerPending: false, dealerOfferIds: null, brainBoostSpins: 0,
     forcedRandomBetSpins: 0, guaranteedWinSpins: 0, blockPowersSpins: 0,
     hideNeuronsSpins: 0, cocktailBoostSpins: 0, compulsiveSpinSkips: 0,
-    pendingCompulsiveSpinSkips: 0, decaySkips: 0, ...overrides,
+    pendingCompulsiveSpinSkips: 0, decaySkips: 0,
+    pairBoostSpins: 0, pairBoostMult: 1, pairBoostHiddenReels: 0, guaranteeSymbolSpins: 0,
+    guaranteeSymbolId: null, blurReelsSpins: 0, pendingBlurSpins: 0,
+    banBrainSpins: 0, potionSpins: 0, forceFlatlineSpins: 0, guaranteedTripleSpins: 0, hideResultSpins: 0,
+    ...overrides,
   };
 }
 
@@ -324,7 +328,7 @@ function baseMeta(overrides: Partial<MetaState> = {}): MetaState {
   return {
     schemaVersion: 2, lucidityWallet: 0, ownedPermanents: [],
     corruptionEverUsed: false, endingsReached: [], pendingConsumables: {},
-    history: { runsPlayed: 0, bestScoreRun: 0 }, ...overrides,
+    is_first_launch: false, history: { runsPlayed: 0, bestScoreRun: 0 }, ...overrides,
   };
 }
 
@@ -336,7 +340,7 @@ function exportBank(): void {
     const cases: unknown[] = [];
     const scenarios: { label: string; run: RunState; meta: MetaState; ending: EndingType }[] = [
       { label: 'flatline-basic', run: baseRun({ lucidityCoins: 150, scoreEarned: 320 }), meta: baseMeta(), ending: 'flatline' },
-      { label: 'wealth-first', run: baseRun({ lucidityCoins: 999, scoreEarned: 1000 }), meta: baseMeta(), ending: 'wealth' },
+      { label: 'wealth-first', run: baseRun({ lucidityCoins: 999, scoreEarned: 2000 }), meta: baseMeta(), ending: 'wealth' },
       { label: 'wealth-already-reached', run: baseRun({ lucidityCoins: 500, scoreEarned: 1200 }), meta: baseMeta({ endingsReached: ['wealth'], history: { runsPlayed: 3, bestScoreRun: 1100, wealthEndingReachedAt: 111 } }), ending: 'wealth' },
       { label: 'exit-first', run: baseRun({ lucidityCoins: 800, scoreEarned: 400 }), meta: baseMeta({ lucidityWallet: 50 }), ending: 'exit' },
       { label: 'flatline-keeps-best', run: baseRun({ lucidityCoins: 73, scoreEarned: 90 }), meta: baseMeta({ history: { runsPlayed: 9, bestScoreRun: 500 } }), ending: 'flatline' },
@@ -394,8 +398,8 @@ function exportEndings(): void {
   const checkEndingCases: unknown[] = [];
   const endingScenarios: { neurons: number; scoreEarned: number }[] = [
     { neurons: 0, scoreEarned: 0 }, { neurons: -1, scoreEarned: 2000 },
-    { neurons: 100, scoreEarned: 0 }, { neurons: 100, scoreEarned: 999 },
-    { neurons: 100, scoreEarned: 1000 }, { neurons: 100, scoreEarned: 1001 },
+    { neurons: 100, scoreEarned: 0 }, { neurons: 100, scoreEarned: 1999 },
+    { neurons: 100, scoreEarned: 2000 }, { neurons: 100, scoreEarned: 2001 },
     { neurons: 1, scoreEarned: 500 },
   ];
   for (const s of endingScenarios) {

@@ -52,7 +52,11 @@ git push -u origin claude/fix-reel-animation-sync
 
 ## Verification & dev loop
 
-- Before considering work done: `npx tsc --noEmit -p tsconfig.json` (clean) and `npx jest` (all pass).
+- For Godot work, do **not** require Jest by default. Use Godot-native checks before considering work done:
+  - `godot --headless --editor --quit --path godot` to validate project import, resources, and script class registration.
+  - `godot --headless --path godot -s res://test/scene_smoke.gd` for touched scene/controller work when the local headless runner is stable.
+  - `godot --headless --path godot -s res://test/run_parity_headless.gd` when rules, scoring, economy, saves, upgrades, or content parity changes.
+- Run `npx tsc --noEmit -p tsconfig.json` and `npx jest` only when touching the Expo/TypeScript surface, parity vectors, or shared TS content that still mirrors Godot rules.
 - Debug builds load JS from the Metro dev server, so **JS/TS-only changes just need a Metro reload (`r`)** — no native rebuild. A native rebuild is only required for native/config changes (new native modules, `app.json`/gradle, Kotlin version, etc.).
 
 ## Core Directives & Syntax (CRITICAL)
