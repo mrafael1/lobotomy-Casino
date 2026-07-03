@@ -91,6 +91,8 @@ const SETTINGS_ASSET := "ui/settings.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
 	&"reel_spin": "reel-spinning.mp3",
+	&"reel_stop": "reel-stop.mp3",
+	&"multiplier_change": "multiplier-change.mp3",
 	&"pair_win": "pair-bonus.mp3",
 	&"triple_win": "triple-bonus.mp3",
 	&"jackpot_win": "jackpot-bonus.mp3",
@@ -758,6 +760,9 @@ func _set_reel_cover(index: int, visible: bool) -> void:
 
 # A reel lands: mask its blur, show its final symbol, stop animating that reel.
 func _reveal_reel(index: int) -> void:
+	var was_visible := _reel_sprites[index].visible
+	if not was_visible:
+		_play_sfx(&"reel_stop")
 	_set_spin_reel_visible(index, false)
 	_set_reel_cover(index, true)
 	_set_reel_symbol(index, String(_final_reels[index]))
@@ -1790,7 +1795,10 @@ func _select_bet_multiplier(m: int) -> void:
 		return
 	if _is_multiplier_locked(m):
 		return
+	if RunStateStore.betMultiplier == m:
+		return
 	RunStateStore.set_bet_multiplier(m)
+	_play_sfx(&"multiplier_change")
 
 func _highest_affordable_multiplier() -> int:
 	if RunStateStore.forcedRandomBetSpins > 0:
@@ -2079,6 +2087,7 @@ func _step_reroll(delta: float) -> void:
 		_set_spin_reel_frame(_reroll_reel_index, _spin_frame)
 	if _reroll_elapsed >= REROLL_REEL_DURATION:
 		_stop_sfx(&"reel_spin")
+		_play_sfx(&"reel_stop")
 		_reroll_anim_active = false
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
