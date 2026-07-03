@@ -139,6 +139,9 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var symbol_to_brain_count := int(input.get("symbolToBrainCount", 0))
 	var pair_score_mult := float(input.get("pairScoreMult", 1.0))
 	var hidden_reel_count := int(input.get("hiddenReelCount", 0))
+	# Issue #53 additions — gated, no-op at their defaults like the #32 keys.
+	var guarantee_symbol_id: Variant = input.get("guaranteeSymbolId", null)
+	var force_reel_symbols: Variant = input.get("forceReelSymbols", null)
 	# Dealer odds table (issue #36) — optional additive per-symbol weight overrides;
 	# every pinned vector omits the key, so the default {} scores exactly as before.
 	var weight_overrides: Dictionary = input.get("weightOverrides", {})
@@ -179,6 +182,18 @@ static func evaluate(input: Dictionary) -> Dictionary:
 					break
 			if all_excluded:
 				reels[0] = _pick_non_excluded(String(exclude_symbol), rng)
+		# Serum (issue #53): the player-picked symbol appears at least once.
+		if guarantee_symbol_id != null and String(guarantee_symbol_id) != "" \
+				and not reels.has(String(guarantee_symbol_id)):
+			reels[int(rng.next() * 3.0)] = String(guarantee_symbol_id)
+
+	# 3x eye (issue #53): reels whose symbol was already revealed to the player are
+	# committed to that symbol — the reveal is a promise, so it wins over everything.
+	if force_reel_symbols != null:
+		for idx in (force_reel_symbols as Dictionary):
+			var i := int(idx)
+			if i >= 0 and i < 3:
+				reels[i] = String((force_reel_symbols as Dictionary)[idx])
 
 	var neurons_after := neurons if is_free_spin else maxi(0, neurons - neuron_decay)
 

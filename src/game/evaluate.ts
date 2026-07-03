@@ -174,6 +174,8 @@ export function evaluate(input: SpinInput): SpinResult {
     symbolToBrainCount = 0,
     pairScoreMult = 1,
     hiddenReelCount = 0,
+    guaranteeSymbolId = null,
+    forceReelSymbols = null,
   } = input;
 
   const weights = buildWeights(brainWeightBonus, bookWeight);
@@ -208,6 +210,17 @@ export function evaluate(input: SpinInput): SpinResult {
     if (guaranteeNonExcluded && excludeSymbol && reels.every(r => r === excludeSymbol)) {
       reels = [pickNonExcluded(excludeSymbol, rng), reels[1], reels[2]];
     }
+    // Serum (issue #53): the player-picked symbol appears at least once.
+    if (guaranteeSymbolId && !reels.includes(guaranteeSymbolId)) {
+      const idx = Math.floor(rng() * 3);
+      reels = reels.map((r, i) => (i === idx ? guaranteeSymbolId : r)) as ReelResult;
+    }
+  }
+
+  // 3x eye (issue #53): reels whose symbol was already revealed to the player are
+  // committed to that symbol — the reveal is a promise, so it wins over everything.
+  if (forceReelSymbols) {
+    reels = reels.map((r, i) => forceReelSymbols[i] ?? r) as ReelResult;
   }
 
   const neuronsAfter = isFreeSpin

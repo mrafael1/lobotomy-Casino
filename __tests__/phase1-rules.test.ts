@@ -146,25 +146,36 @@ function totalConsumableCharges(runConsumables: Partial<Record<string, number>>)
   return Object.values(runConsumables).reduce<number>((sum, n) => sum + (n ?? 0), 0);
 }
 
-test('store: Serum — guarantees a non-brain symbol then bans brain (issue #32)', () => {
+test('store: Serum — picked symbol is guaranteed, blur queues for the spin after (issue #53)', () => {
   freshRun({ cons_focus: 1 });
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(1);
 
-  useRunStore.getState().useConsumable('cons_focus');
+  useRunStore.getState().useConsumable('cons_focus', { serumSymbol: 'vial' });
   expect(useRunStore.getState().guaranteeSymbolSpins).toBe(1);
-  expect(useRunStore.getState().banBrainSpins).toBe(2);
+  expect(useRunStore.getState().guaranteeSymbolId).toBe('vial');
+  expect(useRunStore.getState().pendingBlurSpins).toBe(1);
+  expect(useRunStore.getState().banBrainSpins).toBe(0);
   expect(useRunStore.getState().runConsumables['cons_focus']).toBe(0);
 });
 
-test('store: Serum ban never leaves a brain on the reels while active (issue #32)', () => {
+test('store: Serum guaranteed symbol appears, then the next spin is blurry (issue #53)', () => {
   freshRun({ cons_focus: 1 });
-  useRunStore.getState().useConsumable('cons_focus');
-  // banBrainSpins = 2: the next two spins must contain no brain.
-  for (let i = 0; i < 2; i++) {
-    const result = useRunStore.getState().spin();
-    useRunStore.getState().setSpinning(false);
-    expect(result?.reels.includes('brain')).toBe(false);
-  }
+  useRunStore.getState().useConsumable('cons_focus', { serumSymbol: 'vial' });
+
+  // Guaranteed spin: the picked symbol appears at least once.
+  const result = useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  expect(result?.reels.includes('vial')).toBe(true);
+  let state = useRunStore.getState();
+  expect(state.guaranteeSymbolSpins).toBe(0);
+  expect(state.guaranteeSymbolId).toBeNull();
+  expect(state.blurReelsSpins).toBe(1); // the spin after renders blurry
+  expect(state.pendingBlurSpins).toBe(0);
+
+  useRunStore.getState().spin();
+  useRunStore.getState().setSpinning(false);
+  state = useRunStore.getState();
+  expect(state.blurReelsSpins).toBe(0);
 });
 
 test('store: consumable rejected when no charges remain', () => {
@@ -191,19 +202,19 @@ test('store: mid-run dealer Cocktail is stashed, not activated immediately', () 
   state = useRunStore.getState();
 
   expect(state.runConsumables.item_cocktail).toBe(0);
-  expect(state.cocktailBoostSpins).toBe(3);
+  expect(state.cocktailBoostSpins).toBe(2);
   expect(state.compulsiveSpinSkips).toBe(0);
-  expect(state.pendingCompulsiveSpinSkips).toBe(2);
+  expect(state.pendingCompulsiveSpinSkips).toBe(1);
   expect(state.scoreEarned).toBe(0);
 });
 
-test('store: Cocktail boosts 3 spins first, THEN forces 2 x1 spins', () => {
+test('store: Cocktail boosts 2 spins first, THEN forces 1 x1 spin (issue #53)', () => {
   freshRun({ item_cocktail: 1 });
 
   expect(useRunStore.getState().useConsumable('item_cocktail')).toBe(true);
-  expect(useRunStore.getState().cocktailBoostSpins).toBe(3);
+  expect(useRunStore.getState().cocktailBoostSpins).toBe(2);
   expect(useRunStore.getState().compulsiveSpinSkips).toBe(0);
-  expect(useRunStore.getState().pendingCompulsiveSpinSkips).toBe(2);
+  expect(useRunStore.getState().pendingCompulsiveSpinSkips).toBe(1);
 
   // First boosted spin is a normal player spin with the rarity bonus.
   useRunStore.getState().spin();
@@ -215,29 +226,25 @@ test('store: Cocktail boosts 3 spins first, THEN forces 2 x1 spins', () => {
     0,
   );
   expect(state.lastResult!.scoreEarned).toBeGreaterThanOrEqual(firstBonus);
-  expect(state.cocktailBoostSpins).toBe(2);
+  expect(state.cocktailBoostSpins).toBe(1);
   expect(state.compulsiveSpinSkips).toBe(0);
 
-  useRunStore.getState().spin();
-  useRunStore.getState().setSpinning(false);
-  expect(useRunStore.getState().compulsiveSpinSkips).toBe(0);
-
-  // Third boosted spin: compulsion unlocks only now.
+  // Second boosted spin: compulsion unlocks only now.
   useRunStore.getState().spin();
   useRunStore.getState().setSpinning(false);
   state = useRunStore.getState();
   expect(state.cocktailBoostSpins).toBe(0);
-  expect(state.compulsiveSpinSkips).toBe(2);
+  expect(state.compulsiveSpinSkips).toBe(1);
   expect(state.pendingCompulsiveSpinSkips).toBe(0);
 
-  // Compulsive spins are forced x1 and no longer get the boost.
+  // The compulsive spin is forced x1 and no longer gets the boost.
   const beforeCompulsive = useRunStore.getState().neurons;
   useRunStore.getState().setBetMultiplier(3);
   useRunStore.getState().spin({ compulsive: true });
   useRunStore.getState().setSpinning(false);
   state = useRunStore.getState();
   expect(state.neurons).toBe(beforeCompulsive - 3); // x1 decay despite x3 selected
-  expect(state.compulsiveSpinSkips).toBe(1);
+  expect(state.compulsiveSpinSkips).toBe(0);
 });
 
 test('store: Energy Drink locks out x3 and preserves neurons while active', () => {
@@ -246,7 +253,7 @@ test('store: Energy Drink locks out x3 and preserves neurons while active', () =
 
   expect(useRunStore.getState().useConsumable('item_energy_drink')).toBe(true);
   expect(useRunStore.getState().betMultiplier).toBe(2);
-  expect(useRunStore.getState().forcedRandomBetSpins).toBe(5);
+  expect(useRunStore.getState().forcedRandomBetSpins).toBe(2);
 
   useRunStore.getState().setBetMultiplier(3);
   expect(useRunStore.getState().betMultiplier).toBe(2);
@@ -257,8 +264,8 @@ test('store: Energy Drink locks out x3 and preserves neurons while active', () =
 
   const state = useRunStore.getState();
   expect(state.neurons).toBe(neuronsBefore);
-  expect(state.decaySkips).toBe(4);
-  expect(state.forcedRandomBetSpins).toBe(4);
+  expect(state.decaySkips).toBe(1);
+  expect(state.forcedRandomBetSpins).toBe(1);
 });
 
 test('store: mid-run dealer substance is refused while stash is full, taken after a throw', () => {

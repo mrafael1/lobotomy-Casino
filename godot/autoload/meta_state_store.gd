@@ -309,6 +309,14 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["is_first_launch"] = true
 	if not current.has("oddsUpgrades"):
 		current["oddsUpgrades"] = {}
+	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
+	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
+	if pending.has("cons_syringe"):
+		pending = pending.duplicate(true)
+		pending["cons_potion"] = int(pending.get("cons_potion", 0)) + int(pending["cons_syringe"])
+		pending.erase("cons_syringe")
+		current = current.duplicate(true)
+		current["pendingConsumables"] = pending
 	# Campaign rebalance (issue #38): saves from the 12-neuron era reclamp down to
 	# the current starting count, and Left re-clamps to the new Max.
 	current["campaignNeuronsMax"] = mini(int(current["campaignNeuronsMax"]), campaign_starting_neurons)

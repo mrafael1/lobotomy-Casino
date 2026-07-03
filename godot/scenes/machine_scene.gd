@@ -131,7 +131,7 @@ const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
 	"cons_cigarette": "items/cigarette.png",
 	"cons_white_powder": "items/white_powder.png",
-	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_potion": "items/consumable_placeholder.png",
 	"cons_tea": "items/herbal_tea.png",
 	"item_energy_drink": "items/energy_drink.png",
 	"item_cocktail": "items/cocktail.png",
@@ -155,7 +155,7 @@ const ITEM_ICONS := {
 	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
 	"cons_white_powder": { "pos": "COPY", "neg": "LOSE" },
 	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
-	"cons_syringe": { "pos": "BRAINS", "neg": "NO POWER" },
+	"cons_potion": { "pos": "BRAINS", "neg": "NO POWER" },
 	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
 	"item_water": { "pos": "REFRESHING", "neg": "WEAK" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
@@ -190,11 +190,12 @@ const ITEM_ICONS := {
 @export_group("Consumable Visuals")
 @export var consumable_fx_enabled: bool = true
 @export_subgroup("Tobacco", "tobacco_")
-## Smoke + dark cover on the reel(s) actually hidden from scoring (the last
+## Smoke + FULLY opaque cover on the reel(s) hidden from scoring (the last
 ## pairBoostHiddenReels reels — mirrors evaluate.gd's slice) while Tobacco runs.
+## Issue #53: the hidden reel can't be seen at all.
 @export var tobacco_fx_enabled: bool = true
 @export var tobacco_smoke_color: Color = Color(0.78, 0.78, 0.82, 0.5)
-@export var tobacco_cover_color: Color = Color(0.05, 0.04, 0.07, 0.85)
+@export var tobacco_cover_color: Color = Color(0.05, 0.04, 0.07, 1.0)
 @export_subgroup("Cocktail", "cocktail_")
 ## Whole-machine decaying shake on use (same position:x wobble as _nudge).
 @export var cocktail_fx_enabled: bool = true
@@ -221,6 +222,17 @@ const ITEM_ICONS := {
 @export var hidden_fx_enabled: bool = true
 @export var hidden_cover_color: Color = Color(0.04, 0.03, 0.06, 0.94)
 @export var hidden_glyph_color: Color = Color(0.85, 0.8, 1.0)
+@export_subgroup("Serum", "serum_")
+## Serum (issue #53): frost layer over the reels for the spin after the guarantee —
+## symbols stay readable, just harder.
+@export var blur_cover_color: Color = Color(0.82, 0.86, 0.95, 0.55)
+@export_subgroup("Compulsive", "compulsive_")
+## Cocktail (issue #53): the machine spins by itself once the boost ends — heavy
+## vibration + red overlay while it takes over.
+@export var compulsive_fx_enabled: bool = true
+@export var compulsive_overlay_color: Color = Color(0.85, 0.08, 0.08, 0.28)
+@export_range(1.0, 12.0, 0.5) var compulsive_shake_strength: float = 5.0
+@export_range(0.2, 3.0, 0.1) var compulsive_shake_time: float = 1.2
 
 # ── campaign rebalance (issue #38) ───────────────────────────────────────────────
 @export_group("Campaign")
@@ -326,6 +338,11 @@ var _cocktail_shake_tween: Tween = null
 var _potion_jump_tween: Tween = null
 var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
+var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
+var _blur_result_active := false           # the displayed result renders blurry
+var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
+var _compulsive_queued := false            # cocktail auto-spin pending (issue #53)
+var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
@@ -695,6 +712,7 @@ func _reveal_reel(index: int) -> void:
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
 	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
+	_set_blur_cover(index, _blur_result_active)   # Serum frost blurs the reveal (issue #53)
 
 func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
 	s.centered = true
@@ -939,6 +957,10 @@ func _sync_visuals() -> void:
 	_close_score_table()
 	_clear_targeting()
 	_set_hidden_result_active(false)
+	_set_blur_result_active(false)
+	_close_serum_picker()
+	_hide_compulsive_overlay()
+	_compulsive_queued = false
 	_last_reacted_reels = []
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
@@ -964,7 +986,7 @@ func _to_menu() -> void:
 func _to_dealer() -> void:
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
-func _do_spin() -> void:
+func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _reroll_anim_active or _sequence_lock_active:
 		return
 	if _dealer_offer_popup != null:
@@ -977,22 +999,22 @@ func _do_spin() -> void:
 	# White Powder (issue #34): hideResultSpins is consumed inside spin(), so read it
 	# before spinning — this spin's result reveals as "?" covers.
 	var hide_this_spin := RunStateStore.hideResultSpins > 0
-	var result: Variant = RunStateStore.spin()
+	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
+	# result renders behind the blur frost.
+	var blur_this_spin := RunStateStore.blurReelsSpins > 0
+	var result: Variant = RunStateStore.spin(compulsive)
 	if result == null:
 		return
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
+	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
 	_reel_stop_times = [0.55, 0.8, 1.05 + tension]
-	# Eye triple (issue #35): the player-picked reel's result reveals early on this
-	# spin — a popup names the symbol over that reel, and reels 0/1 also stop early
-	# (reel 2 stays last to stop: reveal-complete keys off its time). Presentation
-	# only: spin() already computed the result above, parity untouched.
-	if _reveal_reel_next_spin >= 0:
-		if _reveal_reel_next_spin < 2:
-			_reel_stop_times[_reveal_reel_next_spin] = 0.2
-		_show_eye_reveal_popup(_reveal_reel_next_spin, String(_final_reels[_reveal_reel_next_spin]))
+	# Eye triple: the revealed reel was already committed at tap time (issue #53);
+	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
+	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
+		_reel_stop_times[_reveal_reel_next_spin] = 0.2
 	_reveal_reel_next_spin = -1
 	_start_lever_pull()
 	_start_reel_spin_animation(locked_before)
@@ -1105,7 +1127,74 @@ func _run_post_reveal_sequence() -> void:
 		_show_dealer_incoming()
 	else:
 		_set_sequence_lock(false)
+		# Cocktail (issue #53): once the boost ends the machine takes the compulsive
+		# spin by itself — heavy vibration + red overlay, no player input needed.
+		if RunStateStore.compulsiveSpinSkips > 0:
+			_queue_compulsive_spin()
 	_post_spin_sequence_active = false
+
+# ── cocktail compulsive takeover (issue #53) ─────────────────────────────────────
+
+func _queue_compulsive_spin() -> void:
+	if _compulsive_queued or RunStateStore.runPhase != "running":
+		return
+	_compulsive_queued = true
+	_play_compulsive_takeover()
+
+func _play_compulsive_takeover() -> void:
+	await get_tree().create_timer(0.55).timeout
+	if not is_inside_tree() or RunStateStore.runPhase != "running" \
+			or RunStateStore.compulsiveSpinSkips <= 0 or _spinning_anim:
+		_compulsive_queued = false
+		_hide_compulsive_overlay()
+		return
+	if compulsive_fx_enabled:
+		_show_compulsive_overlay()
+		_play_compulsive_shake()
+		await get_tree().create_timer(0.5).timeout
+	_compulsive_queued = false
+	if not is_inside_tree() or RunStateStore.runPhase != "running":
+		_hide_compulsive_overlay()
+		return
+	_do_spin(true)
+	if _compulsive_overlay != null:
+		var tw := create_tween()
+		tw.tween_interval(1.4) # reels settle, then the red haze lifts
+		tw.tween_property(_compulsive_overlay, "modulate:a", 0.0, 0.4)
+		tw.tween_callback(_hide_compulsive_overlay)
+
+func _show_compulsive_overlay() -> void:
+	if _compulsive_overlay == null:
+		_compulsive_overlay = ColorRect.new()
+		_compulsive_overlay.name = "CompulsiveOverlay"
+		_compulsive_overlay.color = compulsive_overlay_color
+		_compulsive_overlay.size = Vector2(SRC_W, SRC_H)
+		_compulsive_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_compulsive_overlay.z_index = 90
+		add_child(_compulsive_overlay)
+	_compulsive_overlay.modulate.a = 0.0
+	_compulsive_overlay.visible = true
+	var tw := create_tween()
+	tw.tween_property(_compulsive_overlay, "modulate:a", 1.0, 0.18)
+
+func _hide_compulsive_overlay() -> void:
+	if _compulsive_overlay != null and is_instance_valid(_compulsive_overlay):
+		_compulsive_overlay.visible = false
+
+## Much harder shake than the on-use cocktail wobble — the machine is in charge.
+func _play_compulsive_shake() -> void:
+	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
+		_cocktail_shake_tween.kill()
+	if _nudge_tween != null and _nudge_tween.is_valid():
+		_nudge_tween.kill()
+	position.x = 0.0
+	_cocktail_shake_tween = create_tween()
+	var swings := 14
+	var step := compulsive_shake_time / float(swings + 1)
+	for s in swings:
+		var dir := 1.0 if s % 2 == 0 else -1.0
+		_cocktail_shake_tween.tween_property(self, "position:x", compulsive_shake_strength * dir, step)
+	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
 
 func _update_hud() -> void:
 	_refresh_tv_indicators()
@@ -2050,7 +2139,11 @@ func _on_stash_pressed(slot_index: int) -> void:
 	if id == "cons_white_powder":
 		_begin_white_powder()
 		return
+	if id == "cons_focus":
+		_begin_serum() # Serum (issue #53): pick the guaranteed symbol first
+		return
 	var lucidity_before := int(RunStateStore.lucidityCoins)
+	var free_spins_before := int(RunStateStore.freeSpinsRemaining)
 	if not RunStateStore.use_consumable(id):
 		return
 	_refresh_reels_from_state()
@@ -2060,6 +2153,9 @@ func _on_stash_pressed(slot_index: int) -> void:
 	_play_consumable_lucidity_feedback(lucidity_before)
 	if id == "cons_tea":
 		_try_start_power_coin_flow()
+		# Tea (issue #53): restored spins fly from the stash to the spins counter.
+		if int(RunStateStore.freeSpinsRemaining) > free_spins_before:
+			_play_tea_flight(slot_index)
 
 func _item_display_name(id: String) -> String:
 	var imap := InRunItems.map()
@@ -2100,6 +2196,120 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	if reward_time > 0.0:
 		await get_tree().create_timer(reward_time).timeout
 	_set_sequence_lock(false)
+
+# ── serum symbol picker (issue #53) ──────────────────────────────────────────────
+# Using Serum opens a small overlay listing every reel symbol except brain; the
+# picked one is guaranteed to appear at least once next spin (the charge is only
+# consumed on pick — tapping anywhere else cancels).
+
+const SERUM_PICKER_RECT := Rect2(14.0, 138.0, 132.0, 44.0)
+
+func _begin_serum() -> void:
+	if _sequence_lock_active or _serum_picker != null:
+		return
+	if not RunStateStore._can_act():
+		return
+	_build_serum_picker()
+
+func _build_serum_picker() -> void:
+	_serum_picker = Control.new()
+	_serum_picker.name = "SerumPicker"
+	_serum_picker.size = Vector2(SRC_W, SRC_H)
+	_serum_picker.mouse_filter = Control.MOUSE_FILTER_STOP
+	_serum_picker.z_index = 95
+	_serum_picker.gui_input.connect(_on_serum_picker_input)
+	add_child(_serum_picker)
+
+	var panel := ColorRect.new()
+	panel.color = Color(0.05, 0.03, 0.1, 0.94)
+	panel.position = SERUM_PICKER_RECT.position
+	panel.size = SERUM_PICKER_RECT.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_serum_picker.add_child(panel)
+
+	var title := _reaction_label(_serum_picker, "PICK A SYMBOL",
+		Vector2(SERUM_PICKER_RECT.position.x, SERUM_PICKER_RECT.position.y + 3.0), 7, Color(0.72, 1.0, 0.65))
+	title.size = Vector2(SERUM_PICKER_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var pool: Array = []
+	for s in Symbols.BASE_SYMBOL_CYCLE:
+		if String(s) != "brain":
+			pool.append(String(s))
+	var cell_w := SERUM_PICKER_RECT.size.x / float(maxi(1, pool.size()))
+	for i in pool.size():
+		var sym: String = pool[i]
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.position = Vector2(SERUM_PICKER_RECT.position.x + float(i) * cell_w, SERUM_PICKER_RECT.position.y + 14.0)
+		b.size = Vector2(cell_w, 26.0)
+		b.pressed.connect(_on_serum_pick.bind(sym))
+		_serum_picker.add_child(b)
+		var tex := _load_texture("symbols/%s.png" % sym, true)
+		if tex != null:
+			var icon := TextureRect.new()
+			icon.texture = tex
+			icon.position = Vector2((cell_w - 16.0) * 0.5, 4.0)
+			icon.size = Vector2(16.0, 16.0)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(icon)
+
+func _on_serum_picker_input(event: InputEvent) -> void:
+	# Any tap that no symbol button consumed cancels the pick (charge kept).
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_close_serum_picker()
+
+func _on_serum_pick(symbol_id: String) -> void:
+	_close_serum_picker()
+	var lucidity_before := int(RunStateStore.lucidityCoins)
+	if not RunStateStore.use_consumable("cons_focus", symbol_id):
+		return
+	_refresh_reels_from_state()
+	_update_hud()
+	_show_consumable_feedback("cons_focus")
+	_play_use_fx("cons_focus")
+	_play_consumable_lucidity_feedback(lucidity_before)
+
+func _close_serum_picker() -> void:
+	if _serum_picker != null and is_instance_valid(_serum_picker):
+		_serum_picker.queue_free()
+	_serum_picker = null
+
+## Tea (issue #53): the restored free spins fly from the used stash slot to the
+## spins-left counter, which pulses as the tea lands.
+func _play_tea_flight(slot_index: int) -> void:
+	if not consumable_fx_enabled:
+		return
+	var tex := _icon_for("cons_tea")
+	if tex == null:
+		return
+	var icon := TextureRect.new()
+	icon.texture = tex
+	icon.size = Vector2(12.0, 12.0)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.z_index = 130
+	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
+	add_child(icon)
+	var target := Vector2(43.0, 82.0) # spins counter fallback
+	var spins_label := _bar_labels.get("life") as Label
+	if spins_label != null:
+		target = spins_label.position
+	var tw := create_tween()
+	tw.tween_property(icon, "position", target, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(icon.queue_free)
+	if spins_label != null:
+		spins_label.pivot_offset = spins_label.size * 0.5
+		var pulse := create_tween()
+		pulse.tween_interval(0.55)
+		pulse.tween_property(spins_label, "scale", Vector2(1.3, 1.3), 0.1)
+		pulse.tween_property(spins_label, "scale", Vector2.ONE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. copy_reel() applies the copy and its side effect (consume a random
@@ -2161,6 +2371,23 @@ func _build_fx_layer() -> void:
 	_build_tobacco_fx()
 	_build_energy_edges()
 	_build_hidden_covers()
+	_build_blur_covers()
+
+## Serum frost (issue #53): translucent per-reel covers — symbols show through but
+## read harder. Reuses the hidden-cover geometry.
+func _build_blur_covers() -> void:
+	_blur_covers.clear()
+	for i in 3:
+		var cover := ColorRect.new()
+		cover.name = "BlurCover%d" % i
+		cover.color = blur_cover_color
+		var rect := _fx_cover_rect(REEL_HOLES[i])
+		cover.position = rect.position
+		cover.size = rect.size
+		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cover.visible = false
+		_fx_layer.add_child(cover)
+		_blur_covers.append(cover)
 
 func _build_tobacco_fx() -> void:
 	_tobacco_covers.clear()
@@ -2389,6 +2616,17 @@ func _set_hidden_cover(index: int, visible_now: bool) -> void:
 	if index >= 0 and index < _hidden_covers.size():
 		(_hidden_covers[index] as ColorRect).visible = visible_now
 
+# Serum blur (issue #53): the spin after the guaranteed one lands behind a frost
+# layer — symbols stay distinguishable, just harder to read.
+func _set_blur_result_active(active: bool) -> void:
+	_blur_result_active = active
+	for c in _blur_covers:
+		(c as ColorRect).visible = false
+
+func _set_blur_cover(index: int, visible_now: bool) -> void:
+	if index >= 0 and index < _blur_covers.size():
+		(_blur_covers[index] as ColorRect).visible = visible_now
+
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
 # All reactions run in this presentation layer AFTER the parity-pinned spin()/power
 # results, so they never touch evaluate()/spin() outputs or the pinned vectors.
@@ -2410,6 +2648,12 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 	_last_reacted_spin = RunStateStore.spinCount
 	var a := String(reels[0])
 	if not (a == String(reels[1]) and a == String(reels[2])):
+		return
+	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a
+	# raw 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal,
+	# flatline strike...). Gating on the scored winType blocks exactly those spins.
+	var win_type := String(lr.get("winType", ""))
+	if win_type != "triple" and win_type != "jackpot":
 		return
 	if a == "flatline":
 		var count := RunStateStore.register_flatline_result()
@@ -2449,8 +2693,9 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 	_update_hud()
 
 # ── 3x eye reveal (player-picked reel) ───────────────────────────────────────────
-# Reuses the shared reel-selection UI; the pick is presentation-only state
-# (_reveal_reel_next_spin) consumed by the next _do_spin.
+# Reuses the shared reel-selection UI. Tapping a reel reveals its NEXT-spin symbol
+# INSTANTLY (issue #53): the store rolls it through the normal weight pipeline and
+# commits it, so the next spin's evaluate() honours the revealed promise.
 
 const EYE_REVEAL_POPUP_TIME := 1.6
 
@@ -2458,12 +2703,14 @@ func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
 
 func _on_eye_reveal_pick(reel_index: int) -> void:
-	_reveal_reel_next_spin = reel_index
 	_clear_targeting()
-	_spawn_reaction_flash(triple_eye_color, "REEL %d" % (reel_index + 1))
+	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
+	if symbol == "":
+		return
+	_reveal_reel_next_spin = reel_index # that reel also stops early next spin
+	_show_eye_reveal_popup(reel_index, symbol)
 
-## Popup over the picked reel naming its just-rolled symbol while the reels are
-## still spinning — the "reveal that reel's next spin" beat of the eye triple.
+## Popup over the picked reel naming its revealed next-spin symbol.
 func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 	var w := 34.0
 	var h := 34.0

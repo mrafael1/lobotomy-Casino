@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RunState, SpinResult, UpgradeId, EndingType, AbilityId } from '../game/types';
+import type { RunState, SpinResult, UpgradeId, EndingType, AbilityId, SymbolId } from '../game/types';
 import { evaluate } from '../game/evaluate';
 import { applyReroll, applyMoveColumn, applyCopyReel } from '../game/abilities';
 import { createRNG } from '../game/rng';
@@ -29,6 +29,8 @@ import type { ReelResult } from '../game/types';
 
 export type RunPhase = 'idle' | 'running' | 'over';
 export type SpinOptions = { readonly compulsive?: boolean };
+// Serum (issue #53): the player picks the symbol to guarantee before using it.
+export type UseConsumableOptions = { readonly serumSymbol?: SymbolId };
 
 // Dealer trigger thresholds and offer selection now live in ../game/dealer
 // (pure + deterministic, exported as golden parity vectors). The store keeps the
@@ -61,7 +63,7 @@ export interface RunStore extends RunState {
   endRun: (ending: EndingType) => void;
   continueRun: () => void;
 
-  useConsumable: (consumableId: string) => boolean;
+  useConsumable: (consumableId: string, options?: UseConsumableOptions) => boolean;
   lockReel: (reelIndex: number) => void;
   rerollReel: (reelIndex: number) => boolean;
   moveReel: (reelIndex: number, direction: -1 | 1) => boolean;
@@ -115,6 +117,9 @@ const INITIAL_RUN_STATE: RunState = {
   pairBoostMult:              1,
   pairBoostHiddenReels:       0,
   guaranteeSymbolSpins:       0,
+  guaranteeSymbolId:          null,
+  blurReelsSpins:             0,
+  pendingBlurSpins:           0,
   banBrainSpins:              0,
   potionSpins:                0,
   forceFlatlineSpins:         0,
@@ -291,9 +296,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
       learningActive:     learningOn,
       forceAllSymbol,
       forceTripleFrom,
-      excludeSymbol:      (state.banBrainSpins > 0 || state.guaranteeSymbolSpins > 0) ? 'brain' : null,
+      excludeSymbol:      state.banBrainSpins > 0 ? 'brain' : null,
       banExcluded:        state.banBrainSpins > 0,
-      guaranteeNonExcluded: state.guaranteeSymbolSpins > 0,
+      guaranteeSymbolId:  state.guaranteeSymbolSpins > 0 ? state.guaranteeSymbolId : null,
       symbolToBrainCount: potionSymbolToBrain,
       pairScoreMult:      pairBoostActive ? state.pairBoostMult : 1,
       hiddenReelCount:    pairBoostActive ? state.pairBoostHiddenReels : 0,
@@ -346,6 +351,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
       pendingCompulsiveSpinSkips: state.cocktailBoostSpins === 1 ? 0 : state.pendingCompulsiveSpinSkips,
       pairBoostSpins:             Math.max(0, state.pairBoostSpins - 1),
       guaranteeSymbolSpins:       Math.max(0, state.guaranteeSymbolSpins - 1),
+      guaranteeSymbolId:          state.guaranteeSymbolSpins - 1 > 0 ? state.guaranteeSymbolId : null,
+      // Serum blur (issue #53): the spin AFTER the guaranteed one renders blurry —
+      // queued blur moves in when the guarantee is consumed (same pattern as the
+      // cocktail's pending compulsive skips).
+      blurReelsSpins:             state.guaranteeSymbolSpins === 1
+        ? state.pendingBlurSpins
+        : Math.max(0, state.blurReelsSpins - 1),
+      pendingBlurSpins:           state.guaranteeSymbolSpins === 1 ? 0 : state.pendingBlurSpins,
       banBrainSpins:              Math.max(0, state.banBrainSpins - 1),
       potionSpins:                Math.max(0, state.potionSpins - 1),
       // Keep the pending triple until the flatline spin is spent, then consume it.
@@ -419,7 +432,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set({ runPhase: 'running', lastEnding: null, wealthContinued: true });
   },
 
-  useConsumable(consumableId: string): boolean {
+  useConsumable(consumableId: string, options?: UseConsumableOptions): boolean {
     const state = get();
     if (!canAct(state)) return false;
     // Consumables can never be activated while a dealer scene is up (the
@@ -500,14 +513,22 @@ export const useRunStore = create<RunStore>((set, get) => ({
         });
         return true;
 
-      case 'guaranteeSymbol':
-        // Serum: guarantee a non-brain symbol for appearSpins, ban brain for banSpins.
+      case 'guaranteeSymbol': {
+        // Serum (issue #53): the PICKED non-excluded symbol appears at least once
+        // next spin, and the spin after renders blurry. Falls back to the first
+        // non-excluded cycle symbol when no pick was provided.
+        const pool = BASE_SYMBOL_CYCLE.filter(s => !effect.excludes.includes(s));
+        const picked = options?.serumSymbol && pool.includes(options.serumSymbol)
+          ? options.serumSymbol
+          : pool[0];
         set({
           runConsumables: newRunConsumables,
           guaranteeSymbolSpins: state.guaranteeSymbolSpins + effect.appearSpins,
-          banBrainSpins: state.banBrainSpins + effect.banSpins,
+          guaranteeSymbolId: picked ?? null,
+          pendingBlurSpins: state.pendingBlurSpins + effect.blurSpins,
         });
         return true;
+      }
 
       case 'scrambleThenHide':
         // White Powder: the scramble is the copyReel UI flow; hide the next spin.

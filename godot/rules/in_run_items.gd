@@ -6,9 +6,9 @@ extends RefCounted
 
 const LIST := [
 	{ "id": "item_energy_drink", "name": "Energy Drink", "corrupt": true,
-	  "effect": { "type": "skipDecay", "spins": 5, "blockBet": "x3" } },
+	  "effect": { "type": "skipDecay", "spins": 2, "blockBet": "x3" } },
 	{ "id": "item_cocktail", "name": "Cocktail",
-	  "effect": { "type": "cocktailBoost", "spins": 3, "compulsiveSpins": 2 } },
+	  "effect": { "type": "cocktailBoost", "spins": 2, "compulsiveSpins": 1 } },
 	{ "id": "item_water", "name": "Water",
 	  "effect": { "type": "addLucidity", "amount": 40 } },
 	{ "id": "item_pill", "name": "Red Pill", "corrupt": true,

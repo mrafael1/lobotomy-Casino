@@ -73,8 +73,11 @@ var decaySkips := 0
 var pairBoostSpins := 0          # Tobacco: hidden reel + pair multiplier active
 var pairBoostMult := 1           # Tobacco: pair payout multiplier while active
 var pairBoostHiddenReels := 0    # Tobacco: reels hidden from scoring while active
-var guaranteeSymbolSpins := 0    # Serum: force a non-excluded symbol to appear
-var banBrainSpins := 0           # Serum: brain banned from the reels
+var guaranteeSymbolSpins := 0    # Serum: force the picked symbol to appear
+var guaranteeSymbolId := ""      # Serum: the player-picked symbol (issue #53)
+var blurReelsSpins := 0          # Serum: reels render blurry for these spins (display)
+var pendingBlurSpins := 0        # Serum: blur queued for after the guaranteed spin
+var banBrainSpins := 0           # Serum (legacy): brain banned from the reels
 var potionSpins := 0             # Potion: one random pool effect per spin
 var forceFlatlineSpins := 0      # Pill: force an all-flatline spin
 var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatline
@@ -90,6 +93,12 @@ var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumabl
 # Presentation-only (issue #34): the Potion pool pick rolled for the last spin, so the
 # machine can announce it. Never feeds evaluate()/spin() inputs — parity untouched.
 var lastPotionEffect: Variant = null
+
+# 3x eye (issue #53): the player taps a reel and its NEXT-spin symbol is revealed
+# instantly. The symbol is rolled through the run's normal weight pipeline at tap
+# time, then committed into the next spin via evaluate()'s gated forceReelSymbols.
+var eyeRevealReel := -1
+var eyeRevealSymbol := ""
 
 # Dealer odds table (issue #36): additive weight overrides bought with a token
 # budget at the post-run "what's next?" phase. Upgrades are PERMANENT — staged
@@ -200,9 +209,10 @@ func spin(compulsive := false) -> Variant:
 		"learningActive": book_w > 0,
 		"forceAllSymbol": force_all,
 		"forceTripleFrom": force_triple,
-		"excludeSymbol": ("brain" if (banBrainSpins > 0 or guaranteeSymbolSpins > 0) else null),
+		"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
 		"banExcluded": banBrainSpins > 0,
-		"guaranteeNonExcluded": guaranteeSymbolSpins > 0,
+		"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
+		"forceReelSymbols": ({ eyeRevealReel: eyeRevealSymbol } if (eyeRevealReel >= 0 and eyeRevealSymbol != "") else null),
 		"symbolToBrainCount": potion_symbol_to_brain,
 		"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
 		"hiddenReelCount": (pairBoostHiddenReels if pair_boost_active else 0),
@@ -254,7 +264,17 @@ func spin(compulsive := false) -> Variant:
 		+ (pendingCompulsiveSpinSkips if was_cocktail_last else 0)
 	pendingCompulsiveSpinSkips = 0 if was_cocktail_last else pendingCompulsiveSpinSkips
 	pairBoostSpins = maxi(0, pairBoostSpins - 1)
+	# Serum (issue #53): the spin AFTER the guaranteed one renders blurry — queued
+	# blur moves in when the guarantee is consumed (mirrors the cocktail pattern).
+	var guarantee_was_last := guaranteeSymbolSpins == 1
 	guaranteeSymbolSpins = maxi(0, guaranteeSymbolSpins - 1)
+	if guaranteeSymbolSpins <= 0:
+		guaranteeSymbolId = ""
+	blurReelsSpins = pendingBlurSpins if guarantee_was_last else maxi(0, blurReelsSpins - 1)
+	pendingBlurSpins = 0 if guarantee_was_last else pendingBlurSpins
+	# 3x eye (issue #53): the revealed reel was committed into this spin — consume it.
+	eyeRevealReel = -1
+	eyeRevealSymbol = ""
 	banBrainSpins = maxi(0, banBrainSpins - 1)
 	potionSpins = maxi(0, potionSpins - 1)
 	# Keep the pending triple until the flatline spin is spent, then consume it.
@@ -324,6 +344,11 @@ func reset_run_state() -> void:
 	pairBoostMult = 1
 	pairBoostHiddenReels = 0
 	guaranteeSymbolSpins = 0
+	guaranteeSymbolId = ""
+	blurReelsSpins = 0
+	pendingBlurSpins = 0
+	eyeRevealReel = -1
+	eyeRevealSymbol = ""
 	banBrainSpins = 0
 	potionSpins = 0
 	forceFlatlineSpins = 0
@@ -386,6 +411,11 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	pairBoostMult = 1
 	pairBoostHiddenReels = 0
 	guaranteeSymbolSpins = 0
+	guaranteeSymbolId = ""
+	blurReelsSpins = 0
+	pendingBlurSpins = 0
+	eyeRevealReel = -1
+	eyeRevealSymbol = ""
 	banBrainSpins = 0
 	potionSpins = 0
 	forceFlatlineSpins = 0
@@ -444,6 +474,24 @@ func restore_all_powers() -> void:
 		return
 	abilitiesUsed = []
 	_commit()
+
+## 3x eye (issue #53): rolls what the tapped reel WILL show next spin — drawn from
+## the run's normal weight pipeline (brain boosts, book, purchased odds all apply)
+## with a fresh seed — and commits it so the next spin's evaluate() honours it.
+## Returns the revealed symbol ("" outside a running, non-spinning state).
+func reveal_next_reel_symbol(reel_index: int) -> String:
+	if runPhase != "running" or reel_index < 0 or reel_index > 2:
+		return ""
+	var brain_bonus := Economy.compute_brain_weight_bonus(ownedUpgrades)
+	if brainBoostSpins > 0:
+		brain_bonus += int(Symbols.WEIGHT["brain"]) * 3
+	var book_w := Economy.compute_book_weight(ownedUpgrades)
+	var weights := _weights_with_bonuses(brain_bonus, book_w)
+	var rng := LobRNG.new(_seed(spinCount * 0x85ebca6b + reel_index))
+	eyeRevealReel = reel_index
+	eyeRevealSymbol = String(LobRNG.weighted_pick(weights, rng))
+	_commit()
+	return eyeRevealSymbol
 
 ## Syringe triple: puts the last-used consumable back if a stash slot is free.
 func recover_last_consumable(max_slots: int) -> bool:
@@ -572,7 +620,10 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 
 # ── consumables / dealer ───────────────────────────────────────────────────────────
 
-func use_consumable(consumable_id: String) -> bool:
+## `serum_symbol` (issue #53): the player-picked symbol for the Serum guarantee;
+## ignored by every other consumable. Falls back to the first non-excluded cycle
+## symbol when empty or not in the pickable pool.
+func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 	if not _can_act():
 		return false
 	if dealerIncoming or dealerPending:
@@ -623,9 +674,17 @@ func use_consumable(consumable_id: String) -> bool:
 			pairBoostMult = int(ce["pairMult"])
 			pairBoostHiddenReels = int(ce["hiddenReels"])
 		"guaranteeSymbol":
-			# Serum: guarantee a non-brain symbol for appearSpins, ban brain for banSpins.
+			# Serum (issue #53): the PICKED non-excluded symbol appears at least once
+			# next spin, and the spin after renders blurry.
+			var excludes: Array = ce.get("excludes", [])
+			var pool: Array = []
+			for s in Symbols.BASE_SYMBOL_CYCLE:
+				if not excludes.has(String(s)):
+					pool.append(String(s))
+			var picked := serum_symbol if pool.has(serum_symbol) else (String(pool[0]) if not pool.is_empty() else "")
 			guaranteeSymbolSpins += int(ce["appearSpins"])
-			banBrainSpins += int(ce["banSpins"])
+			guaranteeSymbolId = picked
+			pendingBlurSpins += int(ce.get("blurSpins", 0))
 		"scrambleThenHide":
 			# White Powder: the scramble is the copy_reel UI flow; hide the next spin.
 			hideResultSpins += 1 if bool(ce["hideNextSpin"]) else 0

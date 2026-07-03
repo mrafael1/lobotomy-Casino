@@ -34,6 +34,9 @@ export interface SpinInput {
   readonly symbolToBrainCount?: number;                   // Potion: convert first N reels to brain
   readonly pairScoreMult?: number;                        // Tobacco: multiply pair payout
   readonly hiddenReelCount?: number;                      // Tobacco: score only the visible remainder
+  // Issue #53 additions — gated, no-op at their defaults like the #32 keys.
+  readonly guaranteeSymbolId?: SymbolId | null;           // Serum: this symbol appears at least once
+  readonly forceReelSymbols?: Readonly<Partial<Record<number, SymbolId>>> | null; // 3x eye: pre-revealed reel(s)
 }
 
 export interface SpinResult {
@@ -97,8 +100,11 @@ export interface RunState {
   readonly pairBoostSpins: number;          // Tobacco: hidden reel + pair multiplier active
   readonly pairBoostMult: number;           // Tobacco: pair payout multiplier while active
   readonly pairBoostHiddenReels: number;    // Tobacco: reels hidden from scoring while active
-  readonly guaranteeSymbolSpins: number;    // Serum: force a non-excluded symbol to appear
-  readonly banBrainSpins: number;           // Serum: brain banned from the reels
+  readonly guaranteeSymbolSpins: number;    // Serum: force the chosen symbol to appear
+  readonly guaranteeSymbolId: SymbolId | null; // Serum: the player-picked symbol (issue #53)
+  readonly blurReelsSpins: number;          // Serum: reels render blurry for these spins (display)
+  readonly pendingBlurSpins: number;        // Serum: blur queued for after the guaranteed spin
+  readonly banBrainSpins: number;           // Serum (legacy): brain banned from the reels
   readonly potionSpins: number;             // Potion: one random pool effect per spin
   readonly forceFlatlineSpins: number;      // Pill: force an all-flatline spin
   readonly guaranteedTripleSpins: number;   // Pill: force a triple the spin after the flatline

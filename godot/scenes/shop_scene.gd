@@ -19,7 +19,7 @@ const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
 	"cons_cigarette": "items/cigarette.png",
 	"cons_white_powder": "items/white_powder.png",
-	"cons_syringe": "items/consumable_placeholder.png",
+	"cons_potion": "items/consumable_placeholder.png",
 	"cons_tea": "items/herbal_tea.png",
 }
 

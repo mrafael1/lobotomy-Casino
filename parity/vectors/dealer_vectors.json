@@ -368,7 +368,7 @@
       "id": "item_energy_drink",
       "effect": {
         "type": "skipDecay",
-        "spins": 5,
+        "spins": 2,
         "blockBet": "x3"
       }
     },
@@ -376,8 +376,8 @@
       "id": "item_cocktail",
       "effect": {
         "type": "cocktailBoost",
-        "spins": 3,
-        "compulsiveSpins": 2
+        "spins": 2,
+        "compulsiveSpins": 1
       }
     },
     {
