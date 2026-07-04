@@ -61,6 +61,7 @@ func _run() -> void:
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
 	_check_wealth_zero_spins_62(machine, run_store, failures)
+	_check_flatline_free_spins_75(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1180,6 +1181,54 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 		failures.append("issue62: wealth-continued run at the spin cap did not end")
 	elif str(run_store.lastEnding) != "flatline":
 		failures.append("issue62: spin-cap post-continue ended as %s, expected flatline" % str(run_store.lastEnding))
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	machine._set_stash_tray_visible(true)
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+# Issue #75: neurons hitting 0 with banked free spins left must NOT flatline —
+# the SPINS LEFT counter (which includes free spins) still shows spins the player
+# can take; the flatline only resolves once both pools are empty.
+func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 100
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 2
+	run_store.maxFreeSpins = 10
+	if machine._check_ending():
+		failures.append("issue75: flatlined with banked free spins remaining")
+	if str(run_store.runPhase) != "running":
+		failures.append("issue75: free-spin hold ended the run phase")
+
+	# The banked free spin is actually playable at 0 neurons.
+	if run_store.spin() == null:
+		failures.append("issue75: free spin at 0 neurons was rejected")
+	else:
+		run_store.set_spinning(false)
+
+	# Wealth-continued runs get the same carve-out (parallels _can_resume_after_wealth).
+	run_store.neurons = 0
+	run_store.scoreEarned = 2500
+	run_store.freeSpinsRemaining = 1
+	run_store.wealthContinued = true
+	if machine._check_ending():
+		failures.append("issue75: wealth-continued run flatlined with free spins left")
+
+	# Both pools empty => the flatline resolves normally.
+	run_store.freeSpinsRemaining = 0
+	if not machine._check_ending():
+		failures.append("issue75: dry run with no free spins did not flatline")
+	elif str(run_store.lastEnding) != "flatline":
+		failures.append("issue75: dry run ended as %s, expected flatline" % str(run_store.lastEnding))
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
