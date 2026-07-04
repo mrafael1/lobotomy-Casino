@@ -53,6 +53,7 @@ func _run() -> void:
 	_check_issue27_overlay_layout(failures)
 	_check_issue27_machine_stash_drag(machine, run_store, failures)
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
+	_check_options_spin_lock_77(machine, run_store, failures)
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
@@ -1835,6 +1836,114 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 	await create_timer(coin_duration + 0.05).timeout
 	if machine._display_lucidity != 3:
 		failures.append("issue28: wealth display did not update after coin contact")
+
+# Issue #77: opening options and leaving the scene (Settings/Scores/Collection)
+# mid-spin frees the animation that would call set_spinning(false), so the store's
+# isSpinning stays true and the committed lastResult is never resolved. Re-entering
+# the running machine (_sync_visuals) must run the same non-visual post-spin
+# resolution: clear the spin lock for a live run, and resolve a terminal committed
+# result into its ending instead of leaving a playable-but-dead machine.
+func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	var prev_phase := String(run_store.runPhase)
+	var prev_spinning := bool(run_store.isSpinning)
+	var prev_compulsive := int(run_store.compulsiveSpinSkips)
+	var prev_free := int(run_store.freeSpinsRemaining)
+	var prev_neurons := int(run_store.neurons)
+	var prev_starting := int(run_store.startingNeurons)
+	var prev_score := int(run_store.scoreEarned)
+	var prev_spin_count := int(run_store.spinCount)
+	var prev_flat := int(run_store.flatlineResultCount)
+	var prev_locked_spins: Array = run_store.lockedReelSpins.duplicate()
+	var prev_locked: Array = run_store.lockedReels.duplicate()
+	var prev_last: Variant = run_store.lastResult
+
+	# startingNeurons = 0 keeps check_dealer_trigger a no-op so these cases stay
+	# isolated from the dealer RNG; flatlineResultCount = 0 avoids a stray instant death.
+	run_store.startingNeurons = 0
+	run_store.flatlineResultCount = 0
+
+	# Case 1 — live run: a non-terminal committed result interrupted mid-spin. Re-entry
+	# clears the stale spin lock and re-enables the lever/powers.
+	run_store.runPhase = "running"
+	run_store.isSpinning = true
+	run_store.compulsiveSpinSkips = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.neurons = 8
+	run_store.scoreEarned = 100
+	run_store.spinCount = 1
+	run_store.lockedReelSpins = [0, 0, 0]
+	run_store.lockedReels = [false, false, false]
+	run_store.lastResult = { "reels": ["brain", "eye", "vial"], "winType": "loss", "freeSpinsGranted": 0 }
+	machine._spinning_anim = false
+	machine._sequence_lock_active = false
+
+	machine._sync_visuals()
+
+	if bool(run_store.isSpinning):
+		failures.append("issue77: returning to the machine left isSpinning stuck true")
+	if not run_store._can_act():
+		failures.append("issue77: machine stayed non-actionable after returning from options")
+	machine._refresh_controls()
+	if machine._spin_button == null or machine._spin_button.disabled:
+		failures.append("issue77: lever stayed disabled after returning from options mid-spin")
+	if machine._overlay != null:
+		failures.append("issue77: live-run re-entry wrongly showed an ending overlay")
+
+	# Case 2 — terminal committed result (neurons drained to 0, no free spins). The
+	# interrupted spin banked a flatline result; re-entry must resolve the ending, NOT
+	# leave a playable-but-dead machine (owner review on PR #82).
+	run_store.runPhase = "running"
+	run_store.isSpinning = true
+	run_store.compulsiveSpinSkips = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.neurons = 0
+	run_store.scoreEarned = 100
+	run_store.spinCount = 2
+	run_store.lastResult = { "reels": ["brain", "eye", "vial"], "winType": "loss", "freeSpinsGranted": 0 }
+	machine._spinning_anim = false
+	machine._sequence_lock_active = false
+
+	machine._sync_visuals()
+
+	if bool(run_store.isSpinning):
+		failures.append("issue77: terminal re-entry left isSpinning stuck true")
+	if String(run_store.runPhase) == "running":
+		failures.append("issue77: terminal committed result did not end the run on re-entry")
+	if String(run_store.lastEnding) != "flatline":
+		failures.append("issue77: terminal re-entry ended as %s, expected flatline" % str(run_store.lastEnding))
+	if machine._overlay == null:
+		failures.append("issue77: terminal re-entry showed no ending overlay")
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	# Case 3 — a non-spinning re-entry must NOT spuriously decrement locked-reel counters.
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.lockedReelSpins = [2, 0, 0]
+	run_store.lockedReels = [true, false, false]
+	machine._sync_visuals()
+	if int(run_store.lockedReelSpins[0]) != 2:
+		failures.append("issue77: idle re-entry wrongly decremented a locked reel")
+
+	machine._set_stash_tray_visible(true)
+	run_store.runPhase = prev_phase
+	run_store.isSpinning = prev_spinning
+	run_store.compulsiveSpinSkips = prev_compulsive
+	run_store.freeSpinsRemaining = prev_free
+	run_store.neurons = prev_neurons
+	run_store.startingNeurons = prev_starting
+	run_store.scoreEarned = prev_score
+	run_store.spinCount = prev_spin_count
+	run_store.flatlineResultCount = prev_flat
+	run_store.lockedReelSpins = prev_locked_spins
+	run_store.lockedReels = prev_locked
+	run_store.lastResult = prev_last
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array) -> void:
 	# Save the state this check mutates.

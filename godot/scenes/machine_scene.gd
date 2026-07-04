@@ -1027,6 +1027,11 @@ func _begin_fresh_run() -> bool:
 func _sync_visuals() -> void:
 	_stop_sfx(&"reel_spin")
 	_spin_launch_pending = false
+	# A spin whose scene was freed mid-resolution (e.g. opening options and tapping
+	# Settings/Scores while the reels are still turning) committed lastResult + run
+	# state inside RunStateStore.spin() but never reached _run_post_reveal_sequence,
+	# so isSpinning is still true. Resolve it below, after the visual reset (issue #77).
+	var resume_interrupted_spin := RunStateStore.isSpinning
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
@@ -1058,6 +1063,37 @@ func _sync_visuals() -> void:
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp(false)
+	if resume_interrupted_spin:
+		_resolve_interrupted_spin()
+
+## Finalizes a spin whose committed result never got resolved because its scene was
+## freed before _run_post_reveal_sequence ran (issue #77). Runs the same non-visual
+## post-spin resolution — minus the animated score burst — so earned reactions land
+## and a terminal result (flatline strike, neuron flatline, wealth goal, spin cap)
+## resolves into its ending instead of leaving a playable-but-dead machine that only
+## answers spins with null. Mirrors the tail of _run_post_reveal_sequence.
+func _resolve_interrupted_spin() -> void:
+	RunStateStore.set_spinning(false) # clears isSpinning + applies the locked-reel decrement
+	_refresh_lock_art()
+	if RunStateStore.lastResult == null:
+		_update_hud() # defensive: nothing to resolve, just re-enable controls
+		return
+	RunStateStore.check_dealer_trigger()
+	var dealer_pending := RunStateStore.dealerIncoming
+	_release_hud_delta_hold()
+	_refresh_jackpot_lamp()
+	_apply_machine_reactions(false) # flatline-result / triple reactions the player earned
+	if _check_flatline_instant_death():
+		return
+	if _check_ending():
+		return
+	if _check_spin_cap_ending():
+		return
+	if dealer_pending:
+		_show_dealer_incoming()
+	elif RunStateStore.compulsiveSpinSkips > 0:
+		_queue_compulsive_spin()
+	_update_hud()
 
 func _to_menu() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE)
