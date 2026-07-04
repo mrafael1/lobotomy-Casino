@@ -2192,12 +2192,10 @@ func _step_reroll(delta: float) -> void:
 		if _spin_button != null:
 			_spin_button.disabled = false
 		_update_hud()
-		_refresh_jackpot_lamp()
-		_apply_machine_reactions(true)  # reroll may form a triple (issue #35)
-		if _check_flatline_instant_death():
-			_release_hud_delta_hold()
-			return
-		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
+		# Machine reactions (triple/flatline) and the instant-death check now run
+		# inside the reward sequence, after the score popup — a reroll-made triple
+		# must not pop before its own score burst (issue #54 alignment).
+		_play_reward_sequence(rerolled, true) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
 	if _sequence_lock_active or _spin_launch_pending:
@@ -2207,14 +2205,15 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	_refresh_jackpot_lamp()
-	_apply_machine_reactions(true)  # shift may form a triple (issue #35)
-	if _check_flatline_instant_death():
-		_release_hud_delta_hold()
-		return
-	_play_reward_sequence(reel_index) # shift burst pops from the shifted reel
+	# Reactions + instant-death run inside the reward sequence, after the score
+	# popup, so a shift-made triple never pops before its burst (issue #54).
+	_play_reward_sequence(reel_index, true) # shift burst pops from the shifted reel
 
-func _play_reward_sequence(source_reel: int) -> void:
+## `apply_power_reaction` runs the machine reactions (reroll/shift triples, flatline
+## strikes) and the flatline instant-death check AFTER the score popup, mirroring the
+## normal spin path so a power-made triple never flashes before its own burst. The
+## white-powder copy path leaves it false (it fires no machine reaction).
+func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> void:
 	_set_sequence_lock(true)
 	var reward_time := _emit_score_burst(source_reel)
 	# Same beat as the spin path: held HUD deltas pop after the score popup.
@@ -2223,8 +2222,14 @@ func _play_reward_sequence(source_reel: int) -> void:
 		await get_tree().create_timer(pop_lead).timeout
 	_release_hud_delta_hold()
 	_refresh_jackpot_lamp()
+	if apply_power_reaction:
+		_apply_machine_reactions(true)  # reroll/shift may form a triple (issue #35)
 	if reward_time > pop_lead:
 		await get_tree().create_timer(reward_time - pop_lead).timeout
+	# Instant death from stacked flatline results takes precedence, and only the
+	# power paths can add one here — the copy path never reacts.
+	if apply_power_reaction and _check_flatline_instant_death():
+		return
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
