@@ -113,6 +113,9 @@ const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 
 # Score-burst (port of src/components/ScoreBurst.tsx). Visual only.
 const BURST_TIME := 1.05
+# How long the score popup is on screen before spin aftereffects (multiplier/bar
+# deltas, jackpot lamp, machine reactions) are allowed to pop (issue #54 scope).
+const AFTEREFFECT_POP_DELAY := 0.4
 const BURST_RISE := 28.0
 const MULT_COLORS := {
 	1: Color(0.094, 0.227, 0.549), # x1 dark blue  (#183A8C)
@@ -303,6 +306,10 @@ var _dealer_drag_press := Vector2.ZERO
 var _burst_layer: Control = null     # score bursts spawn here (drawn on top)
 var _coin_layer: Control = null      # lucidity / power coin flights spawn here
 var _burst_prev_score := 0           # last announced result score (for power gain)
+# Freezes HUD delta visuals (multiplier badge, TV bars, jackpot lamp) between a
+# spin/power commit and its score popup, so aftereffects never pop before the
+# score does (issue #54 scope).
+var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0
 var _display_lucidity := 0
@@ -1081,8 +1088,13 @@ func _do_spin(compulsive := false) -> void:
 	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
 	# result renders behind the blur frost.
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
+	# Hold HUD deltas from the commit until the score popup lands: spin() fires
+	# state_changed synchronously, which would otherwise pop the new multiplier /
+	# bars / lamp during the lever pull (issue #54).
+	_hud_delta_hold = true
 	var result: Variant = RunStateStore.spin(compulsive)
 	if result == null:
+		_hud_delta_hold = false
 		return
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
 	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
@@ -1101,6 +1113,7 @@ func _do_spin(compulsive := false) -> void:
 	_refresh_controls()
 	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
+		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
 		return
 	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
@@ -1195,15 +1208,21 @@ func _run_post_reveal_sequence() -> void:
 	_set_sequence_lock(true)
 	_update_hud()
 	_refresh_lock_art()
-	_refresh_jackpot_lamp()
-	_apply_machine_reactions(false)  # flatline-result / triple reactions (issue #35)
-	_play_potion_spin_fx()           # potion hop + rolled-effect popup (issue #34)
 	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
 	var dealer_pending := RunStateStore.dealerIncoming
-	if reward_time > 0.0:
-		await get_tree().create_timer(reward_time).timeout
+	# Aftereffects (multiplier/bar deltas, jackpot lamp, machine reactions, potion
+	# fx) only pop once the score popup has been on screen for a beat (issue #54).
+	var pop_lead := minf(AFTEREFFECT_POP_DELAY, reward_time)
+	if pop_lead > 0.0:
+		await get_tree().create_timer(pop_lead).timeout
+	_release_hud_delta_hold()
+	_refresh_jackpot_lamp()
+	_apply_machine_reactions(false)  # flatline-result / triple reactions (issue #35)
+	_play_potion_spin_fx()           # potion hop + rolled-effect popup (issue #34)
+	if reward_time > pop_lead:
+		await get_tree().create_timer(reward_time - pop_lead).timeout
 	# Instant death from stacked flatline results takes precedence (issue #35).
 	if _check_flatline_instant_death():
 		_post_spin_sequence_active = false
@@ -1295,6 +1314,15 @@ func _update_hud() -> void:
 	_refresh_controls()
 	_refresh_consumable_fx()
 
+## Lets the held HUD deltas (multiplier badge, bars, jackpot lamp) pop, once the
+## score popup has had its beat on screen.
+func _release_hud_delta_hold() -> void:
+	if not _hud_delta_hold:
+		return
+	_hud_delta_hold = false
+	_update_hud()
+	_refresh_jackpot_lamp()
+
 # The authored neuron_number Label stays as an anchor/editor placeholder and
 # renders no text; the neuron meter lives on the start menu / flatline overlay.
 func _refresh_campaign_label() -> void:
@@ -1353,6 +1381,8 @@ func _refresh_lock_art() -> void:
 			label.text = str(remaining) if remaining > 0 else ""
 
 func _refresh_tv_indicators() -> void:
+	if _hud_delta_hold:
+		return
 	if RunStateStore.lucidityCoins < _display_lucidity:
 		_set_display_lucidity(RunStateStore.lucidityCoins)
 	# The wealth bar targets the campaign wealth goal (2000) — the same threshold
@@ -1426,6 +1456,8 @@ func _drive_lucidity_count(t: float, from_value: int, to_value: int) -> void:
 func _refresh_jackpot_lamp(use_result := true) -> void:
 	if _jackpot_sprite == null or _jackpot_flashing:
 		return # don't fight an active flash
+	if _hud_delta_hold:
+		return # lamp state pops with the other aftereffects, after the score popup
 	var lit := false
 	if use_result and RunStateStore.lastResult != null:
 		lit = bool(RunStateStore.lastResult.get("isJackpot", false))
@@ -1870,6 +1902,8 @@ func _refresh_multiplier_controls() -> void:
 	for i in _multiplier_buttons.size():
 		var m := i + 1
 		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
+	if _hud_delta_hold:
+		return # badge keeps its pre-commit frame until the score popup lands
 	var affordable := _highest_affordable_multiplier()
 	var effective := mini(RunStateStore.betMultiplier, affordable)
 	var frame := 0
@@ -2103,11 +2137,13 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if power_id == "reroll":
+		_hud_delta_hold = true # deltas pop with the reroll's score popup (issue #54)
 		if RunStateStore.reroll_reel(reel_index):
 			_clear_targeting()
 			_start_reroll_animation(reel_index)
 			_update_hud()
 			return
+		_hud_delta_hold = false
 	elif power_id == "memory":
 		RunStateStore.lock_reel(reel_index)
 	_clear_targeting()
@@ -2159,12 +2195,14 @@ func _step_reroll(delta: float) -> void:
 		_refresh_jackpot_lamp()
 		_apply_machine_reactions(true)  # reroll may form a triple (issue #35)
 		if _check_flatline_instant_death():
+			_release_hud_delta_hold()
 			return
 		_play_reward_sequence(rerolled) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
 	if _sequence_lock_active or _spin_launch_pending:
 		return
+	_hud_delta_hold = true # deltas pop with the shift's score popup (issue #54)
 	RunStateStore.move_reel(reel_index, direction)
 	_clear_targeting()
 	_refresh_reels_from_state()
@@ -2172,14 +2210,21 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 	_refresh_jackpot_lamp()
 	_apply_machine_reactions(true)  # shift may form a triple (issue #35)
 	if _check_flatline_instant_death():
+		_release_hud_delta_hold()
 		return
 	_play_reward_sequence(reel_index) # shift burst pops from the shifted reel
 
 func _play_reward_sequence(source_reel: int) -> void:
 	_set_sequence_lock(true)
 	var reward_time := _emit_score_burst(source_reel)
-	if reward_time > 0.0:
-		await get_tree().create_timer(reward_time).timeout
+	# Same beat as the spin path: held HUD deltas pop after the score popup.
+	var pop_lead := minf(AFTEREFFECT_POP_DELAY, reward_time)
+	if pop_lead > 0.0:
+		await get_tree().create_timer(pop_lead).timeout
+	_release_hud_delta_hold()
+	_refresh_jackpot_lamp()
+	if reward_time > pop_lead:
+		await get_tree().create_timer(reward_time - pop_lead).timeout
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
@@ -2566,6 +2611,7 @@ func _on_copy_pick(reel_index: int) -> void:
 	else:
 		var src := _copy_source
 		_copy_source = -1
+		_hud_delta_hold = true # deltas pop with the copy's score popup (issue #54)
 		RunStateStore.copy_reel(src, reel_index)
 		_clear_targeting()
 		_refresh_reels_from_state()
