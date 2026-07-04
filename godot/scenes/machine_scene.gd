@@ -3150,6 +3150,12 @@ func _check_ending() -> bool:
 		if int(RunStateStore.neurons) > 0:
 			return false
 		ending = "flatline"
+	# Banked free spins are real spins the player can still take at 0 neurons (the
+	# spin gate, the wealth CONTINUE check, and the SPINS LEFT counter all count
+	# them), so a spin that drains the last neurons while granting spins back must
+	# not flatline; the flatline resolves once both pools are empty (issue #75).
+	if ending == "flatline" and int(RunStateStore.freeSpinsRemaining) > 0:
+		return false
 	_show_ending(String(ending), run)
 	return true
 
