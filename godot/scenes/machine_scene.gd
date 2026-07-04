@@ -1027,6 +1027,14 @@ func _begin_fresh_run() -> bool:
 func _sync_visuals() -> void:
 	_stop_sfx(&"reel_spin")
 	_spin_launch_pending = false
+	# A spin interrupted by leaving the scene mid-resolution (e.g. opening options
+	# and tapping Settings/Scores while the reels are still turning) never reaches
+	# _run_post_reveal_sequence, so RunStateStore.isSpinning stays true and _can_act()
+	# would keep the lever and powers locked forever on return. This freshly built
+	# scene has no in-flight spin animation, so finalize the stale spin now — this
+	# also applies the interrupted spin's pending locked-reel decrement (issue #77).
+	if RunStateStore.isSpinning:
+		RunStateStore.set_spinning(false)
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null

@@ -53,6 +53,7 @@ func _run() -> void:
 	_check_issue27_overlay_layout(failures)
 	_check_issue27_machine_stash_drag(machine, run_store, failures)
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
+	_check_options_spin_lock_77(machine, run_store, failures)
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
@@ -1835,6 +1836,53 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 	await create_timer(coin_duration + 0.05).timeout
 	if machine._display_lucidity != 3:
 		failures.append("issue28: wealth display did not update after coin contact")
+
+# Issue #77: opening options and leaving the scene (Settings/Scores/Collection)
+# mid-spin frees the animation that would call set_spinning(false), so the store's
+# isSpinning stays true. Re-entering the running machine (_sync_visuals) must
+# finalize that stale spin so the lever/powers are interactable again.
+func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_spinning := bool(run_store.isSpinning)
+	var prev_compulsive := int(run_store.compulsiveSpinSkips)
+	var prev_locked_spins: Array = run_store.lockedReelSpins.duplicate()
+	var prev_locked: Array = run_store.lockedReels.duplicate()
+	var prev_last: Variant = run_store.lastResult
+
+	# Simulate a spin interrupted by leaving the scene: running run, still spinning.
+	run_store.runPhase = "running"
+	run_store.isSpinning = true
+	run_store.compulsiveSpinSkips = 0
+	run_store.lockedReelSpins = [0, 0, 0]
+	run_store.lockedReels = [false, false, false]
+	run_store.lastResult = null
+	machine._spinning_anim = false
+	machine._sequence_lock_active = false
+
+	machine._sync_visuals()
+
+	if bool(run_store.isSpinning):
+		failures.append("issue77: returning to the machine left isSpinning stuck true")
+	if not run_store._can_act():
+		failures.append("issue77: machine stayed non-actionable after returning from options")
+	machine._refresh_controls()
+	if machine._spin_button == null or machine._spin_button.disabled:
+		failures.append("issue77: lever stayed disabled after returning from options mid-spin")
+
+	# A non-spinning re-entry must NOT spuriously decrement locked-reel counters.
+	run_store.isSpinning = false
+	run_store.lockedReelSpins = [2, 0, 0]
+	run_store.lockedReels = [true, false, false]
+	machine._sync_visuals()
+	if int(run_store.lockedReelSpins[0]) != 2:
+		failures.append("issue77: idle re-entry wrongly decremented a locked reel")
+
+	run_store.runPhase = prev_phase
+	run_store.isSpinning = prev_spinning
+	run_store.compulsiveSpinSkips = prev_compulsive
+	run_store.lockedReelSpins = prev_locked_spins
+	run_store.lockedReels = prev_locked
+	run_store.lastResult = prev_last
 
 func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array) -> void:
 	# Save the state this check mutates.
