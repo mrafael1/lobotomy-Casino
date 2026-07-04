@@ -65,6 +65,7 @@ func _run() -> void:
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
+	_check_spins_bar_lever_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
 	machine.queue_free()
 
@@ -1308,6 +1309,63 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
+	run_store.reset_run_state()
+
+# Issue #80: the SPINS LEFT counter must drop with the neuron cost the instant the
+# lever is pulled — while the HUD reward-delta hold (issue #54) is still active — and
+# a free spin GRANTED by that spin stays hidden until the hold releases at the score.
+func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.startingNeurons = 10
+	run_store.neurons = 10
+	run_store.freeSpinsRemaining = 0
+	machine._pending_spin_gain = 0
+	machine._held_spin_grant = 0
+	machine._hud_delta_hold = false
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+
+	var label := machine._bar_labels.get("life") as Label
+	if label == null:
+		failures.append("issue80: spins-left label missing")
+		run_store.reset_run_state()
+		return
+	var life_fill := machine._life_fill_sprite as Sprite2D
+	var full_spins := String(label.text).get_slice(":", 1).to_int()
+	var full_width := 0.0
+	if life_fill != null:
+		full_width = life_fill.region_rect.size.x
+
+	# Lever pull: the reward-delta hold is on, and spin() has spent the neuron cost.
+	machine._hud_delta_hold = true
+	run_store.neurons = 2
+	machine._update_hud()
+	var during_hold := String(label.text).get_slice(":", 1).to_int()
+	if during_hold >= full_spins:
+		failures.append("issue80: SPINS LEFT did not drop on lever pull while the HUD was held")
+	if life_fill != null and life_fill.region_rect.size.x >= full_width:
+		failures.append("issue80: spins bar did not shrink on lever pull while the HUD was held")
+
+	# A free spin granted by the same spin is held out of the counter until release.
+	run_store.freeSpinsRemaining = 1
+	machine._pending_spin_gain = 1
+	machine._held_spin_grant = 1
+	machine._update_hud()
+	if String(label.text).get_slice(":", 1).to_int() != during_hold:
+		failures.append("issue80: granted free spin appeared before the score popup landed")
+
+	# Releasing the hold (score popup landed) pops the grant into the counter.
+	machine._release_hud_delta_hold()
+	if int(machine._held_spin_grant) != 0 or int(machine._pending_spin_gain) != 0:
+		failures.append("issue80: hold release did not clear the held grant")
+	if String(label.text).get_slice(":", 1).to_int() != during_hold + 1:
+		failures.append("issue80: granted free spin did not pop into SPINS LEFT on release")
+
+	machine._hud_delta_hold = false
+	machine._pending_spin_gain = 0
+	machine._held_spin_grant = 0
 	run_store.reset_run_state()
 
 func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:

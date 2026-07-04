@@ -358,6 +358,10 @@ var _reveal_reel_next_spin := -1
 # Spin-gain fly-ins in flight (issue #66): the spins-left counter is held back by
 # this amount until each "+N" popup lands, so the number ticks up in sync.
 var _pending_spin_gain := 0
+# Free spins granted by the in-progress spin (issue #80): the SPINS LEFT counter
+# drops with the neuron cost the instant the lever is pulled, but a grant from the
+# same spin is a reward held (inside _pending_spin_gain) until the score popup lands.
+var _held_spin_grant := 0
 # Consumable visuals (issue #34).
 var _fx_layer: Control = null              # host for all consumable effect nodes
 var _tobacco_covers: Array = []            # per-reel dark cover while smoked out
@@ -1043,6 +1047,7 @@ func _sync_visuals() -> void:
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
 	_pending_spin_gain = 0
+	_held_spin_grant = 0
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1085,12 +1090,22 @@ func _do_spin(compulsive := false) -> void:
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
-	# bars / lamp during the lever pull (issue #54).
+	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
+	# exception — it must drop with the neuron cost right now (issue #80).
+	var free_before := int(RunStateStore.freeSpinsRemaining)
 	_hud_delta_hold = true
 	var result: Variant = RunStateStore.spin(compulsive)
 	if result == null:
 		_hud_delta_hold = false
 		return
+	# A free spin GRANTED by this spin (jackpot) is a reward, not a cost, so hold it
+	# out of the now-live SPINS LEFT counter until the score lands (issue #80); the
+	# hold is released in _release_hud_delta_hold with the other reward deltas.
+	var granted_free := maxi(0, int(RunStateStore.freeSpinsRemaining) - free_before)
+	if granted_free > 0:
+		_pending_spin_gain += granted_free
+		_held_spin_grant += granted_free
+	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
 	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
 	_final_reels = result["reels"]
@@ -1108,7 +1123,12 @@ func _do_spin(compulsive := false) -> void:
 	_refresh_controls()
 	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
-		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
+		# Aborted launch: don't leave the HUD frozen, and release the held grant so
+		# the committed free spin is not stranded out of the counter (issue #80).
+		if _held_spin_grant > 0:
+			_pending_spin_gain = maxi(0, _pending_spin_gain - _held_spin_grant)
+			_held_spin_grant = 0
+		_hud_delta_hold = false
 		return
 	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
@@ -1315,6 +1335,11 @@ func _release_hud_delta_hold() -> void:
 	if not _hud_delta_hold:
 		return
 	_hud_delta_hold = false
+	# Release the free spin this spin granted so it pops into SPINS LEFT alongside the
+	# other reward deltas, now that the score popup has landed (issue #80).
+	if _held_spin_grant > 0:
+		_pending_spin_gain = maxi(0, _pending_spin_gain - _held_spin_grant)
+		_held_spin_grant = 0
 	_update_hud()
 	_refresh_jackpot_lamp()
 
@@ -1376,6 +1401,19 @@ func _refresh_lock_art() -> void:
 			label.text = str(remaining) if remaining > 0 else ""
 
 func _refresh_tv_indicators() -> void:
+	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
+	# so it always updates — it is NOT held with the reward deltas (issue #80). Any
+	# free spin granted by the in-progress spin stays hidden via _pending_spin_gain
+	# (issue #66 / #80) until the score popup releases it.
+	var start_n := maxi(1, RunStateStore.startingNeurons)
+	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
+	var spins_left := _display_spins_left(life_ratio)
+	var spins_ratio := clampf(float(spins_left) / float(maxi(1, starting_spin_counter)), 0.0, 1.0)
+	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
+	if _bar_labels.has("life"):
+		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
+	# The wealth bar / lucidity readout is a reward delta — hold it (with the
+	# multiplier badge and jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
 		return
 	if RunStateStore.lucidityCoins < _display_lucidity:
@@ -1384,15 +1422,8 @@ func _refresh_tv_indicators() -> void:
 	# the wealth ending checks — not the old lucidity objective.
 	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
-	var start_n := maxi(1, RunStateStore.startingNeurons)
-	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
-	var spins_left := _display_spins_left(life_ratio)
-	var spins_ratio := clampf(float(spins_left) / float(maxi(1, starting_spin_counter)), 0.0, 1.0)
-	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
-	if _bar_labels.has("life"):
-		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
 
 ## Issue #66: free spins are real extra spins (no neuron cost), so grants (+3 vial
 ## triple, Tea's fallback) visibly move the counter. Gains still in flight are held
