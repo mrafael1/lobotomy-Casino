@@ -89,6 +89,7 @@ const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
 # machine's post-reveal reactions AFTER the parity-pinned spin()/power results —
 # they never feed evaluate()/spin(), so the pinned vectors stay untouched.
 var flatlineResultCount := 0    # count of 3-flatline reel outcomes seen this run
+var flatlineWinBoostArmed := false  # issue #76: a flatline strike charges the next winning pair/triple
 var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumable"
 # Presentation-only (issue #34): the Potion pool pick rolled for the last spin, so the
 # machine can announce it. Never feeds evaluate()/spin() inputs — parity untouched.
@@ -228,11 +229,26 @@ func spin(compulsive := false) -> Variant:
 	if cocktailBoostSpins > 0:
 		for sym in result["reels"]:
 			cocktail_bonus += int(Symbols.RARITY.get(sym, 0))
+	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
+	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
+	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
+	# 0-score flatline wins never spend the charge — it waits for a real win.
+	var base_score := int(result["scoreEarned"]) + cocktail_bonus
+	var flatline_boost := 0
+	var flatline_boost_applied := false
+	if flatlineWinBoostArmed and base_score > 0 \
+			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
+		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
+		flatline_boost_applied = true
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0:
+	if cocktail_bonus > 0 or flatline_boost_applied:
 		final_result = result.duplicate(true)
-		final_result["scoreEarned"] = int(result["scoreEarned"]) + cocktail_bonus
-		final_result["cocktailApplied"] = true
+		final_result["scoreEarned"] = base_score + flatline_boost
+		if cocktail_bonus > 0:
+			final_result["cocktailApplied"] = true
+		if flatline_boost_applied:
+			final_result["flatlineBoostApplied"] = true
+			final_result["flatlineBoostBonus"] = flatline_boost
 
 	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
@@ -291,6 +307,9 @@ func spin(compulsive := false) -> Variant:
 	forceFlatlineSpins = maxi(0, forceFlatlineSpins - 1)
 	guaranteedTripleSpins = guaranteedTripleSpins if flatline_was_active else maxi(0, guaranteedTripleSpins - 1)
 	hideResultSpins = maxi(0, hideResultSpins - 1)
+	# Issue #76: the charge is spent only when a win actually consumed it above.
+	if flatline_boost_applied:
+		flatlineWinBoostArmed = false
 
 	_commit()
 	return final_result
@@ -366,6 +385,7 @@ func reset_run_state() -> void:
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
 	flatlineResultCount = 0
+	flatlineWinBoostArmed = false
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
 	oddsTokensRemaining = 0
@@ -433,6 +453,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
 	flatlineResultCount = 0
+	flatlineWinBoostArmed = false
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
 	# Odds upgrades are permanent: every run derives its overrides from the
@@ -467,9 +488,12 @@ func continue_run() -> void:
 # Additive effects the machine applies AFTER a spin/power result. They are NOT part
 # of the parity-pinned spin()/evaluate() path, so they never shift the vectors.
 
-## Records one 3-flatline reel outcome and returns the new running count.
+## Records one 3-flatline reel outcome and returns the new running count. Also charges
+## the next winning pair/triple (issue #76) — a fatal strike ends the run, so the charge
+## only matters on the non-fatal strikes that leave the player still spinning.
 func register_flatline_result() -> int:
 	flatlineResultCount += 1
+	flatlineWinBoostArmed = true
 	_commit()
 	return flatlineResultCount
 
