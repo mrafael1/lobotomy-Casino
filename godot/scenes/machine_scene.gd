@@ -178,6 +178,12 @@ const ITEM_ICONS := {
 	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
 }
 
+## Items whose downside only bites later (issue #76): the use popup shows just the
+## upside, and the negative is popped separately when it actually activates — more
+## dramatic and clearer than front-loading a warning for something not happening yet.
+## Energy Drink's COMPULSIVE lands when the machine seizes the spin (see the takeover).
+const DEFERRED_NEGATIVE_ITEMS := ["item_energy_drink"]
+
 @export_group("Sound")
 @export var sfx_enabled: bool = true
 @export_range(0.0, 1.0, 0.05) var sfx_volume: float = 0.8
@@ -1303,6 +1309,10 @@ func _play_compulsive_takeover() -> void:
 		_compulsive_queued = false
 		_hide_compulsive_overlay()
 		return
+	# Issue #76: COMPULSION is Energy Drink's deferred downside — pop it now, as the
+	# machine seizes the spin, so it reads as a dramatic takeover rather than a warning
+	# buried in the on-use popup several spins ago.
+	_show_deferred_negative("item_energy_drink")
 	if compulsive_fx_enabled:
 		_show_compulsive_overlay()
 		_play_compulsive_shake()
@@ -2477,22 +2487,34 @@ func _item_display_name(id: String) -> String:
 
 ## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
 ## HintLabel; the item name renders purple when the item is flagged corrupted.
-func _show_consumable_feedback(id: String) -> void:
+func _show_consumable_feedback(id: String) -> HintLabel:
+	# Deferred-negative items (issue #76) show only the upside now; their downside is
+	# popped by _show_deferred_negative when it actually activates.
+	return _spawn_hint(id, false, id in DEFERRED_NEGATIVE_ITEMS)
+
+## Pops just the negative line for a deferred-negative item, when its downside fires
+## (issue #76) — e.g. COMPULSIVE as the machine seizes the spin.
+func _show_deferred_negative(id: String) -> HintLabel:
+	return _spawn_hint(id, true, false)
+
+## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
+## just the upside. Otherwise both lines show (the classic on-use hint).
+func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLabel:
 	var hint: Dictionary = use_hints.get(id, {})
 	if hint.is_empty():
-		return
+		return null
 	if _hint_layer == null or not is_instance_valid(_hint_layer):
 		_build_hint_layer()
 	if _hint_layer == null:
-		return
+		return null
 	var hint_label := HintLabel.new()
 	hint_label.grow_time = hint_grow_time
 	hint_label.set_font(_font)
 	_hint_layer.add_child(hint_label)
-	hint_label.play(
-		String(hint["pos"]), String(hint["neg"]),
-		_item_display_name(id), HintLabel.item_is_corrupted(id)
-	)
+	var pos := "" if negative_only else String(hint["pos"])
+	var neg := "" if positive_only else String(hint["neg"])
+	hint_label.play(pos, neg, _item_display_name(id), HintLabel.item_is_corrupted(id))
+	return hint_label
 
 func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	var target_lucidity := int(RunStateStore.lucidityCoins)

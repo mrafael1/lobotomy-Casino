@@ -64,6 +64,7 @@ func _run() -> void:
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
 	_check_flatline_win_boost_76(run_store, failures)
+	_check_deferred_negative_76(machine, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1304,6 +1305,39 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 		failures.append("issue76: boost fired again without a fresh strike")
 
 	run_store.reset_run_state()
+
+# Issue #76: a deferred-negative item's use popup shows only the upside; the downside
+# pops separately when it activates. Energy Drink shows just "+ FREE" on use, and
+# "- COMPULSIVE" is popped later (by the takeover). Non-deferred items still show both.
+func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
+	# Energy Drink on use: upside only.
+	var use_hint: HintLabel = machine._show_consumable_feedback("item_energy_drink")
+	if use_hint == null:
+		failures.append("issue76: energy-drink use hint was not created")
+	else:
+		if not use_hint._pos_label.visible:
+			failures.append("issue76: energy-drink use popup hid its upside")
+		if use_hint._neg_label.visible:
+			failures.append("issue76: energy-drink use popup showed the deferred COMPULSIVE downside")
+		use_hint.queue_free()
+
+	# The downside, popped on activation: negative only.
+	var neg_hint: HintLabel = machine._show_deferred_negative("item_energy_drink")
+	if neg_hint == null:
+		failures.append("issue76: deferred COMPULSIVE hint was not created")
+	else:
+		if not neg_hint._neg_label.visible:
+			failures.append("issue76: deferred COMPULSIVE popup hid the downside")
+		if neg_hint._pos_label.visible:
+			failures.append("issue76: deferred COMPULSIVE popup re-showed the upside")
+		neg_hint.queue_free()
+
+	# A non-deferred item still shows both lines on use.
+	var both: HintLabel = machine._show_consumable_feedback("cons_tea")
+	if both != null:
+		if not (both._pos_label.visible and both._neg_label.visible):
+			failures.append("issue76: non-deferred item stopped showing both hint lines")
+		both.queue_free()
 
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the

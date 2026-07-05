@@ -42,9 +42,13 @@ func set_font(font: Font) -> void:
 			label.add_theme_font_override(&"font", _font)
 
 ## Animate the hint. `item_name` (optional) appears above the +/- lines and turns
-## purple when `corrupted`. Frees itself once the animation completes.
+## purple when `corrupted`. An empty `pos_text` or `neg_text` hides that line, so a
+## caller can show only the upside on use and pop the downside later when it actually
+## activates (issue #76). Frees itself once the animation completes.
 func play(pos_text: String, neg_text: String, item_name: String = "", corrupted: bool = false) -> void:
 	_ensure_labels()
+	_pos_label.visible = not pos_text.is_empty()
+	_neg_label.visible = not neg_text.is_empty()
 	_pos_label.text = "+ %s" % pos_text
 	_neg_label.text = "- %s" % neg_text
 	_pos_label.add_theme_color_override(&"font_color", positive_color)
