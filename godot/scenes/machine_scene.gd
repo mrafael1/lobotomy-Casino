@@ -166,23 +166,39 @@ const ITEM_ICONS := {
 @export_range(0.0, 5.0, 0.1) var hint_grow_time: float = 1.5
 ## Per-item +/- hint vocabulary shown when a stash item is used in-run. Mirrors
 ## the dealer scenes' pools (issue #31) so the same item reads the same way.
+# Precise, unambiguous copy (issue #76): each line says exactly what happens, and the
+# positive/negative are shown at DIFFERENT times — the upside on use, the downside when
+# it activates — so they never blur together. Flavor items (Water/Cocktail/Tea/Potion)
+# have no real downside, so their negative is empty and only the upside shows.
 @export var use_hints: Dictionary = {
-	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
-	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
-	"cons_focus": { "pos": "SHARP", "neg": "HIDDEN" },
-	"cons_potion": { "pos": "BRAINS", "neg": "NO POWER" },
-	"cons_tea": { "pos": "RESTORE", "neg": "RANDOM" },
-	"item_water": { "pos": "REFRESHING", "neg": "WEAK" },
-	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
-	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
-	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
+	"cons_cigarette": { "pos": "3X PAIRS", "neg": "1 REEL HIDDEN" },
+	"cons_white_powder": { "pos": "COPY A REEL", "neg": "RESULT HIDDEN" },
+	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "REELS BLURRED" },
+	"cons_potion": { "pos": "POWERS RESTORED", "neg": "" },
+	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
+	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
+	"item_pill": { "pos": "TRIPLE GUARANTEED", "neg": "CLOSE CALL" },
+	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
+	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
 ## upside, and the negative is popped separately when it actually activates — more
 ## dramatic and clearer than front-loading a warning for something not happening yet.
-## Energy Drink's COMPULSIVE lands when the machine seizes the spin (see the takeover).
-const DEFERRED_NEGATIVE_ITEMS := ["item_energy_drink"]
+const DEFERRED_NEGATIVE_ITEMS := [
+	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette", "item_pill",
+]
+
+## Of the deferred items, these pop their negative via an explicit hook when it fires
+## (Energy Drink at the takeover; Serum/White Powder/Tobacco on the affected spin). Red
+## Pill is intentionally absent: its forced flatline already surfaces "CLOSE CALL"
+## through the flatline-strike reaction, so a second popup would just double it.
+const HOOKED_DEFERRED_NEGATIVES := [
+	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette",
+]
+
+## item_id -> true while a hooked item's negative is armed but hasn't fired yet.
+var _pending_deferred_neg: Dictionary = {}
 
 @export_group("Sound")
 @export var sfx_enabled: bool = true
@@ -1126,6 +1142,9 @@ func _do_spin(compulsive := false) -> void:
 	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
 	# result renders behind the blur frost.
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
+	# Tobacco's hidden reel is likewise active this spin (pairBoostSpins decrements in
+	# spin()), so read it now to pop its deferred "1 REEL HIDDEN" when it first bites.
+	var tobacco_this_spin := RunStateStore.pairBoostSpins > 0
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
 	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
@@ -1146,6 +1165,13 @@ func _do_spin(compulsive := false) -> void:
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
 	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
+	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
+	if hide_this_spin:
+		_pop_deferred_negative("cons_white_powder")
+	if blur_this_spin:
+		_pop_deferred_negative("cons_focus")
+	if tobacco_this_spin:
+		_pop_deferred_negative("cons_cigarette")
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
@@ -1309,10 +1335,10 @@ func _play_compulsive_takeover() -> void:
 		_compulsive_queued = false
 		_hide_compulsive_overlay()
 		return
-	# Issue #76: COMPULSION is Energy Drink's deferred downside — pop it now, as the
+	# Issue #76: FORCED SPIN is Energy Drink's deferred downside — pop it now, as the
 	# machine seizes the spin, so it reads as a dramatic takeover rather than a warning
 	# buried in the on-use popup several spins ago.
-	_show_deferred_negative("item_energy_drink")
+	_pop_deferred_negative("item_energy_drink")
 	if compulsive_fx_enabled:
 		_show_compulsive_overlay()
 		_play_compulsive_shake()
@@ -2488,12 +2514,22 @@ func _item_display_name(id: String) -> String:
 ## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
 ## HintLabel; the item name renders purple when the item is flagged corrupted.
 func _show_consumable_feedback(id: String) -> HintLabel:
-	# Deferred-negative items (issue #76) show only the upside now; their downside is
-	# popped by _show_deferred_negative when it actually activates.
+	# Deferred-negative items (issue #76) show only the upside now; a hooked item also
+	# arms its downside so the activation hook can pop it later.
+	if id in HOOKED_DEFERRED_NEGATIVES:
+		_pending_deferred_neg[id] = true
 	return _spawn_hint(id, false, id in DEFERRED_NEGATIVE_ITEMS)
 
-## Pops just the negative line for a deferred-negative item, when its downside fires
-## (issue #76) — e.g. COMPULSIVE as the machine seizes the spin.
+## Pops a hooked item's armed negative when its downside actually fires (issue #76) —
+## e.g. FORCED SPIN as the machine seizes the spin, RESULT HIDDEN on the hidden spin.
+## No-op if it isn't armed, so an activation condition can't double-fire the popup.
+func _pop_deferred_negative(id: String) -> void:
+	if not _pending_deferred_neg.get(id, false):
+		return
+	_pending_deferred_neg.erase(id)
+	_show_deferred_negative(id)
+
+## Pops just the negative line for a deferred-negative item (issue #76).
 func _show_deferred_negative(id: String) -> HintLabel:
 	return _spawn_hint(id, true, false)
 
@@ -2692,6 +2728,9 @@ func _begin_white_powder() -> void:
 		return
 	if not RunStateStore.use_consumable("cons_white_powder"):
 		return
+	# Issue #76: show the upside now (and arm RESULT HIDDEN for the next spin); the copy
+	# picker arms right after, so the player sees what the item does as they pick.
+	_show_consumable_feedback("cons_white_powder")
 	_copy_source = -1
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
