@@ -67,6 +67,7 @@ func _run() -> void:
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
 	_check_spins_bar_lever_80(machine, run_store, failures)
+	await _check_spins_counter_accuracy_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
 	machine.queue_free()
 
@@ -1365,6 +1366,56 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue80: granted free spin did not pop into SPINS LEFT on release")
 
 	machine._hud_delta_hold = false
+	machine._pending_spin_gain = 0
+	machine._held_spin_grant = 0
+	run_store.reset_run_state()
+
+# Issue #80: SPINS LEFT must match the real spin economy (ceil(neurons / decay), the
+# same budget spin() uses) and respect the hard run-length cap. The old rescale to a
+# fixed 35-spin budget drifted at the live 100-neuron economy — a +3 vial restore read
+# +4 and a spin dropped the counter by 2 — and ignored the cap, so it could read 11
+# the spin before a cap flatline.
+func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.startingNeurons = 100 # the real campaign value; 35/100 != 1/3 exposed the drift
+	run_store.neurons = 34          # ceil(34 / 3) = 12 spins
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = 0
+	machine._pending_spin_gain = 0
+	machine._held_spin_grant = 0
+	machine._hud_delta_hold = false
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+
+	var label := machine._bar_labels.get("life") as Label
+	if label == null:
+		failures.append("issue80: spins-left label missing")
+		run_store.reset_run_state()
+		return
+	var before := String(label.text).get_slice(":", 1).to_int()
+	if before != 12:
+		failures.append("issue80: SPINS LEFT should read ceil(neurons/decay)=12, got %d" % before)
+
+	# A +3 vial restore must move the counter by exactly +3 (read +4 under the rescale).
+	machine._apply_symbol_triple("vial", 0, false)
+	await create_timer(1.3).timeout # let the +3 fly-in land
+	var after := String(label.text).get_slice(":", 1).to_int()
+	if after != before + 3:
+		failures.append("issue80: +3 vial restore moved SPINS LEFT by %d, expected 3" % (after - before))
+
+	# Cap awareness: plenty of neurons, but the hard spin cap is one spin away.
+	run_store.neurons = 100 # affords ~34 spins on its own
+	run_store.freeSpinsRemaining = 0
+	run_store.spinCount = int(machine.run_spin_length) - 1
+	machine._pending_spin_gain = 0
+	machine._held_spin_grant = 0
+	machine._update_hud()
+	var capped := String(label.text).get_slice(":", 1).to_int()
+	if capped != 1:
+		failures.append("issue80: SPINS LEFT ignored the spin cap (read %d, expected 1)" % capped)
+
 	machine._pending_spin_gain = 0
 	machine._held_spin_grant = 0
 	run_store.reset_run_state()

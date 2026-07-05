@@ -59,7 +59,6 @@ const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
 const LOCK_POWER_FRAME_COUNT := 3
 const JACKPOT_FRAME_COUNT := 2
-const DISPLAY_SPIN_BUDGET := 35
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
@@ -157,7 +156,6 @@ const ITEM_ICONS := {
 }
 
 @export_group("Run Balance")
-@export var starting_spin_counter: int = DISPLAY_SPIN_BUDGET
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
 @export var default_run_power_ids: Array[String] = ["reroll"]
@@ -1441,10 +1439,8 @@ func _refresh_tv_indicators() -> void:
 	# so it always updates — it is NOT held with the reward deltas (issue #80). Any
 	# free spin granted by the in-progress spin stays hidden via _pending_spin_gain
 	# (issue #66 / #80) until the score popup releases it.
-	var start_n := maxi(1, RunStateStore.startingNeurons)
-	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
-	var spins_left := _display_spins_left(life_ratio)
-	var spins_ratio := clampf(float(spins_left) / float(maxi(1, starting_spin_counter)), 0.0, 1.0)
+	var spins_left := _display_spins_left()
+	var spins_ratio := clampf(float(spins_left) / float(_max_spins_display()), 0.0, 1.0)
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("life"):
 		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
@@ -1461,23 +1457,38 @@ func _refresh_tv_indicators() -> void:
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 
-## Issue #66: free spins are real extra spins (no neuron cost), so grants (+3 vial
-## triple, Tea's fallback) visibly move the counter. Gains still in flight are held
-## back so the number ticks up exactly when the "+N" popup lands.
-func _display_spins_left(life_ratio: float) -> int:
-	return maxi(0, _display_remaining_spins(life_ratio)
-		+ int(RunStateStore.freeSpinsRemaining) - _pending_spin_gain)
+## The real number of spins the player can still take: what the neuron pool affords
+## (ceil(neurons / decay) — the SAME budget spin() uses) plus banked free spins, but
+## never more than the hard run-length cap still allows. Free-spin grants in flight
+## are held back by _pending_spin_gain so the counter ticks up when the "+N" popup
+## lands (issue #66). The earlier rescale to a fixed 35-spin display budget drifted
+## from the economy (a +3 restore read +4, a single spin dropped the counter by 2)
+## and ignored the spin cap, so it could read 11 the spin before the cap flatline (#80).
+func _spin_decay() -> int:
+	return maxi(1, Economy.compute_neuron_decay(RunStateStore.ownedUpgrades))
 
-func _current_display_spins_left() -> int:
-	var start_n := maxi(1, RunStateStore.startingNeurons)
-	var life_ratio := clampf(float(RunStateStore.neurons) / float(start_n), 0.0, 1.0)
-	return _display_spins_left(life_ratio)
-
-func _display_remaining_spins(life_ratio: float) -> int:
+## Spins the current neuron pool affords, matching run_state_store.spin()'s budget.
+func _neuron_spins_left() -> int:
 	if RunStateStore.neurons <= 0:
 		return 0
-	var spin_budget := maxi(1, starting_spin_counter)
-	return clampi(int(ceili(life_ratio * float(spin_budget))), 1, spin_budget)
+	return maxi(1, int(ceili(float(RunStateStore.neurons) / float(_spin_decay()))))
+
+## Spins left before the hard run-length cap ends the run (every spin, free or not,
+## increments spinCount, so the cap bounds the total).
+func _cap_spins_left() -> int:
+	return maxi(0, run_spin_length - int(RunStateStore.spinCount))
+
+## Full-bar reference: the smaller of the neuron budget at run start and the cap.
+func _max_spins_display() -> int:
+	var neuron_max := int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay())))
+	return maxi(1, mini(neuron_max, run_spin_length))
+
+func _display_spins_left() -> int:
+	var affordable := _neuron_spins_left() + int(RunStateStore.freeSpinsRemaining)
+	return maxi(0, mini(affordable, _cap_spins_left()) - _pending_spin_gain)
+
+func _current_display_spins_left() -> int:
+	return _display_spins_left()
 
 func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 	if spr == null:
