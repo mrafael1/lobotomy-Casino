@@ -1370,17 +1370,16 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._held_spin_grant = 0
 	run_store.reset_run_state()
 
-# Issue #80: SPINS LEFT must match the real spin economy (ceil(neurons / decay), the
-# same budget spin() uses) and respect the hard run-length cap. The old rescale to a
-# fixed 35-spin budget drifted at the live 100-neuron economy — a +3 vial restore read
-# +4 and a spin dropped the counter by 2 — and ignored the cap, so it could read 11
-# the spin before a cap flatline.
+# Issue #85: with a single 1:1 spin currency SPINS LEFT is just the neuron pool
+# (plus banked free spins), capped by the hard run-length cap. The #80 drift
+# (a +3 vial restore reading +4, a spin dropping the counter by 2) can't recur
+# because neurons and spins no longer disagree.
 func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.runPhase = "running"
-	run_store.startingNeurons = 100 # the real campaign value; 35/100 != 1/3 exposed the drift
-	run_store.neurons = 34          # ceil(34 / 3) = 12 spins
+	run_store.startingNeurons = EconomyConst.STARTING_NEURONS
+	run_store.neurons = 20          # 1 neuron = 1 spin, well under the cap
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 0
 	machine._pending_spin_gain = 0
@@ -1395,8 +1394,8 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 		run_store.reset_run_state()
 		return
 	var before := String(label.text).get_slice(":", 1).to_int()
-	if before != 12:
-		failures.append("issue80: SPINS LEFT should read ceil(neurons/decay)=12, got %d" % before)
+	if before != 20:
+		failures.append("issue85: SPINS LEFT should equal neurons=20, got %d" % before)
 
 	# A +3 vial restore must move the counter by exactly +3 (read +4 under the rescale).
 	machine._apply_symbol_triple("vial", 0, false)
@@ -1406,7 +1405,7 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 		failures.append("issue80: +3 vial restore moved SPINS LEFT by %d, expected 3" % (after - before))
 
 	# Cap awareness: plenty of neurons, but the hard spin cap is one spin away.
-	run_store.neurons = 100 # affords ~34 spins on its own
+	run_store.neurons = 100 # far more than the cap allows on its own
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = int(machine.run_spin_length) - 1
 	machine._pending_spin_gain = 0

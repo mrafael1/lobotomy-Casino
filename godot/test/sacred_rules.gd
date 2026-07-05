@@ -9,8 +9,8 @@ const BRAIN := 0.0   # FixedRNG -> always 'brain' (first weighted symbol)
 
 static func _base_input(overrides: Dictionary = {}) -> Dictionary:
 	var input := {
-		"neurons": 100,
-		"neuronDecayAmount": 3,
+		"neurons": EconomyConst.STARTING_NEURONS,
+		"neuronDecayAmount": EconomyConst.NEURON_DECAY_PER_SPIN,
 		"freeSpinsRemaining": 0,
 		"maxFreeSpins": EconomyConst.BASE_MAX_FREE_SPINS,
 		"lucidityMultiplier": 1.0,
@@ -35,15 +35,17 @@ static func _check(out: Array, cond: bool, label: String) -> void:
 static func run_all() -> Array:
 	var out: Array = []
 
-	# 1) Neurons never increase on a regular spin (decay applied).
+	# 1) Neurons never increase on a regular spin (decay applied). 1 neuron = 1 spin
+	# (issue #85), so a regular spin costs exactly NEURON_DECAY_PER_SPIN.
+	var expected_after := EconomyConst.STARTING_NEURONS - EconomyConst.NEURON_DECAY_PER_SPIN
 	var r1 := Evaluate.evaluate(_base_input({ "rng": FixedRNG.new(BRAIN) }))
-	_check(out, int(r1["neuronsAfter"]) == 97, "regular spin decays neurons (100-3=97)")
+	_check(out, int(r1["neuronsAfter"]) == expected_after, "regular spin decays neurons by one spin")
 
 	# 2) Free spins don't consume neurons.
 	var r2 := Evaluate.evaluate(_base_input({
 		"isFreeSpin": true, "freeSpinsRemaining": 1, "rng": FixedRNG.new(BRAIN),
 	}))
-	_check(out, int(r2["neuronsAfter"]) == 100, "free spin preserves neurons")
+	_check(out, int(r2["neuronsAfter"]) == EconomyConst.STARTING_NEURONS, "free spin preserves neurons")
 
 	# 3) Free spins can't chain — a jackpot on a free spin grants no free spin.
 	_check(out, int(r2["freeSpinsGranted"]) == 0, "free-spin jackpot grants no free spin")
