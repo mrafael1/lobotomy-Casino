@@ -30,13 +30,13 @@ const CORRUPTED_UPGRADES := [
 
 const POSITIVE_UPGRADES := [
 	{ "id": "pos_hydration_1", "name": "Hydration", "category": "positive", "cost": 80,
-	  "effect": { "type": "startingNeuronBonus", "amount": 10 }, "tierGroup": "hydration", "tierLabel": "I" },
+	  "effect": { "type": "startingNeuronBonus", "amount": 3 }, "tierGroup": "hydration", "tierLabel": "I" },
 	{ "id": "pos_hydration_2", "name": "Hydration", "category": "positive", "cost": 140,
 	  "requiresId": "pos_hydration_1",
-	  "effect": { "type": "startingNeuronBonus", "amount": 15 }, "tierGroup": "hydration", "tierLabel": "II" },
+	  "effect": { "type": "startingNeuronBonus", "amount": 5 }, "tierGroup": "hydration", "tierLabel": "II" },
 	{ "id": "pos_hydration_3", "name": "Hydration", "category": "positive", "cost": 200,
 	  "requiresId": "pos_hydration_2",
-	  "effect": { "type": "startingNeuronBonus", "amount": 15 }, "tierGroup": "hydration", "tierLabel": "III" },
+	  "effect": { "type": "startingNeuronBonus", "amount": 5 }, "tierGroup": "hydration", "tierLabel": "III" },
 	{ "id": "pos_passive_lucidity", "name": "Passive Cognition", "category": "positive", "cost": 200,
 	  "effect": { "type": "passiveLucidityPerSpin", "amount": 5 } },
 	{ "id": "pos_enlightenment", "name": "Hallucination", "category": "positive", "cost": 50,
