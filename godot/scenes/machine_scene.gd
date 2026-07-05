@@ -185,11 +185,11 @@ const ITEM_ICONS := {
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
 # The GDD "flatline result" is a REEL outcome (3 flatline symbols); the pinned
 # "flatline" ENDING (neurons <= 0) keeps its serialized name for parity — only this
-# new reel event is called flatline_result. Reaching fatal_flatline_count flatline
-# results, OR the run_spin_length hard cap, ends the run (added alongside neurons<=0).
+# new reel event is called flatline_result. A run ends on neurons <= 0 or on
+# fatal_flatline_count flatline results; there is no spin-count cap — you never die
+# just for spinning a lot, so vials genuinely extend the run (issue #75).
 @export_group("Machine Reactions")
 @export var fatal_flatline_count: int = 3
-@export var run_spin_length: int = 35          # NEW hard run-length cap (added, not a replacement)
 @export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
 @export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
 @export_group("Triple Overlays", "triple_")
@@ -1090,8 +1090,6 @@ func _resolve_interrupted_spin() -> void:
 		return
 	if _check_ending():
 		return
-	if _check_spin_cap_ending():
-		return
 	if dealer_pending:
 		_show_dealer_incoming()
 	elif RunStateStore.compulsiveSpinSkips > 0:
@@ -1280,10 +1278,6 @@ func _run_post_reveal_sequence() -> void:
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
 		return
-	# New hard run-length cap ends the run after the wealth/neuron checks.
-	if _check_spin_cap_ending():
-		_post_spin_sequence_active = false
-		return
 	if dealer_pending:
 		_show_dealer_incoming()
 	else:
@@ -1458,12 +1452,12 @@ func _refresh_tv_indicators() -> void:
 		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
 
 ## The real number of spins the player can still take: what the neuron pool affords
-## (ceil(neurons / decay) — the SAME budget spin() uses) plus banked free spins, but
-## never more than the hard run-length cap still allows. Free-spin grants in flight
-## are held back by _pending_spin_gain so the counter ticks up when the "+N" popup
-## lands (issue #66). The earlier rescale to a fixed 35-spin display budget drifted
-## from the economy (a +3 restore read +4, a single spin dropped the counter by 2)
-## and ignored the spin cap, so it could read 11 the spin before the cap flatline (#80).
+## (ceil(neurons / decay) — the SAME budget spin() uses) plus banked free spins.
+## Free-spin grants in flight are held back by _pending_spin_gain so the counter
+## ticks up when the "+N" popup lands (issue #66). The earlier rescale to a fixed
+## 35-spin display budget drifted from the economy (a +3 restore read +4, a single
+## spin dropped the counter by 2); the counter now reads straight off the neuron
+## budget with no spin cap, so vials genuinely raise it (issue #75).
 func _spin_decay() -> int:
 	return maxi(1, Economy.compute_neuron_decay(RunStateStore.ownedUpgrades))
 
@@ -1473,19 +1467,13 @@ func _neuron_spins_left() -> int:
 		return 0
 	return maxi(1, int(ceili(float(RunStateStore.neurons) / float(_spin_decay()))))
 
-## Spins left before the hard run-length cap ends the run (every spin, free or not,
-## increments spinCount, so the cap bounds the total).
-func _cap_spins_left() -> int:
-	return maxi(0, run_spin_length - int(RunStateStore.spinCount))
-
-## Full-bar reference: the smaller of the neuron budget at run start and the cap.
+## Full-bar reference: the neuron budget the run started with.
 func _max_spins_display() -> int:
-	var neuron_max := int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay())))
-	return maxi(1, mini(neuron_max, run_spin_length))
+	return maxi(1, int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay()))))
 
 func _display_spins_left() -> int:
 	var affordable := _neuron_spins_left() + int(RunStateStore.freeSpinsRemaining)
-	return maxi(0, mini(affordable, _cap_spins_left()) - _pending_spin_gain)
+	return maxi(0, affordable - _pending_spin_gain)
 
 func _current_display_spins_left() -> int:
 	return _display_spins_left()
@@ -3139,19 +3127,6 @@ func _check_flatline_instant_death() -> bool:
 	_show_ending("flatline", run)
 	return true
 
-## New hard run-length cap (issue #35): reaching run_spin_length ends the run like a
-## neuron flatline (banks lucidity), added alongside the neurons<=0 ending.
-func _check_spin_cap_ending() -> bool:
-	if RunStateStore.spinCount < run_spin_length:
-		return false
-	var run := {
-		"neurons": RunStateStore.neurons,
-		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
-	}
-	_show_ending("flatline", run)
-	return true
-
 func _show_flatline_result_reaction(count: int) -> void:
 	var host := Control.new()
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3456,10 +3431,10 @@ func _end_run_lucidity_kept_fraction() -> float:
 		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
 
 ## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
-## neurons (or free spins) remain and the hard spin cap isn't reached (issue #62).
+## neurons (or banked free spins) remain (issue #62). There is no spin cap — the run
+## lasts as long as the neuron economy allows (issue #75).
 func _can_resume_after_wealth() -> bool:
-	return (int(RunStateStore.neurons) >= 1 or int(RunStateStore.freeSpinsRemaining) > 0) \
-		and int(RunStateStore.spinCount) < run_spin_length
+	return int(RunStateStore.neurons) >= 1 or int(RunStateStore.freeSpinsRemaining) > 0
 
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
