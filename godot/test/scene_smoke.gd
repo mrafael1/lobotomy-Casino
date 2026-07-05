@@ -64,6 +64,7 @@ func _run() -> void:
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
 	_check_flatline_win_boost_76(run_store, failures)
+	_check_deferred_negative_76(machine, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -361,10 +362,10 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
-		"cons_tea": "RESTORE",
-		"item_pill": "WIN GUARANTEED",
-		"item_cocktail": "EASY",
-		"item_energy_drink": "FREE",
+		"cons_tea": "RESTORE POWER",
+		"item_pill": "TRIPLE GUARANTEED",
+		"item_cocktail": "RARITY BONUS",
+		"item_energy_drink": "2 FREE SPINS",
 	}
 	for id in expected:
 		var hint: Dictionary = machine.use_hints.get(String(id), {})
@@ -398,8 +399,8 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		spawned = hint_layer.get_child(hint_layer.get_child_count() - 1)
 	if spawned == null or not (spawned is HintLabel):
 		failures.append("machine consumable feedback: Tea did not spawn a hint")
-	elif (spawned as HintLabel)._pos_label == null or (spawned as HintLabel)._pos_label.text != "+ RESTORE":
-		failures.append("machine consumable feedback: Tea hint missing '+ RESTORE' line")
+	elif (spawned as HintLabel)._pos_label == null or (spawned as HintLabel)._pos_label.text != "+ RESTORE POWER":
+		failures.append("machine consumable feedback: Tea hint missing '+ RESTORE POWER' line")
 	if not machine._power_coin_active and run_store.pendingPowerRestores.is_empty():
 		failures.append("machine consumable feedback: Tea did not start/queue power coin restore")
 	await create_timer(1.0).timeout
@@ -1304,6 +1305,54 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 		failures.append("issue76: boost fired again without a fresh strike")
 
 	run_store.reset_run_state()
+
+# Issue #76: deferred-negative items show only the precise upside on use; the downside
+# pops separately when it activates. Flavor items (no real downside) show upside only.
+func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
+	machine._pending_deferred_neg.clear()
+
+	# Energy Drink on use: upside only, and the copy is precise.
+	var use_hint: HintLabel = machine._show_consumable_feedback("item_energy_drink")
+	if use_hint == null:
+		failures.append("issue76: energy-drink use hint was not created")
+	else:
+		if not use_hint._pos_label.visible or use_hint._neg_label.visible:
+			failures.append("issue76: energy-drink use popup was not upside-only")
+		if use_hint._pos_label.text != "+ 2 FREE SPINS":
+			failures.append("issue76: energy-drink upside copy wrong: '%s'" % use_hint._pos_label.text)
+		use_hint.queue_free()
+	# Using a hooked item arms its deferred negative.
+	if not machine._pending_deferred_neg.get("item_energy_drink", false):
+		failures.append("issue76: energy-drink use did not arm its deferred negative")
+
+	# Popping on activation: downside only, precise, and it disarms (no double-fire).
+	var neg_hint: HintLabel = machine._show_deferred_negative("item_energy_drink")
+	if neg_hint != null:
+		if not neg_hint._neg_label.visible or neg_hint._pos_label.visible:
+			failures.append("issue76: deferred popup was not downside-only")
+		if neg_hint._neg_label.text != "- FORCED SPIN":
+			failures.append("issue76: deferred downside copy wrong: '%s'" % neg_hint._neg_label.text)
+		neg_hint.queue_free()
+	machine._pop_deferred_negative("item_energy_drink") # arms cleared -> no-op
+	if machine._pending_deferred_neg.get("item_energy_drink", false):
+		failures.append("issue76: deferred negative did not disarm after popping")
+
+	# A newly-deferred item (Serum) also shows upside-only on use.
+	var serum: HintLabel = machine._show_consumable_feedback("cons_focus")
+	if serum != null:
+		if not serum._pos_label.visible or serum._neg_label.visible:
+			failures.append("issue76: serum use popup was not upside-only")
+		serum.queue_free()
+
+	# A flavor item (Water) shows upside only — no fabricated downside line.
+	var flavor: HintLabel = machine._show_consumable_feedback("item_water")
+	if flavor != null:
+		if not flavor._pos_label.visible or flavor._neg_label.visible:
+			failures.append("issue76: flavor item showed a negative line")
+		if flavor._pos_label.text != "+ +40 LUCIDITY":
+			failures.append("issue76: water upside copy wrong: '%s'" % flavor._pos_label.text)
+		flavor.queue_free()
+	machine._pending_deferred_neg.clear()
 
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the
