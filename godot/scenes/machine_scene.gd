@@ -2022,7 +2022,48 @@ func _finish_power_coin_flow(power_id: String, coin: Node, target: Vector2) -> v
 		coin.queue_free()
 	RunStateStore.commit_power_restore(power_id)
 	_spawn_power_pulse(target)
+	_show_power_restored_label(power_id, target)
 	_power_coin_active = false
+
+## Names the restored power and ties it to the power coin (issue #76). The coin already
+## flew from the lucidity tray (why: a power coin was earned at the threshold) onto this
+## power's button (which: position) — this callout says both in words, so the restore
+## reads as an earned event, not a random button lighting back up. Returns the name label.
+func _show_power_restored_label(power_id: String, center: Vector2) -> Label:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.z_index = 40
+	add_child(host)
+	var gold := Color(1.0, 0.88, 0.22)
+	# "POWER COIN" (the why) sits above the bright "<POWER> BACK" (the which).
+	var why := _stacked_callout_label(host, "POWER COIN", center, -30.0, 6, Color(gold.r, gold.g, gold.b, 0.85))
+	var name_label := _stacked_callout_label(host, "%s BACK" % power_id.to_upper(), center, -21.0, 8, gold)
+	name_label.pivot_offset = Vector2(30.0, 5.0)
+	name_label.scale = Vector2(0.6, 0.6)
+	var tw := create_tween()
+	tw.tween_property(name_label, "scale", Vector2.ONE, reaction_flash_time * 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(reaction_flash_time * 0.7)
+	tw.tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.35)
+	tw.tween_callback(host.queue_free)
+	return name_label
+
+## A small centre-aligned label placed `dy` above a button centre (issue #76).
+func _stacked_callout_label(host: Control, text: String, center: Vector2, dy: float, size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.size = Vector2(60.0, 9.0)
+	label.position = Vector2(center.x - 30.0, center.y + dy)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", size)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	host.add_child(label)
+	return label
 
 func _spawn_power_pulse(center: Vector2) -> void:
 	if _coin_layer == null:
