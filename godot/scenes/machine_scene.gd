@@ -2004,6 +2004,13 @@ func _refresh_multiplier_controls() -> void:
 	for i in _multiplier_buttons.size():
 		var m := i + 1
 		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
+	# Compulsion (issue #76): while the machine owns the spins it forces x1, ignoring the
+	# player's chosen multiplier. Show the locked-x1 frame for the whole compulsive phase
+	# (even through the HUD hold) so the override reads immediately — the machine, not the
+	# player, is driving. The buttons are already disabled since _can_act() is false here.
+	if RunStateStore.compulsiveSpinSkips > 0:
+		_set_sheet_frame(_multiplier_sprite, 4)
+		return
 	if _hud_delta_hold:
 		return # badge keeps its pre-commit frame until the score popup lands
 	var affordable := _highest_affordable_multiplier()
