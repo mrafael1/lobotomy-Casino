@@ -66,6 +66,7 @@ func _run() -> void:
 	_check_flatline_win_boost_76(run_store, failures)
 	_check_deferred_negative_76(machine, failures)
 	_check_dealer_pacing_76(run_store, failures)
+	_check_compulsion_multiplier_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1391,6 +1392,38 @@ func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	run_store.spinCount = 10 + 1000
 	if not is_equal_approx(run_store._dealer_effective_proc(), run_store.dealer_proc_max):
 		failures.append("issue76: long-drought proc should clamp at dealer_proc_max")
+
+	run_store.reset_run_state()
+
+# Issue #76: while Compulsion owns the spins the multiplier badge must read x1 (the
+# locked-x1 frame 4), overriding the player's chosen bet, so the takeover is obvious.
+# Once the compulsive spins are spent, the badge returns to the player's choice.
+func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 100
+	run_store.betMultiplier = 3
+	machine._hud_delta_hold = false
+	machine._set_sequence_lock(false)
+
+	# Baseline: no compulsion, x3 affordable → the badge shows the player's x3 (frame 2).
+	run_store.compulsiveSpinSkips = 0
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame == 4:
+		failures.append("issue76: multiplier showed forced-x1 without compulsion")
+
+	# Compulsion takes control → forced-x1 frame regardless of the chosen x3.
+	run_store.compulsiveSpinSkips = 2
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 4:
+		failures.append("issue76: multiplier did not show forced x1 during compulsion (frame %d)" % machine._multiplier_sprite.frame)
+
+	# Spins spent → back to the player's multiplier.
+	run_store.compulsiveSpinSkips = 0
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame == 4:
+		failures.append("issue76: multiplier stuck on forced-x1 after compulsion ended")
 
 	run_store.reset_run_state()
 
