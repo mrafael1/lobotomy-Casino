@@ -28,6 +28,12 @@ const SMART_SAVE_LUCIDITY_KEPT := 0.20
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
 const CAMPAIGN_STARTING_NEURONS := 10
 
+# Issue #76: a 3x-flatline strike charges the NEXT winning pair/triple to score at
+# this multiplier (its points AND lucidity coins both scale, since the bonus rides
+# on top of the pinned score before the coin plan). Re-armed by each strike, spent
+# on the next scoring win; misses and 0-score flatline wins never spend it.
+const FLATLINE_WIN_BOOST_MULT := 2
+
 # The Nth coin (50, 100, …) is a "power coin". Pass the total AFTER counting it.
 static func is_power_coin(total_after_coin: int) -> bool:
 	return total_after_coin > 0 and total_after_coin % LUCIDITY_COINS_PER_RESTORE == 0

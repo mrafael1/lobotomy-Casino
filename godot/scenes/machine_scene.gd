@@ -1641,6 +1641,11 @@ func _emit_score_burst(source_reel) -> float:
 			_play_sfx(&"triple_win")
 		elif win_type == "pair":
 			_play_sfx(&"pair_win")
+		# Issue #76: a flatline strike charged this win — call it out and tint it red so
+		# the doubled score reads as the flatline payoff, not a normal pair/triple.
+		if is_new_spin and bool(lr.get("flatlineBoostApplied", false)):
+			label = "FLATLINE x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT
+			color = flatline_result_color
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
@@ -3143,6 +3148,13 @@ func _show_flatline_result_reaction(count: int) -> void:
 	var label := _reaction_label(host, "%s  %d/%d" % [text, count, fatal_flatline_count],
 		Vector2(0.0, cy + 8.0), 10, flatline_result_color)
 	label.pivot_offset = Vector2(SRC_W * 0.5, 6.0)
+	# Issue #76: a non-fatal strike charges the next winning pair/triple — say so, since
+	# the payoff lands on a later spin and would otherwise feel disconnected. (A fatal
+	# strike ends the run, so there is no next win to charge.)
+	if count < fatal_flatline_count:
+		var charge := _reaction_label(host, "NEXT WIN x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT,
+			Vector2(0.0, cy + 20.0), 8, flatline_result_color)
+		charge.pivot_offset = Vector2(SRC_W * 0.5, 5.0)
 	var tw := create_tween()
 	tw.tween_property(line, "size:x", float(SRC_W), reaction_flash_time * 0.5)
 	tw.tween_interval(reaction_flash_time * 0.3)

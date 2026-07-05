@@ -63,6 +63,7 @@ func _run() -> void:
 	_check_wealth_screen(machine, run_store, failures)
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
+	_check_flatline_win_boost_76(run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1243,6 +1244,66 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+# Issue #76: a 3x-flatline strike charges the NEXT winning pair/triple. The charge is
+# armed by register_flatline_result, survives non-scoring spins, doubles the next real
+# win (points AND coins), then is spent. Deterministic wins/misses come from fully
+# locked reels replaying a stubbed previousReels, so no RNG flakiness.
+func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 100
+
+	if run_store.flatlineWinBoostArmed:
+		failures.append("issue76: next-win boost armed at run start")
+
+	# A flatline strike arms the charge.
+	run_store.register_flatline_result()
+	if not run_store.flatlineWinBoostArmed:
+		failures.append("issue76: flatline strike did not arm the next-win boost")
+
+	# A miss must NOT spend the charge (three different symbols score nothing).
+	run_store.lastResult = { "reels": ["eye", "vial", "pill"] }
+	run_store.lockedReels = [true, true, true]
+	var miss: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if miss != null and String(miss["winType"]) != "miss":
+		failures.append("issue76: locked miss setup did not produce a miss")
+	if bool(miss.get("flatlineBoostApplied", false)):
+		failures.append("issue76: boost fired on a miss")
+	if not run_store.flatlineWinBoostArmed:
+		failures.append("issue76: a miss wrongly spent the charge")
+
+	# The next real win (a locked eye pair) doubles and consumes the charge.
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	var win: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if win == null:
+		failures.append("issue76: charged win spin did not resolve")
+	else:
+		if String(win["winType"]) != "pair":
+			failures.append("issue76: locked pair setup did not produce a pair")
+		if not bool(win.get("flatlineBoostApplied", false)):
+			failures.append("issue76: charged win did not apply the boost")
+		var bonus := int(win.get("flatlineBoostBonus", 0))
+		var total := int(win["scoreEarned"])
+		var base := total - bonus
+		if base <= 0 or total != base * EconomyConst.FLATLINE_WIN_BOOST_MULT:
+			failures.append("issue76: boosted score %d != base %d x %d" % [total, base, EconomyConst.FLATLINE_WIN_BOOST_MULT])
+		if run_store.flatlineWinBoostArmed:
+			failures.append("issue76: charge not spent after a winning spin")
+
+	# A later win with no charge scores normally (no lingering boost).
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	var plain: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if plain != null and bool(plain.get("flatlineBoostApplied", false)):
+		failures.append("issue76: boost fired again without a fresh strike")
+
+	run_store.reset_run_state()
 
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the
