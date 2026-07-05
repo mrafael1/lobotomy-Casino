@@ -1111,14 +1111,13 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
 
-	# Goal reached on the very spin that exhausts neurons AND hits the spin cap:
-	# the wealth ending wins over the no-spins dead-end.
+	# Goal reached on the very spin that exhausts neurons: the wealth ending wins
+	# over the no-spins dead-end.
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.scoreEarned = 2000
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 0
-	run_store.spinCount = int(machine.run_spin_length)
 	if not machine._check_ending():
 		failures.append("issue62: wealth goal with 0 spins left did not end the run")
 	elif str(run_store.lastEnding) != "wealth":
@@ -1170,24 +1169,14 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 		machine._overlay = null
 	machine._stop_flatline_countdown()
 
-	# With neurons remaining, a wealth-continued run keeps playing (no ending).
+	# With neurons remaining, a wealth-continued run keeps playing (no ending) — a
+	# high spin count no longer ends it, only the neuron economy does (issue #75).
 	run_store.runPhase = "running"
 	run_store.lastEnding = null
 	run_store.neurons = 5
+	run_store.spinCount = 500
 	if machine._check_ending():
 		failures.append("issue62: wealth-continued run with neurons left ended early")
-
-	# Post-continue with neurons left but the hard spin cap reached, the cap
-	# ending (checked after _check_ending) still closes the run.
-	run_store.spinCount = int(machine.run_spin_length)
-	if not machine._check_spin_cap_ending():
-		failures.append("issue62: wealth-continued run at the spin cap did not end")
-	elif str(run_store.lastEnding) != "flatline":
-		failures.append("issue62: spin-cap post-continue ended as %s, expected flatline" % str(run_store.lastEnding))
-	if machine._overlay != null:
-		machine._overlay.queue_free()
-		machine._overlay = null
-	machine._stop_flatline_countdown()
 
 	machine._set_stash_tray_visible(true)
 	run_store.reset_run_state()
@@ -1228,6 +1217,8 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 
 	# Both pools empty => the flatline resolves normally.
 	run_store.freeSpinsRemaining = 0
+	run_store.wealthContinued = false
+	run_store.scoreEarned = 100
 	if not machine._check_ending():
 		failures.append("issue75: dry run with no free spins did not flatline")
 	elif str(run_store.lastEnding) != "flatline":
@@ -1236,6 +1227,17 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 		machine._overlay.queue_free()
 		machine._overlay = null
 	machine._stop_flatline_countdown()
+
+	# The core fix: you never die just for spinning a lot. With neurons on the bar,
+	# no number of spins ends the run — there is no spin cap anymore (issue #75).
+	run_store.runPhase = "running"
+	run_store.lastEnding = null
+	run_store.neurons = 20
+	run_store.freeSpinsRemaining = 0
+	run_store.wealthContinued = false
+	run_store.spinCount = 999
+	if machine._check_ending():
+		failures.append("issue75: run with HP left flatlined from spin count alone")
 
 	machine._set_stash_tray_visible(true)
 	run_store.reset_run_state()
@@ -1370,10 +1372,11 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._held_spin_grant = 0
 	run_store.reset_run_state()
 
-# Issue #85: with a single 1:1 spin currency SPINS LEFT is just the neuron pool
-# (plus banked free spins), capped by the hard run-length cap. The #80 drift
-# (a +3 vial restore reading +4, a spin dropping the counter by 2) can't recur
-# because neurons and spins no longer disagree.
+# Issue #85/#80/#75: with a single 1:1 spin currency SPINS LEFT is just the neuron
+# pool (plus banked free spins). The #80 drift (a +3 vial restore reading +4, a spin
+# dropping the counter by 2) can't recur because neurons and spins no longer disagree,
+# and there is no spin-count cap (issue #75): the counter reads straight off the neuron
+# budget no matter how many spins have been taken.
 func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
@@ -1404,16 +1407,18 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	if after != before + 3:
 		failures.append("issue80: +3 vial restore moved SPINS LEFT by %d, expected 3" % (after - before))
 
-	# Cap awareness: plenty of neurons, but the hard spin cap is one spin away.
-	run_store.neurons = 100 # far more than the cap allows on its own
+	# No spin cap (issue #75): even after a huge number of spins, SPINS LEFT reads the
+	# full neuron budget — 1:1, so neurons=100 => 100 spins — so spinning a lot never
+	# strands the run.
+	run_store.neurons = 100
 	run_store.freeSpinsRemaining = 0
-	run_store.spinCount = int(machine.run_spin_length) - 1
+	run_store.spinCount = 500
 	machine._pending_spin_gain = 0
 	machine._held_spin_grant = 0
 	machine._update_hud()
-	var capped := String(label.text).get_slice(":", 1).to_int()
-	if capped != 1:
-		failures.append("issue80: SPINS LEFT ignored the spin cap (read %d, expected 1)" % capped)
+	var uncapped := String(label.text).get_slice(":", 1).to_int()
+	if uncapped != 100:
+		failures.append("issue75: SPINS LEFT should ignore spin count (read %d, expected 100)" % uncapped)
 
 	machine._pending_spin_gain = 0
 	machine._held_spin_grant = 0
