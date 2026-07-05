@@ -65,6 +65,7 @@ func _run() -> void:
 	_check_flatline_free_spins_75(machine, run_store, failures)
 	_check_flatline_win_boost_76(run_store, failures)
 	_check_deferred_negative_76(machine, failures)
+	_check_dealer_pacing_76(run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1353,6 +1354,45 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 			failures.append("issue76: water upside copy wrong: '%s'" % flavor._pos_label.text)
 		flavor.queue_free()
 	machine._pending_deferred_neg.clear()
+
+# Issue #76: dealer pacing. No hard 3-per-run cap, and the between-safety proc ramps the
+# longer the dealer stays away, faster on safer (low-bet) runs. Deterministic: the ramp
+# is a pure function of spin counters + bet, so no RNG is involved here.
+func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+
+	# The old hard cap (3) is gone — the ceiling is a high sentinel now.
+	if run_store.dealer_max_count <= Dealer.MAX_COUNT:
+		failures.append("issue76: dealer still capped at the old per-run limit (%d)" % run_store.dealer_max_count)
+
+	# Right after a visit (within the min gap) the proc is just the base chance.
+	run_store.betMultiplier = 1
+	run_store.dealerLastSpinCount = 10
+	run_store.spinCount = 10 + run_store.dealer_min_spin_gap
+	var base_proc: float = run_store._dealer_effective_proc()
+	if not is_equal_approx(base_proc, run_store.dealer_proc_chance):
+		failures.append("issue76: proc at the min gap should equal the base, got %f" % base_proc)
+
+	# Pressure builds the longer the dealer's away.
+	run_store.spinCount = 10 + run_store.dealer_min_spin_gap + 4
+	var ramped_x1: float = run_store._dealer_effective_proc()
+	if ramped_x1 <= base_proc:
+		failures.append("issue76: dealer proc did not ramp up over time")
+
+	# Same drought, higher bet => slower ramp (x1 builds pressure faster than x3).
+	run_store.betMultiplier = 3
+	var ramped_x3: float = run_store._dealer_effective_proc()
+	if not (ramped_x3 < ramped_x1):
+		failures.append("issue76: x3 should ramp slower than x1 (x1=%f x3=%f)" % [ramped_x1, ramped_x3])
+
+	# A long drought clamps at the ceiling, never a guaranteed instant re-trigger.
+	run_store.betMultiplier = 1
+	run_store.spinCount = 10 + 1000
+	if not is_equal_approx(run_store._dealer_effective_proc(), run_store.dealer_proc_max):
+		failures.append("issue76: long-drought proc should clamp at dealer_proc_max")
+
+	run_store.reset_run_state()
 
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the

@@ -17,11 +17,20 @@ const M32 := 0xFFFFFFFF
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
 
 @export_group("Dealer Interruptions")
-@export var dealer_max_count: int = Dealer.MAX_COUNT
+# Issue #76: no hard 3-per-run cap anymore — the dealer is a pressure system that keeps
+# showing up on long safe runs. Kept as a high sentinel so the pinned guard still has a
+# ceiling, but in practice the min gap + run length pace it, not this.
+@export var dealer_max_count: int = 99
 @export var dealer_min_spin_gap: int = Dealer.MIN_SPIN_GAP
 @export_range(0.0, 1.0, 0.01) var dealer_high_threshold: float = Dealer.THRESHOLD_HIGH
 @export_range(0.0, 1.0, 0.01) var dealer_low_threshold: float = Dealer.THRESHOLD_LOW
+# Base per-spin proc right after a visit; it ramps up the longer the dealer stays away
+# (dealer_proc_ramp per eligible spin, scaled by 1/bet so safer x1 runs build pressure
+# fastest and x3 slowest), capped at dealer_proc_max. Keeps x1 from long dealer droughts
+# while x3's short run naturally yields fewer visits (issue #76).
 @export_range(0.0, 1.0, 0.01) var dealer_proc_chance: float = Dealer.PROC_CHANCE
+@export_range(0.0, 0.5, 0.005) var dealer_proc_ramp: float = 0.05
+@export_range(0.0, 1.0, 0.01) var dealer_proc_max: float = 0.6
 
 # Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
@@ -825,6 +834,16 @@ func _odds_overrides_from_meta() -> Dictionary:
 			out[String(symbol)] = level * probability_increase_per_upgrade
 	return out
 
+## The per-spin dealer proc, ramped by how long the dealer's been away (issue #76). It
+## starts at dealer_proc_chance right after a visit and climbs by dealer_proc_ramp for
+## each eligible spin since, scaled by 1/bet so a safe x1 run builds pressure fastest and
+## a risky x3 run slowest — capped at dealer_proc_max. The pinned safety triggers (65%/35%
+## HP) are unchanged; this only shapes the random appearances between them.
+func _dealer_effective_proc() -> float:
+	var bet := clampi(betMultiplier, 1, 3)
+	var spins_over := maxi(0, spinCount - dealerLastSpinCount - dealer_min_spin_gap)
+	return clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
+
 func check_dealer_trigger() -> void:
 	if runPhase != "running" or dealerPending or dealerIncoming:
 		return
@@ -843,7 +862,7 @@ func check_dealer_trigger() -> void:
 		"minSpinGap": dealer_min_spin_gap,
 		"highThreshold": dealer_high_threshold,
 		"lowThreshold": dealer_low_threshold,
-		"procChance": dealer_proc_chance,
+		"procChance": _dealer_effective_proc(),
 	})
 	dealer65SafetyFired = decision["dealer65SafetyFired"]
 	dealer35SafetyFired = decision["dealer35SafetyFired"]
