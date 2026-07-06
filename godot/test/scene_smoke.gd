@@ -874,6 +874,12 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 # Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
 # text bubble, outlined feedback messages above the dealer, no 1-Lucidity
 # placeholder slot.
+func _button_sheet_file(button: Button) -> String:
+	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
+	if style == null or style.texture == null:
+		return ""
+	return style.texture.resource_path.get_file()
+
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
 func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void:
@@ -899,9 +905,15 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 	if modal == null or not modal.visible:
 		failures.append("issue84: machine button did not raise the start-confirm modal")
 	else:
-		if modal.get_node_or_null("Panel/Buttons/EnterButton") == null \
-				or modal.get_node_or_null("Panel/Buttons/CancelButton") == null:
+		var enter_button := modal.get_node_or_null("Panel/Buttons/EnterButton") as Button
+		var cancel_button := modal.get_node_or_null("Panel/Buttons/CancelButton") as Button
+		if enter_button == null or cancel_button == null:
 			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
+		else:
+			if _button_sheet_file(cancel_button) != "red_button.png":
+				failures.append("issue84: CANCEL is not skinned with the red button asset")
+			if _button_sheet_file(enter_button) != "green_button.png":
+				failures.append("issue84: ENTER is not skinned with the green button asset")
 		# Cancelling dismisses the modal (and does not start the run).
 		dealer._on_start_cancelled()
 		if modal.visible:
