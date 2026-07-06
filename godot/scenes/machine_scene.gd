@@ -358,7 +358,8 @@ var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0
 var _power_bar_sprite: Sprite2D = null
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
-var _power_bar_coins := 0    # lucidity already reflected in the bar (multiple of the step)
+var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
+var _power_seen_lucidity := 0    # lucidity total the gauge has already accounted for
 var _display_lucidity := 0
 var _lucidity_count_tween: Tween = null
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
@@ -774,10 +775,11 @@ func _build_power_bar() -> void:
 		_power_bar_sprite.position = Vector2.ZERO
 		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
 	_power_bar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	# Snap to the current progress (a resumed run may already have lucidity/pending restores).
-	var step := _power_bar_step()
-	_power_bar_coins = int(RunStateStore.lucidityCoins) - (int(RunStateStore.lucidityCoins) % step)
-	_set_power_bar_frame(_bar_frame_for(int(RunStateStore.lucidityCoins)))
+	# Start empty; the gauge fills only from score gained after this point (a resumed run
+	# doesn't re-bank its existing lucidity).
+	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
+	_power_bar_score = 0
+	_set_power_bar_frame(0)
 	# Any restores earned before this scene existed resolve immediately (visual only —
 	# the ability itself was already restored by plan_gain at spin time).
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
@@ -2013,8 +2015,8 @@ func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
 
-# Lucidity per gauge step / frame. Derived from the restore threshold so the bar is
-# always full exactly when a restore threshold is crossed (50 / 5 steps = 10 coins).
+# Score per gauge frame: one coin banks this much score (10 for a 6-frame / 50-threshold
+# gauge). Power coins are tied to SCORE GAINED — 10 score => 1 coin, 50 => 5.
 func _power_bar_step() -> int:
 	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
 
@@ -2023,15 +2025,10 @@ func _set_power_bar_frame(f: int) -> void:
 	if _power_bar_sprite != null:
 		_power_bar_sprite.frame = _power_bar_frame
 
-## Gauge frame for a lucidity total: how far into the current restore cycle it is, in
-## step-sized increments. Exact threshold multiples read as 0 (the next cycle's start).
-func _bar_frame_for(coins: int) -> int:
-	var per := maxi(1, coins_per_power_restore)
-	return clampi((coins % per) / _power_bar_step(), 0, POWER_BAR_FRAMES - 1)
+## Gauge frame for a banked-score value (0 empty .. full).
+func _bar_frame_for_score(score: int) -> int:
+	return clampi(score / _power_bar_step(), 0, POWER_BAR_FRAMES - 1)
 
-## Entry point (called after the reward sequence and after Tea): catch the gauge up to the
-## authoritative lucidity total, one step at a time. The mechanic is unchanged — this only
-## paces the visual and, when the gauge fills, resolves the pending restore's visual.
 func _power_sequence_active() -> bool:
 	return _power_coins_in_flight > 0 or _power_batch_running
 
@@ -2048,33 +2045,42 @@ func _try_start_power_coin_flow() -> void:
 		return
 	_advance_power_bar()
 
-## The step plan from the gauge's current progress up to the current lucidity, one 10-coin
-## frame at a time. A threshold-filling step is only taken when a restore is available;
-## otherwise the plan stops, leaving the gauge blocked one frame short of full (4/5) so it
-## never fake-fills or loops with no power to restore.
-func _plan_power_bar_steps() -> Array:
-	var target := int(RunStateStore.lucidityCoins)
-	if target <= _power_bar_coins:
-		return []
-	var step := _power_bar_step()
+## Pure: plan the coins for the score gained since the gauge last caught up. Each coin banks
+## one step of score; a full gauge is only completed when a restore is available (else it
+## caps at 4/5 and the rest of the gain is discarded — never fake-fills or loops). Returns
+## { steps: [{frame, restore}], score: <final banked score>, seen: <lucidity now> }.
+func _compute_power_plan() -> Dictionary:
+	var lucidity := int(RunStateStore.lucidityCoins)
+	var gain := lucidity - _power_seen_lucidity
 	var per := maxi(1, coins_per_power_restore)
-	var coins := _power_bar_coins
+	var step := _power_bar_step()
 	var avail := RunStateStore.pendingPowerRestores.size()
+	var score := _power_bar_score
 	var out: Array = []
-	while coins < target:
-		var nxt := coins + step
-		if nxt % per == 0:
-			if avail <= 0:
-				break # cap at 4/5 — no restorable power for this fill
-			out.append({ "milestone": nxt, "restore": true })
-			avail -= 1
+	var g := gain
+	while g > 0:
+		var to_next := step - (score % step)
+		if g < to_next:
+			score += g # sub-step remainder banks silently (no coin) — no overshoot/loop
+			g = 0
+			break
+		score += to_next
+		g -= to_next
+		if score >= per:
+			if avail > 0:
+				out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
+				avail -= 1
+				score = 0 # restore resets the gauge; no backlog carries over
+			else:
+				score = per - step # cap at 4/5
+				g = 0 # discard the rest of the gain
+				break
 		else:
-			out.append({ "milestone": nxt, "restore": false })
-		coins = nxt
-	return out
+			out.append({ "frame": score / step, "restore": false })
+	return { "steps": out, "score": score, "seen": lucidity }
 
 func _power_has_pending_work() -> bool:
-	return not _plan_power_bar_steps().is_empty()
+	return not (_compute_power_plan()["steps"] as Array).is_empty()
 
 func _advance_power_bar() -> void:
 	# Flatline / run over: no power-coin visuals at all — snap the gauge and resolve any
@@ -2083,14 +2089,18 @@ func _advance_power_bar() -> void:
 		_snap_power_bar()
 		_maybe_present_pending_dealer()
 		return
-	if int(RunStateStore.lucidityCoins) < _power_bar_coins:
-		_snap_power_bar()
 	if _power_batch_running or _power_coins_in_flight > 0:
 		return # a batch is already flying; it re-advances on completion
-	var steps := _plan_power_bar_steps()
+	var plan := _compute_power_plan()
+	# Commit the logical end state now (so the same gain isn't re-planned); coins animate
+	# the frames and restores commit on arrival.
+	_power_bar_score = int(plan["score"])
+	_power_seen_lucidity = int(plan["seen"])
+	var steps: Array = plan["steps"]
 	if steps.is_empty():
-		# A restore not tied to a lucidity fill (Tea restores an ability directly) flies
-		# straight to the power, bypassing the gauge — it isn't a coin-banking event.
+		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
+		# A restore not tied to score (Tea restores an ability directly) flies straight to
+		# the power, bypassing the gauge — it isn't a coin-banking event.
 		if not RunStateStore.pendingPowerRestores.is_empty():
 			_resolve_direct_restore()
 			return
@@ -2145,12 +2155,9 @@ func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
 	_on_power_coin_landed()
 
 func _apply_power_bank_step(stepd: Dictionary) -> void:
-	_power_bar_coins = int(stepd["milestone"])
+	_set_power_bar_frame(int(stepd["frame"]))
 	if bool(stepd["restore"]):
-		_set_power_bar_frame(POWER_BAR_FRAMES - 1) # full frame only — no yellow pulse (req 1)
-		_spawn_restore_coin()
-	else:
-		_set_power_bar_frame(_bar_frame_for(_power_bar_coins))
+		_spawn_restore_coin() # full frame already set; commit + fly bar->power, reset to 0
 
 ## Gauge just filled with a restore available. Commit the restore NOW (guaranteed once —
 ## commit is idempotent and the ability was already restored by plan_gain), reset the gauge
@@ -2181,12 +2188,11 @@ func _on_power_coin_landed() -> void:
 		_power_batch_running = false
 		_advance_power_bar() # more lucidity? else presents any queued dealer offer
 
-## Snap the gauge to the current lucidity without animation, and clear pending restores
-## (visual only). Used on lucidity drops and on the flatline/run-over transition.
+## Resolve the gauge without animation and clear pending restores (visual only). Used on
+## the flatline/run-over transition — the gauge itself just holds its current frame.
 func _snap_power_bar() -> void:
-	var coins := int(RunStateStore.lucidityCoins)
-	_power_bar_coins = coins - (coins % _power_bar_step())
-	_set_power_bar_frame(_bar_frame_for(coins))
+	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
+	_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
 

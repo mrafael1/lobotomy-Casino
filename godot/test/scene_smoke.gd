@@ -397,7 +397,8 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	machine._set_sequence_lock(false)
 	machine._power_coins_in_flight = 0
 	machine._power_batch_running = false
-	machine._power_bar_coins = 0
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
 
 	machine._on_stash_pressed(0)
 	var hint_layer := machine.get_node_or_null("BottomHudLayer/HintLayer") as Control
@@ -1481,60 +1482,78 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 
 	run_store.reset_run_state()
 
-# Issue #76: the power-restore gauge is a visual for the SAME 50-coin restore mechanic.
-# The gauge fills one frame per 10 coins (50/5 steps), and when it fills it commits the
-# pending restore exactly once. Gameplay (abilitiesUsed) is untouched here — the restore
-# was already applied by plan_gain; commit_power_restore only clears the visual pending.
+# Issue #76: the power gauge banks SCORE GAINED (10 score = 1 coin/frame, 50 = 5). Sub-10
+# gains bank without a coin (no infinite loop), the gauge caps at 4/5 when no restore is
+# available (discarding the excess, no fake-fill), and a fill commits one pending restore.
 func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
+	run_store.runPhase = "running"
 
-	# One frame per 10 coins, derived from the restore threshold.
 	if machine._power_bar_step() != 10:
 		failures.append("issue76: power-bar step should be 10, got %d" % machine._power_bar_step())
 
-	# Frame mapping across a restore cycle (threshold multiples read as the next cycle's 0).
-	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 0, 60: 1 }
-	for coins in expect:
-		if machine._bar_frame_for(coins) != expect[coins]:
-			failures.append("issue76: bar frame for %d = %d, expected %d" % [coins, machine._bar_frame_for(coins), expect[coins]])
+	# Frame for a banked-score value.
+	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
+	for score in expect:
+		if machine._bar_frame_for_score(score) != expect[score]:
+			failures.append("issue76: frame for score %d = %d, expected %d" % [score, machine._bar_frame_for_score(score), expect[score]])
 
-	run_store.runPhase = "running"
+	# Scoring 9 banks a partial (no coin) and does NOT loop — plan is empty, seen advances.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.pendingPowerRestores = []
+	run_store.lucidityCoins = 9
+	var p9: Dictionary = machine._compute_power_plan()
+	if not (p9["steps"] as Array).is_empty():
+		failures.append("issue76: scoring 9 planned coins (should bank a partial, %d steps)" % (p9["steps"] as Array).size())
+	if int(p9["score"]) != 9 or int(p9["seen"]) != 9:
+		failures.append("issue76: scoring 9 mis-banked (score %d seen %d, expected 9/9)" % [int(p9["score"]), int(p9["seen"])])
 
-	# No restorable power: even a huge gain caps the gauge at 4/5 (last step 40), never
-	# plans a restore, and never cycles (req 6).
+	# 10 score => exactly 1 coin (frame 1). 50 => 5 coins.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.lucidityCoins = 10
+	if (machine._compute_power_plan()["steps"] as Array).size() != 1:
+		failures.append("issue76: 10 score should be exactly 1 power coin")
+
+	# No restorable power + big gain: caps at 4/5 (score 40), no restore step, no cycling.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
 	run_store.pendingPowerRestores = []
 	run_store.lucidityCoins = 200
-	machine._power_bar_coins = 0
-	var capped: Array = machine._plan_power_bar_steps()
+	var cap: Dictionary = machine._compute_power_plan()
 	var cap_restores := 0
-	var cap_last := 0
-	for s in capped:
-		cap_last = int(s["milestone"])
+	for s in (cap["steps"] as Array):
 		if bool(s["restore"]):
 			cap_restores += 1
 	if cap_restores != 0:
 		failures.append("issue76: gauge planned a restore with no restorable power")
-	if cap_last != 40:
-		failures.append("issue76: no-restore gauge did not cap at 4/5 (last %d, expected 40)" % cap_last)
+	if int(cap["score"]) != 40:
+		failures.append("issue76: no-restore gauge did not cap at 4/5 (score %d, expected 40)" % int(cap["score"]))
 
-	# One restorable power: exactly one fill completes, then it caps again at the next 4/5.
+	# At 4/5, scoring 10 with a restore available => 1 coin, restore, reset to 0 (no refill).
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = ["reroll"]
-	machine._power_bar_coins = 0
-	var withone: Array = machine._plan_power_bar_steps()
-	var one_restores := 0
-	var one_last := 0
-	for s in withone:
-		one_last = int(s["milestone"])
-		if bool(s["restore"]):
-			one_restores += 1
-	if one_restores != 1:
-		failures.append("issue76: expected exactly one restore fill, got %d" % one_restores)
-	if one_last != 90:
-		failures.append("issue76: gauge did not cap at the next 4/5 after one restore (last %d)" % one_last)
+	run_store.lucidityCoins = 110
+	var atcap: Dictionary = machine._compute_power_plan()
+	if (atcap["steps"] as Array).size() != 1 or not bool((atcap["steps"] as Array)[0]["restore"]):
+		failures.append("issue76: 4/5 + 10 with a restore should be a single restore coin")
+	if int(atcap["score"]) != 0:
+		failures.append("issue76: after the restore the gauge should sit at 0, got %d" % int(atcap["score"]))
+
+	# At 4/5, scoring 10 with NO restore => no coin, gauge stays 4/5, excess discarded.
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
+	run_store.pendingPowerRestores = []
+	run_store.lucidityCoins = 110
+	var stay: Dictionary = machine._compute_power_plan()
+	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 40:
+		failures.append("issue76: 4/5 with no restore should stay at 4/5 with no coin (score %d)" % int(stay["score"]))
 
 	# Applying a restore step commits exactly the FRONT pending restore, once.
 	run_store.pendingPowerRestores = ["reroll", "shift"]
-	machine._apply_power_bank_step({ "milestone": 50, "restore": true })
+	machine._apply_power_bank_step({ "frame": 5, "restore": true })
 	if run_store.pendingPowerRestores != ["shift"]:
 		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
 	machine._power_coins_in_flight = 0
