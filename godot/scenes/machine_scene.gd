@@ -3634,7 +3634,8 @@ func _reel_window_center() -> Vector2:
 # INSTANTLY (issue #53): the store rolls it through the normal weight pipeline and
 # commits it, so the next spin's evaluate() honours the revealed promise.
 
-const EYE_REVEAL_POPUP_TIME := 1.6
+const EYE_REVEAL_POPUP_TIME := 1.1
+const EYE_REVEAL_FRAME_ASSET := "ui/vision.png"
 
 func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
@@ -3649,40 +3650,54 @@ func _on_eye_reveal_pick(reel_index: int) -> void:
 
 ## Popup over the picked reel naming its revealed next-spin symbol.
 func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
-	var w := 34.0
-	var h := 34.0
+	var w := 32.0
+	var h := 32.0
 	var popup := Control.new()
 	popup.z_index = 40
 	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var cx := float(REEL_CELL_CENTERS[reel_index])
-	popup.position = Vector2(clampf(cx - w * 0.5, 2.0, SRC_W - w - 2.0), float(REEL_WINDOW["top"]) - h - 6.0)
+	popup.position = Vector2(clampf(cx - w * 0.5, 2.0, SRC_W - w - 2.0), float(REEL_WINDOW["top"]) - h - 7.0)
 	popup.size = Vector2(w, h)
 	add_child(popup)
 
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.03, 0.1, 0.92)
-	bg.size = popup.size
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	popup.add_child(bg)
+	var frame_tex := _load_texture(EYE_REVEAL_FRAME_ASSET, true)
+	if frame_tex != null:
+		var frame := TextureRect.new()
+		frame.texture = frame_tex
+		frame.size = popup.size
+		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		popup.add_child(frame)
+	else:
+		var bg := ColorRect.new()
+		bg.color = Color(0.05, 0.03, 0.1, 0.92)
+		bg.size = popup.size
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		popup.add_child(bg)
 
-	var title := _reaction_label(popup, "REEL %d" % (reel_index + 1), Vector2(0.0, 2.0), 6, triple_eye_color)
-	title.size = Vector2(w, 8.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var pointer := ColorRect.new()
+	pointer.color = triple_eye_color
+	pointer.position = Vector2(w * 0.5 - 1.0, h - 1.0)
+	pointer.size = Vector2(2.0, 8.0)
+	pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.add_child(pointer)
 
 	var tex := _load_texture("symbols/%s.png" % symbol_id, true)
 	if tex != null:
 		var icon := TextureRect.new()
 		icon.texture = tex
-		icon.position = Vector2((w - 16.0) * 0.5, 13.0)
-		icon.size = Vector2(16.0, 16.0)
+		icon.position = Vector2((w - 22.0) * 0.5, (h - 22.0) * 0.5)
+		icon.size = Vector2(22.0, 22.0)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		popup.add_child(icon)
 	else:
-		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 16.0), 7, Color(0.9, 0.95, 1.0))
-		sym.size = Vector2(w, 10.0)
+		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 8.0), 6, Color(0.1, 0.08, 0.2))
+		sym.size = Vector2(w, 14.0)
 		sym.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	popup.pivot_offset = popup.size * 0.5
