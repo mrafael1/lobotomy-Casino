@@ -2302,13 +2302,18 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 	var cancel := panel.get_node_or_null("CancelButton") as Button
 	if cancel == null or cancel.size.x < 10.0 or cancel.size.y < 9.0:
 		failures.append("%s picker cancel target is missing or too small" % prefix)
+	var title := panel.get_node_or_null("TitleLabel") as Label
 	var frame := panel.get_node_or_null("Frame") as TextureRect
 	var background := panel.get_node_or_null("Background") as ColorRect
 	if expects_frame:
 		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_chosing.png":
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
-		if background == null or background.size.y > 12.0:
+		if background == null or background.size != Vector2.ZERO:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
+		if title == null or frame == null or title.position.y < frame.position.y:
+			failures.append("%s picker title should sit on the symbol choosing art" % prefix)
+		if cancel == null or frame == null or cancel.position.y < frame.position.y:
+			failures.append("%s picker cancel should sit on the symbol choosing art" % prefix)
 	elif frame != null:
 		failures.append("%s picker should use variable-count slots, not the five-slot art" % prefix)
 	var buttons := panel.find_children("SymbolButton*", "Button", true, false)
@@ -2318,7 +2323,11 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		var button := node as Button
 		if button == null:
 			continue
-		if button.size.x < 20.0 or button.size.y < 40.0:
+		if expects_frame:
+			if button.size.x > 24.0 or button.size.y > 26.0:
+				failures.append("%s picker framed hover target is too large: %s" % [prefix, button.size])
+				break
+		elif button.size.x < 20.0 or button.size.y < 40.0:
 			failures.append("%s picker touch target too small: %s" % [prefix, button.size])
 			break
 		var icon := button.find_child("SymbolIcon*", true, false) as Sprite2D

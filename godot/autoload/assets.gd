@@ -184,18 +184,34 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	parent.add_child(panel)
 
+	var content := Rect2(0.0, 12.0, rect.size.x, rect.size.y - 12.0)
+
 	var background := ColorRect.new()
 	background.name = "Background"
 	background.color = SYMBOL_PICKER_PANEL_COLOR
 	background.position = Vector2.ZERO
-	background.size = Vector2(rect.size.x, 12.0) if uses_frame else rect.size
+	background.size = Vector2.ZERO if uses_frame else rect.size
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(background)
+
+	if uses_frame:
+		var frame := TextureRect.new()
+		frame.name = "Frame"
+		frame.texture = frame_texture
+		frame.position = content.position
+		frame.size = Vector2(float(frame_texture.get_width()), float(frame_texture.get_height()))
+		frame.scale = Vector2(content.size.x / frame.size.x, content.size.y / frame.size.y)
+		frame.stretch_mode = TextureRect.STRETCH_KEEP
+		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(frame)
+	else:
+		_build_symbol_picker_slots(panel, symbols.size(), content)
 
 	var title := Label.new()
 	title.name = "TitleLabel"
 	title.text = title_text
-	title.position = Vector2(0.0, 1.0)
+	title.position = Vector2(0.0, content.position.y + 1.0) if uses_frame else Vector2(0.0, 1.0)
 	title.size = Vector2(rect.size.x, 11.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -212,7 +228,7 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	cancel.name = "CancelButton"
 	cancel.text = ""
 	cancel.focus_mode = Control.FOCUS_NONE
-	cancel.position = Vector2(rect.size.x - 12.0, 1.0)
+	cancel.position = Vector2(rect.size.x - 12.0, content.position.y + 1.0) if uses_frame else Vector2(rect.size.x - 12.0, 1.0)
 	cancel.size = Vector2(10.0, 10.0)
 	cancel.add_theme_font_size_override("font_size", 6)
 	if font() != null:
@@ -224,28 +240,13 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	)
 	panel.add_child(cancel)
 
-	var content := Rect2(0.0, 12.0, rect.size.x, rect.size.y - 12.0)
-	if uses_frame:
-		var frame := TextureRect.new()
-		frame.name = "Frame"
-		frame.texture = frame_texture
-		frame.position = content.position
-		frame.size = Vector2(float(frame_texture.get_width()), float(frame_texture.get_height()))
-		frame.scale = Vector2(content.size.x / frame.size.x, content.size.y / frame.size.y)
-		frame.stretch_mode = TextureRect.STRETCH_KEEP
-		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		panel.add_child(frame)
-	else:
-		_build_symbol_picker_slots(panel, symbols.size(), content)
-
 	var cell_w := content.size.x / float(maxi(1, symbols.size()))
 	for i in symbols.size():
 		var symbol_id := symbols[i]
 		var button := Button.new()
 		button.name = "SymbolButton%s" % symbol_id.capitalize()
 		button.focus_mode = Control.FOCUS_NONE
-		var button_rect := _symbol_picker_button_rect(i, cell_w, content)
+		var button_rect := _symbol_picker_button_rect(i, cell_w, content, frame_texture, uses_frame)
 		button.position = button_rect.position
 		button.size = button_rect.size
 		_apply_symbol_picker_button_style(button)
@@ -269,7 +270,12 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 
 	return panel
 
-func _symbol_picker_button_rect(index: int, cell_w: float, content: Rect2) -> Rect2:
+func _symbol_picker_button_rect(index: int, cell_w: float, content: Rect2, frame_texture: Texture2D,
+		uses_frame: bool) -> Rect2:
+	if uses_frame and frame_texture != null and index < SYMBOL_PICKER_FIVE_SLOT_SOURCE_RECTS.size():
+		var slot_rect := _symbol_picker_slot_rect(index, content, frame_texture)
+		var pad := Vector2(1.0, 1.0)
+		return Rect2(slot_rect.position - pad, slot_rect.size + pad * 2.0)
 	return Rect2(Vector2(content.position.x + float(index) * cell_w, content.position.y),
 		Vector2(cell_w, content.size.y))
 
