@@ -1314,10 +1314,12 @@ func _resolve_interrupted_spin() -> void:
 		return
 	if _check_ending():
 		return
-	if dealer_pending:
-		_present_dealer_or_defer()
-	elif RunStateStore.compulsiveSpinSkips > 0:
+	# Issue #96: resolve a pending compulsion before the dealer pops (see
+	# _run_post_reveal_sequence) — the dealer stays queued and presents afterward.
+	if RunStateStore.compulsiveSpinSkips > 0:
 		_queue_compulsive_spin()
+	elif dealer_pending:
+		_present_dealer_or_defer()
 	_update_hud()
 
 func _to_menu() -> void:
@@ -1523,17 +1525,23 @@ func _run_post_reveal_sequence() -> void:
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
 		return
-	if dealer_pending:
+	# Issue #96: a pending compulsion must fully resolve BEFORE the dealer pops.
+	# The dealer stays queued in the store (dealerIncoming) and presents again on
+	# the compulsive spin's own post-reveal. If the dealer took the scene first,
+	# the player would be locked out (compulsiveSpinSkips>0 blocks _can_act) while
+	# nothing re-queued the compulsive spin after the dealer closed → softlock.
+	if RunStateStore.compulsiveSpinSkips > 0:
+		_set_sequence_lock(false)
+		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
+		# spin by itself — heavy vibration + red overlay, no player input needed.
+		_queue_compulsive_spin()
+	elif dealer_pending:
 		# The dealer waits behind any active/pending power-coin sequence; the power flow
 		# runs even under the sequence lock while a dealer is queued (req 2). Keeping the
 		# lock on holds the player until the dealer actually appears.
 		_present_dealer_or_defer()
 	else:
 		_set_sequence_lock(false)
-		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
-		# spin by itself — heavy vibration + red overlay, no player input needed.
-		if RunStateStore.compulsiveSpinSkips > 0:
-			_queue_compulsive_spin()
 	_post_spin_sequence_active = false
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
@@ -4192,3 +4200,9 @@ func _close_dealer() -> void:
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
 	_set_sequence_lock(false)
 	_update_hud()
+	# Issue #96 safety net: never leave the machine idle while a compulsion is
+	# pending — the player can't act (compulsiveSpinSkips>0), so the machine must
+	# take the forced spin. Normal sequencing already resolves compulsion first,
+	# but this catches any path that closes the dealer with a compulsion queued.
+	if RunStateStore.compulsiveSpinSkips > 0:
+		_queue_compulsive_spin()
