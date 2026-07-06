@@ -83,7 +83,7 @@ const SYMBOL_PICKER_SLOT_COLOR := Color(0.18, 0.13, 0.26, 0.95)
 const SYMBOL_PICKER_SLOT_BORDER := Color(0.45, 0.38, 0.62, 0.9)
 const SYMBOL_PICKER_SLOT_HOVER := Color(0.28, 0.2, 0.42, 0.9)
 const SYMBOL_PICKER_SLOT_PRESSED := Color(0.45, 0.38, 0.62, 0.95)
-const SYMBOL_PICKER_ICON_SIZE := 14.0
+const SYMBOL_PICKER_ICON_SIZE := 16.0
 const SYMBOL_PICKER_FIVE_SLOT_SOURCE_RECTS: Array[Rect2] = [
 	Rect2(40.0, 56.0, 88.0, 96.0),
 	Rect2(152.0, 56.0, 88.0, 96.0),
@@ -265,7 +265,7 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 			var texture_max_side := float(maxi(symbol_texture.get_width(), symbol_texture.get_height()))
 			var icon_scale := icon_size / texture_max_side
 			icon.scale = Vector2(icon_scale, icon_scale)
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			button.add_child(icon)
 
 	return panel

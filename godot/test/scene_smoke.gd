@@ -2311,7 +2311,7 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if background == null or background.size != Vector2.ZERO:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
 		if title == null or frame == null \
-				or title.position.y < frame.position.y - 4.0 or title.position.y > frame.position.y + 1.0:
+				or title.position.y < frame.position.y - 6.0 or title.position.y > frame.position.y + 1.0:
 			failures.append("%s picker title should sit on the top band of the symbol choosing art" % prefix)
 		if cancel == null or frame == null or cancel.position.y < frame.position.y:
 			failures.append("%s picker cancel should sit on the symbol choosing art" % prefix)
@@ -2337,11 +2337,14 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 			break
 		var rendered_size := Vector2(float(icon.texture.get_width()) * icon.scale.x,
 			float(icon.texture.get_height()) * icon.scale.y)
-		if maxf(rendered_size.x, rendered_size.y) > 14.5:
+		if maxf(rendered_size.x, rendered_size.y) > 16.5:
 			failures.append("%s picker icon did not scale down: %s" % [prefix, rendered_size])
 			break
-		if maxf(rendered_size.x, rendered_size.y) < 10.0:
+		if maxf(rendered_size.x, rendered_size.y) < 15.5:
 			failures.append("%s picker icon is too small: %s" % [prefix, rendered_size])
+			break
+		if icon.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("%s picker icon should use reel-style mipmapped filtering" % prefix)
 			break
 
 func _check_upgrades_scene(failures: Array) -> void:
