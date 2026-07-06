@@ -1516,10 +1516,12 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	if (machine._compute_power_plan()["steps"] as Array).size() != 1:
 		failures.append("issue76: 10 score should be exactly 1 power coin")
 
-	# No restorable power + big gain: caps at 4/5 (score 40), no restore step, no cycling.
+	# No restorable power (no pending, no spent ability) + big gain: caps at 4/5 (score 40),
+	# no restore step, no cycling.
 	machine._power_bar_score = 0
 	machine._power_seen_lucidity = 0
 	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = []
 	run_store.lucidityCoins = 200
 	var cap: Dictionary = machine._compute_power_plan()
 	var cap_restores := 0
@@ -1542,20 +1544,39 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	if int(atcap["score"]) != 0:
 		failures.append("issue76: after the restore the gauge should sit at 0, got %d" % int(atcap["score"]))
 
-	# At 4/5, scoring 10 with NO restore => no coin, gauge stays 4/5, excess discarded.
+	# At 4/5 with NO pending but a SPENT ability, scoring 10 completes the fill and the
+	# gauge restores the spent power itself (e.g. Water at 4/5 with a used power).
 	machine._power_bar_score = 40
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = ["reroll"]
+	run_store.lucidityCoins = 110
+	var spent: Dictionary = machine._compute_power_plan()
+	if (spent["steps"] as Array).size() != 1 or not bool((spent["steps"] as Array)[0]["restore"]):
+		failures.append("issue76: 4/5 + 10 with a spent power should restore it (bar-driven)")
+
+	# At 4/5, scoring 10 with NOTHING restorable => no coin, gauge stays 4/5, excess discarded.
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = []
 	run_store.lucidityCoins = 110
 	var stay: Dictionary = machine._compute_power_plan()
 	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 40:
-		failures.append("issue76: 4/5 with no restore should stay at 4/5 with no coin (score %d)" % int(stay["score"]))
+		failures.append("issue76: 4/5 with nothing restorable should stay at 4/5 (score %d)" % int(stay["score"]))
 
-	# Applying a restore step commits exactly the FRONT pending restore, once.
+	# A restore step consumes a pending restore first (front, once).
+	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = ["reroll", "shift"]
 	machine._apply_power_bank_step({ "frame": 5, "restore": true })
 	if run_store.pendingPowerRestores != ["shift"]:
 		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
+	# With no pending but a spent ability, the restore step brings that ability back.
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = ["shift"]
+	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	if run_store.abilitiesUsed.has("shift"):
+		failures.append("issue76: bar-driven restore did not bring the spent ability back")
 	machine._power_coins_in_flight = 0
 	machine._power_batch_running = false
 

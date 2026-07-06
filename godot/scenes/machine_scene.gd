@@ -2054,7 +2054,9 @@ func _compute_power_plan() -> Dictionary:
 	var gain := lucidity - _power_seen_lucidity
 	var per := maxi(1, coins_per_power_restore)
 	var step := _power_bar_step()
-	var avail := RunStateStore.pendingPowerRestores.size()
+	# Restorable = plan_gain's queued restores plus any spent ability the gauge can bring
+	# back itself. A fill completes only while one of those exists (else it caps at 4/5).
+	var avail := RunStateStore.pendingPowerRestores.size() + RunStateStore.abilitiesUsed.size()
 	var score := _power_bar_score
 	var out: Array = []
 	var g := gain
@@ -2164,10 +2166,16 @@ func _apply_power_bank_step(stepd: Dictionary) -> void:
 ## for the next cycle, and fly a coin from the bar to the power as pure feedback.
 func _spawn_restore_coin() -> void:
 	_set_power_bar_frame(0)
-	if RunStateStore.pendingPowerRestores.is_empty():
+	# Consume a plan_gain restore if one is queued; otherwise the gauge itself brings a
+	# spent power back (guaranteed once — both paths remove the id from their source).
+	var power_id := ""
+	if not RunStateStore.pendingPowerRestores.is_empty():
+		power_id = String(RunStateStore.pendingPowerRestores[0])
+		RunStateStore.commit_power_restore(power_id)
+	else:
+		power_id = RunStateStore.bar_restore_power(RunStateStore._seed(_power_seen_lucidity * 0x9e3779b9))
+	if power_id == "":
 		return
-	var power_id := String(RunStateStore.pendingPowerRestores[0])
-	RunStateStore.commit_power_restore(power_id)
 	var coin := _make_power_coin(POWER_BAR_TOP)
 	if coin == null:
 		return

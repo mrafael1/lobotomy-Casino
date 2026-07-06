@@ -569,6 +569,21 @@ func commit_power_restore(power_id: String) -> void:
 	pendingPowerRestores.remove_at(idx)
 	_commit()
 
+## Bar-driven restore (issue #76 follow-up): when the power gauge fills and no plan_gain
+## restore is queued, it restores one spent ability directly — random pick removed from
+## abilitiesUsed so its button re-enables. Same selection shape as Lucidity.plan_gain.
+## Returns the restored id ("" if nothing is spent).
+func bar_restore_power(seed: int) -> String:
+	if abilitiesUsed.is_empty():
+		return ""
+	var rng := LobRNG.new(seed & M32)
+	var idx := mini(abilitiesUsed.size() - 1, floori(rng.next() * abilitiesUsed.size()))
+	var id := String(abilitiesUsed[idx])
+	abilitiesUsed = abilitiesUsed.duplicate()
+	abilitiesUsed.remove_at(idx)
+	_commit()
+	return id
+
 # ── abilities ──────────────────────────────────────────────────────────────────────
 
 # Reroll draws share the spin's weight pipeline, so purchased odds (issue #36)
