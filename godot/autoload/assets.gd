@@ -73,6 +73,7 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 # Button art lives in horizontal sprite sheets under ui/. Frame order by count:
 #   2 -> [normal, pressed]   3 -> [normal, hover, pressed]   4 -> [+ disabled]
 const _RED_BUTTON_REL := "ui/red_button.png"
+const _CANCEL_BUTTON_REL := "ui/cancel_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
 const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 const SYMBOL_PICKER_FRAME_REL := "ui/symbol_chosing.png"
@@ -139,6 +140,9 @@ func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
 func skin_negative_button(b: Button) -> void:
 	skin_sheet_button(b, _RED_BUTTON_REL, 4)
 
+func skin_cancel_button(b: Button) -> void:
+	skin_sheet_button(b, _CANCEL_BUTTON_REL, 2)
+
 # Skin an ICON TextureButton from a sheet (no text). Adds a 1-2px sink on press.
 func skin_icon_button(b: TextureButton, rel: String, frames: int) -> void:
 	if texture(rel) == null:
@@ -170,6 +174,9 @@ func _press_restore(b: BaseButton) -> void:
 
 func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_text: String, rect: Rect2,
 		picked: Callable, cancelled: Callable, use_five_slot_art := false) -> Control:
+	var frame_texture := texture(SYMBOL_PICKER_FRAME_REL)
+	var uses_frame := use_five_slot_art and symbols.size() == 5 and frame_texture != null
+
 	var panel := Control.new()
 	panel.name = "SymbolPickerPanel"
 	panel.position = rect.position
@@ -181,7 +188,7 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	background.name = "Background"
 	background.color = SYMBOL_PICKER_PANEL_COLOR
 	background.position = Vector2.ZERO
-	background.size = rect.size
+	background.size = Vector2(rect.size.x, 12.0) if uses_frame else rect.size
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(background)
 
@@ -203,14 +210,14 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 
 	var cancel := Button.new()
 	cancel.name = "CancelButton"
-	cancel.text = "X"
+	cancel.text = ""
 	cancel.focus_mode = Control.FOCUS_NONE
-	cancel.position = Vector2(rect.size.x - 14.0, 1.0)
-	cancel.size = Vector2(12.0, 10.0)
+	cancel.position = Vector2(rect.size.x - 12.0, 1.0)
+	cancel.size = Vector2(10.0, 10.0)
 	cancel.add_theme_font_size_override("font_size", 6)
 	if font() != null:
 		cancel.add_theme_font_override("font", font())
-	skin_negative_button(cancel)
+	skin_cancel_button(cancel)
 	cancel.pressed.connect(func() -> void:
 		if cancelled.is_valid():
 			cancelled.call()
@@ -218,8 +225,6 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	panel.add_child(cancel)
 
 	var content := Rect2(0.0, 12.0, rect.size.x, rect.size.y - 12.0)
-	var frame_texture := texture(SYMBOL_PICKER_FRAME_REL)
-	var uses_frame := use_five_slot_art and symbols.size() == 5 and frame_texture != null
 	if uses_frame:
 		var frame := TextureRect.new()
 		frame.name = "Frame"
@@ -257,7 +262,7 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 			icon.position = icon_center - button.position - Vector2(icon_size, icon_size) * 0.5
 			icon.size = Vector2(icon_size, icon_size)
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.stretch_mode = TextureRect.STRETCH_SCALE
 			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			button.add_child(icon)

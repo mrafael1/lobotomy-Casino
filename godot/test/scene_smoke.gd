@@ -2303,9 +2303,12 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 	if cancel == null or cancel.size.x < 10.0 or cancel.size.y < 9.0:
 		failures.append("%s picker cancel target is missing or too small" % prefix)
 	var frame := panel.get_node_or_null("Frame") as TextureRect
+	var background := panel.get_node_or_null("Background") as ColorRect
 	if expects_frame:
 		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_chosing.png":
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
+		if background == null or background.size.y > 12.0:
+			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
 	elif frame != null:
 		failures.append("%s picker should use variable-count slots, not the five-slot art" % prefix)
 	var buttons := panel.find_children("SymbolButton*", "Button", true, false)
@@ -2324,6 +2327,9 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 			break
 		if icon.size.x < 14.0 or icon.size.y < 14.0:
 			failures.append("%s picker icon is too small: %s" % [prefix, icon.size])
+			break
+		if expects_frame and icon.stretch_mode != TextureRect.STRETCH_SCALE:
+			failures.append("%s picker icon should scale into the slot rect" % prefix)
 			break
 
 func _check_upgrades_scene(failures: Array) -> void:
