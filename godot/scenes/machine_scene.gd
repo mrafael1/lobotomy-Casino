@@ -886,6 +886,7 @@ func _clear_boost_zero_linger() -> void:
 		return
 	_boost_zero_linger.clear()
 	_refresh_boost_indicators()
+	_refresh_consumable_fx()
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -3249,7 +3250,8 @@ func _refresh_consumable_fx() -> void:
 ## Tobacco: evaluate.gd hides the LAST pairBoostHiddenReels reels from scoring
 ## (reels.slice keeps the first ones), so smoke exactly those.
 func _refresh_tobacco_fx() -> void:
-	var active := consumable_fx_enabled and tobacco_fx_enabled and RunStateStore.pairBoostSpins > 0
+	var active := consumable_fx_enabled and tobacco_fx_enabled \
+		and (RunStateStore.pairBoostSpins > 0 or bool(_boost_zero_linger.get("pairBoostSpins", false)))
 	var hidden := clampi(RunStateStore.pairBoostHiddenReels, 0, 2) if active else 0
 	for i in 3:
 		var smoked: bool = i >= 3 - hidden

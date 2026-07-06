@@ -659,6 +659,7 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		failures.append("consumables: Cocktail still queued compulsion")
 	run_store.betMultiplier = 3
 	run_store.neurons = 100
+	run_store.freeSpinsRemaining = 0
 	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
 	run_store.lockedReels = [true, true, true]
 	run_store.lockedReelSpins = [2, 2, 2]
@@ -1547,6 +1548,20 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._clear_boost_zero_linger()
 	if (slots[0]["slot"] as Control).visible:
 		failures.append("issue76: boost count 0 icon did not clear on next lever press")
+
+	run_store.pairBoostHiddenReels = 1
+	run_store.pairBoostSpins = 1
+	machine._refresh_consumable_fx()
+	expiring = machine._capture_expiring_boost_counters()
+	run_store.pairBoostSpins = 0
+	machine._apply_expiring_boost_linger(expiring)
+	machine._refresh_consumable_fx()
+	if not (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue76: Cigarette hidden reel should stay visible at count 0")
+	machine._clear_boost_zero_linger()
+	if (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue76: Cigarette hidden reel did not clear on next lever press")
+	run_store.pairBoostHiddenReels = 0
 
 	# Serum negative now hides the above/below strip neighbours, leaving center symbols.
 	machine._set_reel_symbol(0, "eye")
