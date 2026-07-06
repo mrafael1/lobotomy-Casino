@@ -209,7 +209,7 @@ const DURATION_BOOSTS := [
 	"cons_potion": { "pos": "POWERS RESTORED", "neg": "" },
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
 	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
-	"item_pill": { "pos": "TRIPLE GUARANTEED", "neg": "CLOSE CALL" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
 	"item_cocktail": { "pos": "RARITY BONUS", "neg": "15% PAIR/TRIPLE TAX" },
 }
@@ -218,7 +218,7 @@ const DURATION_BOOSTS := [
 ## upside, and the negative is popped separately when it actually activates — more
 ## dramatic and clearer than front-loading a warning for something not happening yet.
 const DEFERRED_NEGATIVE_ITEMS := [
-	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette", "item_pill",
+	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette",
 ]
 
 ## Of the deferred items, these pop their negative via an explicit hook when it fires
@@ -1332,6 +1332,7 @@ func _do_spin(compulsive := false) -> void:
 	# Tobacco's hidden reel is likewise active this spin (pairBoostSpins decrements in
 	# spin()), so read it now to pop its deferred "1 REEL HIDDEN" when it first bites.
 	var tobacco_this_spin := RunStateStore.pairBoostSpins > 0
+	var pill_guaranteed_spin := _pill_guaranteed_spin_pending()
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
 	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
@@ -1360,6 +1361,8 @@ func _do_spin(compulsive := false) -> void:
 		_pop_deferred_negative("cons_focus")
 	if tobacco_this_spin:
 		_pop_deferred_negative("cons_cigarette")
+	if pill_guaranteed_spin:
+		_show_deferred_positive("item_pill")
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
@@ -2914,6 +2917,8 @@ func _item_display_name(id: String) -> String:
 ## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
 ## HintLabel; the item name renders purple when the item is flagged corrupted.
 func _show_consumable_feedback(id: String) -> HintLabel:
+	if id == "item_pill":
+		return _show_deferred_negative(id)
 	# Deferred-negative items (issue #76) show only the upside now; a hooked item also
 	# arms its downside so the activation hook can pop it later.
 	if id in HOOKED_DEFERRED_NEGATIVES:
@@ -2932,6 +2937,13 @@ func _pop_deferred_negative(id: String) -> void:
 ## Pops just the negative line for a deferred-negative item (issue #76).
 func _show_deferred_negative(id: String) -> HintLabel:
 	return _spawn_hint(id, true, false)
+
+## Pops just the positive line for an upside that activates after the item is consumed.
+func _show_deferred_positive(id: String) -> HintLabel:
+	return _spawn_hint(id, false, true)
+
+func _pill_guaranteed_spin_pending() -> bool:
+	return int(RunStateStore.forceFlatlineSpins) <= 0 and int(RunStateStore.guaranteedTripleSpins) > 0
 
 ## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
 ## just the upside. Otherwise both lines show (the classic on-use hint).

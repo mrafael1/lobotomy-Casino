@@ -483,7 +483,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
 		"cons_tea": "RESTORE POWER",
-		"item_pill": "TRIPLE GUARANTEED",
+		"item_pill": "WIN GUARANTEED",
 		"item_cocktail": "RARITY BONUS",
 		"item_energy_drink": "2 FREE SPINS",
 	}
@@ -1512,6 +1512,35 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 			failures.append("issue76: serum use popup was not upside-only")
 		serum.queue_free()
 
+	# Red Pill is inverted: CLOSE CALL on use, then WIN GUARANTEED on the second spin.
+	var pill: HintLabel = machine._show_consumable_feedback("item_pill")
+	if pill != null:
+		if not pill._neg_label.visible or pill._pos_label.visible:
+			failures.append("issue92: red pill use popup should be close-call only")
+		if pill._neg_label.text != "- CLOSE CALL":
+			failures.append("issue92: red pill close-call copy wrong: '%s'" % pill._neg_label.text)
+		pill.queue_free()
+	var pill_win: HintLabel = machine._show_deferred_positive("item_pill")
+	if pill_win != null:
+		if not pill_win._pos_label.visible or pill_win._neg_label.visible:
+			failures.append("issue92: red pill guaranteed-win popup should be upside-only")
+		if pill_win._pos_label.text != "+ WIN GUARANTEED":
+			failures.append("issue92: red pill guaranteed-win copy wrong: '%s'" % pill_win._pos_label.text)
+		pill_win.queue_free()
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var previous_force_flatline := int(run_store.forceFlatlineSpins)
+	var previous_guaranteed_triple := int(run_store.guaranteedTripleSpins)
+	run_store.forceFlatlineSpins = 1
+	run_store.guaranteedTripleSpins = 1
+	if machine._pill_guaranteed_spin_pending():
+		failures.append("issue92: red pill should not show guaranteed-win popup on the close-call spin")
+	run_store.forceFlatlineSpins = 0
+	run_store.guaranteedTripleSpins = 1
+	if not machine._pill_guaranteed_spin_pending():
+		failures.append("issue92: red pill should show guaranteed-win popup on the second spin")
+	run_store.forceFlatlineSpins = previous_force_flatline
+	run_store.guaranteedTripleSpins = previous_guaranteed_triple
+
 	# A flavor item (Water) shows upside only — no fabricated downside line.
 	var flavor: HintLabel = machine._show_consumable_feedback("item_water")
 	if flavor != null:
@@ -2162,6 +2191,13 @@ func _check_dealer_offer_take_flow(overlay: Node, failures: Array) -> void:
 		failures.append("take-flow: item tap did not reveal hint text")
 	if name_hint.visible:
 		failures.append("take-flow: item name should no longer show in the bubble")
+	var neg_hint := overlay.get_node("SpeechBubble/HintLayer/NegativeHint") as Label
+	overlay._select_offer("item_pill")
+	if pos_hint.text != "+ WIN GUARANTEED" or neg_hint.text != "- CLOSE CALL":
+		failures.append("take-flow: red pill hints are not using close-call/win-guaranteed copy")
+	if neg_hint.position.y >= pos_hint.position.y:
+		failures.append("take-flow: red pill negative hint should display above the positive hint")
+	overlay._select_offer("item_water")
 	var take := overlay.get_node("LookButton") as Button
 	if take.disabled or take.text != "take":
 		failures.append("take-flow: selecting an item did not arm the take button")
