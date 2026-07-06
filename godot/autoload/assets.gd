@@ -211,7 +211,7 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	var title := Label.new()
 	title.name = "TitleLabel"
 	title.text = title_text
-	title.position = Vector2(0.0, content.position.y + 1.0) if uses_frame else Vector2(0.0, 1.0)
+	title.position = Vector2(0.0, content.position.y - 1.0) if uses_frame else Vector2(0.0, 1.0)
 	title.size = Vector2(rect.size.x, 11.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
