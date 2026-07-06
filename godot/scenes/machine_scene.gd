@@ -2100,20 +2100,21 @@ func _advance_power_bar() -> void:
 	_power_seen_lucidity = int(plan["seen"])
 	var steps: Array = plan["steps"]
 	if steps.is_empty():
+		# Nothing to bank. A queued restore is NOT fired here — it waits for the gauge to
+		# actually fill (a plan_gain threshold can queue a restore on a spin whose score
+		# only partially fills the bar; the power must not pop before the bar is full).
 		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
-		# A restore not tied to score (Tea restores an ability directly) flies straight to
-		# the power, bypassing the gauge — it isn't a coin-banking event.
-		if not RunStateStore.pendingPowerRestores.is_empty():
-			_resolve_direct_restore()
-			return
 		_maybe_present_pending_dealer()
 		return
 	_power_batch_running = true
 	_launch_power_coin_batch(steps)
 
-## Tea-style restore: not a lucidity threshold, so no gauge fill — commit it now and fly a
-## coin from the cash tray straight to the power (idempotent commit, no double-restore).
+## Tea restores an ability instantly (a consumable, not a score event): commit its queued
+## restore now and fly a coin from the cash tray straight to the power. No-op if Tea
+## restored spins instead of a power (nothing queued).
 func _resolve_direct_restore() -> void:
+	if RunStateStore.pendingPowerRestores.is_empty():
+		return
 	var power_id := String(RunStateStore.pendingPowerRestores[0])
 	RunStateStore.commit_power_restore(power_id)
 	var coin := _make_power_coin(_cash_tray_pos())
@@ -2792,7 +2793,7 @@ func _on_stash_pressed(slot_index: int) -> void:
 	_play_use_fx(id)
 	_play_consumable_lucidity_feedback(lucidity_before)
 	if id == "cons_tea":
-		_try_start_power_coin_flow()
+		_resolve_direct_restore() # Tea restores its power instantly, not via the gauge
 		# Tea (issue #53): restored spins fly from the stash to the spins counter,
 		# with a "+N" fly-in that ticks the counter on landing (issue #66).
 		var spins_gained := _current_display_spins_left() - spins_before
