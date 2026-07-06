@@ -255,16 +255,16 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 		var symbol_texture := texture("symbols/%s.png" % symbol_id, true)
 		if symbol_texture != null:
 			var icon_size: float = SYMBOL_PICKER_ICON_SIZE if uses_frame else minf(SYMBOL_PICKER_ICON_SIZE, content.size.y - 8.0)
-			var icon := TextureRect.new()
+			var icon := Sprite2D.new()
 			icon.name = "SymbolIcon%s" % symbol_id.capitalize()
 			icon.texture = symbol_texture
 			var icon_center := _symbol_picker_icon_center(i, cell_w, content, frame_texture, uses_frame)
-			icon.position = icon_center - button.position - Vector2(icon_size, icon_size) * 0.5
-			icon.size = Vector2(icon_size, icon_size)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_SCALE
+			icon.position = icon_center - button.position
+			icon.centered = true
+			var texture_max_side := float(maxi(symbol_texture.get_width(), symbol_texture.get_height()))
+			var icon_scale := icon_size / texture_max_side
+			icon.scale = Vector2(icon_scale, icon_scale)
 			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			button.add_child(icon)
 
 	return panel

@@ -2321,15 +2321,17 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if button.size.x < 20.0 or button.size.y < 40.0:
 			failures.append("%s picker touch target too small: %s" % [prefix, button.size])
 			break
-		var icon := button.find_child("SymbolIcon*", true, false) as TextureRect
+		var icon := button.find_child("SymbolIcon*", true, false) as Sprite2D
 		if icon == null or icon.texture == null:
 			failures.append("%s picker button is missing an icon" % prefix)
 			break
-		if icon.size.x < 14.0 or icon.size.y < 14.0:
-			failures.append("%s picker icon is too small: %s" % [prefix, icon.size])
+		var rendered_size := Vector2(float(icon.texture.get_width()) * icon.scale.x,
+			float(icon.texture.get_height()) * icon.scale.y)
+		if maxf(rendered_size.x, rendered_size.y) > 14.5:
+			failures.append("%s picker icon did not scale down: %s" % [prefix, rendered_size])
 			break
-		if expects_frame and icon.stretch_mode != TextureRect.STRETCH_SCALE:
-			failures.append("%s picker icon should scale into the slot rect" % prefix)
+		if maxf(rendered_size.x, rendered_size.y) < 10.0:
+			failures.append("%s picker icon is too small: %s" % [prefix, rendered_size])
 			break
 
 func _check_upgrades_scene(failures: Array) -> void:
