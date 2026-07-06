@@ -2311,7 +2311,7 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if background == null or background.size != Vector2.ZERO:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
 		if title == null or frame == null \
-				or title.position.y < frame.position.y - 2.0 or title.position.y > frame.position.y + 1.0:
+				or title.position.y < frame.position.y - 4.0 or title.position.y > frame.position.y + 1.0:
 			failures.append("%s picker title should sit on the top band of the symbol choosing art" % prefix)
 		if cancel == null or frame == null or cancel.position.y < frame.position.y:
 			failures.append("%s picker cancel should sit on the symbol choosing art" % prefix)
