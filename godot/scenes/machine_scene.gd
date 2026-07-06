@@ -338,7 +338,7 @@ var _multiplier_sprite: Sprite2D = null
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
-var _boost_zero_linger: Dictionary = {} # counter -> true while the just-spent final spin shows "0"
+var _boost_zero_linger: Dictionary = {} # counter -> snapshot while the just-spent final spin shows "0"
 var _jackpot_sprite: Sprite2D = null
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
@@ -855,9 +855,9 @@ func _refresh_boost_indicators() -> void:
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
 		var remaining := int(RunStateStore.get(counter))
-		var show_zero := remaining <= 0 and bool(_boost_zero_linger.get(counter, false))
+		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
 		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
-		if suppress_when_zero_counter != "" and bool(_boost_zero_linger.get(suppress_when_zero_counter, false)):
+		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
 			continue
 		if remaining > 0:
 			_boost_zero_linger.erase(counter)
@@ -885,18 +885,25 @@ func _refresh_boost_indicators() -> void:
 	for i in range(col, _boost_indicator_slots.size()):
 		(_boost_indicator_slots[i]["slot"] as Control).visible = false
 
-func _capture_expiring_boost_counters() -> Array[String]:
-	var out: Array[String] = []
+func _capture_expiring_boost_counters() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
 		if int(RunStateStore.get(counter)) == 1:
-			out.append(counter)
+			var snapshot: Dictionary = { "counter": counter }
+			var symbol_field := String(boost.get("symbolField", ""))
+			if symbol_field != "":
+				var symbol_id := String(RunStateStore.get(symbol_field))
+				if symbol_id != "":
+					snapshot["symbolId"] = symbol_id
+			out.append(snapshot)
 	return out
 
-func _apply_expiring_boost_linger(counters: Array[String]) -> void:
-	for counter in counters:
+func _apply_expiring_boost_linger(counters: Array[Dictionary]) -> void:
+	for snapshot in counters:
+		var counter := String(snapshot.get("counter", ""))
 		if int(RunStateStore.get(counter)) <= 0:
-			_boost_zero_linger[counter] = true
+			_boost_zero_linger[counter] = snapshot
 
 func _clear_boost_zero_linger() -> void:
 	if _boost_zero_linger.is_empty():
@@ -2563,6 +2570,14 @@ func _icon_for(id: String) -> Texture2D:
 	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
 
 func _boost_icon_for(boost: Dictionary) -> Texture2D:
+	var counter := String(boost.get("counter", ""))
+	if _boost_zero_linger.has(counter):
+		var snapshot := _boost_zero_linger[counter] as Dictionary
+		var linger_symbol_id := String(snapshot.get("symbolId", ""))
+		if linger_symbol_id != "":
+			var linger_symbol_tex := _load_texture("symbols/%s.png" % linger_symbol_id, true)
+			if linger_symbol_tex != null:
+				return linger_symbol_tex
 	var symbol_field := String(boost.get("symbolField", ""))
 	if symbol_field != "":
 		var symbol_id := String(RunStateStore.get(symbol_field))
@@ -3321,7 +3336,7 @@ func _refresh_consumable_fx() -> void:
 ## first ones), so smoke exactly those.
 func _refresh_tobacco_fx() -> void:
 	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
-		or bool(_boost_zero_linger.get("pairBoostSpins", false))
+		or _boost_zero_linger.has("pairBoostSpins")
 	var hallucination_active := Economy.has_hallucination(RunStateStore.ownedUpgrades)
 	var active := consumable_fx_enabled and tobacco_fx_enabled and (tobacco_active or hallucination_active)
 	var hidden := 0

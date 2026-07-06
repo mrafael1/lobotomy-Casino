@@ -1664,10 +1664,13 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		var serum_icon := (slots[0]["icon"] as TextureRect).texture
 		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/vial.png"):
 			failures.append("issue92: Serum boost icon did not use the chosen symbol")
+	run_store.guaranteeSymbolSpins = 1
+	run_store.guaranteeSymbolId = "vial"
+	var serum_expiring: Array[Dictionary] = machine._capture_expiring_boost_counters()
 	run_store.guaranteeSymbolSpins = 0
 	run_store.guaranteeSymbolId = ""
 	run_store.blurReelsSpins = 2
-	machine._boost_zero_linger["guaranteeSymbolSpins"] = true
+	machine._apply_expiring_boost_linger(serum_expiring)
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum zero-count handoff icon did not show")
@@ -1676,8 +1679,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	else:
 		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
 		var serum_zero_color := (slots[0]["count"] as Label).get_theme_color("font_color")
-		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("items/focus_serum.png"):
-			failures.append("issue92: Serum zero-count handoff icon should use the serum bottle")
+		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/vial.png"):
+			failures.append("issue92: Serum zero-count handoff icon should keep the chosen symbol")
 		if serum_zero_color == Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum zero-count handoff should not be red yet")
 	if (slots[1]["slot"] as Control).visible:
@@ -1729,7 +1732,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	# clears that zero-state icon before the next spin begins.
 	run_store.cocktailBoostSpins = 1
 	machine._refresh_boost_indicators()
-	var expiring: Array[String] = machine._capture_expiring_boost_counters()
+	var expiring: Array[Dictionary] = machine._capture_expiring_boost_counters()
 	run_store.cocktailBoostSpins = 0
 	machine._apply_expiring_boost_linger(expiring)
 	machine._refresh_boost_indicators()
