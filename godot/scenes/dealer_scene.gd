@@ -75,6 +75,17 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
+# Issue #84: the LAB button pulses so it reads as an interactive button. The pulse
+# rides self_modulate (frame art stays on the 2-frame sheet) — dim → bright brighten
+# and back, looping. Values >1 brighten the CanvasItem, giving the glow.
+const LAB_GLOW_DIM := Color(0.82, 0.82, 0.82)
+const LAB_GLOW_BRIGHT := Color(1.55, 1.5, 1.15)
+const LAB_GLOW_PERIOD := 0.85
+
+# Issue #84: confirm before the machine button starts the run (misclick guard).
+const CANVAS_W := 160.0
+const CANVAS_H := 320.0
+
 # Pre-run pool only (Consumables.LIST) — see item_hints note (issue #31).
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
@@ -105,8 +116,10 @@ var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _lab_button: Button = null
 var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
+var _lab_glow_tween: Tween = null            # issue #84: looping lab-button glow
 var _start_button: Button = null
 var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
+var _start_confirm_modal: Control = null     # issue #84: machine-button misclick guard
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
 var _campaign_label: Label = null
@@ -513,7 +526,7 @@ func _build_hud() -> void:
 			start.add_theme_font_override("font", _font)
 		Assets.skin_sheet_button(start, "ui/arrow_button.png", 3)
 		_apply_button_text_margin(start)
-		start.pressed.connect(_start_run)
+		start.pressed.connect(_confirm_start_run)
 		add_child(start)
 		_build_credits_display()
 		if Engine.is_editor_hint():
@@ -565,6 +578,21 @@ func _configure_lab_button() -> void:
 	if _lab_button_sprite == null:
 		_lab_button_sprite = _build_button_art(LAB_BUTTON_ASSET, "LabButtonArt")
 	_wire_art_button(_lab_button, _lab_button_sprite, Callable(self, "_open_lab"))
+	_start_lab_glow()
+
+## Issue #84: give the LAB button a looping glow so it reads as a pressable button.
+## The pulse rides self_modulate, independent of the press-frame swap on the sheet.
+func _start_lab_glow() -> void:
+	if _lab_button_sprite == null or Engine.is_editor_hint():
+		return
+	if _lab_glow_tween != null and _lab_glow_tween.is_valid():
+		return
+	_lab_button_sprite.self_modulate = LAB_GLOW_DIM
+	_lab_glow_tween = create_tween().set_loops()
+	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_DIM, LAB_GLOW_PERIOD) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _configure_machine_button() -> void:
 	if _start_button == null:
@@ -573,7 +601,7 @@ func _configure_machine_button() -> void:
 	_start_button.size = MACHINE_BUTTON_RECT.size
 	if _machine_button_sprite == null:
 		_machine_button_sprite = _build_button_art(MACHINE_BUTTON_ASSET, "MachineButtonArt")
-	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_start_run"))
+	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_confirm_start_run"))
 	_start_button.visible = _pre_run
 	if _machine_button_sprite != null:
 		_machine_button_sprite.visible = _pre_run
@@ -625,6 +653,98 @@ func _open_lab() -> void:
 	if scene_nav != null:
 		scene_nav.call("push_current_scene")
 	get_tree().change_scene_to_file(UPGRADES_SCENE)
+
+# ── machine-button confirmation (issue #84) ────────────────────────────────────────
+# The machine button leaves the lab and starts the run — an accidental tap would skip
+# the rest of the shop. Gate it behind a YES/CANCEL modal so a misclick is recoverable.
+
+func _confirm_start_run() -> void:
+	if Engine.is_editor_hint():
+		return
+	if _start_confirm_modal == null:
+		_start_confirm_modal = _build_start_confirm_modal()
+	_start_confirm_modal.visible = true
+	_start_confirm_modal.move_to_front()
+
+func _build_start_confirm_modal() -> Control:
+	var modal := get_node_or_null("StartConfirmModal") as Control
+	if modal == null:
+		modal = Control.new()
+		modal.name = "StartConfirmModal"
+		add_child(modal)
+	modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	modal.size = Vector2(CANVAS_W, CANVAS_H)
+	modal.z_index = 200
+	modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal.visible = false
+
+	var dim := modal.get_node_or_null("Dim") as ColorRect
+	if dim == null:
+		dim = ColorRect.new()
+		dim.name = "Dim"
+		modal.add_child(dim)
+	dim.color = Color(0.0, 0.0, 0.0, 0.66)
+	dim.position = Vector2.ZERO
+	dim.size = Vector2(CANVAS_W, CANVAS_H)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel := modal.get_node_or_null("Panel") as VBoxContainer
+	if panel == null:
+		panel = VBoxContainer.new()
+		panel.name = "Panel"
+		modal.add_child(panel)
+		panel.add_child(_confirm_label("Prompt", "ENTER THE MACHINE?", 9, Color(0.85, 0.95, 1.0)))
+		panel.add_child(_confirm_label("Sub", "THE RUN BEGINS NOW.", 6, Color(0.9, 0.78, 0.64)))
+		var row := HBoxContainer.new()
+		row.name = "Buttons"
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 8)
+		panel.add_child(row)
+		row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png", Callable(self, "_on_start_cancelled")))
+		row.add_child(_confirm_button("EnterButton", "ENTER", "ui/green_button.png", Callable(self, "_on_start_confirmed")))
+	panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_theme_constant_override("separation", 6)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.size = Vector2(CANVAS_W - 24.0, 70.0)
+	panel.position = Vector2(12.0, (CANVAS_H - panel.size.y) * 0.5)
+	return modal
+
+func _confirm_label(node_name: String, text: String, size: int, color: Color) -> Label:
+	var l := Label.new()
+	l.name = node_name
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	l.add_theme_constant_override("outline_size", 1)
+	if _font != null:
+		l.add_theme_font_override("font", _font)
+	return l
+
+func _confirm_button(node_name: String, text: String, asset: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.name = node_name
+	b.text = text
+	b.custom_minimum_size = Vector2(44.0, 18.0)
+	b.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
+	# Issue #84: CANCEL rides the red sheet, ENTER the green sheet (4-frame skins).
+	Assets.skin_sheet_button(b, asset, 4)
+	_apply_button_text_margin(b)
+	b.pressed.connect(cb)
+	return b
+
+func _on_start_confirmed() -> void:
+	if _start_confirm_modal != null:
+		_start_confirm_modal.visible = false
+	_start_run()
+
+func _on_start_cancelled() -> void:
+	if _start_confirm_modal != null:
+		_start_confirm_modal.visible = false
 
 func _apply_button_text_margin(button: Button) -> void:
 	if button == null:

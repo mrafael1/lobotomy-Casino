@@ -345,6 +345,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		if dealer_neuron_number.text != "":
 			failures.append("dealer: neuron_number should render no text (meter replaces it)")
 	_check_neuron_meter_absent("dealer", dealer_bottom_hud, failures)
+	_check_start_confirm_and_lab_glow_84(dealer, failures)
 	dealer.queue_free()
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
@@ -873,6 +874,51 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 # Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
 # text bubble, outlined feedback messages above the dealer, no 1-Lucidity
 # placeholder slot.
+func _button_sheet_file(button: Button) -> String:
+	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
+	if style == null or style.texture == null:
+		return ""
+	return style.texture.resource_path.get_file()
+
+## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
+## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
+func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void:
+	# Lab glow is armed and looping.
+	if dealer._lab_glow_tween == null or not dealer._lab_glow_tween.is_valid():
+		failures.append("issue84: LAB button glow tween is not running")
+	elif not dealer._lab_glow_tween.is_running():
+		failures.append("issue84: LAB button glow tween is not looping")
+
+	# The machine button is wired to the confirm guard, not straight to _start_run.
+	var start_button := dealer.get_node_or_null("StartButton") as Button
+	if start_button == null:
+		failures.append("issue84: machine (StartButton) missing for confirm wiring")
+	else:
+		if start_button.pressed.is_connected(Callable(dealer, "_start_run")):
+			failures.append("issue84: machine button still starts the run without confirmation")
+		if not start_button.pressed.is_connected(Callable(dealer, "_confirm_start_run")):
+			failures.append("issue84: machine button is not gated behind the confirm modal")
+
+	# Pressing the machine button shows the modal instead of starting the run.
+	dealer._confirm_start_run()
+	var modal := dealer.get_node_or_null("StartConfirmModal") as Control
+	if modal == null or not modal.visible:
+		failures.append("issue84: machine button did not raise the start-confirm modal")
+	else:
+		var enter_button := modal.get_node_or_null("Panel/Buttons/EnterButton") as Button
+		var cancel_button := modal.get_node_or_null("Panel/Buttons/CancelButton") as Button
+		if enter_button == null or cancel_button == null:
+			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
+		else:
+			if _button_sheet_file(cancel_button) != "red_button.png":
+				failures.append("issue84: CANCEL is not skinned with the red button asset")
+			if _button_sheet_file(enter_button) != "green_button.png":
+				failures.append("issue84: ENTER is not skinned with the green button asset")
+		# Cancelling dismisses the modal (and does not start the run).
+		dealer._on_start_cancelled()
+		if modal.visible:
+			failures.append("issue84: CANCEL did not dismiss the start-confirm modal")
+
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
