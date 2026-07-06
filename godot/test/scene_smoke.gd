@@ -54,6 +54,7 @@ func _run() -> void:
 	_check_issue27_machine_stash_drag(machine, run_store, failures)
 	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
 	_check_options_spin_lock_77(machine, run_store, failures)
+	_check_dealer_compulsion_softlock_96(machine, run_store, failures)
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
@@ -2831,6 +2832,56 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	run_store.lastResult = prev_last
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+## Issue #96: a pending compulsion must resolve before the dealer takes the scene.
+## If the dealer pops (and later closes) while compulsiveSpinSkips>0, the player is
+## locked out of acting and nothing re-queues the forced spin → softlock. Closing the
+## dealer with a compulsion pending must hand the scene to the compulsive takeover.
+func _check_dealer_compulsion_softlock_96(machine: Node, run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_spinning := bool(run_store.isSpinning)
+	var prev_compulsive := int(run_store.compulsiveSpinSkips)
+	var prev_offers: Variant = run_store.dealerOfferIds
+	var prev_incoming := bool(run_store.dealerIncoming)
+	var prev_pending := bool(run_store.dealerPending)
+
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.neurons = 100
+	run_store.spinCount = 0
+	run_store.runConsumables = {}
+	machine._hud_delta_hold = false
+	machine._compulsive_queued = false
+	machine._set_sequence_lock(false)
+
+	# A compulsion is pending while the dealer is mid-visit.
+	run_store.compulsiveSpinSkips = 1
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water"]
+	machine._show_dealer_offers()
+	if machine._dealer_offer_popup == null:
+		failures.append("issue96: dealer popup did not open for setup")
+
+	# Dealer closes — the machine must take the forced spin, not sit idle while the
+	# player is locked out.
+	machine._close_dealer()
+	if run_store._can_act():
+		failures.append("issue96: player could act while a compulsion was still pending")
+	if not machine._compulsive_queued:
+		failures.append("issue96: closing the dealer with a pending compulsion softlocked (no compulsive spin queued)")
+
+	# Neutralize the queued takeover before its timer auto-spins, then restore state.
+	run_store.compulsiveSpinSkips = 0
+	machine._compulsive_queued = false
+	machine._hide_compulsive_overlay()
+	machine._close_dealer()
+	machine._set_sequence_lock(false)
+	run_store.runPhase = prev_phase
+	run_store.isSpinning = prev_spinning
+	run_store.compulsiveSpinSkips = prev_compulsive
+	run_store.dealerOfferIds = prev_offers
+	run_store.dealerIncoming = prev_incoming
+	run_store.dealerPending = prev_pending
 
 func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array) -> void:
 	# Save the state this check mutates.
