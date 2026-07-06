@@ -299,10 +299,10 @@ var _pending_deferred_neg: Dictionary = {}
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
 @export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
 @export_subgroup("Tea", "tea_")
-## Sakura-petal tranquility layer when Tea is used.
+## Sakura-petal tranquility layer when Tea is used: a light cross-screen wind.
 @export var tea_fx_enabled: bool = true
-@export_range(0.5, 4.0, 0.1) var tea_petal_time: float = 2.2
-@export_range(4, 64, 1) var tea_petal_count: int = 28
+@export_range(0.5, 4.0, 0.1) var tea_petal_time: float = 2.7
+@export_range(4, 64, 1) var tea_petal_count: int = 12
 @export var tea_petal_color: Color = Color(1.0, 0.62, 0.82, 0.82)
 @export_subgroup("White Powder", "white_powder_")
 ## Copying a symbol ripples the screen, then cleanly fades out.
@@ -3434,15 +3434,15 @@ func _play_tea_sakura_fx() -> void:
 	petals.amount = tea_petal_count
 	petals.lifetime = tea_petal_time
 	petals.one_shot = true
-	petals.explosiveness = 0.18
-	petals.position = Vector2(SRC_W * 0.5, 24.0)
+	petals.explosiveness = 0.35
+	petals.position = Vector2(-8.0, SRC_H * 0.45)
 	petals.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	petals.emission_rect_extents = Vector2(SRC_W * 0.55, 6.0)
-	petals.direction = Vector2(0.2, 1.0)
-	petals.spread = 32.0
-	petals.gravity = Vector2(-3.0, 13.0)
-	petals.initial_velocity_min = 10.0
-	petals.initial_velocity_max = 24.0
+	petals.emission_rect_extents = Vector2(4.0, SRC_H * 0.32)
+	petals.direction = Vector2(1.0, 0.08)
+	petals.spread = 10.0
+	petals.gravity = Vector2(0.0, 1.5)
+	petals.initial_velocity_min = 48.0
+	petals.initial_velocity_max = 70.0
 	petals.angular_velocity_min = -90.0
 	petals.angular_velocity_max = 90.0
 	petals.scale_amount_min = 0.7
@@ -3765,14 +3765,13 @@ func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 
 	var tex := _load_texture("symbols/%s.png" % symbol_id, true)
 	if tex != null:
-		var icon := TextureRect.new()
+		var icon := Sprite2D.new()
 		icon.texture = tex
-		icon.position = Vector2((w - 22.0) * 0.5, (h - 22.0) * 0.5)
-		icon.size = Vector2(22.0, 22.0)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.position = popup.size * 0.5
+		icon.centered = true
+		var icon_scale := minf(1.0, STRIP_CENTER_H / float(tex.get_height()))
+		icon.scale = Vector2(icon_scale, icon_scale)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		popup.add_child(icon)
 	else:
 		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 8.0), 6, Color(0.1, 0.08, 0.2))
