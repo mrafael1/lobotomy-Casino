@@ -140,7 +140,6 @@ const COIN_TRAY_PILE_SCATTER := 22.0
 const COIN_TRAY_PILE_DEPTH := 8.0
 const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
-const POWER_PULSE_TIME := 0.36
 
 # Power restore gauge (issue #76). power_bar.png is a full-canvas overlay sheet, 3 cols x
 # 2 rows = 6 frames, gauge empty (0) -> full (5), filling bottom-up. A power coin flies to
@@ -153,6 +152,9 @@ const POWER_BAR_VFRAMES := 2
 const POWER_BAR_FRAMES := 6
 const POWER_BAR_CENTER := Vector2(13.0, 84.0) # coin-to-bar landing point (gauge middle)
 const POWER_BAR_TOP := Vector2(13.0, 62.0)     # where the restore coin spawns when full
+const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
+# With no restorable power the gauge stops one frame short of full so it never fake-fills.
+const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
 
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
@@ -359,7 +361,9 @@ var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-
 var _power_bar_coins := 0    # lucidity already reflected in the bar (multiple of the step)
 var _display_lucidity := 0
 var _lucidity_count_tween: Tween = null
-var _power_coin_active := false
+var _power_coins_in_flight := 0   # bank + restore coins currently animating
+var _power_batch_running := false # a batch of bank coins is being launched/processed
+var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
 var _jackpot_flash_tween: Tween = null
 var _jackpot_flashing := false
@@ -1248,7 +1252,7 @@ func _resolve_interrupted_spin() -> void:
 	if _check_ending():
 		return
 	if dealer_pending:
-		_show_dealer_incoming()
+		_present_dealer_or_defer()
 	elif RunStateStore.compulsiveSpinSkips > 0:
 		_queue_compulsive_spin()
 	_update_hud()
@@ -1446,7 +1450,10 @@ func _run_post_reveal_sequence() -> void:
 		_set_sequence_lock(false)
 		return
 	if dealer_pending:
-		_show_dealer_incoming()
+		# The dealer waits behind any active/pending power-coin sequence; the power flow
+		# runs even under the sequence lock while a dealer is queued (req 2). Keeping the
+		# lock on holds the player until the dealer actually appears.
+		_present_dealer_or_defer()
 	else:
 		_set_sequence_lock(false)
 		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
@@ -2025,78 +2032,163 @@ func _bar_frame_for(coins: int) -> int:
 ## Entry point (called after the reward sequence and after Tea): catch the gauge up to the
 ## authoritative lucidity total, one step at a time. The mechanic is unchanged — this only
 ## paces the visual and, when the gauge fills, resolves the pending restore's visual.
+func _power_sequence_active() -> bool:
+	return _power_coins_in_flight > 0 or _power_batch_running
+
+func _cash_tray_pos() -> Vector2:
+	return COIN_TRAY + CASH_COIN_TRAY_OFFSET # same origin as normal lucidity coins
+
+## Polled every frame. Power coins are held behind the sequence lock (so they don't
+## overlap the score burst) EXCEPT while a dealer offer is queued behind them — then they
+## run to completion first (issue #76 follow-up).
 func _try_start_power_coin_flow() -> void:
-	# _spin_launch_pending covers the lever-pull window: the score isn't validated yet, so
-	# hold the flow until the reward sequence releases the lock (issue #54).
-	if _power_coin_active or _spinning_anim or _spin_launch_pending \
-			or _reroll_anim_active or _sequence_lock_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
+		return
+	if _sequence_lock_active and not _pending_dealer_offer:
 		return
 	_advance_power_bar()
 
-func _advance_power_bar() -> void:
-	var coins := int(RunStateStore.lucidityCoins)
-	# Lucidity dropped (e.g. Potion): snap the gauge down, no animation.
-	if coins < _power_bar_coins:
-		_power_bar_coins = coins - (coins % _power_bar_step())
-		_set_power_bar_frame(_bar_frame_for(coins))
-		return
+## The step plan from the gauge's current progress up to the current lucidity, one 10-coin
+## frame at a time. A threshold-filling step is only taken when a restore is available;
+## otherwise the plan stops, leaving the gauge blocked one frame short of full (4/5) so it
+## never fake-fills or loops with no power to restore.
+func _plan_power_bar_steps() -> Array:
+	var target := int(RunStateStore.lucidityCoins)
+	if target <= _power_bar_coins:
+		return []
 	var step := _power_bar_step()
-	var next_ms := (_power_bar_coins / step + 1) * step
-	if coins < next_ms or _coin_layer == null:
-		return # gauge is caught up
-	_power_coin_active = true
-	var coin := _make_power_coin(COIN_TRAY)
+	var per := maxi(1, coins_per_power_restore)
+	var coins := _power_bar_coins
+	var avail := RunStateStore.pendingPowerRestores.size()
+	var out: Array = []
+	while coins < target:
+		var nxt := coins + step
+		if nxt % per == 0:
+			if avail <= 0:
+				break # cap at 4/5 — no restorable power for this fill
+			out.append({ "milestone": nxt, "restore": true })
+			avail -= 1
+		else:
+			out.append({ "milestone": nxt, "restore": false })
+		coins = nxt
+	return out
+
+func _power_has_pending_work() -> bool:
+	return not _plan_power_bar_steps().is_empty()
+
+func _advance_power_bar() -> void:
+	# Flatline / run over: no power-coin visuals at all — snap the gauge and resolve any
+	# pending restores silently (the ability was already restored by plan_gain).
+	if RunStateStore.runPhase != "running":
+		_snap_power_bar()
+		_maybe_present_pending_dealer()
+		return
+	if int(RunStateStore.lucidityCoins) < _power_bar_coins:
+		_snap_power_bar()
+	if _power_batch_running or _power_coins_in_flight > 0:
+		return # a batch is already flying; it re-advances on completion
+	var steps := _plan_power_bar_steps()
+	if steps.is_empty():
+		# A restore not tied to a lucidity fill (Tea restores an ability directly) flies
+		# straight to the power, bypassing the gauge — it isn't a coin-banking event.
+		if not RunStateStore.pendingPowerRestores.is_empty():
+			_resolve_direct_restore()
+			return
+		_maybe_present_pending_dealer()
+		return
+	_power_batch_running = true
+	_launch_power_coin_batch(steps)
+
+## Tea-style restore: not a lucidity threshold, so no gauge fill — commit it now and fly a
+## coin from the cash tray straight to the power (idempotent commit, no double-restore).
+func _resolve_direct_restore() -> void:
+	var power_id := String(RunStateStore.pendingPowerRestores[0])
+	RunStateStore.commit_power_restore(power_id)
+	var coin := _make_power_coin(_cash_tray_pos())
 	if coin == null:
-		_power_bar_coins = next_ms
-		_power_coin_active = false
 		_advance_power_bar()
 		return
+	_power_batch_running = true
+	_power_coins_in_flight += 1
+	var target := _power_center(power_id)
 	var tw := create_tween()
-	tw.tween_method(_drive_power_coin.bind(coin, COIN_TRAY, POWER_BAR_CENTER), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
-	tw.tween_callback(_on_power_coin_reached_bar.bind(coin, next_ms))
+	tw.tween_method(_drive_power_coin.bind(coin, _cash_tray_pos(), target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+	tw.tween_callback(_on_restore_coin_arrived.bind(coin))
 
-func _on_power_coin_reached_bar(coin: Node, milestone: int) -> void:
+func _launch_power_coin_batch(steps: Array) -> void:
+	_power_coins_in_flight = 0
+	for i in steps.size():
+		_launch_power_bank_coin(steps[i], float(i) * POWER_COIN_STAGGER)
+	if _power_coins_in_flight == 0: # no coin layer/texture — apply instantly
+		for stepd in steps:
+			_apply_power_bank_step(stepd)
+		_power_batch_running = false
+		_advance_power_bar()
+
+## One bank coin: from the cash tray to the gauge, launched after `delay` so a batch flies
+## in quick succession (each coin independent, not waiting for the previous to arrive).
+func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> void:
+	var coin := _make_power_coin(_cash_tray_pos())
+	if coin == null:
+		return
+	_power_coins_in_flight += 1
+	var tw := create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay) # coin stays invisible (alpha 0) until its flight begins
+	tw.tween_method(_drive_power_coin.bind(coin, _cash_tray_pos(), POWER_BAR_CENTER), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
+
+func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
 	if is_instance_valid(coin):
 		coin.queue_free()
-	_power_bar_coins = milestone
-	if milestone % maxi(1, coins_per_power_restore) == 0:
-		# Threshold crossed: show the full gauge, then resolve the restore + reset.
-		_set_power_bar_frame(POWER_BAR_FRAMES - 1)
-		_spawn_power_pulse(POWER_BAR_CENTER)
-		_resolve_full_power_bar()
-	else:
-		_set_power_bar_frame(_bar_frame_for(milestone))
-		_power_coin_active = false
-		_advance_power_bar()
+	_apply_power_bank_step(stepd)
+	_on_power_coin_landed()
 
-## Gauge is full. The restore target is whatever plan_gain queued for this threshold; we
-## commit it NOW (guaranteed once — commit is idempotent and the ability was already
-## restored in the rules) and fly a coin from the bar to the power as pure feedback.
-func _resolve_full_power_bar() -> void:
+func _apply_power_bank_step(stepd: Dictionary) -> void:
+	_power_bar_coins = int(stepd["milestone"])
+	if bool(stepd["restore"]):
+		_set_power_bar_frame(POWER_BAR_FRAMES - 1) # full frame only — no yellow pulse (req 1)
+		_spawn_restore_coin()
+	else:
+		_set_power_bar_frame(_bar_frame_for(_power_bar_coins))
+
+## Gauge just filled with a restore available. Commit the restore NOW (guaranteed once —
+## commit is idempotent and the ability was already restored by plan_gain), reset the gauge
+## for the next cycle, and fly a coin from the bar to the power as pure feedback.
+func _spawn_restore_coin() -> void:
+	_set_power_bar_frame(0)
 	if RunStateStore.pendingPowerRestores.is_empty():
-		_reset_power_bar_after_full() # no spent power this cycle — just reset the gauge
 		return
 	var power_id := String(RunStateStore.pendingPowerRestores[0])
 	RunStateStore.commit_power_restore(power_id)
 	var coin := _make_power_coin(POWER_BAR_TOP)
 	if coin == null:
-		_reset_power_bar_after_full()
 		return
+	_power_coins_in_flight += 1 # keep the sequence active until it lands
 	var target := _power_center(power_id)
 	var tw := create_tween()
 	tw.tween_method(_drive_power_coin.bind(coin, POWER_BAR_TOP, target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
-	tw.tween_callback(_finish_bar_restore.bind(coin, target))
+	tw.tween_callback(_on_restore_coin_arrived.bind(coin))
 
-func _finish_bar_restore(coin: Node, target: Vector2) -> void:
+func _on_restore_coin_arrived(coin: Node) -> void:
 	if is_instance_valid(coin):
 		coin.queue_free()
-	_spawn_power_pulse(target)
-	_reset_power_bar_after_full()
+	_on_power_coin_landed() # no pulse (req 1)
 
-func _reset_power_bar_after_full() -> void:
-	_set_power_bar_frame(_bar_frame_for(_power_bar_coins)) # next cycle's start (0)
-	_power_coin_active = false
-	_advance_power_bar() # keep going if a big gain crossed more thresholds
+func _on_power_coin_landed() -> void:
+	_power_coins_in_flight = maxi(0, _power_coins_in_flight - 1)
+	if _power_coins_in_flight == 0:
+		_power_batch_running = false
+		_advance_power_bar() # more lucidity? else presents any queued dealer offer
+
+## Snap the gauge to the current lucidity without animation, and clear pending restores
+## (visual only). Used on lucidity drops and on the flatline/run-over transition.
+func _snap_power_bar() -> void:
+	var coins := int(RunStateStore.lucidityCoins)
+	_power_bar_coins = coins - (coins % _power_bar_step())
+	_set_power_bar_frame(_bar_frame_for(coins))
+	for power_id in RunStateStore.pendingPowerRestores.duplicate():
+		RunStateStore.commit_power_restore(String(power_id))
 
 func _make_power_coin(pos: Vector2) -> Sprite2D:
 	if _coin_layer == null:
@@ -2139,27 +2231,6 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
-
-func _spawn_power_pulse(center: Vector2) -> void:
-	if _coin_layer == null:
-		return
-	var pulse := ColorRect.new()
-	pulse.color = Color(1.0, 0.88, 0.22, 0.38)
-	pulse.size = Vector2(18.0, 18.0)
-	pulse.position = center - pulse.size * 0.5
-	pulse.pivot_offset = pulse.size * 0.5
-	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_coin_layer.add_child(pulse)
-	var tw := create_tween()
-	tw.tween_method(_drive_power_pulse.bind(pulse), 0.0, 1.0, POWER_PULSE_TIME)
-	tw.tween_callback(pulse.queue_free)
-
-func _drive_power_pulse(t: float, pulse: ColorRect) -> void:
-	if not is_instance_valid(pulse):
-		return
-	var s := lerpf(0.6, 1.35, t)
-	pulse.scale = Vector2(s, s)
-	pulse.modulate.a = 1.0 - t
 
 # ── bet / powers / stash controls ─────────────────────────────────────────────────
 
@@ -3747,6 +3818,19 @@ func _exit_casino(run: Dictionary) -> void:
 	_to_menu()
 
 # ── dealer flow ────────────────────────────────────────────────────────────────────
+
+## Queue the dealer offer behind the power-coin sequence (req 2): if power coins are
+## flying or still owed, defer; the sequence presents it when it finishes. Never cancels.
+func _present_dealer_or_defer() -> void:
+	if _power_sequence_active() or _power_has_pending_work():
+		_pending_dealer_offer = true
+	else:
+		_show_dealer_incoming()
+
+func _maybe_present_pending_dealer() -> void:
+	if _pending_dealer_offer and not _power_sequence_active():
+		_pending_dealer_offer = false
+		_show_dealer_incoming()
 
 func _show_dealer_incoming() -> void:
 	_dealer_visit()

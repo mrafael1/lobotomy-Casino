@@ -393,8 +393,11 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	run_store.abilitiesUsed = ["reroll"]
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
+	run_store.lucidityCoins = 0 # keep the power flow deterministic: no bank steps, direct restore
 	machine._set_sequence_lock(false)
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
+	machine._power_bar_coins = 0
 
 	machine._on_stash_pressed(0)
 	var hint_layer := machine.get_node_or_null("BottomHudLayer/HintLayer") as Control
@@ -405,8 +408,12 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		failures.append("machine consumable feedback: Tea did not spawn a hint")
 	elif (spawned as HintLabel)._pos_label == null or (spawned as HintLabel)._pos_label.text != "+ RESTORE POWER":
 		failures.append("machine consumable feedback: Tea hint missing '+ RESTORE POWER' line")
-	if not machine._power_coin_active and run_store.pendingPowerRestores.is_empty():
-		failures.append("machine consumable feedback: Tea did not start/queue power coin restore")
+	# Tea restored the used ability (gameplay, deterministic) and engaged the restore
+	# visual (a coin is in flight, or the restore already committed the pending entry).
+	if run_store.abilitiesUsed.has("reroll"):
+		failures.append("machine consumable feedback: Tea did not restore the used ability")
+	if not machine._power_sequence_active() and not run_store.pendingPowerRestores.is_empty():
+		failures.append("machine consumable feedback: Tea queued a restore but no coin flew")
 	await create_timer(1.0).timeout
 	if spawned == null or not is_instance_valid(spawned):
 		failures.append("machine consumable feedback: hint disappeared before the 1.5s hold")
@@ -416,7 +423,8 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		spawned.queue_free()
 
 	machine._set_sequence_lock(false)
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 	run_store.runPhase = previous_phase
 	run_store.isSpinning = previous_spinning
 	run_store.dealerIncoming = previous_dealer_incoming
@@ -1490,18 +1498,47 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		if machine._bar_frame_for(coins) != expect[coins]:
 			failures.append("issue76: bar frame for %d = %d, expected %d" % [coins, machine._bar_frame_for(coins), expect[coins]])
 
-	# A full gauge commits exactly the FRONT pending restore, once, synchronously.
+	run_store.runPhase = "running"
+
+	# No restorable power: even a huge gain caps the gauge at 4/5 (last step 40), never
+	# plans a restore, and never cycles (req 6).
+	run_store.pendingPowerRestores = []
+	run_store.lucidityCoins = 200
+	machine._power_bar_coins = 0
+	var capped: Array = machine._plan_power_bar_steps()
+	var cap_restores := 0
+	var cap_last := 0
+	for s in capped:
+		cap_last = int(s["milestone"])
+		if bool(s["restore"]):
+			cap_restores += 1
+	if cap_restores != 0:
+		failures.append("issue76: gauge planned a restore with no restorable power")
+	if cap_last != 40:
+		failures.append("issue76: no-restore gauge did not cap at 4/5 (last %d, expected 40)" % cap_last)
+
+	# One restorable power: exactly one fill completes, then it caps again at the next 4/5.
+	run_store.pendingPowerRestores = ["reroll"]
+	machine._power_bar_coins = 0
+	var withone: Array = machine._plan_power_bar_steps()
+	var one_restores := 0
+	var one_last := 0
+	for s in withone:
+		one_last = int(s["milestone"])
+		if bool(s["restore"]):
+			one_restores += 1
+	if one_restores != 1:
+		failures.append("issue76: expected exactly one restore fill, got %d" % one_restores)
+	if one_last != 90:
+		failures.append("issue76: gauge did not cap at the next 4/5 after one restore (last %d)" % one_last)
+
+	# Applying a restore step commits exactly the FRONT pending restore, once.
 	run_store.pendingPowerRestores = ["reroll", "shift"]
-	machine._resolve_full_power_bar()
+	machine._apply_power_bank_step({ "milestone": 50, "restore": true })
 	if run_store.pendingPowerRestores != ["shift"]:
-		failures.append("issue76: full gauge did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
-	machine._resolve_full_power_bar()
-	if not run_store.pendingPowerRestores.is_empty():
-		failures.append("issue76: gauge did not commit the remaining restore")
-	# Resolving with nothing pending is a safe no-op (no crash, no negative state).
-	machine._resolve_full_power_bar()
-	if not run_store.pendingPowerRestores.is_empty():
-		failures.append("issue76: empty-gauge resolve altered pending restores")
+		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 
 	run_store.reset_run_state()
 
@@ -1557,7 +1594,8 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = []
 	machine._pending_spin_gain = 0
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 	var tea_before := String(label.text).get_slice(":", 1).to_int()
