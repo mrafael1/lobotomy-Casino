@@ -519,6 +519,10 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	machine._power_seen_lucidity = 0
 
 	machine._on_stash_pressed(0)
+	var fx_layer := machine._fx_layer as Control
+	var tea_petals := fx_layer.get_node_or_null("TeaSakuraPetals") if fx_layer != null else null
+	if tea_petals == null:
+		failures.append("issue34: Tea did not spawn sakura petals")
 	var hint_layer := machine.get_node_or_null("BottomHudLayer/HintLayer") as Control
 	var spawned: Node = null
 	if hint_layer != null and hint_layer.get_child_count() > 0:
@@ -540,6 +544,22 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		failures.append("machine consumable feedback: hint faded before the 1.5s hold")
 	if spawned != null and is_instance_valid(spawned):
 		spawned.queue_free()
+	await create_timer(float(machine.tea_petal_time) + 0.3).timeout
+
+	machine._play_close_call_heartbeat()
+	if machine._close_call_heartbeat_tween == null:
+		failures.append("issue34: close call did not start heartbeat zoom")
+	machine._clear_close_call_heartbeat()
+
+	machine._play_white_powder_distortion()
+	var distortion := fx_layer.get_node_or_null("WhitePowderDistortion") if fx_layer != null else null
+	if distortion == null:
+		failures.append("issue34: White Powder did not spawn distortion")
+	if machine._white_powder_distortion_tween != null and machine._white_powder_distortion_tween.is_valid():
+		machine._white_powder_distortion_tween.kill()
+	machine._white_powder_distortion_tween = null
+	if distortion != null and is_instance_valid(distortion):
+		distortion.free()
 
 	machine._set_sequence_lock(false)
 	machine._power_coins_in_flight = 0

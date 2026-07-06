@@ -85,6 +85,7 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
+const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const SETTINGS_ASSET := "ui/settings.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
@@ -264,6 +265,11 @@ var _pending_deferred_neg: Dictionary = {}
 # tea sakura) are NOT here — they wait on assets. 🎨
 @export_group("Consumable Visuals")
 @export var consumable_fx_enabled: bool = true
+@export_subgroup("Close Call", "close_call_")
+## Non-fatal flatline strikes briefly zoom the machine like a heartbeat.
+@export var close_call_fx_enabled: bool = true
+@export_range(1.0, 1.2, 0.005) var close_call_zoom_scale: float = 1.055
+@export_range(0.1, 1.0, 0.05) var close_call_zoom_time: float = 0.38
 @export_subgroup("Tobacco", "tobacco_")
 ## Smoke + FULLY opaque cover on the reel(s) hidden from scoring (the last
 ## pairBoostHiddenReels reels — mirrors evaluate.gd's slice) while Tobacco runs.
@@ -292,6 +298,17 @@ var _pending_deferred_neg: Dictionary = {}
 @export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
 @export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
+@export_subgroup("Tea", "tea_")
+## Sakura-petal tranquility layer when Tea is used.
+@export var tea_fx_enabled: bool = true
+@export_range(0.5, 4.0, 0.1) var tea_petal_time: float = 2.2
+@export_range(4, 64, 1) var tea_petal_count: int = 28
+@export var tea_petal_color: Color = Color(1.0, 0.62, 0.82, 0.82)
+@export_subgroup("White Powder", "white_powder_")
+## Copying a symbol ripples the screen, then cleanly fades out.
+@export var white_powder_fx_enabled: bool = true
+@export_range(0.1, 2.0, 0.05) var white_powder_distortion_time: float = 0.55
+@export_range(0.0, 1.0, 0.01) var white_powder_distortion_strength: float = 0.65
 @export_subgroup("Hidden Result", "hidden_")
 ## White Powder: the spin consumed by hideResultSpins reveals "?" covers instead
 ## of readable reels, until the next spin re-rolls the machine.
@@ -434,6 +451,8 @@ var _energy_pulse_tween: Tween = null
 var _energy_fx_active := false
 var _cocktail_shake_tween: Tween = null
 var _potion_jump_tween: Tween = null
+var _close_call_heartbeat_tween: Tween = null
+var _white_powder_distortion_tween: Tween = null
 var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
 var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
@@ -1264,6 +1283,7 @@ func _sync_visuals() -> void:
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
+	_clear_close_call_heartbeat()
 	_set_hidden_result_active(false)
 	_set_adjacent_symbols_hidden_active(false)
 	_close_serum_picker()
@@ -3159,6 +3179,7 @@ func _on_copy_pick(reel_index: int) -> void:
 		_copy_source = -1
 		_hud_delta_hold = true # deltas pop with the copy's score popup (issue #54)
 		RunStateStore.copy_reel(src, reel_index)
+		_play_white_powder_distortion()
 		_clear_targeting()
 		_refresh_reels_from_state()
 		_update_hud()
@@ -3368,6 +3389,8 @@ func _play_use_fx(id: String) -> void:
 		return
 	if id == "item_cocktail" and cocktail_fx_enabled:
 		_play_cocktail_shake()
+	elif id == "cons_tea" and tea_fx_enabled:
+		_play_tea_sakura_fx()
 
 func _play_cocktail_shake() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
@@ -3401,6 +3424,62 @@ func _play_potion_jump() -> void:
 	_potion_jump_tween.tween_property(self, "position:y", -potion_jump_height, 0.09)
 	_potion_jump_tween.tween_property(self, "position:y", 0.0, 0.14) \
 		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+
+func _play_tea_sakura_fx() -> void:
+	if _fx_layer == null:
+		return
+	var petals := CPUParticles2D.new()
+	petals.name = "TeaSakuraPetals"
+	petals.z_index = 65
+	petals.amount = tea_petal_count
+	petals.lifetime = tea_petal_time
+	petals.one_shot = true
+	petals.explosiveness = 0.18
+	petals.position = Vector2(SRC_W * 0.5, 24.0)
+	petals.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	petals.emission_rect_extents = Vector2(SRC_W * 0.55, 6.0)
+	petals.direction = Vector2(0.2, 1.0)
+	petals.spread = 32.0
+	petals.gravity = Vector2(-3.0, 13.0)
+	petals.initial_velocity_min = 10.0
+	petals.initial_velocity_max = 24.0
+	petals.angular_velocity_min = -90.0
+	petals.angular_velocity_max = 90.0
+	petals.scale_amount_min = 0.7
+	petals.scale_amount_max = 1.25
+	petals.color = tea_petal_color
+	var tex := _load_texture("ui/sakura_petal.png", false)
+	if tex != null:
+		petals.texture = tex
+		petals.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_fx_layer.add_child(petals)
+	petals.emitting = true
+	var tw := create_tween()
+	tw.tween_interval(tea_petal_time + 0.2)
+	tw.tween_callback(petals.queue_free)
+
+func _play_white_powder_distortion() -> void:
+	if _fx_layer == null or not (consumable_fx_enabled and white_powder_fx_enabled):
+		return
+	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
+		_white_powder_distortion_tween.kill()
+	var ripple := ColorRect.new()
+	ripple.name = "WhitePowderDistortion"
+	ripple.size = Vector2(SRC_W, SRC_H)
+	ripple.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ripple.z_index = 70
+	var mat := ShaderMaterial.new()
+	mat.shader = WHITE_POWDER_DISTORTION_SHADER
+	mat.set_shader_parameter("amount", white_powder_distortion_strength)
+	mat.set_shader_parameter("ripple_time", 0.0)
+	ripple.material = mat
+	_fx_layer.add_child(ripple)
+	_white_powder_distortion_tween = create_tween()
+	_white_powder_distortion_tween.set_parallel(true)
+	_white_powder_distortion_tween.tween_property(mat, "shader_parameter/ripple_time", 1.0, white_powder_distortion_time)
+	_white_powder_distortion_tween.tween_property(mat, "shader_parameter/amount", 0.0, white_powder_distortion_time)
+	_white_powder_distortion_tween.set_parallel(false)
+	_white_powder_distortion_tween.tween_callback(ripple.queue_free)
 
 func _potion_effect_text(pick: Dictionary) -> String:
 	match String(pick.get("kind", "")):
@@ -3742,6 +3821,7 @@ func _show_flatline_result_reaction(count: int) -> void:
 	# the payoff lands on a later spin and would otherwise feel disconnected. (A fatal
 	# strike ends the run, so there is no next win to charge.)
 	if count < fatal_flatline_count:
+		_play_close_call_heartbeat()
 		var charge := _reaction_label(host, "NEXT WIN x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT,
 			Vector2(0.0, cy + 20.0), 8, flatline_result_color)
 		charge.pivot_offset = Vector2(SRC_W * 0.5, 5.0)
@@ -3750,6 +3830,34 @@ func _show_flatline_result_reaction(count: int) -> void:
 	tw.tween_interval(reaction_flash_time * 0.3)
 	tw.tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.3)
 	tw.tween_callback(host.queue_free)
+
+func _play_close_call_heartbeat() -> void:
+	if not (consumable_fx_enabled and close_call_fx_enabled):
+		return
+	_clear_close_call_heartbeat()
+	var center := Vector2(SRC_W * 0.5, SRC_H * 0.5)
+	var zoom := maxf(1.0, close_call_zoom_scale)
+	var zoom_pos := -center * (zoom - 1.0)
+	var half_time := close_call_zoom_time * 0.5
+	_close_call_heartbeat_tween = create_tween()
+	_close_call_heartbeat_tween.set_parallel(true)
+	_close_call_heartbeat_tween.tween_property(self, "scale", Vector2(zoom, zoom), half_time) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_close_call_heartbeat_tween.tween_property(self, "position", zoom_pos, half_time) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_close_call_heartbeat_tween.chain()
+	_close_call_heartbeat_tween.tween_property(self, "scale", Vector2.ONE, half_time) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_close_call_heartbeat_tween.tween_property(self, "position", Vector2.ZERO, half_time) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_close_call_heartbeat_tween.chain().tween_callback(_clear_close_call_heartbeat)
+
+func _clear_close_call_heartbeat() -> void:
+	if _close_call_heartbeat_tween != null and _close_call_heartbeat_tween.is_valid():
+		_close_call_heartbeat_tween.kill()
+	_close_call_heartbeat_tween = null
+	scale = Vector2.ONE
+	position = Vector2.ZERO
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	var host := Control.new()
