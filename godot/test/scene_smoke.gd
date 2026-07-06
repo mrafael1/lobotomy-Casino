@@ -178,6 +178,13 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	machine._apply_machine_reactions(true)
 	if int(run_store.neurons) <= before_vial:
 		failures.append("issue92: hallucination power-made visible pair did not trigger vial triple effect")
+	run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	var before_flatline := int(run_store.flatlineResultCount)
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(false)
+	if int(run_store.flatlineResultCount) != before_flatline:
+		failures.append("issue92: hallucination close-call flatline pair should not trigger deadly flatline effect")
 
 	if machine._derive_source_reel(["vial", "vial", "brain"]) != 1:
 		failures.append("issue92: hallucination score burst should derive from second reel")
@@ -2396,8 +2403,9 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await process_frame
 	if power_name_label.text != "Hallucination":
 		failures.append("upgrades: Hallucination did not show in the power name box")
-	if price_label.text != "120":
-		failures.append("upgrades: Hallucination price should be 120")
+	var hallucination_cost := int(Upgrades.upgrade_map()["pos_enlightenment"]["cost"])
+	if price_label.text != str(hallucination_cost):
+		failures.append("upgrades: Hallucination price should be %d" % hallucination_cost)
 	if not description_label.text.contains("Visible pairs count as triples"):
 		failures.append("upgrades: Hallucination description does not describe the rework")
 	brain.frame = 11

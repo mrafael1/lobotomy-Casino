@@ -3468,6 +3468,8 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 				int(lr.get("freeSpinsGranted", 0)), power_triggered)
 		return
 	if _active_hidden_reel_count() > 0 and String(reels[0]) == String(reels[1]):
+		if String(reels[0]) == "flatline":
+			return
 		_apply_symbol_triple(String(reels[0]), int(lr.get("freeSpinsGranted", 0)), power_triggered)
 		return
 	if not (a == String(reels[1]) and a == String(reels[2])):
