@@ -693,6 +693,14 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if int(run_store.guaranteeSymbolSpins) != 3 or String(run_store.guaranteeSymbolId) != "vial" \
 			or int(run_store.pendingBlurSpins) != 2 or int(run_store.banBrainSpins) != 0:
 		failures.append("issue53: Serum did not set guarantee/blur state")
+	# Issue #97: stacking a second Serum extends the guarantee window but the
+	# negative blur duration stays capped at a single item.
+	run_store.runConsumables = { "cons_focus": 1 }
+	run_store.use_consumable("cons_focus", "vial")
+	if int(run_store.guaranteeSymbolSpins) != 6 or int(run_store.pendingBlurSpins) != 2:
+		failures.append("issue97: stacked Serums stacked the blur instead of the guarantee")
+	run_store.guaranteeSymbolSpins = 3
+	run_store.pendingBlurSpins = 2
 	# The next 3 spins contain the picked symbol, then the next 2 spins are blurry.
 	run_store.neurons = 100
 	for i in 3:
@@ -829,6 +837,22 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		failures.append("issue61: forced compulsion spin did not start")
 	else:
 		run_store.set_spinning(false)
+
+	# Issue #97: stacking two Energy Drinks at once stacks the free-spin rush
+	# (decaySkips) but caps the negative compulsion at a single forced spin.
+	run_store.compulsiveSpinSkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.decaySkips = 0
+	run_store.forcedRandomBetSpins = 0
+	run_store.betMultiplier = 1
+	run_store.runConsumables = { "item_energy_drink": 2 }
+	run_store.use_consumable("item_energy_drink")
+	run_store.use_consumable("item_energy_drink")
+	if int(run_store.decaySkips) != 4 or int(run_store.pendingCompulsiveSpinSkips) != 1:
+		failures.append("issue97: stacked Energy Drinks stacked the compulsion instead of the rush")
+	run_store.decaySkips = 0
+	run_store.forcedRandomBetSpins = 0
+	run_store.pendingCompulsiveSpinSkips = 0
 
 	# White Powder copy keeps other consumables and neurons intact after the copy.
 	run_store.runConsumables = { "cons_white_powder": 0, "item_water": 1 }

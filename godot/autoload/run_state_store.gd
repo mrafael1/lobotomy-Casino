@@ -800,7 +800,10 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				# x3 bet for those spins, then queues the forced x1 spin.
 				decaySkips += int(e["spins"])
 				forcedRandomBetSpins += int(e["spins"])
-				pendingCompulsiveSpinSkips += int(e["compulsiveSpins"])
+				# Issue #97: stacking Energy Drinks stacks the free-spin rush
+				# (decaySkips) but NOT the compulsion — the negative debuff caps at
+				# a single forced spin no matter how many are used at once.
+				pendingCompulsiveSpinSkips = maxi(pendingCompulsiveSpinSkips, int(e["compulsiveSpins"]))
 				if betMultiplier == 3:
 					betMultiplier = 2
 			"addLucidity":
@@ -836,7 +839,9 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 			var picked := serum_symbol if pool.has(serum_symbol) else (String(pool[0]) if not pool.is_empty() else "")
 			guaranteeSymbolSpins += int(ce["appearSpins"])
 			guaranteeSymbolId = picked
-			pendingBlurSpins += int(ce.get("blurSpins", 0))
+			# Issue #97: stacking Serums stacks the guarantee window (appearSpins)
+			# but NOT the negative blur — it caps at a single item's duration.
+			pendingBlurSpins = maxi(pendingBlurSpins, int(ce.get("blurSpins", 0)))
 		"scrambleThenHide":
 			# White Powder: the scramble is the copy_reel UI flow; hide the next spin.
 			hideResultSpins += 1 if bool(ce["hideNextSpin"]) else 0
