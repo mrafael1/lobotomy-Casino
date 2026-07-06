@@ -121,6 +121,12 @@ const MULT_COLORS := {
 }
 const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const JACKPOT_GOLD := Color(1.0, 0.84, 0.18) # jackpot burst is ALWAYS golden (issue #22)
+const SCORE_TABLE_GAIN_COLOR := Color(0.75, 1.0, 0.8)
+const SCORE_TABLE_DIM_COLOR := Color(0.45, 0.48, 0.58)
+const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
+const SCORE_TABLE_REWARD_AMP_COLOR := Color(1.0, 0.86, 0.2)
+const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
+const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
@@ -2767,6 +2773,8 @@ func _show_score_table() -> void:
 	_score_label_right(_score_overlay, "PAIR", pair_right, header_y, 7, Color(0.0, 0.9, 1.0))
 	_score_label_right(_score_overlay, "TRIPLE", triple_right, header_y, 7, Color(0.0, 0.9, 1.0))
 
+	var reward_amp_symbol := String(MetaStateStore.rewardAmpSymbol)
+	var reward_amp_bonus := Economy.compute_symbol_reward_amp_bonus(RunStateStore.ownedUpgrades)
 	var y := 74.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var symbol_id := String(sym)
@@ -2785,19 +2793,32 @@ func _show_score_table() -> void:
 		# Permanent odds level (issue #51): the same levels bought at the dealer's
 		# odds table; dimmed when the symbol was never upgraded.
 		var level := RunStateStore.odds_upgrade_level(symbol_id)
-		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7,
-			Color(1.0, 0.86, 0.2) if level > 0 else Color(0.45, 0.48, 0.58))
+		var is_maxed := level >= int(RunStateStore.odds_max_level)
+		var level_color := SCORE_TABLE_MAXED_COLOR if is_maxed else (
+			SCORE_TABLE_LEVEL_COLOR if level > 0 else SCORE_TABLE_DIM_COLOR)
+		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7, level_color)
+		if is_maxed:
+			_score_label(_score_overlay, "(%s)" % _reward_bonus_text(
+				float(RunStateStore.odds_max_level_reward_bonus)),
+				Vector2(lvl_cx + 6.0, y + 4.0), 4, SCORE_TABLE_MAXED_COLOR)
 
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
 		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
 		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
-		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, Color(0.75, 1.0, 0.8))
-		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7,
-			Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8))
+		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
+		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
+		var triple_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else (
+			SCORE_TABLE_BRAIN_COLOR if symbol_id == "brain" else SCORE_TABLE_GAIN_COLOR)
+		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, pair_color)
+		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7, triple_color)
 		# Little bonus-effect blurb under the triple value (issue #51).
 		_score_label_right(_score_overlay, _triple_effect_text(symbol_id), triple_right, y + 12.0, 4,
 			Color(0.58, 0.64, 0.72))
+		if is_maxed:
+			_score_label_right(_score_overlay, _reward_bonus_text(
+				float(RunStateStore.odds_max_level_reward_bonus)),
+				triple_right, y + 20.0, 4, SCORE_TABLE_MAXED_COLOR)
 		y += 27.0
 
 	var close := Button.new()
@@ -2824,6 +2845,9 @@ func _score_label_centered(parent: Control, text: String, center_x: float, y: fl
 	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
 	l.position = Vector2(center_x - l.get_minimum_size().x * 0.5, y)
 	return l
+
+func _reward_bonus_text(bonus: float) -> String:
+	return "+%d%%" % int(round(bonus * 100.0))
 
 ## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
 ## Dynamic counts pull from the reaction exports so the copy never drifts.

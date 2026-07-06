@@ -2052,14 +2052,25 @@ func _check_eye_reveal(machine: Node, failures: Array) -> void:
 # bonus-effect blurbs, downscalable icons, no symbol names.
 func _check_score_table_51(machine: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
-	meta_store.oddsUpgrades = { "eye": 2 }
+	var owned_before: Array = run_store.ownedUpgrades.duplicate()
+	var bonuses_before: Dictionary = run_store.symbolRewardBonuses.duplicate(true)
+	meta_store.oddsUpgrades = { "eye": 2, "vial": int(run_store.odds_max_level) }
+	meta_store.rewardAmpSymbol = "eye"
+	run_store.ownedUpgrades = ["corr_reward_amp_1"]
+	run_store.symbolRewardBonuses = {
+		"eye": 0.15,
+		"vial": float(run_store.odds_max_level_reward_bonus),
+	}
 	machine._set_sequence_lock(false)
 	machine._close_score_table()
 	machine._show_score_table()
 	var overlay: Control = machine._score_overlay
 	if overlay == null:
 		failures.append("issue51: score table did not open")
+		run_store.ownedUpgrades = owned_before
+		run_store.symbolRewardBonuses = bonuses_before
 		meta_store._apply(meta_before)
 		meta_store.save_state()
 		return
@@ -2081,11 +2092,42 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		failures.append("issue51: triple bonus-effect blurbs missing")
 	if not texts.has("2"):
 		failures.append("issue51: LVL column does not show the symbol's odds level")
+	var found_amp_pair := false
+	var found_amp_triple := false
+	var found_max_level := false
+	var found_max_level_bonus := false
+	var found_max_line_bonus := false
+	var expected_max_bonus := "+%d%%" % int(round(float(run_store.odds_max_level_reward_bonus) * 100.0))
+	var eye_bonus := float(run_store.symbolRewardBonuses.get("eye", 0.0))
+	var expected_amp_pair := "+%d" % floori(float(int(Payouts.PAIR_SCORE["eye"])) * (1.0 + eye_bonus) + 0.5)
+	var expected_amp_triple := "+%d" % floori(float(int(Payouts.TRIPLE_SCORE["eye"])) * (1.0 + eye_bonus) + 0.5)
+	var gain_debug: Array[String] = []
 	for child in overlay.get_children():
+		if child is Label:
+			var label := child as Label
+			var color := label.get_theme_color("font_color")
+			if label.text.begins_with("+"):
+				gain_debug.append("%s:%s" % [label.text, str(color)])
+			if label.text == expected_amp_pair and color == Color(1.0, 0.86, 0.2):
+				found_amp_pair = true
+			if label.text == expected_amp_triple and color == Color(1.0, 0.86, 0.2):
+				found_amp_triple = true
+			if label.text == str(int(run_store.odds_max_level)) and color == Color(1.0, 0.24, 0.24):
+				found_max_level = true
+			if label.text == "(%s)" % expected_max_bonus and color == Color(1.0, 0.24, 0.24):
+				found_max_level_bonus = true
+			if label.text == expected_max_bonus and color == Color(1.0, 0.24, 0.24):
+				found_max_line_bonus = true
 		if child is TextureRect and (child as TextureRect).expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
 			failures.append("issue51: table icons cannot scale down (expand mode)")
 			break
+	if not found_amp_pair or not found_amp_triple:
+		failures.append("issue51: reward amplification does not highlight pair/triple gains in yellow (%s)" % str(gain_debug))
+	if not found_max_level or not found_max_level_bonus or not found_max_line_bonus:
+		failures.append("issue51: maxed odds level bonus is not shown in red in the table")
 	machine._close_score_table()
+	run_store.ownedUpgrades = owned_before
+	run_store.symbolRewardBonuses = bonuses_before
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
