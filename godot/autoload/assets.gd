@@ -82,7 +82,14 @@ const SYMBOL_PICKER_SLOT_COLOR := Color(0.18, 0.13, 0.26, 0.95)
 const SYMBOL_PICKER_SLOT_BORDER := Color(0.45, 0.38, 0.62, 0.9)
 const SYMBOL_PICKER_SLOT_HOVER := Color(0.28, 0.2, 0.42, 0.9)
 const SYMBOL_PICKER_SLOT_PRESSED := Color(0.45, 0.38, 0.62, 0.95)
-const SYMBOL_PICKER_ICON_SIZE := 16.0
+const SYMBOL_PICKER_ICON_SIZE := 14.0
+const SYMBOL_PICKER_FIVE_SLOT_SOURCE_RECTS: Array[Rect2] = [
+	Rect2(40.0, 56.0, 88.0, 96.0),
+	Rect2(152.0, 56.0, 88.0, 96.0),
+	Rect2(264.0, 56.0, 88.0, 96.0),
+	Rect2(376.0, 56.0, 88.0, 96.0),
+	Rect2(488.0, 56.0, 88.0, 96.0),
+]
 
 # Per-state -> frame index for a sheet of `frames` frames.
 func _sheet_state_frames(frames: int) -> Dictionary:
@@ -211,15 +218,16 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	panel.add_child(cancel)
 
 	var content := Rect2(0.0, 12.0, rect.size.x, rect.size.y - 12.0)
-	var uses_frame := use_five_slot_art and symbols.size() == 5 and texture(SYMBOL_PICKER_FRAME_REL) != null
+	var frame_texture := texture(SYMBOL_PICKER_FRAME_REL)
+	var uses_frame := use_five_slot_art and symbols.size() == 5 and frame_texture != null
 	if uses_frame:
 		var frame := TextureRect.new()
 		frame.name = "Frame"
-		frame.texture = texture(SYMBOL_PICKER_FRAME_REL)
+		frame.texture = frame_texture
 		frame.position = content.position
-		frame.size = content.size
-		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		frame.stretch_mode = TextureRect.STRETCH_SCALE
+		frame.size = Vector2(float(frame_texture.get_width()), float(frame_texture.get_height()))
+		frame.scale = Vector2(content.size.x / frame.size.x, content.size.y / frame.size.y)
+		frame.stretch_mode = TextureRect.STRETCH_KEEP
 		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(frame)
@@ -232,8 +240,9 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 		var button := Button.new()
 		button.name = "SymbolButton%s" % symbol_id.capitalize()
 		button.focus_mode = Control.FOCUS_NONE
-		button.position = Vector2(content.position.x + float(i) * cell_w, content.position.y)
-		button.size = Vector2(cell_w, content.size.y)
+		var button_rect := _symbol_picker_button_rect(i, cell_w, content)
+		button.position = button_rect.position
+		button.size = button_rect.size
 		_apply_symbol_picker_button_style(button)
 		button.pressed.connect(picked.bind(symbol_id))
 		panel.add_child(button)
@@ -244,7 +253,8 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 			var icon := TextureRect.new()
 			icon.name = "SymbolIcon%s" % symbol_id.capitalize()
 			icon.texture = symbol_texture
-			icon.position = Vector2((cell_w - icon_size) * 0.5, (content.size.y - icon_size) * 0.5)
+			var icon_center := _symbol_picker_icon_center(i, cell_w, content, frame_texture, uses_frame)
+			icon.position = icon_center - button.position - Vector2(icon_size, icon_size) * 0.5
 			icon.size = Vector2(icon_size, icon_size)
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -253,6 +263,22 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 			button.add_child(icon)
 
 	return panel
+
+func _symbol_picker_button_rect(index: int, cell_w: float, content: Rect2) -> Rect2:
+	return Rect2(Vector2(content.position.x + float(index) * cell_w, content.position.y),
+		Vector2(cell_w, content.size.y))
+
+func _symbol_picker_icon_center(index: int, cell_w: float, content: Rect2, frame_texture: Texture2D,
+		uses_frame: bool) -> Vector2:
+	if uses_frame and frame_texture != null and index < SYMBOL_PICKER_FIVE_SLOT_SOURCE_RECTS.size():
+		return _symbol_picker_slot_rect(index, content, frame_texture).get_center()
+	return Vector2(content.position.x + (float(index) + 0.5) * cell_w, content.position.y + content.size.y * 0.5)
+
+func _symbol_picker_slot_rect(index: int, content: Rect2, frame_texture: Texture2D) -> Rect2:
+	var source_rect := SYMBOL_PICKER_FIVE_SLOT_SOURCE_RECTS[index]
+	var scale := Vector2(content.size.x / float(frame_texture.get_width()),
+		content.size.y / float(frame_texture.get_height()))
+	return Rect2(content.position + source_rect.position * scale, source_rect.size * scale)
 
 func _build_symbol_picker_slots(parent: Control, count: int, content: Rect2) -> void:
 	var cell_w := content.size.x / float(maxi(1, count))

@@ -2522,7 +2522,12 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: reward amp tier I description is not blue BBCode")
 	scene._build_reward_amp_picker("corr_reward_amp_1")
 	var reward_picker := scene._reward_amp_picker as Control
-	_check_symbol_picker_panel_63(reward_picker, 6, false, "issue63: Reward Amp", failures)
+	_check_symbol_picker_panel_63(reward_picker, 5, true, "issue63: Reward Amp", failures)
+	if reward_picker != null:
+		if reward_picker.find_child("SymbolButtonBrain", true, false) == null:
+			failures.append("issue63: Reward Amp picker should include brain")
+		if reward_picker.find_child("SymbolButtonFlatline", true, false) != null:
+			failures.append("issue63: Reward Amp picker should not include flatline")
 	if reward_picker != null:
 		var cancel_button := reward_picker.get_node_or_null("SymbolPickerPanel/CancelButton") as Button
 		if cancel_button != null:

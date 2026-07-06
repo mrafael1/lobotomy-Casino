@@ -613,9 +613,10 @@ func _build_reward_amp_picker(upgrade_id: String) -> void:
 
 	var symbols: Array[String] = []
 	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
-		symbols.append(String(symbol_id))
+		if String(symbol_id) != "flatline":
+			symbols.append(String(symbol_id))
 	Assets.build_symbol_picker_panel(_reward_amp_picker, symbols, "BOOST SYMBOL", REWARD_AMP_PICKER_RECT,
-		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"), false)
+		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"), true)
 
 func _on_reward_amp_picker_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
