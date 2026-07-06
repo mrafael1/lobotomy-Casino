@@ -75,6 +75,7 @@ func _run() -> void:
 	_check_spins_bar_lever_80(machine, run_store, failures)
 	await _check_spins_counter_accuracy_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
+	_check_issue92_rule_reworks(run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -105,6 +106,42 @@ func _run() -> void:
 		for f in failures:
 			printerr("✗ ", f)
 		quit(1)
+
+func _check_issue92_rule_reworks(run_store: Node, meta_store: Node, failures: Array) -> void:
+	var triple_book := Evaluate.score_reels(["book", "book", "book"], 1.0, true,
+		false, true)
+	if String(triple_book["winType"]) != "triple" or int(triple_book["scoreEarned"]) != Payouts.TRIPLE_SCORE["eye"] \
+			or not bool(triple_book.get("bookTripleChoice", false)):
+		failures.append("issue92: triple book should score as eye and open choice: %s" % str(triple_book))
+
+	var joker_eye := Evaluate.score_reels(["book", "eye", "eye"], 1.0, true,
+		false, true)
+	if String(joker_eye["winType"]) != "triple" or String(joker_eye.get("resolvedSymbol", "")) != "eye":
+		failures.append("issue92: book should complete the highest near symbol triple: %s" % str(joker_eye))
+
+	var hallucination := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, true, 0.70)
+	if String(hallucination["winType"]) != "triple" or int(hallucination["scoreEarned"]) != 35:
+		failures.append("issue92: hallucination should score visible pair as 70%% triple: %s" % str(hallucination))
+
+	var amped_pair := Evaluate.score_reels(["eye", "eye", "pill"], 1.0, true,
+		false, false, 1.0, 0, false, 1.0, { "eye": 0.40 })
+	if int(amped_pair["scoreEarned"]) != 14:
+		failures.append("issue92: symbol reward amp should boost only the matched symbol: %s" % str(amped_pair))
+
+	var previous_odds: Dictionary = meta_store.oddsUpgrades.duplicate(true)
+	var previous_amp_symbol := String(meta_store.rewardAmpSymbol)
+	meta_store.oddsUpgrades = { "eye": int(run_store.odds_max_level) }
+	meta_store.rewardAmpSymbol = "pill"
+	var bonuses: Dictionary = run_store._symbol_reward_bonuses_from_meta([
+		"corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3",
+	])
+	if not is_equal_approx(float(bonuses.get("eye", 0.0)), float(run_store.odds_max_level_reward_bonus)):
+		failures.append("issue92: maxed odds level should add reward bonus: %s" % str(bonuses))
+	if not is_equal_approx(float(bonuses.get("pill", 0.0)), 0.40):
+		failures.append("issue92: reward amplification should target saved symbol: %s" % str(bonuses))
+	meta_store.oddsUpgrades = previous_odds
+	meta_store.rewardAmpSymbol = previous_amp_symbol
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_first_launch := bool(meta_store.is_first_launch)
@@ -2229,21 +2266,21 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await process_frame
 	if power_name_label.text != "Rewards+":
 		failures.append("upgrades: reward amp did not show the shortened power name")
-	if price_label.text != "15":
+	if price_label.text != "30":
 		failures.append("upgrades: reward amp tier I price is not shown in PowerNameBox")
 	if not description_label.text.contains("[color=#183A8C]tier I[/color]"):
 		failures.append("upgrades: reward amp tier I description is not blue BBCode")
 	await scene._animate_money_to_brain()
 	reward_row.set_meta("upgrade_id", "corr_reward_amp_2")
 	scene._select_row(reward_row)
-	if price_label.text != "25":
-		failures.append("upgrades: reward amp tier II price should be 25")
+	if price_label.text != "55":
+		failures.append("upgrades: reward amp tier II price should be 55")
 	if not description_label.text.contains("[color=#FBBF24]tier II[/color]"):
 		failures.append("upgrades: reward amp tier II description is not orange BBCode")
 	reward_row.set_meta("upgrade_id", "corr_reward_amp_3")
 	scene._select_row(reward_row)
-	if price_label.text != "50":
-		failures.append("upgrades: reward amp tier III price should be 50")
+	if price_label.text != "90":
+		failures.append("upgrades: reward amp tier III price should be 90")
 	if not description_label.text.contains("[color=#D62828]tier III[/color]"):
 		failures.append("upgrades: reward amp tier III description is not red BBCode")
 	if (scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory/NameLabel") as Label).text != "Lock":
@@ -2275,22 +2312,22 @@ func _check_upgrades_scene(failures: Array) -> void:
 	scene._select_row(pattern_row)
 	if power_name_label.text != "Pattern Fabrication":
 		failures.append("upgrades: Pattern Fabrication did not select the pattern upgrade")
-	if price_label.text != "100":
-		failures.append("upgrades: Pattern Fabrication price should be 100")
+	if price_label.text != "160":
+		failures.append("upgrades: Pattern Fabrication price should be 160")
 	scene._select_row(learning_row)
 	if power_name_label.text != "Book Upgrade":
 		failures.append("upgrades: Learning did not select the book upgrade")
-	if price_label.text != "70":
-		failures.append("upgrades: Learning price should be 70")
+	if price_label.text != "120":
+		failures.append("upgrades: Learning price should be 120")
 	var hallucination_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment") as Control
 	scene._select_row(hallucination_row)
 	await process_frame
 	if power_name_label.text != "Hallucination":
 		failures.append("upgrades: Hallucination did not show in the power name box")
-	if price_label.text != "50":
-		failures.append("upgrades: Hallucination price should be 50")
-	if not description_label.text.contains("25% more Lucidity"):
-		failures.append("upgrades: Hallucination description does not describe the 25% gain")
+	if price_label.text != "120":
+		failures.append("upgrades: Hallucination price should be 120")
+	if not description_label.text.contains("Visible pairs count as triples"):
+		failures.append("upgrades: Hallucination description does not describe the rework")
 	brain.frame = 11
 	scene._sync_brain_overlay_frames()
 	if eye_overlay.frame != 11:

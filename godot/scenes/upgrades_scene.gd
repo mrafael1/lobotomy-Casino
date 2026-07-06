@@ -42,6 +42,7 @@ const BUBBLES_REST_FRAME := 12
 const BRAIN_MONEY_TARGET := Vector2(80.0, 128.0)
 const BUY_BUTTON_FONT_SIZE := 6
 const OWNED_BUTTON_FONT_SIZE := 5
+const REWARD_AMP_PICKER_RECT := Rect2(14.0, 136.0, 132.0, 44.0)
 const BG_DEFAULT_FRAME := 3
 const BG_FLASH_LAST_FRAME := 2
 const DEFAULT_DESCRIPTION := "Select a lab terminal."
@@ -53,11 +54,11 @@ const DESCRIPTIONS := {
 	"perm_shift": "Shift one reel symbol up \n or down during a run.",
 	"corr_pattern_23": "Two matching symbols in slots 2 and 3 count as a triple.",
 	"pos_learning": "Adds the Book symbol to the reels.",
-	"pos_enlightenment": "All gains pay 25% more Lucidity.",
+	"pos_enlightenment": "Removes one reel. Visible pairs count as triples, but rewards are cut by 30%.",
 	"perm_memory": "Lock a reel before spinning.",
-	"corr_reward_amp_1": "Increases all lucidity rewards.\n[color=#183A8C]tier I[/color].",
-	"corr_reward_amp_2": "Increases all lucidity rewards.\n[color=#FBBF24]tier II[/color].",
-	"corr_reward_amp_3": "Increases all lucidity rewards.\n[color=#D62828]tier III[/color].",
+	"corr_reward_amp_1": "Choose one symbol and increase its rewards.\n[color=#183A8C]tier I[/color].",
+	"corr_reward_amp_2": "Increase the chosen symbol's rewards.\n[color=#FBBF24]tier II[/color].",
+	"corr_reward_amp_3": "Increase the chosen symbol's rewards.\n[color=#D62828]tier III[/color].",
 	"pos_smart_save": "Retain 20% of run lucidity on reset instead of 10%.",
 }
 
@@ -146,6 +147,8 @@ var _eye_idle_wait := 1.8
 var _eye_idle_frame := -1
 var _memory_active := false
 var _purchase_animating := false
+var _reward_amp_picker: Control = null
+var _pending_reward_amp_upgrade_id := ""
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(160.0, 320.0)
@@ -582,6 +585,12 @@ func _buy_selected_upgrade() -> void:
 	if _owned(upgrade_id) or price > _wallet() or not _requirements_met(upgrade):
 		_refresh_context_buy_button()
 		return
+	if REWARD_AMP_IDS.has(upgrade_id) and String(MetaStateStore.rewardAmpSymbol) == "":
+		_build_reward_amp_picker(upgrade_id)
+		return
+	await _complete_upgrade_purchase(upgrade_id)
+
+func _complete_upgrade_purchase(upgrade_id: String) -> void:
 	_purchase_animating = true
 	_refresh_context_buy_button()
 	await _animate_money_to_brain()
@@ -589,6 +598,70 @@ func _buy_selected_upgrade() -> void:
 	_purchase_animating = false
 	_refresh_all()
 	_describe_row(_selected_upgrade_row)
+
+func _build_reward_amp_picker(upgrade_id: String) -> void:
+	if _reward_amp_picker != null:
+		return
+	_pending_reward_amp_upgrade_id = upgrade_id
+	_reward_amp_picker = Control.new()
+	_reward_amp_picker.name = "RewardAmpPicker"
+	_reward_amp_picker.size = LAB_SIZE
+	_reward_amp_picker.mouse_filter = Control.MOUSE_FILTER_STOP
+	_reward_amp_picker.z_index = 200
+	_ui_container.add_child(_reward_amp_picker)
+
+	var panel := ColorRect.new()
+	panel.color = Color(0.05, 0.03, 0.1, 0.94)
+	panel.position = REWARD_AMP_PICKER_RECT.position
+	panel.size = REWARD_AMP_PICKER_RECT.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reward_amp_picker.add_child(panel)
+
+	var title := Label.new()
+	title.text = "BOOST SYMBOL"
+	title.position = Vector2(REWARD_AMP_PICKER_RECT.position.x, REWARD_AMP_PICKER_RECT.position.y + 3.0)
+	title.size = Vector2(REWARD_AMP_PICKER_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 7)
+	title.add_theme_color_override("font_color", Color(0.72, 1.0, 0.65))
+	if Assets.font() != null:
+		title.add_theme_font_override("font", Assets.font())
+	_reward_amp_picker.add_child(title)
+
+	var cell_w := REWARD_AMP_PICKER_RECT.size.x / float(maxi(1, Symbols.BASE_SYMBOL_CYCLE.size()))
+	for i in Symbols.BASE_SYMBOL_CYCLE.size():
+		var sym := String(Symbols.BASE_SYMBOL_CYCLE[i])
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.position = Vector2(REWARD_AMP_PICKER_RECT.position.x + float(i) * cell_w,
+			REWARD_AMP_PICKER_RECT.position.y + 14.0)
+		b.size = Vector2(cell_w, 26.0)
+		b.pressed.connect(_on_reward_amp_symbol_picked.bind(sym))
+		_reward_amp_picker.add_child(b)
+		var tex := Assets.texture("symbols/%s.png" % sym, true)
+		if tex != null:
+			var icon := TextureRect.new()
+			icon.texture = tex
+			icon.position = Vector2((cell_w - 16.0) * 0.5, 4.0)
+			icon.size = Vector2(16.0, 16.0)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(icon)
+
+func _close_reward_amp_picker() -> void:
+	if _reward_amp_picker != null:
+		_reward_amp_picker.queue_free()
+	_reward_amp_picker = null
+
+func _on_reward_amp_symbol_picked(symbol_id: String) -> void:
+	var upgrade_id := _pending_reward_amp_upgrade_id
+	_pending_reward_amp_upgrade_id = ""
+	_close_reward_amp_picker()
+	MetaStateStore.set_reward_amp_symbol(symbol_id)
+	await _complete_upgrade_purchase(upgrade_id)
 
 func _animate_money_to_brain() -> void:
 	if _ui_container == null or _context_price_group == null:
@@ -644,7 +717,10 @@ func _describe_row(row: Control) -> void:
 		return
 	var upgrade_id := String(row.get_meta("upgrade_id"))
 	_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true, upgrade_id)
-	_set_description(String(DESCRIPTIONS.get(upgrade_id, "")))
+	var description := String(DESCRIPTIONS.get(upgrade_id, ""))
+	if REWARD_AMP_IDS.has(upgrade_id) and String(MetaStateStore.rewardAmpSymbol) != "":
+		description += "\nTarget: %s" % String(MetaStateStore.rewardAmpSymbol).to_upper()
+	_set_description(description)
 
 func _inspect_row(event: InputEvent, row: Control) -> void:
 	if event is InputEventMouseButton and event.pressed:

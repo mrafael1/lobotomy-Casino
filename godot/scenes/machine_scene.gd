@@ -432,6 +432,7 @@ var _blur_covers: Array = []               # per-reel frost cover (Serum, issue 
 var _blur_result_active := false           # the displayed result renders blurry
 var _adjacent_symbols_hidden_active := false # Serum downside: hide strip neighbours
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
+var _book_choice_overlay: Control = null
 var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
@@ -1243,6 +1244,7 @@ func _sync_visuals() -> void:
 	_set_hidden_result_active(false)
 	_set_adjacent_symbols_hidden_active(false)
 	_close_serum_picker()
+	_close_book_choice_overlay()
 	_hide_compulsive_overlay()
 	_compulsive_queued = false
 	_last_reacted_reels = []
@@ -2766,8 +2768,10 @@ func _show_score_table() -> void:
 		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7,
 			Color(1.0, 0.86, 0.2) if level > 0 else Color(0.45, 0.48, 0.58))
 
-		var pair := int(Payouts.PAIR_SCORE.get(symbol_id, 0))
-		var triple := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
+		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
+		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
+		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
+		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
 		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, Color(0.75, 1.0, 0.8))
 		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7,
 			Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8))
@@ -3247,12 +3251,18 @@ func _refresh_consumable_fx() -> void:
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
 
-## Tobacco: evaluate.gd hides the LAST pairBoostHiddenReels reels from scoring
-## (reels.slice keeps the first ones), so smoke exactly those.
+## Hidden-reel effects hide the LAST reels from scoring (reels.slice keeps the
+## first ones), so smoke exactly those.
 func _refresh_tobacco_fx() -> void:
-	var active := consumable_fx_enabled and tobacco_fx_enabled \
-		and (RunStateStore.pairBoostSpins > 0 or bool(_boost_zero_linger.get("pairBoostSpins", false)))
-	var hidden := clampi(RunStateStore.pairBoostHiddenReels, 0, 2) if active else 0
+	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
+		or bool(_boost_zero_linger.get("pairBoostSpins", false))
+	var hallucination_active := Economy.has_hallucination(RunStateStore.ownedUpgrades)
+	var active := consumable_fx_enabled and tobacco_fx_enabled and (tobacco_active or hallucination_active)
+	var hidden := 0
+	if active:
+		hidden = clampi(RunStateStore.pairBoostHiddenReels if tobacco_active else 0, 0, 2)
+		if hallucination_active:
+			hidden = maxi(hidden, 1)
 	for i in 3:
 		var smoked: bool = i >= 3 - hidden
 		if i < _tobacco_covers.size():
@@ -3426,14 +3436,21 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 	_last_reacted_reels = reels.duplicate()
 	_last_reacted_spin = RunStateStore.spinCount
 	var a := String(reels[0])
+	var win_type := String(lr.get("winType", ""))
+	if win_type != "triple" and win_type != "jackpot":
+		return
+	if bool(lr.get("bookJoker", false)):
+		if bool(lr.get("bookTripleChoice", false)):
+			_show_book_triple_choice(int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		else:
+			_apply_symbol_triple(String(lr.get("resolvedSymbol", "")),
+				int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		return
 	if not (a == String(reels[1]) and a == String(reels[2])):
 		return
 	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a
 	# raw 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal,
 	# flatline strike...). Gating on the scored winType blocks exactly those spins.
-	var win_type := String(lr.get("winType", ""))
-	if win_type != "triple" and win_type != "jackpot":
-		return
 	if a == "flatline":
 		var count := RunStateStore.register_flatline_result()
 		_show_flatline_result_reaction(count)
@@ -3479,6 +3496,69 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 	_update_hud()
 
 ## Centre of the reel window — where triple-grant "+N" fly-ins spawn (issue #66).
+const BOOK_CHOICE_RECT := Rect2(11.0, 130.0, 138.0, 54.0)
+
+func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) -> void:
+	_close_book_choice_overlay()
+	_set_sequence_lock(true)
+	_book_choice_overlay = Control.new()
+	_book_choice_overlay.name = "BookTripleChoice"
+	_book_choice_overlay.size = Vector2(SRC_W, SRC_H)
+	_book_choice_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_choice_overlay.z_index = 96
+	add_child(_book_choice_overlay)
+
+	var panel := ColorRect.new()
+	panel.color = Color(0.05, 0.03, 0.1, 0.94)
+	panel.position = BOOK_CHOICE_RECT.position
+	panel.size = BOOK_CHOICE_RECT.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_book_choice_overlay.add_child(panel)
+
+	var title := _reaction_label(_book_choice_overlay, "BOOK EFFECT",
+		Vector2(BOOK_CHOICE_RECT.position.x, BOOK_CHOICE_RECT.position.y + 3.0),
+		7, Color(1.0, 0.82, 0.28))
+	title.size = Vector2(BOOK_CHOICE_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var choices := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
+	var cell_w := BOOK_CHOICE_RECT.size.x / float(choices.size())
+	for i in choices.size():
+		var sym := String(choices[i])
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.position = Vector2(BOOK_CHOICE_RECT.position.x + float(i) * cell_w,
+			BOOK_CHOICE_RECT.position.y + 17.0)
+		b.size = Vector2(cell_w, 30.0)
+		b.pressed.connect(_on_book_triple_choice.bind(sym, free_spins_granted, power_triggered))
+		_book_choice_overlay.add_child(b)
+		var tex := _load_texture("symbols/%s.png" % sym, true)
+		if tex != null:
+			var icon := TextureRect.new()
+			icon.texture = tex
+			icon.position = Vector2((cell_w - 16.0) * 0.5, 3.0)
+			icon.size = Vector2(16.0, 16.0)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(icon)
+
+func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_triggered: bool) -> void:
+	_close_book_choice_overlay()
+	_set_sequence_lock(false)
+	if symbol_id == "flatline":
+		var count := RunStateStore.register_flatline_result()
+		_show_flatline_result_reaction(count)
+	else:
+		_apply_symbol_triple(symbol_id, free_spins_granted, power_triggered)
+
+func _close_book_choice_overlay() -> void:
+	if _book_choice_overlay != null:
+		_book_choice_overlay.queue_free()
+	_book_choice_overlay = null
+
 func _reel_window_center() -> Vector2:
 	return Vector2(SRC_W * 0.5 - 6.0,
 		float(REEL_WINDOW["top"]) + float(REEL_WINDOW["height"]) * 0.5)

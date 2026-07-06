@@ -36,7 +36,6 @@ static func compute_starting_neurons(owned: Array) -> int:
 static func compute_lucidity_multiplier(owned: Array) -> float:
 	var m := _map()
 	var multiplicative := EconomyConst.BASE_LUCIDITY_MULTIPLIER
-	var reward_amp := 0.0
 	for id in owned:
 		var u: Variant = m.get(id, null)
 		if u == null:
@@ -44,9 +43,25 @@ static func compute_lucidity_multiplier(owned: Array) -> float:
 		var e: Dictionary = u["effect"]
 		if e["type"] == "lucidityMultiplier":
 			multiplicative *= float(e["multiplier"])
-		elif e["type"] == "rewardAmpBonus":
-			reward_amp += float(e["bonus"])
-	return multiplicative * (1.0 + reward_amp)
+	return multiplicative
+
+static func compute_symbol_reward_amp_bonus(owned: Array) -> float:
+	var m := _map()
+	var bonus := 0.0
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "symbolRewardAmpBonus":
+			bonus += float(u["effect"]["bonus"])
+	return bonus
+
+static func compute_hallucination_reward_scale(owned: Array) -> float:
+	var m := _map()
+	var scale := 1.0
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "hallucination":
+			scale *= float(u["effect"].get("rewardScale", 1.0))
+	return scale
 
 static func compute_jackpot_multiplier(owned: Array) -> float:
 	var m := _map()
@@ -99,5 +114,13 @@ static func has_pattern23_triple(owned: Array) -> bool:
 	for id in owned:
 		var u: Variant = m.get(id, null)
 		if u != null and u["effect"]["type"] == "pattern23Triple":
+			return true
+	return false
+
+static func has_hallucination(owned: Array) -> bool:
+	var m := _map()
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "hallucination":
 			return true
 	return false
