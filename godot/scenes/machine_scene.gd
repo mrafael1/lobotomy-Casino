@@ -181,9 +181,9 @@ const ITEM_ICONS := {
 # it stacks top-down in the corner.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
-	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus",
-		"symbolField": "guaranteeSymbolId", "suppressZeroWhenCounter": "blurReelsSpins" },
-	{ "counter": "blurReelsSpins", "id": "cons_focus", "negative": true },
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
+	{ "counter": "blurReelsSpins", "id": "cons_focus",
+		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
 	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
 	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
@@ -856,10 +856,9 @@ func _refresh_boost_indicators() -> void:
 		var counter := String(boost["counter"])
 		var remaining := int(RunStateStore.get(counter))
 		var show_zero := remaining <= 0 and bool(_boost_zero_linger.get(counter, false))
-		var suppress_zero_counter := String(boost.get("suppressZeroWhenCounter", ""))
-		if show_zero and suppress_zero_counter != "" and int(RunStateStore.get(suppress_zero_counter)) > 0:
-			_boost_zero_linger.erase(counter)
-			show_zero = false
+		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
+		if suppress_when_zero_counter != "" and bool(_boost_zero_linger.get(suppress_when_zero_counter, false)):
+			continue
 		if remaining > 0:
 			_boost_zero_linger.erase(counter)
 		if (remaining <= 0 and not show_zero) or col >= _boost_indicator_slots.size():
@@ -1340,7 +1339,6 @@ func _do_spin(compulsive := false) -> void:
 	# Serum (issue #53): blurReelsSpins is consumed inside spin() too; this spin's
 	# result hides the top/bottom adjacent strip symbols.
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
-	var serum_negative_starts_after_spin := _serum_negative_starts_this_spin()
 	# Tobacco's hidden reel is likewise active this spin (pairBoostSpins decrements in
 	# spin()), so read it now to pop its deferred "1 REEL HIDDEN" when it first bites.
 	var tobacco_this_spin := RunStateStore.pairBoostSpins > 0
@@ -1365,12 +1363,11 @@ func _do_spin(compulsive := false) -> void:
 		_held_spin_grant += granted_free
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
-	var serum_negative_active := blur_this_spin or serum_negative_starts_after_spin
-	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and serum_negative_active)
+	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and blur_this_spin)
 	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
 	if hide_this_spin:
 		_pop_deferred_negative("cons_white_powder")
-	if serum_negative_active:
+	if blur_this_spin:
 		_pop_deferred_negative("cons_focus")
 	if tobacco_this_spin:
 		_pop_deferred_negative("cons_cigarette")
@@ -2957,11 +2954,6 @@ func _show_deferred_positive(id: String) -> HintLabel:
 
 func _pill_guaranteed_spin_pending() -> bool:
 	return int(RunStateStore.forceFlatlineSpins) <= 0 and int(RunStateStore.guaranteedTripleSpins) > 0
-
-func _serum_negative_starts_this_spin() -> bool:
-	return int(RunStateStore.guaranteeSymbolSpins) == 1 \
-		and int(RunStateStore.pendingBlurSpins) > 0 \
-		and int(RunStateStore.blurReelsSpins) <= 0
 
 ## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
 ## just the upside. Otherwise both lines show (the classic on-use hint).

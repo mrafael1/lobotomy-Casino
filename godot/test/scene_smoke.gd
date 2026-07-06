@@ -1511,18 +1511,6 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		if not serum._pos_label.visible or serum._neg_label.visible:
 			failures.append("issue76: serum use popup was not upside-only")
 		serum.queue_free()
-	var serum_store: Node = get_root().get_node("RunStateStore")
-	var previous_guarantee_symbol_spins := int(serum_store.guaranteeSymbolSpins)
-	var previous_pending_blur_spins := int(serum_store.pendingBlurSpins)
-	var previous_blur_reels_spins := int(serum_store.blurReelsSpins)
-	serum_store.guaranteeSymbolSpins = 1
-	serum_store.pendingBlurSpins = 2
-	serum_store.blurReelsSpins = 0
-	if not machine._serum_negative_starts_this_spin():
-		failures.append("issue92: serum negative should activate when final positive spin is consumed")
-	serum_store.guaranteeSymbolSpins = previous_guarantee_symbol_spins
-	serum_store.pendingBlurSpins = previous_pending_blur_spins
-	serum_store.blurReelsSpins = previous_blur_reels_spins
 	machine._pending_deferred_neg["cons_focus"] = true
 	var hint_layer: Control = machine._hint_layer
 	var serum_hint_count := hint_layer.get_child_count() if hint_layer != null else 0
@@ -1682,7 +1670,21 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._boost_zero_linger["guaranteeSymbolSpins"] = true
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
-		failures.append("issue92: Serum negative boost icon did not show")
+		failures.append("issue92: Serum zero-count handoff icon did not show")
+	elif (slots[0]["count"] as Label).text != "0":
+		failures.append("issue92: Serum zero-count handoff icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
+		var serum_zero_color := (slots[0]["count"] as Label).get_theme_color("font_color")
+		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("items/focus_serum.png"):
+			failures.append("issue92: Serum zero-count handoff icon should use the serum bottle")
+		if serum_zero_color == Color(0.94, 0.27, 0.27):
+			failures.append("issue92: Serum zero-count handoff should not be red yet")
+	if (slots[1]["slot"] as Control).visible:
+		failures.append("issue92: Serum negative icon should wait until after the zero-count spin")
+	machine._clear_boost_zero_linger()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum negative boost icon did not show after zero handoff")
 	elif (slots[0]["count"] as Label).text != "2":
 		failures.append("issue92: Serum negative boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
@@ -1693,7 +1695,6 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		if serum_neg_color != Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum negative boost count should be red")
 	run_store.blurReelsSpins = 0
-	machine._boost_zero_linger.erase("guaranteeSymbolSpins")
 	machine._refresh_boost_indicators()
 
 	# One boost active: first slot shows its count.
