@@ -175,6 +175,7 @@ const ITEM_ICONS := {
 # it stacks top-down in the corner.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
 	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
 	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
@@ -198,7 +199,7 @@ const DURATION_BOOSTS := [
 @export var use_hints: Dictionary = {
 	"cons_cigarette": { "pos": "3X PAIRS", "neg": "1 REEL HIDDEN" },
 	"cons_white_powder": { "pos": "COPY A REEL", "neg": "RESULT HIDDEN" },
-	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "REELS BLURRED" },
+	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "ADJACENTS HIDDEN" },
 	"cons_potion": { "pos": "POWERS RESTORED", "neg": "" },
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
 	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
@@ -282,6 +283,7 @@ var _pending_deferred_neg: Dictionary = {}
 @export_range(1.0, 12.0, 0.5) var potion_jump_height: float = 4.0
 @export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
+@export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
 @export_subgroup("Hidden Result", "hidden_")
 ## White Powder: the spin consumed by hideResultSpins reveals "?" covers instead
 ## of readable reels, until the next spin re-rolls the machine.
@@ -427,6 +429,7 @@ var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
 var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
 var _blur_result_active := false           # the displayed result renders blurry
+var _adjacent_symbols_hidden_active := false # Serum downside: hide strip neighbours
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
 var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
@@ -841,7 +844,7 @@ func _refresh_boost_indicators() -> void:
 		var remaining := int(RunStateStore.get(String(boost["counter"])))
 		if remaining <= 0 or col >= _boost_indicator_slots.size():
 			continue
-		var tex := _icon_for(String(boost["id"]))
+		var tex := _boost_icon_for(boost)
 		if tex == null:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
@@ -953,7 +956,7 @@ func _reveal_reel(index: int) -> void:
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
 	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
-	_set_blur_cover(index, _blur_result_active)   # Serum frost blurs the reveal (issue #53)
+	_apply_adjacent_symbol_visibility(index)      # Serum hides above/below neighbours
 
 func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
 	s.centered = true
@@ -985,8 +988,8 @@ func _build_reels() -> void:
 
 func _set_reel_visible(index: int, visible: bool) -> void:
 	_reel_sprites[index].visible = visible
-	_reel_top_sprites[index].visible = visible
-	_reel_bottom_sprites[index].visible = visible
+	_reel_top_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
+	_reel_bottom_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
 
 func _set_all_reels_visible(visible: bool) -> void:
 	for i in _reel_sprites.size():
@@ -1017,6 +1020,14 @@ func _set_reel_symbol(index: int, symbol_id: String) -> void:
 	var nb := _reel_neighbours(symbol_id)
 	_apply_symbol(_reel_top_sprites[index], String(nb["top"]), STRIP_ADJ_H)
 	_apply_symbol(_reel_bottom_sprites[index], String(nb["bottom"]), STRIP_ADJ_H)
+	_apply_adjacent_symbol_visibility(index)
+
+func _apply_adjacent_symbol_visibility(index: int) -> void:
+	if index < 0 or index >= _reel_sprites.size():
+		return
+	var visible := bool(_reel_sprites[index].visible) and not _adjacent_symbols_hidden_active
+	_reel_top_sprites[index].visible = visible
+	_reel_bottom_sprites[index].visible = visible
 
 func _build_hud() -> void:
 	_build_score_button()
@@ -1205,7 +1216,7 @@ func _sync_visuals() -> void:
 	_close_score_table()
 	_clear_targeting()
 	_set_hidden_result_active(false)
-	_set_blur_result_active(false)
+	_set_adjacent_symbols_hidden_active(false)
 	_close_serum_picker()
 	_hide_compulsive_overlay()
 	_compulsive_queued = false
@@ -1280,8 +1291,8 @@ func _do_spin(compulsive := false) -> void:
 	# White Powder (issue #34): hideResultSpins is consumed inside spin(), so read it
 	# before spinning — this spin's result reveals as "?" covers.
 	var hide_this_spin := RunStateStore.hideResultSpins > 0
-	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
-	# result renders behind the blur frost.
+	# Serum (issue #53): blurReelsSpins is consumed inside spin() too; this spin's
+	# result hides the top/bottom adjacent strip symbols.
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
 	# Tobacco's hidden reel is likewise active this spin (pairBoostSpins decrements in
 	# spin()), so read it now to pop its deferred "1 REEL HIDDEN" when it first bites.
@@ -1305,7 +1316,7 @@ func _do_spin(compulsive := false) -> void:
 		_held_spin_grant += granted_free
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
-	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
+	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and blur_this_spin)
 	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
 	if hide_this_spin:
 		_pop_deferred_negative("cons_white_powder")
@@ -1805,7 +1816,7 @@ func _emit_score_burst(source_reel) -> float:
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
 		for i in 3:
-			_spawn_burst("", int(Symbols.RARITY.get(String(reels[i]), 0)), COCKTAIL_COLOR, i)
+			_spawn_burst("", _cocktail_reel_bonus(String(reels[i]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, i)
 		_nudge(0.8)
 		return maxf(reward_time, BURST_TIME)
 
@@ -1837,8 +1848,12 @@ func _emit_score_burst(source_reel) -> float:
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
 			if solo != -1:
-				_spawn_burst("", int(Symbols.RARITY.get(String(reels[solo]), 0)), COCKTAIL_COLOR, solo)
+				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
 	return reward_time
+
+func _cocktail_reel_bonus(symbol_id: String, score_multiplier: float) -> int:
+	var points := int(RunStateStore.COCKTAIL_RARITY_POINTS.get(symbol_id, 0))
+	return floori(float(points) * score_multiplier + 0.5)
 
 func _burst_text(text: String, size: int, color: Color, width: float) -> Label:
 	var l := Label.new()
@@ -2477,6 +2492,16 @@ func _short_name(consumable_id: String) -> String:
 
 func _icon_for(id: String) -> Texture2D:
 	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+
+func _boost_icon_for(boost: Dictionary) -> Texture2D:
+	var symbol_field := String(boost.get("symbolField", ""))
+	if symbol_field != "":
+		var symbol_id := String(RunStateStore.get(symbol_field))
+		if symbol_id != "":
+			var symbol_tex := _load_texture("symbols/%s.png" % symbol_id, true)
+			if symbol_tex != null:
+				return symbol_tex
+	return _icon_for(String(boost["id"]))
 
 # ── power targeting ────────────────────────────────────────────────────────────────
 
@@ -3268,7 +3293,7 @@ func _play_potion_spin_fx() -> void:
 	if pick == null:
 		return
 	_play_potion_jump()
-	_show_potion_popup(_potion_effect_text(pick))
+	_show_potion_popup(_potion_effect_text(pick), _potion_effect_color(pick))
 
 func _play_potion_jump() -> void:
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
@@ -3296,7 +3321,12 @@ func _potion_effect_text(pick: Dictionary) -> String:
 			return "SYMBOL SHIFT"
 	return ""
 
-func _show_potion_popup(text: String) -> void:
+func _potion_effect_color(pick: Dictionary) -> Color:
+	if String(pick.get("kind", "")) == "lucidity" and int(pick.get("amount", 0)) < 0:
+		return potion_popup_negative_color
+	return potion_popup_color
+
+func _show_potion_popup(text: String, color: Color) -> void:
 	if text.is_empty() or _fx_layer == null:
 		return
 	var label := Label.new()
@@ -3306,10 +3336,10 @@ func _show_potion_popup(text: String) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 7)
+	label.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", potion_popup_color)
+	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	_fx_layer.add_child(label)
@@ -3330,8 +3360,14 @@ func _set_hidden_cover(index: int, visible_now: bool) -> void:
 	if index >= 0 and index < _hidden_covers.size():
 		(_hidden_covers[index] as ColorRect).visible = visible_now
 
-# Serum blur (issue #53): the spin after the guaranteed one lands behind a frost
-# layer — symbols stay distinguishable, just harder to read.
+# Serum downside: after the guaranteed-symbol spins, hide the strip neighbours above
+# and below each center symbol so only the actual result remains readable.
+func _set_adjacent_symbols_hidden_active(active: bool) -> void:
+	_adjacent_symbols_hidden_active = active
+	for i in _reel_sprites.size():
+		_apply_adjacent_symbol_visibility(i)
+
+# Legacy frost covers stay built but inactive; Serum now hides adjacent strip symbols.
 func _set_blur_result_active(active: bool) -> void:
 	_blur_result_active = active
 	for c in _blur_covers:

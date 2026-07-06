@@ -85,8 +85,8 @@ var pairBoostMult := 1           # Tobacco: pair payout multiplier while active
 var pairBoostHiddenReels := 0    # Tobacco: reels hidden from scoring while active
 var guaranteeSymbolSpins := 0    # Serum: force the picked symbol to appear
 var guaranteeSymbolId := ""      # Serum: the player-picked symbol (issue #53)
-var blurReelsSpins := 0          # Serum: reels render blurry for these spins (display)
-var pendingBlurSpins := 0        # Serum: blur queued for after the guaranteed spin
+var blurReelsSpins := 0          # Serum: adjacent strip symbols hide for these spins
+var pendingBlurSpins := 0        # Serum: adjacent hiding queued after the guarantee
 var banBrainSpins := 0           # Serum (legacy): brain banned from the reels
 var potionSpins := 0             # Potion: one random pool effect per spin
 var forceFlatlineSpins := 0      # Pill: force an all-flatline spin
@@ -94,6 +94,9 @@ var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatl
 var hideResultSpins := 0         # White Powder: hide the next spin's result
 
 const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
+const COCKTAIL_RARITY_POINTS := {
+	"flatline": 1, "vial": 2, "syringe": 3, "pill": 4, "eye": 5, "brain": 6, "book": 6,
+}
 
 # Machine-reaction state (issue #35). Additive run-flow fields updated by the
 # machine's post-reveal reactions AFTER the parity-pinned spin()/power results —
@@ -252,7 +255,7 @@ func spin(compulsive := false) -> Variant:
 	if cocktailBoostSpins > 0:
 		var rarity_total := 0
 		for sym in result["reels"]:
-			rarity_total += int(Symbols.RARITY.get(sym, 0))
+			rarity_total += int(COCKTAIL_RARITY_POINTS.get(String(sym), 0))
 		cocktail_bonus = floori(float(rarity_total) * float(result["scoreMultiplier"]) + 0.5)
 		if String(result["winType"]) in ["pair", "triple"] and cocktailPairTriplePenalty > 0.0:
 			cocktail_penalty = floori(float(result["scoreEarned"]) * cocktailPairTriplePenalty + 0.5)
@@ -780,7 +783,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 			pairBoostHiddenReels = int(ce["hiddenReels"])
 		"guaranteeSymbol":
 			# Serum (issue #53): the PICKED non-excluded symbol appears at least once
-			# next spin, and the spin after renders blurry.
+			# next spins, then adjacent strip symbols hide for the negative duration.
 			var excludes: Array = ce.get("excludes", [])
 			var pool: Array = []
 			for s in Symbols.BASE_SYMBOL_CYCLE:

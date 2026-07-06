@@ -665,11 +665,11 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if cocktail_spin == null:
 		failures.append("issue92: Cocktail test spin did not resolve")
 	else:
-		if int(cocktail_spin.get("cocktailBonus", 0)) != 60:
-			failures.append("issue92: Cocktail bonus should scale with x3 multiplier")
+		if int(cocktail_spin.get("cocktailBonus", 0)) != 36:
+			failures.append("issue92: Cocktail bonus should use 1-6 rarity scaled by x3")
 		if int(cocktail_spin.get("cocktailPenalty", 0)) != 5:
 			failures.append("issue92: Cocktail pair/triple penalty should be 15%% rounded")
-		if int(cocktail_spin["scoreEarned"]) != 85 or int(cocktail_spin["coinsEarned"]) != 85:
+		if int(cocktail_spin["scoreEarned"]) != 61 or int(cocktail_spin["coinsEarned"]) != 61:
 			failures.append("issue92: Cocktail final score/coins wrong: %s" % str(cocktail_spin))
 	run_store.cocktailBoostSpins = 0
 	run_store.cocktailPairTriplePenalty = 0.0
@@ -1488,6 +1488,22 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	if (slots[0]["slot"] as Control).visible:
 		failures.append("issue76: boost icon shown with no active boost")
 
+	# Focus Serum shows the chosen symbol on the TV, not the serum bottle.
+	run_store.guaranteeSymbolSpins = 3
+	run_store.guaranteeSymbolId = "vial"
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum chosen-symbol boost icon did not show")
+	elif (slots[0]["count"] as Label).text != "3":
+		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_icon := (slots[0]["icon"] as TextureRect).texture
+		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/vial.png"):
+			failures.append("issue92: Serum boost icon did not use the chosen symbol")
+	run_store.guaranteeSymbolSpins = 0
+	run_store.guaranteeSymbolId = ""
+	machine._refresh_boost_indicators()
+
 	# One boost active: first slot shows its count.
 	run_store.cocktailBoostSpins = 2
 	machine._refresh_boost_indicators()
@@ -1515,6 +1531,34 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if (slots[0]["slot"] as Control).visible or (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: boost icons lingered after the boosts ended")
+
+	# Serum negative now hides the above/below strip neighbours, leaving center symbols.
+	machine._set_reel_symbol(0, "eye")
+	machine._set_reel_visible(0, true)
+	machine._set_adjacent_symbols_hidden_active(true)
+	if not machine._reel_sprites[0].visible or machine._reel_top_sprites[0].visible or machine._reel_bottom_sprites[0].visible:
+		failures.append("issue92: Serum negative did not hide adjacent reel symbols")
+	machine._set_adjacent_symbols_hidden_active(false)
+	if not machine._reel_top_sprites[0].visible or not machine._reel_bottom_sprites[0].visible:
+		failures.append("issue92: adjacent reel symbols did not restore after Serum negative")
+
+	# Potion popup uses normal popup text size and green/red by effect sign.
+	if machine._potion_effect_color({ "kind": "lucidity", "amount": -5 }) != machine.potion_popup_negative_color:
+		failures.append("issue92: negative Potion popup should use negative color")
+	if machine._potion_effect_color({ "kind": "restorePower" }) != machine.potion_popup_color:
+		failures.append("issue92: positive Potion popup should use positive color")
+	var fx_count: int = machine._fx_layer.get_child_count()
+	machine._show_potion_popup("POTION TEST", machine.potion_popup_negative_color)
+	if machine._fx_layer.get_child_count() <= fx_count:
+		failures.append("issue92: Potion popup did not spawn")
+	else:
+		var popup := machine._fx_layer.get_child(machine._fx_layer.get_child_count() - 1) as Label
+		if popup == null or popup.get_theme_font_size("font_size") != 8:
+			failures.append("issue92: Potion popup text should use popup font size 8")
+		elif popup.get_theme_color("font_color") != machine.potion_popup_negative_color:
+			failures.append("issue92: Potion popup did not use requested effect color")
+		if popup != null:
+			popup.queue_free()
 
 	run_store.reset_run_state()
 
