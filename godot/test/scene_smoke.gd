@@ -67,6 +67,7 @@ func _run() -> void:
 	_check_deferred_negative_76(machine, failures)
 	_check_dealer_pacing_76(run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
+	_check_boost_duration_icons_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1424,6 +1425,50 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	machine._refresh_multiplier_controls()
 	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame == 4:
 		failures.append("issue76: multiplier stuck on forced-x1 after compulsion ended")
+	run_store.reset_run_state()
+
+# Issue #76: active multi-spin boosts show a little consumable icon + spins-remaining in
+# the TV's top-right. Icons appear only while their counter is live, stack in order, show
+# the right count, and clear when the boost ends.
+func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	var slots: Array = machine._boost_indicator_slots
+	if slots.size() < 2:
+		failures.append("issue76: boost indicator slots were not built")
+		return
+
+	# No boosts active: every icon hidden.
+	machine._refresh_boost_indicators()
+	if (slots[0]["slot"] as Control).visible:
+		failures.append("issue76: boost icon shown with no active boost")
+
+	# One boost active: first slot shows its count.
+	run_store.cocktailBoostSpins = 2
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue76: active boost did not show an icon")
+	elif (slots[0]["count"] as Label).text != "2":
+		failures.append("issue76: boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+
+	# Two boosts: they stack in DURATION_BOOSTS order (energy no-decay first).
+	run_store.decaySkips = 3
+	machine._refresh_boost_indicators()
+	if (slots[0]["count"] as Label).text != "3" or (slots[1]["count"] as Label).text != "2":
+		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
+	if not (slots[1]["slot"] as Control).visible:
+		failures.append("issue76: second stacked boost icon not shown")
+	# Stacking is horizontal: same row (y), second icon to the LEFT of the first.
+	var p0: Vector2 = (slots[0]["slot"] as Control).position
+	var p1: Vector2 = (slots[1]["slot"] as Control).position
+	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
+		failures.append("issue76: boost icons did not stack horizontally (%s vs %s)" % [p0, p1])
+
+	# Boosts end: icons clear.
+	run_store.cocktailBoostSpins = 0
+	run_store.decaySkips = 0
+	machine._refresh_boost_indicators()
+	if (slots[0]["slot"] as Control).visible or (slots[1]["slot"] as Control).visible:
+		failures.append("issue76: boost icons lingered after the boosts ended")
 
 	run_store.reset_run_state()
 

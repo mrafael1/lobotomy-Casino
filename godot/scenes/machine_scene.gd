@@ -155,6 +155,17 @@ const ITEM_ICONS := {
 	"item_pill": "items/pill.png",
 }
 
+# Active multi-spin boosts shown as little duration icons on the TV screen (issue #76):
+# each entry maps a RunStateStore spins-remaining counter to the consumable that set it,
+# so the player can see WHICH boost is active and for HOW MANY more spins. Ordered by how
+# it stacks top-down in the corner.
+const DURATION_BOOSTS := [
+	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
+	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
+	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
+	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
+]
+
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
@@ -302,6 +313,7 @@ var _multiplier_buttons: Array[Button] = []
 var _multiplier_sprite: Sprite2D = null
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
+var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
 var _jackpot_sprite: Sprite2D = null
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
@@ -718,6 +730,82 @@ func _build_tv_indicators() -> void:
 	_goal_fill_sprite = _build_region_sprite("machine new view/wealth_fill_final_machine.png", WEALTH_BAR)
 	_build_full_canvas_sheet("machine new view/health_track_final_machine.png", 1)
 	_life_fill_sprite = _build_region_sprite("machine new view/health_fill_final_machine.png", HEALTH_BAR)
+	_build_boost_indicators()
+
+## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
+## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
+## corner says how many spins are left. Active boosts stack HORIZONTALLY, growing left
+## from the corner. Anchored to the wealth-bar geometry, which is known to sit inside the
+## screen, so the row clears the red bezel. Built once; refreshed each HUD update.
+const BOOST_ICON_SIZE := 12.0
+const BOOST_ICON_GAP := 3.0
+func _build_boost_indicators() -> void:
+	_boost_indicator_slots.clear()
+	for i in DURATION_BOOSTS.size():
+		var slot := Control.new()
+		slot.name = "BoostIndicator%d" % i
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.z_index = 12
+		slot.visible = false
+		add_child(slot)
+		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
+		var icon := TextureRect.new()
+		icon.position = Vector2.ZERO
+		icon.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(icon)
+		# Count in the icon's bottom-right corner. The DTM font forces a ~23px min box
+		# height, so a fixed box would push bottom-aligned text well below the icon; the
+		# box is instead sized/placed from the label's real min height on refresh.
+		var count := Label.new()
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		count.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			count.add_theme_font_override("font", _font)
+		count.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		count.add_theme_color_override("font_outline_color", Color.BLACK)
+		count.add_theme_constant_override("outline_size", 1)
+		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(count)
+		_boost_indicator_slots.append({ "slot": slot, "icon": icon, "count": count })
+
+## Shows one icon per active multi-spin boost, stacked horizontally inside the TV's
+## top-right, each with a spins-remaining badge. A boost whose icon is missing is skipped
+## rather than shown as a bare number. Unused slots hide (issue #76).
+func _refresh_boost_indicators() -> void:
+	if _boost_indicator_slots.is_empty():
+		return
+	# Anchor to the wealth bar's right edge / the top strip above it — both inside the
+	# screen, clear of the bezel and of the bars below.
+	var row_right := float(WEALTH_BAR["left"]) + float(WEALTH_BAR["width"])
+	var row_top := float(TV_SCREEN["top"]) + 13.0
+	var col := 0
+	for boost in DURATION_BOOSTS:
+		var remaining := int(RunStateStore.get(String(boost["counter"])))
+		if remaining <= 0 or col >= _boost_indicator_slots.size():
+			continue
+		var tex := _icon_for(String(boost["id"]))
+		if tex == null:
+			continue
+		var s: Dictionary = _boost_indicator_slots[col]
+		var slot: Control = s["slot"]
+		slot.position = Vector2(row_right - BOOST_ICON_SIZE - float(col) * (BOOST_ICON_SIZE + BOOST_ICON_GAP), row_top)
+		(s["icon"] as TextureRect).texture = tex
+		var cn: Label = s["count"]
+		cn.text = str(remaining)
+		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
+		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
+		var mh := cn.get_minimum_size().y
+		cn.size = Vector2(BOOST_ICON_SIZE, mh)
+		cn.position = Vector2(0.0, BOOST_ICON_SIZE - mh)
+		slot.visible = true
+		col += 1
+	for i in range(col, _boost_indicator_slots.size()):
+		(_boost_indicator_slots[i]["slot"] as Control).visible = false
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -1474,6 +1562,9 @@ func _refresh_tv_indicators() -> void:
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("life"):
 		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
+	# Active-boost duration icons update with the spin cost, not the reward hold, so the
+	# count ticks down the moment the boost is spent on a spin (issue #76).
+	_refresh_boost_indicators()
 	# The wealth bar / lucidity readout is a reward delta — hold it (with the
 	# multiplier badge and jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
