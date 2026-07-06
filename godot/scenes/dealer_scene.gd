@@ -700,8 +700,8 @@ func _build_start_confirm_modal() -> Control:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", 8)
 		panel.add_child(row)
-		row.add_child(_confirm_button("CancelButton", "CANCEL", Callable(self, "_on_start_cancelled")))
-		row.add_child(_confirm_button("EnterButton", "ENTER", Callable(self, "_on_start_confirmed")))
+		row.add_child(_confirm_button("CancelButton", "CANCEL", Color(0.85, 0.24, 0.24), Callable(self, "_on_start_cancelled")))
+		row.add_child(_confirm_button("EnterButton", "ENTER", Color(0.24, 0.78, 0.35), Callable(self, "_on_start_confirmed")))
 	panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_theme_constant_override("separation", 6)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -723,7 +723,7 @@ func _confirm_label(node_name: String, text: String, size: int, color: Color) ->
 		l.add_theme_font_override("font", _font)
 	return l
 
-func _confirm_button(node_name: String, text: String, cb: Callable) -> Button:
+func _confirm_button(node_name: String, text: String, tint: Color, cb: Callable) -> Button:
 	var b := Button.new()
 	b.name = node_name
 	b.text = text
@@ -733,6 +733,8 @@ func _confirm_button(node_name: String, text: String, cb: Callable) -> Button:
 		b.add_theme_font_override("font", _font)
 	Assets.skin_sheet_button(b, "ui/arrow_button.png", 3)
 	_apply_button_text_margin(b)
+	# Issue #84: CANCEL reads red, ENTER reads green.
+	b.self_modulate = tint
 	b.pressed.connect(cb)
 	return b
 
