@@ -75,6 +75,14 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 const _RED_BUTTON_REL := "ui/red_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
 const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
+const SYMBOL_PICKER_FRAME_REL := "ui/symbol_chosing.png"
+const SYMBOL_PICKER_TITLE_COLOR := Color(0.72, 1.0, 0.65)
+const SYMBOL_PICKER_PANEL_COLOR := Color(0.05, 0.03, 0.1, 0.94)
+const SYMBOL_PICKER_SLOT_COLOR := Color(0.18, 0.13, 0.26, 0.95)
+const SYMBOL_PICKER_SLOT_BORDER := Color(0.45, 0.38, 0.62, 0.9)
+const SYMBOL_PICKER_SLOT_HOVER := Color(0.28, 0.2, 0.42, 0.9)
+const SYMBOL_PICKER_SLOT_PRESSED := Color(0.45, 0.38, 0.62, 0.95)
+const SYMBOL_PICKER_ICON_SIZE := 16.0
 
 # Per-state -> frame index for a sheet of `frames` frames.
 func _sheet_state_frames(frames: int) -> Dictionary:
@@ -152,3 +160,133 @@ func _press_sink(b: BaseButton) -> void:
 func _press_restore(b: BaseButton) -> void:
 	if b.has_meta("_rest_y"):
 		b.position.y = b.get_meta("_rest_y")
+
+func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_text: String, rect: Rect2,
+		picked: Callable, cancelled: Callable, use_five_slot_art := false) -> Control:
+	var panel := Control.new()
+	panel.name = "SymbolPickerPanel"
+	panel.position = rect.position
+	panel.size = rect.size
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	parent.add_child(panel)
+
+	var background := ColorRect.new()
+	background.name = "Background"
+	background.color = SYMBOL_PICKER_PANEL_COLOR
+	background.position = Vector2.ZERO
+	background.size = rect.size
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(background)
+
+	var title := Label.new()
+	title.name = "TitleLabel"
+	title.text = title_text
+	title.position = Vector2(0.0, 1.0)
+	title.size = Vector2(rect.size.x, 11.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.add_theme_font_size_override("font_size", 7)
+	title.add_theme_color_override("font_color", SYMBOL_PICKER_TITLE_COLOR)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 1)
+	if font() != null:
+		title.add_theme_font_override("font", font())
+	panel.add_child(title)
+
+	var cancel := Button.new()
+	cancel.name = "CancelButton"
+	cancel.text = "X"
+	cancel.focus_mode = Control.FOCUS_NONE
+	cancel.position = Vector2(rect.size.x - 14.0, 1.0)
+	cancel.size = Vector2(12.0, 10.0)
+	cancel.add_theme_font_size_override("font_size", 6)
+	if font() != null:
+		cancel.add_theme_font_override("font", font())
+	skin_negative_button(cancel)
+	cancel.pressed.connect(func() -> void:
+		if cancelled.is_valid():
+			cancelled.call()
+	)
+	panel.add_child(cancel)
+
+	var content := Rect2(0.0, 12.0, rect.size.x, rect.size.y - 12.0)
+	var uses_frame := use_five_slot_art and symbols.size() == 5 and texture(SYMBOL_PICKER_FRAME_REL) != null
+	if uses_frame:
+		var frame := TextureRect.new()
+		frame.name = "Frame"
+		frame.texture = texture(SYMBOL_PICKER_FRAME_REL)
+		frame.position = content.position
+		frame.size = content.size
+		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		frame.stretch_mode = TextureRect.STRETCH_SCALE
+		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(frame)
+	else:
+		_build_symbol_picker_slots(panel, symbols.size(), content)
+
+	var cell_w := content.size.x / float(maxi(1, symbols.size()))
+	for i in symbols.size():
+		var symbol_id := symbols[i]
+		var button := Button.new()
+		button.name = "SymbolButton%s" % symbol_id.capitalize()
+		button.focus_mode = Control.FOCUS_NONE
+		button.position = Vector2(content.position.x + float(i) * cell_w, content.position.y)
+		button.size = Vector2(cell_w, content.size.y)
+		_apply_symbol_picker_button_style(button)
+		button.pressed.connect(picked.bind(symbol_id))
+		panel.add_child(button)
+
+		var symbol_texture := texture("symbols/%s.png" % symbol_id, true)
+		if symbol_texture != null:
+			var icon_size: float = SYMBOL_PICKER_ICON_SIZE if uses_frame else minf(SYMBOL_PICKER_ICON_SIZE, content.size.y - 8.0)
+			var icon := TextureRect.new()
+			icon.name = "SymbolIcon%s" % symbol_id.capitalize()
+			icon.texture = symbol_texture
+			icon.position = Vector2((cell_w - icon_size) * 0.5, (content.size.y - icon_size) * 0.5)
+			icon.size = Vector2(icon_size, icon_size)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			button.add_child(icon)
+
+	return panel
+
+func _build_symbol_picker_slots(parent: Control, count: int, content: Rect2) -> void:
+	var cell_w := content.size.x / float(maxi(1, count))
+	for i in count:
+		var slot := ColorRect.new()
+		slot.name = "Slot%d" % i
+		slot.color = SYMBOL_PICKER_SLOT_COLOR
+		slot.position = Vector2(content.position.x + float(i) * cell_w + 2.0, content.position.y + 5.0)
+		slot.size = Vector2(maxf(1.0, cell_w - 4.0), maxf(1.0, content.size.y - 10.0))
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		parent.add_child(slot)
+
+func _apply_symbol_picker_button_style(button: Button) -> void:
+	var states := {
+		"normal": _symbol_picker_style(Color(0.0, 0.0, 0.0, 0.0), Color(0.0, 0.0, 0.0, 0.0)),
+		"hover": _symbol_picker_style(SYMBOL_PICKER_SLOT_HOVER, SYMBOL_PICKER_SLOT_BORDER),
+		"pressed": _symbol_picker_style(SYMBOL_PICKER_SLOT_PRESSED, Color(0.72, 1.0, 0.65, 1.0)),
+		"focus": _symbol_picker_style(Color(0.0, 0.0, 0.0, 0.0), SYMBOL_PICKER_SLOT_BORDER),
+		"disabled": _symbol_picker_style(Color(0.0, 0.0, 0.0, 0.0), Color(0.0, 0.0, 0.0, 0.0)),
+	}
+	for state in states:
+		button.add_theme_stylebox_override(String(state), states[state])
+	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+func _symbol_picker_style(fill: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_left = 0
+	style.corner_radius_bottom_right = 0
+	return style
