@@ -1457,6 +1457,11 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
+	# Stacking is horizontal: same row (y), second icon to the LEFT of the first.
+	var p0: Vector2 = (slots[0]["slot"] as Control).position
+	var p1: Vector2 = (slots[1]["slot"] as Control).position
+	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
+		failures.append("issue76: boost icons did not stack horizontally (%s vs %s)" % [p0, p1])
 
 	# Boosts end: icons clear.
 	run_store.cocktailBoostSpins = 0

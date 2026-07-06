@@ -732,13 +732,16 @@ func _build_tv_indicators() -> void:
 	_life_fill_sprite = _build_region_sprite("machine new view/health_fill_final_machine.png", HEALTH_BAR)
 	_build_boost_indicators()
 
-## Pooled duration icons in the TV's top-right corner (issue #76): one slot per possible
-## boost, hidden until active. The icon says WHICH boost, the number says how many spins
-## are left. Built once; _refresh_boost_indicators shows/updates them each HUD refresh.
+## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
+## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
+## corner says how many spins are left. Active boosts stack HORIZONTALLY, growing left
+## from the corner. Anchored to the wealth-bar geometry, which is known to sit inside the
+## screen, so the row clears the red bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
+const BOOST_ICON_GAP := 3.0
+const BOOST_BADGE_SIZE := 8.0
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
-	var icon_x := float(TV_SCREEN["left"]) + float(TV_SCREEN["width"]) - BOOST_ICON_SIZE - 2.0
 	for i in DURATION_BOOSTS.size():
 		var slot := Control.new()
 		slot.name = "BoostIndicator%d" % i
@@ -746,19 +749,21 @@ func _build_boost_indicators() -> void:
 		slot.z_index = 12
 		slot.visible = false
 		add_child(slot)
+		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
 		var icon := TextureRect.new()
-		icon.position = Vector2(icon_x, 0.0)
+		icon.position = Vector2.ZERO
 		icon.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(icon)
+		# Count badge overlapping the icon's bottom-right corner.
 		var count := Label.new()
-		count.position = Vector2(icon_x - 14.0, 1.0)
-		count.size = Vector2(13.0, BOOST_ICON_SIZE)
+		count.position = Vector2(BOOST_ICON_SIZE - BOOST_BADGE_SIZE, BOOST_ICON_SIZE - BOOST_BADGE_SIZE - 1.0)
+		count.size = Vector2(BOOST_BADGE_SIZE + 1.0, BOOST_BADGE_SIZE + 1.0)
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 		count.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			count.add_theme_font_override("font", _font)
@@ -769,24 +774,32 @@ func _build_boost_indicators() -> void:
 		slot.add_child(count)
 		_boost_indicator_slots.append({ "slot": slot, "icon": icon, "count": count })
 
-## Shows one icon per active multi-spin boost, stacked from the TV's top-right, with the
-## spins remaining beside it. Unused slots hide (issue #76).
+## Shows one icon per active multi-spin boost, stacked horizontally inside the TV's
+## top-right, each with a spins-remaining badge. A boost whose icon is missing is skipped
+## rather than shown as a bare number. Unused slots hide (issue #76).
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	var row := 0
+	# Anchor to the wealth bar's right edge / the top strip above it — both inside the
+	# screen, clear of the bezel and of the bars below.
+	var row_right := float(WEALTH_BAR["left"]) + float(WEALTH_BAR["width"])
+	var row_top := float(TV_SCREEN["top"]) + 5.0
+	var col := 0
 	for boost in DURATION_BOOSTS:
 		var remaining := int(RunStateStore.get(String(boost["counter"])))
-		if remaining <= 0 or row >= _boost_indicator_slots.size():
+		if remaining <= 0 or col >= _boost_indicator_slots.size():
 			continue
-		var s: Dictionary = _boost_indicator_slots[row]
+		var tex := _icon_for(String(boost["id"]))
+		if tex == null:
+			continue
+		var s: Dictionary = _boost_indicator_slots[col]
 		var slot: Control = s["slot"]
-		slot.position = Vector2(0.0, float(TV_SCREEN["top"]) + 2.0 + float(row) * (BOOST_ICON_SIZE + 2.0))
-		(s["icon"] as TextureRect).texture = _icon_for(String(boost["id"]))
+		slot.position = Vector2(row_right - BOOST_ICON_SIZE - float(col) * (BOOST_ICON_SIZE + BOOST_ICON_GAP), row_top)
+		(s["icon"] as TextureRect).texture = tex
 		(s["count"] as Label).text = str(remaining)
 		slot.visible = true
-		row += 1
-	for i in range(row, _boost_indicator_slots.size()):
+		col += 1
+	for i in range(col, _boost_indicator_slots.size()):
 		(_boost_indicator_slots[i]["slot"] as Control).visible = false
 
 func _build_machine_control_art() -> void:
