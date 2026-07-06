@@ -68,6 +68,7 @@ func _run() -> void:
 	_check_dealer_pacing_76(run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
+	_check_power_bar_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -392,8 +393,12 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	run_store.abilitiesUsed = ["reroll"]
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
+	run_store.lucidityCoins = 0 # keep the power flow deterministic: no bank steps, direct restore
 	machine._set_sequence_lock(false)
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
 
 	machine._on_stash_pressed(0)
 	var hint_layer := machine.get_node_or_null("BottomHudLayer/HintLayer") as Control
@@ -404,8 +409,12 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		failures.append("machine consumable feedback: Tea did not spawn a hint")
 	elif (spawned as HintLabel)._pos_label == null or (spawned as HintLabel)._pos_label.text != "+ RESTORE POWER":
 		failures.append("machine consumable feedback: Tea hint missing '+ RESTORE POWER' line")
-	if not machine._power_coin_active and run_store.pendingPowerRestores.is_empty():
-		failures.append("machine consumable feedback: Tea did not start/queue power coin restore")
+	# Tea restored the used ability (gameplay, deterministic) and engaged the restore
+	# visual (a coin is in flight, or the restore already committed the pending entry).
+	if run_store.abilitiesUsed.has("reroll"):
+		failures.append("machine consumable feedback: Tea did not restore the used ability")
+	if not machine._power_sequence_active() and not run_store.pendingPowerRestores.is_empty():
+		failures.append("machine consumable feedback: Tea queued a restore but no coin flew")
 	await create_timer(1.0).timeout
 	if spawned == null or not is_instance_valid(spawned):
 		failures.append("machine consumable feedback: hint disappeared before the 1.5s hold")
@@ -415,7 +424,8 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		spawned.queue_free()
 
 	machine._set_sequence_lock(false)
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 	run_store.runPhase = previous_phase
 	run_store.isSpinning = previous_spinning
 	run_store.dealerIncoming = previous_dealer_incoming
@@ -1472,6 +1482,106 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 
 	run_store.reset_run_state()
 
+# Issue #76: the power gauge banks SCORE GAINED (10 score = 1 coin/frame, 50 = 5). Sub-10
+# gains bank without a coin (no infinite loop), the gauge caps at 4/5 when no restore is
+# available (discarding the excess, no fake-fill), and a fill commits one pending restore.
+func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+
+	if machine._power_bar_step() != 10:
+		failures.append("issue76: power-bar step should be 10, got %d" % machine._power_bar_step())
+
+	# Frame for a banked-score value.
+	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
+	for score in expect:
+		if machine._bar_frame_for_score(score) != expect[score]:
+			failures.append("issue76: frame for score %d = %d, expected %d" % [score, machine._bar_frame_for_score(score), expect[score]])
+
+	# Scoring 9 banks a partial (no coin) and does NOT loop — plan is empty, seen advances.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.pendingPowerRestores = []
+	run_store.lucidityCoins = 9
+	var p9: Dictionary = machine._compute_power_plan()
+	if not (p9["steps"] as Array).is_empty():
+		failures.append("issue76: scoring 9 planned coins (should bank a partial, %d steps)" % (p9["steps"] as Array).size())
+	if int(p9["score"]) != 9 or int(p9["seen"]) != 9:
+		failures.append("issue76: scoring 9 mis-banked (score %d seen %d, expected 9/9)" % [int(p9["score"]), int(p9["seen"])])
+
+	# 10 score => exactly 1 coin (frame 1). 50 => 5 coins.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.lucidityCoins = 10
+	if (machine._compute_power_plan()["steps"] as Array).size() != 1:
+		failures.append("issue76: 10 score should be exactly 1 power coin")
+
+	# No restorable power (no pending, no spent ability) + big gain: caps at 4/5 (score 40),
+	# no restore step, no cycling.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = []
+	run_store.lucidityCoins = 200
+	var cap: Dictionary = machine._compute_power_plan()
+	var cap_restores := 0
+	for s in (cap["steps"] as Array):
+		if bool(s["restore"]):
+			cap_restores += 1
+	if cap_restores != 0:
+		failures.append("issue76: gauge planned a restore with no restorable power")
+	if int(cap["score"]) != 40:
+		failures.append("issue76: no-restore gauge did not cap at 4/5 (score %d, expected 40)" % int(cap["score"]))
+
+	# At 4/5, scoring 10 with a restore available => 1 coin, restore, reset to 0 (no refill).
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
+	run_store.pendingPowerRestores = ["reroll"]
+	run_store.lucidityCoins = 110
+	var atcap: Dictionary = machine._compute_power_plan()
+	if (atcap["steps"] as Array).size() != 1 or not bool((atcap["steps"] as Array)[0]["restore"]):
+		failures.append("issue76: 4/5 + 10 with a restore should be a single restore coin")
+	if int(atcap["score"]) != 0:
+		failures.append("issue76: after the restore the gauge should sit at 0, got %d" % int(atcap["score"]))
+
+	# At 4/5 with NO pending but a SPENT ability, scoring 10 completes the fill and the
+	# gauge restores the spent power itself (e.g. Water at 4/5 with a used power).
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = ["reroll"]
+	run_store.lucidityCoins = 110
+	var spent: Dictionary = machine._compute_power_plan()
+	if (spent["steps"] as Array).size() != 1 or not bool((spent["steps"] as Array)[0]["restore"]):
+		failures.append("issue76: 4/5 + 10 with a spent power should restore it (bar-driven)")
+
+	# At 4/5, scoring 10 with NOTHING restorable => no coin, gauge stays 4/5, excess discarded.
+	machine._power_bar_score = 40
+	machine._power_seen_lucidity = 100
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = []
+	run_store.lucidityCoins = 110
+	var stay: Dictionary = machine._compute_power_plan()
+	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 40:
+		failures.append("issue76: 4/5 with nothing restorable should stay at 4/5 (score %d)" % int(stay["score"]))
+
+	# A restore step consumes a pending restore first (front, once).
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = ["reroll", "shift"]
+	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	if run_store.pendingPowerRestores != ["shift"]:
+		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
+	# With no pending but a spent ability, the restore step brings that ability back.
+	run_store.pendingPowerRestores = []
+	run_store.abilitiesUsed = ["shift"]
+	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	if run_store.abilitiesUsed.has("shift"):
+		failures.append("issue76: bar-driven restore did not bring the spent ability back")
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
+
+	run_store.reset_run_state()
+
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the
 # fly-in lands (value in sync with the effect).
@@ -1524,7 +1634,8 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = []
 	machine._pending_spin_gain = 0
-	machine._power_coin_active = false
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 	var tea_before := String(label.text).get_slice(":", 1).to_int()
