@@ -183,8 +183,8 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	machine._last_reacted_reels = []
 	machine._last_reacted_spin = -1
 	machine._apply_machine_reactions(false)
-	if int(run_store.flatlineResultCount) != before_flatline:
-		failures.append("issue92: hallucination close-call flatline pair should not trigger deadly flatline effect")
+	if int(run_store.flatlineResultCount) != before_flatline + 1:
+		failures.append("issue92: hallucination flatline pair should trigger a close-call strike")
 
 	if machine._derive_source_reel(["vial", "vial", "brain"]) != 1:
 		failures.append("issue92: hallucination score burst should derive from second reel")
