@@ -2200,6 +2200,32 @@ func _check_eye_reveal(machine: Node, failures: Array) -> void:
 		failures.append("eye: next spin did not honour the revealed symbol")
 	if int(run_store.eyeRevealReel) != -1 or String(run_store.eyeRevealSymbol) != "":
 		failures.append("eye: reveal commitment was not consumed by the spin")
+
+	# Issue #65: Memory locking the revealed reel should keep the current symbol,
+	# not the previously promised next-spin reveal.
+	run_store.set_spinning(false)
+	run_store.reset_run_state()
+	run_store.start_new_run(["perm_memory"], {}, false)
+	run_store.neurons = 100
+	var setup_result: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if setup_result == null:
+		failures.append("issue65: setup spin failed before reveal/lock check")
+	else:
+		var locked_symbol := String(setup_result["reels"][1])
+		var promised_symbol := "brain" if locked_symbol != "brain" else "eye"
+		run_store.eyeRevealReel = 1
+		run_store.eyeRevealSymbol = promised_symbol
+		run_store.lock_reel(1)
+		if int(run_store.eyeRevealReel) != -1 or String(run_store.eyeRevealSymbol) != "":
+			failures.append("issue65: locking the revealed reel did not clear the reveal promise")
+		var locked_result: Variant = run_store.spin()
+		run_store.set_spinning(false)
+		if locked_result == null or String(locked_result["reels"][1]) != locked_symbol:
+			failures.append("issue65: locked revealed reel changed from %s to %s" % [
+				locked_symbol,
+				("<null>" if locked_result == null else String(locked_result["reels"][1])),
+			])
 	machine._reveal_reel_next_spin = -1
 	run_store.reset_run_state()
 

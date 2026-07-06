@@ -133,6 +133,13 @@ var lastEnding: Variant = null
 var wealthContinued := false
 var pendingPowerRestores: Array = []
 
+func _forced_eye_reveal_symbols() -> Variant:
+	if eyeRevealReel < 0 or eyeRevealReel > 2 or eyeRevealSymbol == "":
+		return null
+	if bool(lockedReels[eyeRevealReel]):
+		return null
+	return { eyeRevealReel: eyeRevealSymbol }
+
 static func _now_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0)
 
@@ -246,7 +253,7 @@ func spin(compulsive := false) -> Variant:
 		"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
 		"banExcluded": banBrainSpins > 0,
 		"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
-		"forceReelSymbols": ({ eyeRevealReel: eyeRevealSymbol } if (eyeRevealReel >= 0 and eyeRevealSymbol != "") else null),
+		"forceReelSymbols": _forced_eye_reveal_symbols(),
 		"symbolToBrainCount": potion_symbol_to_brain,
 		"adjacentSymbolCount": potion_adjacent_symbols,
 		"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
@@ -748,6 +755,9 @@ func lock_reel(reel_index: int) -> void:
 	spins[reel_index] = 2
 	lockedReels = locks
 	lockedReelSpins = spins
+	if eyeRevealReel == reel_index:
+		eyeRevealReel = -1
+		eyeRevealSymbol = ""
 	abilitiesUsed = abilitiesUsed.duplicate()
 	abilitiesUsed.append("memory")
 	_commit()
