@@ -1650,6 +1650,22 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			failures.append("issue92: Serum boost icon did not use the chosen symbol")
 	run_store.guaranteeSymbolSpins = 0
 	run_store.guaranteeSymbolId = ""
+	run_store.blurReelsSpins = 2
+	machine._boost_zero_linger["guaranteeSymbolSpins"] = true
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum negative boost icon did not show")
+	elif (slots[0]["count"] as Label).text != "2":
+		failures.append("issue92: Serum negative boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
+		var serum_neg_color := (slots[0]["count"] as Label).get_theme_color("font_color")
+		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/focus_serum.png"):
+			failures.append("issue92: Serum negative boost icon did not use the serum bottle")
+		if serum_neg_color != Color(0.94, 0.27, 0.27):
+			failures.append("issue92: Serum negative boost count should be red")
+	run_store.blurReelsSpins = 0
+	machine._boost_zero_linger.erase("guaranteeSymbolSpins")
 	machine._refresh_boost_indicators()
 
 	# One boost active: first slot shows its count.

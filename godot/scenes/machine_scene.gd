@@ -181,7 +181,9 @@ const ITEM_ICONS := {
 # it stacks top-down in the corner.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
-	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus",
+		"symbolField": "guaranteeSymbolId", "suppressZeroWhenCounter": "blurReelsSpins" },
+	{ "counter": "blurReelsSpins", "id": "cons_focus", "negative": true },
 	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
 	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
@@ -803,6 +805,8 @@ func _build_power_bar() -> void:
 ## screen, so the row clears the red bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
+const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
+const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
@@ -830,7 +834,7 @@ func _build_boost_indicators() -> void:
 		count.add_theme_font_size_override("font_size", 7)
 		if _font != null:
 			count.add_theme_font_override("font", _font)
-		count.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		count.add_theme_color_override("font_color", BOOST_COUNT_COLOR)
 		count.add_theme_color_override("font_outline_color", Color.BLACK)
 		count.add_theme_constant_override("outline_size", 1)
 		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -852,6 +856,10 @@ func _refresh_boost_indicators() -> void:
 		var counter := String(boost["counter"])
 		var remaining := int(RunStateStore.get(counter))
 		var show_zero := remaining <= 0 and bool(_boost_zero_linger.get(counter, false))
+		var suppress_zero_counter := String(boost.get("suppressZeroWhenCounter", ""))
+		if show_zero and suppress_zero_counter != "" and int(RunStateStore.get(suppress_zero_counter)) > 0:
+			_boost_zero_linger.erase(counter)
+			show_zero = false
 		if remaining > 0:
 			_boost_zero_linger.erase(counter)
 		if (remaining <= 0 and not show_zero) or col >= _boost_indicator_slots.size():
@@ -865,6 +873,9 @@ func _refresh_boost_indicators() -> void:
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
 		cn.text = str(maxi(0, remaining))
+		cn.add_theme_color_override(
+			"font_color",
+			BOOST_NEGATIVE_COUNT_COLOR if bool(boost.get("negative", false)) else BOOST_COUNT_COLOR)
 		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
 		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
 		var mh := cn.get_minimum_size().y
