@@ -68,6 +68,7 @@ func _run() -> void:
 	_check_dealer_pacing_76(run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
+	_check_power_bar_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1469,6 +1470,38 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if (slots[0]["slot"] as Control).visible or (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: boost icons lingered after the boosts ended")
+
+	run_store.reset_run_state()
+
+# Issue #76: the power-restore gauge is a visual for the SAME 50-coin restore mechanic.
+# The gauge fills one frame per 10 coins (50/5 steps), and when it fills it commits the
+# pending restore exactly once. Gameplay (abilitiesUsed) is untouched here — the restore
+# was already applied by plan_gain; commit_power_restore only clears the visual pending.
+func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+
+	# One frame per 10 coins, derived from the restore threshold.
+	if machine._power_bar_step() != 10:
+		failures.append("issue76: power-bar step should be 10, got %d" % machine._power_bar_step())
+
+	# Frame mapping across a restore cycle (threshold multiples read as the next cycle's 0).
+	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 0, 60: 1 }
+	for coins in expect:
+		if machine._bar_frame_for(coins) != expect[coins]:
+			failures.append("issue76: bar frame for %d = %d, expected %d" % [coins, machine._bar_frame_for(coins), expect[coins]])
+
+	# A full gauge commits exactly the FRONT pending restore, once, synchronously.
+	run_store.pendingPowerRestores = ["reroll", "shift"]
+	machine._resolve_full_power_bar()
+	if run_store.pendingPowerRestores != ["shift"]:
+		failures.append("issue76: full gauge did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
+	machine._resolve_full_power_bar()
+	if not run_store.pendingPowerRestores.is_empty():
+		failures.append("issue76: gauge did not commit the remaining restore")
+	# Resolving with nothing pending is a safe no-op (no crash, no negative state).
+	machine._resolve_full_power_bar()
+	if not run_store.pendingPowerRestores.is_empty():
+		failures.append("issue76: empty-gauge resolve altered pending restores")
 
 	run_store.reset_run_state()
 

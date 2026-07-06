@@ -142,6 +142,18 @@ const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
 const POWER_PULSE_TIME := 0.36
 
+# Power restore gauge (issue #76). power_bar.png is a full-canvas overlay sheet, 3 cols x
+# 2 rows = 6 frames, gauge empty (0) -> full (5), filling bottom-up. A power coin flies to
+# the bar every POWER_COIN_STEP lucidity and advances one frame; at the full frame it
+# spawns a coin from the bar top that flies to the random restorable power. The 6 frames
+# span one restore threshold (coins_per_power_restore), so 5 steps = 50 coins = 10/step.
+const POWER_BAR_SHEET := "machine new view/power_bar.png"
+const POWER_BAR_HFRAMES := 3
+const POWER_BAR_VFRAMES := 2
+const POWER_BAR_FRAMES := 6
+const POWER_BAR_CENTER := Vector2(13.0, 84.0) # coin-to-bar landing point (gauge middle)
+const POWER_BAR_TOP := Vector2(13.0, 62.0)     # where the restore coin spawns when full
+
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
@@ -342,6 +354,9 @@ var _burst_prev_score := 0           # last announced result score (for power ga
 var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0
+var _power_bar_sprite: Sprite2D = null
+var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
+var _power_bar_coins := 0    # lucidity already reflected in the bar (multiple of the step)
 var _display_lucidity := 0
 var _lucidity_count_tween: Tween = null
 var _power_coin_active := false
@@ -731,6 +746,38 @@ func _build_tv_indicators() -> void:
 	_build_full_canvas_sheet("machine new view/health_track_final_machine.png", 1)
 	_life_fill_sprite = _build_region_sprite("machine new view/health_fill_final_machine.png", HEALTH_BAR)
 	_build_boost_indicators()
+	_build_power_bar()
+
+## The power-restore gauge (issue #76): a full-canvas overlay sheet (3x2 = 6 frames). It
+## snaps to the current lucidity progress on build so a resumed run shows the right fill.
+func _build_power_bar() -> void:
+	var tex := _load_texture(POWER_BAR_SHEET, true)
+	if tex == null:
+		return
+	_power_bar_sprite = _authored_sprite("PowerBar")
+	var authored := _power_bar_sprite != null
+	if _power_bar_sprite == null:
+		_power_bar_sprite = Sprite2D.new()
+		_power_bar_sprite.name = "PowerBar"
+		add_child(_power_bar_sprite)
+	_power_bar_sprite.texture = tex
+	_power_bar_sprite.hframes = POWER_BAR_HFRAMES
+	_power_bar_sprite.vframes = POWER_BAR_VFRAMES
+	_power_bar_sprite.centered = false
+	if not authored:
+		var frame_w := float(tex.get_width()) / float(POWER_BAR_HFRAMES)
+		var frame_h := float(tex.get_height()) / float(POWER_BAR_VFRAMES)
+		_power_bar_sprite.position = Vector2.ZERO
+		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
+	_power_bar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Snap to the current progress (a resumed run may already have lucidity/pending restores).
+	var step := _power_bar_step()
+	_power_bar_coins = int(RunStateStore.lucidityCoins) - (int(RunStateStore.lucidityCoins) % step)
+	_set_power_bar_frame(_bar_frame_for(int(RunStateStore.lucidityCoins)))
+	# Any restores earned before this scene existed resolve immediately (visual only —
+	# the ability itself was already restored by plan_gain at spin time).
+	for power_id in RunStateStore.pendingPowerRestores.duplicate():
+		RunStateStore.commit_power_restore(String(power_id))
 
 ## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
 ## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
@@ -1959,39 +2006,114 @@ func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
 
+# Lucidity per gauge step / frame. Derived from the restore threshold so the bar is
+# always full exactly when a restore threshold is crossed (50 / 5 steps = 10 coins).
+func _power_bar_step() -> int:
+	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
+
+func _set_power_bar_frame(f: int) -> void:
+	_power_bar_frame = clampi(f, 0, POWER_BAR_FRAMES - 1)
+	if _power_bar_sprite != null:
+		_power_bar_sprite.frame = _power_bar_frame
+
+## Gauge frame for a lucidity total: how far into the current restore cycle it is, in
+## step-sized increments. Exact threshold multiples read as 0 (the next cycle's start).
+func _bar_frame_for(coins: int) -> int:
+	var per := maxi(1, coins_per_power_restore)
+	return clampi((coins % per) / _power_bar_step(), 0, POWER_BAR_FRAMES - 1)
+
+## Entry point (called after the reward sequence and after Tea): catch the gauge up to the
+## authoritative lucidity total, one step at a time. The mechanic is unchanged — this only
+## paces the visual and, when the gauge fills, resolves the pending restore's visual.
 func _try_start_power_coin_flow() -> void:
-	# _spin_launch_pending covers the lever-pull window: the spin (and its restore)
-	# is already committed, but the score isn't validated yet. Holding the coin here
-	# means it only launches after the reward sequence (score burst + lucidity coins
-	# reaching the wealth bar) releases the sequence lock (issue #54).
+	# _spin_launch_pending covers the lever-pull window: the score isn't validated yet, so
+	# hold the flow until the reward sequence releases the lock (issue #54).
 	if _power_coin_active or _spinning_anim or _spin_launch_pending \
 			or _reroll_anim_active or _sequence_lock_active:
 		return
-	if RunStateStore.pendingPowerRestores.is_empty():
-		return
-	_start_power_coin_flow(String(RunStateStore.pendingPowerRestores[0]))
+	_advance_power_bar()
 
-func _start_power_coin_flow(power_id: String) -> void:
-	if _coin_layer == null:
+func _advance_power_bar() -> void:
+	var coins := int(RunStateStore.lucidityCoins)
+	# Lucidity dropped (e.g. Potion): snap the gauge down, no animation.
+	if coins < _power_bar_coins:
+		_power_bar_coins = coins - (coins % _power_bar_step())
+		_set_power_bar_frame(_bar_frame_for(coins))
 		return
+	var step := _power_bar_step()
+	var next_ms := (_power_bar_coins / step + 1) * step
+	if coins < next_ms or _coin_layer == null:
+		return # gauge is caught up
+	_power_coin_active = true
+	var coin := _make_power_coin(COIN_TRAY)
+	if coin == null:
+		_power_bar_coins = next_ms
+		_power_coin_active = false
+		_advance_power_bar()
+		return
+	var tw := create_tween()
+	tw.tween_method(_drive_power_coin.bind(coin, COIN_TRAY, POWER_BAR_CENTER), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+	tw.tween_callback(_on_power_coin_reached_bar.bind(coin, next_ms))
+
+func _on_power_coin_reached_bar(coin: Node, milestone: int) -> void:
+	if is_instance_valid(coin):
+		coin.queue_free()
+	_power_bar_coins = milestone
+	if milestone % maxi(1, coins_per_power_restore) == 0:
+		# Threshold crossed: show the full gauge, then resolve the restore + reset.
+		_set_power_bar_frame(POWER_BAR_FRAMES - 1)
+		_spawn_power_pulse(POWER_BAR_CENTER)
+		_resolve_full_power_bar()
+	else:
+		_set_power_bar_frame(_bar_frame_for(milestone))
+		_power_coin_active = false
+		_advance_power_bar()
+
+## Gauge is full. The restore target is whatever plan_gain queued for this threshold; we
+## commit it NOW (guaranteed once — commit is idempotent and the ability was already
+## restored in the rules) and fly a coin from the bar to the power as pure feedback.
+func _resolve_full_power_bar() -> void:
+	if RunStateStore.pendingPowerRestores.is_empty():
+		_reset_power_bar_after_full() # no spent power this cycle — just reset the gauge
+		return
+	var power_id := String(RunStateStore.pendingPowerRestores[0])
+	RunStateStore.commit_power_restore(power_id)
+	var coin := _make_power_coin(POWER_BAR_TOP)
+	if coin == null:
+		_reset_power_bar_after_full()
+		return
+	var target := _power_center(power_id)
+	var tw := create_tween()
+	tw.tween_method(_drive_power_coin.bind(coin, POWER_BAR_TOP, target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+	tw.tween_callback(_finish_bar_restore.bind(coin, target))
+
+func _finish_bar_restore(coin: Node, target: Vector2) -> void:
+	if is_instance_valid(coin):
+		coin.queue_free()
+	_spawn_power_pulse(target)
+	_reset_power_bar_after_full()
+
+func _reset_power_bar_after_full() -> void:
+	_set_power_bar_frame(_bar_frame_for(_power_bar_coins)) # next cycle's start (0)
+	_power_coin_active = false
+	_advance_power_bar() # keep going if a big gain crossed more thresholds
+
+func _make_power_coin(pos: Vector2) -> Sprite2D:
+	if _coin_layer == null:
+		return null
 	var tex := _load_texture("ui/power_coin.png", true)
 	if tex == null:
-		RunStateStore.commit_power_restore(power_id)
-		return
-	_power_coin_active = true
+		return null
 	var coin := Sprite2D.new()
 	coin.texture = tex
 	coin.centered = true
-	coin.position = COIN_TRAY
+	coin.position = pos
 	var power_scale := POWER_COIN_SIZE / float(maxi(1, tex.get_width()))
 	coin.scale = Vector2(power_scale, power_scale)
 	coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	coin.modulate.a = 0.0
 	_coin_layer.add_child(coin)
-	var target := _power_center(power_id)
-	var tw := create_tween()
-	tw.tween_method(_drive_power_coin.bind(coin, COIN_TRAY, target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
-	tw.tween_callback(_finish_power_coin_flow.bind(power_id, coin, target))
+	return coin
 
 func _power_center(power_id: String) -> Vector2:
 	var hit: Dictionary = POWER_HITS.get(power_id, POWER_HITS["reroll"])
@@ -2017,12 +2139,6 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 	else:
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
-func _finish_power_coin_flow(power_id: String, coin: Node, target: Vector2) -> void:
-	if is_instance_valid(coin):
-		coin.queue_free()
-	RunStateStore.commit_power_restore(power_id)
-	_spawn_power_pulse(target)
-	_power_coin_active = false
 
 func _spawn_power_pulse(center: Vector2) -> void:
 	if _coin_layer == null:
