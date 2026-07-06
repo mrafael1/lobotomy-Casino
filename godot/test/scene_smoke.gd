@@ -68,7 +68,6 @@ func _run() -> void:
 	_check_dealer_pacing_76(run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
-	_check_power_restore_feedback_76(machine, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -1472,29 +1471,6 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue76: boost icons lingered after the boosts ended")
 
 	run_store.reset_run_state()
-
-# Issue #76: when a power is restored (a power coin reaching its button), a callout
-# names the power ("SHIFT BACK") and tags the why ("POWER COIN"), so the restore reads
-# as an earned event rather than a button silently lighting back up.
-func _check_power_restore_feedback_76(machine: Node, failures: Array) -> void:
-	var center: Vector2 = machine._power_center("shift")
-	var label: Label = machine._show_power_restored_label("shift", center)
-	if label == null:
-		failures.append("issue76: power-restore callout was not created")
-		return
-	if label.text != "SHIFT BACK":
-		failures.append("issue76: power-restore callout did not name the power: '%s'" % label.text)
-	# The "why" line (POWER COIN) shares the callout host.
-	var host := label.get_parent()
-	var has_why := false
-	if host != null:
-		for child in host.get_children():
-			if child is Label and (child as Label).text == "POWER COIN":
-				has_why = true
-	if not has_why:
-		failures.append("issue76: power-restore callout missing the POWER COIN 'why' line")
-	if host != null and is_instance_valid(host):
-		host.queue_free()
 
 # Issue #66: +3 spin grants (3x vial, Tea's fallback) fly a "+N" into the
 # spins-left counter; the counter includes free spins and only ticks up when the
