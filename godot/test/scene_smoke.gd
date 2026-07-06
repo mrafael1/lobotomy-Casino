@@ -1511,6 +1511,34 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		if not serum._pos_label.visible or serum._neg_label.visible:
 			failures.append("issue76: serum use popup was not upside-only")
 		serum.queue_free()
+	var serum_store: Node = get_root().get_node("RunStateStore")
+	var previous_guarantee_symbol_spins := int(serum_store.guaranteeSymbolSpins)
+	var previous_pending_blur_spins := int(serum_store.pendingBlurSpins)
+	var previous_blur_reels_spins := int(serum_store.blurReelsSpins)
+	serum_store.guaranteeSymbolSpins = 1
+	serum_store.pendingBlurSpins = 2
+	serum_store.blurReelsSpins = 0
+	if not machine._serum_negative_starts_this_spin():
+		failures.append("issue92: serum negative should activate when final positive spin is consumed")
+	serum_store.guaranteeSymbolSpins = previous_guarantee_symbol_spins
+	serum_store.pendingBlurSpins = previous_pending_blur_spins
+	serum_store.blurReelsSpins = previous_blur_reels_spins
+	machine._pending_deferred_neg["cons_focus"] = true
+	var hint_layer: Control = machine._hint_layer
+	var serum_hint_count := hint_layer.get_child_count() if hint_layer != null else 0
+	machine._pop_deferred_negative("cons_focus")
+	if machine._pending_deferred_neg.get("cons_focus", false):
+		failures.append("issue92: serum deferred negative did not disarm after popping")
+	if hint_layer == null or hint_layer.get_child_count() <= serum_hint_count:
+		failures.append("issue92: serum negative popup was not created")
+	else:
+		var serum_neg := hint_layer.get_child(hint_layer.get_child_count() - 1) as HintLabel
+		if serum_neg == null or not serum_neg._neg_label.visible or serum_neg._pos_label.visible:
+			failures.append("issue92: serum negative popup should be downside-only")
+		elif serum_neg._neg_label.text != "- ADJACENTS HIDDEN":
+			failures.append("issue92: serum negative copy wrong: '%s'" % serum_neg._neg_label.text)
+		if serum_neg != null:
+			serum_neg.queue_free()
 
 	# Red Pill is inverted: CLOSE CALL on use, then WIN GUARANTEED on the second spin.
 	var pill: HintLabel = machine._show_consumable_feedback("item_pill")
