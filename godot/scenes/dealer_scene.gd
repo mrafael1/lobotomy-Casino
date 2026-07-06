@@ -48,7 +48,7 @@ const DRAG_SLOP := 4.0
 @export var item_hints: Dictionary = {
 	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
 	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
-	"cons_focus": { "pos": "SHARP", "neg": "DISABLED" },
+	"cons_focus": { "pos": "FOCUS", "neg": "HIDE" },
 	"cons_potion": { "pos": "POWERS", "neg": "RANDOM" },
 	"cons_tea": { "pos": "RESTORE", "neg": "NONE" },
 }
