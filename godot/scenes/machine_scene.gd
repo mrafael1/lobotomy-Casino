@@ -204,7 +204,7 @@ const DURATION_BOOSTS := [
 	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
 	"item_pill": { "pos": "TRIPLE GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
-	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
+	"item_cocktail": { "pos": "RARITY BONUS", "neg": "15% PAIR/TRIPLE TAX" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
@@ -2613,8 +2613,7 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 
 ## `apply_power_reaction` runs the machine reactions (reroll/shift triples, flatline
 ## strikes) and the flatline instant-death check AFTER the score popup, mirroring the
-## normal spin path so a power-made triple never flashes before its own burst. The
-## white-powder copy path leaves it false (it fires no machine reaction).
+## normal spin path so a power-made triple never flashes before its own burst.
 func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> void:
 	_set_sequence_lock(true)
 	var reward_time := _emit_score_burst(source_reel)
@@ -3049,7 +3048,7 @@ func _on_copy_pick(reel_index: int) -> void:
 		_refresh_reels_from_state()
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_play_reward_sequence(reel_index) # copy burst pops from the target reel
+		_play_reward_sequence(reel_index, true) # copy-made triples now trigger normally
 
 # ── consumable visuals (issue #34) ───────────────────────────────────────────────
 # Presentation-only per-item effects. Duration effects (tobacco smoke, energy-drink
@@ -3282,8 +3281,6 @@ func _play_potion_jump() -> void:
 
 func _potion_effect_text(pick: Dictionary) -> String:
 	match String(pick.get("kind", "")):
-		"multNextSpin":
-			return "SCORE x%s" % String.num(float(pick["multiplier"]), 2)
 		"lucidity":
 			var amt := int(pick["amount"])
 			return ("+%d LUCIDITY" % amt) if amt >= 0 else ("%d LUCIDITY" % amt)
@@ -3291,6 +3288,12 @@ func _potion_effect_text(pick: Dictionary) -> String:
 			return "FREE REROLL"
 		"symbolToBrain":
 			return "BRAIN SWAP"
+		"restoreSpin":
+			return "+%d SPIN" % int(pick.get("count", 1))
+		"restorePower":
+			return "POWER BACK"
+		"adjacentSymbol":
+			return "SYMBOL SHIFT"
 	return ""
 
 func _show_potion_popup(text: String) -> void:

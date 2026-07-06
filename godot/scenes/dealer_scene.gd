@@ -47,8 +47,8 @@ const DRAG_SLOP := 4.0
 @export_group("Vague Item Hints")
 @export var item_hints: Dictionary = {
 	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
-	"cons_white_powder": { "pos": "SCRAMBLE", "neg": "HIDDEN" },
-	"cons_focus": { "pos": "SHARP", "neg": "NO BRAIN" },
+	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
+	"cons_focus": { "pos": "SHARP", "neg": "DISABLED" },
 	"cons_potion": { "pos": "POWERS", "neg": "RANDOM" },
 	"cons_tea": { "pos": "RESTORE", "neg": "NONE" },
 }

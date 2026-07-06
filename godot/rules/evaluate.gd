@@ -19,6 +19,14 @@ static func _pick_non_excluded(excluded: String, rng: LobRNG) -> String:
 		return excluded
 	return String(pool[int(rng.next() * pool.size())])
 
+static func _adjacent_symbol(symbol: String, direction: int) -> String:
+	var order := Symbols.BASE_SYMBOL_CYCLE
+	var current := order.find(symbol)
+	if current < 0:
+		return symbol
+	var n := order.size()
+	return String(order[(current + direction + n) % n])
+
 # Mirrors buildWeights(brainWeightBonus, bookWeight). `overrides` (issue #36, dealer
 # odds table) is a per-run additive { symbol: bonus } map layered on at build time —
 # the parity-locked base in Symbols stays untouched, and an empty map reproduces the
@@ -138,6 +146,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var ban_excluded: bool = bool(input.get("banExcluded", false))
 	var guarantee_non_excluded: bool = bool(input.get("guaranteeNonExcluded", false))
 	var symbol_to_brain_count := int(input.get("symbolToBrainCount", 0))
+	var adjacent_symbol_count := int(input.get("adjacentSymbolCount", 0))
 	var pair_score_mult := float(input.get("pairScoreMult", 1.0))
 	var hidden_reel_count := int(input.get("hiddenReelCount", 0))
 	# Issue #53 additions — gated, no-op at their defaults like the #32 keys.
@@ -187,6 +196,11 @@ static func evaluate(input: Dictionary) -> Dictionary:
 		if guarantee_symbol_id != null and String(guarantee_symbol_id) != "" \
 				and not reels.has(String(guarantee_symbol_id)):
 			reels[int(rng.next() * 3.0)] = String(guarantee_symbol_id)
+		if adjacent_symbol_count > 0:
+			for _i in mini(adjacent_symbol_count, 3):
+				var reel_index := int(rng.next() * 3.0)
+				var direction := 1 if rng.next() >= 0.5 else -1
+				reels[reel_index] = _adjacent_symbol(String(reels[reel_index]), direction)
 
 	# 3x eye (issue #53): reels whose symbol was already revealed to the player are
 	# committed to that symbol — the reveal is a promise, so it wins over everything.

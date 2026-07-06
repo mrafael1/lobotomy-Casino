@@ -40,10 +40,10 @@ const CORRUPT_NAME_COLOR := Color(0.66, 0.33, 0.86)
 # In-run pool only (InRunItems.LIST). Pre-run cons_* hints live in
 # dealer_scene.gd — the two scenes own separate pools (issue #31).
 const ITEM_HINTS := {
-	"item_water": { "pos": "refreshing", "neg": "WEAK" },
-	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
-	"item_energy_drink": { "pos": "FREE", "neg": "compulsive" },
-	"item_cocktail": { "pos": "EASY", "neg": "sticky" },
+	"item_water": { "pos": "REFRESH", "neg": "WEAK" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
+	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
+	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
 }
 const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
 # In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).

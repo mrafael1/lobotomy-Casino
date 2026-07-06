@@ -574,27 +574,37 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.runConsumables = { "cons_focus": 1 }
 	if not run_store.use_consumable("cons_focus", "vial"):
 		failures.append("issue32: Serum use rejected")
-	if int(run_store.guaranteeSymbolSpins) != 1 or String(run_store.guaranteeSymbolId) != "vial" \
-			or int(run_store.pendingBlurSpins) != 1 or int(run_store.banBrainSpins) != 0:
+	if int(run_store.guaranteeSymbolSpins) != 3 or String(run_store.guaranteeSymbolId) != "vial" \
+			or int(run_store.pendingBlurSpins) != 2 or int(run_store.banBrainSpins) != 0:
 		failures.append("issue53: Serum did not set guarantee/blur state")
-	# The guaranteed spin contains the picked symbol, then the next spin is blurry.
+	# The next 3 spins contain the picked symbol, then the next 2 spins are blurry.
 	run_store.neurons = 100
-	var serum_spin: Variant = run_store.spin()
-	run_store.set_spinning(false)
-	if serum_spin == null or not (serum_spin["reels"] as Array).has("vial"):
-		failures.append("issue53: Serum guaranteed spin did not contain the picked symbol")
-	if int(run_store.blurReelsSpins) != 1 or int(run_store.pendingBlurSpins) != 0:
-		failures.append("issue53: blur did not queue for the spin after the guarantee")
-	run_store.spin()
-	run_store.set_spinning(false)
+	for i in 3:
+		var serum_spin: Variant = run_store.spin()
+		run_store.set_spinning(false)
+		if serum_spin == null or not (serum_spin["reels"] as Array).has("vial"):
+			failures.append("issue53: Serum guaranteed spin %d did not contain the picked symbol" % [i + 1])
+	if int(run_store.blurReelsSpins) != 2 or int(run_store.pendingBlurSpins) != 0:
+		failures.append("issue53: blur did not queue for 2 spins after the guarantee")
+	for _i in 2:
+		run_store.spin()
+		run_store.set_spinning(false)
 	if int(run_store.blurReelsSpins) != 0:
-		failures.append("issue53: blur did not clear after its spin")
+		failures.append("issue53: blur did not clear after 2 spins")
 
 	# Tobacco (issue #53): pair boost + hidden reel for 2 spins.
 	run_store.runConsumables = { "cons_cigarette": 1 }
 	run_store.use_consumable("cons_cigarette")
 	if int(run_store.pairBoostSpins) != 2 or int(run_store.pairBoostMult) != 3 or int(run_store.pairBoostHiddenReels) != 1:
 		failures.append("issue32: Tobacco did not set pair-boost counters")
+	run_store.lastResult = {
+		"reels": ["eye", "vial", "pill"], "scoreEarned": 0, "coinsEarned": 0,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
+		"winType": "miss", "isFreeSpin": false, "scoreMultiplier": 1.0,
+	}
+	run_store.copy_reel(0, 1)
+	if int(run_store.lastResult["scoreEarned"]) != 30 or String(run_store.lastResult["winType"]) != "pair":
+		failures.append("issue92: Tobacco pair boost did not apply to a power-made pair")
 	run_store.pairBoostSpins = 0 # cleared so later spins in this check score normally
 
 	# Potion (renamed cons_potion, issue #53): restores all powers + potionSpins.
@@ -603,6 +613,12 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.use_consumable("cons_potion")
 	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
 		failures.append("issue32: Potion did not reset powers / set potionSpins")
+	var potion_kinds := {}
+	for effect in Consumables.POTION_RANDOM_POOL:
+		potion_kinds[String(effect["kind"])] = true
+	if potion_kinds.has("multNextSpin") or not potion_kinds.has("restoreSpin") \
+			or not potion_kinds.has("restorePower") or not potion_kinds.has("adjacentSymbol"):
+		failures.append("issue92: Potion pool did not remove multiplier and add new effects")
 
 	# Tea with no used abilities restores normal spins.
 	run_store.abilitiesUsed = []
@@ -639,7 +655,25 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.use_consumable("item_cocktail")
 	if int(run_store.cocktailBoostSpins) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 0:
 		failures.append("consumables: Cocktail still queued compulsion")
+	run_store.betMultiplier = 3
+	run_store.neurons = 100
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	var cocktail_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if cocktail_spin == null:
+		failures.append("issue92: Cocktail test spin did not resolve")
+	else:
+		if int(cocktail_spin.get("cocktailBonus", 0)) != 60:
+			failures.append("issue92: Cocktail bonus should scale with x3 multiplier")
+		if int(cocktail_spin.get("cocktailPenalty", 0)) != 5:
+			failures.append("issue92: Cocktail pair/triple penalty should be 15%% rounded")
+		if int(cocktail_spin["scoreEarned"]) != 85 or int(cocktail_spin["coinsEarned"]) != 85:
+			failures.append("issue92: Cocktail final score/coins wrong: %s" % str(cocktail_spin))
 	run_store.cocktailBoostSpins = 0
+	run_store.cocktailPairTriplePenalty = 0.0
+	run_store.lockedReels = [false, false, false]
 	run_store.freeSpinsRemaining = 0
 	run_store.compulsiveSpinSkips = 0
 	run_store.pendingCompulsiveSpinSkips = 0
@@ -1306,6 +1340,8 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 		var base := total - bonus
 		if base <= 0 or total != base * EconomyConst.FLATLINE_WIN_BOOST_MULT:
 			failures.append("issue76: boosted score %d != base %d x %d" % [total, base, EconomyConst.FLATLINE_WIN_BOOST_MULT])
+		if int(win["coinsEarned"]) != total:
+			failures.append("issue76: boosted coins should match boosted score")
 		if run_store.flatlineWinBoostArmed:
 			failures.append("issue76: charge not spent after a winning spin")
 
@@ -1889,7 +1925,7 @@ func _check_dealer_offer_take_flow(overlay: Node, failures: Array) -> void:
 	var hint_layer := overlay.get_node("SpeechBubble/HintLayer") as Control
 	var pos_hint := overlay.get_node("SpeechBubble/HintLayer/PositiveHint") as Label
 	var name_hint := overlay.get_node("SpeechBubble/HintLayer/NameHint") as Label
-	if not hint_layer.visible or pos_hint.text != "+ refreshing":
+	if not hint_layer.visible or pos_hint.text != "+ REFRESH":
 		failures.append("take-flow: item tap did not reveal hint text")
 	if name_hint.visible:
 		failures.append("take-flow: item name should no longer show in the bubble")
