@@ -1358,6 +1358,8 @@ func _do_spin(compulsive := false) -> void:
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
 	_reel_stop_times = [0.55, 1, 1.4 + tension]
+	if _active_hidden_reel_count() > 0:
+		_reel_stop_times[2] = _reel_stop_times[1]
 	# Eye triple: the revealed reel was already committed at tap time (issue #53);
 	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
@@ -1425,7 +1427,10 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 	_spin_frame = 0
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
+	var visible_count := _visible_reel_count()
 	for i in 3:
+		if i >= visible_count:
+			_locked_reels_during_spin[i] = true
 		var locked := bool(_locked_reels_during_spin[i])
 		_reel_stop_sfx_played[i] = locked
 		_set_reel_visible(i, locked)
@@ -1812,7 +1817,20 @@ func _init_burst_tracking() -> void:
 # Normal-spin source reel: a pair on the first two reels pops on reel 2 (index 1);
 # every other win reads from reel 3 (index 2).
 func _derive_source_reel(reels: Array) -> int:
+	if _active_hidden_reel_count() > 0:
+		return 1
 	return 1 if (String(reels[0]) == String(reels[1]) and String(reels[1]) != String(reels[2])) else 2
+
+func _active_hidden_reel_count() -> int:
+	var lr: Variant = RunStateStore.lastResult
+	if lr != null and (lr as Dictionary).has("hiddenReelCount"):
+		return clampi(int((lr as Dictionary)["hiddenReelCount"]), 0, 2)
+	if Economy.has_hallucination(RunStateStore.ownedUpgrades):
+		return 1
+	return 0
+
+func _visible_reel_count() -> int:
+	return maxi(1, 3 - _active_hidden_reel_count())
 
 # The lone unpaired reel of a pair (-1 if none).
 func _solo_reel(reels: Array) -> int:
@@ -1845,7 +1863,7 @@ func _emit_score_burst(source_reel) -> float:
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
-		for i in 3:
+		for i in _visible_reel_count():
 			_spawn_burst("", _cocktail_reel_bonus(String(reels[i]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, i)
 		_nudge(0.8)
 		return maxf(reward_time, BURST_TIME)
@@ -1871,13 +1889,15 @@ func _emit_score_burst(source_reel) -> float:
 			label = "FLATLINE x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT
 			color = flatline_result_color
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
+		if _active_hidden_reel_count() > 0:
+			reel = mini(reel, _visible_reel_count() - 1)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
 		reward_time = maxf(reward_time, BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
-			if solo != -1:
+			if solo != -1 and solo < _visible_reel_count():
 				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
 	return reward_time
 
@@ -3269,8 +3289,9 @@ func _refresh_tobacco_fx() -> void:
 			(_tobacco_covers[i] as ColorRect).visible = smoked
 		if i < _tobacco_smoke.size():
 			var smoke := _tobacco_smoke[i] as CPUParticles2D
-			smoke.visible = smoked
-			smoke.emitting = smoked
+			var emits_smoke := smoked and tobacco_active
+			smoke.visible = emits_smoke
+			smoke.emitting = emits_smoke
 
 func _refresh_energy_fx() -> void:
 	if _energy_edges == null:
@@ -3445,6 +3466,9 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 		else:
 			_apply_symbol_triple(String(lr.get("resolvedSymbol", "")),
 				int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		return
+	if _active_hidden_reel_count() > 0 and String(reels[0]) == String(reels[1]):
+		_apply_symbol_triple(String(reels[0]), int(lr.get("freeSpinsGranted", 0)), power_triggered)
 		return
 	if not (a == String(reels[1]) and a == String(reels[2])):
 		return

@@ -75,7 +75,7 @@ func _run() -> void:
 	_check_spins_bar_lever_80(machine, run_store, failures)
 	await _check_spins_counter_accuracy_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
-	_check_issue92_rule_reworks(run_store, meta_store, failures)
+	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -107,7 +107,7 @@ func _run() -> void:
 			printerr("✗ ", f)
 		quit(1)
 
-func _check_issue92_rule_reworks(run_store: Node, meta_store: Node, failures: Array) -> void:
+func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
 	var triple_book := Evaluate.score_reels(["book", "book", "book"], 1.0, true,
 		false, true)
 	if String(triple_book["winType"]) != "triple" or int(triple_book["scoreEarned"]) != Payouts.TRIPLE_SCORE["eye"] \
@@ -142,6 +142,78 @@ func _check_issue92_rule_reworks(run_store: Node, meta_store: Node, failures: Ar
 		failures.append("issue92: reward amplification should target saved symbol: %s" % str(bonuses))
 	meta_store.oddsUpgrades = previous_odds
 	meta_store.rewardAmpSymbol = previous_amp_symbol
+
+	var previous_run_phase := String(run_store.runPhase)
+	var previous_owned: Array = run_store.ownedUpgrades.duplicate()
+	var previous_last: Variant = run_store.lastResult
+	var previous_locked: Array = run_store.lockedReels.duplicate()
+	var previous_neurons := int(run_store.neurons)
+	var previous_starting := int(run_store.startingNeurons)
+	var previous_spin_count := int(run_store.spinCount)
+	var previous_free_spins := int(run_store.freeSpinsRemaining)
+	var previous_is_spinning := bool(run_store.isSpinning)
+	var previous_pair_spins := int(run_store.pairBoostSpins)
+	var previous_pair_hidden := int(run_store.pairBoostHiddenReels)
+	var previous_cocktail := int(run_store.cocktailBoostSpins)
+	var previous_penalty := float(run_store.cocktailPairTriplePenalty)
+	run_store.runPhase = "running"
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	run_store.neurons = 10
+	run_store.startingNeurons = 10
+	run_store.lockedReels = [true, true, true]
+	run_store.lastResult = { "reels": ["eye", "eye", "brain"] }
+	run_store.cocktailBoostSpins = 1
+	run_store.cocktailPairTriplePenalty = 0.0
+	var cocktail_result: Variant = run_store.spin(false)
+	if cocktail_result == null or int((cocktail_result as Dictionary).get("cocktailBonus", -1)) != 10:
+		failures.append("issue92: hallucination cocktail bonus should ignore hidden third reel: %s" % str(cocktail_result))
+	run_store.set_spinning(false)
+
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	run_store.lastResult = { "reels": ["vial", "vial", "brain"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	run_store.neurons = 10
+	var before_vial := int(run_store.neurons)
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(true)
+	if int(run_store.neurons) <= before_vial:
+		failures.append("issue92: hallucination power-made visible pair did not trigger vial triple effect")
+
+	if machine._derive_source_reel(["vial", "vial", "brain"]) != 1:
+		failures.append("issue92: hallucination score burst should derive from second reel")
+	machine._start_reel_spin_animation([false, false, false])
+	if not bool(machine._locked_reels_during_spin[2]) or bool(machine._spin_reel_sprites[2].visible):
+		failures.append("issue92: hallucination should not spin the hidden third reel")
+	machine._stop_sfx(&"reel_spin")
+
+	run_store.pairBoostSpins = 0
+	run_store.pairBoostHiddenReels = 0
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	machine._refresh_tobacco_fx()
+	if not bool(machine._tobacco_covers[2].visible):
+		failures.append("issue92: hallucination should still cover the hidden third reel")
+	if bool(machine._tobacco_smoke[2].emitting) or bool(machine._tobacco_smoke[2].visible):
+		failures.append("issue92: hallucination hidden reel should not emit cigarette smoke")
+	run_store.ownedUpgrades = []
+	run_store.pairBoostSpins = 1
+	run_store.pairBoostHiddenReels = 1
+	machine._refresh_tobacco_fx()
+	if not bool(machine._tobacco_smoke[2].emitting):
+		failures.append("issue92: cigarette should still emit smoke on its hidden reel")
+
+	run_store.runPhase = previous_run_phase
+	run_store.ownedUpgrades = previous_owned
+	run_store.lastResult = previous_last
+	run_store.lockedReels = previous_locked
+	run_store.neurons = previous_neurons
+	run_store.startingNeurons = previous_starting
+	run_store.spinCount = previous_spin_count
+	run_store.freeSpinsRemaining = previous_free_spins
+	run_store.isSpinning = previous_is_spinning
+	run_store.pairBoostSpins = previous_pair_spins
+	run_store.pairBoostHiddenReels = previous_pair_hidden
+	run_store.cocktailBoostSpins = previous_cocktail
+	run_store.cocktailPairTriplePenalty = previous_penalty
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_first_launch := bool(meta_store.is_first_launch)

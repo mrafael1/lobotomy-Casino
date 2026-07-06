@@ -261,8 +261,9 @@ func spin(compulsive := false) -> Variant:
 	var cocktail_penalty := 0
 	if cocktailBoostSpins > 0:
 		var rarity_total := 0
-		for sym in result["reels"]:
-			rarity_total += int(COCKTAIL_RARITY_POINTS.get(String(sym), 0))
+		var visible_count := maxi(1, (result["reels"] as Array).size() - hidden_reel_count)
+		for i in visible_count:
+			rarity_total += int(COCKTAIL_RARITY_POINTS.get(String((result["reels"] as Array)[i]), 0))
 		cocktail_bonus = floori(float(rarity_total) * float(result["scoreMultiplier"]) + 0.5)
 		if String(result["winType"]) in ["pair", "triple"] and cocktailPairTriplePenalty > 0.0:
 			cocktail_penalty = floori(float(result["scoreEarned"]) * cocktailPairTriplePenalty + 0.5)
@@ -278,10 +279,12 @@ func spin(compulsive := false) -> Variant:
 		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		flatline_boost_applied = true
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied:
+	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied or hidden_reel_count > 0:
 		final_result = result.duplicate(true)
 		final_result["scoreEarned"] = base_score + flatline_boost
 		final_result["coinsEarned"] = base_score + flatline_boost
+		if hidden_reel_count > 0:
+			final_result["hiddenReelCount"] = hidden_reel_count
 		if cocktail_bonus > 0:
 			final_result["cocktailApplied"] = true
 			final_result["cocktailBonus"] = cocktail_bonus
@@ -661,6 +664,11 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	lr["reels"] = outcome["reels"]
 	lr["isJackpot"] = outcome["isJackpot"]
 	lr["winType"] = outcome["winType"]
+	var hidden_reel_count := _active_hidden_reel_count(pairBoostSpins > 0)
+	if hidden_reel_count > 0:
+		lr["hiddenReelCount"] = hidden_reel_count
+	else:
+		lr.erase("hiddenReelCount")
 	if outcome.has("resolvedSymbol"):
 		lr["resolvedSymbol"] = String(outcome["resolvedSymbol"])
 	else:
