@@ -3006,7 +3006,7 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 # picked one is guaranteed to appear at least once next spin (the charge is only
 # consumed on pick — tapping anywhere else cancels).
 
-const SERUM_PICKER_RECT := Rect2(14.0, 138.0, 132.0, 44.0)
+const SERUM_PICKER_RECT := Rect2(12.0, 132.0, 136.0, 58.0)
 
 func _begin_serum() -> void:
 	if _sequence_lock_active or _serum_picker != null:
@@ -3024,43 +3024,12 @@ func _build_serum_picker() -> void:
 	_serum_picker.gui_input.connect(_on_serum_picker_input)
 	add_child(_serum_picker)
 
-	var panel := ColorRect.new()
-	panel.color = Color(0.05, 0.03, 0.1, 0.94)
-	panel.position = SERUM_PICKER_RECT.position
-	panel.size = SERUM_PICKER_RECT.size
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_serum_picker.add_child(panel)
-
-	var title := _reaction_label(_serum_picker, "PICK A SYMBOL",
-		Vector2(SERUM_PICKER_RECT.position.x, SERUM_PICKER_RECT.position.y + 3.0), 7, Color(0.72, 1.0, 0.65))
-	title.size = Vector2(SERUM_PICKER_RECT.size.x, 9.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	var pool: Array = []
+	var pool: Array[String] = []
 	for s in Symbols.BASE_SYMBOL_CYCLE:
 		if String(s) != "brain":
 			pool.append(String(s))
-	var cell_w := SERUM_PICKER_RECT.size.x / float(maxi(1, pool.size()))
-	for i in pool.size():
-		var sym: String = pool[i]
-		var b := Button.new()
-		b.flat = true
-		b.focus_mode = Control.FOCUS_NONE
-		b.position = Vector2(SERUM_PICKER_RECT.position.x + float(i) * cell_w, SERUM_PICKER_RECT.position.y + 14.0)
-		b.size = Vector2(cell_w, 26.0)
-		b.pressed.connect(_on_serum_pick.bind(sym))
-		_serum_picker.add_child(b)
-		var tex := _load_texture("symbols/%s.png" % sym, true)
-		if tex != null:
-			var icon := TextureRect.new()
-			icon.texture = tex
-			icon.position = Vector2((cell_w - 16.0) * 0.5, 4.0)
-			icon.size = Vector2(16.0, 16.0)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(icon)
+	Assets.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
+		Callable(self, "_on_serum_pick"), Callable(self, "_close_serum_picker"), true)
 
 func _on_serum_picker_input(event: InputEvent) -> void:
 	# Any tap that no symbol button consumed cancels the pick (charge kept).

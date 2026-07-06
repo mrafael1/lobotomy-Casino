@@ -42,7 +42,7 @@ const BUBBLES_REST_FRAME := 12
 const BRAIN_MONEY_TARGET := Vector2(80.0, 128.0)
 const BUY_BUTTON_FONT_SIZE := 6
 const OWNED_BUTTON_FONT_SIZE := 5
-const REWARD_AMP_PICKER_RECT := Rect2(14.0, 136.0, 132.0, 44.0)
+const REWARD_AMP_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const BG_DEFAULT_FRAME := 3
 const BG_FLASH_LAST_FRAME := 2
 const DEFAULT_DESCRIPTION := "Select a lab terminal."
@@ -608,48 +608,23 @@ func _build_reward_amp_picker(upgrade_id: String) -> void:
 	_reward_amp_picker.size = LAB_SIZE
 	_reward_amp_picker.mouse_filter = Control.MOUSE_FILTER_STOP
 	_reward_amp_picker.z_index = 200
+	_reward_amp_picker.gui_input.connect(_on_reward_amp_picker_input)
 	_ui_container.add_child(_reward_amp_picker)
 
-	var panel := ColorRect.new()
-	panel.color = Color(0.05, 0.03, 0.1, 0.94)
-	panel.position = REWARD_AMP_PICKER_RECT.position
-	panel.size = REWARD_AMP_PICKER_RECT.size
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_reward_amp_picker.add_child(panel)
+	var symbols: Array[String] = []
+	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
+		if String(symbol_id) != "flatline":
+			symbols.append(String(symbol_id))
+	Assets.build_symbol_picker_panel(_reward_amp_picker, symbols, "BOOST SYMBOL", REWARD_AMP_PICKER_RECT,
+		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"), true)
 
-	var title := Label.new()
-	title.text = "BOOST SYMBOL"
-	title.position = Vector2(REWARD_AMP_PICKER_RECT.position.x, REWARD_AMP_PICKER_RECT.position.y + 3.0)
-	title.size = Vector2(REWARD_AMP_PICKER_RECT.size.x, 9.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 7)
-	title.add_theme_color_override("font_color", Color(0.72, 1.0, 0.65))
-	if Assets.font() != null:
-		title.add_theme_font_override("font", Assets.font())
-	_reward_amp_picker.add_child(title)
+func _on_reward_amp_picker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_cancel_reward_amp_picker()
 
-	var cell_w := REWARD_AMP_PICKER_RECT.size.x / float(maxi(1, Symbols.BASE_SYMBOL_CYCLE.size()))
-	for i in Symbols.BASE_SYMBOL_CYCLE.size():
-		var sym := String(Symbols.BASE_SYMBOL_CYCLE[i])
-		var b := Button.new()
-		b.flat = true
-		b.focus_mode = Control.FOCUS_NONE
-		b.position = Vector2(REWARD_AMP_PICKER_RECT.position.x + float(i) * cell_w,
-			REWARD_AMP_PICKER_RECT.position.y + 14.0)
-		b.size = Vector2(cell_w, 26.0)
-		b.pressed.connect(_on_reward_amp_symbol_picked.bind(sym))
-		_reward_amp_picker.add_child(b)
-		var tex := Assets.texture("symbols/%s.png" % sym, true)
-		if tex != null:
-			var icon := TextureRect.new()
-			icon.texture = tex
-			icon.position = Vector2((cell_w - 16.0) * 0.5, 4.0)
-			icon.size = Vector2(16.0, 16.0)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(icon)
+func _cancel_reward_amp_picker() -> void:
+	_pending_reward_amp_upgrade_id = ""
+	_close_reward_amp_picker()
 
 func _close_reward_amp_picker() -> void:
 	if _reward_amp_picker != null:

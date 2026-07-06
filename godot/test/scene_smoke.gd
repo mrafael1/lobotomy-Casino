@@ -1766,6 +1766,13 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	if not machine._reel_top_sprites[0].visible or not machine._reel_bottom_sprites[0].visible:
 		failures.append("issue92: adjacent reel symbols did not restore after Serum negative")
 
+	machine._build_serum_picker()
+	var serum_picker := machine._serum_picker as Control
+	_check_symbol_picker_panel_63(serum_picker, 5, true, "issue63: Serum", failures)
+	if serum_picker != null and serum_picker.find_child("SymbolButtonBrain", true, false) != null:
+		failures.append("issue63: Serum picker should not offer brain")
+	machine._close_serum_picker()
+
 	# Potion popup uses normal popup text size and green/red by effect sign.
 	if machine._potion_effect_color({ "kind": "lucidity", "amount": -5 }) != machine.potion_popup_negative_color:
 		failures.append("issue92: negative Potion popup should use negative color")
@@ -2281,6 +2288,65 @@ func _check_base_scene_parity(failures: Array) -> void:
 					failures.append("parity: %s StashSlot%d is not 16x16: %s" % [scene_path, i, slot.size])
 		scene.queue_free()
 
+func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expects_frame: bool,
+		prefix: String, failures: Array) -> void:
+	if picker == null:
+		failures.append("%s picker was not built" % prefix)
+		return
+	var panel := picker.get_node_or_null("SymbolPickerPanel") as Control
+	if panel == null:
+		failures.append("%s picker is missing the shared panel" % prefix)
+		return
+	if panel.size.y < 54.0:
+		failures.append("%s picker is too cramped: %s" % [prefix, panel.size])
+	var cancel := panel.get_node_or_null("CancelButton") as Button
+	if cancel == null or cancel.size.x < 10.0 or cancel.size.y < 9.0:
+		failures.append("%s picker cancel target is missing or too small" % prefix)
+	var title := panel.get_node_or_null("TitleLabel") as Label
+	var frame := panel.get_node_or_null("Frame") as TextureRect
+	var background := panel.get_node_or_null("Background") as ColorRect
+	if expects_frame:
+		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_chosing.png":
+			failures.append("%s picker did not use the symbol choosing art" % prefix)
+		if background == null or background.size != Vector2.ZERO:
+			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
+		if title == null or frame == null \
+				or title.position.y < frame.position.y - 6.0 or title.position.y > frame.position.y + 1.0:
+			failures.append("%s picker title should sit on the top band of the symbol choosing art" % prefix)
+		if cancel == null or frame == null or cancel.position.y < frame.position.y:
+			failures.append("%s picker cancel should sit on the symbol choosing art" % prefix)
+	elif frame != null:
+		failures.append("%s picker should use variable-count slots, not the five-slot art" % prefix)
+	var buttons := panel.find_children("SymbolButton*", "Button", true, false)
+	if buttons.size() != expected_symbols:
+		failures.append("%s picker button count wrong: %d" % [prefix, buttons.size()])
+	for node in buttons:
+		var button := node as Button
+		if button == null:
+			continue
+		if expects_frame:
+			if button.size.x > 24.0 or button.size.y > 26.0:
+				failures.append("%s picker framed hover target is too large: %s" % [prefix, button.size])
+				break
+		elif button.size.x < 20.0 or button.size.y < 40.0:
+			failures.append("%s picker touch target too small: %s" % [prefix, button.size])
+			break
+		var icon := button.find_child("SymbolIcon*", true, false) as Sprite2D
+		if icon == null or icon.texture == null:
+			failures.append("%s picker button is missing an icon" % prefix)
+			break
+		var rendered_size := Vector2(float(icon.texture.get_width()) * icon.scale.x,
+			float(icon.texture.get_height()) * icon.scale.y)
+		if maxf(rendered_size.x, rendered_size.y) > 16.5:
+			failures.append("%s picker icon did not scale down: %s" % [prefix, rendered_size])
+			break
+		if maxf(rendered_size.x, rendered_size.y) < 15.5:
+			failures.append("%s picker icon is too small: %s" % [prefix, rendered_size])
+			break
+		if icon.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("%s picker icon should use reel-style mipmapped filtering" % prefix)
+			break
+
 func _check_upgrades_scene(failures: Array) -> void:
 	var ps := load("res://scenes/upgrades_scene.tscn") as PackedScene
 	if ps == null:
@@ -2475,6 +2541,21 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: reward amp tier I price is not shown in PowerNameBox")
 	if not description_label.text.contains("[color=#183A8C]tier I[/color]"):
 		failures.append("upgrades: reward amp tier I description is not blue BBCode")
+	scene._build_reward_amp_picker("corr_reward_amp_1")
+	var reward_picker := scene._reward_amp_picker as Control
+	_check_symbol_picker_panel_63(reward_picker, 5, true, "issue63: Reward Amp", failures)
+	if reward_picker != null:
+		if reward_picker.find_child("SymbolButtonBrain", true, false) == null:
+			failures.append("issue63: Reward Amp picker should include brain")
+		if reward_picker.find_child("SymbolButtonFlatline", true, false) != null:
+			failures.append("issue63: Reward Amp picker should not include flatline")
+	if reward_picker != null:
+		var cancel_button := reward_picker.get_node_or_null("SymbolPickerPanel/CancelButton") as Button
+		if cancel_button != null:
+			cancel_button.pressed.emit()
+		await process_frame
+		if scene._reward_amp_picker != null or String(scene._pending_reward_amp_upgrade_id) != "":
+			failures.append("issue63: Reward Amp picker cancel did not close cleanly")
 	await scene._animate_money_to_brain()
 	reward_row.set_meta("upgrade_id", "corr_reward_amp_2")
 	scene._select_row(reward_row)
