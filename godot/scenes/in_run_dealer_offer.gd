@@ -40,12 +40,13 @@ const CORRUPT_NAME_COLOR := Color(0.66, 0.33, 0.86)
 # In-run pool only (InRunItems.LIST). Pre-run cons_* hints live in
 # dealer_scene.gd — the two scenes own separate pools (issue #31).
 const ITEM_HINTS := {
-	"item_water": { "pos": "refreshing", "neg": "WEAK" },
-	"item_pill": { "pos": "WIN GUARANTEED", "neg": "NUMB" },
-	"item_energy_drink": { "pos": "FREE", "neg": "compulsive" },
-	"item_cocktail": { "pos": "EASY", "neg": "sticky" },
+	"item_water": { "pos": "REFRESH", "neg": "WEAK" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
+	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
+	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
 }
 const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
+const INVERTED_HINT_ITEMS := ["item_pill"]
 # In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).
 const ITEM_ICONS := {
 	"item_energy_drink": "items/energy_drink.png",
@@ -793,9 +794,12 @@ func _set_speech_hints(item_id: String, backing_text := "Interested in one?") ->
 		return
 	# No item name in the bubble — just the two hint lines, so they fit nicely.
 	var hints: Dictionary = ITEM_HINTS.get(item_id, FALLBACK_HINT)
+	var inverted := INVERTED_HINT_ITEMS.has(item_id)
 	_speech_name_hint.visible = false
 	_speech_pos_hint.text = "+ %s" % String(hints["pos"])
 	_speech_neg_hint.text = "- %s" % String(hints["neg"])
+	_speech_pos_hint.position = Vector2(8.0, 16.0 if inverted else 4.0)
+	_speech_neg_hint.position = Vector2(8.0, 4.0 if inverted else 16.0)
 	_speech_hint_layer.visible = true
 
 func _item_name(id: String) -> String:

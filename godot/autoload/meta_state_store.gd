@@ -30,6 +30,7 @@ var oddsUpgrades: Dictionary = {}
 # Odds-menu tokens left unspent when an odds phase was finalized (issue #50);
 # the next odds menu starts with these on top of its fresh budget.
 var oddsTokensBanked: int = 0
+var rewardAmpSymbol: String = ""
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -66,6 +67,7 @@ func _as_dict() -> Dictionary:
 		"is_first_launch": is_first_launch,
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
 		"oddsTokensBanked": oddsTokensBanked,
+		"rewardAmpSymbol": rewardAmpSymbol,
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -88,6 +90,7 @@ func _apply(meta: Dictionary) -> void:
 	is_first_launch = bool(meta.get("is_first_launch", true))
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
+	rewardAmpSymbol = String(meta.get("rewardAmpSymbol", ""))
 	meta_changed.emit()
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
@@ -119,6 +122,15 @@ func buy_upgrade(upgrade_id: String) -> void:
 	ownedPermanents.append(upgrade_id)
 	if String(upgrade["category"]) == "corrupted":
 		corruptionEverUsed = true
+	meta_changed.emit()
+	save_state()
+
+func set_reward_amp_symbol(symbol: String) -> void:
+	if not Symbols.BASE_SYMBOL_CYCLE.has(symbol):
+		return
+	if rewardAmpSymbol == symbol:
+		return
+	rewardAmpSymbol = symbol
 	meta_changed.emit()
 	save_state()
 
@@ -246,6 +258,7 @@ func start_new_campaign(save_immediately := true) -> void:
 	wealthEndingReached = false
 	oddsUpgrades = {}
 	oddsTokensBanked = 0
+	rewardAmpSymbol = ""
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -324,6 +337,8 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["oddsUpgrades"] = {}
 	if not current.has("oddsTokensBanked"):
 		current["oddsTokensBanked"] = 0
+	if not current.has("rewardAmpSymbol"):
+		current["rewardAmpSymbol"] = ""
 	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
 	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
 	if pending.has("cons_syringe"):

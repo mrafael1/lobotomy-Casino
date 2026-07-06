@@ -75,6 +75,7 @@ func _run() -> void:
 	_check_spins_bar_lever_80(machine, run_store, failures)
 	await _check_spins_counter_accuracy_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
+	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -105,6 +106,121 @@ func _run() -> void:
 		for f in failures:
 			printerr("✗ ", f)
 		quit(1)
+
+func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var triple_book := Evaluate.score_reels(["book", "book", "book"], 1.0, true,
+		false, true)
+	if String(triple_book["winType"]) != "triple" or int(triple_book["scoreEarned"]) != Payouts.TRIPLE_SCORE["eye"] \
+			or not bool(triple_book.get("bookTripleChoice", false)):
+		failures.append("issue92: triple book should score as eye and open choice: %s" % str(triple_book))
+
+	var joker_eye := Evaluate.score_reels(["book", "eye", "eye"], 1.0, true,
+		false, true)
+	if String(joker_eye["winType"]) != "triple" or String(joker_eye.get("resolvedSymbol", "")) != "eye":
+		failures.append("issue92: book should complete the highest near symbol triple: %s" % str(joker_eye))
+
+	var hallucination := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, true, 0.70)
+	if String(hallucination["winType"]) != "triple" or int(hallucination["scoreEarned"]) != 35:
+		failures.append("issue92: hallucination should score visible pair as 70%% triple: %s" % str(hallucination))
+
+	var amped_pair := Evaluate.score_reels(["eye", "eye", "pill"], 1.0, true,
+		false, false, 1.0, 0, false, 1.0, { "eye": 0.40 })
+	if int(amped_pair["scoreEarned"]) != 14:
+		failures.append("issue92: symbol reward amp should boost only the matched symbol: %s" % str(amped_pair))
+
+	var previous_odds: Dictionary = meta_store.oddsUpgrades.duplicate(true)
+	var previous_amp_symbol := String(meta_store.rewardAmpSymbol)
+	meta_store.oddsUpgrades = { "eye": int(run_store.odds_max_level) }
+	meta_store.rewardAmpSymbol = "pill"
+	var bonuses: Dictionary = run_store._symbol_reward_bonuses_from_meta([
+		"corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3",
+	])
+	if not is_equal_approx(float(bonuses.get("eye", 0.0)), float(run_store.odds_max_level_reward_bonus)):
+		failures.append("issue92: maxed odds level should add reward bonus: %s" % str(bonuses))
+	if not is_equal_approx(float(bonuses.get("pill", 0.0)), 0.40):
+		failures.append("issue92: reward amplification should target saved symbol: %s" % str(bonuses))
+	meta_store.oddsUpgrades = previous_odds
+	meta_store.rewardAmpSymbol = previous_amp_symbol
+
+	var previous_run_phase := String(run_store.runPhase)
+	var previous_owned: Array = run_store.ownedUpgrades.duplicate()
+	var previous_last: Variant = run_store.lastResult
+	var previous_locked: Array = run_store.lockedReels.duplicate()
+	var previous_neurons := int(run_store.neurons)
+	var previous_starting := int(run_store.startingNeurons)
+	var previous_spin_count := int(run_store.spinCount)
+	var previous_free_spins := int(run_store.freeSpinsRemaining)
+	var previous_is_spinning := bool(run_store.isSpinning)
+	var previous_pair_spins := int(run_store.pairBoostSpins)
+	var previous_pair_hidden := int(run_store.pairBoostHiddenReels)
+	var previous_cocktail := int(run_store.cocktailBoostSpins)
+	var previous_penalty := float(run_store.cocktailPairTriplePenalty)
+	run_store.runPhase = "running"
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	run_store.neurons = 10
+	run_store.startingNeurons = 10
+	run_store.lockedReels = [true, true, true]
+	run_store.lastResult = { "reels": ["eye", "eye", "brain"] }
+	run_store.cocktailBoostSpins = 1
+	run_store.cocktailPairTriplePenalty = 0.0
+	var cocktail_result: Variant = run_store.spin(false)
+	if cocktail_result == null or int((cocktail_result as Dictionary).get("cocktailBonus", -1)) != 10:
+		failures.append("issue92: hallucination cocktail bonus should ignore hidden third reel: %s" % str(cocktail_result))
+	run_store.set_spinning(false)
+
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	run_store.lastResult = { "reels": ["vial", "vial", "brain"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	run_store.neurons = 10
+	var before_vial := int(run_store.neurons)
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(true)
+	if int(run_store.neurons) <= before_vial:
+		failures.append("issue92: hallucination power-made visible pair did not trigger vial triple effect")
+	run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	var before_flatline := int(run_store.flatlineResultCount)
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(false)
+	if int(run_store.flatlineResultCount) != before_flatline + 1:
+		failures.append("issue92: hallucination flatline pair should trigger a close-call strike")
+
+	if machine._derive_source_reel(["vial", "vial", "brain"]) != 1:
+		failures.append("issue92: hallucination score burst should derive from second reel")
+	machine._start_reel_spin_animation([false, false, false])
+	if not bool(machine._locked_reels_during_spin[2]) or bool(machine._spin_reel_sprites[2].visible):
+		failures.append("issue92: hallucination should not spin the hidden third reel")
+	machine._stop_sfx(&"reel_spin")
+
+	run_store.pairBoostSpins = 0
+	run_store.pairBoostHiddenReels = 0
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	machine._refresh_tobacco_fx()
+	if not bool(machine._tobacco_covers[2].visible):
+		failures.append("issue92: hallucination should still cover the hidden third reel")
+	if bool(machine._tobacco_smoke[2].emitting) or bool(machine._tobacco_smoke[2].visible):
+		failures.append("issue92: hallucination hidden reel should not emit cigarette smoke")
+	run_store.ownedUpgrades = []
+	run_store.pairBoostSpins = 1
+	run_store.pairBoostHiddenReels = 1
+	machine._refresh_tobacco_fx()
+	if not bool(machine._tobacco_smoke[2].emitting):
+		failures.append("issue92: cigarette should still emit smoke on its hidden reel")
+
+	run_store.runPhase = previous_run_phase
+	run_store.ownedUpgrades = previous_owned
+	run_store.lastResult = previous_last
+	run_store.lockedReels = previous_locked
+	run_store.neurons = previous_neurons
+	run_store.startingNeurons = previous_starting
+	run_store.spinCount = previous_spin_count
+	run_store.freeSpinsRemaining = previous_free_spins
+	run_store.isSpinning = previous_is_spinning
+	run_store.pairBoostSpins = previous_pair_spins
+	run_store.pairBoostHiddenReels = previous_pair_hidden
+	run_store.cocktailBoostSpins = previous_cocktail
+	run_store.cocktailPairTriplePenalty = previous_penalty
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_first_launch := bool(meta_store.is_first_launch)
@@ -367,7 +483,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
 		"cons_tea": "RESTORE POWER",
-		"item_pill": "TRIPLE GUARANTEED",
+		"item_pill": "WIN GUARANTEED",
 		"item_cocktail": "RARITY BONUS",
 		"item_energy_drink": "2 FREE SPINS",
 	}
@@ -574,27 +690,37 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.runConsumables = { "cons_focus": 1 }
 	if not run_store.use_consumable("cons_focus", "vial"):
 		failures.append("issue32: Serum use rejected")
-	if int(run_store.guaranteeSymbolSpins) != 1 or String(run_store.guaranteeSymbolId) != "vial" \
-			or int(run_store.pendingBlurSpins) != 1 or int(run_store.banBrainSpins) != 0:
+	if int(run_store.guaranteeSymbolSpins) != 3 or String(run_store.guaranteeSymbolId) != "vial" \
+			or int(run_store.pendingBlurSpins) != 2 or int(run_store.banBrainSpins) != 0:
 		failures.append("issue53: Serum did not set guarantee/blur state")
-	# The guaranteed spin contains the picked symbol, then the next spin is blurry.
+	# The next 3 spins contain the picked symbol, then the next 2 spins are blurry.
 	run_store.neurons = 100
-	var serum_spin: Variant = run_store.spin()
-	run_store.set_spinning(false)
-	if serum_spin == null or not (serum_spin["reels"] as Array).has("vial"):
-		failures.append("issue53: Serum guaranteed spin did not contain the picked symbol")
-	if int(run_store.blurReelsSpins) != 1 or int(run_store.pendingBlurSpins) != 0:
-		failures.append("issue53: blur did not queue for the spin after the guarantee")
-	run_store.spin()
-	run_store.set_spinning(false)
+	for i in 3:
+		var serum_spin: Variant = run_store.spin()
+		run_store.set_spinning(false)
+		if serum_spin == null or not (serum_spin["reels"] as Array).has("vial"):
+			failures.append("issue53: Serum guaranteed spin %d did not contain the picked symbol" % [i + 1])
+	if int(run_store.blurReelsSpins) != 2 or int(run_store.pendingBlurSpins) != 0:
+		failures.append("issue53: blur did not queue for 2 spins after the guarantee")
+	for _i in 2:
+		run_store.spin()
+		run_store.set_spinning(false)
 	if int(run_store.blurReelsSpins) != 0:
-		failures.append("issue53: blur did not clear after its spin")
+		failures.append("issue53: blur did not clear after 2 spins")
 
 	# Tobacco (issue #53): pair boost + hidden reel for 2 spins.
 	run_store.runConsumables = { "cons_cigarette": 1 }
 	run_store.use_consumable("cons_cigarette")
 	if int(run_store.pairBoostSpins) != 2 or int(run_store.pairBoostMult) != 3 or int(run_store.pairBoostHiddenReels) != 1:
 		failures.append("issue32: Tobacco did not set pair-boost counters")
+	run_store.lastResult = {
+		"reels": ["eye", "vial", "pill"], "scoreEarned": 0, "coinsEarned": 0,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
+		"winType": "miss", "isFreeSpin": false, "scoreMultiplier": 1.0,
+	}
+	run_store.copy_reel(0, 1)
+	if int(run_store.lastResult["scoreEarned"]) != 30 or String(run_store.lastResult["winType"]) != "pair":
+		failures.append("issue92: Tobacco pair boost did not apply to a power-made pair")
 	run_store.pairBoostSpins = 0 # cleared so later spins in this check score normally
 
 	# Potion (renamed cons_potion, issue #53): restores all powers + potionSpins.
@@ -603,6 +729,14 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.use_consumable("cons_potion")
 	if not run_store.abilitiesUsed.is_empty() or int(run_store.potionSpins) != 3:
 		failures.append("issue32: Potion did not reset powers / set potionSpins")
+	var potion_kinds := {}
+	for effect in Consumables.POTION_RANDOM_POOL:
+		potion_kinds[String(effect["kind"])] = true
+	if potion_kinds.has("multNextSpin") or not potion_kinds.has("restoreSpin") \
+			or not potion_kinds.has("restorePower") or not potion_kinds.has("adjacentSymbol"):
+		failures.append("issue92: Potion pool did not remove multiplier and add new effects")
+	run_store.potionSpins = 0
+	run_store.lastPotionEffect = null
 
 	# Tea with no used abilities restores normal spins.
 	run_store.abilitiesUsed = []
@@ -639,7 +773,26 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.use_consumable("item_cocktail")
 	if int(run_store.cocktailBoostSpins) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 0:
 		failures.append("consumables: Cocktail still queued compulsion")
+	run_store.betMultiplier = 3
+	run_store.neurons = 100
+	run_store.freeSpinsRemaining = 0
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	var cocktail_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if cocktail_spin == null:
+		failures.append("issue92: Cocktail test spin did not resolve")
+	else:
+		if int(cocktail_spin.get("cocktailBonus", 0)) != 36:
+			failures.append("issue92: Cocktail bonus should use 1-6 rarity scaled by x3")
+		if int(cocktail_spin.get("cocktailPenalty", 0)) != 5:
+			failures.append("issue92: Cocktail pair/triple penalty should be 15%% rounded")
+		if int(cocktail_spin["scoreEarned"]) != 61 or int(cocktail_spin["coinsEarned"]) != 61:
+			failures.append("issue92: Cocktail final score/coins wrong: %s" % str(cocktail_spin))
 	run_store.cocktailBoostSpins = 0
+	run_store.cocktailPairTriplePenalty = 0.0
+	run_store.lockedReels = [false, false, false]
 	run_store.freeSpinsRemaining = 0
 	run_store.compulsiveSpinSkips = 0
 	run_store.pendingCompulsiveSpinSkips = 0
@@ -1306,6 +1459,8 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 		var base := total - bonus
 		if base <= 0 or total != base * EconomyConst.FLATLINE_WIN_BOOST_MULT:
 			failures.append("issue76: boosted score %d != base %d x %d" % [total, base, EconomyConst.FLATLINE_WIN_BOOST_MULT])
+		if int(win["coinsEarned"]) != total:
+			failures.append("issue76: boosted coins should match boosted score")
 		if run_store.flatlineWinBoostArmed:
 			failures.append("issue76: charge not spent after a winning spin")
 
@@ -1356,6 +1511,51 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		if not serum._pos_label.visible or serum._neg_label.visible:
 			failures.append("issue76: serum use popup was not upside-only")
 		serum.queue_free()
+	machine._pending_deferred_neg["cons_focus"] = true
+	var hint_layer: Control = machine._hint_layer
+	var serum_hint_count := hint_layer.get_child_count() if hint_layer != null else 0
+	machine._pop_deferred_negative("cons_focus")
+	if machine._pending_deferred_neg.get("cons_focus", false):
+		failures.append("issue92: serum deferred negative did not disarm after popping")
+	if hint_layer == null or hint_layer.get_child_count() <= serum_hint_count:
+		failures.append("issue92: serum negative popup was not created")
+	else:
+		var serum_neg := hint_layer.get_child(hint_layer.get_child_count() - 1) as HintLabel
+		if serum_neg == null or not serum_neg._neg_label.visible or serum_neg._pos_label.visible:
+			failures.append("issue92: serum negative popup should be downside-only")
+		elif serum_neg._neg_label.text != "- ADJACENTS HIDDEN":
+			failures.append("issue92: serum negative copy wrong: '%s'" % serum_neg._neg_label.text)
+		if serum_neg != null:
+			serum_neg.queue_free()
+
+	# Red Pill is inverted: CLOSE CALL on use, then WIN GUARANTEED on the second spin.
+	var pill: HintLabel = machine._show_consumable_feedback("item_pill")
+	if pill != null:
+		if not pill._neg_label.visible or pill._pos_label.visible:
+			failures.append("issue92: red pill use popup should be close-call only")
+		if pill._neg_label.text != "- CLOSE CALL":
+			failures.append("issue92: red pill close-call copy wrong: '%s'" % pill._neg_label.text)
+		pill.queue_free()
+	var pill_win: HintLabel = machine._show_deferred_positive("item_pill")
+	if pill_win != null:
+		if not pill_win._pos_label.visible or pill_win._neg_label.visible:
+			failures.append("issue92: red pill guaranteed-win popup should be upside-only")
+		if pill_win._pos_label.text != "+ WIN GUARANTEED":
+			failures.append("issue92: red pill guaranteed-win copy wrong: '%s'" % pill_win._pos_label.text)
+		pill_win.queue_free()
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var previous_force_flatline := int(run_store.forceFlatlineSpins)
+	var previous_guaranteed_triple := int(run_store.guaranteedTripleSpins)
+	run_store.forceFlatlineSpins = 1
+	run_store.guaranteedTripleSpins = 1
+	if machine._pill_guaranteed_spin_pending():
+		failures.append("issue92: red pill should not show guaranteed-win popup on the close-call spin")
+	run_store.forceFlatlineSpins = 0
+	run_store.guaranteedTripleSpins = 1
+	if not machine._pill_guaranteed_spin_pending():
+		failures.append("issue92: red pill should show guaranteed-win popup on the second spin")
+	run_store.forceFlatlineSpins = previous_force_flatline
+	run_store.guaranteedTripleSpins = previous_guaranteed_triple
 
 	# A flavor item (Water) shows upside only — no fabricated downside line.
 	var flavor: HintLabel = machine._show_consumable_feedback("item_water")
@@ -1452,6 +1652,54 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	if (slots[0]["slot"] as Control).visible:
 		failures.append("issue76: boost icon shown with no active boost")
 
+	# Focus Serum shows the chosen symbol on the TV, not the serum bottle.
+	run_store.guaranteeSymbolSpins = 3
+	run_store.guaranteeSymbolId = "vial"
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum chosen-symbol boost icon did not show")
+	elif (slots[0]["count"] as Label).text != "3":
+		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_icon := (slots[0]["icon"] as TextureRect).texture
+		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/vial.png"):
+			failures.append("issue92: Serum boost icon did not use the chosen symbol")
+	run_store.guaranteeSymbolSpins = 1
+	run_store.guaranteeSymbolId = "vial"
+	var serum_expiring: Array[Dictionary] = machine._capture_expiring_boost_counters()
+	run_store.guaranteeSymbolSpins = 0
+	run_store.guaranteeSymbolId = ""
+	run_store.blurReelsSpins = 2
+	machine._apply_expiring_boost_linger(serum_expiring)
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum zero-count handoff icon did not show")
+	elif (slots[0]["count"] as Label).text != "0":
+		failures.append("issue92: Serum zero-count handoff icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
+		var serum_zero_color := (slots[0]["count"] as Label).get_theme_color("font_color")
+		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/vial.png"):
+			failures.append("issue92: Serum zero-count handoff icon should keep the chosen symbol")
+		if serum_zero_color == Color(0.94, 0.27, 0.27):
+			failures.append("issue92: Serum zero-count handoff should not be red yet")
+	if (slots[1]["slot"] as Control).visible:
+		failures.append("issue92: Serum negative icon should wait until after the zero-count spin")
+	machine._clear_boost_zero_linger()
+	if not (slots[0]["slot"] as Control).visible:
+		failures.append("issue92: Serum negative boost icon did not show after zero handoff")
+	elif (slots[0]["count"] as Label).text != "2":
+		failures.append("issue92: Serum negative boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
+	else:
+		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
+		var serum_neg_color := (slots[0]["count"] as Label).get_theme_color("font_color")
+		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/focus_serum.png"):
+			failures.append("issue92: Serum negative boost icon did not use the serum bottle")
+		if serum_neg_color != Color(0.94, 0.27, 0.27):
+			failures.append("issue92: Serum negative boost count should be red")
+	run_store.blurReelsSpins = 0
+	machine._refresh_boost_indicators()
+
 	# One boost active: first slot shows its count.
 	run_store.cocktailBoostSpins = 2
 	machine._refresh_boost_indicators()
@@ -1479,6 +1727,62 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if (slots[0]["slot"] as Control).visible or (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: boost icons lingered after the boosts ended")
+
+	# A boost that just spent its final spin stays visible as "0"; the next lever press
+	# clears that zero-state icon before the next spin begins.
+	run_store.cocktailBoostSpins = 1
+	machine._refresh_boost_indicators()
+	var expiring: Array[Dictionary] = machine._capture_expiring_boost_counters()
+	run_store.cocktailBoostSpins = 0
+	machine._apply_expiring_boost_linger(expiring)
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "0":
+		failures.append("issue76: final boost spin should linger as count 0")
+	machine._clear_boost_zero_linger()
+	if (slots[0]["slot"] as Control).visible:
+		failures.append("issue76: boost count 0 icon did not clear on next lever press")
+
+	run_store.pairBoostHiddenReels = 1
+	run_store.pairBoostSpins = 1
+	machine._refresh_consumable_fx()
+	expiring = machine._capture_expiring_boost_counters()
+	run_store.pairBoostSpins = 0
+	machine._apply_expiring_boost_linger(expiring)
+	machine._refresh_consumable_fx()
+	if not (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue76: Cigarette hidden reel should stay visible at count 0")
+	machine._clear_boost_zero_linger()
+	if (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue76: Cigarette hidden reel did not clear on next lever press")
+	run_store.pairBoostHiddenReels = 0
+
+	# Serum negative now hides the above/below strip neighbours, leaving center symbols.
+	machine._set_reel_symbol(0, "eye")
+	machine._set_reel_visible(0, true)
+	machine._set_adjacent_symbols_hidden_active(true)
+	if not machine._reel_sprites[0].visible or machine._reel_top_sprites[0].visible or machine._reel_bottom_sprites[0].visible:
+		failures.append("issue92: Serum negative did not hide adjacent reel symbols")
+	machine._set_adjacent_symbols_hidden_active(false)
+	if not machine._reel_top_sprites[0].visible or not machine._reel_bottom_sprites[0].visible:
+		failures.append("issue92: adjacent reel symbols did not restore after Serum negative")
+
+	# Potion popup uses normal popup text size and green/red by effect sign.
+	if machine._potion_effect_color({ "kind": "lucidity", "amount": -5 }) != machine.potion_popup_negative_color:
+		failures.append("issue92: negative Potion popup should use negative color")
+	if machine._potion_effect_color({ "kind": "restorePower" }) != machine.potion_popup_color:
+		failures.append("issue92: positive Potion popup should use positive color")
+	var fx_count: int = machine._fx_layer.get_child_count()
+	machine._show_potion_popup("POTION TEST", machine.potion_popup_negative_color)
+	if machine._fx_layer.get_child_count() <= fx_count:
+		failures.append("issue92: Potion popup did not spawn")
+	else:
+		var popup := machine._fx_layer.get_child(machine._fx_layer.get_child_count() - 1) as Label
+		if popup == null or popup.get_theme_font_size("font_size") != 8:
+			failures.append("issue92: Potion popup text should use popup font size 8")
+		elif popup.get_theme_color("font_color") != machine.potion_popup_negative_color:
+			failures.append("issue92: Potion popup did not use requested effect color")
+		if popup != null:
+			popup.queue_free()
 
 	run_store.reset_run_state()
 
@@ -1825,14 +2129,25 @@ func _check_eye_reveal(machine: Node, failures: Array) -> void:
 # bonus-effect blurbs, downscalable icons, no symbol names.
 func _check_score_table_51(machine: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
-	meta_store.oddsUpgrades = { "eye": 2 }
+	var owned_before: Array = run_store.ownedUpgrades.duplicate()
+	var bonuses_before: Dictionary = run_store.symbolRewardBonuses.duplicate(true)
+	meta_store.oddsUpgrades = { "eye": 2, "vial": int(run_store.odds_max_level) }
+	meta_store.rewardAmpSymbol = "eye"
+	run_store.ownedUpgrades = ["corr_reward_amp_1"]
+	run_store.symbolRewardBonuses = {
+		"eye": 0.15,
+		"vial": float(run_store.odds_max_level_reward_bonus),
+	}
 	machine._set_sequence_lock(false)
 	machine._close_score_table()
 	machine._show_score_table()
 	var overlay: Control = machine._score_overlay
 	if overlay == null:
 		failures.append("issue51: score table did not open")
+		run_store.ownedUpgrades = owned_before
+		run_store.symbolRewardBonuses = bonuses_before
 		meta_store._apply(meta_before)
 		meta_store.save_state()
 		return
@@ -1854,11 +2169,42 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		failures.append("issue51: triple bonus-effect blurbs missing")
 	if not texts.has("2"):
 		failures.append("issue51: LVL column does not show the symbol's odds level")
+	var found_amp_pair := false
+	var found_amp_triple := false
+	var found_max_level := false
+	var found_max_level_bonus := false
+	var found_max_line_bonus := false
+	var expected_max_bonus := "+%d%%" % int(round(float(run_store.odds_max_level_reward_bonus) * 100.0))
+	var eye_bonus := float(run_store.symbolRewardBonuses.get("eye", 0.0))
+	var expected_amp_pair := "+%d" % floori(float(int(Payouts.PAIR_SCORE["eye"])) * (1.0 + eye_bonus) + 0.5)
+	var expected_amp_triple := "+%d" % floori(float(int(Payouts.TRIPLE_SCORE["eye"])) * (1.0 + eye_bonus) + 0.5)
+	var gain_debug: Array[String] = []
 	for child in overlay.get_children():
+		if child is Label:
+			var label := child as Label
+			var color := label.get_theme_color("font_color")
+			if label.text.begins_with("+"):
+				gain_debug.append("%s:%s" % [label.text, str(color)])
+			if label.text == expected_amp_pair and color == Color(1.0, 0.86, 0.2):
+				found_amp_pair = true
+			if label.text == expected_amp_triple and color == Color(1.0, 0.86, 0.2):
+				found_amp_triple = true
+			if label.text == str(int(run_store.odds_max_level)) and color == Color(1.0, 0.24, 0.24):
+				found_max_level = true
+			if label.text == "(%s)" % expected_max_bonus and color == Color(1.0, 0.24, 0.24):
+				found_max_level_bonus = true
+			if label.text == expected_max_bonus and color == Color(1.0, 0.24, 0.24):
+				found_max_line_bonus = true
 		if child is TextureRect and (child as TextureRect).expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
 			failures.append("issue51: table icons cannot scale down (expand mode)")
 			break
+	if not found_amp_pair or not found_amp_triple:
+		failures.append("issue51: reward amplification does not highlight pair/triple gains in yellow (%s)" % str(gain_debug))
+	if not found_max_level or not found_max_level_bonus or not found_max_line_bonus:
+		failures.append("issue51: maxed odds level bonus is not shown in red in the table")
 	machine._close_score_table()
+	run_store.ownedUpgrades = owned_before
+	run_store.symbolRewardBonuses = bonuses_before
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
@@ -1889,10 +2235,17 @@ func _check_dealer_offer_take_flow(overlay: Node, failures: Array) -> void:
 	var hint_layer := overlay.get_node("SpeechBubble/HintLayer") as Control
 	var pos_hint := overlay.get_node("SpeechBubble/HintLayer/PositiveHint") as Label
 	var name_hint := overlay.get_node("SpeechBubble/HintLayer/NameHint") as Label
-	if not hint_layer.visible or pos_hint.text != "+ refreshing":
+	if not hint_layer.visible or pos_hint.text != "+ REFRESH":
 		failures.append("take-flow: item tap did not reveal hint text")
 	if name_hint.visible:
 		failures.append("take-flow: item name should no longer show in the bubble")
+	var neg_hint := overlay.get_node("SpeechBubble/HintLayer/NegativeHint") as Label
+	overlay._select_offer("item_pill")
+	if pos_hint.text != "+ WIN GUARANTEED" or neg_hint.text != "- CLOSE CALL":
+		failures.append("take-flow: red pill hints are not using close-call/win-guaranteed copy")
+	if neg_hint.position.y >= pos_hint.position.y:
+		failures.append("take-flow: red pill negative hint should display above the positive hint")
+	overlay._select_offer("item_water")
 	var take := overlay.get_node("LookButton") as Button
 	if take.disabled or take.text != "take":
 		failures.append("take-flow: selecting an item did not arm the take button")
@@ -2118,21 +2471,21 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await process_frame
 	if power_name_label.text != "Rewards+":
 		failures.append("upgrades: reward amp did not show the shortened power name")
-	if price_label.text != "15":
+	if price_label.text != "30":
 		failures.append("upgrades: reward amp tier I price is not shown in PowerNameBox")
 	if not description_label.text.contains("[color=#183A8C]tier I[/color]"):
 		failures.append("upgrades: reward amp tier I description is not blue BBCode")
 	await scene._animate_money_to_brain()
 	reward_row.set_meta("upgrade_id", "corr_reward_amp_2")
 	scene._select_row(reward_row)
-	if price_label.text != "25":
-		failures.append("upgrades: reward amp tier II price should be 25")
+	if price_label.text != "55":
+		failures.append("upgrades: reward amp tier II price should be 55")
 	if not description_label.text.contains("[color=#FBBF24]tier II[/color]"):
 		failures.append("upgrades: reward amp tier II description is not orange BBCode")
 	reward_row.set_meta("upgrade_id", "corr_reward_amp_3")
 	scene._select_row(reward_row)
-	if price_label.text != "50":
-		failures.append("upgrades: reward amp tier III price should be 50")
+	if price_label.text != "90":
+		failures.append("upgrades: reward amp tier III price should be 90")
 	if not description_label.text.contains("[color=#D62828]tier III[/color]"):
 		failures.append("upgrades: reward amp tier III description is not red BBCode")
 	if (scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory/NameLabel") as Label).text != "Lock":
@@ -2164,22 +2517,23 @@ func _check_upgrades_scene(failures: Array) -> void:
 	scene._select_row(pattern_row)
 	if power_name_label.text != "Pattern Fabrication":
 		failures.append("upgrades: Pattern Fabrication did not select the pattern upgrade")
-	if price_label.text != "100":
-		failures.append("upgrades: Pattern Fabrication price should be 100")
+	if price_label.text != "160":
+		failures.append("upgrades: Pattern Fabrication price should be 160")
 	scene._select_row(learning_row)
 	if power_name_label.text != "Book Upgrade":
 		failures.append("upgrades: Learning did not select the book upgrade")
-	if price_label.text != "70":
-		failures.append("upgrades: Learning price should be 70")
+	if price_label.text != "120":
+		failures.append("upgrades: Learning price should be 120")
 	var hallucination_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment") as Control
 	scene._select_row(hallucination_row)
 	await process_frame
 	if power_name_label.text != "Hallucination":
 		failures.append("upgrades: Hallucination did not show in the power name box")
-	if price_label.text != "50":
-		failures.append("upgrades: Hallucination price should be 50")
-	if not description_label.text.contains("25% more Lucidity"):
-		failures.append("upgrades: Hallucination description does not describe the 25% gain")
+	var hallucination_cost := int(Upgrades.upgrade_map()["pos_enlightenment"]["cost"])
+	if price_label.text != str(hallucination_cost):
+		failures.append("upgrades: Hallucination price should be %d" % hallucination_cost)
+	if not description_label.text.contains("Visible pairs count as triples"):
+		failures.append("upgrades: Hallucination description does not describe the rework")
 	brain.frame = 11
 	scene._sync_brain_overlay_frames()
 	if eye_overlay.frame != 11:

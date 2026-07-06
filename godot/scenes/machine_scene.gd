@@ -121,6 +121,12 @@ const MULT_COLORS := {
 }
 const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const JACKPOT_GOLD := Color(1.0, 0.84, 0.18) # jackpot burst is ALWAYS golden (issue #22)
+const SCORE_TABLE_GAIN_COLOR := Color(0.75, 1.0, 0.8)
+const SCORE_TABLE_DIM_COLOR := Color(0.45, 0.48, 0.58)
+const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
+const SCORE_TABLE_REWARD_AMP_COLOR := Color(1.0, 0.86, 0.2)
+const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
+const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
@@ -175,6 +181,9 @@ const ITEM_ICONS := {
 # it stacks top-down in the corner.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
+	{ "counter": "blurReelsSpins", "id": "cons_focus",
+		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
 	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
 	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
@@ -198,20 +207,20 @@ const DURATION_BOOSTS := [
 @export var use_hints: Dictionary = {
 	"cons_cigarette": { "pos": "3X PAIRS", "neg": "1 REEL HIDDEN" },
 	"cons_white_powder": { "pos": "COPY A REEL", "neg": "RESULT HIDDEN" },
-	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "REELS BLURRED" },
+	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "ADJACENTS HIDDEN" },
 	"cons_potion": { "pos": "POWERS RESTORED", "neg": "" },
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
 	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
-	"item_pill": { "pos": "TRIPLE GUARANTEED", "neg": "CLOSE CALL" },
+	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
-	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
+	"item_cocktail": { "pos": "RARITY BONUS", "neg": "15% PAIR/TRIPLE TAX" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
 ## upside, and the negative is popped separately when it actually activates — more
 ## dramatic and clearer than front-loading a warning for something not happening yet.
 const DEFERRED_NEGATIVE_ITEMS := [
-	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette", "item_pill",
+	"item_energy_drink", "cons_focus", "cons_white_powder", "cons_cigarette",
 ]
 
 ## Of the deferred items, these pop their negative via an explicit hook when it fires
@@ -282,6 +291,7 @@ var _pending_deferred_neg: Dictionary = {}
 @export_range(1.0, 12.0, 0.5) var potion_jump_height: float = 4.0
 @export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
+@export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
 @export_subgroup("Hidden Result", "hidden_")
 ## White Powder: the spin consumed by hideResultSpins reveals "?" covers instead
 ## of readable reels, until the next spin re-rolls the machine.
@@ -328,6 +338,7 @@ var _multiplier_sprite: Sprite2D = null
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
+var _boost_zero_linger: Dictionary = {} # counter -> snapshot while the just-spent final spin shows "0"
 var _jackpot_sprite: Sprite2D = null
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
@@ -427,7 +438,9 @@ var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
 var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
 var _blur_result_active := false           # the displayed result renders blurry
+var _adjacent_symbols_hidden_active := false # Serum downside: hide strip neighbours
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
+var _book_choice_overlay: Control = null
 var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
@@ -792,6 +805,8 @@ func _build_power_bar() -> void:
 ## screen, so the row clears the red bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
+const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
+const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
@@ -819,7 +834,7 @@ func _build_boost_indicators() -> void:
 		count.add_theme_font_size_override("font_size", 7)
 		if _font != null:
 			count.add_theme_font_override("font", _font)
-		count.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		count.add_theme_color_override("font_color", BOOST_COUNT_COLOR)
 		count.add_theme_color_override("font_outline_color", Color.BLACK)
 		count.add_theme_constant_override("outline_size", 1)
 		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -838,10 +853,17 @@ func _refresh_boost_indicators() -> void:
 	var row_top := float(TV_SCREEN["top"]) + 13.0
 	var col := 0
 	for boost in DURATION_BOOSTS:
-		var remaining := int(RunStateStore.get(String(boost["counter"])))
-		if remaining <= 0 or col >= _boost_indicator_slots.size():
+		var counter := String(boost["counter"])
+		var remaining := int(RunStateStore.get(counter))
+		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
+		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
+		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
 			continue
-		var tex := _icon_for(String(boost["id"]))
+		if remaining > 0:
+			_boost_zero_linger.erase(counter)
+		if (remaining <= 0 and not show_zero) or col >= _boost_indicator_slots.size():
+			continue
+		var tex := _boost_icon_for(boost)
 		if tex == null:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
@@ -849,7 +871,10 @@ func _refresh_boost_indicators() -> void:
 		slot.position = Vector2(row_right - BOOST_ICON_SIZE - float(col) * (BOOST_ICON_SIZE + BOOST_ICON_GAP), row_top)
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
-		cn.text = str(remaining)
+		cn.text = str(maxi(0, remaining))
+		cn.add_theme_color_override(
+			"font_color",
+			BOOST_NEGATIVE_COUNT_COLOR if bool(boost.get("negative", false)) else BOOST_COUNT_COLOR)
 		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
 		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
 		var mh := cn.get_minimum_size().y
@@ -859,6 +884,33 @@ func _refresh_boost_indicators() -> void:
 		col += 1
 	for i in range(col, _boost_indicator_slots.size()):
 		(_boost_indicator_slots[i]["slot"] as Control).visible = false
+
+func _capture_expiring_boost_counters() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for boost in DURATION_BOOSTS:
+		var counter := String(boost["counter"])
+		if int(RunStateStore.get(counter)) == 1:
+			var snapshot: Dictionary = { "counter": counter }
+			var symbol_field := String(boost.get("symbolField", ""))
+			if symbol_field != "":
+				var symbol_id := String(RunStateStore.get(symbol_field))
+				if symbol_id != "":
+					snapshot["symbolId"] = symbol_id
+			out.append(snapshot)
+	return out
+
+func _apply_expiring_boost_linger(counters: Array[Dictionary]) -> void:
+	for snapshot in counters:
+		var counter := String(snapshot.get("counter", ""))
+		if int(RunStateStore.get(counter)) <= 0:
+			_boost_zero_linger[counter] = snapshot
+
+func _clear_boost_zero_linger() -> void:
+	if _boost_zero_linger.is_empty():
+		return
+	_boost_zero_linger.clear()
+	_refresh_boost_indicators()
+	_refresh_consumable_fx()
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -953,7 +1005,7 @@ func _reveal_reel(index: int) -> void:
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
 	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
-	_set_blur_cover(index, _blur_result_active)   # Serum frost blurs the reveal (issue #53)
+	_apply_adjacent_symbol_visibility(index)      # Serum hides above/below neighbours
 
 func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
 	s.centered = true
@@ -985,8 +1037,8 @@ func _build_reels() -> void:
 
 func _set_reel_visible(index: int, visible: bool) -> void:
 	_reel_sprites[index].visible = visible
-	_reel_top_sprites[index].visible = visible
-	_reel_bottom_sprites[index].visible = visible
+	_reel_top_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
+	_reel_bottom_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
 
 func _set_all_reels_visible(visible: bool) -> void:
 	for i in _reel_sprites.size():
@@ -1017,6 +1069,14 @@ func _set_reel_symbol(index: int, symbol_id: String) -> void:
 	var nb := _reel_neighbours(symbol_id)
 	_apply_symbol(_reel_top_sprites[index], String(nb["top"]), STRIP_ADJ_H)
 	_apply_symbol(_reel_bottom_sprites[index], String(nb["bottom"]), STRIP_ADJ_H)
+	_apply_adjacent_symbol_visibility(index)
+
+func _apply_adjacent_symbol_visibility(index: int) -> void:
+	if index < 0 or index >= _reel_sprites.size():
+		return
+	var visible := bool(_reel_sprites[index].visible) and not _adjacent_symbols_hidden_active
+	_reel_top_sprites[index].visible = visible
+	_reel_bottom_sprites[index].visible = visible
 
 func _build_hud() -> void:
 	_build_score_button()
@@ -1205,8 +1265,9 @@ func _sync_visuals() -> void:
 	_close_score_table()
 	_clear_targeting()
 	_set_hidden_result_active(false)
-	_set_blur_result_active(false)
+	_set_adjacent_symbols_hidden_active(false)
 	_close_serum_picker()
+	_close_book_choice_overlay()
 	_hide_compulsive_overlay()
 	_compulsive_queued = false
 	_last_reacted_reels = []
@@ -1272,6 +1333,8 @@ func _do_spin(compulsive := false) -> void:
 		return
 	if not compulsive and not RunStateStore._can_act():
 		return
+	_clear_boost_zero_linger()
+	var expiring_boost_counters := _capture_expiring_boost_counters()
 	_clear_targeting()
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
@@ -1280,12 +1343,13 @@ func _do_spin(compulsive := false) -> void:
 	# White Powder (issue #34): hideResultSpins is consumed inside spin(), so read it
 	# before spinning — this spin's result reveals as "?" covers.
 	var hide_this_spin := RunStateStore.hideResultSpins > 0
-	# Serum (issue #53): blurReelsSpins is consumed inside spin() too — this spin's
-	# result renders behind the blur frost.
+	# Serum (issue #53): blurReelsSpins is consumed inside spin() too; this spin's
+	# result hides the top/bottom adjacent strip symbols.
 	var blur_this_spin := RunStateStore.blurReelsSpins > 0
 	# Tobacco's hidden reel is likewise active this spin (pairBoostSpins decrements in
 	# spin()), so read it now to pop its deferred "1 REEL HIDDEN" when it first bites.
 	var tobacco_this_spin := RunStateStore.pairBoostSpins > 0
+	var pill_guaranteed_spin := _pill_guaranteed_spin_pending()
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
 	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
@@ -1296,6 +1360,7 @@ func _do_spin(compulsive := false) -> void:
 	if result == null:
 		_hud_delta_hold = false
 		return
+	_apply_expiring_boost_linger(expiring_boost_counters)
 	# A free spin GRANTED by this spin (jackpot) is a reward, not a cost, so hold it
 	# out of the now-live SPINS LEFT counter until the score lands (issue #80); the
 	# hold is released in _release_hud_delta_hold with the other reward deltas.
@@ -1305,7 +1370,7 @@ func _do_spin(compulsive := false) -> void:
 		_held_spin_grant += granted_free
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
-	_set_blur_result_active(consumable_fx_enabled and blur_this_spin)
+	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and blur_this_spin)
 	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
 	if hide_this_spin:
 		_pop_deferred_negative("cons_white_powder")
@@ -1313,10 +1378,14 @@ func _do_spin(compulsive := false) -> void:
 		_pop_deferred_negative("cons_focus")
 	if tobacco_this_spin:
 		_pop_deferred_negative("cons_cigarette")
+	if pill_guaranteed_spin:
+		_show_deferred_positive("item_pill")
 	_final_reels = result["reels"]
 	# Third-reel tension: if reels 1 & 2 will match, hold reel 3 a little longer.
 	var tension := TENSION_DELAY if String(_final_reels[0]) == String(_final_reels[1]) else 0.0
 	_reel_stop_times = [0.55, 1, 1.4 + tension]
+	if _active_hidden_reel_count() > 0:
+		_reel_stop_times[2] = _reel_stop_times[1]
 	# Eye triple: the revealed reel was already committed at tap time (issue #53);
 	# reels 0/1 also stop early (reel 2 stays last: reveal-complete keys off its time).
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
@@ -1384,7 +1453,10 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 	_spin_frame = 0
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
+	var visible_count := _visible_reel_count()
 	for i in 3:
+		if i >= visible_count:
+			_locked_reels_during_spin[i] = true
 		var locked := bool(_locked_reels_during_spin[i])
 		_reel_stop_sfx_played[i] = locked
 		_set_reel_visible(i, locked)
@@ -1771,7 +1843,20 @@ func _init_burst_tracking() -> void:
 # Normal-spin source reel: a pair on the first two reels pops on reel 2 (index 1);
 # every other win reads from reel 3 (index 2).
 func _derive_source_reel(reels: Array) -> int:
+	if _active_hidden_reel_count() > 0:
+		return 1
 	return 1 if (String(reels[0]) == String(reels[1]) and String(reels[1]) != String(reels[2])) else 2
+
+func _active_hidden_reel_count() -> int:
+	var lr: Variant = RunStateStore.lastResult
+	if lr != null and (lr as Dictionary).has("hiddenReelCount"):
+		return clampi(int((lr as Dictionary)["hiddenReelCount"]), 0, 2)
+	if Economy.has_hallucination(RunStateStore.ownedUpgrades):
+		return 1
+	return 0
+
+func _visible_reel_count() -> int:
+	return maxi(1, 3 - _active_hidden_reel_count())
 
 # The lone unpaired reel of a pair (-1 if none).
 func _solo_reel(reels: Array) -> int:
@@ -1804,8 +1889,8 @@ func _emit_score_burst(source_reel) -> float:
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
-		for i in 3:
-			_spawn_burst("", int(Symbols.RARITY.get(String(reels[i]), 0)), COCKTAIL_COLOR, i)
+		for i in _visible_reel_count():
+			_spawn_burst("", _cocktail_reel_bonus(String(reels[i]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, i)
 		_nudge(0.8)
 		return maxf(reward_time, BURST_TIME)
 
@@ -1830,15 +1915,21 @@ func _emit_score_burst(source_reel) -> float:
 			label = "FLATLINE x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT
 			color = flatline_result_color
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
+		if _active_hidden_reel_count() > 0:
+			reel = mini(reel, _visible_reel_count() - 1)
 		_spawn_burst(label, score, color, reel)
 		_nudge(1.0)
 		reward_time = maxf(reward_time, BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
-			if solo != -1:
-				_spawn_burst("", int(Symbols.RARITY.get(String(reels[solo]), 0)), COCKTAIL_COLOR, solo)
+			if solo != -1 and solo < _visible_reel_count():
+				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
 	return reward_time
+
+func _cocktail_reel_bonus(symbol_id: String, score_multiplier: float) -> int:
+	var points := int(RunStateStore.COCKTAIL_RARITY_POINTS.get(symbol_id, 0))
+	return floori(float(points) * score_multiplier + 0.5)
 
 func _burst_text(text: String, size: int, color: Color, width: float) -> Label:
 	var l := Label.new()
@@ -2478,6 +2569,24 @@ func _short_name(consumable_id: String) -> String:
 func _icon_for(id: String) -> Texture2D:
 	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
 
+func _boost_icon_for(boost: Dictionary) -> Texture2D:
+	var counter := String(boost.get("counter", ""))
+	if _boost_zero_linger.has(counter):
+		var snapshot := _boost_zero_linger[counter] as Dictionary
+		var linger_symbol_id := String(snapshot.get("symbolId", ""))
+		if linger_symbol_id != "":
+			var linger_symbol_tex := _load_texture("symbols/%s.png" % linger_symbol_id, true)
+			if linger_symbol_tex != null:
+				return linger_symbol_tex
+	var symbol_field := String(boost.get("symbolField", ""))
+	if symbol_field != "":
+		var symbol_id := String(RunStateStore.get(symbol_field))
+		if symbol_id != "":
+			var symbol_tex := _load_texture("symbols/%s.png" % symbol_id, true)
+			if symbol_tex != null:
+				return symbol_tex
+	return _icon_for(String(boost["id"]))
+
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
@@ -2613,8 +2722,7 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 
 ## `apply_power_reaction` runs the machine reactions (reroll/shift triples, flatline
 ## strikes) and the flatline instant-death check AFTER the score popup, mirroring the
-## normal spin path so a power-made triple never flashes before its own burst. The
-## white-powder copy path leaves it false (it fires no machine reaction).
+## normal spin path so a power-made triple never flashes before its own burst.
 func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> void:
 	_set_sequence_lock(true)
 	var reward_time := _emit_score_burst(source_reel)
@@ -2693,6 +2801,8 @@ func _show_score_table() -> void:
 	_score_label_right(_score_overlay, "PAIR", pair_right, header_y, 7, Color(0.0, 0.9, 1.0))
 	_score_label_right(_score_overlay, "TRIPLE", triple_right, header_y, 7, Color(0.0, 0.9, 1.0))
 
+	var reward_amp_symbol := String(MetaStateStore.rewardAmpSymbol)
+	var reward_amp_bonus := Economy.compute_symbol_reward_amp_bonus(RunStateStore.ownedUpgrades)
 	var y := 74.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var symbol_id := String(sym)
@@ -2711,17 +2821,32 @@ func _show_score_table() -> void:
 		# Permanent odds level (issue #51): the same levels bought at the dealer's
 		# odds table; dimmed when the symbol was never upgraded.
 		var level := RunStateStore.odds_upgrade_level(symbol_id)
-		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7,
-			Color(1.0, 0.86, 0.2) if level > 0 else Color(0.45, 0.48, 0.58))
+		var is_maxed := level >= int(RunStateStore.odds_max_level)
+		var level_color := SCORE_TABLE_MAXED_COLOR if is_maxed else (
+			SCORE_TABLE_LEVEL_COLOR if level > 0 else SCORE_TABLE_DIM_COLOR)
+		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7, level_color)
+		if is_maxed:
+			_score_label(_score_overlay, "(%s)" % _reward_bonus_text(
+				float(RunStateStore.odds_max_level_reward_bonus)),
+				Vector2(lvl_cx + 6.0, y + 4.0), 4, SCORE_TABLE_MAXED_COLOR)
 
-		var pair := int(Payouts.PAIR_SCORE.get(symbol_id, 0))
-		var triple := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, Color(0.75, 1.0, 0.8))
-		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7,
-			Color(1.0, 0.33, 0.58) if symbol_id == "brain" else Color(0.75, 1.0, 0.8))
+		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
+		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
+		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
+		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
+		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
+		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
+		var triple_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else (
+			SCORE_TABLE_BRAIN_COLOR if symbol_id == "brain" else SCORE_TABLE_GAIN_COLOR)
+		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, pair_color)
+		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7, triple_color)
 		# Little bonus-effect blurb under the triple value (issue #51).
 		_score_label_right(_score_overlay, _triple_effect_text(symbol_id), triple_right, y + 12.0, 4,
 			Color(0.58, 0.64, 0.72))
+		if is_maxed:
+			_score_label_right(_score_overlay, _reward_bonus_text(
+				float(RunStateStore.odds_max_level_reward_bonus)),
+				triple_right, y + 20.0, 4, SCORE_TABLE_MAXED_COLOR)
 		y += 27.0
 
 	var close := Button.new()
@@ -2748,6 +2873,9 @@ func _score_label_centered(parent: Control, text: String, center_x: float, y: fl
 	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
 	l.position = Vector2(center_x - l.get_minimum_size().x * 0.5, y)
 	return l
+
+func _reward_bonus_text(bonus: float) -> String:
+	return "+%d%%" % int(round(bonus * 100.0))
 
 ## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
 ## Dynamic counts pull from the reaction exports so the copy never drifts.
@@ -2814,6 +2942,8 @@ func _item_display_name(id: String) -> String:
 ## Animated two-line +/- hint on stash use (issue #33). Spawns a self-freeing
 ## HintLabel; the item name renders purple when the item is flagged corrupted.
 func _show_consumable_feedback(id: String) -> HintLabel:
+	if id == "item_pill":
+		return _show_deferred_negative(id)
 	# Deferred-negative items (issue #76) show only the upside now; a hooked item also
 	# arms its downside so the activation hook can pop it later.
 	if id in HOOKED_DEFERRED_NEGATIVES:
@@ -2832,6 +2962,13 @@ func _pop_deferred_negative(id: String) -> void:
 ## Pops just the negative line for a deferred-negative item (issue #76).
 func _show_deferred_negative(id: String) -> HintLabel:
 	return _spawn_hint(id, true, false)
+
+## Pops just the positive line for an upside that activates after the item is consumed.
+func _show_deferred_positive(id: String) -> HintLabel:
+	return _spawn_hint(id, false, true)
+
+func _pill_guaranteed_spin_pending() -> bool:
+	return int(RunStateStore.forceFlatlineSpins) <= 0 and int(RunStateStore.guaranteedTripleSpins) > 0
 
 ## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
 ## just the upside. Otherwise both lines show (the classic on-use hint).
@@ -3049,7 +3186,7 @@ func _on_copy_pick(reel_index: int) -> void:
 		_refresh_reels_from_state()
 		_update_hud()
 		_refresh_jackpot_lamp()
-		_play_reward_sequence(reel_index) # copy burst pops from the target reel
+		_play_reward_sequence(reel_index, true) # copy-made triples now trigger normally
 
 # ── consumable visuals (issue #34) ───────────────────────────────────────────────
 # Presentation-only per-item effects. Duration effects (tobacco smoke, energy-drink
@@ -3195,19 +3332,27 @@ func _refresh_consumable_fx() -> void:
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
 
-## Tobacco: evaluate.gd hides the LAST pairBoostHiddenReels reels from scoring
-## (reels.slice keeps the first ones), so smoke exactly those.
+## Hidden-reel effects hide the LAST reels from scoring (reels.slice keeps the
+## first ones), so smoke exactly those.
 func _refresh_tobacco_fx() -> void:
-	var active := consumable_fx_enabled and tobacco_fx_enabled and RunStateStore.pairBoostSpins > 0
-	var hidden := clampi(RunStateStore.pairBoostHiddenReels, 0, 2) if active else 0
+	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
+		or _boost_zero_linger.has("pairBoostSpins")
+	var hallucination_active := Economy.has_hallucination(RunStateStore.ownedUpgrades)
+	var active := consumable_fx_enabled and tobacco_fx_enabled and (tobacco_active or hallucination_active)
+	var hidden := 0
+	if active:
+		hidden = clampi(RunStateStore.pairBoostHiddenReels if tobacco_active else 0, 0, 2)
+		if hallucination_active:
+			hidden = maxi(hidden, 1)
 	for i in 3:
 		var smoked: bool = i >= 3 - hidden
 		if i < _tobacco_covers.size():
 			(_tobacco_covers[i] as ColorRect).visible = smoked
 		if i < _tobacco_smoke.size():
 			var smoke := _tobacco_smoke[i] as CPUParticles2D
-			smoke.visible = smoked
-			smoke.emitting = smoked
+			var emits_smoke := smoked and tobacco_active
+			smoke.visible = emits_smoke
+			smoke.emitting = emits_smoke
 
 func _refresh_energy_fx() -> void:
 	if _energy_edges == null:
@@ -3269,7 +3414,7 @@ func _play_potion_spin_fx() -> void:
 	if pick == null:
 		return
 	_play_potion_jump()
-	_show_potion_popup(_potion_effect_text(pick))
+	_show_potion_popup(_potion_effect_text(pick), _potion_effect_color(pick))
 
 func _play_potion_jump() -> void:
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
@@ -3282,8 +3427,6 @@ func _play_potion_jump() -> void:
 
 func _potion_effect_text(pick: Dictionary) -> String:
 	match String(pick.get("kind", "")):
-		"multNextSpin":
-			return "SCORE x%s" % String.num(float(pick["multiplier"]), 2)
 		"lucidity":
 			var amt := int(pick["amount"])
 			return ("+%d LUCIDITY" % amt) if amt >= 0 else ("%d LUCIDITY" % amt)
@@ -3291,9 +3434,20 @@ func _potion_effect_text(pick: Dictionary) -> String:
 			return "FREE REROLL"
 		"symbolToBrain":
 			return "BRAIN SWAP"
+		"restoreSpin":
+			return "+%d SPIN" % int(pick.get("count", 1))
+		"restorePower":
+			return "POWER BACK"
+		"adjacentSymbol":
+			return "SYMBOL SHIFT"
 	return ""
 
-func _show_potion_popup(text: String) -> void:
+func _potion_effect_color(pick: Dictionary) -> Color:
+	if String(pick.get("kind", "")) == "lucidity" and int(pick.get("amount", 0)) < 0:
+		return potion_popup_negative_color
+	return potion_popup_color
+
+func _show_potion_popup(text: String, color: Color) -> void:
 	if text.is_empty() or _fx_layer == null:
 		return
 	var label := Label.new()
@@ -3303,10 +3457,10 @@ func _show_potion_popup(text: String) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 7)
+	label.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", potion_popup_color)
+	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	_fx_layer.add_child(label)
@@ -3327,8 +3481,14 @@ func _set_hidden_cover(index: int, visible_now: bool) -> void:
 	if index >= 0 and index < _hidden_covers.size():
 		(_hidden_covers[index] as ColorRect).visible = visible_now
 
-# Serum blur (issue #53): the spin after the guaranteed one lands behind a frost
-# layer — symbols stay distinguishable, just harder to read.
+# Serum downside: after the guaranteed-symbol spins, hide the strip neighbours above
+# and below each center symbol so only the actual result remains readable.
+func _set_adjacent_symbols_hidden_active(active: bool) -> void:
+	_adjacent_symbols_hidden_active = active
+	for i in _reel_sprites.size():
+		_apply_adjacent_symbol_visibility(i)
+
+# Legacy frost covers stay built but inactive; Serum now hides adjacent strip symbols.
 func _set_blur_result_active(active: bool) -> void:
 	_blur_result_active = active
 	for c in _blur_covers:
@@ -3358,14 +3518,28 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 	_last_reacted_reels = reels.duplicate()
 	_last_reacted_spin = RunStateStore.spinCount
 	var a := String(reels[0])
+	var win_type := String(lr.get("winType", ""))
+	if win_type != "triple" and win_type != "jackpot":
+		return
+	if bool(lr.get("bookJoker", false)):
+		if bool(lr.get("bookTripleChoice", false)):
+			_show_book_triple_choice(int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		else:
+			_apply_symbol_triple(String(lr.get("resolvedSymbol", "")),
+				int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		return
+	if _active_hidden_reel_count() > 0 and String(reels[0]) == String(reels[1]):
+		if String(reels[0]) == "flatline":
+			var count := RunStateStore.register_flatline_result()
+			_show_flatline_result_reaction(count)
+			return
+		_apply_symbol_triple(String(reels[0]), int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		return
 	if not (a == String(reels[1]) and a == String(reels[2])):
 		return
 	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a
 	# raw 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal,
 	# flatline strike...). Gating on the scored winType blocks exactly those spins.
-	var win_type := String(lr.get("winType", ""))
-	if win_type != "triple" and win_type != "jackpot":
-		return
 	if a == "flatline":
 		var count := RunStateStore.register_flatline_result()
 		_show_flatline_result_reaction(count)
@@ -3411,6 +3585,69 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 	_update_hud()
 
 ## Centre of the reel window — where triple-grant "+N" fly-ins spawn (issue #66).
+const BOOK_CHOICE_RECT := Rect2(11.0, 130.0, 138.0, 54.0)
+
+func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) -> void:
+	_close_book_choice_overlay()
+	_set_sequence_lock(true)
+	_book_choice_overlay = Control.new()
+	_book_choice_overlay.name = "BookTripleChoice"
+	_book_choice_overlay.size = Vector2(SRC_W, SRC_H)
+	_book_choice_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_choice_overlay.z_index = 96
+	add_child(_book_choice_overlay)
+
+	var panel := ColorRect.new()
+	panel.color = Color(0.05, 0.03, 0.1, 0.94)
+	panel.position = BOOK_CHOICE_RECT.position
+	panel.size = BOOK_CHOICE_RECT.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_book_choice_overlay.add_child(panel)
+
+	var title := _reaction_label(_book_choice_overlay, "BOOK EFFECT",
+		Vector2(BOOK_CHOICE_RECT.position.x, BOOK_CHOICE_RECT.position.y + 3.0),
+		7, Color(1.0, 0.82, 0.28))
+	title.size = Vector2(BOOK_CHOICE_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var choices := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
+	var cell_w := BOOK_CHOICE_RECT.size.x / float(choices.size())
+	for i in choices.size():
+		var sym := String(choices[i])
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.position = Vector2(BOOK_CHOICE_RECT.position.x + float(i) * cell_w,
+			BOOK_CHOICE_RECT.position.y + 17.0)
+		b.size = Vector2(cell_w, 30.0)
+		b.pressed.connect(_on_book_triple_choice.bind(sym, free_spins_granted, power_triggered))
+		_book_choice_overlay.add_child(b)
+		var tex := _load_texture("symbols/%s.png" % sym, true)
+		if tex != null:
+			var icon := TextureRect.new()
+			icon.texture = tex
+			icon.position = Vector2((cell_w - 16.0) * 0.5, 3.0)
+			icon.size = Vector2(16.0, 16.0)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(icon)
+
+func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_triggered: bool) -> void:
+	_close_book_choice_overlay()
+	_set_sequence_lock(false)
+	if symbol_id == "flatline":
+		var count := RunStateStore.register_flatline_result()
+		_show_flatline_result_reaction(count)
+	else:
+		_apply_symbol_triple(symbol_id, free_spins_granted, power_triggered)
+
+func _close_book_choice_overlay() -> void:
+	if _book_choice_overlay != null:
+		_book_choice_overlay.queue_free()
+	_book_choice_overlay = null
+
 func _reel_window_center() -> Vector2:
 	return Vector2(SRC_W * 0.5 - 6.0,
 		float(REEL_WINDOW["top"]) + float(REEL_WINDOW["height"]) * 0.5)

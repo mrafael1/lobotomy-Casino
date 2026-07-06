@@ -9,20 +9,20 @@ const MAX_CONSUMABLE_SLOTS := 2
 ## with a deterministic per-spin seed (issue #32). Mirrors POTION_RANDOM_POOL in
 ## this file.
 const POTION_RANDOM_POOL := [
-	{ "kind": "multNextSpin", "multiplier": 0.75 },
-	{ "kind": "multNextSpin", "multiplier": 1.25 },
-	{ "kind": "multNextSpin", "multiplier": 1.5 },
 	{ "kind": "lucidity", "amount": 10 },
 	{ "kind": "lucidity", "amount": -5 },
 	{ "kind": "freeReroll" },
 	{ "kind": "symbolToBrain" },
+	{ "kind": "restoreSpin", "count": 1 },
+	{ "kind": "restorePower" },
+	{ "kind": "adjacentSymbol", "count": 1 },
 ]
 
 const LIST := [
 	{ "id": "cons_cigarette", "name": "Tobacco", "shopCost": 20, "corrupt": true,
 	  "effect": { "type": "hideReelPairBoost", "spins": 2, "hiddenReels": 1, "pairMult": 3 } },
 	{ "id": "cons_focus", "name": "Serum", "shopCost": 15,
-	  "effect": { "type": "guaranteeSymbol", "excludes": ["brain"], "appearSpins": 1, "blurSpins": 1 } },
+	  "effect": { "type": "guaranteeSymbol", "excludes": ["brain"], "appearSpins": 3, "blurSpins": 2 } },
 	{ "id": "cons_white_powder", "name": "White Powder", "shopCost": 10, "corrupt": true,
 	  "effect": { "type": "scrambleThenHide", "hideNextSpin": true } },
 	{ "id": "cons_potion", "name": "Potion", "shopCost": 40,
