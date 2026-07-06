@@ -330,6 +330,7 @@ var _multiplier_sprite: Sprite2D = null
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
+var _boost_zero_linger: Dictionary = {} # counter -> true while the just-spent final spin shows "0"
 var _jackpot_sprite: Sprite2D = null
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
@@ -841,8 +842,12 @@ func _refresh_boost_indicators() -> void:
 	var row_top := float(TV_SCREEN["top"]) + 13.0
 	var col := 0
 	for boost in DURATION_BOOSTS:
-		var remaining := int(RunStateStore.get(String(boost["counter"])))
-		if remaining <= 0 or col >= _boost_indicator_slots.size():
+		var counter := String(boost["counter"])
+		var remaining := int(RunStateStore.get(counter))
+		var show_zero := remaining <= 0 and bool(_boost_zero_linger.get(counter, false))
+		if remaining > 0:
+			_boost_zero_linger.erase(counter)
+		if (remaining <= 0 and not show_zero) or col >= _boost_indicator_slots.size():
 			continue
 		var tex := _boost_icon_for(boost)
 		if tex == null:
@@ -852,7 +857,7 @@ func _refresh_boost_indicators() -> void:
 		slot.position = Vector2(row_right - BOOST_ICON_SIZE - float(col) * (BOOST_ICON_SIZE + BOOST_ICON_GAP), row_top)
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
-		cn.text = str(remaining)
+		cn.text = str(maxi(0, remaining))
 		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
 		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
 		var mh := cn.get_minimum_size().y
@@ -862,6 +867,25 @@ func _refresh_boost_indicators() -> void:
 		col += 1
 	for i in range(col, _boost_indicator_slots.size()):
 		(_boost_indicator_slots[i]["slot"] as Control).visible = false
+
+func _capture_expiring_boost_counters() -> Array[String]:
+	var out: Array[String] = []
+	for boost in DURATION_BOOSTS:
+		var counter := String(boost["counter"])
+		if int(RunStateStore.get(counter)) == 1:
+			out.append(counter)
+	return out
+
+func _apply_expiring_boost_linger(counters: Array[String]) -> void:
+	for counter in counters:
+		if int(RunStateStore.get(counter)) <= 0:
+			_boost_zero_linger[counter] = true
+
+func _clear_boost_zero_linger() -> void:
+	if _boost_zero_linger.is_empty():
+		return
+	_boost_zero_linger.clear()
+	_refresh_boost_indicators()
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -1283,6 +1307,8 @@ func _do_spin(compulsive := false) -> void:
 		return
 	if not compulsive and not RunStateStore._can_act():
 		return
+	_clear_boost_zero_linger()
+	var expiring_boost_counters := _capture_expiring_boost_counters()
 	_clear_targeting()
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
@@ -1307,6 +1333,7 @@ func _do_spin(compulsive := false) -> void:
 	if result == null:
 		_hud_delta_hold = false
 		return
+	_apply_expiring_boost_linger(expiring_boost_counters)
 	# A free spin GRANTED by this spin (jackpot) is a reward, not a cost, so hold it
 	# out of the now-live SPINS LEFT counter until the score lands (issue #80); the
 	# hold is released in _release_hud_delta_hold with the other reward deltas.

@@ -619,6 +619,8 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	if potion_kinds.has("multNextSpin") or not potion_kinds.has("restoreSpin") \
 			or not potion_kinds.has("restorePower") or not potion_kinds.has("adjacentSymbol"):
 		failures.append("issue92: Potion pool did not remove multiplier and add new effects")
+	run_store.potionSpins = 0
+	run_store.lastPotionEffect = null
 
 	# Tea with no used abilities restores normal spins.
 	run_store.abilitiesUsed = []
@@ -1531,6 +1533,20 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if (slots[0]["slot"] as Control).visible or (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: boost icons lingered after the boosts ended")
+
+	# A boost that just spent its final spin stays visible as "0"; the next lever press
+	# clears that zero-state icon before the next spin begins.
+	run_store.cocktailBoostSpins = 1
+	machine._refresh_boost_indicators()
+	var expiring: Array[String] = machine._capture_expiring_boost_counters()
+	run_store.cocktailBoostSpins = 0
+	machine._apply_expiring_boost_linger(expiring)
+	machine._refresh_boost_indicators()
+	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "0":
+		failures.append("issue76: final boost spin should linger as count 0")
+	machine._clear_boost_zero_linger()
+	if (slots[0]["slot"] as Control).visible:
+		failures.append("issue76: boost count 0 icon did not clear on next lever press")
 
 	# Serum negative now hides the above/below strip neighbours, leaving center symbols.
 	machine._set_reel_symbol(0, "eye")
