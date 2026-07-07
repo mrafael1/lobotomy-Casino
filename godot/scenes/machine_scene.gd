@@ -195,6 +195,21 @@ const DURATION_BOOSTS := [
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
 @export var default_run_power_ids: Array[String] = ["reroll"]
 
+@export_group("Tutorial Preview")
+@export var tutorial_preview: bool = false
+@export var tutorial_interactive: bool = false
+@export_enum("machine", "effects") var tutorial_preview_mode: String = "machine"
+@export var tutorial_preview_labels: bool = true
+@export var tutorial_preview_stash_ids: Array[String] = ["item_energy_drink", "item_cocktail"]
+
+signal tutorial_multiplier_selected(mult: int)
+signal tutorial_spin_completed
+signal tutorial_reroll_armed
+signal tutorial_reroll_used
+signal tutorial_consumable_used(id: String)
+signal tutorial_tables_shown
+signal tutorial_tables_opened
+
 @export_group("Feedback")
 ## Grow-then-fade duration of the on-use +/- hint (issue #33). The animated
 ## HintLabel owns the +/- and corrupt colours; this only drives its lifetime.
@@ -462,6 +477,12 @@ var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #5
 var _book_choice_overlay: Control = null
 var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
+var _tutorial_stage := "multiplier"
+var _tut_spins_left := 9
+var _tut_multiplier := 1
+var _tut_score := 480
+var _tut_boost_counts: Dictionary = {}
+var _tut_tables_opened := false
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
@@ -485,13 +506,17 @@ func _ready() -> void:
 	_build_burst_layer()
 	_build_coin_layer()
 	_build_options_controls()
+	if tutorial_preview:
+		_apply_tutorial_preview()
+		return
 	_restore_options_overlay_if_requested()
-	RunStateStore.state_changed.connect(_update_hud)
+	if not RunStateStore.state_changed.is_connected(_update_hud):
+		RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_init_burst_tracking()
 
 func _apply_balance_exports() -> void:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	RunStateStore.max_consumable_slots = maxi(1, max_consumable_slots)
 	RunStateStore.coins_per_power_restore = maxi(1, coins_per_power_restore)
@@ -873,7 +898,7 @@ func _refresh_boost_indicators() -> void:
 	var col := 0
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
-		var remaining := int(RunStateStore.get(counter))
+		var remaining := _tutorial_boost_remaining(counter) if tutorial_preview and tutorial_interactive else int(RunStateStore.get(counter))
 		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
 		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
 		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
@@ -930,6 +955,9 @@ func _clear_boost_zero_linger() -> void:
 	_boost_zero_linger.clear()
 	_refresh_boost_indicators()
 	_refresh_consumable_fx()
+
+func _tutorial_boost_remaining(counter: String) -> int:
+	return int(_tut_boost_counts.get(counter, 0))
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -1143,6 +1171,8 @@ func _build_options_controls() -> void:
 		add_child(_options_overlay)
 
 func _toggle_options_overlay() -> void:
+	if tutorial_preview:
+		return
 	if _options_overlay == null:
 		return
 	_options_overlay.toggle_overlay()
@@ -1313,6 +1343,180 @@ func _sync_visuals() -> void:
 	if resume_interrupted_spin:
 		_resolve_interrupted_spin()
 
+func _apply_tutorial_preview() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	if _options_button != null:
+		_options_button.visible = false
+		_options_button.disabled = true
+	if _options_overlay != null:
+		_options_overlay.visible = false
+	if _spin_button != null:
+		_spin_button.disabled = true
+		_spin_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_set_all_reels_visible(true)
+	var preview_reels := ["brain", "brain", "vial"] if tutorial_preview_mode == "effects" else ["brain", "eye", "vial"]
+	for i in range(mini(3, preview_reels.size())):
+		_set_reel_symbol(i, String(preview_reels[i]))
+		_set_reel_cover(i, true)
+	_hide_spin_reels()
+	if _spin_sheet_sprite != null:
+		_spin_sheet_sprite.visible = false
+	_refresh_tutorial_hud()
+	_set_sheet_frame(_multiplier_sprite, 4 if tutorial_preview_mode == "effects" else 1)
+	_refresh_controls()
+	_refresh_jackpot_lamp(false)
+	if tutorial_interactive:
+		set_tutorial_stage(_tutorial_stage)
+	elif tutorial_preview_labels:
+		_build_tutorial_preview_labels()
+
+func set_tutorial_stage(stage: String) -> void:
+	if not tutorial_preview or not tutorial_interactive:
+		return
+	_tutorial_stage = stage
+	_set_tutorial_controls_for_stage()
+	_refresh_tutorial_hud()
+
+func _refresh_tutorial_hud() -> void:
+	if _bar_labels.has("life"):
+		var life := _bar_labels["life"] as Label
+		life.text = "SPINS LEFT: %d" % _tut_spins_left
+	if _bar_labels.has("goal"):
+		var goal := _bar_labels["goal"] as Label
+		goal.text = "%d/2000" % _tut_score
+	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, clampf(float(_tut_spins_left) / 9.0, 0.0, 1.0))
+	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, clampf(float(_tut_score) / 2000.0, 0.0, 1.0))
+	_refresh_boost_indicators()
+
+func _set_tutorial_controls_for_stage() -> void:
+	_set_score_button_locked(_tutorial_stage != "tables")
+	if _spin_button != null:
+		_spin_button.disabled = _tutorial_stage != "spins"
+		_spin_button.mouse_filter = Control.MOUSE_FILTER_STOP if _tutorial_stage == "spins" else Control.MOUSE_FILTER_IGNORE
+	for i in _multiplier_buttons.size():
+		var button := _multiplier_buttons[i] as Button
+		button.disabled = _tutorial_stage != "multiplier"
+		button.mouse_filter = Control.MOUSE_FILTER_STOP if _tutorial_stage == "multiplier" else Control.MOUSE_FILTER_IGNORE
+	for id in _power_buttons:
+		var button := _power_buttons[id] as Button
+		var enabled := _tutorial_stage == "reroll" and String(id) == "reroll"
+		button.disabled = not enabled
+		button.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+		var sprite := _power_sprites[id] as Sprite2D
+		if sprite != null:
+			sprite.visible = String(id) == "reroll"
+			_set_sheet_frame(sprite, POWER_FRAME_AVAILABLE if enabled else POWER_FRAME_DISABLED)
+	for i in _stash_icons.size():
+		var icon := _stash_icons[i] as TextureRect
+		var enabled_slot := _tutorial_stage == "consumable" and i == 0
+		icon.mouse_filter = Control.MOUSE_FILTER_STOP if enabled_slot else Control.MOUSE_FILTER_IGNORE
+		icon.modulate = Color.WHITE if enabled_slot or i == 0 else Color(1.0, 1.0, 1.0, 0.35)
+
+func _build_tutorial_preview_labels() -> void:
+	var layer := get_node_or_null("TutorialPreviewLabels") as Control
+	if layer == null:
+		layer = Control.new()
+		layer.name = "TutorialPreviewLabels"
+		layer.size = Vector2(SRC_W, SRC_H)
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.z_index = 140
+		add_child(layer)
+	for child in layer.get_children():
+		child.queue_free()
+	if tutorial_preview_mode == "effects":
+		_make_tutorial_preview_label(layer, "+ FREE SPINS", Vector2(20.0, 112.0), Color(0.13, 0.77, 0.37))
+		_make_tutorial_preview_label(layer, "- FORCED X1", Vector2(78.0, 112.0), Color(0.94, 0.27, 0.27))
+	else:
+		_make_tutorial_preview_label(layer, "X2 SELECTED", Vector2(44.0, 136.0), Color(0.984, 0.749, 0.141))
+		_make_tutorial_preview_label(layer, "9 SPINS", Vector2(44.0, 100.0), Color(0.75, 1.0, 0.8))
+
+func _make_tutorial_preview_label(parent: Control, text: String, pos: Vector2, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.position = pos
+	label.size = Vector2(58.0, 10.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(label)
+
+func _do_tutorial_spin() -> void:
+	if _tutorial_stage != "spins" or _spin_launch_pending or _spinning_anim:
+		return
+	_tut_spins_left = maxi(0, _tut_spins_left - _tut_multiplier)
+	_tut_score += 120 * _tut_multiplier
+	_refresh_tutorial_hud()
+	_start_lever_pull()
+	_spin_launch_pending = true
+	_set_tutorial_controls_for_stage()
+	for i in 3:
+		_set_reel_visible(i, false)
+		_set_reel_cover(i, false)
+		_set_spin_reel_visible(i, true)
+	var timer := get_tree().create_timer(0.7, true)
+	timer.timeout.connect(_finish_tutorial_spin, CONNECT_ONE_SHOT)
+
+func _finish_tutorial_spin() -> void:
+	if not is_inside_tree() or not tutorial_interactive:
+		return
+	_spin_launch_pending = false
+	_set_reel_symbol(0, "brain")
+	_set_reel_symbol(1, "brain")
+	_set_reel_symbol(2, "vial")
+	for i in 3:
+		_set_reel_cover(i, true)
+		_set_reel_visible(i, true)
+		_set_spin_reel_visible(i, false)
+	_refresh_tutorial_hud()
+	tutorial_spin_completed.emit()
+
+func _do_tutorial_reroll(reel_index: int = 2) -> void:
+	if _tutorial_stage != "reroll_pick" or _reroll_anim_active:
+		return
+	_clear_targeting()
+	reel_index = clampi(reel_index, 0, 2)
+	_tut_score += 180
+	_reroll_anim_active = true
+	_play_sfx(&"reel_spin")
+	_set_reel_visible(reel_index, false)
+	_set_reel_cover(reel_index, false)
+	_set_spin_reel_visible(reel_index, true)
+	var timer := get_tree().create_timer(0.45, true)
+	timer.timeout.connect(_finish_tutorial_reroll.bind(reel_index), CONNECT_ONE_SHOT)
+
+func _finish_tutorial_reroll(reel_index: int) -> void:
+	if not is_inside_tree() or not tutorial_interactive:
+		return
+	_stop_sfx(&"reel_spin")
+	_play_reel_stop_sfx(reel_index)
+	_reroll_anim_active = false
+	_set_reel_symbol(reel_index, "brain")
+	_set_spin_reel_visible(reel_index, false)
+	_set_reel_visible(reel_index, true)
+	_set_reel_cover(reel_index, true)
+	_refresh_tutorial_hud()
+	tutorial_reroll_used.emit()
+
+func _do_tutorial_consumable(slot_index: int) -> void:
+	if _tutorial_stage != "consumable":
+		return
+	var slots := _stash_slots()
+	if slot_index >= slots.size():
+		return
+	var id := String(slots[slot_index])
+	_tut_boost_counts["decaySkips"] = 2
+	_refresh_tutorial_hud()
+	_show_consumable_feedback(id)
+	_show_deferred_negative(id)
+	_play_use_fx(id)
+	tutorial_consumable_used.emit(id)
+
 ## Finalizes a spin whose committed result never got resolved because its scene was
 ## freed before _run_post_reveal_sequence ran (issue #77). Runs the same non-visual
 ## post-spin resolution — minus the animated score burst — so earned reactions land
@@ -1349,6 +1553,9 @@ func _to_dealer() -> void:
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
+	if tutorial_preview and tutorial_interactive:
+		_do_tutorial_spin()
+		return
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active:
 		return
 	if _dealer_offer_popup != null:
@@ -1435,7 +1642,7 @@ func _do_spin(compulsive := false) -> void:
 func _process(delta: float) -> void:
 	if _lever_anim_active:
 		_step_lever(delta)
-	if _reroll_anim_active:
+	if _reroll_anim_active and not (tutorial_preview and tutorial_interactive):
 		_step_reroll(delta)
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
@@ -1755,6 +1962,8 @@ func _max_spins_display() -> int:
 	return maxi(1, int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay()))))
 
 func _display_spins_left() -> int:
+	if tutorial_preview and tutorial_interactive:
+		return _tut_spins_left
 	var affordable := _neuron_spins_left() + int(RunStateStore.freeSpinsRemaining)
 	return maxi(0, affordable - _pending_spin_gain)
 
@@ -2380,6 +2589,17 @@ func _build_multiplier_buttons() -> void:
 		_multiplier_buttons.append(b)
 
 func _select_bet_multiplier(m: int) -> void:
+	if tutorial_preview and tutorial_interactive:
+		if _tutorial_stage != "multiplier":
+			return
+		_tut_multiplier = clampi(m, 1, 3)
+		_play_sfx(&"multiplier_change")
+		_refresh_tutorial_hud()
+		_refresh_multiplier_controls()
+		tutorial_multiplier_selected.emit(_tut_multiplier)
+		return
+	if tutorial_preview:
+		return
 	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if not RunStateStore._can_act():
@@ -2408,9 +2628,25 @@ func _highest_affordable_multiplier() -> int:
 	return mini(highest, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
 
 func _is_multiplier_locked(m: int) -> bool:
+	if tutorial_preview:
+		return false
 	return m > _highest_affordable_multiplier()
 
 func _refresh_multiplier_controls() -> void:
+	if tutorial_preview:
+		if tutorial_interactive:
+			for i in _multiplier_buttons.size():
+				var button := _multiplier_buttons[i] as Button
+				var enabled := _tutorial_stage == "multiplier"
+				button.disabled = not enabled
+				button.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+			_set_sheet_frame(_multiplier_sprite, _tut_multiplier - 1)
+			return
+		for button in _multiplier_buttons:
+			button.disabled = true
+			button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_set_sheet_frame(_multiplier_sprite, 4 if tutorial_preview_mode == "effects" else 1)
+		return
 	var can_act := RunStateStore._can_act() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and _dealer_offer_popup == null and not _sequence_lock_active
 	for i in _multiplier_buttons.size():
@@ -2508,6 +2744,15 @@ func _stash_icon_for_slot(slot: Control, index: int) -> TextureRect:
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
 # stash). Gated by the same can-act check the refresh uses, so disabled slots ignore taps.
 func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
+	if tutorial_preview and tutorial_interactive:
+		if not (event is InputEventMouseButton):
+			return
+		var tut_mb := event as InputEventMouseButton
+		if tut_mb.button_index == MOUSE_BUTTON_LEFT and tut_mb.pressed:
+			_do_tutorial_consumable(slot_index)
+		return
+	if tutorial_preview:
+		return
 	if not (event is InputEventMouseButton):
 		return
 	var mb := event as InputEventMouseButton
@@ -2532,6 +2777,11 @@ func _set_stash_visible(v: bool) -> void:
 # Snapshot of the stash expanded to one entry per copy (matches buildStashSlots).
 func _stash_slots() -> Array:
 	var slots: Array = []
+	if tutorial_preview:
+		for id in tutorial_preview_stash_ids:
+			if slots.size() < max_consumable_slots:
+				slots.append(String(id))
+		return slots
 	var stash: Dictionary = RunStateStore.runConsumables
 	for entry in stash:
 		var copies := int(stash[entry])
@@ -2542,6 +2792,36 @@ func _stash_slots() -> Array:
 
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
+	if tutorial_preview:
+		if tutorial_interactive:
+			_set_tutorial_controls_for_stage()
+			var tut_slots := _stash_slots()
+			for i in _stash_icons.size():
+				var icon := _stash_icons[i]
+				if i < tut_slots.size():
+					icon.texture = _icon_for(tut_slots[i])
+				else:
+					icon.texture = null
+			return
+		for id in _power_buttons:
+			var button := _power_buttons[id] as Button
+			if button != null:
+				button.disabled = true
+				button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var sprite := _power_sprites[id] as Sprite2D
+			if sprite != null:
+				sprite.visible = id == "reroll"
+			_set_sheet_frame(sprite, POWER_FRAME_AVAILABLE)
+		var slots := _stash_slots()
+		for i in _stash_icons.size():
+			var icon := _stash_icons[i]
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if i < slots.size():
+				icon.texture = _icon_for(slots[i])
+				icon.modulate = Color.WHITE
+			else:
+				icon.texture = null
+		return
 
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and _dealer_offer_popup == null and not _sequence_lock_active
@@ -2618,6 +2898,13 @@ func _boost_icon_for(boost: Dictionary) -> Texture2D:
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
+	if tutorial_preview and tutorial_interactive:
+		if _tutorial_stage == "reroll" and id == "reroll":
+			_arm_reel_picker(func(reel_index: int) -> void: _do_tutorial_reroll(reel_index))
+			_targeting_power_id = id
+			_set_tutorial_controls_for_stage()
+			tutorial_reroll_armed.emit()
+		return
 	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if not RunStateStore._can_use_ability():
@@ -2792,6 +3079,8 @@ func _score_label(parent: Control, text: String, pos: Vector2, size: int, color:
 	return l
 
 func _show_score_table() -> void:
+	if tutorial_preview and tutorial_interactive and _tutorial_stage != "tables":
+		return
 	if _sequence_lock_active or _spin_launch_pending:
 		return
 	if _dealer_offer_popup != null:
@@ -2887,6 +3176,8 @@ func _show_score_table() -> void:
 	Assets.skin_negative_button(close)
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
+	if tutorial_preview and tutorial_interactive and _tutorial_stage == "tables":
+		tutorial_tables_shown.emit()
 
 # Labels sized by their text and placed from the right edge / centre — the only
 # reliable way to align DTM-Sans columns (min size = text width, no shrinking).
@@ -2924,11 +3215,19 @@ func _triple_effect_text(symbol_id: String) -> String:
 	return ""
 
 func _close_score_table() -> void:
+	var should_advance_tutorial := tutorial_preview and tutorial_interactive \
+			and _tutorial_stage == "tables" and not _tut_tables_opened
 	if _score_overlay != null:
 		_score_overlay.queue_free()
 		_score_overlay = null
+	if should_advance_tutorial:
+		_tut_tables_opened = true
+		tutorial_tables_opened.emit()
 
 func _on_stash_pressed(slot_index: int) -> void:
+	if tutorial_preview and tutorial_interactive:
+		_do_tutorial_consumable(slot_index)
+		return
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return

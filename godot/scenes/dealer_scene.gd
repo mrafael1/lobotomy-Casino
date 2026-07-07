@@ -36,11 +36,25 @@ const COUNTER_DOT_CY := 206.0 # measured centre of the counter's white round dot
 const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # icon base sits on the dot
 const TV := { "left": 2.0, "top": 126.0, "width": 49.0, "height": 26.0 }
 const DEALER_DROP_Y := 200.0 # release above this y = dropped "on the dealer"
+const TUTORIAL_DEALER_HEAD_CENTER := Vector2(80.0, 148.0)
 const DRAG_SLOP := 4.0
 
 # One-word TV hints (display only) — display-only hints.
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
+
+@export_group("Tutorial Preview")
+@export var tutorial_preview: bool = false
+@export var tutorial_interactive: bool = false
+@export var tutorial_preview_offer_ids: Array[String] = ["cons_focus", "cons_cigarette"]
+@export var tutorial_preview_stash_ids: Array[String] = ["cons_tea"]
+@export var tutorial_preview_wallet: int = 120
+@export var tutorial_preview_selected_id: String = "cons_focus"
+
+signal tutorial_item_selected(id: String)
+signal tutorial_item_bought(id: String)
+signal tutorial_lab_pressed
+signal tutorial_machine_pressed
 
 # Pre-run pool only (Consumables.LIST). In-run item_* hints live in
 # in_run_dealer_offer.gd — the two scenes own separate pools (issue #31).
@@ -126,6 +140,10 @@ var _campaign_label: Label = null
 var _offer_slots := []
 var _stash_slot_nodes := []
 var _offer_slots_by_id := {}
+var _tutorial_wallet := 0
+var _tutorial_stash_ids: Array[String] = []
+var _tutorial_ghost_drag: TextureRect = null
+var _tutorial_ghost_tween: Tween = null
 
 # Drag state (one item at a time).
 var _drag_active := false
@@ -138,10 +156,12 @@ var _press_pos := Vector2.ZERO
 
 func _ready() -> void:
 	_font = Assets.font()
+	_tutorial_wallet = tutorial_preview_wallet
+	_tutorial_stash_ids = tutorial_preview_stash_ids.duplicate()
 	# No run in progress => this is the pre-run shop, not the in-run dealer visit.
-	_pre_run = true if Engine.is_editor_hint() else RunStateStore.runPhase != "running"
+	_pre_run = true if Engine.is_editor_hint() or tutorial_preview else RunStateStore.runPhase != "running"
 	# A run just ended => this visit is the "what's next?" phase (issue #36).
-	_post_run = (not Engine.is_editor_hint()) and _pre_run and RunStateStore.runPhase == "over"
+	_post_run = (not Engine.is_editor_hint()) and not tutorial_preview and _pre_run and RunStateStore.runPhase == "over"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bind_scene_nodes()
 	_build_art()
@@ -153,7 +173,9 @@ func _ready() -> void:
 	_select("") # show instruction
 	if _post_run:
 		_setup_odds_phase()
-	if not Engine.is_editor_hint():
+	if tutorial_preview:
+		_apply_tutorial_preview()
+	elif not Engine.is_editor_hint():
 		if not MetaStateStore.meta_changed.is_connected(_refresh_campaign_label):
 			MetaStateStore.meta_changed.connect(_refresh_campaign_label)
 		if _pre_run and not MetaStateStore.meta_changed.is_connected(_refresh_credits):
@@ -410,6 +432,8 @@ func _make_offer_price_tag(id: String, pos: Vector2, parent: Control, width := 3
 # Pre-run: the pre-run consumables (a fixed shelf). In-run: the dealer's
 # vector-pinned offer for this visit.
 func _offer_ids() -> Array:
+	if tutorial_preview:
+		return tutorial_preview_offer_ids.duplicate()
 	if _pre_run:
 		var ids: Array = []
 		for c in Consumables.LIST:
@@ -425,6 +449,9 @@ func _build_offers() -> void:
 		_offer_slots_by_id.clear()
 		for slot in _offer_slots:
 			_clear_dynamic_children(slot)
+			var price_tag := slot.get_node_or_null("PriceTag") as HBoxContainer
+			if price_tag != null:
+				price_tag.visible = false
 		var ids := _offer_ids()
 		var icon_size := _offer_icon_size()
 		for i in range(mini(ids.size(), _offer_slots.size())):
@@ -469,6 +496,16 @@ func _build_stash() -> void:
 # Pre-run pockets are the wallet-purchased pending consumables; in-run they are
 # the live run stash.
 func _stash_source() -> Dictionary:
+	if tutorial_preview and tutorial_interactive:
+		var local_out := {}
+		for id in _tutorial_stash_ids:
+			local_out[id] = int(local_out.get(id, 0)) + 1
+		return local_out
+	if tutorial_preview:
+		var out := {}
+		for id in tutorial_preview_stash_ids:
+			out[id] = int(out.get(id, 0)) + 1
+		return out
 	if Engine.is_editor_hint():
 		return { "cons_focus": 1, "cons_white_powder": 1 }
 	return MetaStateStore.pendingConsumables if _pre_run else RunStateStore.runConsumables
@@ -647,7 +684,10 @@ func _restore_options_overlay_if_requested() -> void:
 		_options_overlay.call_deferred("show_overlay")
 
 func _open_lab() -> void:
-	if Engine.is_editor_hint():
+	if tutorial_preview and tutorial_interactive:
+		tutorial_lab_pressed.emit()
+		return
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null:
@@ -659,7 +699,10 @@ func _open_lab() -> void:
 # the rest of the shop. Gate it behind a YES/CANCEL modal so a misclick is recoverable.
 
 func _confirm_start_run() -> void:
-	if Engine.is_editor_hint():
+	if tutorial_preview and tutorial_interactive:
+		tutorial_machine_pressed.emit()
+		return
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	if _start_confirm_modal == null:
 		_start_confirm_modal = _build_start_confirm_modal()
@@ -816,7 +859,12 @@ func _build_credits_display() -> void:
 
 func _refresh_credits() -> void:
 	if _credits_label != null:
-		_credits_label.text = "0" if Engine.is_editor_hint() else str(MetaStateStore.lucidityWallet)
+		if tutorial_preview and tutorial_interactive:
+			_credits_label.text = str(_tutorial_wallet)
+		elif tutorial_preview:
+			_credits_label.text = str(tutorial_preview_wallet)
+		else:
+			_credits_label.text = "0" if Engine.is_editor_hint() else str(MetaStateStore.lucidityWallet)
 
 # ── selection + TV ────────────────────────────────────────────────────────────────
 
@@ -868,6 +916,8 @@ func _select(id: String) -> void:
 		var cx: float = float(_offer_cx.get(id, 80.0))
 		_name_label.position = Vector2(cx - 30.0, ITEM_TOP + _offer_icon_size() + 1.0)
 	_name_label.visible = true
+	if tutorial_preview and tutorial_interactive and _offer_slots_by_id.has(id):
+		tutorial_item_selected.emit(id)
 
 func _item_cost(id: String) -> int:
 	var cmap := Consumables.map()
@@ -876,6 +926,8 @@ func _item_cost(id: String) -> int:
 # ── drag handling ───────────────────────────────────────────────────────────────────
 
 func _on_item_input(event: InputEvent, node: Control, id: String, kind: String) -> void:
+	if tutorial_preview and not tutorial_interactive:
+		return
 	if Engine.is_editor_hint():
 		return
 	if event is InputEventMouseButton:
@@ -913,6 +965,8 @@ func _update_drag_position(pos: Vector2) -> void:
 		_drag_node.global_position = pos - _drag_node.size * 0.5
 
 func _input(event: InputEvent) -> void:
+	if tutorial_preview and not tutorial_interactive:
+		return
 	if Engine.is_editor_hint():
 		return
 	if not _drag_active:
@@ -953,6 +1007,9 @@ func _is_on_dealer(global_pos: Vector2) -> bool:
 
 func _drop_on_dealer(id: String, kind: String) -> void:
 	if kind == "offer":
+		if tutorial_preview and tutorial_interactive:
+			_buy_tutorial_offer(id)
+			return
 		if _pre_run:
 			_buy_offer(id)
 			return
@@ -973,6 +1030,9 @@ func _drop_on_dealer(id: String, kind: String) -> void:
 # Pre-run purchase: pay wallet Lucidity for a consumable copy. Buying never leaves
 # the counter (you can stock up to max_consumable_slots before starting the run).
 func _buy_offer(id: String) -> void:
+	if tutorial_preview and tutorial_interactive:
+		_buy_tutorial_offer(id)
+		return
 	if Consumables.total_copies(MetaStateStore.pendingConsumables) >= max_consumable_slots:
 		_message.text = "POCKETS FULL — DROP ONE"
 		_flash_full_pockets()
@@ -984,6 +1044,24 @@ func _buy_offer(id: String) -> void:
 	MetaStateStore.buy_consumable_charge_with_limit(id, max_consumable_slots) # deducts wallet + persists; emits meta_changed
 	_dealer_react()
 	_build_stash()
+
+func _buy_tutorial_offer(id: String) -> void:
+	stop_tutorial_ghost_drag()
+	if _tutorial_stash_ids.size() >= max_consumable_slots:
+		_message.text = "POCKETS FULL"
+		_flash_full_pockets()
+		return
+	var cost := _item_cost(id)
+	if _tutorial_wallet < cost:
+		_message.text = "NOT ENOUGH CREDITS"
+		_flash_full_pockets()
+		return
+	_tutorial_wallet -= cost
+	_tutorial_stash_ids.append(id)
+	_refresh_credits()
+	_dealer_react()
+	_build_stash()
+	tutorial_item_bought.emit(id)
 
 # Flash the "pockets full" message and bump the dealer so the rejection is clear.
 func _flash_full_pockets() -> void:
@@ -1004,7 +1082,7 @@ func _react_then_return() -> void:
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
 func _start_run() -> void:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	# Carry the purchased consumables into the run and hand off to the machine.
 	if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables()):
@@ -1013,10 +1091,106 @@ func _start_run() -> void:
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
 func _on_leave() -> void:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	if _pre_run:
 		get_tree().change_scene_to_file(MENU_SCENE) # back to the menu hub
 		return
 	RunStateStore.decline_dealer_offer()
 	await _react_then_return()
+
+func _apply_tutorial_preview() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	mouse_filter = Control.MOUSE_FILTER_PASS if tutorial_interactive else Control.MOUSE_FILTER_IGNORE
+	if _options_button != null:
+		_options_button.visible = false
+		_options_button.disabled = true
+	if _lab_button != null:
+		_lab_button.disabled = not tutorial_interactive
+		_lab_button.mouse_filter = Control.MOUSE_FILTER_STOP if tutorial_interactive else Control.MOUSE_FILTER_IGNORE
+	if _start_button != null:
+		_start_button.disabled = not tutorial_interactive
+		_start_button.mouse_filter = Control.MOUSE_FILTER_STOP if tutorial_interactive else Control.MOUSE_FILTER_IGNORE
+	if _credits_row != null:
+		_credits_row.visible = true
+	_refresh_credits()
+	if not tutorial_preview_selected_id.is_empty():
+		_select(tutorial_preview_selected_id)
+	_set_tutorial_navigation_enabled(false)
+
+func set_tutorial_navigation_enabled(enabled: bool) -> void:
+	_set_tutorial_navigation_enabled(enabled)
+
+func _set_tutorial_navigation_enabled(enabled: bool) -> void:
+	if not tutorial_preview or not tutorial_interactive:
+		return
+	if _lab_button != null:
+		_lab_button.disabled = not enabled
+		_lab_button.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+	if _start_button != null:
+		_start_button.disabled = not enabled
+		_start_button.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+	if _lab_button_sprite != null:
+		_lab_button_sprite.visible = enabled
+	if _machine_button_sprite != null:
+		_machine_button_sprite.visible = enabled
+
+func play_tutorial_ghost_drag(id: String) -> void:
+	if not tutorial_preview or not tutorial_interactive:
+		return
+	stop_tutorial_ghost_drag()
+	var tex := _icon_tex(id)
+	if tex == null:
+		return
+	var start := _tutorial_item_center(id) - Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE) * 0.5
+	var target := _tutorial_dealer_drop_center() - Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE) * 0.5
+	_tutorial_ghost_drag = TextureRect.new()
+	_tutorial_ghost_drag.name = "TutorialGhostDrag"
+	_tutorial_ghost_drag.texture = tex
+	_tutorial_ghost_drag.position = start
+	_tutorial_ghost_drag.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
+	_tutorial_ghost_drag.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_tutorial_ghost_drag.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_tutorial_ghost_drag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_tutorial_ghost_drag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tutorial_ghost_drag.z_index = 90
+	_tutorial_ghost_drag.modulate = Color(1.0, 1.0, 1.0, 0.5)
+	add_child(_tutorial_ghost_drag)
+	_loop_tutorial_ghost_drag(start, target)
+
+func stop_tutorial_ghost_drag() -> void:
+	if _tutorial_ghost_tween != null and _tutorial_ghost_tween.is_valid():
+		_tutorial_ghost_tween.kill()
+	_tutorial_ghost_tween = null
+	if _tutorial_ghost_drag != null and is_instance_valid(_tutorial_ghost_drag):
+		if _tutorial_ghost_drag.get_parent() != null:
+			_tutorial_ghost_drag.get_parent().remove_child(_tutorial_ghost_drag)
+		_tutorial_ghost_drag.queue_free()
+	_tutorial_ghost_drag = null
+
+func _loop_tutorial_ghost_drag(start: Vector2, target: Vector2) -> void:
+	if _tutorial_ghost_drag == null or not is_instance_valid(_tutorial_ghost_drag):
+		return
+	_tutorial_ghost_drag.position = start
+	_tutorial_ghost_drag.modulate.a = 0.5
+	_tutorial_ghost_tween = create_tween()
+	_tutorial_ghost_tween.tween_property(_tutorial_ghost_drag, "position", target, 0.85).set_trans(Tween.TRANS_SINE)
+	_tutorial_ghost_tween.parallel().tween_property(_tutorial_ghost_drag, "modulate:a", 0.08, 0.85)
+	_tutorial_ghost_tween.tween_interval(0.25)
+	_tutorial_ghost_tween.tween_callback(_loop_tutorial_ghost_drag.bind(start, target))
+
+func _tutorial_item_center(id: String) -> Vector2:
+	var item := _item_nodes.get(id, null) as Control
+	if item != null:
+		return get_global_transform().affine_inverse() * item.get_global_rect().get_center()
+	if _offer_slots_by_id.has(id):
+		var slot: Control = _offer_slots_by_id[id]
+		return slot.position + slot.size * 0.5
+	return Vector2(34.0, ITEM_TOP + Assets.STASH_ICON_SIZE * 0.5)
+
+func _tutorial_dealer_drop_center() -> Vector2:
+	if tutorial_preview and tutorial_interactive:
+		return TUTORIAL_DEALER_HEAD_CENTER
+	if _dealer_drop_zone != null:
+		return get_global_transform().affine_inverse() * _dealer_drop_zone.get_global_rect().get_center()
+	return Vector2(CANVAS_W * 0.5, DEALER_DROP_Y * 0.45)

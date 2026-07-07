@@ -82,6 +82,8 @@ const DESCRIPTIONS := {
 		editor_preview_wallet = value
 		_refresh_all()
 
+@export var tutorial_preview: bool = false
+
 @export_group("Editor Hitboxes")
 @export var show_terminal_hitboxes_in_editor: bool = true:
 	set(value):
@@ -163,6 +165,8 @@ func _ready() -> void:
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_refresh_all):
 		MetaStateStore.meta_changed.connect(_refresh_all)
 	_refresh_all()
+	if tutorial_preview:
+		_apply_tutorial_preview()
 	_restore_options_overlay_if_requested()
 	set_process(not Engine.is_editor_hint() or animate_in_editor)
 
@@ -307,6 +311,8 @@ func _configure_layer_visibility() -> void:
 		_ui_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _bind_buttons() -> void:
+	if tutorial_preview:
+		return
 	_connect_button(_eye_hitbox, _activate_eye)
 	_connect_button(_memory_hitbox, _activate_memory)
 	_connect_button(_context_buy_button, _buy_selected_upgrade)
@@ -334,7 +340,7 @@ func _toggle_options_overlay() -> void:
 	_options_overlay.toggle_overlay()
 
 func _restore_options_overlay_if_requested() -> void:
-	if Engine.is_editor_hint() or _options_overlay == null:
+	if Engine.is_editor_hint() or tutorial_preview or _options_overlay == null:
 		return
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null and bool(scene_nav.call("consume_restore_options", String(scene_file_path))):
@@ -441,6 +447,23 @@ func _refresh_all() -> void:
 	_refresh_power_name_box()
 	_refresh_context_buy_button()
 
+func _apply_tutorial_preview() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _options_button != null:
+		_options_button.visible = false
+		_options_button.disabled = true
+	if _back_button != null:
+		_back_button.visible = false
+		_back_button.disabled = true
+	if _options_overlay != null:
+		_options_overlay.visible = false
+	var row := get_node_or_null("CanvasLayer/UI_Container/EyeUpgradePanel/perm_shift") as Control
+	if row != null:
+		_selected_upgrade_row = row
+		_describe_row(row)
+	_refresh_context_buy_button()
+
 func _refresh_upgrade_ui() -> void:
 	if not is_inside_tree():
 		return
@@ -544,15 +567,15 @@ func _upgrade(upgrade_id: String) -> Dictionary:
 	return found as Dictionary
 
 func _wallet() -> int:
-	return editor_preview_wallet if Engine.is_editor_hint() else int(MetaStateStore.lucidityWallet)
+	return editor_preview_wallet if Engine.is_editor_hint() or tutorial_preview else int(MetaStateStore.lucidityWallet)
 
 func _owned(upgrade_id: String) -> bool:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return false
 	return MetaStateStore.ownedPermanents.has(upgrade_id)
 
 func _requirements_met(upgrade: Dictionary) -> bool:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return true
 	return not upgrade.has("requiresId") or MetaStateStore.ownedPermanents.has(upgrade["requiresId"])
 
@@ -573,6 +596,8 @@ func _upgrade_rows() -> Array[Control]:
 	return rows
 
 func _buy_selected_upgrade() -> void:
+	if tutorial_preview:
+		return
 	if _purchase_animating or _selected_upgrade_row == null:
 		_refresh_context_buy_button()
 		return
@@ -698,6 +723,8 @@ func _describe_row(row: Control) -> void:
 	_set_description(description)
 
 func _inspect_row(event: InputEvent, row: Control) -> void:
+	if tutorial_preview:
+		return
 	if event is InputEventMouseButton and event.pressed:
 		_select_row(row)
 		get_viewport().set_input_as_handled()
@@ -782,7 +809,7 @@ func _reset_memory_terminal() -> void:
 		_memory_terminal.frame = 0
 
 func _go_back() -> void:
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or tutorial_preview:
 		return
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null:
@@ -791,10 +818,10 @@ func _go_back() -> void:
 		get_tree().change_scene_to_file(START_MENU_SCENE)
 
 func _is_eye_open() -> bool:
-	return _eye_active or (Engine.is_editor_hint() and editor_preview_eye_active)
+	return _eye_active or ((Engine.is_editor_hint() or tutorial_preview) and editor_preview_eye_active)
 
 func _is_memory_open() -> bool:
-	return _memory_active or (Engine.is_editor_hint() and editor_preview_memory_active)
+	return _memory_active or ((Engine.is_editor_hint() or tutorial_preview) and editor_preview_memory_active)
 
 func _is_panel_open(panel_name: String) -> bool:
 	if panel_name == "EyeUpgradePanel":

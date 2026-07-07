@@ -61,6 +61,8 @@ const ITEM_ICONS := {
 		if Engine.is_editor_hint() and is_inside_tree():
 			call_deferred("_show_editor_preview")
 
+@export var tutorial_preview: bool = false
+
 @export var item_offset := Vector2.ZERO:
 	set(value):
 		item_offset = value
@@ -127,10 +129,25 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_font = Assets.font("font/DTM-Sans.otf")
 	_build_base()
+	if tutorial_preview:
+		show_tutorial_preview()
+		return
 	if Engine.is_editor_hint():
 		_show_editor_preview()
 		return
 	visible = false
+
+func show_tutorial_preview() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_show_editor_preview()
+	_items_stage = true
+	if _look_text_button != null:
+		_look_text_button.text = "take"
+		_look_text_button.disabled = true
+	if _ignore_action_button != null:
+		_ignore_action_button.text = "leave"
+	_set_speech_hints(String(editor_preview_offer_ids[0]) if not editor_preview_offer_ids.is_empty() else "item_water")
 
 func _notification(what: int) -> void:
 	if not Engine.is_editor_hint():
@@ -818,11 +835,15 @@ func _string_items(items: Array) -> Array[String]:
 	return out
 
 func _on_ignore_pressed() -> void:
+	if tutorial_preview:
+		return
 	dealer_ignored.emit()
 
 # The green button doubles up: "look" reveals the items, then it becomes "take"
 # in the old look position (above leave) and buys the selected item.
 func _on_look_pressed() -> void:
+	if tutorial_preview:
+		return
 	if _items_stage:
 		if _selected_offer_id != "":
 			item_selected.emit(_selected_offer_id)
@@ -865,6 +886,8 @@ func has_dealer_drop_point(global_pos: Vector2) -> bool:
 # Offers are tap-to-select (no drag-to-buy): tapping shows the item's hints and
 # arms the TAKE button with that item.
 func _on_offer_icon_input(event: InputEvent, id: String, kind: String) -> void:
+	if tutorial_preview:
+		return
 	if Engine.is_editor_hint() or kind != "offer":
 		return
 	var pressed := false

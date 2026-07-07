@@ -40,7 +40,7 @@ func _run() -> void:
 	if not machine.has_method("_spawn_jackpot_burst"):
 		failures.append("machine missing _spawn_jackpot_burst")
 	_check_base_scene_parity(failures)
-	_check_first_launch_tutorial(meta_store, failures)
+	await _check_first_launch_tutorial(meta_store, failures)
 	_check_scene_nav(failures)
 	_check_machine_ending_flow_source(failures)
 	_check_flatline_action_text(machine, meta_store, failures)
@@ -230,12 +230,15 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_compulsive := int(run_store.compulsiveSpinSkips)
 	var previous_pending_compulsive := int(run_store.pendingCompulsiveSpinSkips)
 	meta_store.is_first_launch = true
+	run_store.runPhase = "idle"
+	var tutorial_run_phase := String(run_store.runPhase)
 	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(start_menu)
 	var tutorial := start_menu.get_node_or_null("TutorialModal") as Control
+	var preview_root := start_menu.get_node_or_null("TutorialModal/PreviewRoot") as Control
 	var panel := start_menu.get_node_or_null("TutorialModal/Panel") as PanelContainer
 	var body := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Body") as RichTextLabel
-	var tutorial_button := start_menu.get_node_or_null("MenuColumn/TutorialButton") as Button
+	var start_button := start_menu.get_node_or_null("MenuColumn/StartButton") as Button
 	var step_label := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/StepLabel") as Label
 	var highlight := start_menu.get_node_or_null("TutorialModal/Highlight") as Panel
 	var pointer := start_menu.get_node_or_null("TutorialModal/Pointer") as Label
@@ -246,14 +249,40 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	if tutorial == null:
 		failures.append("tutorial: TutorialModal is missing")
 	else:
-		if not tutorial.visible:
-			failures.append("tutorial: first launch did not show the modal")
+		if tutorial.visible:
+			failures.append("tutorial: first launch should wait for START RUN")
 		if tutorial.process_mode != Node.PROCESS_MODE_ALWAYS:
 			failures.append("tutorial: modal must process while the tree is paused")
-	if tutorial_button == null or tutorial_button.text != "TUTORIAL":
-		failures.append("tutorial: main menu is missing accessible TUTORIAL button")
+	if start_menu.get_node_or_null("MenuColumn/TutorialButton") != null:
+		failures.append("tutorial: debug TUTORIAL button should not be shown")
+	if start_button == null:
+		failures.append("tutorial: START RUN button is missing")
+	else:
+		start_button.pressed.emit()
+		if tutorial == null or not tutorial.visible:
+			failures.append("tutorial: START RUN did not open first-launch tutorial")
+	if preview_root == null:
+		failures.append("tutorial: preview root is missing")
+	elif preview_root.get_child_count() <= 0:
+		failures.append("tutorial: first step did not show a scene preview")
+	var dealer_preview: Control = null
+	if preview_root != null and preview_root.get_child_count() > 0:
+		dealer_preview = preview_root.get_child(0) as Control
+	if dealer_preview == null:
+		failures.append("tutorial: first step did not show dealer preview")
+	elif not bool(dealer_preview.get("tutorial_interactive")):
+		failures.append("tutorial: dealer preview should be interactive")
+	else:
+		for slot_index in range(3, 6):
+			var unused_slot := dealer_preview.get_node_or_null("OfferSlot%d" % slot_index) as Control
+			var price_tag := unused_slot.get_node_or_null("PriceTag") as Control if unused_slot != null else null
+			if price_tag != null and price_tag.visible:
+				failures.append("tutorial: unused dealer offer slot still shows a price")
+				break
 	if panel == null:
 		failures.append("tutorial: central panel is not a PanelContainer")
+	elif panel.size.y > 180.0:
+		failures.append("tutorial: panel is too tall for guided highlights")
 	if body == null:
 		failures.append("tutorial: body is not a RichTextLabel")
 	else:
@@ -265,6 +294,8 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 		failures.append("tutorial: visual highlight/pointer is missing")
 	elif not highlight.visible or not pointer.visible:
 		failures.append("tutorial: first step does not show a visual target")
+	elif panel != null and highlight.get_global_rect().intersects(panel.get_global_rect()):
+		failures.append("tutorial: first-step target highlight overlaps the tutorial panel")
 	if buttons == null or skip_button == null or prev_button == null or next_button == null:
 		failures.append("tutorial: skip/back/next controls are missing")
 	else:
@@ -274,26 +305,152 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 			failures.append("tutorial: next button is mislabelled on first step")
 		if not prev_button.disabled:
 			failures.append("tutorial: back button should be disabled on first step")
-	if not get_root().get_tree().paused:
+		if not next_button.disabled:
+			failures.append("tutorial: next button should wait for dealer interaction")
+	if tutorial != null and tutorial.visible and not get_root().get_tree().paused:
 		failures.append("tutorial: first launch did not pause the tree")
 	var combined_copy := ""
 	if body != null:
 		combined_copy += body.text + "\n"
 	if start_menu._tutorial_title != null:
 		combined_copy += start_menu._tutorial_title.text + "\n"
-	for i in range(1, int(start_menu.TUTORIAL_STEPS.size())):
+	if body != null and not body.text.contains("variety of consumables"):
+		failures.append("tutorial: dealer preamble copy is missing")
+	if dealer_preview != null:
+		dealer_preview.call("_select", "cons_focus")
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("green = upside") or not body.text.contains("red = risk"):
+				failures.append("tutorial: selecting an item did not explain hints")
+		if next_button == null or next_button.disabled:
+			failures.append("tutorial: hints stage should enable NEXT")
+		else:
+			start_menu._next_tutorial_step()
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("CREDITS") or not body.text.contains("price"):
+				failures.append("tutorial: economy stage did not explain money and prices")
+		dealer_preview.call("_select", "cons_cigarette")
+		if body != null and not body.text.contains("CREDITS"):
+			failures.append("tutorial: selecting another item rolled economy back to hints")
+		if next_button == null or next_button.disabled:
+			failures.append("tutorial: economy stage should enable NEXT")
+		else:
+			start_menu._next_tutorial_step()
+		if dealer_preview.get_node_or_null("TutorialGhostDrag") == null:
+			failures.append("tutorial: buy stage did not start ghost drag")
+		dealer_preview.call("_select", "cons_focus")
+		if body != null and not body.text.contains("Drag"):
+			failures.append("tutorial: selecting another item rolled buy stage back to hints")
+		dealer_preview.call("_buy_offer", "cons_focus")
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("stash"):
+				failures.append("tutorial: buying an item did not explain stash")
+		var credits_label := dealer_preview.get_node_or_null("CreditsRow/CreditsLabel") as Label
+		if credits_label == null or credits_label.text != "20":
+			failures.append("tutorial: preview buy did not subtract local credits")
+		if dealer_preview.get_node_or_null("TutorialGhostDrag") != null:
+			failures.append("tutorial: ghost drag did not stop after purchase")
+		if next_button == null or next_button.disabled:
+			failures.append("tutorial: stash stage should enable NEXT")
+		else:
+			start_menu._next_tutorial_step()
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("LAB") or not body.text.contains("MACHINE"):
+				failures.append("tutorial: navigation stage did not explain LAB and MACHINE")
+		dealer_preview.call("_confirm_start_run")
+		await process_frame
+		if start_menu._tutorial_title == null or start_menu._tutorial_title.text != "MACHINE":
+			failures.append("tutorial: MACHINE press did not advance to machine tutorial")
+		if body != null:
+			combined_copy += body.text + "\n"
+		if start_menu._tutorial_title != null:
+			combined_copy += start_menu._tutorial_title.text + "\n"
+	var machine_preview: Node = null
+	if preview_root != null and preview_root.get_child_count() > 0:
+		machine_preview = preview_root.get_child(0)
+	if machine_preview == null or not bool(machine_preview.get("tutorial_interactive")):
+		failures.append("tutorial: machine step did not show interactive machine preview")
+	else:
+		var score_before := int(run_store.scoreEarned)
+		var lucidity_before := int(run_store.lucidityCoins)
+		machine_preview.call("_select_bet_multiplier", 2)
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("Pull the lever"):
+				failures.append("tutorial: multiplier did not advance to spins stage")
+		machine_preview.call("_do_spin")
+		await create_timer(0.85, true).timeout
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("REROLL"):
+				failures.append("tutorial: spin did not advance to reroll stage (%s pending=%s)" % [
+					String(machine_preview.get("_tutorial_stage")),
+					str(bool(machine_preview.get("_spin_launch_pending"))),
+				])
+		machine_preview.call("_on_power_pressed", "reroll")
+		await process_frame
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("choose") and not body.text.contains("reel"):
+				failures.append("tutorial: reroll did not ask for a reel selection")
+		machine_preview.call("_do_tutorial_reroll", 2)
+		await create_timer(0.55, true).timeout
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("Energy Drink"):
+				failures.append("tutorial: reroll did not advance to consumable stage")
+		machine_preview.call("_on_stash_pressed", 0)
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("10%"):
+				failures.append("tutorial: consumable did not advance to keep stage")
+		if next_button == null or next_button.disabled:
+			failures.append("tutorial: keep stage should enable NEXT")
+		else:
+			start_menu._next_tutorial_step()
+		if body != null:
+			combined_copy += body.text + "\n"
+			if not body.text.contains("TABLES"):
+				failures.append("tutorial: tables stage copy is missing")
+		machine_preview.call("_show_score_table")
+		await process_frame
+		if start_menu._tutorial_title == null or start_menu._tutorial_title.text != "MACHINE":
+			failures.append("tutorial: opening score table advanced before the table was closed")
+		if next_button == null or next_button.disabled or next_button.text != "CLOSE":
+			failures.append("tutorial: NEXT should become CLOSE when score table is open")
+		else:
+			start_menu._next_tutorial_step()
+		await process_frame
+		if start_menu._tutorial_title == null or start_menu._tutorial_title.text != "DEALER OFFER":
+			failures.append("tutorial: NEXT did not close score table and advance to dealer offer tutorial")
+		if preview_root != null and preview_root.get_child_count() > 0:
+			var offer_preview := preview_root.get_child(0)
+			if offer_preview.get_node_or_null("MachineBackground") == null \
+					or offer_preview.get_node_or_null("OfferOverlay") == null:
+				failures.append("tutorial: dealer offer preview should keep machine in the background")
+		if int(run_store.scoreEarned) != score_before or int(run_store.lucidityCoins) != lucidity_before:
+			failures.append("tutorial: interactive machine mutated run score/lucidity")
+	var tutorial_advance_guard := 0
+	while int(start_menu._tutorial_step_index) < int(start_menu.TUTORIAL_STEPS.size()) - 1 \
+			and tutorial_advance_guard < int(start_menu.TUTORIAL_STEPS.size()) + 2:
+		tutorial_advance_guard += 1
 		start_menu._next_tutorial_step()
 		if body != null:
 			combined_copy += body.text + "\n"
 		if start_menu._tutorial_title != null:
 			combined_copy += start_menu._tutorial_title.text + "\n"
+	if tutorial_advance_guard >= int(start_menu.TUTORIAL_STEPS.size()) + 2:
+		failures.append("tutorial: guided flow got stuck before final step")
 	if next_button != null and next_button.text != "DONE":
 		failures.append("tutorial: final step should label the next button DONE")
-	for phrase in ["START RUN", "Dealer", "STANDARD", "Energy Drink", "Compulsion", "forced x1", "mid-run"]:
+	for phrase in ["CREDITS", "stash", "MACHINE", "Energy Drink", "10%", "TABLES", "Dealer", "UPGRADES"]:
 		if not combined_copy.contains(phrase):
 			failures.append("tutorial: missing guided copy phrase '%s'" % phrase)
 			break
-	if String(run_store.runPhase) != previous_run_phase \
+	if String(run_store.runPhase) != tutorial_run_phase \
 			or int(run_store.compulsiveSpinSkips) != previous_compulsive \
 			or int(run_store.pendingCompulsiveSpinSkips) != previous_pending_compulsive:
 		failures.append("tutorial: guided steps mutated run/dealer compulsion state")
@@ -302,13 +459,15 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 		failures.append("tutorial: dismiss did not clear is_first_launch")
 	if get_root().get_tree().paused:
 		failures.append("tutorial: dismiss did not unpause the tree")
-	if tutorial_button != null:
-		tutorial_button.pressed.emit()
-		if tutorial == null or not tutorial.visible:
-			failures.append("tutorial: menu TUTORIAL button did not reopen the guide")
-		start_menu._skip_tutorial()
-		if get_root().get_tree().paused:
-			failures.append("tutorial: skip did not unpause the tree")
+	start_menu._tutorial_start_run_after_close = false
+	meta_store.is_first_launch = true
+	run_store.runPhase = "idle"
+	start_menu._open_tutorial(false)
+	start_menu._skip_tutorial()
+	if not bool(meta_store.is_first_launch):
+		failures.append("tutorial: non-first-launch open should not mark first launch seen")
+	if get_root().get_tree().paused:
+		failures.append("tutorial: skip did not unpause the tree")
 	start_menu.queue_free()
 	meta_store.is_first_launch = previous_first_launch
 	run_store.runPhase = previous_run_phase
