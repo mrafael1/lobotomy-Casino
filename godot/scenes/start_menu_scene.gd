@@ -22,28 +22,49 @@ const MENU_Y := 44.0
 const MENU_SEPARATION := 6
 const TITLE_SPACER_H := 8.0
 const CAMPAIGN_HINT_H := 18.0
+const TUTORIAL_HIGHLIGHT_PAD := 3.0
+
+const TUTORIAL_STEPS := [
+	{
+		"title": "BASIC CONTROLS",
+		"body": "Tap buttons to move between screens. START RUN visits the Dealer first. SCORES shows records. This TUTORIAL can be reopened here any time.",
+		"target": "MenuColumn/StartButton",
+	},
+	{
+		"title": "DEALER SHOP",
+		"body": "Before a run, the Dealer sells consumables. Tap an item to read its green upside and red risk. Drag an offer onto the Dealer to buy it. Drag stash items back to the Dealer to discard them.",
+		"rect": Rect2(8.0, 126.0, 144.0, 92.0),
+	},
+	{
+		"title": "STANDARD TURN",
+		"body": "On the machine, choose x1, x2, or x3, then pull the lever. A spin resolves the reels, pays pairs/triples, updates wealth, and drains neurons unless a free-spin effect prevents it.",
+		"rect": Rect2(22.0, 42.0, 116.0, 178.0),
+	},
+	{
+		"title": "CONSUMABLES",
+		"body": "Your stash holds two consumables. Tap a stash icon during a run to use it. Energy Drink is the simple example: it grants free no-decay spins before its downside arrives.",
+		"rect": Rect2(108.0, 252.0, 44.0, 42.0),
+	},
+	{
+		"title": "NEGATIVE EFFECTS",
+		"body": "Some items have delayed debuffs. Energy Drink queues a Compulsion: the machine takes a forced x1 spin and locks manual controls until that forced spin resolves.",
+		"rect": Rect2(18.0, 116.0, 124.0, 108.0),
+	},
+	{
+		"title": "DEALER SEQUENCE",
+		"body": "The Dealer can interrupt mid-run with run-only items. Resolve the offer or ignore it to continue. If a Compulsion is pending, the forced spin resolves before the Dealer flow can strand you.",
+		"rect": Rect2(16.0, 78.0, 128.0, 128.0),
+	},
+	{
+		"title": "READY",
+		"body": "Skip when you know the loop. Reopen TUTORIAL from the main menu whenever you need the guide. Start a run when you are ready to chase wealth before flatline.",
+		"target": "MenuColumn/StartButton",
+	},
+]
 
 @export_group("First Launch Tutorial")
 @export var tutorial_pauses_tree: bool = true
-@export var tutorial_title_text: String = "HOW TO PLAY"
-@export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 10 neurons -> attain wealth before hitting 0.
-
-[color=#f2d37c][b]Dealer Scene[/b][/color]
-- Buy consumables for your run.
-- Effects are vague. Try them all to discover what they do.
-- Inventory limit: 2 consumables max.
-
-[color=#c6f08a][b]Upgrades Scene[/b][/color]
-- Purchase upgrades for your run.
-- Acquire powers that manipulate the machine.
-- Boost your overall gains.
-
-[color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 35 spins with x1, x2, or x3 bets.
-- The Dealer can pop up mid-run with run-only items.
-- You always start with the "Reroll" power.
-- 1 random power restores every 50 coins obtained."""
+@export var tutorial_title_text: String = "TUTORIAL"
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")
@@ -54,13 +75,20 @@ var _font: FontFile = null
 var _background: Sprite2D = null
 var _start_button: Button = null
 var _scores_button: Button = null
+var _tutorial_menu_button: Button = null
 var _campaign_label: Label = null
 var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
 var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
-var _tutorial_button: Button = null
+var _tutorial_step_label: Label = null
+var _tutorial_prev_button: Button = null
+var _tutorial_next_button: Button = null
+var _tutorial_skip_button: Button = null
+var _tutorial_highlight: Panel = null
+var _tutorial_pointer: Label = null
+var _tutorial_step_index := 0
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -91,7 +119,12 @@ func _bind_scene_nodes() -> void:
 	_tutorial_modal = get_node_or_null("TutorialModal") as Control
 	_tutorial_title = get_node_or_null("TutorialModal/Panel/Margin/Content/Title") as Label
 	_tutorial_body = get_node_or_null("TutorialModal/Panel/Margin/Content/Body") as RichTextLabel
-	_tutorial_button = get_node_or_null("TutorialModal/Panel/Margin/Content/OkButton") as Button
+	_tutorial_step_label = get_node_or_null("TutorialModal/Panel/Margin/Content/StepLabel") as Label
+	_tutorial_prev_button = get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/PrevButton") as Button
+	_tutorial_next_button = get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/NextButton") as Button
+	_tutorial_skip_button = get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/SkipButton") as Button
+	_tutorial_highlight = get_node_or_null("TutorialModal/Highlight") as Panel
+	_tutorial_pointer = get_node_or_null("TutorialModal/Pointer") as Label
 
 func _build_background() -> void:
 	if _background != null:
@@ -149,6 +182,8 @@ func _build_menu() -> void:
 	if _start_button != null or _scores_button != null:
 		_build_campaign_labels()
 		_connect_button(_start_button, _start_run)
+		_tutorial_menu_button = get_node_or_null("MenuColumn/TutorialButton") as Button
+		_ensure_tutorial_menu_button()
 		_connect_button(_scores_button, _open_scores)
 		_refresh_start_button()
 		_layout_menu_column()
@@ -178,6 +213,9 @@ func _build_menu() -> void:
 	var start := _menu_button("START RUN", 11, _start_run)
 	col.add_child(start)
 	_start_button = start
+	_tutorial_menu_button = _menu_button("TUTORIAL", 8, _open_tutorial)
+	_tutorial_menu_button.name = "TutorialButton"
+	col.add_child(_tutorial_menu_button)
 	col.add_child(_menu_button("SCORES", 8, _open_scores))
 
 func _build_campaign_labels() -> void:
@@ -216,6 +254,23 @@ func _layout_menu_column() -> void:
 	var spacer := col.get_node_or_null("TitleSpacer") as Control
 	if spacer != null:
 		spacer.custom_minimum_size = Vector2(0.0, TITLE_SPACER_H)
+
+func _ensure_tutorial_menu_button() -> void:
+	var col := get_node_or_null("MenuColumn") as VBoxContainer
+	if col == null:
+		return
+	if _tutorial_menu_button == null:
+		_tutorial_menu_button = _menu_button("TUTORIAL", 8, _open_tutorial)
+		_tutorial_menu_button.name = "TutorialButton"
+		var insert_index := _scores_button.get_index() if _scores_button != null else col.get_child_count()
+		col.add_child(_tutorial_menu_button)
+		col.move_child(_tutorial_menu_button, insert_index)
+	else:
+		_tutorial_menu_button.text = "TUTORIAL"
+		_tutorial_menu_button.add_theme_font_size_override("font_size", 8)
+		if _font != null:
+			_tutorial_menu_button.add_theme_font_override("font", _font)
+		_connect_button(_tutorial_menu_button, _open_tutorial)
 
 func _refresh_start_button() -> void:
 	if _start_button == null:
@@ -272,6 +327,8 @@ func _configure_tutorial_modal() -> void:
 	_tutorial_modal.visible = Engine.is_editor_hint()
 	_tutorial_modal.process_mode = Node.PROCESS_MODE_ALWAYS
 	_tutorial_modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	_ensure_tutorial_highlight()
+	_ensure_tutorial_controls()
 	if _tutorial_title != null:
 		_tutorial_title.text = tutorial_title_text
 		_tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -279,25 +336,95 @@ func _configure_tutorial_modal() -> void:
 		if _font != null:
 			_tutorial_title.add_theme_font_override("font", _font)
 	if _tutorial_body != null:
+		_tutorial_body.custom_minimum_size = Vector2(132.0, 180.0)
 		_tutorial_body.bbcode_enabled = true
-		_tutorial_body.text = tutorial_bbcode
 		_tutorial_body.fit_content = false
 		_tutorial_body.scroll_active = false
 		_tutorial_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_tutorial_body.add_theme_font_size_override("normal_font_size", 5)
-		_tutorial_body.add_theme_font_size_override("bold_font_size", 5)
+		_tutorial_body.add_theme_font_size_override("normal_font_size", 6)
+		_tutorial_body.add_theme_font_size_override("bold_font_size", 6)
 		_tutorial_body.add_theme_color_override("default_color", Color(0.94, 0.88, 1.0))
 		if _font != null:
 			_tutorial_body.add_theme_font_override("normal_font", _font)
 			_tutorial_body.add_theme_font_override("bold_font", _font)
-	if _tutorial_button != null:
-		_tutorial_button.text = "UNDERSTOOD"
-		_tutorial_button.process_mode = Node.PROCESS_MODE_ALWAYS
-		_tutorial_button.add_theme_font_size_override("font_size", 6)
+	if _tutorial_step_label != null:
+		_tutorial_step_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_tutorial_step_label.add_theme_font_size_override("font_size", 6)
 		if _font != null:
-			_tutorial_button.add_theme_font_override("font", _font)
-		if not _tutorial_button.pressed.is_connected(_dismiss_tutorial):
-			_tutorial_button.pressed.connect(_dismiss_tutorial)
+			_tutorial_step_label.add_theme_font_override("font", _font)
+		_tutorial_step_label.add_theme_color_override("font_color", Color(0.9, 0.78, 0.64))
+	_update_tutorial_step()
+
+func _ensure_tutorial_highlight() -> void:
+	if _tutorial_modal == null:
+		return
+	if _tutorial_highlight == null:
+		_tutorial_highlight = Panel.new()
+		_tutorial_highlight.name = "Highlight"
+		_tutorial_modal.add_child(_tutorial_highlight)
+		_tutorial_modal.move_child(_tutorial_highlight, mini(1, _tutorial_modal.get_child_count() - 1))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.95, 0.82, 0.22, 0.10)
+	style.border_color = Color(1.0, 0.85, 0.22, 1.0)
+	style.set_border_width_all(1)
+	_tutorial_highlight.add_theme_stylebox_override("panel", style)
+	_tutorial_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tutorial_highlight.z_index = 201
+	if _tutorial_pointer == null:
+		_tutorial_pointer = Label.new()
+		_tutorial_pointer.name = "Pointer"
+		_tutorial_modal.add_child(_tutorial_pointer)
+	_tutorial_pointer.text = "LOOK"
+	_tutorial_pointer.add_theme_font_size_override("font_size", 6)
+	_tutorial_pointer.add_theme_color_override("font_color", Color(1.0, 0.85, 0.22))
+	_tutorial_pointer.add_theme_color_override("font_outline_color", Color.BLACK)
+	_tutorial_pointer.add_theme_constant_override("outline_size", 1)
+	if _font != null:
+		_tutorial_pointer.add_theme_font_override("font", _font)
+	_tutorial_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tutorial_pointer.z_index = 202
+
+func _ensure_tutorial_controls() -> void:
+	var content := get_node_or_null("TutorialModal/Panel/Margin/Content") as VBoxContainer
+	if content == null:
+		return
+	if _tutorial_step_label == null:
+		_tutorial_step_label = Label.new()
+		_tutorial_step_label.name = "StepLabel"
+		content.add_child(_tutorial_step_label)
+		content.move_child(_tutorial_step_label, 1)
+	var old_ok := content.get_node_or_null("OkButton") as Button
+	if old_ok != null and old_ok.get_parent() == content:
+		content.remove_child(old_ok)
+	var row := content.get_node_or_null("Buttons") as HBoxContainer
+	if row == null:
+		row = HBoxContainer.new()
+		row.name = "Buttons"
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 4)
+		content.add_child(row)
+	row.process_mode = Node.PROCESS_MODE_ALWAYS
+	_tutorial_skip_button = _ensure_tutorial_button(row, "SkipButton", "SKIP", _skip_tutorial)
+	_tutorial_prev_button = _ensure_tutorial_button(row, "PrevButton", "BACK", _previous_tutorial_step)
+	_tutorial_next_button = _ensure_tutorial_button(row, "NextButton", "NEXT", _next_tutorial_step)
+	if old_ok != null:
+		old_ok.queue_free()
+
+func _ensure_tutorial_button(parent: Control, node_name: String, text: String, cb: Callable) -> Button:
+	var button := parent.get_node_or_null(node_name) as Button
+	if button == null:
+		button = Button.new()
+		button.name = node_name
+		parent.add_child(button)
+	button.text = text
+	button.process_mode = Node.PROCESS_MODE_ALWAYS
+	button.custom_minimum_size = Vector2(38.0, 18.0)
+	button.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		button.add_theme_font_override("font", _font)
+	if not button.pressed.is_connected(cb):
+		button.pressed.connect(cb)
+	return button
 
 func _maybe_show_tutorial() -> void:
 	if Engine.is_editor_hint() or _tutorial_modal == null:
@@ -305,19 +432,90 @@ func _maybe_show_tutorial() -> void:
 	if not MetaStateStore.is_first_launch:
 		_tutorial_modal.visible = false
 		return
+	_open_tutorial()
+
+func _open_tutorial() -> void:
+	if Engine.is_editor_hint() or _tutorial_modal == null:
+		return
+	_tutorial_step_index = 0
 	_tutorial_modal.visible = true
-	if _tutorial_button != null:
-		_tutorial_button.grab_focus()
+	_update_tutorial_step()
+	if _tutorial_next_button != null:
+		_tutorial_next_button.grab_focus()
 	if tutorial_pauses_tree:
 		get_tree().paused = true
+
+func _skip_tutorial() -> void:
+	_dismiss_tutorial()
 
 func _dismiss_tutorial(save_immediately := true) -> void:
 	if _tutorial_modal != null:
 		_tutorial_modal.visible = false
+	if _tutorial_highlight != null:
+		_tutorial_highlight.visible = false
+	if _tutorial_pointer != null:
+		_tutorial_pointer.visible = false
 	if tutorial_pauses_tree:
 		get_tree().paused = false
 	if not Engine.is_editor_hint():
 		MetaStateStore.mark_tutorial_seen(save_immediately)
+
+func _previous_tutorial_step() -> void:
+	_tutorial_step_index = maxi(0, _tutorial_step_index - 1)
+	_update_tutorial_step()
+
+func _next_tutorial_step() -> void:
+	if _tutorial_step_index >= TUTORIAL_STEPS.size() - 1:
+		_dismiss_tutorial()
+		return
+	_tutorial_step_index += 1
+	_update_tutorial_step()
+
+func _update_tutorial_step() -> void:
+	if _tutorial_modal == null or TUTORIAL_STEPS.is_empty():
+		return
+	_tutorial_step_index = clampi(_tutorial_step_index, 0, TUTORIAL_STEPS.size() - 1)
+	var step: Dictionary = TUTORIAL_STEPS[_tutorial_step_index]
+	if _tutorial_title != null:
+		_tutorial_title.text = String(step.get("title", tutorial_title_text))
+	if _tutorial_body != null:
+		_tutorial_body.text = String(step.get("body", ""))
+	if _tutorial_step_label != null:
+		_tutorial_step_label.text = "%d/%d" % [_tutorial_step_index + 1, TUTORIAL_STEPS.size()]
+	if _tutorial_prev_button != null:
+		_tutorial_prev_button.disabled = _tutorial_step_index == 0
+	if _tutorial_next_button != null:
+		_tutorial_next_button.text = "DONE" if _tutorial_step_index >= TUTORIAL_STEPS.size() - 1 else "NEXT"
+	_update_tutorial_highlight(step)
+
+func _update_tutorial_highlight(step: Dictionary) -> void:
+	if _tutorial_highlight == null or _tutorial_pointer == null:
+		return
+	var rect := _tutorial_rect_for_step(step)
+	if rect.size == Vector2.ZERO:
+		_tutorial_highlight.visible = false
+		_tutorial_pointer.visible = false
+		return
+	rect = rect.grow(TUTORIAL_HIGHLIGHT_PAD)
+	_tutorial_highlight.position = rect.position
+	_tutorial_highlight.size = rect.size
+	_tutorial_highlight.visible = true
+	_tutorial_pointer.position = Vector2(
+		clampf(rect.position.x, 2.0, CANVAS_W - 34.0),
+		clampf(rect.position.y - 10.0, 2.0, 306.0)
+	)
+	_tutorial_pointer.visible = true
+
+func _tutorial_rect_for_step(step: Dictionary) -> Rect2:
+	var target_path := String(step.get("target", ""))
+	if not target_path.is_empty():
+		var target := get_node_or_null(target_path) as Control
+		if target != null:
+			return target.get_global_rect()
+	if step.has("rect"):
+		var rect: Rect2 = step["rect"]
+		return rect
+	return Rect2()
 
 func _start_run() -> void:
 	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":

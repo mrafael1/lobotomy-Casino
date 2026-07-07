@@ -225,13 +225,24 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_first_launch := bool(meta_store.is_first_launch)
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var previous_run_phase := String(run_store.runPhase)
+	var previous_compulsive := int(run_store.compulsiveSpinSkips)
+	var previous_pending_compulsive := int(run_store.pendingCompulsiveSpinSkips)
 	meta_store.is_first_launch = true
 	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(start_menu)
 	var tutorial := start_menu.get_node_or_null("TutorialModal") as Control
 	var panel := start_menu.get_node_or_null("TutorialModal/Panel") as PanelContainer
 	var body := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Body") as RichTextLabel
-	var button := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/OkButton") as Button
+	var tutorial_button := start_menu.get_node_or_null("MenuColumn/TutorialButton") as Button
+	var step_label := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/StepLabel") as Label
+	var highlight := start_menu.get_node_or_null("TutorialModal/Highlight") as Panel
+	var pointer := start_menu.get_node_or_null("TutorialModal/Pointer") as Label
+	var buttons := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons") as HBoxContainer
+	var skip_button := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/SkipButton") as Button
+	var prev_button := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/PrevButton") as Button
+	var next_button := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Buttons/NextButton") as Button
 	if tutorial == null:
 		failures.append("tutorial: TutorialModal is missing")
 	else:
@@ -239,6 +250,8 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 			failures.append("tutorial: first launch did not show the modal")
 		if tutorial.process_mode != Node.PROCESS_MODE_ALWAYS:
 			failures.append("tutorial: modal must process while the tree is paused")
+	if tutorial_button == null or tutorial_button.text != "TUTORIAL":
+		failures.append("tutorial: main menu is missing accessible TUTORIAL button")
 	if panel == null:
 		failures.append("tutorial: central panel is not a PanelContainer")
 	if body == null:
@@ -246,21 +259,61 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	else:
 		if not body.bbcode_enabled:
 			failures.append("tutorial: RichTextLabel BBCode is not enabled")
-		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "35 spins", "50 coins"]:
-			if not body.text.contains(phrase):
-				failures.append("tutorial: missing copy phrase '%s'" % phrase)
-				break
-	if button == null or button.text != "UNDERSTOOD":
-		failures.append("tutorial: dismiss button is missing or mislabelled")
+	if step_label == null:
+		failures.append("tutorial: step counter is missing")
+	if highlight == null or pointer == null:
+		failures.append("tutorial: visual highlight/pointer is missing")
+	elif not highlight.visible or not pointer.visible:
+		failures.append("tutorial: first step does not show a visual target")
+	if buttons == null or skip_button == null or prev_button == null or next_button == null:
+		failures.append("tutorial: skip/back/next controls are missing")
+	else:
+		if skip_button.text != "SKIP":
+			failures.append("tutorial: skip button is mislabelled")
+		if next_button.text != "NEXT":
+			failures.append("tutorial: next button is mislabelled on first step")
+		if not prev_button.disabled:
+			failures.append("tutorial: back button should be disabled on first step")
 	if not get_root().get_tree().paused:
 		failures.append("tutorial: first launch did not pause the tree")
+	var combined_copy := ""
+	if body != null:
+		combined_copy += body.text + "\n"
+	if start_menu._tutorial_title != null:
+		combined_copy += start_menu._tutorial_title.text + "\n"
+	for i in range(1, int(start_menu.TUTORIAL_STEPS.size())):
+		start_menu._next_tutorial_step()
+		if body != null:
+			combined_copy += body.text + "\n"
+		if start_menu._tutorial_title != null:
+			combined_copy += start_menu._tutorial_title.text + "\n"
+	if next_button != null and next_button.text != "DONE":
+		failures.append("tutorial: final step should label the next button DONE")
+	for phrase in ["START RUN", "Dealer", "STANDARD", "Energy Drink", "Compulsion", "forced x1", "mid-run"]:
+		if not combined_copy.contains(phrase):
+			failures.append("tutorial: missing guided copy phrase '%s'" % phrase)
+			break
+	if String(run_store.runPhase) != previous_run_phase \
+			or int(run_store.compulsiveSpinSkips) != previous_compulsive \
+			or int(run_store.pendingCompulsiveSpinSkips) != previous_pending_compulsive:
+		failures.append("tutorial: guided steps mutated run/dealer compulsion state")
 	start_menu._dismiss_tutorial(false)
 	if bool(meta_store.is_first_launch):
 		failures.append("tutorial: dismiss did not clear is_first_launch")
 	if get_root().get_tree().paused:
 		failures.append("tutorial: dismiss did not unpause the tree")
+	if tutorial_button != null:
+		tutorial_button.pressed.emit()
+		if tutorial == null or not tutorial.visible:
+			failures.append("tutorial: menu TUTORIAL button did not reopen the guide")
+		start_menu._skip_tutorial()
+		if get_root().get_tree().paused:
+			failures.append("tutorial: skip did not unpause the tree")
 	start_menu.queue_free()
 	meta_store.is_first_launch = previous_first_launch
+	run_store.runPhase = previous_run_phase
+	run_store.compulsiveSpinSkips = previous_compulsive
+	run_store.pendingCompulsiveSpinSkips = previous_pending_compulsive
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
