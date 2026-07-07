@@ -33,6 +33,20 @@ godot --headless --path godot -s res://test/scene_smoke.gd
 `run_parity_headless.gd` checks the GDScript rules against the frozen golden vectors
 under `../parity/vectors`. `scene_smoke.gd` exercises the main scenes/controllers.
 
+## Scene Renders
+
+Render every authored scene at the native 160x320 canvas size:
+
+```sh
+godot --path godot -s res://tools/render_scenes_1to1.gd
+```
+
+The script writes PNGs to `godot/.tmp/scene_renders_1to1` by default and exits
+after rendering. Pass `-- --output res://.tmp/other_dir` to choose a different
+project-local output folder, or `-- --scenes res://scenes` to point it at another
+scene directory. Use the normal renderer for this command; headless mode uses
+dummy viewport textures and will not produce scene pixels.
+
 ## Running
 
 Open this folder in Godot and press Play, or run:
