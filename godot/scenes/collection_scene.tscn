@@ -1,7 +1,11 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://cg1k2delhw7gs"]
 
-[ext_resource type="Script" path="res://scenes/collection_scene.gd" id="1_collection"]
+[ext_resource type="Script" uid="uid://de4lavvk1cwjj" path="res://scenes/collection_scene.gd" id="1_collection"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+[ext_resource type="Texture2D" uid="uid://ckf78hj8fjggk" path="res://assets/images/ui/red_button.png" id="3_hv1g0"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.02, 0.01, 0.04, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 content_margin_left = 8.0
@@ -15,10 +19,59 @@ border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.92, 0.86, 0.56, 0.82)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
-bg_color = Color(0.02, 0.01, 0.04, 1)
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_5acdj"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(0, 0, 24, 12)
 
-[node name="CollectionScene" type="Control"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1171b"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(48, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_pi0vs"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(24, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vjxux"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(72, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_rq54v"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_88mqk"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(0, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_uhm3a"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(48, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_2xmik"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(24, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qhcqg"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(72, 0, 24, 12)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_4d7xx"]
+content_margin_bottom = 2.0
+texture = ExtResource("3_hv1g0")
+region_rect = Rect2(0, 0, 24, 12)
+
+[node name="CollectionScene" type="Control" unique_id=706504441]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -27,7 +80,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_collection")
 
-[node name="Background" type="Panel" parent="."]
+[node name="Background" type="Panel" parent="." unique_id=1987697429]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -37,7 +90,7 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
 
-[node name="Panel" type="PanelContainer" parent="."]
+[node name="Panel" type="PanelContainer" parent="." unique_id=33301622]
 layout_mode = 0
 offset_left = 8.0
 offset_top = 28.0
@@ -45,11 +98,11 @@ offset_right = 152.0
 offset_bottom = 292.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="Rows" type="VBoxContainer" parent="Panel"]
+[node name="Rows" type="VBoxContainer" parent="Panel" unique_id=958422335]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Panel/Rows"]
+[node name="Title" type="Label" parent="Panel/Rows" unique_id=309225363]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
 theme_override_fonts/font = ExtResource("2_font")
@@ -57,20 +110,31 @@ theme_override_font_sizes/font_size = 11
 text = "COLLECTION"
 horizontal_alignment = 1
 
-[node name="Grid" type="GridContainer" parent="Panel/Rows"]
+[node name="Grid" type="GridContainer" parent="Panel/Rows" unique_id=1705269081]
 layout_mode = 2
 theme_override_constants/h_separation = 5
 theme_override_constants/v_separation = 6
 columns = 3
 
-[node name="BackButton" type="Button" parent="Panel/Rows"]
+[node name="BackButton" type="Button" parent="Panel/Rows" unique_id=1614892236]
+texture_filter = 1
 custom_minimum_size = Vector2(112, 20)
 layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
+theme_override_styles/normal = SubResource("StyleBoxTexture_5acdj")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_1171b")
+theme_override_styles/hover = SubResource("StyleBoxTexture_pi0vs")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_vjxux")
+theme_override_styles/focus = SubResource("StyleBoxTexture_rq54v")
 text = "BACK"
 
-[node name="UnlockModal" type="PanelContainer" parent="."]
+[node name="UnlockModal" type="PanelContainer" parent="." unique_id=1903653666]
 visible = false
 z_index = 50
 layout_mode = 0
@@ -80,12 +144,12 @@ offset_right = 142.0
 offset_bottom = 209.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="Rows" type="VBoxContainer" parent="UnlockModal"]
+[node name="Rows" type="VBoxContainer" parent="UnlockModal" unique_id=2100518132]
 layout_mode = 2
 theme_override_constants/separation = 7
 alignment = 1
 
-[node name="NameLabel" type="Label" parent="UnlockModal/Rows"]
+[node name="NameLabel" type="Label" parent="UnlockModal/Rows" unique_id=1184801154]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
 theme_override_fonts/font = ExtResource("2_font")
@@ -93,7 +157,7 @@ theme_override_font_sizes/font_size = 9
 text = "POWER"
 horizontal_alignment = 1
 
-[node name="DescriptionLabel" type="Label" parent="UnlockModal/Rows"]
+[node name="DescriptionLabel" type="Label" parent="UnlockModal/Rows" unique_id=433438712]
 custom_minimum_size = Vector2(104, 34)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
@@ -103,9 +167,20 @@ text = "Requires 350 Lucidity Coins."
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="CloseButton" type="Button" parent="UnlockModal/Rows"]
+[node name="CloseButton" type="Button" parent="UnlockModal/Rows" unique_id=688986421]
+texture_filter = 1
 custom_minimum_size = Vector2(86, 18)
 layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_disabled_color = Color(1, 1, 1, 0.5)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
+theme_override_styles/normal = SubResource("StyleBoxTexture_88mqk")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_uhm3a")
+theme_override_styles/hover = SubResource("StyleBoxTexture_2xmik")
+theme_override_styles/disabled = SubResource("StyleBoxTexture_qhcqg")
+theme_override_styles/focus = SubResource("StyleBoxTexture_4d7xx")
 text = "CLOSE"
