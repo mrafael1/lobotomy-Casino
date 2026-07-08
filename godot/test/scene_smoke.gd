@@ -224,21 +224,30 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	run_store.cocktailPairTriplePenalty = previous_penalty
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
 	var previous_first_launch := bool(meta_store.is_first_launch)
+	var previous_run_phase := String(run_store.runPhase)
 	meta_store.is_first_launch = true
+	run_store.runPhase = "idle"
 	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(start_menu)
 	var tutorial := start_menu.get_node_or_null("TutorialModal") as Control
 	var panel := start_menu.get_node_or_null("TutorialModal/Panel") as PanelContainer
 	var body := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/Body") as RichTextLabel
 	var button := start_menu.get_node_or_null("TutorialModal/Panel/Margin/Content/OkButton") as Button
+	# The tutorial must NOT auto-open on launch; it opens on the first START RUN.
 	if tutorial == null:
 		failures.append("tutorial: TutorialModal is missing")
 	else:
-		if not tutorial.visible:
-			failures.append("tutorial: first launch did not show the modal")
+		if tutorial.visible:
+			failures.append("tutorial: modal should stay hidden on launch")
 		if tutorial.process_mode != Node.PROCESS_MODE_ALWAYS:
 			failures.append("tutorial: modal must process while the tree is paused")
+	start_menu._start_run()
+	if tutorial != null and not tutorial.visible:
+		failures.append("tutorial: first START RUN did not open the tutorial")
+	if not get_root().get_tree().paused:
+		failures.append("tutorial: opening the tutorial did not pause the tree")
 	if panel == null:
 		failures.append("tutorial: central panel is not a PanelContainer")
 	if body == null:
@@ -252,8 +261,8 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 				break
 	if button == null or button.text != "UNDERSTOOD":
 		failures.append("tutorial: dismiss button is missing or mislabelled")
-	if not get_root().get_tree().paused:
-		failures.append("tutorial: first launch did not pause the tree")
+	# Dismiss without re-triggering the real run (avoid a scene change mid-test).
+	start_menu._tutorial_start_run_after_close = false
 	start_menu._dismiss_tutorial(false)
 	if bool(meta_store.is_first_launch):
 		failures.append("tutorial: dismiss did not clear is_first_launch")
@@ -261,6 +270,7 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 		failures.append("tutorial: dismiss did not unpause the tree")
 	start_menu.queue_free()
 	meta_store.is_first_launch = previous_first_launch
+	run_store.runPhase = previous_run_phase
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")

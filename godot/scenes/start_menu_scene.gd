@@ -61,6 +61,7 @@ var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
 var _tutorial_button: Button = null
+var _tutorial_start_run_after_close := false
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -300,10 +301,14 @@ func _configure_tutorial_modal() -> void:
 			_tutorial_button.pressed.connect(_dismiss_tutorial)
 
 func _maybe_show_tutorial() -> void:
+	# Never auto-open on launch. The tutorial is triggered by the first
+	# START RUN press instead (see _start_run).
 	if Engine.is_editor_hint() or _tutorial_modal == null:
 		return
-	if not MetaStateStore.is_first_launch:
-		_tutorial_modal.visible = false
+	_tutorial_modal.visible = false
+
+func _show_tutorial() -> void:
+	if _tutorial_modal == null:
 		return
 	_tutorial_modal.visible = true
 	if _tutorial_button != null:
@@ -318,8 +323,17 @@ func _dismiss_tutorial(save_immediately := true) -> void:
 		get_tree().paused = false
 	if not Engine.is_editor_hint():
 		MetaStateStore.mark_tutorial_seen(save_immediately)
+	if _tutorial_start_run_after_close:
+		_tutorial_start_run_after_close = false
+		_start_run()
 
 func _start_run() -> void:
+	# First time only: START RUN opens the tutorial. Once dismissed it marks
+	# is_first_launch false and re-enters _start_run to begin the real run.
+	if not Engine.is_editor_hint() and MetaStateStore.is_first_launch and RunStateStore.runPhase != "running":
+		_tutorial_start_run_after_close = true
+		_show_tutorial()
+		return
 	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
 		get_tree().change_scene_to_file(MACHINE_SCENE)
 		return
