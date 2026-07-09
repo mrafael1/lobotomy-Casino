@@ -2900,14 +2900,15 @@ func _show_score_table() -> void:
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
 
-	# Text lives on a child Label: Button text inflates the minimum size well past
-	# 44x13 (font metrics), which would bleed over the art's baked column header.
+	# Cross (X) close button in the top marquee band. The glyph lives on a child
+	# Label: Button text inflates the minimum size well past the art-sized box
+	# (font metrics), which would bleed over the art's baked column header.
 	var close := Button.new()
 	close.name = "CloseButton"
-	close.position = Vector2(58.0, 10.0)
-	close.size = Vector2(44.0, 13.0)
-	var close_label := _score_label(close, "CLOSE", Vector2.ZERO, 6,
-		Color(1.0, 0.82, 0.28), 44.0, HORIZONTAL_ALIGNMENT_CENTER)
+	close.position = Vector2(137.0, 9.0)
+	close.size = Vector2(14.0, 14.0)
+	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
+		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.position.y = 2.0
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Flat pixel style: the shared textured skin draws past the button rect and
@@ -2916,6 +2917,7 @@ func _show_score_table() -> void:
 	close_style.bg_color = Color(0.11, 0.05, 0.07)
 	close_style.border_color = Color(1.0, 0.82, 0.28)
 	close_style.set_border_width_all(1)
+	close_style.set_corner_radius_all(3)
 	var close_pressed := close_style.duplicate() as StyleBoxFlat
 	close_pressed.bg_color = Color(0.35, 0.1, 0.12)
 	close.add_theme_stylebox_override("normal", close_style)
