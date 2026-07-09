@@ -128,16 +128,21 @@ const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_REWARD_AMP_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
-# Issue #119: authored points-table art. Both sheets are the full 160x320 canvas
-# at x8 (1280x2240); the information sheet only holds the per-row "i" buttons, so
-# each button is cropped from its first cluster and placed at the art's own
-# canvas-space rects (source px / 8).
+# Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
+# 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
+# vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
+# and source px / 7 on y; the information sheet only holds the per-row "i"
+# buttons, cropped from their first pixel cluster.
 const SCORE_TABLE_ART := "TABLE/TABLES SCORE.png"
 const SCORE_TABLE_INFO_ART := "TABLE/TABLES SCORE_information.png"
 const SCORE_TABLE_INFO_SRC := Rect2(1032.0, 560.0, 56.0, 56.0)
 const SCORE_TABLE_INFO_X := 129.0
-const SCORE_TABLE_INFO_SIZE := 7.0
-const SCORE_TABLE_INFO_ROW_Y := [70.0, 108.0, 146.0, 184.0, 222.0, 261.0]
+const SCORE_TABLE_INFO_W := 7.0
+const SCORE_TABLE_INFO_H := 8.0
+const SCORE_TABLE_INFO_ROW_Y := [80.0, 123.5, 167.0, 210.5, 254.0, 298.5]
+# Vertical centers of the art's row bands (dark grid lines sit at canvas y 44.6,
+# 89.1, 132.6, 176, 219.4, 262.9, 307.4), so the values center inside their cells.
+const SCORE_TABLE_ROW_CY := [67.0, 111.0, 154.5, 198.0, 241.5, 285.0]
 const SCORE_TABLE_LVL_CX := 66.0
 const SCORE_TABLE_PAIR_CX := 99.0
 const SCORE_TABLE_TRIPLE_CX := 131.5
@@ -2843,7 +2848,7 @@ func _show_score_table() -> void:
 	for i in Symbols.BASE_SYMBOL_CYCLE.size():
 		var symbol_id := String(Symbols.BASE_SYMBOL_CYCLE[i])
 		var btn_y := float(SCORE_TABLE_INFO_ROW_Y[i])
-		var value_y := btn_y - 15.0
+		var row_cy := float(SCORE_TABLE_ROW_CY[i])
 
 		# Permanent odds level: the same levels bought at the dealer's odds table;
 		# dimmed when the symbol was never upgraded.
@@ -2851,11 +2856,11 @@ func _show_score_table() -> void:
 		var is_maxed := level >= int(RunStateStore.odds_max_level)
 		var level_color := SCORE_TABLE_MAXED_COLOR if is_maxed else (
 			SCORE_TABLE_LEVEL_COLOR if level > 0 else SCORE_TABLE_DIM_COLOR)
-		_score_label_centered(_score_overlay, str(level), SCORE_TABLE_LVL_CX, value_y, 7, level_color)
+		_score_label_cell(str(level), SCORE_TABLE_LVL_CX, row_cy, 12, level_color)
 		if is_maxed:
-			_score_label_centered(_score_overlay, "(%s)" % _reward_bonus_text(
+			_score_label_cell("(%s)" % _reward_bonus_text(
 				float(RunStateStore.odds_max_level_reward_bonus)),
-				SCORE_TABLE_LVL_CX, value_y + 11.0, 4, SCORE_TABLE_MAXED_COLOR)
+				SCORE_TABLE_LVL_CX, row_cy + 10.0, 4, SCORE_TABLE_MAXED_COLOR)
 
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
@@ -2865,8 +2870,8 @@ func _show_score_table() -> void:
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
 		var triple_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else (
 			SCORE_TABLE_BRAIN_COLOR if symbol_id == "brain" else SCORE_TABLE_GAIN_COLOR)
-		_score_label_centered(_score_overlay, "+%d" % pair, SCORE_TABLE_PAIR_CX, value_y, 7, pair_color)
-		_score_label_centered(_score_overlay, "+%d" % triple, SCORE_TABLE_TRIPLE_CX, value_y, 7, triple_color)
+		_score_label_cell("+%d" % pair, SCORE_TABLE_PAIR_CX, row_cy, 12, pair_color)
+		_score_label_cell("+%d" % triple, SCORE_TABLE_TRIPLE_CX, row_cy, 12, triple_color)
 		if is_maxed:
 			_score_label_right(_score_overlay, _reward_bonus_text(
 				float(RunStateStore.odds_max_level_reward_bonus)),
@@ -2926,7 +2931,7 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 	var b := Button.new()
 	b.name = "InfoButton_%s" % symbol_id
 	b.position = Vector2(SCORE_TABLE_INFO_X - 3.0, art_y - 3.0)
-	b.size = Vector2(SCORE_TABLE_INFO_SIZE + 6.0, SCORE_TABLE_INFO_SIZE + 6.0)
+	b.size = Vector2(SCORE_TABLE_INFO_W + 6.0, SCORE_TABLE_INFO_H + 6.0)
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
@@ -2949,7 +2954,7 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	icon.position = Vector2(3.0, 3.0)
-	icon.size = Vector2(SCORE_TABLE_INFO_SIZE, SCORE_TABLE_INFO_SIZE)
+	icon.size = Vector2(SCORE_TABLE_INFO_W, SCORE_TABLE_INFO_H)
 	icon.pivot_offset = icon.size * 0.5
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(icon)
@@ -3018,6 +3023,15 @@ func _score_label_right(parent: Control, text: String, right_x: float, y: float,
 		font_size: int, color: Color) -> Label:
 	var l := _score_label(parent, text, Vector2.ZERO, font_size, color)
 	l.position = Vector2(right_x - l.get_minimum_size().x, y)
+	return l
+
+# A table value centered on its cell's midpoint (both axes), so numbers sit in
+# the middle of the art's baked boxes (issue #119 feedback).
+func _score_label_cell(text: String, center_x: float, center_y: float,
+		font_size: int, color: Color) -> Label:
+	var l := _score_label(_score_overlay, text, Vector2.ZERO, font_size, color)
+	var min_size := l.get_minimum_size()
+	l.position = Vector2(center_x - min_size.x * 0.5, center_y - min_size.y * 0.5)
 	return l
 
 func _score_label_centered(parent: Control, text: String, center_x: float, y: float,
