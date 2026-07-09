@@ -3056,21 +3056,22 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	var text := _triple_effect_text(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
-	_score_label(_score_info_popup, text, Vector2(3.0, 2.0), 5, Color(0.9, 0.94, 1.0))
-	var bg := ColorRect.new()
-	bg.color = Color(0.045, 0.035, 0.075, 0.97)
+	_score_label(_score_info_popup, text, Vector2(4.0, 2.0), 5, Color(0.9, 0.94, 1.0))
+	# Rounded box: dark panel with a thin gold outline and soft corners.
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
+	bg_style.border_color = Color(1.0, 0.82, 0.28)
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.add_theme_stylebox_override("panel", bg_style)
 	# Height by line count: the Label's rendered line height exceeds the font's
 	# measured extent, so metric-based heights clip multi-line blurbs.
 	var line_count := text.split("\n").size()
-	bg.size = Vector2(text_size.x + 6.0, float(line_count) * 10.0 + 4.0)
+	bg.size = Vector2(text_size.x + 8.0, float(line_count) * 10.0 + 4.0)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_score_info_popup.add_child(bg)
 	_score_info_popup.move_child(bg, 0)
-	var border := ColorRect.new()
-	border.color = Color(1.0, 0.82, 0.28)
-	border.size = Vector2(bg.size.x, 1.0)
-	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_score_info_popup.add_child(border)
 	# Anchored left of the held button, clamped onto the canvas.
 	var pos := button.position + Vector2(-bg.size.x - 2.0, button.size.y * 0.5 - bg.size.y * 0.5)
 	pos.x = clampf(pos.x, 2.0, SRC_W - bg.size.x - 2.0)
