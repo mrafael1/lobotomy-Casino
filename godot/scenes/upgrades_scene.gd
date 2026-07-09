@@ -959,6 +959,10 @@ func _step_eye_terminal(delta: float) -> void:
 				_eye_terminal.frame = EYE_PATTERN_IDLE_START
 				_eye_idle_wait = _rng.randf_range(1.4, 3.1)
 		return
+	# Resting on the pattern-fabrication slot: always show its rest frame
+	# immediately (never leave a stale frame from a previously-shown item
+	# lingering until the ambient idle-wait timer happens to expire).
+	_eye_terminal.frame = EYE_PATTERN_IDLE_START
 	_eye_idle_wait -= delta
 	if _eye_idle_wait <= 0.0:
 		_eye_idle_frame = EYE_PATTERN_IDLE_START

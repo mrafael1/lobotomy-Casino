@@ -993,21 +993,6 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_id1iw")
 theme_override_styles/hover = SubResource("StyleBoxFlat_id1iw")
 theme_override_styles/focus = SubResource("StyleBoxFlat_id1iw")
 
-[node name="EyeUpgradePanel" type="Control" parent="CanvasLayer/UI_Container" unique_id=328122031]
-anchors_preset = 0
-offset_left = 72.0
-offset_top = 9.0
-offset_right = 114.0
-offset_bottom = 48.0
-mouse_filter = 2
-
-[node name="MemoryUpgradePanel" type="Control" parent="CanvasLayer/UI_Container" unique_id=1373977613]
-anchors_preset = 0
-offset_left = 1.0
-offset_top = 10.0
-offset_right = 36.0
-offset_bottom = 55.0
-
 [node name="EyePrevButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=101]
 layout_mode = 0
 offset_left = 57.0
@@ -1203,10 +1188,10 @@ visible = false
 z_index = 5
 texture_filter = 1
 layout_mode = 0
-offset_left = 126.0
-offset_top = 107.0
-offset_right = 154.0
-offset_bottom = 120.0
+offset_left = 69.0
+offset_top = 193.0
+offset_right = 91.0
+offset_bottom = 203.0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)

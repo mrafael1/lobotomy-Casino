@@ -2584,6 +2584,23 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: eye hitbox does not cover the eye terminal panel")
 	if memory_hitbox.position != Vector2(1.0, 10.0) or memory_hitbox.size != Vector2(35.0, 45.0):
 		failures.append("upgrades: memory hitbox does not cover the memory terminal panel")
+	# Regression check: a later, stop-filtered sibling sitting on top of a
+	# hitbox's center silently eats the click even though the hitbox itself
+	# is wired up correctly (this is exactly how the empty MemoryUpgradePanel
+	# used to swallow every click to MemoryComputerHitbox after its rows were
+	# removed). Assert nothing else claims mouse input at either hitbox's center.
+	for hitbox in [eye_hitbox, memory_hitbox]:
+		var center: Vector2 = hitbox.position + hitbox.size / 2.0
+		var seen_hitbox := false
+		for sibling in ui_container.get_children():
+			if sibling == hitbox:
+				seen_hitbox = true
+				continue
+			if not seen_hitbox or not (sibling is Control):
+				continue
+			var sib := sibling as Control
+			if sib.visible and sib.mouse_filter == Control.MOUSE_FILTER_STOP and sib.get_rect().has_point(center):
+				failures.append("upgrades: %s sits on top of %s's center and would swallow its click" % [sib.name, hitbox.name])
 	var coin_label := scene.get_node("CanvasLayer/UI_Container/LucidtyCoinDisplay/Label") as Label
 	var coin_icon := scene.get_node("CanvasLayer/UI_Container/LucidtyCoinDisplay/Coin") as TextureRect
 	if coin_label.text.contains("lucid") or coin_label.text.contains("coin"):
@@ -2622,8 +2639,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: power name and price amount are not horizontally centered")
 	if context_buy.visible:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
-	if context_buy.size != Vector2(28.0, 13.0):
-		failures.append("upgrades: contextual buy button should keep its authored 28x13 size")
+	if context_buy.size != Vector2(22.0, 10.0):
+		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
 	if context_buy_disabled_style != null:
 		if context_buy_disabled_style.content_margin_left != 0.0 or context_buy_disabled_style.content_margin_right != 0.0:
@@ -2652,7 +2669,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: memory carousel did not open on the Lock power")
 	if context_buy.text != "BUY" and context_buy.text != "OWNED":
 		failures.append("upgrades: contextual buy button includes price text")
-	if context_buy.alignment != HORIZONTAL_ALIGNMENT_CENTER or context_buy.size.x < 28.0:
+	if context_buy.alignment != HORIZONTAL_ALIGNMENT_CENTER or context_buy.size.x < 22.0:
 		failures.append("upgrades: contextual buy button text is not centered with enough width")
 	if not context_price.visible:
 		failures.append("upgrades: contextual price group did not appear for the memory carousel's first power")
