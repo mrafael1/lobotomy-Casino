@@ -39,6 +39,13 @@ const MEMORY_TERMINAL_FRAMES := 11
 const MEMORY_BOOT_LAST_FRAME := 3
 const MEMORY_ITEM_STATIC_FRAME := { 0: 4, 2: 9, 3: 10 } # carousel index -> frame (index 1 = reward-amp tier lookup)
 const MEMORY_REWARD_AMP_FRAMES := [5, 6, 7, 8] # tier 0..3
+## Pixel centers of the three "+" pips baked into the reward-amp card art
+## (frame-local, top-left origin — _memory_terminal.centered is false),
+## measured from upgrades_scene_memory_upgrades.png. Owned tiers light the
+## first N pips with a procedural glow (no new art needed).
+const REWARD_AMP_PIP_CENTERS: Array[Vector2] = [Vector2(87.0, 304.0), Vector2(151.0, 304.0), Vector2(215.0, 304.0)]
+const REWARD_AMP_GLOW_DIAMETER := 64.0
+const REWARD_AMP_GLOW_COLOR := Color(1.0, 0.92, 0.55, 0.9)
 
 const AUTHORED_FRAME_WIDTH := 1280.0
 const FRAME_TIME := 0.08
@@ -157,12 +164,14 @@ var _reward_amp_picker: Control = null
 var _pending_reward_amp_upgrade_id := ""
 var _eye_index := 0
 var _memory_index := 0
+var _reward_amp_glows: Array[Sprite2D] = []
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(160.0, 320.0)
 	_rng.randomize()
 	_configure_sprite_frames()
 	_configure_layer_visibility()
+	_build_reward_amp_glows()
 	_bind_buttons()
 	_apply_font(self)
 	_style_buttons(self)
@@ -819,6 +828,7 @@ func _refresh_memory_frame() -> void:
 		return
 	if not _is_memory_open():
 		_memory_terminal.frame = 0
+		_set_reward_amp_glow_tier(0)
 		return
 	var raw_id := MEMORY_CAROUSEL_IDS[_memory_index]
 	if raw_id == REWARD_AMP_SLOT_ID:
@@ -827,8 +837,43 @@ func _refresh_memory_frame() -> void:
 			if _owned(REWARD_AMP_IDS[i]):
 				tier = i + 1
 		_memory_terminal.frame = MEMORY_REWARD_AMP_FRAMES[clampi(tier, 0, MEMORY_REWARD_AMP_FRAMES.size() - 1)]
+		_set_reward_amp_glow_tier(tier)
 		return
 	_memory_terminal.frame = int(MEMORY_ITEM_STATIC_FRAME.get(_memory_index, 0))
+	_set_reward_amp_glow_tier(0)
+
+## Builds a small radial-gradient glow sprite per reward-amp pip (no new art
+## needed — procedural GradientTexture2D), parented under _memory_terminal so
+## it inherits the terminal's 0.125 scale and lines up with the baked pips.
+func _build_reward_amp_glows() -> void:
+	if _memory_terminal == null or not _reward_amp_glows.is_empty():
+		return
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var glow_texture := GradientTexture2D.new()
+	glow_texture.gradient = gradient
+	glow_texture.fill = GradientTexture2D.FILL_RADIAL
+	glow_texture.fill_from = Vector2(0.5, 0.5)
+	glow_texture.fill_to = Vector2(1.0, 0.5)
+	glow_texture.width = int(REWARD_AMP_GLOW_DIAMETER)
+	glow_texture.height = int(REWARD_AMP_GLOW_DIAMETER)
+	var material := CanvasItemMaterial.new()
+	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	for center in REWARD_AMP_PIP_CENTERS:
+		var glow := Sprite2D.new()
+		glow.name = "RewardAmpGlow%d" % _reward_amp_glows.size()
+		glow.texture = glow_texture
+		glow.material = material
+		glow.position = center
+		glow.modulate = REWARD_AMP_GLOW_COLOR
+		glow.visible = false
+		_memory_terminal.add_child(glow)
+		_reward_amp_glows.append(glow)
+
+func _set_reward_amp_glow_tier(tier: int) -> void:
+	for i in _reward_amp_glows.size():
+		_reward_amp_glows[i].visible = i < tier
 
 func _step_background(delta: float) -> void:
 	if _bg == null:
@@ -954,12 +999,15 @@ func _step_eye_terminal(delta: float) -> void:
 		_eye_idle_time += delta
 		if _eye_idle_time >= FRAME_TIME:
 			_eye_idle_time = 0.0
-			_eye_terminal.frame = _eye_idle_frame
-			_eye_idle_frame += 1
+			# Let the counter run one past the end so the last loop frame
+			# holds for a full FRAME_TIME before the rest branch takes over.
 			if _eye_idle_frame > EYE_PATTERN_IDLE_END:
 				_eye_idle_frame = -1
-				_eye_terminal.frame = EYE_PATTERN_IDLE_START
 				_eye_idle_wait = _rng.randf_range(1.4, 3.1)
+				_eye_terminal.frame = EYE_PATTERN_IDLE_START
+			else:
+				_eye_terminal.frame = _eye_idle_frame
+				_eye_idle_frame += 1
 		return
 	# Resting on the pattern-fabrication slot: always show its rest frame
 	# immediately (never leave a stale frame from a previously-shown item
