@@ -2516,6 +2516,9 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 
 func _check_upgrades_scene(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
+	# This check mutates ownedPermanents (reward-amp tiers); snapshot the
+	# current meta state so later checks see whatever they started with.
+	var saved_permanents: Array = meta_store.ownedPermanents.duplicate()
 	var ps := load("res://scenes/upgrades_scene.tscn") as PackedScene
 	if ps == null:
 		failures.append("upgrades: scene failed to load")
@@ -2785,7 +2788,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await create_timer(0.2).timeout
 	if brain.frame <= 0:
 		failures.append("upgrades: brain layer did not animate while scene was ticking")
-	meta_store.ownedPermanents = []
+	meta_store.ownedPermanents = saved_permanents
 	scene.queue_free()
 
 func _check_smart_save_retention(failures: Array) -> void:

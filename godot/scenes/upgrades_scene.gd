@@ -49,6 +49,12 @@ const REWARD_AMP_GLOW_COLOR := Color(1.0, 0.92, 0.55, 0.9)
 
 const AUTHORED_FRAME_WIDTH := 1280.0
 const FRAME_TIME := 0.08
+## Closed terminals (frame 0) bob up/down to read as clickable. Whole-pixel
+## offsets only, to keep the pixel art crisp on the 160x320 virtual canvas.
+const TERMINAL_FLOAT_PERIOD := 2.6
+const TERMINAL_FLOAT_AMPLITUDE := 1.0
+const TERMINAL_FLOAT_MEMORY_PHASE := PI * 0.5
+const NAV_FLASH_TIME := 0.12
 const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
 const COIN_ASSET := "ui/coin.png"
@@ -165,10 +171,17 @@ var _pending_reward_amp_upgrade_id := ""
 var _eye_index := 0
 var _memory_index := 0
 var _reward_amp_glows: Array[Sprite2D] = []
+var _terminal_float_time := 0.0
+var _eye_terminal_base_pos := Vector2.ZERO
+var _memory_terminal_base_pos := Vector2.ZERO
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(160.0, 320.0)
 	_rng.randomize()
+	if _eye_terminal != null:
+		_eye_terminal_base_pos = _eye_terminal.position
+	if _memory_terminal != null:
+		_memory_terminal_base_pos = _memory_terminal.position
 	_configure_sprite_frames()
 	_configure_layer_visibility()
 	_build_reward_amp_glows()
@@ -193,23 +206,32 @@ func _process(delta: float) -> void:
 	_step_sign(delta)
 	_step_leak(delta)
 	_step_eye_terminal(delta)
+	_step_terminal_float(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint() or _purchase_animating:
 		return
+	# The reward-amp symbol picker is modal: while it is open, carousel
+	# navigation must not leak through underneath it.
+	if _reward_amp_picker != null:
+		return
 	if _is_eye_open():
 		if event.is_action_pressed("ui_left"):
 			_eye_prev()
+			_flash_nav_frame(_eye_nav_sprite, 1)
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("ui_right"):
 			_eye_next()
+			_flash_nav_frame(_eye_nav_sprite, 2)
 			get_viewport().set_input_as_handled()
 	elif _is_memory_open():
 		if event.is_action_pressed("ui_up"):
 			_memory_prev()
+			_flash_nav_frame(_memory_nav_sprite, 2)
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("ui_down"):
 			_memory_next()
+			_flash_nav_frame(_memory_nav_sprite, 1)
 			get_viewport().set_input_as_handled()
 
 func _configure_sprite_frames() -> void:
@@ -377,6 +399,20 @@ func _bind_nav_press_feedback(button: Button, sprite: AnimatedSprite2D, pressed_
 		return
 	button.button_down.connect(func(): sprite.frame = pressed_frame)
 	button.button_up.connect(func(): sprite.frame = 0)
+
+## Keyboard/gamepad nav has no button_down/button_up pair, so briefly show the
+## pressed arrow frame and release it after a short beat. Called after the nav
+## handler (whose _refresh_all resets the sprite to frame 0), and the release
+## only fires if the flash frame is still showing, so a concurrent pointer
+## press is never stomped.
+func _flash_nav_frame(sprite: AnimatedSprite2D, pressed_frame: int) -> void:
+	if sprite == null or not is_inside_tree():
+		return
+	sprite.frame = pressed_frame
+	var release := func() -> void:
+		if is_instance_valid(sprite) and sprite.frame == pressed_frame:
+			sprite.frame = 0
+	get_tree().create_timer(NAV_FLASH_TIME).timeout.connect(release)
 
 func _connect_button(button: Button, cb: Callable) -> void:
 	if button == null:
@@ -1016,3 +1052,17 @@ func _step_eye_terminal(delta: float) -> void:
 	_eye_idle_wait -= delta
 	if _eye_idle_wait <= 0.0:
 		_eye_idle_frame = EYE_PATTERN_IDLE_START
+
+func _step_terminal_float(delta: float) -> void:
+	_terminal_float_time = fmod(_terminal_float_time + delta, TERMINAL_FLOAT_PERIOD)
+	var phase := _terminal_float_time / TERMINAL_FLOAT_PERIOD * TAU
+	_apply_terminal_float(_eye_terminal, _eye_terminal_base_pos, phase)
+	_apply_terminal_float(_memory_terminal, _memory_terminal_base_pos, phase + TERMINAL_FLOAT_MEMORY_PHASE)
+
+func _apply_terminal_float(terminal: AnimatedSprite2D, base_pos: Vector2, phase: float) -> void:
+	if terminal == null:
+		return
+	if terminal.frame != 0:
+		terminal.position = base_pos
+		return
+	terminal.position = base_pos + Vector2(0.0, round(sin(phase) * TERMINAL_FLOAT_AMPLITUDE))
