@@ -3,28 +3,58 @@ extends Control
 
 ## WYSIWYG upgrade hub controller. Visual sprite layers stay as authored scene
 ## nodes; this script only coordinates frame state, contextual panels, and buys.
+##
+## Issue #116: each terminal ("eye"/"memory") now shows exactly one power at a
+## time, cycled with prev/next navigation (pointer, keyboard ui_left/right or
+## ui_up/down, and gamepad — all via the shared ui_* input actions). The
+## carousel wraps at the ends: the nav art has no "disabled" frame, so wrapping
+## reads better than a dead-ended arrow.
 
 const START_MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const SETTINGS_ASSET := "ui/settings.png"
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
 const REWARD_AMP_IDS: Array[String] = ["corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"]
-const EYE_UPGRADE_IDS: Array[String] = ["perm_shift", "corr_pattern_23", "pos_learning", "pos_enlightenment"]
-const MEMORY_STATIC_UPGRADE_IDS: Array[String] = ["perm_memory", SMART_SAVE_UPGRADE_ID]
+## "" marks the locked/future-achievement slot baked into the new terminal art.
+const LOCKED_SLOT_ID := ""
+const EYE_CAROUSEL_IDS: Array[String] = ["corr_pattern_23", "pos_learning", "pos_enlightenment", LOCKED_SLOT_ID]
+## "reward_amp" is a pseudo-id resolved at display time to whichever reward-amp
+## tier is next to buy (or the maxed tier once all are owned).
+const REWARD_AMP_SLOT_ID := "reward_amp"
+const MEMORY_CAROUSEL_IDS: Array[String] = ["perm_memory", REWARD_AMP_SLOT_ID, SMART_SAVE_UPGRADE_ID, LOCKED_SLOT_ID]
 const HALLUCINATION_UPGRADE_ID := "pos_enlightenment"
-const EYE_ROW_RECTS := {
-	"perm_shift": Rect2(0.0, 0.0, 18.0, 16.0),
-	"pos_enlightenment": Rect2(22.0, 0.0, 20.0, 16.0),
-	"corr_pattern_23": Rect2(0.0, 14.0, 18.0, 9.0),
-	"pos_learning": Rect2(0.0, 23.0, 18.0, 16.0),
-}
-const MEMORY_ROW_RECTS := {
-	"perm_memory": Rect2(12.0, 2.0, 13.0, 13.0),
-	"reward_amp": Rect2(12.0, 16.0, 13.0, 10.0),
-	"pos_smart_save": Rect2(12.0, 28.0, 13.0, 12.0),
-}
-const EYE_TERMINAL_FRAMES := 12
+
+## Eye terminal sheet (13 frames): 0 closed, 1-4 boot-open growth, 5-9 pattern
+## fabrication idle loop, 10 book (static), 11 hallucination (static),
+## 12 locked/future (static).
+const EYE_TERMINAL_FRAMES := 13
+const EYE_BOOT_LAST_FRAME := 4
+const EYE_PATTERN_IDLE_START := 5
+const EYE_PATTERN_IDLE_END := 9
+const EYE_ITEM_STATIC_FRAME := { 1: 10, 2: 11, 3: 12 } # carousel index -> frame (index 0 uses the idle loop)
+
+## Memory terminal sheet (11 frames): 0 closed, 1-3 boot-open growth, 4 lock
+## (static), 5-8 reward-amp tiers 0..3 (static per owned tier), 9 smart save
+## (static), 10 locked/future (static).
+const MEMORY_TERMINAL_FRAMES := 11
+const MEMORY_BOOT_LAST_FRAME := 3
+const MEMORY_ITEM_STATIC_FRAME := { 0: 4, 2: 9, 3: 10 } # carousel index -> frame (index 1 = reward-amp tier lookup)
+const MEMORY_REWARD_AMP_FRAMES := [5, 6, 7, 8] # tier 0..3
+## Pixel centers of the three "+" pips baked into the reward-amp card art
+## (frame-local, top-left origin — _memory_terminal.centered is false),
+## measured from upgrades_scene_memory_upgrades.png. Owned tiers light the
+## first N pips with a procedural glow (no new art needed).
+const REWARD_AMP_PIP_CENTERS: Array[Vector2] = [Vector2(87.0, 304.0), Vector2(151.0, 304.0), Vector2(215.0, 304.0)]
+const REWARD_AMP_GLOW_DIAMETER := 64.0
+const REWARD_AMP_GLOW_COLOR := Color(1.0, 0.92, 0.55, 0.9)
+
 const AUTHORED_FRAME_WIDTH := 1280.0
 const FRAME_TIME := 0.08
+## Closed terminals (frame 0) bob up/down to read as clickable. Whole-pixel
+## offsets only, to keep the pixel art crisp on the 160x320 virtual canvas.
+const TERMINAL_FLOAT_PERIOD := 2.6
+const TERMINAL_FLOAT_AMPLITUDE := 1.0
+const TERMINAL_FLOAT_MEMORY_PHASE := PI * 0.5
+const NAV_FLASH_TIME := 0.12
 const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
 const COIN_ASSET := "ui/coin.png"
@@ -36,8 +66,6 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const CORRUPTED_NAME_IDS: Array[String] = ["corr_pattern_23", HALLUCINATION_UPGRADE_ID,
 	"corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"]
 @export var corrupt_name_color: Color = Color(0.66, 0.33, 0.86)
-const EDITOR_HITBOX_FILL := Color(0.13, 0.77, 0.37, 0.18)
-const EDITOR_HITBOX_BORDER := Color(0.13, 0.77, 0.37, 0.85)
 const BUBBLES_REST_FRAME := 12
 const BRAIN_MONEY_TARGET := Vector2(80.0, 128.0)
 const BUY_BUTTON_FONT_SIZE := 6
@@ -46,10 +74,8 @@ const REWARD_AMP_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const BG_DEFAULT_FRAME := 3
 const BG_FLASH_LAST_FRAME := 2
 const DEFAULT_DESCRIPTION := "Select a lab terminal."
-const SELECT_POWER_DESCRIPTION := "Select a power."
-const MACHINE_MANIPULATION_CATEGORY := "Machine Manipulations"
-const GAIN_BOOST_CATEGORY := "Gain Boosts"
-
+const LOCKED_SLOT_NAME := "???"
+const LOCKED_SLOT_DESCRIPTION := "Unlocks with future achievements."
 const DESCRIPTIONS := {
 	"perm_shift": "Shift one reel symbol up \n or down during a run.",
 	"corr_pattern_23": "Two matching symbols in slots 2 and 3 count as a triple.",
@@ -82,17 +108,6 @@ const DESCRIPTIONS := {
 		editor_preview_wallet = value
 		_refresh_all()
 
-@export_group("Editor Hitboxes")
-@export var show_terminal_hitboxes_in_editor: bool = true:
-	set(value):
-		show_terminal_hitboxes_in_editor = value
-		if is_inside_tree():
-			_style_terminal_hitboxes()
-
-@export_group("Upgrade Categories")
-@export var machine_manipulation_upgrade_ids: Array[String] = ["perm_shift", "perm_memory", "corr_pattern_23", "pos_learning"]
-@export var gain_boost_upgrade_ids: Array[String] = ["corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3", "pos_enlightenment", "pos_smart_save"]
-
 @onready var _bg := $upgrades_scene_bg as AnimatedSprite2D
 @onready var _brain := $upgrades_scene_brain as AnimatedSprite2D
 @onready var _bubbles := $upgrades_scene_bubbles as AnimatedSprite2D
@@ -102,18 +117,23 @@ const DESCRIPTIONS := {
 @onready var _layer := $upgrades_scene_layer as Sprite2D
 @onready var _eye_terminal := $upgrades_scene_eye_upgrades as AnimatedSprite2D
 @onready var _memory_terminal := $upgrades_scene_memory_upgrades as AnimatedSprite2D
+@onready var _eye_nav_sprite := $upgrades_scene_eye_buttons as AnimatedSprite2D
+@onready var _memory_nav_sprite := $upgrades_scene_memory_buttons as AnimatedSprite2D
 @onready var _lab_sign := $upgrades_scene_LAB_SIGN as AnimatedSprite2D
 @onready var _leak := $upgrades_scene_leak as AnimatedSprite2D
 @onready var _ui_container := $CanvasLayer/UI_Container as Control
 @onready var _wallet_label := $CanvasLayer/UI_Container/LucidtyCoinDisplay/Label as Label
 @onready var _wallet_coin := $CanvasLayer/UI_Container/LucidtyCoinDisplay/Coin as TextureRect
-@onready var _eye_panel := $CanvasLayer/UI_Container/EyeUpgradePanel as Control
-@onready var _memory_panel := $CanvasLayer/UI_Container/MemoryUpgradePanel as Control
 @onready var _power_name_box := $CanvasLayer/UI_Container/PowerNameBox as Control
 @onready var _power_name_label := $CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PowerNameLabel as Label
 @onready var _description_label := $CanvasLayer/UI_Container/DescriptionBubble/DescriptionCenter/Text as RichTextLabel
 @onready var _eye_hitbox := $CanvasLayer/UI_Container/EyeComputerHitbox as Button
 @onready var _memory_hitbox := $CanvasLayer/UI_Container/MemoryComputerHitbox as Button
+@onready var _eye_prev_button := $CanvasLayer/UI_Container/EyePrevButton as Button
+@onready var _eye_next_button := $CanvasLayer/UI_Container/EyeNextButton as Button
+@onready var _memory_prev_button := $CanvasLayer/UI_Container/MemoryPrevButton as Button
+@onready var _memory_next_button := $CanvasLayer/UI_Container/MemoryNextButton as Button
+@onready var _buy_stele := $CanvasLayer/UI_Container/BuyStele as Sprite2D
 @onready var _context_price_group := $CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup as Control
 @onready var _context_price_label := $CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/PriceLabel as Label
 @onready var _context_price_coin := $CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/Coin as TextureRect
@@ -123,7 +143,6 @@ const DESCRIPTIONS := {
 @onready var _options_overlay := $CanvasLayer/OptionsOverlay as OptionsOverlay
 
 var _rng := RandomNumberGenerator.new()
-var _selected_upgrade_row: Control = null
 var _bg_wait := 3.25
 var _bg_flash_frame := -1
 var _bg_flash_pause := 0.0
@@ -149,16 +168,26 @@ var _memory_active := false
 var _purchase_animating := false
 var _reward_amp_picker: Control = null
 var _pending_reward_amp_upgrade_id := ""
+var _eye_index := 0
+var _memory_index := 0
+var _reward_amp_glows: Array[Sprite2D] = []
+var _terminal_float_time := 0.0
+var _eye_terminal_base_pos := Vector2.ZERO
+var _memory_terminal_base_pos := Vector2.ZERO
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(160.0, 320.0)
 	_rng.randomize()
+	if _eye_terminal != null:
+		_eye_terminal_base_pos = _eye_terminal.position
+	if _memory_terminal != null:
+		_memory_terminal_base_pos = _memory_terminal.position
 	_configure_sprite_frames()
 	_configure_layer_visibility()
+	_build_reward_amp_glows()
 	_bind_buttons()
 	_apply_font(self)
 	_style_buttons(self)
-	_style_terminal_hitboxes()
 	_style_lucidity_displays()
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_refresh_all):
 		MetaStateStore.meta_changed.connect(_refresh_all)
@@ -177,6 +206,33 @@ func _process(delta: float) -> void:
 	_step_sign(delta)
 	_step_leak(delta)
 	_step_eye_terminal(delta)
+	_step_terminal_float(delta)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if Engine.is_editor_hint() or _purchase_animating:
+		return
+	# The reward-amp symbol picker is modal: while it is open, carousel
+	# navigation must not leak through underneath it.
+	if _reward_amp_picker != null:
+		return
+	if _is_eye_open():
+		if event.is_action_pressed("ui_left"):
+			_eye_prev()
+			_flash_nav_frame(_eye_nav_sprite, 1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_right"):
+			_eye_next()
+			_flash_nav_frame(_eye_nav_sprite, 2)
+			get_viewport().set_input_as_handled()
+	elif _is_memory_open():
+		if event.is_action_pressed("ui_up"):
+			_memory_prev()
+			_flash_nav_frame(_memory_nav_sprite, 2)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_down"):
+			_memory_next()
+			_flash_nav_frame(_memory_nav_sprite, 1)
+			get_viewport().set_input_as_handled()
 
 func _configure_sprite_frames() -> void:
 	_configure_animated_sprite(_bg, "upgrade_scene/upgrades_scene_bg.png", 4, BG_DEFAULT_FRAME)
@@ -187,7 +243,9 @@ func _configure_sprite_frames() -> void:
 	_configure_animated_sprite(_cables, "upgrade_scene/upgrades_scene_cables.png", 11, 0)
 	_configure_sprite(_layer, 1, 0)
 	_configure_animated_sprite(_eye_terminal, "upgrade_scene/upgrades_scene_eye_upgrades.png", EYE_TERMINAL_FRAMES, 0)
-	_configure_animated_sprite(_memory_terminal, "upgrade_scene/upgrades_scene_memory_upgrades.png", 5, 0)
+	_configure_animated_sprite(_memory_terminal, "upgrade_scene/upgrades_scene_memory_upgrades.png", MEMORY_TERMINAL_FRAMES, 0)
+	_configure_animated_sprite(_eye_nav_sprite, "upgrade_scene/upgrades_scene_eye_buttons.png", 3, 0)
+	_configure_animated_sprite(_memory_nav_sprite, "upgrade_scene/upgrades_scene_memory_buttons.png", 3, 0)
 	_configure_animated_sprite(_lab_sign, "upgrade_scene/upgrades_scene_LAB_SIGN.png", 2, 0)
 	_configure_animated_sprite(_leak, "upgrade_scene/upgrades_scene_leak.png", 11, 0)
 
@@ -299,6 +357,10 @@ func _configure_layer_visibility() -> void:
 		_eye_terminal.z_index = 10
 	if _memory_terminal != null:
 		_memory_terminal.z_index = 10
+	if _eye_nav_sprite != null:
+		_eye_nav_sprite.z_index = 11
+	if _memory_nav_sprite != null:
+		_memory_nav_sprite.z_index = 11
 	if _lab_sign != null:
 		_lab_sign.z_index = 20
 	if _leak != null:
@@ -311,9 +373,46 @@ func _bind_buttons() -> void:
 	_connect_button(_memory_hitbox, _activate_memory)
 	_connect_button(_context_buy_button, _buy_selected_upgrade)
 	_connect_button(_back_button, _go_back)
+	_connect_button(_eye_prev_button, _eye_prev)
+	_connect_button(_eye_next_button, _eye_next)
+	_connect_button(_memory_prev_button, _memory_prev)
+	_connect_button(_memory_next_button, _memory_next)
+	_bind_nav_press_feedback(_eye_prev_button, _eye_nav_sprite, 1)
+	_bind_nav_press_feedback(_eye_next_button, _eye_nav_sprite, 2)
+	# MemoryPrevButton sits at the TOP hitbox, MemoryNextButton at the BOTTOM
+	# one — the sheet's pressed frames are (1=bottom, 2=top), so prev maps to
+	# the top-pressed frame and next to the bottom-pressed frame.
+	_bind_nav_press_feedback(_memory_prev_button, _memory_nav_sprite, 2)
+	_bind_nav_press_feedback(_memory_next_button, _memory_nav_sprite, 1)
 	_bind_options_button()
-	for row in _upgrade_rows():
-		row.gui_input.connect(_inspect_row.bind(row))
+	for button in [_eye_hitbox, _memory_hitbox, _eye_prev_button, _eye_next_button, _memory_prev_button, _memory_next_button]:
+		if button != null:
+			button.add_theme_stylebox_override(&"normal", StyleBoxEmpty.new())
+			button.add_theme_stylebox_override(&"pressed", StyleBoxEmpty.new())
+			button.add_theme_stylebox_override(&"hover", StyleBoxEmpty.new())
+			button.add_theme_stylebox_override(&"focus", StyleBoxEmpty.new())
+
+## Swaps the paired arrow sprite to its pressed frame while a nav button is
+## held, so pointer, keyboard, and gamepad presses all get the same art feedback.
+func _bind_nav_press_feedback(button: Button, sprite: AnimatedSprite2D, pressed_frame: int) -> void:
+	if button == null or sprite == null:
+		return
+	button.button_down.connect(func(): sprite.frame = pressed_frame)
+	button.button_up.connect(func(): sprite.frame = 0)
+
+## Keyboard/gamepad nav has no button_down/button_up pair, so briefly show the
+## pressed arrow frame and release it after a short beat. Called after the nav
+## handler (whose _refresh_all resets the sprite to frame 0), and the release
+## only fires if the flash frame is still showing, so a concurrent pointer
+## press is never stomped.
+func _flash_nav_frame(sprite: AnimatedSprite2D, pressed_frame: int) -> void:
+	if sprite == null or not is_inside_tree():
+		return
+	sprite.frame = pressed_frame
+	var release := func() -> void:
+		if is_instance_valid(sprite) and sprite.frame == pressed_frame:
+			sprite.frame = 0
+	get_tree().create_timer(NAV_FLASH_TIME).timeout.connect(release)
 
 func _connect_button(button: Button, cb: Callable) -> void:
 	if button == null:
@@ -360,38 +459,16 @@ func _apply_font(node: Node) -> void:
 func _style_buttons(node: Node) -> void:
 	if node is OptionsOverlay:
 		return
+	var skip_names := ["EyeComputerHitbox", "MemoryComputerHitbox", "EyePrevButton", "EyeNextButton", "MemoryPrevButton", "MemoryNextButton"]
 	for child in node.get_children():
 		if child is Button:
 			var button := child as Button
-			if button.name != "EyeComputerHitbox" and button.name != "MemoryComputerHitbox":
+			if not skip_names.has(button.name):
 				if button.name == "BackButton":
 					Assets.skin_negative_button(button)
 				else:
 					Assets.skin_sheet_button(button, "ui/green_button.png", 4)
 		_style_buttons(child)
-
-func _style_terminal_hitboxes() -> void:
-	var stylebox: StyleBox = _make_empty_hitbox_style()
-	if Engine.is_editor_hint() and show_terminal_hitboxes_in_editor:
-		stylebox = _make_editor_hitbox_style()
-	for button in [_eye_hitbox, _memory_hitbox]:
-		if button == null:
-			continue
-		for state in [&"normal", &"pressed", &"hover", &"focus"]:
-			button.add_theme_stylebox_override(state, stylebox)
-
-func _make_empty_hitbox_style() -> StyleBoxEmpty:
-	return StyleBoxEmpty.new()
-
-func _make_editor_hitbox_style() -> StyleBoxFlat:
-	var stylebox := StyleBoxFlat.new()
-	stylebox.bg_color = EDITOR_HITBOX_FILL
-	stylebox.border_color = EDITOR_HITBOX_BORDER
-	stylebox.border_width_left = 1
-	stylebox.border_width_top = 1
-	stylebox.border_width_right = 1
-	stylebox.border_width_bottom = 1
-	return stylebox
 
 func _style_lucidity_displays() -> void:
 	for coin in [_wallet_coin, _context_price_coin]:
@@ -432,25 +509,81 @@ func _refresh_all() -> void:
 	_eye_overlay.visible = eye_open
 	_memory_overlay.visible = memory_open
 	_sync_brain_overlay_frames()
-	_eye_panel.visible = eye_open
-	_memory_panel.visible = memory_open
 	if eye_open and not _eye_active and not _eye_opening:
-		_eye_terminal.frame = 7
+		_eye_terminal.frame = EYE_PATTERN_IDLE_START
+	_refresh_nav_visibility()
 	_refresh_memory_frame()
 	_refresh_upgrade_ui()
 	_refresh_power_name_box()
 	_refresh_context_buy_button()
 
+func _refresh_nav_visibility() -> void:
+	var eye_open := _is_eye_open()
+	var memory_open := _is_memory_open()
+	if _eye_nav_sprite != null:
+		_eye_nav_sprite.visible = eye_open
+		_eye_nav_sprite.frame = 0
+	if _memory_nav_sprite != null:
+		_memory_nav_sprite.visible = memory_open
+		_memory_nav_sprite.frame = 0
+	for button in [_eye_prev_button, _eye_next_button]:
+		if button != null:
+			button.visible = eye_open
+			button.disabled = not eye_open
+	for button in [_memory_prev_button, _memory_next_button]:
+		if button != null:
+			button.visible = memory_open
+			button.disabled = not memory_open
+
 func _refresh_upgrade_ui() -> void:
 	if not is_inside_tree():
 		return
-	var wallet := _wallet()
-	_wallet_label.text = "%d" % wallet
-	for id in EYE_UPGRADE_IDS:
-		_refresh_row("EyeUpgradePanel", id, id)
-	for id in MEMORY_STATIC_UPGRADE_IDS:
-		_refresh_row("MemoryUpgradePanel", id, id)
-	_refresh_reward_amp_row()
+	_wallet_label.text = "%d" % _wallet()
+
+## Carousel navigation — wraps at the ends (the nav art has no "disabled" state).
+func _eye_prev() -> void:
+	if not _is_eye_open() or EYE_CAROUSEL_IDS.is_empty():
+		return
+	_eye_index = (_eye_index - 1 + EYE_CAROUSEL_IDS.size()) % EYE_CAROUSEL_IDS.size()
+	_refresh_all()
+
+func _eye_next() -> void:
+	if not _is_eye_open() or EYE_CAROUSEL_IDS.is_empty():
+		return
+	_eye_index = (_eye_index + 1) % EYE_CAROUSEL_IDS.size()
+	_refresh_all()
+
+func _memory_prev() -> void:
+	if not _is_memory_open() or MEMORY_CAROUSEL_IDS.is_empty():
+		return
+	_memory_index = (_memory_index - 1 + MEMORY_CAROUSEL_IDS.size()) % MEMORY_CAROUSEL_IDS.size()
+	_refresh_all()
+
+func _memory_next() -> void:
+	if not _is_memory_open() or MEMORY_CAROUSEL_IDS.is_empty():
+		return
+	_memory_index = (_memory_index + 1) % MEMORY_CAROUSEL_IDS.size()
+	_refresh_all()
+
+## Resolves the pseudo-id "reward_amp" to whichever reward-amp tier is next to
+## buy, or the maxed tier once all are owned — mirrors the old single-row logic.
+func _resolve_carousel_id(raw_id: String) -> String:
+	if raw_id != REWARD_AMP_SLOT_ID:
+		return raw_id
+	var next_id := _next_reward_amp_id()
+	return "corr_reward_amp_3" if next_id.is_empty() else next_id
+
+## The upgrade id currently shown by whichever terminal is open, or "" if
+## neither is open. Distinguishes the locked-placeholder slot (also "") from
+## "nothing open" via the separate _is_eye_open()/_is_memory_open() checks at
+## call sites — callers that need the locked-slot case check terminal-open
+## state first.
+func _current_upgrade_id() -> String:
+	if _is_eye_open():
+		return _resolve_carousel_id(EYE_CAROUSEL_IDS[_eye_index])
+	if _is_memory_open():
+		return _resolve_carousel_id(MEMORY_CAROUSEL_IDS[_memory_index])
+	return ""
 
 func _sync_brain_overlay_frames() -> void:
 	if _brain == null:
@@ -469,55 +602,9 @@ func _sync_overlay_to_frame(overlay: AnimatedSprite2D, brain_frame: int) -> void
 		return
 	overlay.frame = clampi(brain_frame, 0, frame_count - 1)
 
-func _refresh_row(panel_name: String, row_name: String, upgrade_id: String) -> void:
-	var row := get_node_or_null("CanvasLayer/UI_Container/%s/%s" % [panel_name, row_name]) as Control
-	if row == null:
-		return
-	if panel_name == "EyeUpgradePanel" and EYE_ROW_RECTS.has(row_name):
-		var rect: Rect2 = EYE_ROW_RECTS[row_name]
-		row.position = rect.position
-		row.size = rect.size
-	elif panel_name == "MemoryUpgradePanel" and MEMORY_ROW_RECTS.has(row_name):
-		var rect: Rect2 = MEMORY_ROW_RECTS[row_name]
-		row.position = rect.position
-		row.size = rect.size
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	row.set_meta("upgrade_id", upgrade_id)
-	row.set_meta("concept_category", _concept_category_for_upgrade(upgrade_id))
-	var upgrade := _upgrade(upgrade_id)
-	var name_label := _row_name_label(row)
-	if name_label != null:
-		name_label.text = _display_name(upgrade_id, upgrade)
-		name_label.visible = false
-		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-func _refresh_reward_amp_row() -> void:
-	var next_id := _next_reward_amp_id()
-	var row := get_node_or_null("CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp") as Control
-	if row == null:
-		return
-	if MEMORY_ROW_RECTS.has("reward_amp"):
-		var rect: Rect2 = MEMORY_ROW_RECTS["reward_amp"]
-		row.position = rect.position
-		row.size = rect.size
-	var owned_all := next_id.is_empty()
-	var id := "corr_reward_amp_3" if owned_all else next_id
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	row.set_meta("upgrade_id", id)
-	row.set_meta("concept_category", _concept_category_for_upgrade(id))
-	var label := _row_name_label(row)
-	if label != null:
-		label.text = "Rewards+"
-		label.visible = false
-
-func _concept_category_for_upgrade(upgrade_id: String) -> String:
-	if machine_manipulation_upgrade_ids.has(upgrade_id):
-		return MACHINE_MANIPULATION_CATEGORY
-	if gain_boost_upgrade_ids.has(upgrade_id):
-		return GAIN_BOOST_CATEGORY
-	return "Unsorted"
-
 func _display_name(upgrade_id: String, upgrade: Dictionary) -> String:
+	if upgrade_id == LOCKED_SLOT_ID:
+		return LOCKED_SLOT_NAME
 	if upgrade_id == "perm_shift":
 		return "Shift Power"
 	if upgrade_id == "pos_learning":
@@ -531,12 +618,6 @@ func _display_name(upgrade_id: String, upgrade: Dictionary) -> String:
 	if upgrade_id == "pos_smart_save":
 		return "Saving"
 	return String(upgrade.get("name", upgrade_id))
-
-func _row_name_label(row: Control) -> Label:
-	var grouped := row.get_node_or_null("Info/NameLabel") as Label
-	if grouped != null:
-		return grouped
-	return row.get_node_or_null("NameLabel") as Label
 
 func _upgrade(upgrade_id: String) -> Dictionary:
 	var map := Upgrades.upgrade_map()
@@ -562,24 +643,15 @@ func _next_reward_amp_id() -> String:
 			return id
 	return ""
 
-func _upgrade_rows() -> Array[Control]:
-	var rows: Array[Control] = []
-	for panel in [_eye_panel, _memory_panel]:
-		if panel == null:
-			continue
-		for child in panel.get_children():
-			if child is Control and child.has_node("NameLabel"):
-				rows.append(child as Control)
-	return rows
-
 func _buy_selected_upgrade() -> void:
-	if _purchase_animating or _selected_upgrade_row == null:
+	if _purchase_animating:
 		_refresh_context_buy_button()
 		return
-	if Engine.is_editor_hint() or not _selected_upgrade_row.has_meta("upgrade_id"):
-		_describe_row(_selected_upgrade_row)
+	if Engine.is_editor_hint():
 		return
-	var upgrade_id := String(_selected_upgrade_row.get_meta("upgrade_id"))
+	var upgrade_id := _current_upgrade_id()
+	if upgrade_id == LOCKED_SLOT_ID:
+		return
 	var upgrade := _upgrade(upgrade_id)
 	var price := int(upgrade.get("cost", 0)) if not upgrade.is_empty() else 0
 	if _owned(upgrade_id) or price > _wallet() or not _requirements_met(upgrade):
@@ -597,7 +669,6 @@ func _complete_upgrade_purchase(upgrade_id: String) -> void:
 	MetaStateStore.buy_upgrade(upgrade_id)
 	_purchase_animating = false
 	_refresh_all()
-	_describe_row(_selected_upgrade_row)
 
 func _build_reward_amp_picker(upgrade_id: String) -> void:
 	if _reward_amp_picker != null:
@@ -667,13 +738,22 @@ func _animate_money_to_brain() -> void:
 func _refresh_context_buy_button() -> void:
 	if _context_buy_button == null:
 		return
-	var row := _selected_upgrade_row
-	if row == null or not row.has_meta("upgrade_id") or not _is_selected_row_panel_open(row):
+	# The stele is furniture: it's always visible, whether or not a terminal
+	# is open, unlike the interactive BUY button and price, which only make
+	# sense once a purchasable power is showing.
+	if _buy_stele != null:
+		_buy_stele.visible = true
+	if not (_is_eye_open() or _is_memory_open()):
 		_context_buy_button.visible = false
 		if _context_price_group != null:
 			_context_price_group.visible = false
 		return
-	var upgrade_id := String(row.get_meta("upgrade_id"))
+	var upgrade_id := _current_upgrade_id()
+	if upgrade_id == LOCKED_SLOT_ID:
+		_context_buy_button.visible = false
+		if _context_price_group != null:
+			_context_price_group.visible = false
+		return
 	var upgrade := _upgrade(upgrade_id)
 	var owned := _owned(upgrade_id)
 	var price := int(upgrade.get("cost", 0)) if not upgrade.is_empty() else 0
@@ -687,40 +767,22 @@ func _refresh_context_buy_button() -> void:
 	if _context_price_label != null:
 		_context_price_label.text = "%d" % price
 
-func _describe_row(row: Control) -> void:
-	if row == null or not row.has_meta("upgrade_id"):
-		return
-	var upgrade_id := String(row.get_meta("upgrade_id"))
-	_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true, upgrade_id)
-	var description := String(DESCRIPTIONS.get(upgrade_id, ""))
-	if REWARD_AMP_IDS.has(upgrade_id) and String(MetaStateStore.rewardAmpSymbol) != "":
-		description += "\nTarget: %s" % String(MetaStateStore.rewardAmpSymbol).to_upper()
-	_set_description(description)
-
-func _inspect_row(event: InputEvent, row: Control) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		_select_row(row)
-		get_viewport().set_input_as_handled()
-	elif event is InputEventScreenTouch and event.pressed:
-		_select_row(row)
-		get_viewport().set_input_as_handled()
-
-func _select_row(row: Control) -> void:
-	_selected_upgrade_row = row
-	_describe_row(row)
-	_refresh_context_buy_button()
-
 func _refresh_power_name_box() -> void:
 	if _power_name_box == null or _power_name_label == null:
 		return
-	if _selected_upgrade_row != null and _selected_upgrade_row.has_meta("upgrade_id") and _is_selected_row_panel_open(_selected_upgrade_row):
-		var upgrade_id := String(_selected_upgrade_row.get_meta("upgrade_id"))
+	if _is_eye_open() or _is_memory_open():
+		var upgrade_id := _current_upgrade_id()
 		_set_power_name(_display_name(upgrade_id, _upgrade(upgrade_id)), true, upgrade_id)
+		var description := LOCKED_SLOT_DESCRIPTION if upgrade_id == LOCKED_SLOT_ID else String(DESCRIPTIONS.get(upgrade_id, ""))
+		if REWARD_AMP_IDS.has(upgrade_id) and String(MetaStateStore.rewardAmpSymbol) != "":
+			description += "\nTarget: %s" % String(MetaStateStore.rewardAmpSymbol).to_upper()
+		_set_description(description)
 		return
-	if _is_eye_open() or _is_memory_open() or Engine.is_editor_hint():
+	if Engine.is_editor_hint():
 		_set_power_name("SELECT POWER", true)
 	else:
 		_set_power_name("", false)
+	_set_description(DEFAULT_DESCRIPTION)
 
 func _set_power_name(text: String, visible: bool, upgrade_id := "") -> void:
 	if _power_name_box != null:
@@ -744,25 +806,26 @@ func _set_description(text: String) -> void:
 func _activate_eye() -> void:
 	_reset_memory_terminal()
 	if _is_eye_open():
-		_clear_selected_upgrade()
+		_eye_active = false
+		_eye_terminal.frame = 0
 		_refresh_all()
 		return
 	_eye_active = true
 	_eye_opening = true
 	_eye_open_frame = 1
 	_eye_open_time = 0.0
+	_eye_index = 0
 	_eye_terminal.frame = _eye_open_frame
-	_clear_selected_upgrade()
 	_refresh_all()
 
 func _activate_memory() -> void:
 	_reset_eye_terminal()
 	if _is_memory_open():
-		_clear_selected_upgrade()
+		_memory_active = false
 		_refresh_all()
 		return
 	_memory_active = true
-	_clear_selected_upgrade()
+	_memory_index = 0
 	_refresh_all()
 
 func _reset_eye_terminal() -> void:
@@ -796,42 +859,57 @@ func _is_eye_open() -> bool:
 func _is_memory_open() -> bool:
 	return _memory_active or (Engine.is_editor_hint() and editor_preview_memory_active)
 
-func _is_panel_open(panel_name: String) -> bool:
-	if panel_name == "EyeUpgradePanel":
-		return _is_eye_open()
-	if panel_name == "MemoryUpgradePanel":
-		return _is_memory_open()
-	return false
-
-func _is_selected_row_panel_open(row: Control) -> bool:
-	var panel := row.get_parent() as Control
-	if panel == null:
-		return false
-	return _is_panel_open(panel.name)
-
-func _clear_selected_upgrade() -> void:
-	_selected_upgrade_row = null
-	if _context_buy_button != null:
-		_context_buy_button.visible = false
-	if _context_price_group != null:
-		_context_price_group.visible = false
-	if _is_eye_open() or _is_memory_open():
-		_set_description(SELECT_POWER_DESCRIPTION)
-	else:
-		_set_description(DEFAULT_DESCRIPTION)
-	_refresh_power_name_box()
-
 func _refresh_memory_frame() -> void:
 	if _memory_terminal == null:
 		return
 	if not _is_memory_open():
 		_memory_terminal.frame = 0
+		_set_reward_amp_glow_tier(0)
 		return
-	var tier := 0
-	for i in REWARD_AMP_IDS.size():
-		if _owned(REWARD_AMP_IDS[i]):
-			tier = i + 1
-	_memory_terminal.frame = clampi(1 + tier, 1, 4)
+	var raw_id := MEMORY_CAROUSEL_IDS[_memory_index]
+	if raw_id == REWARD_AMP_SLOT_ID:
+		var tier := 0
+		for i in REWARD_AMP_IDS.size():
+			if _owned(REWARD_AMP_IDS[i]):
+				tier = i + 1
+		_memory_terminal.frame = MEMORY_REWARD_AMP_FRAMES[clampi(tier, 0, MEMORY_REWARD_AMP_FRAMES.size() - 1)]
+		_set_reward_amp_glow_tier(tier)
+		return
+	_memory_terminal.frame = int(MEMORY_ITEM_STATIC_FRAME.get(_memory_index, 0))
+	_set_reward_amp_glow_tier(0)
+
+## Builds a small radial-gradient glow sprite per reward-amp pip (no new art
+## needed — procedural GradientTexture2D), parented under _memory_terminal so
+## it inherits the terminal's 0.125 scale and lines up with the baked pips.
+func _build_reward_amp_glows() -> void:
+	if _memory_terminal == null or not _reward_amp_glows.is_empty():
+		return
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var glow_texture := GradientTexture2D.new()
+	glow_texture.gradient = gradient
+	glow_texture.fill = GradientTexture2D.FILL_RADIAL
+	glow_texture.fill_from = Vector2(0.5, 0.5)
+	glow_texture.fill_to = Vector2(1.0, 0.5)
+	glow_texture.width = int(REWARD_AMP_GLOW_DIAMETER)
+	glow_texture.height = int(REWARD_AMP_GLOW_DIAMETER)
+	var material := CanvasItemMaterial.new()
+	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	for center in REWARD_AMP_PIP_CENTERS:
+		var glow := Sprite2D.new()
+		glow.name = "RewardAmpGlow%d" % _reward_amp_glows.size()
+		glow.texture = glow_texture
+		glow.material = material
+		glow.position = center
+		glow.modulate = REWARD_AMP_GLOW_COLOR
+		glow.visible = false
+		_memory_terminal.add_child(glow)
+		_reward_amp_glows.append(glow)
+
+func _set_reward_amp_glow_tier(tier: int) -> void:
+	for i in _reward_amp_glows.size():
+		_reward_amp_glows[i].visible = i < tier
 
 func _step_background(delta: float) -> void:
 	if _bg == null:
@@ -937,26 +1015,54 @@ func _step_eye_terminal(delta: float) -> void:
 		_eye_open_time = 0.0
 		_eye_terminal.frame = _eye_open_frame
 		_eye_open_frame += 1
-		if _eye_open_frame > 7:
+		if _eye_open_frame > EYE_BOOT_LAST_FRAME:
 			_eye_opening = false
 			_eye_active = true
-			_eye_terminal.frame = 7
+			_eye_terminal.frame = EYE_PATTERN_IDLE_START
 			_refresh_all()
 		return
 	if not _is_eye_open():
 		_eye_terminal.frame = 0
 		return
+	# Only the pattern-fabrication slot (carousel index 0) has an idle-loop
+	# animation; the other items show a single static frame (set in
+	# _refresh_all/_refresh_all's caller instead of here).
+	if _eye_index != 0:
+		_eye_idle_frame = -1
+		_eye_terminal.frame = int(EYE_ITEM_STATIC_FRAME.get(_eye_index, EYE_PATTERN_IDLE_START))
+		return
 	if _eye_idle_frame >= 0:
 		_eye_idle_time += delta
 		if _eye_idle_time >= FRAME_TIME:
 			_eye_idle_time = 0.0
-			_eye_terminal.frame = _eye_idle_frame
-			_eye_idle_frame += 1
-			if _eye_idle_frame >= EYE_TERMINAL_FRAMES:
+			# Let the counter run one past the end so the last loop frame
+			# holds for a full FRAME_TIME before the rest branch takes over.
+			if _eye_idle_frame > EYE_PATTERN_IDLE_END:
 				_eye_idle_frame = -1
-				_eye_terminal.frame = 7
 				_eye_idle_wait = _rng.randf_range(1.4, 3.1)
+				_eye_terminal.frame = EYE_PATTERN_IDLE_START
+			else:
+				_eye_terminal.frame = _eye_idle_frame
+				_eye_idle_frame += 1
 		return
+	# Resting on the pattern-fabrication slot: always show its rest frame
+	# immediately (never leave a stale frame from a previously-shown item
+	# lingering until the ambient idle-wait timer happens to expire).
+	_eye_terminal.frame = EYE_PATTERN_IDLE_START
 	_eye_idle_wait -= delta
 	if _eye_idle_wait <= 0.0:
-		_eye_idle_frame = 7
+		_eye_idle_frame = EYE_PATTERN_IDLE_START
+
+func _step_terminal_float(delta: float) -> void:
+	_terminal_float_time = fmod(_terminal_float_time + delta, TERMINAL_FLOAT_PERIOD)
+	var phase := _terminal_float_time / TERMINAL_FLOAT_PERIOD * TAU
+	_apply_terminal_float(_eye_terminal, _eye_terminal_base_pos, phase)
+	_apply_terminal_float(_memory_terminal, _memory_terminal_base_pos, phase + TERMINAL_FLOAT_MEMORY_PHASE)
+
+func _apply_terminal_float(terminal: AnimatedSprite2D, base_pos: Vector2, phase: float) -> void:
+	if terminal == null:
+		return
+	if terminal.frame != 0:
+		terminal.position = base_pos
+		return
+	terminal.position = base_pos + Vector2(0.0, round(sin(phase) * TERMINAL_FLOAT_AMPLITUDE))
