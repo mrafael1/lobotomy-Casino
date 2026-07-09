@@ -36,6 +36,12 @@ static func _rescore(before: Array, after: Array, lucidity_multiplier: float,
 		out["bookTripleChoice"] = bool(new["bookTripleChoice"])
 	return out
 
+## Issue #118: Random must never redraw the symbol already occupying its target —
+## excludes it from the weighted candidate pool before the draw. Returns an empty
+## array when nothing else remains to draw (caller must fail safely in that case).
+static func random_candidate_weights(symbol_weights: Array, exclude_symbol: String) -> Array:
+	return symbol_weights.filter(func(w): return String(w["value"]) != exclude_symbol)
+
 static func apply_reroll(reels: Array, reel_index: int, rng: LobRNG, lucidity_multiplier: float,
 		symbol_weights: Array, pattern23: bool = false, learning: bool = false,
 		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
