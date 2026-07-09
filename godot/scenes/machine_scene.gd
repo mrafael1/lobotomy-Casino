@@ -128,6 +128,19 @@ const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_REWARD_AMP_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
+# Issue #119: authored points-table art. Both sheets are the full 160x320 canvas
+# at x8 (1280x2240); the information sheet only holds the per-row "i" buttons, so
+# each button is cropped from its first cluster and placed at the art's own
+# canvas-space rects (source px / 8).
+const SCORE_TABLE_ART := "TABLE/TABLES SCORE.png"
+const SCORE_TABLE_INFO_ART := "TABLE/TABLES SCORE_information.png"
+const SCORE_TABLE_INFO_SRC := Rect2(1032.0, 560.0, 56.0, 56.0)
+const SCORE_TABLE_INFO_X := 129.0
+const SCORE_TABLE_INFO_SIZE := 7.0
+const SCORE_TABLE_INFO_ROW_Y := [70.0, 108.0, 146.0, 184.0, 222.0, 261.0]
+const SCORE_TABLE_LVL_CX := 66.0
+const SCORE_TABLE_PAIR_CX := 99.0
+const SCORE_TABLE_TRIPLE_CX := 131.5
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
@@ -346,6 +359,8 @@ var _dealer_offer_popup: Control = null
 var _dealer_message_label: Label = null
 var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
+var _score_info_popup: Control = null
+var _score_info_buttons: Array[Button] = []
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
@@ -2800,8 +2815,10 @@ func _show_score_table() -> void:
 		_close_score_table()
 		return
 	_clear_targeting()
+	_score_info_buttons.clear()
 	_score_overlay = Control.new()
 	_score_overlay.size = Vector2(SRC_W, SRC_H)
+	_score_overlay.z_index = 130 # above HUD extras, below the options overlay (140)
 	add_child(_score_overlay)
 
 	var dim := ColorRect.new()
@@ -2809,54 +2826,36 @@ func _show_score_table() -> void:
 	dim.size = Vector2(SRC_W, SRC_H)
 	_score_overlay.add_child(dim)
 
-	var panel := ColorRect.new()
-	panel.color = Color(0.045, 0.035, 0.075, 0.96)
-	panel.position = Vector2(9.0, 26.0)
-	panel.size = Vector2(142.0, 260.0)
-	_score_overlay.add_child(panel)
-
-	_score_label(_score_overlay, "TABLES", Vector2(17.0, 34.0), 12, Color(1.0, 0.82, 0.28))
-
-	# SYMBOL | LVL | PAIR | TRIPLE (issue #51) — no run stats, no symbol names.
-	# Columns place by measured text width: a Label can never shrink below its text
-	# (DTM-Sans is wide), so fixed-width right alignment silently overflows instead.
-	var lvl_cx := 54.0
-	var pair_right := 102.0
-	var triple_right := 146.0
-	var header_y := 56.0
-	_score_label(_score_overlay, "SYMBOL", Vector2(15.0, header_y), 7, Color(0.0, 0.9, 1.0))
-	_score_label_centered(_score_overlay, "LVL", lvl_cx, header_y, 7, Color(0.0, 0.9, 1.0))
-	_score_label_right(_score_overlay, "PAIR", pair_right, header_y, 7, Color(0.0, 0.9, 1.0))
-	_score_label_right(_score_overlay, "TRIPLE", triple_right, header_y, 7, Color(0.0, 0.9, 1.0))
+	# Authored full-canvas table art (issue #119): SYMBOL|LVL|PAIR|TRIPLE header,
+	# row grid and symbol icons are baked in; only the live values are labels.
+	var art := TextureRect.new()
+	art.name = "TableArt"
+	art.texture = _load_texture(SCORE_TABLE_ART, true)
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.size = Vector2(SRC_W, SRC_H)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_overlay.add_child(art)
 
 	var reward_amp_symbol := String(MetaStateStore.rewardAmpSymbol)
 	var reward_amp_bonus := Economy.compute_symbol_reward_amp_bonus(RunStateStore.ownedUpgrades)
-	var y := 74.0
-	for sym in Symbols.BASE_SYMBOL_CYCLE:
-		var symbol_id := String(sym)
-		var icon := TextureRect.new()
-		icon.texture = _load_texture("symbols/%s.png" % symbol_id, true)
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		# IGNORE_SIZE must be set BEFORE size: with the default expand mode the
-		# texture's own size is the minimum, so the box silently refuses to shrink —
-		# that's what kept these icons stuck at full art size.
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.position = Vector2(15.0, y - 1.0)
-		icon.size = Vector2(20.0, 20.0)
-		_score_overlay.add_child(icon)
+	for i in Symbols.BASE_SYMBOL_CYCLE.size():
+		var symbol_id := String(Symbols.BASE_SYMBOL_CYCLE[i])
+		var btn_y := float(SCORE_TABLE_INFO_ROW_Y[i])
+		var value_y := btn_y - 15.0
 
-		# Permanent odds level (issue #51): the same levels bought at the dealer's
-		# odds table; dimmed when the symbol was never upgraded.
+		# Permanent odds level: the same levels bought at the dealer's odds table;
+		# dimmed when the symbol was never upgraded.
 		var level := RunStateStore.odds_upgrade_level(symbol_id)
 		var is_maxed := level >= int(RunStateStore.odds_max_level)
 		var level_color := SCORE_TABLE_MAXED_COLOR if is_maxed else (
 			SCORE_TABLE_LEVEL_COLOR if level > 0 else SCORE_TABLE_DIM_COLOR)
-		_score_label_centered(_score_overlay, str(level), lvl_cx, y + 2.0, 7, level_color)
+		_score_label_centered(_score_overlay, str(level), SCORE_TABLE_LVL_CX, value_y, 7, level_color)
 		if is_maxed:
-			_score_label(_score_overlay, "(%s)" % _reward_bonus_text(
+			_score_label_centered(_score_overlay, "(%s)" % _reward_bonus_text(
 				float(RunStateStore.odds_max_level_reward_bonus)),
-				Vector2(lvl_cx + 6.0, y + 4.0), 4, SCORE_TABLE_MAXED_COLOR)
+				SCORE_TABLE_LVL_CX, value_y + 11.0, 4, SCORE_TABLE_MAXED_COLOR)
 
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
@@ -2866,27 +2865,152 @@ func _show_score_table() -> void:
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
 		var triple_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else (
 			SCORE_TABLE_BRAIN_COLOR if symbol_id == "brain" else SCORE_TABLE_GAIN_COLOR)
-		_score_label_right(_score_overlay, "+%d" % pair, pair_right, y + 2.0, 7, pair_color)
-		_score_label_right(_score_overlay, "+%d" % triple, triple_right, y + 2.0, 7, triple_color)
-		# Little bonus-effect blurb under the triple value (issue #51).
-		_score_label_right(_score_overlay, _triple_effect_text(symbol_id), triple_right, y + 12.0, 4,
-			Color(0.58, 0.64, 0.72))
+		_score_label_centered(_score_overlay, "+%d" % pair, SCORE_TABLE_PAIR_CX, value_y, 7, pair_color)
+		_score_label_centered(_score_overlay, "+%d" % triple, SCORE_TABLE_TRIPLE_CX, value_y, 7, triple_color)
 		if is_maxed:
 			_score_label_right(_score_overlay, _reward_bonus_text(
 				float(RunStateStore.odds_max_level_reward_bonus)),
-				triple_right, y + 20.0, 4, SCORE_TABLE_MAXED_COLOR)
-		y += 27.0
+				SCORE_TABLE_INFO_X - 2.0, btn_y, 4, SCORE_TABLE_MAXED_COLOR)
 
+		# Hold-to-peek info button (issue #119): the triple's special effect only
+		# shows while the button is held (button_down/button_up also fire from
+		# ui_accept, so keyboard/controller holds work the same as pointer holds).
+		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
+
+	# Text lives on a child Label: Button text inflates the minimum size well past
+	# 44x13 (font metrics), which would bleed over the art's baked column header.
 	var close := Button.new()
-	close.text = "CLOSE"
-	close.position = Vector2(50.0, 263.0)
-	close.size = Vector2(60.0, 16.0)
-	close.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		close.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(close)
+	close.name = "CloseButton"
+	close.position = Vector2(58.0, 10.0)
+	close.size = Vector2(44.0, 13.0)
+	var close_label := _score_label(close, "CLOSE", Vector2.ZERO, 6,
+		Color(1.0, 0.82, 0.28), 44.0, HORIZONTAL_ALIGNMENT_CENTER)
+	close_label.position.y = 2.0
+	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Flat pixel style: the shared textured skin draws past the button rect and
+	# would bleed over the art's baked column header.
+	var close_style := StyleBoxFlat.new()
+	close_style.bg_color = Color(0.11, 0.05, 0.07)
+	close_style.border_color = Color(1.0, 0.82, 0.28)
+	close_style.set_border_width_all(1)
+	var close_pressed := close_style.duplicate() as StyleBoxFlat
+	close_pressed.bg_color = Color(0.35, 0.1, 0.12)
+	close.add_theme_stylebox_override("normal", close_style)
+	close.add_theme_stylebox_override("hover", close_pressed)
+	close.add_theme_stylebox_override("pressed", close_pressed)
+	var close_focus := StyleBoxFlat.new()
+	close_focus.draw_center = false
+	close_focus.border_color = Color(0.0, 0.9, 1.0)
+	close_focus.set_border_width_all(1)
+	close.add_theme_stylebox_override("focus", close_focus)
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
+
+	# Vertical focus chain (close -> rows -> close, wrapping) so keyboard and
+	# controller navigation can reach every interactive element (issue #119).
+	var chain: Array[Button] = [close]
+	chain.append_array(_score_info_buttons)
+	for c in chain.size():
+		var node := chain[c]
+		var up := chain[(c - 1 + chain.size()) % chain.size()]
+		var down := chain[(c + 1) % chain.size()]
+		node.focus_neighbor_top = node.get_path_to(up)
+		node.focus_neighbor_bottom = node.get_path_to(down)
+		node.focus_next = node.get_path_to(down)
+		node.focus_previous = node.get_path_to(up)
+	close.grab_focus()
+
+## The cropped "i" button from the information sheet (issue #119), placed at its
+## authored canvas rect with a slightly larger invisible hit/focus box around it.
+func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
+	var b := Button.new()
+	b.name = "InfoButton_%s" % symbol_id
+	b.position = Vector2(SCORE_TABLE_INFO_X - 3.0, art_y - 3.0)
+	b.size = Vector2(SCORE_TABLE_INFO_SIZE + 6.0, SCORE_TABLE_INFO_SIZE + 6.0)
+	b.focus_mode = Control.FOCUS_ALL
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("hover", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("disabled", StyleBoxEmpty.new())
+	var focus := StyleBoxFlat.new()
+	focus.draw_center = false
+	focus.border_color = Color(0.0, 0.9, 1.0)
+	focus.set_border_width_all(1)
+	b.add_theme_stylebox_override("focus", focus)
+
+	var atlas := AtlasTexture.new()
+	atlas.atlas = _load_texture(SCORE_TABLE_INFO_ART, true)
+	atlas.region = SCORE_TABLE_INFO_SRC
+	var icon := TextureRect.new()
+	icon.name = "InfoIcon"
+	icon.texture = atlas
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	icon.position = Vector2(3.0, 3.0)
+	icon.size = Vector2(SCORE_TABLE_INFO_SIZE, SCORE_TABLE_INFO_SIZE)
+	icon.pivot_offset = icon.size * 0.5
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(icon)
+
+	b.button_down.connect(_on_score_info_down.bind(symbol_id, b, icon))
+	b.button_up.connect(_on_score_info_up.bind(icon))
+	_score_overlay.add_child(b)
+	return b
+
+## Pressed state (issue #119): squash the "i" icon and pop up the triple-effect
+## blurb next to the row for as long as the button is held.
+func _on_score_info_down(symbol_id: String, button: Button, icon: TextureRect) -> void:
+	icon.scale = Vector2(0.7, 0.7)
+	var tw := create_tween()
+	tw.tween_property(icon, "scale", Vector2(0.82, 0.82), 0.08) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_show_score_info_popup(symbol_id, button)
+
+func _on_score_info_up(icon: TextureRect) -> void:
+	if is_instance_valid(icon):
+		var tw := create_tween()
+		tw.tween_property(icon, "scale", Vector2.ONE, 0.1) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_hide_score_info_popup()
+
+func _show_score_info_popup(symbol_id: String, button: Button) -> void:
+	_hide_score_info_popup()
+	if _score_overlay == null:
+		return
+	_score_info_popup = Control.new()
+	_score_info_popup.name = "InfoPopup"
+	_score_info_popup.z_index = 5
+	_score_info_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Size from the actual font: Label.get_minimum_size() before the popup is in
+	# the tree measures with the fallback theme font and comes out huge.
+	var text := _triple_effect_text(symbol_id)
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
+	_score_label(_score_info_popup, text, Vector2(3.0, 2.0), 5, Color(0.9, 0.94, 1.0))
+	var bg := ColorRect.new()
+	bg.color = Color(0.045, 0.035, 0.075, 0.97)
+	bg.size = Vector2(text_size.x + 6.0, maxf(text_size.y, 7.0) + 4.0)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_info_popup.add_child(bg)
+	_score_info_popup.move_child(bg, 0)
+	var border := ColorRect.new()
+	border.color = Color(1.0, 0.82, 0.28)
+	border.size = Vector2(bg.size.x, 1.0)
+	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_info_popup.add_child(border)
+	# Anchored left of the held button, clamped onto the canvas.
+	var pos := button.position + Vector2(-bg.size.x - 2.0, button.size.y * 0.5 - bg.size.y * 0.5)
+	pos.x = clampf(pos.x, 2.0, SRC_W - bg.size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - bg.size.y - 2.0)
+	_score_info_popup.position = pos
+	_score_overlay.add_child(_score_info_popup)
+
+func _hide_score_info_popup() -> void:
+	if _score_info_popup != null:
+		_score_info_popup.queue_free()
+		_score_info_popup = null
 
 # Labels sized by their text and placed from the right edge / centre — the only
 # reliable way to align DTM-Sans columns (min size = text width, no shrinking).
@@ -2924,6 +3048,8 @@ func _triple_effect_text(symbol_id: String) -> String:
 	return ""
 
 func _close_score_table() -> void:
+	_hide_score_info_popup()
+	_score_info_buttons.clear()
 	if _score_overlay != null:
 		_score_overlay.queue_free()
 		_score_overlay = null
@@ -4226,6 +4352,12 @@ func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	node.modulate = Color(1.2, 1.2, 1.2)
 
 func _input(event: InputEvent) -> void:
+	# Points table (issue #119): back/cancel closes the overlay from keyboard
+	# (Esc) or controller (B) without needing to focus the CLOSE button.
+	if _score_overlay != null and event.is_action_pressed("ui_cancel"):
+		_close_score_table()
+		get_viewport().set_input_as_handled()
+		return
 	if not _dealer_drag_active:
 		return
 	if event is InputEventMouseMotion:
