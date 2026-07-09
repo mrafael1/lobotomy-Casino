@@ -693,13 +693,12 @@ func _animate_money_to_brain() -> void:
 func _refresh_context_buy_button() -> void:
 	if _context_buy_button == null:
 		return
-	# The stele is furniture: it stays visible for the whole time a terminal
-	# is open (including on the locked/future slot), unlike the interactive
-	# BUY button and price, which only make sense for a purchasable power.
-	var terminal_open := _is_eye_open() or _is_memory_open()
+	# The stele is furniture: it's always visible, whether or not a terminal
+	# is open, unlike the interactive BUY button and price, which only make
+	# sense once a purchasable power is showing.
 	if _buy_stele != null:
-		_buy_stele.visible = terminal_open
-	if not terminal_open:
+		_buy_stele.visible = true
+	if not (_is_eye_open() or _is_memory_open()):
 		_context_buy_button.visible = false
 		if _context_price_group != null:
 			_context_price_group.visible = false

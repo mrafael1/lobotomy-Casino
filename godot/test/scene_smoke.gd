@@ -2640,8 +2640,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: power name and price amount are not horizontally centered")
 	if context_buy.visible:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
-	if buy_stele.visible:
-		failures.append("upgrades: buy stele should be hidden before a terminal is open")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should be visible even before a terminal is open")
 	if context_buy.size != Vector2(22.0, 10.0):
 		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
