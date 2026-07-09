@@ -12,6 +12,11 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
+## Issue #118: every run starts with these permanent-upgrade-gated powers already
+## active, regardless of meta-shop purchases — Reroll ("Random") has always been
+## unconditional; Shift now joins it as baseline starting loadout.
+const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
+
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
@@ -59,6 +64,10 @@ var lockedReelSpins := [0, 0, 0]
 var runConsumables: Dictionary = {}
 var abilitiesUsed: Array = []
 var ownedUpgrades: Array = []
+## Issue #118: set when a power action fails safely (e.g. Random has no valid
+## replacement symbol) so the UI can surface why nothing happened. Cleared on the
+## next successful use of that power and on run reset.
+var lastPowerFailureReason := ""
 var spinCount := 0
 var isFreeSpin := false
 var betMultiplier := 1
@@ -412,6 +421,7 @@ func reset_run_state() -> void:
 	runConsumables = {}
 	abilitiesUsed = []
 	ownedUpgrades = []
+	lastPowerFailureReason = ""
 	spinCount = 0
 	isFreeSpin = false
 	betMultiplier = 1
@@ -483,6 +493,14 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	runConsumables = pending_consumables.duplicate(true)
 	abilitiesUsed = []
 	ownedUpgrades = owned_permanents.duplicate()
+	# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power —
+	# grant it every run regardless of meta-shop purchases, consistently across
+	# fresh runs, restarts, and save/load (this is the single choke point all three
+	# paths route through).
+	for starting_id in STARTING_POWER_UPGRADE_IDS:
+		if not ownedUpgrades.has(starting_id):
+			ownedUpgrades.append(starting_id)
+	lastPowerFailureReason = ""
 	spinCount = 0
 	isFreeSpin = false
 	betMultiplier = 1
@@ -700,17 +718,29 @@ func reroll_reel(reel_index: int) -> bool:
 		return false
 	if abilitiesUsed.has("reroll"):
 		return false
-	var seed := _seed(spinCount * 0x5bd1e995 + reel_index)
-	var rng := LobRNG.new(seed)
 	var brain_bonus := Economy.compute_brain_weight_bonus(ownedUpgrades)
 	if brainBoostSpins > 0:
 		brain_bonus += int(Symbols.WEIGHT["brain"]) * 4
 	var book_w := Economy.compute_book_weight(ownedUpgrades)
 	var weights := _weights_with_bonuses(brain_bonus, book_w)
+	# Issue #118: Random must always change the targeted reel — exclude the symbol
+	# currently occupying it from the candidate pool before drawing, so it can
+	# never redraw a no-op. If nothing else is left to draw (e.g. every weighted
+	# symbol collapsed onto the current one), fail safely without consuming the
+	# power's charge or seed, and record why for the UI to surface.
+	var current_symbol := String(lastResult["reels"][reel_index])
+	var candidates := Abilities.random_candidate_weights(weights, current_symbol)
+	if candidates.is_empty():
+		lastPowerFailureReason = "Random has no other symbol to draw into this reel."
+		_commit()
+		return false
+	lastPowerFailureReason = ""
+	var seed := _seed(spinCount * 0x5bd1e995 + reel_index)
+	var rng := LobRNG.new(seed)
 	var pair_boost_active := pairBoostSpins > 0
 	var hidden_reel_count := _active_hidden_reel_count(pair_boost_active)
 	var outcome := Abilities.apply_reroll(lastResult["reels"], reel_index, rng, float(lastResult["scoreMultiplier"]),
-		weights, Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
+		candidates, Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		(float(pairBoostMult) if pair_boost_active else 1.0),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
 		symbolRewardBonuses)

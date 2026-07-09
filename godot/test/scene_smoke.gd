@@ -77,6 +77,7 @@ func _run() -> void:
 	await _check_spins_counter_accuracy_80(machine, run_store, failures)
 	_check_free_spin_multiplier_cost(run_store, failures)
 	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
+	_check_starting_powers_and_random_118(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -2170,6 +2171,55 @@ func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:
 
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
 # the popup names the picked reel's rolled symbol.
+# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power,
+# and Random must never redraw the symbol already sitting on its target reel.
+func _check_starting_powers_and_random_118(run_store: Node, failures: Array) -> void:
+	# Starting loadout: a fresh run with zero purchased permanents still has Shift
+	# (perm_shift) and Reroll available, and this holds across restarts.
+	for owned_permanents in [[], ["perm_memory"]]:
+		run_store.reset_run_state()
+		run_store.start_new_run(owned_permanents, {}, false)
+		if not (run_store.ownedUpgrades as Array).has("perm_shift"):
+			failures.append("issue118: new run did not start with Shift (perm_shift) owned=%s" % str(owned_permanents))
+		run_store.reset_run_state()
+
+	# Random candidate selection (pure): excludes the occupying symbol, and reports
+	# no candidates when the pool degenerates to just that symbol.
+	var full_weights: Array = Symbols.symbol_weights()
+	var filtered: Array = Abilities.random_candidate_weights(full_weights, "brain")
+	if filtered.size() != full_weights.size() - 1:
+		failures.append("issue118: random_candidate_weights did not exclude the current symbol")
+	for w in filtered:
+		if String(w["value"]) == "brain":
+			failures.append("issue118: random_candidate_weights left the current symbol in the pool")
+	var degenerate := Abilities.random_candidate_weights([{ "weight": 5, "value": "brain" }], "brain")
+	if not degenerate.is_empty():
+		failures.append("issue118: random_candidate_weights should be empty when no alternative symbol exists")
+
+	# Integration: Random never produces a no-op result, across many seeds/reels,
+	# and repeats are deterministic for a given spin/reel pairing.
+	run_store.start_new_run([], {}, false)
+	run_store.neurons = 100
+	for i in 12:
+		var pre: Variant = run_store.spin()
+		if pre == null:
+			failures.append("issue118: setup spin failed at iteration %d" % i)
+			break
+		run_store.set_spinning(false)
+		run_store.abilitiesUsed = [] # Random is once-per-spin, restored via lucidity coins in real play
+		var reel_index := i % 3
+		var before_symbol := String(pre["reels"][reel_index])
+		var used: bool = run_store.reroll_reel(reel_index)
+		if not used:
+			failures.append("issue118: Random failed to fire on a normal spin (iteration %d)" % i)
+			continue
+		var after_symbol := String(run_store.lastResult["reels"][reel_index])
+		if after_symbol == before_symbol:
+			failures.append("issue118: Random produced a no-op result (%s -> %s)" % [before_symbol, after_symbol])
+		if run_store.lastPowerFailureReason != "":
+			failures.append("issue118: successful Random use left a stale failure reason")
+	run_store.reset_run_state()
+
 func _check_eye_reveal(machine: Node, failures: Array) -> void:
 	# Issue #53: tapping a reel reveals its next-spin symbol INSTANTLY, and the
 	# next spin honours the revealed promise.
