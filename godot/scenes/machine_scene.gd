@@ -146,6 +146,22 @@ const SCORE_TABLE_ROW_CY := [67.0, 111.0, 154.5, 198.0, 241.5, 285.0]
 const SCORE_TABLE_LVL_CX := 66.0
 const SCORE_TABLE_PAIR_CX := 99.0
 const SCORE_TABLE_TRIPLE_CX := 131.5
+# Canvas centers of the 40 baked marquee bulbs (scanned from the art's yellow
+# clusters): 14 across the top, 14 across the bottom, 6 per side.
+const SCORE_TABLE_BULBS: Array[Vector2] = [
+	Vector2(20.5, 6.5), Vector2(29.5, 6.5), Vector2(38.5, 6.5), Vector2(47.5, 6.5),
+	Vector2(57.5, 6.5), Vector2(66.5, 6.5), Vector2(75.5, 6.5), Vector2(84.5, 6.5),
+	Vector2(93.5, 6.5), Vector2(102.5, 6.5), Vector2(112.5, 6.5), Vector2(121.5, 6.5),
+	Vector2(130.5, 6.5), Vector2(139.5, 6.5),
+	Vector2(7.5, 38.5), Vector2(152.5, 38.5), Vector2(7.5, 90.0), Vector2(152.5, 90.0),
+	Vector2(7.5, 133.5), Vector2(152.5, 133.5), Vector2(7.5, 177.0), Vector2(152.5, 177.0),
+	Vector2(7.5, 220.0), Vector2(152.5, 220.0), Vector2(7.5, 263.5), Vector2(152.5, 263.5),
+	Vector2(20.5, 311.5), Vector2(29.5, 311.5), Vector2(38.5, 311.5), Vector2(47.5, 311.5),
+	Vector2(57.5, 311.5), Vector2(66.5, 311.5), Vector2(75.5, 311.5), Vector2(84.5, 311.5),
+	Vector2(93.5, 311.5), Vector2(102.5, 311.5), Vector2(112.5, 311.5), Vector2(121.5, 311.5),
+	Vector2(130.5, 311.5), Vector2(139.5, 311.5),
+]
+const SCORE_TABLE_BULB_GLOW_SIZE := 13.0
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
@@ -366,6 +382,7 @@ var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
+var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
@@ -2842,6 +2859,7 @@ func _show_score_table() -> void:
 	art.size = Vector2(SRC_W, SRC_H)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_score_overlay.add_child(art)
+	_spawn_score_bulb_glows()
 
 	var reward_amp_symbol := String(MetaStateStore.rewardAmpSymbol)
 	var reward_amp_bonus := Economy.compute_symbol_reward_amp_bonus(RunStateStore.ownedUpgrades)
@@ -2925,6 +2943,51 @@ func _show_score_table() -> void:
 		node.focus_previous = node.get_path_to(up)
 	close.grab_focus()
 
+## Warm additive glow behind every baked marquee bulb, chased in two alternating
+## phases like a casino sign (issue #119 feedback). Drawn between the art and
+## the value labels; the looping tween is killed on close.
+func _spawn_score_bulb_glows() -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.92, 0.45, 0.85))
+	grad.set_color(1, Color(1.0, 0.82, 0.25, 0.0))
+	var glow_tex := GradientTexture2D.new()
+	glow_tex.gradient = grad
+	glow_tex.fill = GradientTexture2D.FILL_RADIAL
+	glow_tex.fill_from = Vector2(0.5, 0.5)
+	glow_tex.fill_to = Vector2(0.5, 0.0)
+	glow_tex.width = 32
+	glow_tex.height = 32
+	var add_material := CanvasItemMaterial.new()
+	add_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+
+	var phases: Array[Control] = []
+	for p in 2:
+		var layer := Control.new()
+		layer.name = "BulbGlowPhase%d" % p
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_score_overlay.add_child(layer)
+		phases.append(layer)
+	for i in SCORE_TABLE_BULBS.size():
+		var glow := TextureRect.new()
+		glow.texture = glow_tex
+		glow.material = add_material
+		glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		glow.stretch_mode = TextureRect.STRETCH_SCALE
+		glow.size = Vector2.ONE * SCORE_TABLE_BULB_GLOW_SIZE
+		glow.position = SCORE_TABLE_BULBS[i] - glow.size * 0.5
+		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		phases[i % 2].add_child(glow)
+
+	phases[0].modulate.a = 1.0
+	phases[1].modulate.a = 0.25
+	_score_bulb_tween = create_tween().set_loops()
+	_score_bulb_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_score_bulb_tween.set_parallel(true)
+	_score_bulb_tween.tween_property(phases[0], "modulate:a", 0.25, 0.55)
+	_score_bulb_tween.tween_property(phases[1], "modulate:a", 1.0, 0.55)
+	_score_bulb_tween.chain().tween_property(phases[0], "modulate:a", 1.0, 0.55)
+	_score_bulb_tween.parallel().tween_property(phases[1], "modulate:a", 0.25, 0.55)
+
 ## The cropped "i" button from the information sheet (issue #119), placed at its
 ## authored canvas rect with a slightly larger invisible hit/focus box around it.
 func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
@@ -2992,11 +3055,14 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	# the tree measures with the fallback theme font and comes out huge.
 	var text := _triple_effect_text(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
-	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
+	var text_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
 	_score_label(_score_info_popup, text, Vector2(3.0, 2.0), 5, Color(0.9, 0.94, 1.0))
 	var bg := ColorRect.new()
 	bg.color = Color(0.045, 0.035, 0.075, 0.97)
-	bg.size = Vector2(text_size.x + 6.0, maxf(text_size.y, 7.0) + 4.0)
+	# Height by line count: the Label's rendered line height exceeds the font's
+	# measured extent, so metric-based heights clip multi-line blurbs.
+	var line_count := text.split("\n").size()
+	bg.size = Vector2(text_size.x + 6.0, float(line_count) * 10.0 + 4.0)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_score_info_popup.add_child(bg)
 	_score_info_popup.move_child(bg, 0)
@@ -3058,12 +3124,15 @@ func _triple_effect_text(symbol_id: String) -> String:
 		"vial":
 			return "+%d SPINS" % triple_vial_free_spins
 		"flatline":
-			return "KILLS YOU"
+			return "KILLS YOU BUT GIVE 2X\nREWARDS ON NEXT SPIN"
 	return ""
 
 func _close_score_table() -> void:
 	_hide_score_info_popup()
 	_score_info_buttons.clear()
+	if _score_bulb_tween != null:
+		_score_bulb_tween.kill()
+		_score_bulb_tween = null
 	if _score_overlay != null:
 		_score_overlay.queue_free()
 		_score_overlay = null
