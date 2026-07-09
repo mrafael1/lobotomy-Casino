@@ -63,7 +63,19 @@
 [ext_resource type="Texture2D" uid="uid://bg67euyp4rlo3" path="res://assets/images/upgrade_scene/split/upgrades_scene_memory_brain_overlay_13.png" id="59_flynw"]
 [ext_resource type="Texture2D" uid="uid://015mp4uaqppu" path="res://assets/images/upgrade_scene/split/upgrades_scene_memory_brain_overlay_14.png" id="60_koq3s"]
 [ext_resource type="Texture2D" uid="uid://c8erv70g3ywji" path="res://assets/images/upgrade_scene/upgrades_scene_cables.png" id="61_q5blu"]
-[ext_resource type="Texture2D" uid="uid://c13087t8yvrn1" path="res://assets/images/upgrade_scene/upgrades_scene_eye_upgrades.png" id="63_rl7g3"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_00.png" id="63_eu00"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_01.png" id="63_eu01"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_02.png" id="63_eu02"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_03.png" id="63_eu03"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_04.png" id="63_eu04"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_05.png" id="63_eu05"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_06.png" id="63_eu06"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_07.png" id="63_eu07"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_08.png" id="63_eu08"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_09.png" id="63_eu09"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_10.png" id="63_eu10"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_11.png" id="63_eu11"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/split/upgrades_scene_eye_upgrades_12.png" id="63_eu12"]
 [ext_resource type="Texture2D" uid="uid://doxpqq8xw17xq" path="res://assets/images/upgrade_scene/upgrades_scene_memory_upgrades.png" id="64_xf50n"]
 [ext_resource type="Texture2D" uid="uid://sxa16gr42o2a" path="res://assets/images/upgrade_scene/upgrades_scene_LAB_SIGN.png" id="65_n4ygv"]
 [ext_resource type="Texture2D" uid="uid://di7f3lokqov07" path="res://assets/images/upgrade_scene/upgrades_scene_leak.png" id="66_vicn8"]
@@ -403,99 +415,47 @@ animations = [{
 "speed": 12.5
 }]
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_rjwqt"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(0, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_8rhqh"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(1280, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_id1iw"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(2560, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_8ym08"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(3840, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_awwow"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(5120, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_hdhev"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(6400, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_i0xj1"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(7680, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_gpvjq"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(8960, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_tjjpl"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(10240, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_2jo3a"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(11520, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_v121g"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(12800, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_qipwp"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(14080, 0, 1280, 1920)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_eye12"]
-atlas = ExtResource("63_rl7g3")
-region = Rect2(15360, 0, 1280, 1920)
-
 [sub_resource type="SpriteFrames" id="SpriteFrames_gv5j0"]
 animations = [{
 "frames": [{
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_rjwqt")
+"texture": ExtResource("63_eu00")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_8rhqh")
+"texture": ExtResource("63_eu01")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_id1iw")
+"texture": ExtResource("63_eu02")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_8ym08")
+"texture": ExtResource("63_eu03")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_awwow")
+"texture": ExtResource("63_eu04")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_hdhev")
+"texture": ExtResource("63_eu05")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_i0xj1")
+"texture": ExtResource("63_eu06")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_gpvjq")
+"texture": ExtResource("63_eu07")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_tjjpl")
+"texture": ExtResource("63_eu08")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_2jo3a")
+"texture": ExtResource("63_eu09")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_v121g")
+"texture": ExtResource("63_eu10")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_qipwp")
+"texture": ExtResource("63_eu11")
 }, {
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_eye12")
+"texture": ExtResource("63_eu12")
 }],
 "loop": 0,
 "name": &"default",
