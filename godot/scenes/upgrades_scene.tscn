@@ -72,6 +72,9 @@
 [ext_resource type="Texture2D" uid="uid://cln5cqx2bn0x4" path="res://assets/images/ui/coin.png" id="70_coin"]
 [ext_resource type="Texture2D" uid="uid://08wob2rti106" path="res://assets/images/ui/settings.png" id="71_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="72_options"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/upgrades_scene_eye_buttons.png" id="73_eyebtn"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/upgrades_scene_memory_buttons.png" id="74_membtn"]
+[ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/upgrades_scene_buy_stele.png" id="75_stele"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_77jha"]
 atlas = ExtResource("2_xfal4")
@@ -448,6 +451,10 @@ region = Rect2(12800, 0, 1280, 1920)
 atlas = ExtResource("63_rl7g3")
 region = Rect2(14080, 0, 1280, 1920)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_eye12"]
+atlas = ExtResource("63_rl7g3")
+region = Rect2(15360, 0, 1280, 1920)
+
 [sub_resource type="SpriteFrames" id="SpriteFrames_gv5j0"]
 animations = [{
 "frames": [{
@@ -486,6 +493,9 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_qipwp")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_eye12")
 }],
 "loop": 0,
 "name": &"default",
@@ -512,6 +522,30 @@ region = Rect2(3840, 0, 1280, 1920)
 atlas = ExtResource("64_xf50n")
 region = Rect2(5120, 0, 1280, 1920)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem05"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(6400, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem06"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(7680, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem07"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(8960, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem08"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(10240, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem09"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(11520, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mem10"]
+atlas = ExtResource("64_xf50n")
+region = Rect2(12800, 0, 1280, 1920)
+
 [sub_resource type="SpriteFrames" id="SpriteFrames_hot5x"]
 animations = [{
 "frames": [{
@@ -529,6 +563,24 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_h2h6b")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem05")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem06")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem07")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem08")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem09")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mem10")
 }],
 "loop": 0,
 "name": &"default",
@@ -740,6 +792,66 @@ content_margin_bottom = 2.0
 texture = ExtResource("68_mrfpu")
 region_rect = Rect2(0, 0, 24, 12)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_eyebtn0"]
+atlas = ExtResource("73_eyebtn")
+region = Rect2(0, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_eyebtn1"]
+atlas = ExtResource("73_eyebtn")
+region = Rect2(1280, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_eyebtn2"]
+atlas = ExtResource("73_eyebtn")
+region = Rect2(2560, 0, 1280, 1920)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_eyebtn"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_eyebtn0")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_eyebtn1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_eyebtn2")
+}],
+"loop": 0,
+"name": &"default",
+"speed": 12.5
+}]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_membtn0"]
+atlas = ExtResource("74_membtn")
+region = Rect2(0, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_membtn1"]
+atlas = ExtResource("74_membtn")
+region = Rect2(1280, 0, 1280, 1920)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_membtn2"]
+atlas = ExtResource("74_membtn")
+region = Rect2(2560, 0, 1280, 1920)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_membtn"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_membtn0")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_membtn1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_membtn2")
+}],
+"loop": 0,
+"name": &"default",
+"speed": 12.5
+}]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_navhit"]
+
 [node name="UpgradesScene" type="Control" unique_id=862142156]
 custom_minimum_size = Vector2(160, 320)
 layout_mode = 3
@@ -817,6 +929,22 @@ texture_filter = 1
 scale = Vector2(0.125, 0.125)
 sprite_frames = SubResource("SpriteFrames_hot5x")
 frame = 1
+centered = false
+
+[node name="upgrades_scene_eye_buttons" type="AnimatedSprite2D" parent="." unique_id=105]
+visible = false
+z_index = 11
+texture_filter = 1
+scale = Vector2(0.125, 0.125)
+sprite_frames = SubResource("SpriteFrames_eyebtn")
+centered = false
+
+[node name="upgrades_scene_memory_buttons" type="AnimatedSprite2D" parent="." unique_id=106]
+visible = false
+z_index = 11
+texture_filter = 1
+scale = Vector2(0.125, 0.125)
+sprite_frames = SubResource("SpriteFrames_membtn")
 centered = false
 
 [node name="upgrades_scene_LAB_SIGN" type="AnimatedSprite2D" parent="." unique_id=405423568]
@@ -913,93 +1041,6 @@ offset_right = 114.0
 offset_bottom = 48.0
 mouse_filter = 2
 
-[node name="perm_shift" type="Control" parent="CanvasLayer/UI_Container/EyeUpgradePanel" unique_id=798483996]
-anchors_preset = 0
-offset_right = 18.0
-offset_bottom = 16.0
-metadata/upgrade_id = "perm_shift"
-metadata/concept_category = "Machine Manipulations"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/perm_shift" unique_id=765019588]
-visible = false
-layout_mode = 0
-offset_left = 3.0
-offset_top = -1.0
-offset_right = 36.0
-offset_bottom = 10.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
-theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Shift Power"
-vertical_alignment = 1
-autowrap_mode = 3
-
-[node name="corr_pattern_23" type="Control" parent="CanvasLayer/UI_Container/EyeUpgradePanel" unique_id=322629993]
-anchors_preset = 0
-offset_top = 14.0
-offset_right = 18.0
-offset_bottom = 23.0
-metadata/upgrade_id = "corr_pattern_23"
-metadata/concept_category = "Machine Manipulations"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/corr_pattern_23" unique_id=1462269001]
-visible = false
-layout_mode = 0
-offset_left = 3.0
-offset_top = -2.0
-offset_right = 46.0
-offset_bottom = 9.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
-theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Pattern Fabrication"
-vertical_alignment = 1
-autowrap_mode = 3
-
-[node name="pos_learning" type="Control" parent="CanvasLayer/UI_Container/EyeUpgradePanel" unique_id=646520063]
-anchors_preset = 0
-offset_top = 23.0
-offset_right = 18.0
-offset_bottom = 39.0
-metadata/upgrade_id = "pos_learning"
-metadata/concept_category = "Machine Manipulations"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/pos_learning" unique_id=765469071]
-visible = false
-layout_mode = 0
-offset_left = 2.0
-offset_top = -1.0
-offset_right = 35.0
-offset_bottom = 4.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
-theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Book Upgrade"
-vertical_alignment = 1
-autowrap_mode = 3
-
-[node name="pos_enlightenment" type="Control" parent="CanvasLayer/UI_Container/EyeUpgradePanel" unique_id=626018716]
-anchors_preset = 0
-offset_left = 22.0
-offset_right = 42.0
-offset_bottom = 16.0
-metadata/upgrade_id = "pos_enlightenment"
-metadata/concept_category = "Gain Boosts"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment" unique_id=1663424587]
-visible = false
-layout_mode = 0
-offset_left = 1.0
-offset_top = -1.0
-offset_right = 47.0
-offset_bottom = 9.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
-theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Hallucination"
-vertical_alignment = 1
-autowrap_mode = 3
-
 [node name="MemoryUpgradePanel" type="Control" parent="CanvasLayer/UI_Container" unique_id=1373977613]
 anchors_preset = 0
 offset_left = 1.0
@@ -1007,72 +1048,63 @@ offset_top = 10.0
 offset_right = 36.0
 offset_bottom = 55.0
 
-[node name="perm_memory" type="Control" parent="CanvasLayer/UI_Container/MemoryUpgradePanel" unique_id=838637350]
-anchors_preset = 0
-offset_left = 12.0
-offset_top = 2.0
-offset_right = 25.0
-offset_bottom = 15.0
-metadata/upgrade_id = "perm_memory"
-metadata/concept_category = "Machine Manipulations"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory" unique_id=355578482]
-visible = false
+[node name="EyePrevButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=101]
 layout_mode = 0
-offset_left = 2.0
-offset_top = -2.0
-offset_right = 36.0
-offset_bottom = 10.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
+offset_left = 57.0
+offset_top = 19.0
+offset_right = 68.0
+offset_bottom = 34.0
+focus_mode = 2
+mouse_default_cursor_shape = 2
 theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Lock"
-vertical_alignment = 1
-autowrap_mode = 3
+theme_override_styles/normal = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_navhit")
 
-[node name="reward_amp" type="Control" parent="CanvasLayer/UI_Container/MemoryUpgradePanel" unique_id=709575224]
-anchors_preset = 0
-offset_left = 12.0
-offset_top = 16.0
-offset_right = 25.0
-offset_bottom = 26.0
-metadata/upgrade_id = "corr_reward_amp_1"
-metadata/concept_category = "Gain Boosts"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp" unique_id=1194144507]
-visible = false
+[node name="EyeNextButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=102]
 layout_mode = 0
-offset_left = 2.0
-offset_top = 2.0
-offset_right = 49.0
-offset_bottom = 7.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
+offset_left = 115.0
+offset_top = 19.0
+offset_right = 126.0
+offset_bottom = 34.0
+focus_mode = 2
+focus_neighbor_left = NodePath("../EyePrevButton")
+mouse_default_cursor_shape = 2
 theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Rewards+"
-autowrap_mode = 3
+theme_override_styles/normal = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_navhit")
 
-[node name="pos_smart_save" type="Control" parent="CanvasLayer/UI_Container/MemoryUpgradePanel" unique_id=1830311010]
-anchors_preset = 0
-offset_left = 12.0
-offset_top = 28.0
-offset_right = 25.0
-offset_bottom = 40.0
-metadata/upgrade_id = "pos_smart_save"
-metadata/concept_category = "Gain Boosts"
-
-[node name="NameLabel" type="Label" parent="CanvasLayer/UI_Container/MemoryUpgradePanel/pos_smart_save" unique_id=1984541469]
-visible = false
+[node name="MemoryPrevButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=103]
 layout_mode = 0
-offset_left = 1.0
-offset_right = 35.0
-offset_bottom = 5.0
-theme_override_colors/font_color = Color(0.92, 0.98, 1, 1)
+offset_left = 13.0
+offset_top = 4.0
+offset_right = 24.0
+offset_bottom = 19.0
+focus_mode = 2
+mouse_default_cursor_shape = 2
 theme_override_fonts/font = ExtResource("13_font")
-theme_override_font_sizes/font_size = 4
-text = "Saving"
-vertical_alignment = 1
-autowrap_mode = 3
+theme_override_styles/normal = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_navhit")
+
+[node name="MemoryNextButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=104]
+layout_mode = 0
+offset_left = 13.0
+offset_top = 46.0
+offset_right = 24.0
+offset_bottom = 61.0
+focus_mode = 2
+focus_neighbor_top = NodePath("../MemoryPrevButton")
+mouse_default_cursor_shape = 2
+theme_override_fonts/font = ExtResource("13_font")
+theme_override_styles/normal = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_navhit")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_navhit")
 
 [node name="PowerNameBox" type="PanelContainer" parent="CanvasLayer/UI_Container" unique_id=152036993]
 z_index = 24
@@ -1197,6 +1229,14 @@ texture_pressed = SubResource("AtlasTexture_wecsn")
 texture_hover = SubResource("AtlasTexture_p46ef")
 ignore_texture_size = true
 stretch_mode = 5
+
+[node name="BuyStele" type="Sprite2D" parent="CanvasLayer/UI_Container" unique_id=107]
+visible = false
+z_index = 4
+texture_filter = 1
+scale = Vector2(0.125, 0.125)
+texture = ExtResource("75_stele")
+centered = false
 
 [node name="ContextBuyButton" type="Button" parent="CanvasLayer/UI_Container" unique_id=200898208]
 visible = false

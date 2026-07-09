@@ -2515,6 +2515,7 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 			break
 
 func _check_upgrades_scene(failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var ps := load("res://scenes/upgrades_scene.tscn") as PackedScene
 	if ps == null:
 		failures.append("upgrades: scene failed to load")
@@ -2532,6 +2533,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		"upgrades_scene_layer",
 		"upgrades_scene_eye_upgrades",
 		"upgrades_scene_memory_upgrades",
+		"upgrades_scene_eye_buttons",
+		"upgrades_scene_memory_buttons",
 		"upgrades_scene_LAB_SIGN",
 		"upgrades_scene_leak",
 	]
@@ -2565,9 +2568,12 @@ func _check_upgrades_scene(failures: Array) -> void:
 	var eye_terminal := scene.get_node("upgrades_scene_eye_upgrades") as AnimatedSprite2D
 	if eye_terminal.position != Vector2.ZERO:
 		failures.append("upgrades: eye terminal node is not at native canvas origin")
-	if eye_terminal.sprite_frames.get_frame_count(&"default") != 12:
-		failures.append("upgrades: eye terminal should use the asset's 12 exact 1280px frames")
-	if scene.get_child(11).name != "CanvasLayer":
+	if eye_terminal.sprite_frames.get_frame_count(&"default") != 13:
+		failures.append("upgrades: eye terminal should use the asset's 13 exact 1280px frames")
+	var memory_terminal := scene.get_node("upgrades_scene_memory_upgrades") as AnimatedSprite2D
+	if memory_terminal.sprite_frames.get_frame_count(&"default") != 11:
+		failures.append("upgrades: memory terminal should use the asset's 11 exact 1280px frames")
+	if scene.get_child(13).name != "CanvasLayer":
 		failures.append("upgrades: CanvasLayer is not the foreground root after visual layers")
 	var ui_container := scene.get_node("CanvasLayer/UI_Container") as Control
 	if ui_container.mouse_filter != Control.MOUSE_FILTER_IGNORE:
@@ -2588,52 +2594,12 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: wallet label is not using the shared lucidity yellow")
 	if coin_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_RIGHT:
 		failures.append("upgrades: wallet label horizontal alignment should preserve the authored right setting")
-	var eye_panel := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel") as Control
-	var memory_panel := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel") as Control
-	for path in [
-		"CanvasLayer/UI_Container/EyeUpgradePanel/perm_shift",
-		"CanvasLayer/UI_Container/EyeUpgradePanel/corr_pattern_23",
-		"CanvasLayer/UI_Container/EyeUpgradePanel/pos_learning",
-		"CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment",
-		"CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory",
-		"CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp",
-		"CanvasLayer/UI_Container/MemoryUpgradePanel/pos_smart_save",
-	]:
-		var row := scene.get_node(path) as Control
-		var row_label := row.get_node_or_null("NameLabel") as Label
-		if row_label == null:
-			failures.append("upgrades: row %s is missing its on-computer name label" % path)
-			break
-		if row_label.visible:
-			failures.append("upgrades: row %s still renders its name on the computer" % path)
-			break
-		if row.find_child("Icon", true, false) != null:
-			failures.append("upgrades: row %s still has an artificial icon node" % path)
-			break
-		if row.get_node_or_null("BuyButton") != null:
-			failures.append("upgrades: row %s still has a per-row buy button" % path)
-			break
-	if scene.get_node_or_null("CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment/HallucinationIcon") != null:
-		failures.append("upgrades: Hallucination row still has a duplicate lucidity icon")
-	var pattern_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/corr_pattern_23") as Control
-	var learning_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/pos_learning") as Control
-	if pattern_row.position != Vector2(0.0, 14.0) or pattern_row.size != Vector2(18.0, 9.0):
-		failures.append("upgrades: Pattern Fabrication hitbox does not cover the left middle icon")
-	if learning_row.position != Vector2(0.0, 23.0) or learning_row.size != Vector2(18.0, 16.0):
-		failures.append("upgrades: Learning hitbox does not cover the left lower book icon")
-	var memory_lock_row := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory") as Control
-	var reward_amp_row := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp") as Control
-	var smart_save_row := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/pos_smart_save") as Control
-	if memory_panel.position != Vector2(1.0, 10.0) or memory_panel.size != Vector2(35.0, 45.0):
-		failures.append("upgrades: memory upgrade panel does not align to the memory terminal")
-	if memory_lock_row.position != Vector2(12.0, 2.0) or memory_lock_row.size != Vector2(13.0, 13.0):
-		failures.append("upgrades: Memory hitbox does not cover the top lock icon")
-	if reward_amp_row.position != Vector2(12.0, 16.0) or reward_amp_row.size != Vector2(13.0, 10.0):
-		failures.append("upgrades: Reward Amplification hitbox does not cover the middle reward icon")
-	if smart_save_row.position != Vector2(12.0, 28.0) or smart_save_row.size != Vector2(13.0, 12.0):
-		failures.append("upgrades: Smart Save hitbox does not cover the lower save icon")
-	if eye_panel.visible or memory_panel.visible:
-		failures.append("upgrades: purchase panels should stay hidden at runtime before terminal activation")
+	var eye_prev := scene.get_node("CanvasLayer/UI_Container/EyePrevButton") as Button
+	var eye_next := scene.get_node("CanvasLayer/UI_Container/EyeNextButton") as Button
+	var memory_prev := scene.get_node("CanvasLayer/UI_Container/MemoryPrevButton") as Button
+	var memory_next := scene.get_node("CanvasLayer/UI_Container/MemoryNextButton") as Button
+	if eye_prev.visible or eye_next.visible or memory_prev.visible or memory_next.visible:
+		failures.append("upgrades: nav buttons should stay hidden before terminal activation")
 	if not bool(scene.get("editor_preview_eye_active")) or not bool(scene.get("editor_preview_memory_active")):
 		failures.append("upgrades: editor preview flags are not enabled for WYSIWYG layout")
 	var description := scene.get_node("CanvasLayer/UI_Container/DescriptionBubble") as Control
@@ -2677,30 +2643,22 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: memory activation did not reveal memory overlay")
 	if scene.get_node("upgrades_scene_eye_brain_overlay").visible:
 		failures.append("upgrades: memory activation revealed eye overlay")
-	if context_buy.visible:
-		failures.append("upgrades: contextual buy button appeared before selecting a memory power")
-	var reward_row := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp") as Control
-	var description_before_hover := description_label.text
-	reward_row.mouse_entered.emit()
-	if description_label.text != description_before_hover:
-		failures.append("upgrades: hover changed the contextual description")
-	var memory_row := scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory") as Control
-	scene._select_row(memory_row)
-	await process_frame
+	if not memory_prev.visible or not memory_next.visible:
+		failures.append("upgrades: memory nav buttons did not appear after activating the memory terminal")
 	if not context_buy.visible:
-		failures.append("upgrades: contextual buy button did not appear after selecting a memory power")
+		failures.append("upgrades: contextual buy button did not appear for the memory terminal's first power")
+	await process_frame
 	if power_name_label.text != "Lock":
-		failures.append("upgrades: selected power name did not move to the name box")
+		failures.append("upgrades: memory carousel did not open on the Lock power")
 	if context_buy.text != "BUY" and context_buy.text != "OWNED":
 		failures.append("upgrades: contextual buy button includes price text")
 	if context_buy.alignment != HORIZONTAL_ALIGNMENT_CENTER or context_buy.size.x < 28.0:
 		failures.append("upgrades: contextual buy button text is not centered with enough width")
 	if not context_price.visible:
-		failures.append("upgrades: contextual price group did not appear after selecting a memory power")
+		failures.append("upgrades: contextual price group did not appear for the memory carousel's first power")
 	if context_price.position.x <= power_name_label.position.x:
 		failures.append("upgrades: contextual price group is not aligned to the right of the power name")
-	reward_row.set_meta("upgrade_id", "corr_reward_amp_1")
-	scene._select_row(reward_row)
+	scene._memory_next()
 	await process_frame
 	if power_name_label.text != "Rewards+":
 		failures.append("upgrades: reward amp did not show the shortened power name")
@@ -2723,30 +2681,35 @@ func _check_upgrades_scene(failures: Array) -> void:
 		await process_frame
 		if scene._reward_amp_picker != null or String(scene._pending_reward_amp_upgrade_id) != "":
 			failures.append("issue63: Reward Amp picker cancel did not close cleanly")
-	await scene._animate_money_to_brain()
-	reward_row.set_meta("upgrade_id", "corr_reward_amp_2")
-	scene._select_row(reward_row)
+	# Simulate owning tier I/II so the "reward_amp" carousel slot resolves to the
+	# next unpurchased tier, mirroring the old row's price/description swap.
+	meta_store.ownedPermanents.append("corr_reward_amp_1")
+	scene._refresh_all()
 	if price_label.text != "55":
 		failures.append("upgrades: reward amp tier II price should be 55")
 	if not description_label.text.contains("[color=#FBBF24]tier II[/color]"):
 		failures.append("upgrades: reward amp tier II description is not orange BBCode")
-	reward_row.set_meta("upgrade_id", "corr_reward_amp_3")
-	scene._select_row(reward_row)
+	meta_store.ownedPermanents.append("corr_reward_amp_2")
+	scene._refresh_all()
 	if price_label.text != "90":
 		failures.append("upgrades: reward amp tier III price should be 90")
 	if not description_label.text.contains("[color=#D62828]tier III[/color]"):
 		failures.append("upgrades: reward amp tier III description is not red BBCode")
-	if (scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/perm_memory/NameLabel") as Label).text != "Lock":
-		failures.append("upgrades: memory lock label was not shortened to Lock")
-	if (scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/reward_amp/NameLabel") as Label).text != "Rewards+":
-		failures.append("upgrades: reward amplification label was not shortened to Rewards+")
-	if (scene.get_node("CanvasLayer/UI_Container/MemoryUpgradePanel/pos_smart_save/NameLabel") as Label).text != "Saving":
-		failures.append("upgrades: smart save label was not shortened to Saving")
-	scene._select_row(smart_save_row)
+	meta_store.ownedPermanents.append("corr_reward_amp_3")
+	scene._refresh_all()
+	scene._memory_next()
 	if power_name_label.text != "Saving":
-		failures.append("upgrades: Smart Save did not select the save upgrade")
+		failures.append("upgrades: memory carousel did not advance to the Smart Save power")
 	if price_label.text != "30":
 		failures.append("upgrades: Smart Save price should be 30")
+	scene._memory_next()
+	if power_name_label.text != "???":
+		failures.append("upgrades: memory carousel did not reach the locked/future slot")
+	if context_buy.visible:
+		failures.append("upgrades: contextual buy button should be hidden on the locked/future slot")
+	scene._memory_next()
+	if power_name_label.text != "Lock":
+		failures.append("upgrades: memory carousel did not wrap back to the first power")
 	brain.frame = 7
 	scene._sync_brain_overlay_frames()
 	if memory_overlay.frame != 7:
@@ -2756,24 +2719,20 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: eye activation did not hide memory overlay")
 	if scene.get_node("upgrades_scene_memory_upgrades").frame != 0:
 		failures.append("upgrades: eye activation did not reset memory terminal frame")
-	if context_buy.visible:
-		failures.append("upgrades: contextual buy button stayed visible after switching terminals")
-	var eye_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/perm_shift") as Control
-	scene._select_row(eye_row)
+	if not eye_prev.visible or not eye_next.visible:
+		failures.append("upgrades: eye nav buttons did not appear after activating the eye terminal")
 	if not context_buy.visible:
-		failures.append("upgrades: contextual buy button did not appear after selecting an eye power")
-	scene._select_row(pattern_row)
+		failures.append("upgrades: contextual buy button did not appear for the eye terminal's first power")
 	if power_name_label.text != "Pattern Fabrication":
-		failures.append("upgrades: Pattern Fabrication did not select the pattern upgrade")
+		failures.append("upgrades: eye carousel did not open on Pattern Fabrication")
 	if price_label.text != "160":
 		failures.append("upgrades: Pattern Fabrication price should be 160")
-	scene._select_row(learning_row)
+	scene._eye_next()
 	if power_name_label.text != "Book Upgrade":
-		failures.append("upgrades: Learning did not select the book upgrade")
+		failures.append("upgrades: eye carousel did not advance to the Book power")
 	if price_label.text != "120":
 		failures.append("upgrades: Learning price should be 120")
-	var hallucination_row := scene.get_node("CanvasLayer/UI_Container/EyeUpgradePanel/pos_enlightenment") as Control
-	scene._select_row(hallucination_row)
+	scene._eye_next()
 	await process_frame
 	if power_name_label.text != "Hallucination":
 		failures.append("upgrades: Hallucination did not show in the power name box")
@@ -2782,6 +2741,14 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: Hallucination price should be %d" % hallucination_cost)
 	if not description_label.text.contains("Visible pairs count as triples"):
 		failures.append("upgrades: Hallucination description does not describe the rework")
+	scene._eye_next()
+	if power_name_label.text != "???":
+		failures.append("upgrades: eye carousel did not reach the locked/future slot")
+	if context_buy.visible:
+		failures.append("upgrades: contextual buy button should be hidden on the eye locked/future slot")
+	scene._eye_prev()
+	if power_name_label.text != "Hallucination":
+		failures.append("upgrades: eye carousel prev did not step back from the locked slot")
 	brain.frame = 11
 	scene._sync_brain_overlay_frames()
 	if eye_overlay.frame != 11:
@@ -2794,6 +2761,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await create_timer(0.2).timeout
 	if brain.frame <= 0:
 		failures.append("upgrades: brain layer did not animate while scene was ticking")
+	meta_store.ownedPermanents = []
 	scene.queue_free()
 
 func _check_smart_save_retention(failures: Array) -> void:
