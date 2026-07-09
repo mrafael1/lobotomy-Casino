@@ -2624,6 +2624,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 	var power_name_box := scene.get_node("CanvasLayer/UI_Container/PowerNameBox") as Control
 	var power_name_label := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PowerNameLabel") as Label
 	var context_buy := scene.get_node("CanvasLayer/UI_Container/ContextBuyButton") as Button
+	var buy_stele := scene.get_node("CanvasLayer/UI_Container/BuyStele") as Sprite2D
 	var context_price := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup") as Control
 	var price_label := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/PriceLabel") as Label
 	var context_price_coin := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/Coin") as TextureRect
@@ -2639,6 +2640,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: power name and price amount are not horizontally centered")
 	if context_buy.visible:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
+	if buy_stele.visible:
+		failures.append("upgrades: buy stele should be hidden before a terminal is open")
 	if context_buy.size != Vector2(22.0, 10.0):
 		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
@@ -2724,6 +2727,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: memory carousel did not reach the locked/future slot")
 	if context_buy.visible:
 		failures.append("upgrades: contextual buy button should be hidden on the locked/future slot")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should stay visible on the memory locked/future slot")
 	scene._memory_next()
 	if power_name_label.text != "Lock":
 		failures.append("upgrades: memory carousel did not wrap back to the first power")
@@ -2763,6 +2768,8 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: eye carousel did not reach the locked/future slot")
 	if context_buy.visible:
 		failures.append("upgrades: contextual buy button should be hidden on the eye locked/future slot")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should stay visible on the eye locked/future slot")
 	scene._eye_prev()
 	if power_name_label.text != "Hallucination":
 		failures.append("upgrades: eye carousel prev did not step back from the locked slot")

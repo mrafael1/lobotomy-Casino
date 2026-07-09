@@ -348,8 +348,11 @@ func _bind_buttons() -> void:
 	_connect_button(_memory_next_button, _memory_next)
 	_bind_nav_press_feedback(_eye_prev_button, _eye_nav_sprite, 1)
 	_bind_nav_press_feedback(_eye_next_button, _eye_nav_sprite, 2)
-	_bind_nav_press_feedback(_memory_prev_button, _memory_nav_sprite, 1)
-	_bind_nav_press_feedback(_memory_next_button, _memory_nav_sprite, 2)
+	# MemoryPrevButton sits at the TOP hitbox, MemoryNextButton at the BOTTOM
+	# one — the sheet's pressed frames are (1=bottom, 2=top), so prev maps to
+	# the top-pressed frame and next to the bottom-pressed frame.
+	_bind_nav_press_feedback(_memory_prev_button, _memory_nav_sprite, 2)
+	_bind_nav_press_feedback(_memory_next_button, _memory_nav_sprite, 1)
 	_bind_options_button()
 	for button in [_eye_hitbox, _memory_hitbox, _eye_prev_button, _eye_next_button, _memory_prev_button, _memory_next_button]:
 		if button != null:
@@ -690,27 +693,27 @@ func _animate_money_to_brain() -> void:
 func _refresh_context_buy_button() -> void:
 	if _context_buy_button == null:
 		return
-	if not _is_eye_open() and not _is_memory_open():
+	# The stele is furniture: it stays visible for the whole time a terminal
+	# is open (including on the locked/future slot), unlike the interactive
+	# BUY button and price, which only make sense for a purchasable power.
+	var terminal_open := _is_eye_open() or _is_memory_open()
+	if _buy_stele != null:
+		_buy_stele.visible = terminal_open
+	if not terminal_open:
 		_context_buy_button.visible = false
 		if _context_price_group != null:
 			_context_price_group.visible = false
-		if _buy_stele != null:
-			_buy_stele.visible = false
 		return
 	var upgrade_id := _current_upgrade_id()
 	if upgrade_id == LOCKED_SLOT_ID:
 		_context_buy_button.visible = false
 		if _context_price_group != null:
 			_context_price_group.visible = false
-		if _buy_stele != null:
-			_buy_stele.visible = false
 		return
 	var upgrade := _upgrade(upgrade_id)
 	var owned := _owned(upgrade_id)
 	var price := int(upgrade.get("cost", 0)) if not upgrade.is_empty() else 0
 	_context_buy_button.visible = true
-	if _buy_stele != null:
-		_buy_stele.visible = true
 	_context_buy_button.text = "OWNED" if owned else "BUY"
 	_context_buy_button.add_theme_font_size_override("font_size", OWNED_BUTTON_FONT_SIZE if owned else BUY_BUTTON_FONT_SIZE)
 	_center_button_text(_context_buy_button)
