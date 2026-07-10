@@ -3077,7 +3077,15 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	var text := _triple_effect_text(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
-	_score_label(_score_info_popup, text, Vector2(4.0, 2.0), 5, Color(0.9, 0.94, 1.0))
+	# Center each line inside the bubble as its own label, positioned from the
+	# font's measured line width: a single aligned Label can't do it because its
+	# minimum size clamps to the theme font's metrics, not the small pixel font.
+	var lines := text.split("\n")
+	for li in lines.size():
+		var line_w := font.get_string_size(lines[li], HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
+		_score_label(_score_info_popup, lines[li],
+			Vector2(4.0 + (text_size.x - line_w) * 0.5, 2.0 + float(li) * 10.0),
+			5, Color(0.9, 0.94, 1.0))
 	# Rounded box: dark panel with a thin gold outline and soft corners.
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
@@ -3146,7 +3154,8 @@ func _triple_effect_text(symbol_id: String) -> String:
 		"vial":
 			return "+%d SPINS" % triple_vial_free_spins
 		"flatline":
-			return "KILLS YOU BUT GIVE 2X\nREWARDS ON NEXT SPIN"
+			return "CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN" % [
+				RunStateStore.flatlineResultCount, fatal_flatline_count]
 	return ""
 
 func _close_score_table() -> void:
