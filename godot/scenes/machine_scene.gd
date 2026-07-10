@@ -2907,7 +2907,9 @@ func _show_score_table() -> void:
 	var close := Button.new()
 	close.name = "CloseButton"
 	close.size = Vector2(56.0, 14.0)
-	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 9.0)
+	# Vertically centered in the top red band (canvas y ~12..30 between the
+	# marquee bulbs and the baked column header).
+	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 14.0)
 	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
 		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.position.y = 2.0
@@ -2924,10 +2926,10 @@ func _show_score_table() -> void:
 	close.add_theme_stylebox_override("normal", close_style)
 	close.add_theme_stylebox_override("hover", close_pressed)
 	close.add_theme_stylebox_override("pressed", close_pressed)
-	var close_focus := StyleBoxFlat.new()
-	close_focus.draw_center = false
-	close_focus.border_color = Color(0.0, 0.9, 1.0)
-	close_focus.set_border_width_all(1)
+	# Focus reads as a brighter gold edge, not a colored ring, so the default
+	# keyboard/controller focus doesn't clash with the art.
+	var close_focus := close_style.duplicate() as StyleBoxFlat
+	close_focus.border_color = Color(1.0, 0.95, 0.7)
 	close.add_theme_stylebox_override("focus", close_focus)
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
