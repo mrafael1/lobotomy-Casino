@@ -2900,8 +2900,8 @@ func _show_score_table() -> void:
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
 
-	# Cross (X) close button: a wide rounded rectangle centered in the bottom
-	# red band with the glyph in its middle. The glyph lives on a child
+	# BACK close button: a wide rounded rectangle centered in the bottom
+	# red band with the text in its middle. The text lives on a child
 	# Label: Button text inflates the minimum size well past the art-sized box
 	# (font metrics), which would bleed over the art's baked grid.
 	var close := Button.new()
@@ -2910,7 +2910,7 @@ func _show_score_table() -> void:
 	# Vertically centered in the bottom red band (canvas y ~287..308 between the
 	# last row's grid line and the marquee bulbs).
 	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
-	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
+	var close_label := _score_label(close, "BACK", Vector2.ZERO, 9,
 		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.size = close.size
 	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
