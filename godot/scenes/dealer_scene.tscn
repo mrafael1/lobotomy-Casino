@@ -78,9 +78,9 @@ theme_override_font_sizes/font_size = 8
 
 [node name="TvNeg" type="Label" parent="." unique_id=2067611572]
 layout_mode = 0
-offset_left = 5.5
+offset_left = 5.0
 offset_top = 137.5
-offset_right = 85.5
+offset_right = 85.0
 offset_bottom = 146.5
 theme_override_colors/font_color = Color(0.94, 0.27, 0.27, 1)
 theme_override_fonts/font = ExtResource("5_0se43")

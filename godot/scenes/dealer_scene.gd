@@ -75,9 +75,23 @@ const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
 # dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
 const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
 const PAINTING_BUTTON_RECT := Rect2(2.0, 78.0, 29.0, 25.0)
-const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # spent painting: lab light off
+const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
 const PAINTING_SPENT_MESSAGE := "THE PAINTING HAS GONE DARK"
+const PAINTING_NO_CREDITS_MESSAGE := "NOT ENOUGH CREDITS"
+# Escalating reroll price tag, centred under the painting art (rect x 2..31).
+const REROLL_PRICE_TAG_POS := Vector2(-0.5, 104.0)
+const PRICE_WARN_COLOR := Color(0.94, 0.27, 0.27)
+# Chip Augment offer: presented like a consumable on the counter's far-right
+# slot — icon on the dot, price tag above (both phases), name/rarity/stock/effect
+# on select, drag onto the dealer to buy.
+const AUGMENT_RARITY_COLORS := {
+	"common": Color(0.0, 0.9, 1.0),
+	"rare": Color(0.98, 0.76, 0.24),
+	"legendary": Color(0.8, 0.42, 0.98),
+}
+const AUGMENT_BOUGHT_MESSAGE := "THE CHIP SLOTS INTO PLACE"
+const AUGMENT_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
@@ -129,6 +143,9 @@ var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button a
 var _reroll_button: Button = null            # issue #117: painting hit area
 var _reroll_button_sprite: Sprite2D = null   # authored 2-frame painting art
 var _reroll_glow_tween: Tween = null         # lab-style light while the reroll is live
+var _reroll_price_row: Control = null        # escalating reroll price tag
+var _reroll_price_label: Label = null
+var _augment_picker: Control = null          # symbol / pair-triple selector modal
 var _start_confirm_modal: Control = null     # issue #84: machine-button misclick guard
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
@@ -335,6 +352,8 @@ func _on_odds_overlay_closed() -> void:
 	_dealer_react()
 
 func _icon_tex(id: String) -> Texture2D:
+	if ChipAugments.map().has(id):
+		return Assets.texture(ChipAugments.ICON_SHEET)
 	return Assets.texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
 
 func _offer_icon_size() -> float:
@@ -357,13 +376,21 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	spr.texture = tex
 	spr.centered = false
 	spr.position = Vector2.ZERO
+	# Chip Augments share one authored sheet: one unique chip frame per augment.
+	var hframes := 1
+	if kind == "augment":
+		var entry: Variant = ChipAugments.map().get(id, null)
+		hframes = ChipAugments.ICON_HFRAMES
+		spr.hframes = hframes
+		spr.frame = int(entry.get("frame", 0)) if entry != null else 0
 	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
-		spr.scale = Vector2(size_px / float(tex.get_width()), size_px / float(tex.get_height()))
+		var frame_w := float(tex.get_width()) / float(hframes)
+		spr.scale = Vector2(size_px / frame_w, size_px / float(tex.get_height()))
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	t.add_child(spr)
 	t.gui_input.connect(_on_item_input.bind(t, id, kind))
 	parent.add_child(t)
-	if kind == "offer":
+	if kind == "offer" or kind == "augment":
 		_item_nodes[id] = t
 
 func _style_price_label(price: Label) -> void:
@@ -378,7 +405,10 @@ func _style_price_label(price: Label) -> void:
 	price.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _configure_offer_price_tag(row: HBoxContainer, id: String, pos: Vector2, width := 34.0, apply_layout := true) -> void:
-	row.visible = _pre_run
+	# Consumable tags only matter in the pre-run shop (in-run items are free); the
+	# Chip Augment is bought in BOTH phases, so its tag always shows.
+	var is_augment := ChipAugments.map().has(id)
+	row.visible = _pre_run or is_augment
 	if apply_layout:
 		row.position = pos
 		row.size = Vector2(width, 8.0)
@@ -390,7 +420,7 @@ func _configure_offer_price_tag(row: HBoxContainer, id: String, pos: Vector2, wi
 		price = Label.new()
 		price.name = "Price"
 		row.add_child(price)
-	price.text = "%d" % _item_cost(id)
+	price.text = "%d" % (RunStateStore.chip_augment_price(id) if is_augment else _item_cost(id))
 	_style_price_label(price)
 	var coin := row.get_node_or_null("Coin") as TextureRect
 	var authored_coin := coin != null
@@ -418,14 +448,13 @@ func _make_offer_price_tag(id: String, pos: Vector2, parent: Control, width := 3
 	_configure_offer_price_tag(row, id, pos, width)
 	parent.add_child(row)
 
-# Pre-run: the pre-run consumables (a fixed shelf). In-run: the dealer's
-# vector-pinned offer for this visit.
+# Pre-run: the shop's rolled pair (max two consumables per visit, rerollable via
+# the painting). In-run: the dealer's vector-pinned offer for this visit.
 func _offer_ids() -> Array:
 	if _pre_run:
-		var ids: Array = []
-		for c in Consumables.LIST:
-			ids.append(String(c["id"]))
-		return ids
+		if Engine.is_editor_hint():
+			return ["cons_cigarette", "cons_focus"] # editor preview pair
+		return RunStateStore.ensure_prerun_offer()
 	var offers: Variant = RunStateStore.dealerOfferIds
 	return (offers as Array).duplicate() if offers != null else []
 
@@ -438,6 +467,9 @@ func _build_offers() -> void:
 			_clear_dynamic_children(slot)
 		var ids := _offer_ids()
 		var icon_size := _offer_icon_size()
+		# The Chip Augment stands on the far-right dot, like one more consumable.
+		var aug_id := _augment_offer_id()
+		var aug_slot: Control = _offer_slots[_offer_slots.size() - 1] if aug_id != "" else null
 		for i in range(mini(ids.size(), _offer_slots.size())):
 			var id := String(ids[i])
 			var slot: Control = _offer_slots[i]
@@ -445,6 +477,19 @@ func _build_offers() -> void:
 			_offer_cx[id] = slot.position.x + slot.size.x * 0.5
 			_make_offer_price_tag(id, Vector2(slot.size.x * 0.5 - 17.0, -10.0), slot)
 			_make_drag_icon(id, "offer", (slot.size - Vector2(icon_size, icon_size)) * 0.5, slot, icon_size)
+		# Slots holding neither an item nor the augment hide their authored tags.
+		for i in range(ids.size(), _offer_slots.size()):
+			var slot: Control = _offer_slots[i]
+			if slot == aug_slot:
+				continue
+			var empty_tag := slot.get_node_or_null("PriceTag") as Control
+			if empty_tag != null:
+				empty_tag.visible = false
+		if aug_slot != null:
+			_offer_slots_by_id[aug_id] = aug_slot
+			_offer_cx[aug_id] = aug_slot.position.x + aug_slot.size.x * 0.5
+			_make_offer_price_tag(aug_id, Vector2(aug_slot.size.x * 0.5 - 17.0, -10.0), aug_slot)
+			_make_drag_icon(aug_id, "augment", (aug_slot.size - Vector2(icon_size, icon_size)) * 0.5, aug_slot, icon_size)
 		return
 	var idx := 0
 	var icon_size := _offer_icon_size()
@@ -619,13 +664,14 @@ func _configure_machine_button() -> void:
 	if _machine_button_sprite != null:
 		_machine_button_sprite.visible = _pre_run
 
-# ── painting reroll control (issue #117) ──────────────────────────────────────────
-# During an in-run dealer visit the wall painting is lit (lab-style glow) and
-# pressable: it rerolls the pending offer pair once per visit through
-# RunStateStore.reroll_dealer_offer(). Pre-run the shop pool is fixed, so the
-# painting stays plain scenery (no lit overlay, no hit area). The used state
-# (glow off, dimmed art) restores from RunStateStore.dealerRerollUsed, so leaving
-# and re-entering the scene mid-visit keeps the painting spent.
+# ── painting reroll control (issue #117, repriced) ────────────────────────────────
+# The wall painting rerolls the current offer pair in BOTH dealer phases: the
+# pre-run shop (RunStateStore.reroll_prerun_offer, paid from the wallet) and the
+# in-run visit (RunStateStore.reroll_dealer_offer, paid from run Lucidity). The
+# price starts at 5 and climbs by 5 per reroll within the cycle; the tag under the
+# painting shows the live price and turns red when the funds can't cover it (the
+# glow goes out too). State lives on RunStateStore, so leaving and re-entering the
+# scene keeps the escalated price.
 
 func _configure_reroll_button() -> void:
 	if _reroll_button == null:
@@ -648,13 +694,61 @@ func _configure_reroll_button() -> void:
 		_reroll_button.mouse_exited.connect(hover_off)
 	if not _reroll_button.focus_exited.is_connected(hover_off):
 		_reroll_button.focus_exited.connect(hover_off)
+	_build_reroll_price_tag()
 	_refresh_painting_state()
 
-func _painting_active() -> bool:
-	if Engine.is_editor_hint() or _pre_run:
+func _build_reroll_price_tag() -> void:
+	if _reroll_price_row != null:
+		return
+	var row := get_node_or_null("RerollPriceTag") as HBoxContainer
+	if row == null:
+		row = HBoxContainer.new()
+		row.name = "RerollPriceTag"
+		add_child(row)
+	row.position = REROLL_PRICE_TAG_POS
+	row.size = Vector2(34.0, 8.0)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 1)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var price := row.get_node_or_null("Price") as Label
+	if price == null:
+		price = Label.new()
+		price.name = "Price"
+		row.add_child(price)
+	_style_price_label(price)
+	var coin := row.get_node_or_null("Coin") as TextureRect
+	if coin == null:
+		coin = TextureRect.new()
+		coin.name = "Coin"
+		row.add_child(coin)
+	coin.texture = Assets.texture(COIN_ASSET, true)
+	coin.custom_minimum_size = Vector2(OFFER_PRICE_COIN_SIZE, OFFER_PRICE_COIN_SIZE)
+	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reroll_price_row = row
+	_reroll_price_label = price
+
+# Whether a rerollable offer exists in the current phase. Pre-run the shop pair
+# always exists (rolled lazily by _offer_ids); in-run it needs a pending visit.
+func _reroll_offer_exists() -> bool:
+	if Engine.is_editor_hint():
 		return false
-	return RunStateStore.dealerPending and RunStateStore.dealerOfferIds != null \
-		and not RunStateStore.dealerRerollUsed
+	if _pre_run:
+		return true
+	return RunStateStore.dealerPending and RunStateStore.dealerOfferIds != null
+
+# Funds the current phase's reroll draws from: wallet pre-run, run coins in-run.
+func _reroll_funds() -> int:
+	return MetaStateStore.lucidityWallet if _pre_run else RunStateStore.lucidityCoins
+
+func _reroll_affordable() -> bool:
+	return _reroll_funds() >= RunStateStore.dealer_reroll_price()
+
+func _painting_active() -> bool:
+	return _reroll_offer_exists() and _reroll_affordable()
 
 func _refresh_painting_state() -> void:
 	if _reroll_button == null:
@@ -663,14 +757,22 @@ func _refresh_painting_state() -> void:
 		# Editor preview: show the authored art plainly, no runtime state.
 		if _reroll_button_sprite != null:
 			_reroll_button_sprite.self_modulate = Color.WHITE
+		if _reroll_price_row != null:
+			_reroll_price_row.visible = false
 		return
+	var exists := _reroll_offer_exists()
 	var active := _painting_active()
-	var in_run_visit := not _pre_run and not Engine.is_editor_hint()
-	_reroll_button.visible = in_run_visit or Engine.is_editor_hint()
-	_reroll_button.disabled = not active
+	_reroll_button.visible = true
+	# Pressing while broke still gives feedback, so only a missing offer disables.
+	_reroll_button.disabled = not exists
 	# The other art buttons are pointer-only; the painting is also keyboard- and
 	# controller-operable, so it takes focus while it is live (ui_accept presses it).
 	_reroll_button.focus_mode = Control.FOCUS_ALL if active else Control.FOCUS_NONE
+	if _reroll_price_row != null:
+		_reroll_price_row.visible = exists
+		_reroll_price_label.text = "%d" % RunStateStore.dealer_reroll_price()
+		_reroll_price_label.add_theme_color_override(
+			&"font_color", LUCIDITY_COLOR if _reroll_affordable() else PRICE_WARN_COLOR)
 	if _reroll_button_sprite == null:
 		return
 	_reroll_button_sprite.visible = _reroll_button.visible
@@ -678,7 +780,7 @@ func _refresh_painting_state() -> void:
 		_start_painting_glow()
 	else:
 		_stop_painting_glow()
-		# Used/disabled state: the lab light is off and the art reads dark.
+		# No offer / can't afford: the lab light is off and the art reads dark.
 		_reroll_button_sprite.self_modulate = PAINTING_USED_TINT
 
 func _start_painting_glow() -> void:
@@ -710,17 +812,129 @@ func _set_painting_highlight(highlighted: bool) -> void:
 		_start_painting_glow()
 
 func _on_painting_pressed() -> void:
-	if Engine.is_editor_hint() or _pre_run:
+	if Engine.is_editor_hint():
 		return
-	if not RunStateStore.reroll_dealer_offer():
-		_message.text = PAINTING_SPENT_MESSAGE
+	var ok := RunStateStore.reroll_prerun_offer() if _pre_run else RunStateStore.reroll_dealer_offer()
+	if not ok:
+		_message.text = PAINTING_NO_CREDITS_MESSAGE \
+			if _reroll_offer_exists() and not _reroll_affordable() else PAINTING_SPENT_MESSAGE
 		_refresh_painting_state()
 		return
 	_build_offers()
 	_select("") # the old selection may no longer exist
 	_message.text = PAINTING_REROLL_MESSAGE
 	_dealer_react()
+	_refresh_painting_state() # price + affordability update immediately
+
+# ── Chip Augment offer (far-right counter slot) ─────────────────────────────────────
+# One dedicated augment offer per dealer visit (both phases), separate from the
+# counter items and untouched by the painting reroll. It stands on the counter's
+# far-right dot like a consumable: price tag above (live discounted price, both
+# phases), tap to read name/rarity/stock/effect, drag onto the dealer to buy.
+# Symbol Level / Pair-Triple open a selector first — cancelling never charges
+# (the store is only called on commit).
+
+func _augment_offer_id() -> String:
+	if Engine.is_editor_hint():
+		return ""
+	# In-run the augment offer belongs to the pending visit; pre-run it belongs to
+	# the shop and stays until bought or the cycle ends.
+	if not _pre_run and not RunStateStore.dealerPending:
+		return ""
+	return String(RunStateStore.dealerAugmentOfferId)
+
+func _augment_funds() -> int:
+	return _reroll_funds() # same phase currency as the painting reroll
+
+# Drop-on-dealer purchase entry (same gesture as buying a consumable).
+func _try_buy_augment(id: String) -> void:
+	if Engine.is_editor_hint() or id == "" or id != _augment_offer_id():
+		return
+	if _augment_funds() < RunStateStore.chip_augment_price(id):
+		_message.text = PAINTING_NO_CREDITS_MESSAGE
+		_flash_full_pockets()
+		return
+	match id:
+		"aug_symbol_level":
+			_open_symbol_level_picker(id)
+		"aug_pair_triple":
+			_open_pair_triple_picker(id)
+		_:
+			_commit_augment_purchase(id, "")
+
+# Charge + apply through the store; only reached with a committed choice, so a
+# cancelled selector can never consume stock or spend Lucidity.
+func _commit_augment_purchase(id: String, choice: String) -> void:
+	_close_augment_picker()
+	if not RunStateStore.purchase_chip_augment(id, choice):
+		_message.text = PAINTING_NO_CREDITS_MESSAGE
+		_flash_full_pockets()
+		return
+	_select("") # the bought augment's icon is about to vanish
+	_message.text = AUGMENT_BOUGHT_MESSAGE
+	_dealer_react()
+	_build_offers() # augment slot empties; consumable prices may have changed
 	_refresh_painting_state()
+
+func _open_symbol_level_picker(id: String) -> void:
+	_close_augment_picker()
+	_augment_picker = _augment_picker_root()
+	var symbols: Array[String] = []
+	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
+		if String(symbol_id) != "flatline":
+			symbols.append(String(symbol_id))
+	Assets.build_symbol_picker_panel(_augment_picker, symbols, "LEVEL SYMBOL", AUGMENT_PICKER_RECT,
+		Callable(self, "_on_augment_symbol_picked").bind(id),
+		Callable(self, "_close_augment_picker"), true)
+
+func _on_augment_symbol_picked(symbol_id: String, id: String) -> void:
+	_commit_augment_purchase(id, symbol_id)
+
+func _open_pair_triple_picker(id: String) -> void:
+	_close_augment_picker()
+	_augment_picker = _augment_picker_root()
+	var panel := VBoxContainer.new()
+	panel.name = "PairTriplePanel"
+	panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_theme_constant_override("separation", 6)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.size = Vector2(CANVAS_W - 24.0, 70.0)
+	panel.position = Vector2(12.0, (CANVAS_H - panel.size.y) * 0.5)
+	_augment_picker.add_child(panel)
+	panel.add_child(_confirm_label("Prompt", "SPECIALISE IN?", 9, Color(0.85, 0.95, 1.0)))
+	panel.add_child(_confirm_label("Sub", "THE CHOICE IS FINAL.", 6, Color(0.9, 0.78, 0.64)))
+	var row := HBoxContainer.new()
+	row.name = "Buttons"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	panel.add_child(row)
+	row.add_child(_confirm_button("PairButton", "PAIR", "ui/green_button.png",
+		Callable(self, "_commit_augment_purchase").bind(id, "pair")))
+	row.add_child(_confirm_button("TripleButton", "TRIPLE", "ui/green_button.png",
+		Callable(self, "_commit_augment_purchase").bind(id, "triple")))
+	row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png",
+		Callable(self, "_close_augment_picker")))
+
+# Full-canvas dim root shared by both selectors (modal: swallows input behind it).
+func _augment_picker_root() -> Control:
+	var root := Control.new()
+	root.name = "AugmentPicker"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.z_index = 210
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(root)
+	var dim := ColorRect.new()
+	dim.name = "Dim"
+	dim.color = Color(0.0, 0.0, 0.0, 0.66)
+	dim.size = Vector2(CANVAS_W, CANVAS_H)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+	return root
+
+func _close_augment_picker() -> void:
+	if _augment_picker != null and is_instance_valid(_augment_picker):
+		_augment_picker.queue_free()
+	_augment_picker = null
 
 func _build_button_art(asset: String, node_name: String) -> Sprite2D:
 	var spr := get_node_or_null(node_name) as Sprite2D
@@ -933,6 +1147,8 @@ func _build_credits_display() -> void:
 func _refresh_credits() -> void:
 	if _credits_label != null:
 		_credits_label.text = "0" if Engine.is_editor_hint() else str(MetaStateStore.lucidityWallet)
+	# Wallet changes move the pre-run reroll's affordability state.
+	_refresh_painting_state()
 
 # ── selection + TV ────────────────────────────────────────────────────────────────
 
@@ -949,6 +1165,9 @@ func _item_name(id: String) -> String:
 	var cmap := Consumables.map()
 	if cmap.has(id):
 		return String(cmap[id]["name"]).to_upper()
+	var amap := ChipAugments.map()
+	if amap.has(id):
+		return String(amap[id]["name"]).to_upper()
 	return id.to_upper()
 
 func _highlight_selected(id: String) -> void:
@@ -965,15 +1184,31 @@ func _select(id: String) -> void:
 		return
 	_highlight_selected(id)
 	_dealer_react()
-	var h: Dictionary = item_hints.get(id, FALLBACK_HINT)
-	_tv_pos.text = "+ %s" % String(h["pos"])
-	_tv_neg.text = "- %s" % String(h["neg"])
+	var amap := ChipAugments.map()
+	if amap.has(id):
+		# Chip Augment: augments are purely beneficial, so the TV shows only green
+		# hints (a second green line when one word needs context) — no explanatory
+		# message text; the vague hints are all the dealer gives away.
+		var entry: Dictionary = amap[id]
+		var hints: Array = entry.get("hints", [])
+		_tv_pos.text = ("+ %s" % String(hints[0])) if hints.size() > 0 else ""
+		_tv_neg.text = ("+ %s" % String(hints[1])) if hints.size() > 1 else ""
+		_tv_neg.add_theme_color_override(&"font_color", Color(0.13, 0.77, 0.37))
+	else:
+		var h: Dictionary = item_hints.get(id, FALLBACK_HINT)
+		_tv_pos.text = "+ %s" % String(h["pos"])
+		_tv_neg.text = "- %s" % String(h["neg"])
+		_tv_neg.add_theme_color_override(&"font_color", Color(0.94, 0.27, 0.27))
 	# Name under the selected item's icon, centred on its counter circle. Pre-run
 	# prices are separate tags above each consumable.
 	_name_label.text = _item_name(id)
-	_name_label.add_theme_color_override(
-		&"font_color", corrupt_name_color if HintLabel.item_is_corrupted(id) else name_color
-	)
+	if amap.has(id):
+		_name_label.add_theme_color_override(&"font_color",
+			AUGMENT_RARITY_COLORS.get(String(amap[id]["rarity"]), name_color))
+	else:
+		_name_label.add_theme_color_override(
+			&"font_color", corrupt_name_color if HintLabel.item_is_corrupted(id) else name_color
+		)
 	if _offer_slots_by_id.has(id):
 		var slot: Control = _offer_slots_by_id[id]
 		_name_label.position = Vector2(
@@ -985,9 +1220,13 @@ func _select(id: String) -> void:
 		_name_label.position = Vector2(cx - 30.0, ITEM_TOP + _offer_icon_size() + 1.0)
 	_name_label.visible = true
 
+# Live consumable price: base shopCost with the Consumable Discount augment
+# applied (display and charge share this, so they can never disagree).
 func _item_cost(id: String) -> int:
-	var cmap := Consumables.map()
-	return int(cmap[id]["shopCost"]) if cmap.has(id) else 0
+	if Engine.is_editor_hint():
+		var cmap := Consumables.map()
+		return int(cmap[id]["shopCost"]) if cmap.has(id) else 0
+	return RunStateStore.consumable_price(id)
 
 # ── drag handling ───────────────────────────────────────────────────────────────────
 
@@ -1068,6 +1307,9 @@ func _is_on_dealer(global_pos: Vector2) -> bool:
 	return global_pos.y < DEALER_DROP_Y
 
 func _drop_on_dealer(id: String, kind: String) -> void:
+	if kind == "augment":
+		_try_buy_augment(id)
+		return
 	if kind == "offer":
 		if _pre_run:
 			_buy_offer(id)
@@ -1080,7 +1322,7 @@ func _drop_on_dealer(id: String, kind: String) -> void:
 		await _react_then_return() # show the dealer reaction, then back to the machine
 	elif kind == "stash":
 		if _pre_run:
-			MetaStateStore.discard_pending_consumable(id) # sell it back, free a slot + refund
+			MetaStateStore.discard_pending_consumable(id, _item_cost(id)) # sell back at the live (discounted) price
 		else:
 			RunStateStore.discard_run_consumable(id) # throw it to the dealer, free a slot
 		_dealer_react()
@@ -1097,7 +1339,7 @@ func _buy_offer(id: String) -> void:
 		_message.text = "NOT ENOUGH CREDITS"
 		_flash_full_pockets()
 		return
-	MetaStateStore.buy_consumable_charge_with_limit(id, max_consumable_slots) # deducts wallet + persists; emits meta_changed
+	MetaStateStore.buy_consumable_charge_with_limit(id, max_consumable_slots, _item_cost(id)) # deducts wallet + persists; emits meta_changed
 	_dealer_react()
 	_build_stash()
 

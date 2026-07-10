@@ -12,6 +12,10 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
+## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
+## reroll adds the base again (5, 10, 15, …).
+const DEALER_REROLL_BASE_COST := 5
+
 ## Issue #118: every run starts with these permanent-upgrade-gated powers already
 ## active, regardless of meta-shop purchases — Reroll ("Random") has always been
 ## unconditional; Shift now joins it as baseline starting loadout.
@@ -79,9 +83,25 @@ var dealer35SafetyFired := false
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null
-## Issue #117: the dealer-scene painting rerolls the pending offer pair once per
-## visit. Reset when a new visit's offers roll so every visit gets one reroll.
-var dealerRerollUsed := false
+## Painting reroll economy: rerolling an offer costs Lucidity, starting at
+## DEALER_REROLL_BASE_COST and climbing by the same step each reroll (5, 10, 15…).
+## The counter spans one dealer/run cycle: it resets when a fresh pre-run shop
+## offer rolls and again when a new run starts. Pre-run rerolls charge the wallet
+## (MetaStateStore); in-run rerolls charge the run's lucidityCoins.
+var dealerRerollCount := 0
+## Pre-run shop offer pair (max two consumables per visit). Rolled lazily on the
+## first dealer-scene visit of a cycle and kept across lab round-trips; cleared
+## when a run starts so the next pre-run phase rolls fresh.
+var prerunOfferIds: Variant = null
+## Chip Augments: one dedicated dealer offer per visit, separate from the normal
+## items/consumables and untouched by the painting reroll. Purchased bonuses last
+## one dealer/run cycle (pre-run purchases carry into the run); everything clears
+## when the next cycle's pre-run offer rolls or on a full reset. All fields have
+## safe defaults, so older saves/sessions simply start with no augments.
+var chipAugmentsPurchased := {}       # augment id -> copies bought this cycle
+var dealerAugmentOfferId := ""        # current visit's dedicated offer ("" = none)
+var symbolAugmentLevels := {}         # symbol -> +levels bought via aug_symbol_level
+var pairTripleAugmentChoice := ""     # "" | "pair" | "triple" (locked once chosen)
 var brainBoostSpins := 0
 var forcedRandomBetSpins := 0
 var guaranteedWinSpins := 0
@@ -297,11 +317,16 @@ func spin(compulsive := false) -> Variant:
 			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
 		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		flatline_boost_applied = true
+	# Pair/Triple Specialist (Chip Augment): the chosen win type pays x1.25. Rides on
+	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
+	var specialist_bonus := ChipAugments.specialist_bonus(
+		base_score, String(result["winType"]), pairTripleAugmentChoice)
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied or hidden_reel_count > 0:
+	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
+			or specialist_bonus > 0 or hidden_reel_count > 0:
 		final_result = result.duplicate(true)
-		final_result["scoreEarned"] = base_score + flatline_boost
-		final_result["coinsEarned"] = base_score + flatline_boost
+		final_result["scoreEarned"] = base_score + flatline_boost + specialist_bonus
+		final_result["coinsEarned"] = base_score + flatline_boost + specialist_bonus
 		if hidden_reel_count > 0:
 			final_result["hiddenReelCount"] = hidden_reel_count
 		if cocktail_bonus > 0:
@@ -312,6 +337,8 @@ func spin(compulsive := false) -> Variant:
 		if flatline_boost_applied:
 			final_result["flatlineBoostApplied"] = true
 			final_result["flatlineBoostBonus"] = flatline_boost
+		if specialist_bonus > 0:
+			final_result["specialistBonus"] = specialist_bonus
 
 	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
@@ -436,7 +463,12 @@ func reset_run_state() -> void:
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
-	dealerRerollUsed = false
+	dealerRerollCount = 0
+	prerunOfferIds = null
+	chipAugmentsPurchased = {}
+	dealerAugmentOfferId = ""
+	symbolAugmentLevels = {}
+	pairTripleAugmentChoice = ""
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -515,7 +547,11 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
-	dealerRerollUsed = false
+	dealerRerollCount = 0
+	prerunOfferIds = null # new run => the next pre-run shop rolls a fresh offer
+	dealerAugmentOfferId = "" # the shop's augment offer closes with the shop
+	# chipAugmentsPurchased / symbolAugmentLevels / pairTripleAugmentChoice survive:
+	# pre-run purchases are FOR this run; the overlay below applies them.
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -553,6 +589,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	oddsPhaseCompleted = false
 	oddsWeightOverrides = _odds_overrides_from_meta()
 	symbolRewardBonuses = _symbol_reward_bonuses_from_meta(owned_permanents)
+	_apply_chip_augment_run_overlay()
 	pendingPowerRestores = []
 	runPhase = "running"
 	lastEnding = null
@@ -1036,7 +1073,8 @@ func check_dealer_trigger() -> void:
 	dealer65SafetyFired = decision["dealer65SafetyFired"]
 	dealer35SafetyFired = decision["dealer35SafetyFired"]
 	if decision["shouldTrigger"]:
-		var offers: Variant = Dealer.pick_dealer_items(_seed(spinCount * 0x6b43c7f))
+		var offers: Variant = Dealer.pick_pool_offer(
+			InRunItems.ids(), _seed(spinCount * 0x6b43c7f), dealer_offer_count())
 		if offers == null:
 			_commit()
 			return
@@ -1044,7 +1082,9 @@ func check_dealer_trigger() -> void:
 		dealerLastSpinCount = spinCount
 		dealerIncoming = true
 		dealerOfferIds = offers
-		dealerRerollUsed = false # fresh visit => the painting recharges (issue #117)
+		# One dedicated Chip Augment offer per visit, rolled separately from the
+		# item offer (and never touched by the painting reroll).
+		dealerAugmentOfferId = _roll_augment_offer(_seed(spinCount * 0x51c4a9 + 0xa06))
 	_commit()
 
 func reveal_dealer() -> void:
@@ -1058,6 +1098,7 @@ func decline_dealer_visit() -> void:
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
+	dealerAugmentOfferId = "" # the visit's augment offer closes with the visit
 	_commit()
 
 func accept_dealer_offer(item_id: String) -> void:
@@ -1072,39 +1113,214 @@ func accept_dealer_offer_with_limit(item_id: String, slot_limit: int) -> void:
 	if not imap.has(item_id):
 		dealerPending = false
 		dealerOfferIds = null
+		dealerAugmentOfferId = ""
 		_commit()
 		return
 	if Consumables.total_copies(runConsumables) >= maxi(1, slot_limit):
 		dealerPending = false
 		dealerOfferIds = null
+		dealerAugmentOfferId = ""
 		_commit()
 		return
 	runConsumables = runConsumables.duplicate(true)
 	runConsumables[item_id] = int(runConsumables.get(item_id, 0)) + 1
 	dealerPending = false
 	dealerOfferIds = null
+	dealerAugmentOfferId = ""
 	_commit()
 
-# Painting reroll (issue #117): replace the pending offer pair with a fresh
-# deterministic pick. Free, once per visit; invalid outside a pending in-run
-# visit or after the visit's reroll is spent. Returns whether the reroll happened.
+# Current price of the next offer reroll — shared by the pre-run shop and the
+# in-run dealer visit (one escalating counter per dealer/run cycle).
+func dealer_reroll_price() -> int:
+	return DEALER_REROLL_BASE_COST * (dealerRerollCount + 1)
+
+# Painting reroll (issue #117, repriced): replace the pending offer pair with a
+# fresh deterministic pick. Costs dealer_reroll_price() run Lucidity and the price
+# climbs by DEALER_REROLL_BASE_COST each reroll; available every visit as long as
+# the coins hold out. Returns whether the reroll happened.
 func reroll_dealer_offer() -> bool:
 	if runPhase != "running" or not dealerPending or dealerOfferIds == null:
 		return false
-	if dealerRerollUsed:
+	var price := dealer_reroll_price()
+	if lucidityCoins < price:
 		return false
-	var offers: Variant = Dealer.reroll_dealer_items(
-		_seed(spinCount * 0x6b43c7f + 0x117117), dealerOfferIds)
+	var offers: Variant = Dealer.reroll_pool_offer(InRunItems.ids(),
+		_seed(spinCount * 0x6b43c7f + 0x117117), dealer_offer_count(), dealerOfferIds)
 	if offers == null:
 		return false
+	lucidityCoins -= price
 	dealerOfferIds = offers
-	dealerRerollUsed = true
+	dealerRerollCount += 1
+	# dealerAugmentOfferId is deliberately untouched: rerolls never swap the augment.
 	_commit()
 	return true
+
+# ── pre-run shop offer (max two consumables, rerollable) ───────────────────────────
+
+func _prerun_candidate_ids() -> Array:
+	var ids: Array = []
+	for c in Consumables.LIST:
+		ids.append(String(c["id"]))
+	return ids
+
+# Lazily roll (or return) the current pre-run shop offer. A fresh roll starts a
+# new dealer cycle, so the escalating reroll price resets here and the previous
+# cycle's Chip Augments expire. `seed_override` keeps tests deterministic.
+func ensure_prerun_offer(seed_override := -1) -> Array:
+	if prerunOfferIds is Array and (prerunOfferIds as Array).size() >= 2:
+		return (prerunOfferIds as Array).duplicate()
+	# New cycle: last run's augment bonuses expire before the offer count is read.
+	chipAugmentsPurchased = {}
+	symbolAugmentLevels = {}
+	pairTripleAugmentChoice = ""
+	var roll_seed := seed_override if seed_override >= 0 else _seed(0x21117)
+	var offers: Variant = Dealer.pick_pool_offer(_prerun_candidate_ids(), roll_seed, dealer_offer_count())
+	if offers == null:
+		return []
+	prerunOfferIds = offers
+	dealerRerollCount = 0 # fresh pre-run offer => new cycle, price back to base
+	dealerAugmentOfferId = _roll_augment_offer(roll_seed ^ 0xa06a06)
+	_commit()
+	return (offers as Array).duplicate()
+
+# Pre-run painting reroll: same escalating price, paid from the wallet
+# (MetaStateStore) since no run currency exists yet. Never swaps the augment offer.
+func reroll_prerun_offer(seed_override := -1) -> bool:
+	if runPhase == "running" or not (prerunOfferIds is Array):
+		return false
+	var roll_seed := seed_override if seed_override >= 0 else _seed(0x117 * 977)
+	var offers: Variant = Dealer.reroll_pool_offer(
+		_prerun_candidate_ids(), roll_seed, dealer_offer_count(), prerunOfferIds)
+	if offers == null:
+		return false
+	if not MetaStateStore.spend_lucidity(dealer_reroll_price()):
+		return false
+	prerunOfferIds = offers
+	dealerRerollCount += 1
+	_commit()
+	return true
+
+# ── Chip Augments (data in rules/chip_augments.gd) ──────────────────────────────────
+
+## Items/consumables generated per dealer visit: 2, or 3 with Expanded Selection.
+func dealer_offer_count() -> int:
+	if int(chipAugmentsPurchased.get("aug_offer_expand", 0)) > 0:
+		return ChipAugments.EXPANDED_OFFER_COUNT
+	return 2
+
+## One random eligible augment (stock left) for a fresh visit; "" when the pool
+## is exhausted.
+func _roll_augment_offer(seed_val: int) -> String:
+	var pool := ChipAugments.eligible_ids(chipAugmentsPurchased)
+	if pool.is_empty():
+		return ""
+	var rng := LobRNG.new(seed_val & M32)
+	return String(pool[mini(pool.size() - 1, floori(rng.next() * pool.size()))])
+
+## Chip Discount applies to augment ("chip") prices; project rounding rules.
+func chip_augment_price(augment_id: String) -> int:
+	var entry: Variant = ChipAugments.map().get(augment_id, null)
+	if entry == null:
+		return 0
+	return ChipAugments.discounted_price(int(entry["cost"]),
+		int(chipAugmentsPurchased.get("aug_chip_discount", 0)))
+
+## Consumable Discount applies to the (pre-run) consumable shop prices.
+func consumable_price(consumable_id: String) -> int:
+	var cmap := Consumables.map()
+	if not cmap.has(consumable_id):
+		return 0
+	return ChipAugments.discounted_price(int(cmap[consumable_id]["shopCost"]),
+		int(chipAugmentsPurchased.get("aug_consumable_discount", 0)))
+
+## Effective symbol level = persisted odds level + this cycle's augment levels.
+## Augments may push past odds_max_level, up to the hard cap of 9.
+func augment_symbol_level(symbol: String) -> int:
+	return int(MetaStateStore.odds_upgrade_level(symbol)) + int(symbolAugmentLevels.get(symbol, 0))
+
+## Purchase the offered augment. `choice` carries the selector result: a symbol id
+## for aug_symbol_level, "pair"/"triple" for aug_pair_triple. All validation runs
+## BEFORE any charge, so a cancelled/invalid selection can never spend anything.
+## Charges run Lucidity in-run, the wallet pre-run. Returns whether it went through.
+func purchase_chip_augment(augment_id: String, choice := "") -> bool:
+	if augment_id == "" or dealerAugmentOfferId != augment_id:
+		return false
+	if ChipAugments.stock_left(augment_id, chipAugmentsPurchased) <= 0:
+		return false
+	match augment_id:
+		"aug_symbol_level":
+			if not Symbols.BASE_SYMBOL_CYCLE.has(choice) or choice == "flatline":
+				return false
+			if augment_symbol_level(choice) >= ChipAugments.SYMBOL_LEVEL_HARD_CAP:
+				return false
+		"aug_pair_triple":
+			if choice != "pair" and choice != "triple":
+				return false
+	var price := chip_augment_price(augment_id)
+	if runPhase == "running":
+		if lucidityCoins < price:
+			return false
+		lucidityCoins -= price
+	elif not MetaStateStore.spend_lucidity(price):
+		return false
+	chipAugmentsPurchased = chipAugmentsPurchased.duplicate(true)
+	chipAugmentsPurchased[augment_id] = int(chipAugmentsPurchased.get(augment_id, 0)) + 1
+	match augment_id:
+		"aug_symbol_level":
+			_apply_symbol_augment(choice)
+		"aug_extra_spins":
+			# In-run: replenish now via the spin/neuron model. Pre-run copies are
+			# folded in by _apply_chip_augment_run_overlay at run start.
+			if runPhase == "running":
+				neurons += ChipAugments.EXTRA_SPINS_PER_COPY \
+					* maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+		"aug_pair_triple":
+			pairTripleAugmentChoice = choice # locked — cannot be changed afterwards
+	dealerAugmentOfferId = "" # one dedicated offer per visit; it is now consumed
+	_commit()
+	return true
+
+## +1 augment level for `symbol`. Weight rises like a permanent odds level; the
+## max-level reward bonus is granted on crossing odds_max_level AND again at the
+## augment-only level 9 (the "additional scaling" for level-9 symbols).
+func _apply_symbol_augment(symbol: String) -> void:
+	var new_level := augment_symbol_level(symbol) + 1
+	symbolAugmentLevels = symbolAugmentLevels.duplicate(true)
+	symbolAugmentLevels[symbol] = int(symbolAugmentLevels.get(symbol, 0)) + 1
+	if runPhase != "running":
+		return # pre-run: folded into the run overlay at start_new_run
+	oddsWeightOverrides = oddsWeightOverrides.duplicate(true)
+	oddsWeightOverrides[symbol] = float(oddsWeightOverrides.get(symbol, 0.0)) \
+		+ probability_increase_per_upgrade
+	if new_level == odds_max_level or new_level == ChipAugments.SYMBOL_LEVEL_HARD_CAP:
+		symbolRewardBonuses = symbolRewardBonuses.duplicate(true)
+		symbolRewardBonuses[symbol] = float(symbolRewardBonuses.get(symbol, 0.0)) \
+			+ odds_max_level_reward_bonus
+
+## Folds pre-run augment purchases into a freshly started run: symbol levels into
+## the derived weight/reward tables, Extra Spins into the starting spin budget.
+func _apply_chip_augment_run_overlay() -> void:
+	for symbol in symbolAugmentLevels:
+		var added := int(symbolAugmentLevels[symbol])
+		if added <= 0:
+			continue
+		oddsWeightOverrides[String(symbol)] = float(oddsWeightOverrides.get(String(symbol), 0.0)) \
+			+ added * probability_increase_per_upgrade
+		var base_level := int(MetaStateStore.odds_upgrade_level(String(symbol)))
+		for lvl in range(base_level + 1, base_level + added + 1):
+			if lvl == odds_max_level or lvl == ChipAugments.SYMBOL_LEVEL_HARD_CAP:
+				symbolRewardBonuses[String(symbol)] = float(symbolRewardBonuses.get(String(symbol), 0.0)) \
+					+ odds_max_level_reward_bonus
+	var spin_copies := int(chipAugmentsPurchased.get("aug_extra_spins", 0))
+	if spin_copies > 0:
+		var bonus := spin_copies * ChipAugments.EXTRA_SPINS_PER_COPY \
+			* maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+		neurons += bonus
 
 func decline_dealer_offer() -> void:
 	dealerPending = false
 	dealerOfferIds = null
+	dealerAugmentOfferId = "" # the visit's augment offer closes with the visit
 	_commit()
 
 func discard_run_consumable(discard_id: String) -> void:

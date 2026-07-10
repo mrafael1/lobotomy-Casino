@@ -91,10 +91,20 @@ func _run() -> void:
 	if (run_store.runPhase != "running") != false:
 		failures.append("mode detect: 'running' should be in-run")
 
-	# Offer pool branches on _pre_run (set in _ready from the mode above).
+	# Offer pool branches on _pre_run (set in _ready from the mode above). The
+	# pre-run shop rolls a persistent pair — max two consumables per visit.
 	dealer._pre_run = true
-	if dealer._offer_ids() != ["cons_cigarette", "cons_focus", "cons_white_powder", "cons_potion", "cons_tea"]:
-		failures.append("pre-run offers wrong: %s" % str(dealer._offer_ids()))
+	run_store.prerunOfferIds = null
+	var shop_pool: Array = []
+	for c in Consumables.LIST:
+		shop_pool.append(String(c["id"]))
+	var shop_offers: Array = dealer._offer_ids()
+	if shop_offers.size() != 2 or shop_offers[0] == shop_offers[1] \
+			or not shop_pool.has(shop_offers[0]) or not shop_pool.has(shop_offers[1]):
+		failures.append("pre-run offers wrong: %s" % str(shop_offers))
+	if dealer._offer_ids() != shop_offers:
+		failures.append("pre-run offer pair is not stable across reads")
+	run_store.prerunOfferIds = null
 	dealer._pre_run = false
 	run_store.dealerOfferIds = ["item_water", "item_pill"]
 	if dealer._offer_ids() != ["item_water", "item_pill"]:
@@ -349,6 +359,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	_check_start_confirm_and_lab_glow_84(dealer, failures)
 	dealer.queue_free()
 	_check_painting_reroll_117(failures)
+	_check_chip_augments(failures)
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(machine)
@@ -999,55 +1010,67 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	if dealer.get_node_or_null("OfferSlot6") != null:
 		failures.append("issue55: the 1-Lucidity placeholder offer slot should be gone")
 
-# Issue #117: the dealer-scene painting is an illuminated reroll control during an
-# in-run visit — glowing/focusable while live, spent (dark, disabled) after one use,
-# plain scenery pre-run. Covers activation, invalid states, and mid-visit restore.
+# Issue #117 (repriced): the dealer-scene painting rerolls the current offer for
+# an escalating Lucidity price (5, 10, 15, …) in BOTH dealer phases. Covers the
+# escalating cost, insufficient funds, pre-run availability (wallet-paid), the
+# two-consumable offer maximum, the immediate price/affordability refresh, and the
+# price reset at the start of a new dealer/run cycle.
 func _check_painting_reroll_117(failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
 	if not ResourceLoader.exists("res://assets/images/dealer_scene_reroll_BUTTON.png"):
 		failures.append("issue117: reroll painting art not in godot/assets/images — missing from exported builds (APK)")
 
-	# Store rules: invalid outside a pending visit, once per visit, deterministic pair swap.
 	var prev_phase := String(run_store.runPhase)
 	var prev_pending := bool(run_store.dealerPending)
 	var prev_offers: Variant = run_store.dealerOfferIds
-	var prev_used := bool(run_store.dealerRerollUsed)
+	var prev_count := int(run_store.dealerRerollCount)
+	var prev_prerun_offers: Variant = run_store.prerunOfferIds
+	var prev_coins := int(run_store.lucidityCoins)
+	var prev_wallet := int(meta_store.lucidityWallet)
+
+	# Store rules: invalid outside a pending visit; 5L then 10L; funds gate.
 	run_store.runPhase = "running"
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
-	run_store.dealerRerollUsed = false
+	run_store.dealerRerollCount = 0
+	run_store.lucidityCoins = 100
 	if run_store.reroll_dealer_offer():
 		failures.append("issue117: reroll succeeded with no pending dealer visit")
 	run_store.dealerPending = true
 	run_store.dealerOfferIds = ["item_water", "item_pill"]
+	if int(run_store.dealer_reroll_price()) != 5:
+		failures.append("issue117: first reroll price is not 5L")
 	if not run_store.reroll_dealer_offer():
-		failures.append("issue117: reroll refused a valid pending visit")
+		failures.append("issue117: reroll refused a funded pending visit")
 	else:
 		var offers := run_store.dealerOfferIds as Array
 		if offers.size() != 2 or (offers.has("item_water") and offers.has("item_pill")):
 			failures.append("issue117: reroll did not change the offer pair: %s" % str(offers))
-		if not run_store.dealerRerollUsed:
-			failures.append("issue117: reroll did not mark the painting as used")
+		if int(run_store.lucidityCoins) != 95:
+			failures.append("issue117: first reroll did not charge 5L (coins=%d)" % int(run_store.lucidityCoins))
+		if int(run_store.dealer_reroll_price()) != 10:
+			failures.append("issue117: price did not escalate to 10L after one reroll")
+		if not run_store.reroll_dealer_offer():
+			failures.append("issue117: second reroll refused despite sufficient funds")
+		elif int(run_store.lucidityCoins) != 85:
+			failures.append("issue117: second reroll did not charge 10L (coins=%d)" % int(run_store.lucidityCoins))
+		run_store.lucidityCoins = int(run_store.dealer_reroll_price()) - 1
 		if run_store.reroll_dealer_offer():
-			failures.append("issue117: painting rerolled twice in one visit")
+			failures.append("issue117: reroll succeeded without enough Lucidity")
 
-	# In-run UI: live painting glows, is enabled and focusable; used painting restores dark.
+	# In-run UI: affordable painting glows, shows the live price, and updates the
+	# price + affordability immediately after a reroll.
+	run_store.lucidityCoins = 100
+	run_store.dealerRerollCount = 0
 	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(dealer)
 	var button := dealer.get_node_or_null("RerollButton") as Button
 	var art := dealer.get_node_or_null("RerollButtonArt") as Sprite2D
-	if button == null or art == null:
-		failures.append("issue117: dealer painting button/art pair is missing")
+	var price_label := dealer.get_node_or_null("RerollPriceTag/Price") as Label
+	if button == null or art == null or price_label == null:
+		failures.append("issue117: dealer painting button/art/price-tag is missing")
 	else:
-		# dealerRerollUsed is still true from the store checks above: the scene must
-		# restore the SPENT state on entry (save/leave/reload mid-visit).
-		if not button.disabled:
-			failures.append("issue117: used painting is not disabled after scene re-entry")
-		if dealer._reroll_glow_tween != null and dealer._reroll_glow_tween.is_valid():
-			failures.append("issue117: used painting still glows")
-		# Recharge (a fresh visit) and refresh: the painting comes back to life.
-		run_store.dealerRerollUsed = false
-		dealer._refresh_painting_state()
 		if button.disabled:
 			failures.append("issue117: live painting is disabled")
 		if button.focus_mode != Control.FOCUS_ALL:
@@ -1056,44 +1079,432 @@ func _check_painting_reroll_117(failures: Array) -> void:
 			failures.append("issue117: live painting glow tween is not running")
 		if art.hframes != 2:
 			failures.append("issue117: painting art is not a 2-frame sheet")
+		if price_label.text != "5":
+			failures.append("issue117: painting price tag does not read 5 (got %s)" % price_label.text)
 		button.button_down.emit()
 		if art.frame != 1:
 			failures.append("issue117: painting press did not switch to the pressed frame")
 		button.button_up.emit()
-		# Activation through the scene: reroll fires, feedback shows, painting spends.
+		# Activation through the scene: reroll fires, coins drop, price tag jumps.
 		var before := (run_store.dealerOfferIds as Array).duplicate()
 		dealer._on_painting_pressed()
 		var after := run_store.dealerOfferIds as Array
 		if after.has(before[0]) and after.has(before[1]):
 			failures.append("issue117: painting press did not reroll the offer")
-		if not bool(run_store.dealerRerollUsed):
-			failures.append("issue117: painting press did not spend the reroll")
-		if not button.disabled or button.focus_mode != Control.FOCUS_NONE:
-			failures.append("issue117: spent painting stayed pressable")
+		if int(run_store.lucidityCoins) != 95:
+			failures.append("issue117: painting press did not charge 5L")
+		if price_label.text != "10":
+			failures.append("issue117: price tag did not update to 10 right after the reroll")
 		var message := dealer.get_node_or_null("Message") as Label
 		if message == null or message.text == "":
 			failures.append("issue117: painting reroll gave no feedback message")
+		# Broke: glow off, price reads as warning, press refuses with feedback.
+		run_store.lucidityCoins = 3
+		dealer._refresh_painting_state()
+		if dealer._reroll_glow_tween != null and dealer._reroll_glow_tween.is_valid():
+			failures.append("issue117: unaffordable painting still glows")
+		if price_label.get_theme_color("font_color") != dealer.PRICE_WARN_COLOR:
+			failures.append("issue117: unaffordable price tag is not the warning colour")
+		var held := (run_store.dealerOfferIds as Array).duplicate()
+		dealer._on_painting_pressed()
+		if run_store.dealerOfferIds != held:
+			failures.append("issue117: broke reroll still changed the offer")
+		if message != null and message.text != dealer.PAINTING_NO_CREDITS_MESSAGE:
+			failures.append("issue117: broke reroll gave no NOT ENOUGH CREDITS feedback")
 	dealer.queue_free()
 
-	# Pre-run shop: the pool is fixed, so the painting is not a control at all.
+	# Pre-run shop: the painting is live there too, priced from the wallet, and a
+	# fresh cycle's offer (two consumables max) resets the escalated price.
 	run_store.runPhase = "idle"
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
-	run_store.dealerRerollUsed = false
+	run_store.prerunOfferIds = null
+	run_store.dealerRerollCount = 7 # stale escalation from a previous cycle
+	meta_store.lucidityWallet = 50
 	var shop := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(shop)
+	var shop_offers: Array = shop._offer_ids()
+	if shop_offers.size() != 2:
+		failures.append("issue117: pre-run offer must be exactly two consumables: %s" % str(shop_offers))
+	if int(run_store.dealerRerollCount) != 0 or int(run_store.dealer_reroll_price()) != 5:
+		failures.append("issue117: fresh pre-run offer did not reset the reroll price to 5L")
+	# Slots beyond the two-item offer are empty (the far-right slot belongs to the
+	# Chip Augment): their authored price tags must hide.
+	for i in range(shop_offers.size() + 1, 5):
+		var empty_slot := shop.get_node_or_null("OfferSlot%d" % i) as Control
+		var empty_tag := empty_slot.get_node_or_null("PriceTag") as Control if empty_slot != null else null
+		if empty_tag != null and empty_tag.visible:
+			failures.append("issue117: empty OfferSlot%d still shows a price tag" % i)
 	var shop_button := shop.get_node_or_null("RerollButton") as Button
-	var shop_art := shop.get_node_or_null("RerollButtonArt") as Sprite2D
-	if shop_button != null and (shop_button.visible or not shop_button.disabled):
-		failures.append("issue117: pre-run painting should be hidden and disabled")
-	if shop_art != null and shop_art.visible:
-		failures.append("issue117: pre-run painting should not show the lit overlay")
+	if shop_button == null or not shop_button.visible or shop_button.disabled:
+		failures.append("issue117: pre-run painting is not a live control")
+	elif shop._reroll_glow_tween == null or not shop._reroll_glow_tween.is_valid():
+		failures.append("issue117: pre-run painting glow tween is not running")
+	else:
+		var shop_before := (run_store.prerunOfferIds as Array).duplicate()
+		shop._on_painting_pressed()
+		var shop_after := run_store.prerunOfferIds as Array
+		if shop_after.has(shop_before[0]) and shop_after.has(shop_before[1]):
+			failures.append("issue117: pre-run reroll did not change the shop pair")
+		if int(meta_store.lucidityWallet) != 45:
+			failures.append("issue117: pre-run reroll did not charge the wallet 5L (wallet=%d)" % int(meta_store.lucidityWallet))
+		if int(run_store.dealer_reroll_price()) != 10:
+			failures.append("issue117: pre-run price did not escalate to 10L")
+		if shop._offer_ids().size() != 2:
+			failures.append("issue117: pre-run offer grew past two consumables after reroll")
+		# Insufficient wallet: refuse and leave the pair and wallet untouched.
+		meta_store.lucidityWallet = 2
+		shop._refresh_painting_state()
+		var shop_held := (run_store.prerunOfferIds as Array).duplicate()
+		shop._on_painting_pressed()
+		if run_store.prerunOfferIds != shop_held or int(meta_store.lucidityWallet) != 2:
+			failures.append("issue117: broke pre-run reroll changed state")
 	shop.queue_free()
+
+	# New run => new cycle: starting a run clears the shop offer and price ladder.
+	# Exercised on a detached store instance so ambient smoke-test state survives.
+	var fresh_store: Node = (load("res://autoload/run_state_store.gd") as GDScript).new()
+	fresh_store.dealerRerollCount = 4
+	fresh_store.prerunOfferIds = ["cons_tea", "cons_potion"]
+	fresh_store.start_new_run([], {}, false)
+	if int(fresh_store.dealerRerollCount) != 0 or fresh_store.prerunOfferIds != null:
+		failures.append("issue117: starting a run did not reset the reroll cycle state")
+	fresh_store.free()
 
 	run_store.runPhase = prev_phase
 	run_store.dealerPending = prev_pending
 	run_store.dealerOfferIds = prev_offers
-	run_store.dealerRerollUsed = prev_used
+	run_store.dealerRerollCount = prev_count
+	run_store.prerunOfferIds = prev_prerun_offers
+	run_store.lucidityCoins = prev_coins
+	meta_store.lucidityWallet = prev_wallet
+	meta_store.save_state() # re-persist the restored wallet (rerolls saved to disk)
+
+# Chip Augments (rules/chip_augments.gd): one dedicated dealer offer per visit,
+# separate from the item/consumable offer. Covers offer rolling and eligibility,
+# reroll isolation, stock limits + pool exhaustion, discount stacking + rounding,
+# symbol levels (selection, cancellation, level-9 cap), Extra Spins, expanded
+# three-item offers, pair/triple choices, run-start persistence and cycle reset.
+func _check_chip_augments(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var prev_phase := String(run_store.runPhase)
+	var prev_pending := bool(run_store.dealerPending)
+	var prev_offers: Variant = run_store.dealerOfferIds
+	var prev_reroll_count := int(run_store.dealerRerollCount)
+	var prev_prerun: Variant = run_store.prerunOfferIds
+	var prev_coins := int(run_store.lucidityCoins)
+	var prev_wallet := int(meta_store.lucidityWallet)
+	var prev_augs: Dictionary = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_aug_offer := String(run_store.dealerAugmentOfferId)
+	var prev_sym: Dictionary = (run_store.symbolAugmentLevels as Dictionary).duplicate(true)
+	var prev_pt := String(run_store.pairTripleAugmentChoice)
+	var prev_weights: Dictionary = (run_store.oddsWeightOverrides as Dictionary).duplicate(true)
+	var prev_bonuses: Dictionary = (run_store.symbolRewardBonuses as Dictionary).duplicate(true)
+	var prev_neurons := int(run_store.neurons)
+	var prev_owned: Array = (run_store.ownedUpgrades as Array).duplicate()
+
+	# Fresh pre-run cycle: stale augments expire, exactly one pool offer rolls.
+	run_store.runPhase = "idle"
+	run_store.dealerPending = false
+	run_store.dealerOfferIds = null
+	run_store.prerunOfferIds = null
+	run_store.chipAugmentsPurchased = { "aug_extra_spins": 2 } # stale, must clear
+	run_store.pairTripleAugmentChoice = "pair"
+	run_store.symbolAugmentLevels = { "eye": 1 }
+	meta_store.lucidityWallet = 1000
+	run_store.ensure_prerun_offer(7)
+	if not (run_store.chipAugmentsPurchased as Dictionary).is_empty() \
+			or String(run_store.pairTripleAugmentChoice) != "" \
+			or not (run_store.symbolAugmentLevels as Dictionary).is_empty():
+		failures.append("augments: fresh cycle did not expire the previous cycle's augments")
+	var offer_id := String(run_store.dealerAugmentOfferId)
+	if offer_id == "" or not ChipAugments.ids().has(offer_id):
+		failures.append("augments: fresh visit did not roll one augment offer from the pool")
+
+	# Painting rerolls (both phases) never swap the augment offer.
+	run_store.reroll_prerun_offer(1234)
+	if String(run_store.dealerAugmentOfferId) != offer_id:
+		failures.append("augments: pre-run reroll changed the augment offer")
+	run_store.runPhase = "running"
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water", "item_pill"]
+	run_store.lucidityCoins = 500
+	run_store.reroll_dealer_offer()
+	if String(run_store.dealerAugmentOfferId) != offer_id:
+		failures.append("augments: in-run reroll changed the augment offer")
+
+	# Discount stacking + project rounding (floor(x + 0.5)).
+	run_store.chipAugmentsPurchased = {}
+	if int(run_store.consumable_price("cons_cigarette")) != 20:
+		failures.append("augments: undiscounted consumable price wrong")
+	run_store.dealerAugmentOfferId = "aug_consumable_discount"
+	if not run_store.purchase_chip_augment("aug_consumable_discount"):
+		failures.append("augments: consumable discount purchase refused")
+	run_store.dealerAugmentOfferId = "aug_consumable_discount"
+	run_store.purchase_chip_augment("aug_consumable_discount")
+	if int(run_store.consumable_price("cons_cigarette")) != 16:
+		failures.append("augments: two consumable discounts should stack 20 -> 16")
+	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_consumable_discount", 0)) != 2:
+		failures.append("augments: consumable discount stock not tracked")
+	run_store.dealerAugmentOfferId = "aug_chip_discount"
+	run_store.purchase_chip_augment("aug_chip_discount")
+	if int(run_store.chip_augment_price("aug_extra_spins")) != 32: # 35 * 0.9 = 31.5 -> 32
+		failures.append("augments: one chip discount should price 35 -> 32 (round half up)")
+	run_store.dealerAugmentOfferId = "aug_chip_discount"
+	run_store.purchase_chip_augment("aug_chip_discount")
+	if int(run_store.chip_augment_price("aug_extra_spins")) != 28:
+		failures.append("augments: two chip discounts should price 35 -> 28")
+
+	# Stock limit: a maxed augment can't be offered or bought again.
+	run_store.dealerAugmentOfferId = "aug_chip_discount"
+	var coins_hold := int(run_store.lucidityCoins)
+	if run_store.purchase_chip_augment("aug_chip_discount"):
+		failures.append("augments: purchase exceeded the stock limit")
+	if int(run_store.lucidityCoins) != coins_hold:
+		failures.append("augments: refused over-stock purchase still charged")
+	if ChipAugments.eligible_ids(run_store.chipAugmentsPurchased).has("aug_chip_discount"):
+		failures.append("augments: maxed augment still in the eligible pool")
+
+	# Insufficient funds: nothing charged, no stock consumed.
+	run_store.lucidityCoins = 1
+	run_store.dealerAugmentOfferId = "aug_extra_spins"
+	if run_store.purchase_chip_augment("aug_extra_spins"):
+		failures.append("augments: purchase succeeded without funds")
+	if int(run_store.lucidityCoins) != 1 \
+			or int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 0:
+		failures.append("augments: failed purchase charged or consumed stock")
+
+	# Extra Spins: both copies, +3 spins each through the neuron decay model.
+	run_store.lucidityCoins = 500
+	run_store.ownedUpgrades = []
+	var decay := maxi(1, Economy.compute_neuron_decay([]))
+	var neurons_before := int(run_store.neurons)
+	run_store.dealerAugmentOfferId = "aug_extra_spins"
+	run_store.purchase_chip_augment("aug_extra_spins")
+	run_store.dealerAugmentOfferId = "aug_extra_spins"
+	run_store.purchase_chip_augment("aug_extra_spins")
+	if int(run_store.neurons) != neurons_before + 6 * decay:
+		failures.append("augments: two Extra Spins should add 6 spins' worth of neurons")
+
+	# Symbol Level: needs a selection, raises the weight, honours the level-9 cap.
+	run_store.symbolAugmentLevels = {}
+	run_store.oddsWeightOverrides = {}
+	run_store.symbolRewardBonuses = {}
+	run_store.dealerAugmentOfferId = "aug_symbol_level"
+	if run_store.purchase_chip_augment("aug_symbol_level"):
+		failures.append("augments: symbol level purchase went through without a selection")
+	run_store.dealerAugmentOfferId = "aug_symbol_level"
+	if not run_store.purchase_chip_augment("aug_symbol_level", "eye"):
+		failures.append("augments: symbol level purchase refused a valid symbol")
+	if float((run_store.oddsWeightOverrides as Dictionary).get("eye", 0.0)) \
+			!= float(run_store.probability_increase_per_upgrade):
+		failures.append("augments: symbol augment did not raise the chosen symbol's weight")
+	# Level-9 cap: crossing 8 and 9 each add the max-level reward bonus; a tenth
+	# level is refused without charging. Pick a symbol whose persisted odds level
+	# leaves room, so a real save on this machine can't skew the test.
+	var cap_sym := ""
+	for s in ["vial", "syringe", "pill", "eye", "brain"]:
+		if int(meta_store.odds_upgrade_level(s)) <= 7:
+			cap_sym = s
+			break
+	if cap_sym == "":
+		failures.append("augments: no symbol below level 8 available for the cap test")
+	else:
+		var meta_level := int(meta_store.odds_upgrade_level(cap_sym))
+		run_store.symbolAugmentLevels = { cap_sym: 7 - meta_level } # effective level 7
+		run_store.symbolRewardBonuses = {}
+		run_store.chipAugmentsPurchased = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+		run_store.dealerAugmentOfferId = "aug_symbol_level"
+		run_store.purchase_chip_augment("aug_symbol_level", cap_sym) # -> level 8
+		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+		run_store.dealerAugmentOfferId = "aug_symbol_level"
+		run_store.purchase_chip_augment("aug_symbol_level", cap_sym) # -> level 9
+		var cap_bonus := float((run_store.symbolRewardBonuses as Dictionary).get(cap_sym, 0.0))
+		if not is_equal_approx(cap_bonus, 2.0 * float(run_store.odds_max_level_reward_bonus)):
+			failures.append("augments: levels 8 and 9 should each add the max-level reward bonus")
+		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+		run_store.dealerAugmentOfferId = "aug_symbol_level"
+		var coins_at_cap := int(run_store.lucidityCoins)
+		if run_store.purchase_chip_augment("aug_symbol_level", cap_sym):
+			failures.append("augments: symbol pushed past level 9")
+		if int(run_store.lucidityCoins) != coins_at_cap:
+			failures.append("augments: refused level-10 purchase still charged")
+
+	# Expanded Selection: visits generate three consumables; rerolls keep three.
+	run_store.chipAugmentsPurchased = {}
+	run_store.dealerAugmentOfferId = "aug_offer_expand"
+	run_store.purchase_chip_augment("aug_offer_expand")
+	if int(run_store.dealer_offer_count()) != 3:
+		failures.append("augments: expanded selection did not raise the offer count")
+	run_store.dealerOfferIds = ["item_water", "item_pill"]
+	run_store.reroll_dealer_offer()
+	if (run_store.dealerOfferIds as Array).size() != 3:
+		failures.append("augments: in-run reroll did not generate three items")
+	run_store.runPhase = "idle"
+	run_store.reroll_prerun_offer(77)
+	if (run_store.prerunOfferIds as Array).size() != 3:
+		failures.append("augments: pre-run reroll did not generate three consumables")
+
+	# Pair/Triple Specialist: choice validated, stored, and locked; bonus maths.
+	run_store.runPhase = "running"
+	run_store.dealerAugmentOfferId = "aug_pair_triple"
+	if run_store.purchase_chip_augment("aug_pair_triple", "banana"):
+		failures.append("augments: specialist accepted an invalid choice")
+	run_store.dealerAugmentOfferId = "aug_pair_triple"
+	run_store.purchase_chip_augment("aug_pair_triple", "triple")
+	if String(run_store.pairTripleAugmentChoice) != "triple":
+		failures.append("augments: specialist triple choice not stored")
+	run_store.pairTripleAugmentChoice = ""
+	run_store.chipAugmentsPurchased = {}
+	run_store.dealerAugmentOfferId = "aug_pair_triple"
+	run_store.purchase_chip_augment("aug_pair_triple", "pair")
+	if String(run_store.pairTripleAugmentChoice) != "pair":
+		failures.append("augments: specialist pair choice not stored")
+	if ChipAugments.specialist_bonus(100, "triple", "triple") != 25 \
+			or ChipAugments.specialist_bonus(100, "pair", "triple") != 0 \
+			or ChipAugments.specialist_bonus(10, "pair", "pair") != 3: # 2.5 rounds up
+		failures.append("augments: specialist bonus arithmetic wrong")
+
+	# Pool exhaustion: everything at stock limit => no offer rolls.
+	var maxed := {}
+	for a in ChipAugments.LIST:
+		maxed[String(a["id"])] = int(a["stock"])
+	run_store.chipAugmentsPurchased = maxed
+	if String(run_store._roll_augment_offer(5)) != "":
+		failures.append("augments: exhausted pool still rolled an offer")
+	# One eligible augment left => the roll must offer exactly that one.
+	var one_left: Dictionary = maxed.duplicate(true)
+	one_left["aug_pair_triple"] = 0
+	run_store.chipAugmentsPurchased = one_left
+	if String(run_store._roll_augment_offer(5)) != "aug_pair_triple":
+		failures.append("augments: sole eligible augment was not offered")
+
+	# UI: the augment stands on the far-right counter slot like a consumable —
+	# priced tag above, name/rarity/stock/effect on select, drag-on-dealer to buy;
+	# selector cancel never charges.
+	run_store.runPhase = "idle"
+	run_store.dealerPending = false
+	run_store.dealerOfferIds = null
+	run_store.prerunOfferIds = null
+	run_store.chipAugmentsPurchased = {}
+	run_store.symbolAugmentLevels = {}
+	run_store.pairTripleAugmentChoice = ""
+	meta_store.lucidityWallet = 100
+	var shop := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	run_store.dealerAugmentOfferId = "aug_symbol_level"
+	shop._build_offers()
+	var aug_slot := shop.get_node_or_null("OfferSlot5") as Control
+	if aug_slot == null:
+		failures.append("augments: far-right offer slot missing")
+	else:
+		var has_icon := false
+		var icon_sprite: Sprite2D = null
+		for child in aug_slot.get_children():
+			if child.has_meta("_dealer_dynamic") and child is Control and not (child is HBoxContainer):
+				has_icon = true
+				icon_sprite = (child as Control).get_child(0) as Sprite2D
+		if not has_icon:
+			failures.append("augments: no augment icon on the far-right counter slot")
+		# The authored chip sheet: 6 frames, one unique chip per augment.
+		if icon_sprite == null or icon_sprite.texture == null:
+			failures.append("augments: augment icon has no chip art")
+		elif icon_sprite.hframes != ChipAugments.ICON_HFRAMES \
+				or icon_sprite.frame != int(ChipAugments.map()["aug_symbol_level"]["frame"]):
+			failures.append("augments: augment icon is not the augment's unique chip frame")
+		var aug_tag := aug_slot.get_node_or_null("PriceTag") as Control
+		var aug_price_label := aug_slot.get_node_or_null("PriceTag/Price") as Label
+		if aug_tag == null or not aug_tag.visible or aug_price_label == null \
+				or aug_price_label.text != str(run_store.chip_augment_price("aug_symbol_level")):
+			failures.append("augments: far-right slot must show the live augment price")
+		# Selecting the augment surfaces the shared AUGMENT name (rarity-coloured)
+		# and green-only TV hints — no explanatory message text.
+		shop._select("aug_symbol_level")
+		var sel_name := shop.get_node_or_null("NameLabel") as Label
+		var sel_message := shop.get_node_or_null("Message") as Label
+		if sel_name == null or not sel_name.visible or sel_name.text != "AUGMENT":
+			failures.append("augments: selecting the augment did not show the AUGMENT name")
+		if sel_message == null or sel_message.text != "":
+			failures.append("augments: selecting the augment should show no explanatory text")
+		if not shop._tv_pos.text.begins_with("+ ") \
+				or (shop._tv_neg.text != "" and not shop._tv_neg.text.begins_with("+ ")):
+			failures.append("augments: TV must show only beneficial (green) hints")
+		# A later normal-item selection restores the red negative line.
+		shop._select("cons_cigarette")
+		if not shop._tv_neg.text.begins_with("- "):
+			failures.append("augments: normal item selection lost its negative hint")
+		shop._select("aug_symbol_level")
+		# Selector cancellation: drop on the dealer opens the picker; cancel
+		# consumes nothing.
+		shop._drop_on_dealer("aug_symbol_level", "augment")
+		if shop.get_node_or_null("AugmentPicker") == null:
+			failures.append("augments: symbol selector did not open")
+		shop._close_augment_picker()
+		if int(meta_store.lucidityWallet) != 100 \
+				or not (run_store.chipAugmentsPurchased as Dictionary).is_empty():
+			failures.append("augments: cancelled selector charged or consumed stock")
+		# Drag-to-dealer purchase: wallet pays, the offer and its icon are consumed.
+		run_store.dealerAugmentOfferId = "aug_extra_spins"
+		shop._build_offers()
+		shop._drop_on_dealer("aug_extra_spins", "augment")
+		if int(meta_store.lucidityWallet) != 100 - 35:
+			failures.append("augments: drop purchase charged the wrong wallet price")
+		if String(run_store.dealerAugmentOfferId) != "":
+			failures.append("augments: purchased offer was not consumed")
+		var leftover_tag := aug_slot.get_node_or_null("PriceTag") as Control
+		if leftover_tag != null and leftover_tag.visible:
+			failures.append("augments: consumed augment still shows a price tag")
+		var leftover_icon := false
+		for child in aug_slot.get_children():
+			if child.has_meta("_dealer_dynamic") and child is Control and not (child is HBoxContainer):
+				leftover_icon = true
+		if leftover_icon:
+			failures.append("augments: consumed augment icon still on the counter")
+	shop.queue_free()
+
+	# Run start folds pre-run purchases in; a full reset clears everything. Uses a
+	# detached store so the ambient smoke-test state survives.
+	var fresh: Node = (load("res://autoload/run_state_store.gd") as GDScript).new()
+	fresh.chipAugmentsPurchased = { "aug_extra_spins": 1 }
+	fresh.symbolAugmentLevels = { "eye": 1 }
+	fresh.pairTripleAugmentChoice = "pair"
+	fresh.start_new_run([], {}, false)
+	if int((fresh.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
+			or String(fresh.pairTripleAugmentChoice) != "pair":
+		failures.append("augments: run start dropped pre-run purchases")
+	if int(fresh.neurons) != int(fresh.startingNeurons) + 3 * maxi(1, Economy.compute_neuron_decay([])):
+		failures.append("augments: run start did not fold in pre-run Extra Spins")
+	var eye_base := int(meta_store.odds_upgrade_level("eye")) * int(fresh.probability_increase_per_upgrade)
+	if float((fresh.oddsWeightOverrides as Dictionary).get("eye", 0.0)) \
+			!= float(eye_base + int(fresh.probability_increase_per_upgrade)):
+		failures.append("augments: run start did not fold in pre-run symbol levels")
+	if String(fresh.dealerAugmentOfferId) != "":
+		failures.append("augments: run start left the shop augment offer open")
+	fresh.reset_run_state()
+	if not (fresh.chipAugmentsPurchased as Dictionary).is_empty() \
+			or not (fresh.symbolAugmentLevels as Dictionary).is_empty() \
+			or String(fresh.pairTripleAugmentChoice) != "":
+		failures.append("augments: full reset did not clear augment state")
+	fresh.free()
+
+	run_store.runPhase = prev_phase
+	run_store.dealerPending = prev_pending
+	run_store.dealerOfferIds = prev_offers
+	run_store.dealerRerollCount = prev_reroll_count
+	run_store.prerunOfferIds = prev_prerun
+	run_store.lucidityCoins = prev_coins
+	run_store.chipAugmentsPurchased = prev_augs
+	run_store.dealerAugmentOfferId = prev_aug_offer
+	run_store.symbolAugmentLevels = prev_sym
+	run_store.pairTripleAugmentChoice = prev_pt
+	run_store.oddsWeightOverrides = prev_weights
+	run_store.symbolRewardBonuses = prev_bonuses
+	run_store.neurons = prev_neurons
+	run_store.ownedUpgrades = prev_owned
+	meta_store.lucidityWallet = prev_wallet
+	meta_store.save_state() # re-persist the restored wallet
 
 func _find_label_with_text(node: Node, text: String) -> Label:
 	if node is Label and (node as Label).text == text:

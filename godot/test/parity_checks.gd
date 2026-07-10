@@ -152,6 +152,24 @@ static func check_dealer_reroll(out: Array) -> void:
 				_fail(out, "rerollDealerItems unchanged seed=%d" % int(s), a, "pair != previous")
 	if Dealer.reroll_dealer_items(1, null) == null:
 		_fail(out, "rerollDealerItems null-previous", null, "a pair")
+	# Generic pool-pair helpers back the pre-run shop offer (max two consumables
+	# per visit) — same determinism and pair-must-change contract on that pool.
+	var shop_ids: Array = []
+	for c in Consumables.LIST:
+		shop_ids.append(String(c["id"]))
+	for s in [3, 99, 424242]:
+		var first: Variant = Dealer.pick_pool_pair(shop_ids.duplicate(), int(s))
+		if not deep_equal(first, Dealer.pick_pool_pair(shop_ids.duplicate(), int(s))):
+			_fail(out, "pickPoolPair determinism seed=%d" % int(s), first, "same pair")
+			continue
+		var p := first as Array
+		if p.size() != 2 or p[0] == p[1] or not shop_ids.has(p[0]) or not shop_ids.has(p[1]):
+			_fail(out, "pickPoolPair pair seed=%d" % int(s), first, "two distinct pool items")
+			continue
+		var r: Variant = Dealer.reroll_pool_pair(shop_ids.duplicate(), int(s) * 7 + 1, first)
+		var pair2 := r as Array
+		if pair2.size() != 2 or (p.has(pair2[0]) and p.has(pair2[1])):
+			_fail(out, "rerollPoolPair unchanged seed=%d" % int(s), r, "pair != previous")
 
 static func check_bank(out: Array) -> void:
 	var data: Dictionary = _load("bank.json")
