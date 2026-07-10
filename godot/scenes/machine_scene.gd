@@ -139,10 +139,10 @@ const SCORE_TABLE_INFO_SRC := Rect2(1032.0, 560.0, 56.0, 56.0)
 const SCORE_TABLE_INFO_X := 129.0
 const SCORE_TABLE_INFO_W := 7.0
 const SCORE_TABLE_INFO_H := 8.0
-const SCORE_TABLE_INFO_ROW_Y := [80.0, 123.5, 167.0, 210.5, 254.0, 298.5]
-# Vertical centers of the art's row bands (dark grid lines sit at canvas y 44.6,
-# 89.1, 132.6, 176, 219.4, 262.9, 307.4), so the values center inside their cells.
-const SCORE_TABLE_ROW_CY := [67.0, 111.0, 154.5, 198.0, 241.5, 285.0]
+const SCORE_TABLE_INFO_ROW_Y := [58.5, 102.5, 146.0, 189.5, 233.0, 277.0]
+# Vertical centers of the art's row bands (dark grid lines sit at canvas y 23.4,
+# 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
+const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 const SCORE_TABLE_LVL_CX := 66.0
 const SCORE_TABLE_PAIR_CX := 99.0
 const SCORE_TABLE_TRIPLE_CX := 131.5
@@ -2900,16 +2900,16 @@ func _show_score_table() -> void:
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
 
-	# Cross (X) close button: a wide rounded rectangle centered in the top
-	# marquee band with the glyph in its middle. The glyph lives on a child
+	# Cross (X) close button: a wide rounded rectangle centered in the bottom
+	# red band with the glyph in its middle. The glyph lives on a child
 	# Label: Button text inflates the minimum size well past the art-sized box
-	# (font metrics), which would bleed over the art's baked column header.
+	# (font metrics), which would bleed over the art's baked grid.
 	var close := Button.new()
 	close.name = "CloseButton"
 	close.size = Vector2(56.0, 14.0)
-	# Vertically centered in the top red band (canvas y ~12..30 between the
-	# marquee bulbs and the baked column header).
-	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 14.0)
+	# Vertically centered in the bottom red band (canvas y ~287..308 between the
+	# last row's grid line and the marquee bulbs).
+	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
 	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
 		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.position.y = 2.0
