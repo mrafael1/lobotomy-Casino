@@ -3085,9 +3085,12 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 		var line_w := font.get_string_size(lines[li], HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
 		# Snap to whole pixels: a fractional offset knocks the pixel font off the
 		# grid and blurs the glyphs.
-		_score_label(_score_info_popup, lines[li],
-			Vector2(roundf(4.0 + (text_size.x - line_w) * 0.5), 3.0 + float(li) * 10.0),
-			5, Color(0.9, 0.94, 1.0))
+		var line_x := roundf(4.0 + (text_size.x - line_w) * 0.5)
+		var line_y := 3.0 + float(li) * 10.0
+		for seg in _info_line_segments(symbol_id, lines[li]):
+			_score_label(_score_info_popup, seg[0], Vector2(line_x, line_y), 5, seg[1])
+			line_x = roundf(line_x + font.get_string_size(seg[0],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
 	# Rounded box: dark panel with a thin gold outline and soft corners.
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
@@ -3159,6 +3162,23 @@ func _triple_effect_text(symbol_id: String) -> String:
 			return "CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN" % [
 				RunStateStore.flatlineResultCount, fatal_flatline_count]
 	return ""
+
+## Splits an info-blurb line into [text, color] segments. The flatline strike
+## count heats up as it nears the fatal third strike: 0 white, 1 orange, 2 red.
+func _info_line_segments(symbol_id: String, line: String) -> Array:
+	var base := Color(0.9, 0.94, 1.0)
+	if symbol_id == "flatline":
+		var count_text := "%d/%d" % [RunStateStore.flatlineResultCount, fatal_flatline_count]
+		var idx := line.find(count_text)
+		if idx >= 0:
+			var count_color := base
+			match RunStateStore.flatlineResultCount:
+				0: pass
+				1: count_color = Color(1.0, 0.62, 0.2)
+				_: count_color = flatline_result_color
+			return [[line.substr(0, idx), base], [count_text, count_color],
+				[line.substr(idx + count_text.length()), base]]
+	return [[line, base]]
 
 func _close_score_table() -> void:
 	_hide_score_info_popup()
