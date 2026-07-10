@@ -1217,15 +1217,22 @@ func _select(id: String) -> void:
 		_name_label.add_theme_color_override(
 			&"font_color", corrupt_name_color if HintLabel.item_is_corrupted(id) else name_color
 		)
+	var name_cx: float
 	if _offer_slots_by_id.has(id):
 		var slot: Control = _offer_slots_by_id[id]
-		_name_label.position = Vector2(
-			slot.position.x + slot.size.x * 0.5 - _name_label.size.x * 0.5,
-			slot.position.y + slot.size.y + 1.0
-		)
+		name_cx = slot.position.x + slot.size.x * 0.5
+		_name_label.position.y = slot.position.y + slot.size.y + 1.0
 	else:
-		var cx: float = float(_offer_cx.get(id, 80.0))
-		_name_label.position = Vector2(cx - 30.0, ITEM_TOP + _offer_icon_size() + 1.0)
+		name_cx = float(_offer_cx.get(id, 80.0))
+		_name_label.position.y = ITEM_TOP + _offer_icon_size() + 1.0
+	# Centre on the measured text width: the Label's own box centring rounds to
+	# whole pixels, which reads as a half-pixel drift at the x8 canvas scale.
+	var name_font := _name_label.get_theme_font("font")
+	var name_font_size := _name_label.get_theme_font_size("font_size")
+	var name_w := name_font.get_string_size(_name_label.text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, name_font_size).x
+	_name_label.size.x = maxf(name_w, 1.0)
+	_name_label.position.x = name_cx - name_w * 0.5
 	_name_label.visible = true
 
 # Live consumable price: base shopCost with the Consumable Discount augment
