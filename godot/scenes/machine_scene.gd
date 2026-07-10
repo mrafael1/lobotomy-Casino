@@ -135,11 +135,11 @@ const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 # buttons, cropped from their first pixel cluster.
 const SCORE_TABLE_ART := "TABLE/TABLES SCORE.png"
 const SCORE_TABLE_INFO_ART := "TABLE/TABLES SCORE_information.png"
-const SCORE_TABLE_INFO_SRC := Rect2(1032.0, 560.0, 56.0, 56.0)
+const SCORE_TABLE_INFO_SRC := Rect2(1032.0, 408.0, 56.0, 56.0)
 const SCORE_TABLE_INFO_X := 129.0
 const SCORE_TABLE_INFO_W := 7.0
 const SCORE_TABLE_INFO_H := 8.0
-const SCORE_TABLE_INFO_ROW_Y := [58.5, 102.5, 146.0, 189.5, 233.0, 277.0]
+const SCORE_TABLE_INFO_ROW_Y := [58.3, 101.7, 145.1, 188.6, 232.0, 276.6]
 # Vertical centers of the art's row bands (dark grid lines sit at canvas y 23.4,
 # 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
 const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
@@ -2912,7 +2912,8 @@ func _show_score_table() -> void:
 	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
 	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
 		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
-	close_label.position.y = 2.0
+	close_label.size = close.size
+	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Flat pixel style: the shared textured skin draws past the button rect and
 	# would bleed over the art's baked column header.
@@ -2931,6 +2932,18 @@ func _show_score_table() -> void:
 	var close_focus := close_style.duplicate() as StyleBoxFlat
 	close_focus.border_color = Color(1.0, 0.95, 0.7)
 	close.add_theme_stylebox_override("focus", close_focus)
+	# Pressed squash: shrink around the centre while held, spring back on release
+	# (same feel as the row info buttons).
+	close.pivot_offset = close.size * 0.5
+	close.button_down.connect(func() -> void:
+		var tw := create_tween()
+		tw.tween_property(close, "scale", Vector2(0.9, 0.9), 0.08) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT))
+	close.button_up.connect(func() -> void:
+		if is_instance_valid(close):
+			var tw := create_tween()
+			tw.tween_property(close, "scale", Vector2.ONE, 0.1) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
 	close.pressed.connect(_close_score_table)
 	_score_overlay.add_child(close)
 
