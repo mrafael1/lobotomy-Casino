@@ -77,4 +77,18 @@ static func run_all() -> Array:
 	var smart_banked := Endings.bank_run_to_meta(bank_run, smart_meta, "flatline", 1700000000000)
 	_check(out, int(smart_banked["lucidityWallet"]) == 40, "Smart Save banks 20% of run Lucidity (200 -> 40)")
 
+	# 8) A locked reel keeps its symbol through a forced all-symbol spin (issue
+	# #112: Pill flatline must not overwrite a lock into a close call).
+	var r8 := Evaluate.evaluate(_base_input({
+		"lockedReels": [false, true, false],
+		"previousReels": ["eye", "vial", "pill"],
+		"forceAllSymbol": "flatline",
+		"rng": FixedRNG.new(BRAIN),
+	}))
+	var r8_reels: Array = r8["reels"]
+	_check(out, String(r8_reels[1]) == "vial", "locked reel survives forced flatline")
+	_check(out, String(r8_reels[0]) == "flatline" and String(r8_reels[2]) == "flatline",
+		"unlocked reels still take the forced symbol")
+	_check(out, String(r8["winType"]) != "triple", "lock prevents the forced flatline triple")
+
 	return out

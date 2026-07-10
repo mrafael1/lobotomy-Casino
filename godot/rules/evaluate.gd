@@ -217,7 +217,12 @@ static func evaluate(input: Dictionary) -> Dictionary:
 			reels = [reels[0], reels[0], reels[2]]
 
 	if force_all_symbol != null:
-		reels = [force_all_symbol, force_all_symbol, force_all_symbol]
+		# Issue #112: a locked reel keeps its symbol even through a forced
+		# all-symbol spin (Pill flatline) — the lock wins, preventing a locked
+		# reel from rolling into a flatline close call.
+		for i in 3:
+			if not (bool(locked[i]) and prev != null):
+				reels[i] = force_all_symbol
 	elif force_triple_from != null and (force_triple_from as Array).size() > 0:
 		var pool: Array = force_triple_from
 		var pick: Variant = pool[int(rng.next() * pool.size())]
