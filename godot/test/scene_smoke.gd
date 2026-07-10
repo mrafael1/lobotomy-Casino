@@ -2328,19 +2328,14 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
 	var texts := _overlay_label_texts(overlay)
-	if not texts.has("TABLES"):
-		failures.append("issue51: overlay title is not TABLES")
 	for stat in ["BEST", "RUNS", "CREDITS"]:
 		if texts.has(stat):
 			failures.append("issue51: '%s' stat should be removed from the table" % stat)
-	if not texts.has("LVL"):
-		failures.append("issue51: LVL column header missing")
 	for symbol_name in ["BRAIN", "EYE", "PILL", "SYRINGE", "VIAL", "FLATLINE"]:
 		if texts.has(symbol_name):
 			failures.append("issue51: symbol names should be removed")
 			break
-	if not texts.has("REVEALS A REEL"):
-		failures.append("issue51: triple bonus-effect blurbs missing")
+	_check_points_table_119(machine, overlay, failures)
 	if not texts.has("2"):
 		failures.append("issue51: LVL column does not show the symbol's odds level")
 	var found_amp_pair := false
@@ -2381,6 +2376,60 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 	run_store.symbolRewardBonuses = bonuses_before
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+# Issue #119: authored points-table art, hold-to-peek triple-effect info buttons,
+# and keyboard/controller focus navigation.
+func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -> void:
+	var art := overlay.get_node_or_null("TableArt") as TextureRect
+	if art == null or art.texture == null \
+			or not art.texture.resource_path.ends_with("TABLES SCORE.png"):
+		failures.append("issue119: table does not render the authored TABLES SCORE art")
+	elif art.size != Vector2(160.0, 320.0):
+		failures.append("issue119: table art is not full-canvas")
+	elif art.expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
+		failures.append("issue119: table art cannot scale down to the canvas")
+
+	var info_buttons: Array = machine._score_info_buttons
+	if info_buttons.size() != Symbols.BASE_SYMBOL_CYCLE.size():
+		failures.append("issue119: expected one info button per symbol row, got %d" % info_buttons.size())
+		return
+	for b in info_buttons:
+		var button := b as Button
+		if button.focus_mode != Control.FOCUS_ALL:
+			failures.append("issue119: info button %s is not keyboard/controller focusable" % button.name)
+		var icon := button.get_node_or_null("InfoIcon") as TextureRect
+		if icon == null or not (icon.texture is AtlasTexture) \
+				or not (icon.texture as AtlasTexture).atlas.resource_path.ends_with("TABLES SCORE_information.png"):
+			failures.append("issue119: info button %s missing the authored 'i' art" % button.name)
+
+	# Hold shows the triple effect; release hides it (plus a pressed squash).
+	var eye_button := info_buttons[Symbols.BASE_SYMBOL_CYCLE.find("eye")] as Button
+	eye_button.button_down.emit()
+	var popup: Control = machine._score_info_popup
+	if popup == null:
+		failures.append("issue119: holding the info button did not open the effect popup")
+	else:
+		var popup_texts := _overlay_label_texts(popup)
+		if not popup_texts.has("REVEALS A REEL"):
+			failures.append("issue119: eye info popup missing its triple effect: %s" % str(popup_texts))
+		var icon := eye_button.get_node("InfoIcon") as TextureRect
+		if icon.scale == Vector2.ONE:
+			failures.append("issue119: info button press did not start the pressed animation")
+	eye_button.button_up.emit()
+	if machine._score_info_popup != null:
+		failures.append("issue119: releasing the info button did not hide the effect popup")
+
+	# Focus chain: CLOSE holds initial focus and links down into the rows.
+	var close := overlay.get_node_or_null("CloseButton") as Button
+	if close == null:
+		failures.append("issue119: table has no CLOSE button")
+	else:
+		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
+			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
+		if close.get_node_or_null(close.focus_neighbor_bottom) != info_buttons[0]:
+			failures.append("issue119: CLOSE does not link down to the first info row")
+		if (info_buttons[0] as Button).get_node_or_null((info_buttons[0] as Button).focus_neighbor_top) != close:
+			failures.append("issue119: first info row does not link back up to CLOSE")
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
