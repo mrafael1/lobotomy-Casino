@@ -3083,8 +3083,10 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	var lines := text.split("\n")
 	for li in lines.size():
 		var line_w := font.get_string_size(lines[li], HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
+		# Snap to whole pixels: a fractional offset knocks the pixel font off the
+		# grid and blurs the glyphs.
 		_score_label(_score_info_popup, lines[li],
-			Vector2(4.0 + (text_size.x - line_w) * 0.5, 2.0 + float(li) * 10.0),
+			Vector2(roundf(4.0 + (text_size.x - line_w) * 0.5), 3.0 + float(li) * 10.0),
 			5, Color(0.9, 0.94, 1.0))
 	# Rounded box: dark panel with a thin gold outline and soft corners.
 	var bg_style := StyleBoxFlat.new()
@@ -3105,7 +3107,7 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	var pos := button.position + Vector2(-bg.size.x - 2.0, button.size.y * 0.5 - bg.size.y * 0.5)
 	pos.x = clampf(pos.x, 2.0, SRC_W - bg.size.x - 2.0)
 	pos.y = clampf(pos.y, 2.0, SRC_H - bg.size.y - 2.0)
-	_score_info_popup.position = pos
+	_score_info_popup.position = pos.round() # off-grid blurs the pixel font
 	_score_overlay.add_child(_score_info_popup)
 
 func _hide_score_info_popup() -> void:
