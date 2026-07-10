@@ -2916,7 +2916,7 @@ func _show_score_table() -> void:
 	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# The pixel font's line box leaves its slack above the glyph, so a pure
 	# vertical center reads low in the 14px band — pull the label up to comp.
-	close_label.position.y = -2.0
+	close_label.position.y = -4.0
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Flat pixel style: the shared textured skin draws past the button rect and
 	# would bleed over the art's baked column header.
