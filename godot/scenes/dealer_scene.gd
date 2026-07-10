@@ -386,6 +386,11 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(size_px / frame_w, size_px / float(tex.get_height()))
+		if kind == "augment":
+			# The chip art spans columns 0..30 of its 32px frame (centre 15, not
+			# 15.5), so nudge half a source pixel right to sit centred on the dot
+			# — and under the name label.
+			spr.position.x += 0.5 * spr.scale.x
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	t.add_child(spr)
 	t.gui_input.connect(_on_item_input.bind(t, id, kind))
