@@ -71,6 +71,13 @@ const LAB_BUTTON_ASSET := "dealer_scene_LAB_BUTTON.png"
 # invisible hit buttons cover exactly these rects.
 const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
 const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
+# Issue #117: the wall painting is an illuminated reroll control during an in-run
+# dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
+const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
+const PAINTING_BUTTON_RECT := Rect2(2.0, 78.0, 29.0, 25.0)
+const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # spent painting: lab light off
+const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
+const PAINTING_SPENT_MESSAGE := "THE PAINTING HAS GONE DARK"
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
@@ -119,6 +126,9 @@ var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
 var _lab_glow_tween: Tween = null            # issue #84: looping lab-button glow
 var _start_button: Button = null
 var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
+var _reroll_button: Button = null            # issue #117: painting hit area
+var _reroll_button_sprite: Sprite2D = null   # authored 2-frame painting art
+var _reroll_glow_tween: Tween = null         # lab-style light while the reroll is live
 var _start_confirm_modal: Control = null     # issue #84: machine-button misclick guard
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
@@ -174,6 +184,7 @@ func _bind_scene_nodes() -> void:
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
 	_lab_button = get_node_or_null("LabButton")
 	_start_button = get_node_or_null("StartButton")
+	_reroll_button = get_node_or_null("RerollButton")
 	_credits_row = get_node_or_null("CreditsRow")
 	_credits_coin = get_node_or_null("CreditsRow/Coin")
 	_credits_label = get_node_or_null("CreditsRow/CreditsLabel")
@@ -493,6 +504,7 @@ func _build_hud() -> void:
 				_options_button.pressed.connect(options_cb)
 		_configure_lab_button()
 		_configure_machine_button()
+		_configure_reroll_button()
 		if _credits_row != null:
 			_credits_row.visible = _pre_run
 		_build_credits_display()
@@ -509,6 +521,7 @@ func _build_hud() -> void:
 	add_child(back)
 	_options_button = back
 	_configure_lab_button()
+	_configure_reroll_button()
 	if _pre_run:
 		# Begin the run with whatever was bought; back/leave is a separate action.
 		# START rides on the arrow asset (issue #24 follow-up: the art is now 39x24 and
@@ -605,6 +618,109 @@ func _configure_machine_button() -> void:
 	_start_button.visible = _pre_run
 	if _machine_button_sprite != null:
 		_machine_button_sprite.visible = _pre_run
+
+# ── painting reroll control (issue #117) ──────────────────────────────────────────
+# During an in-run dealer visit the wall painting is lit (lab-style glow) and
+# pressable: it rerolls the pending offer pair once per visit through
+# RunStateStore.reroll_dealer_offer(). Pre-run the shop pool is fixed, so the
+# painting stays plain scenery (no lit overlay, no hit area). The used state
+# (glow off, dimmed art) restores from RunStateStore.dealerRerollUsed, so leaving
+# and re-entering the scene mid-visit keeps the painting spent.
+
+func _configure_reroll_button() -> void:
+	if _reroll_button == null:
+		_reroll_button = Button.new()
+		_reroll_button.name = "RerollButton"
+		add_child(_reroll_button)
+	_reroll_button.position = PAINTING_BUTTON_RECT.position
+	_reroll_button.size = PAINTING_BUTTON_RECT.size
+	if _reroll_button_sprite == null:
+		_reroll_button_sprite = _build_button_art(REROLL_BUTTON_ASSET, "RerollButtonArt")
+	_wire_art_button(_reroll_button, _reroll_button_sprite, Callable(self, "_on_painting_pressed"))
+	# Hover and keyboard/controller focus share one highlight (issue #117).
+	var hover_on := Callable(self, "_set_painting_highlight").bind(true)
+	var hover_off := Callable(self, "_set_painting_highlight").bind(false)
+	if not _reroll_button.mouse_entered.is_connected(hover_on):
+		_reroll_button.mouse_entered.connect(hover_on)
+	if not _reroll_button.focus_entered.is_connected(hover_on):
+		_reroll_button.focus_entered.connect(hover_on)
+	if not _reroll_button.mouse_exited.is_connected(hover_off):
+		_reroll_button.mouse_exited.connect(hover_off)
+	if not _reroll_button.focus_exited.is_connected(hover_off):
+		_reroll_button.focus_exited.connect(hover_off)
+	_refresh_painting_state()
+
+func _painting_active() -> bool:
+	if Engine.is_editor_hint() or _pre_run:
+		return false
+	return RunStateStore.dealerPending and RunStateStore.dealerOfferIds != null \
+		and not RunStateStore.dealerRerollUsed
+
+func _refresh_painting_state() -> void:
+	if _reroll_button == null:
+		return
+	if Engine.is_editor_hint():
+		# Editor preview: show the authored art plainly, no runtime state.
+		if _reroll_button_sprite != null:
+			_reroll_button_sprite.self_modulate = Color.WHITE
+		return
+	var active := _painting_active()
+	var in_run_visit := not _pre_run and not Engine.is_editor_hint()
+	_reroll_button.visible = in_run_visit or Engine.is_editor_hint()
+	_reroll_button.disabled = not active
+	# The other art buttons are pointer-only; the painting is also keyboard- and
+	# controller-operable, so it takes focus while it is live (ui_accept presses it).
+	_reroll_button.focus_mode = Control.FOCUS_ALL if active else Control.FOCUS_NONE
+	if _reroll_button_sprite == null:
+		return
+	_reroll_button_sprite.visible = _reroll_button.visible
+	if active:
+		_start_painting_glow()
+	else:
+		_stop_painting_glow()
+		# Used/disabled state: the lab light is off and the art reads dark.
+		_reroll_button_sprite.self_modulate = PAINTING_USED_TINT
+
+func _start_painting_glow() -> void:
+	if _reroll_button_sprite == null or Engine.is_editor_hint():
+		return
+	if _reroll_glow_tween != null and _reroll_glow_tween.is_valid():
+		return
+	_reroll_button_sprite.self_modulate = LAB_GLOW_DIM
+	_reroll_glow_tween = create_tween().set_loops()
+	_reroll_glow_tween.tween_property(_reroll_button_sprite, "self_modulate", LAB_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_reroll_glow_tween.tween_property(_reroll_button_sprite, "self_modulate", LAB_GLOW_DIM, LAB_GLOW_PERIOD) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _stop_painting_glow() -> void:
+	if _reroll_glow_tween != null and _reroll_glow_tween.is_valid():
+		_reroll_glow_tween.kill()
+	_reroll_glow_tween = null
+
+## Hover/focus state: the pulse parks on full brightness so the painting visibly
+## answers the pointer or focus; leaving resumes the idle glow.
+func _set_painting_highlight(highlighted: bool) -> void:
+	if _reroll_button_sprite == null or not _painting_active():
+		return
+	if highlighted:
+		_stop_painting_glow()
+		_reroll_button_sprite.self_modulate = LAB_GLOW_BRIGHT
+	else:
+		_start_painting_glow()
+
+func _on_painting_pressed() -> void:
+	if Engine.is_editor_hint() or _pre_run:
+		return
+	if not RunStateStore.reroll_dealer_offer():
+		_message.text = PAINTING_SPENT_MESSAGE
+		_refresh_painting_state()
+		return
+	_build_offers()
+	_select("") # the old selection may no longer exist
+	_message.text = PAINTING_REROLL_MESSAGE
+	_dealer_react()
+	_refresh_painting_state()
 
 func _build_button_art(asset: String, node_name: String) -> Sprite2D:
 	var spr := get_node_or_null(node_name) as Sprite2D

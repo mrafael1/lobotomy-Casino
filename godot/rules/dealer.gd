@@ -30,6 +30,24 @@ static func pick_dealer_items(seed: int) -> Variant:
 	shuffle_in_place(candidates, rng)
 	return [candidates[0], candidates[1]]
 
+# Painting reroll (issue #117): deterministic replacement pair for the current
+# dealer offer. Same Fisher-Yates pipeline as pick_dealer_items, but the result is
+# guaranteed to differ from `previous` (as a set) when a third candidate exists —
+# a reroll that hands back the same pair reads as a no-op. Duplicate ITEMS across
+# rerolls of different visits are allowed; only the immediate pair must change.
+static func reroll_dealer_items(seed: int, previous: Variant) -> Variant:
+	var candidates := InRunItems.ids() # fresh array, canonical order
+	if candidates.size() < 2:
+		return null
+	var rng := LobRNG.new(seed & M32)
+	shuffle_in_place(candidates, rng)
+	var pick := [candidates[0], candidates[1]]
+	if candidates.size() >= 3 and previous is Array and (previous as Array).size() == 2:
+		var prev := previous as Array
+		if prev.has(pick[0]) and prev.has(pick[1]):
+			pick = [candidates[1], candidates[2]] # slide the window off the old pair
+	return pick
+
 # evaluate_dealer_trigger(input) -> { shouldTrigger, dealer65SafetyFired, dealer35SafetyFired }.
 static func evaluate_dealer_trigger(input: Dictionary) -> Dictionary:
 	var neurons := int(input["neurons"])

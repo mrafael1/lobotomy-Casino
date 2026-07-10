@@ -339,6 +339,15 @@ offset_bottom = 40.0
 focus_mode = 0
 flat = true
 
+[node name="RerollButton" type="Button" parent="." unique_id=1177201117]
+layout_mode = 0
+offset_left = 2.0
+offset_top = 78.0
+offset_right = 31.0
+offset_bottom = 103.0
+focus_mode = 0
+flat = true
+
 [node name="LabButton" type="Button" parent="." unique_id=1241434241]
 layout_mode = 0
 offset_left = 63.0

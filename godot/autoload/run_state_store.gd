@@ -79,6 +79,9 @@ var dealer35SafetyFired := false
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null
+## Issue #117: the dealer-scene painting rerolls the pending offer pair once per
+## visit. Reset when a new visit's offers roll so every visit gets one reroll.
+var dealerRerollUsed := false
 var brainBoostSpins := 0
 var forcedRandomBetSpins := 0
 var guaranteedWinSpins := 0
@@ -433,6 +436,7 @@ func reset_run_state() -> void:
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
+	dealerRerollUsed = false
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -511,6 +515,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
+	dealerRerollUsed = false
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -1039,6 +1044,7 @@ func check_dealer_trigger() -> void:
 		dealerLastSpinCount = spinCount
 		dealerIncoming = true
 		dealerOfferIds = offers
+		dealerRerollUsed = false # fresh visit => the painting recharges (issue #117)
 	_commit()
 
 func reveal_dealer() -> void:
@@ -1078,6 +1084,23 @@ func accept_dealer_offer_with_limit(item_id: String, slot_limit: int) -> void:
 	dealerPending = false
 	dealerOfferIds = null
 	_commit()
+
+# Painting reroll (issue #117): replace the pending offer pair with a fresh
+# deterministic pick. Free, once per visit; invalid outside a pending in-run
+# visit or after the visit's reroll is spent. Returns whether the reroll happened.
+func reroll_dealer_offer() -> bool:
+	if runPhase != "running" or not dealerPending or dealerOfferIds == null:
+		return false
+	if dealerRerollUsed:
+		return false
+	var offers: Variant = Dealer.reroll_dealer_items(
+		_seed(spinCount * 0x6b43c7f + 0x117117), dealerOfferIds)
+	if offers == null:
+		return false
+	dealerOfferIds = offers
+	dealerRerollUsed = true
+	_commit()
+	return true
 
 func decline_dealer_offer() -> void:
 	dealerPending = false

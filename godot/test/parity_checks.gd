@@ -131,6 +131,28 @@ static func check_dealer(out: Array) -> void:
 		if not deep_equal(got, c["expect"]):
 			_fail(out, "evaluateDealerTrigger " + str(c["input"]), got, c["expect"])
 
+# Painting reroll (issue #117): deterministic, seed-driven like pick_dealer_items.
+static func check_dealer_reroll(out: Array) -> void:
+	var ids := InRunItems.ids()
+	for s in [0, 1, 42, 123456789, 0xFFFFFFFF]:
+		var previous: Variant = Dealer.pick_dealer_items(int(s))
+		var a: Variant = Dealer.reroll_dealer_items(int(s) * 31 + 7, previous)
+		var b: Variant = Dealer.reroll_dealer_items(int(s) * 31 + 7, previous)
+		if not deep_equal(a, b):
+			_fail(out, "rerollDealerItems determinism seed=%d" % int(s), a, b)
+			continue
+		var pair := a as Array
+		if pair.size() != 2 or pair[0] == pair[1] or not ids.has(pair[0]) or not ids.has(pair[1]):
+			_fail(out, "rerollDealerItems pair seed=%d" % int(s), a, "two distinct pool items")
+			continue
+		# With >=3 candidates a reroll must change the offered pair (as a set).
+		if ids.size() >= 3:
+			var prev := previous as Array
+			if prev.has(pair[0]) and prev.has(pair[1]):
+				_fail(out, "rerollDealerItems unchanged seed=%d" % int(s), a, "pair != previous")
+	if Dealer.reroll_dealer_items(1, null) == null:
+		_fail(out, "rerollDealerItems null-previous", null, "a pair")
+
 static func check_bank(out: Array) -> void:
 	var data: Dictionary = _load("bank.json")
 	for c in data["cases"]:
@@ -174,6 +196,7 @@ static func run_all() -> Array:
 	check_evaluate(out)
 	check_abilities(out)
 	check_dealer(out)
+	check_dealer_reroll(out)
 	check_bank(out)
 	check_lucidity(out)
 	check_endings(out)

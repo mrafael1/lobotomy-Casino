@@ -348,6 +348,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	_check_neuron_meter_absent("dealer", dealer_bottom_hud, failures)
 	_check_start_confirm_and_lab_glow_84(dealer, failures)
 	dealer.queue_free()
+	_check_painting_reroll_117(failures)
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(machine)
@@ -997,6 +998,102 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 			failures.append("issue55: dealer message is not just above the dealer: %s" % message.position)
 	if dealer.get_node_or_null("OfferSlot6") != null:
 		failures.append("issue55: the 1-Lucidity placeholder offer slot should be gone")
+
+# Issue #117: the dealer-scene painting is an illuminated reroll control during an
+# in-run visit — glowing/focusable while live, spent (dark, disabled) after one use,
+# plain scenery pre-run. Covers activation, invalid states, and mid-visit restore.
+func _check_painting_reroll_117(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	if not ResourceLoader.exists("res://assets/images/dealer_scene_reroll_BUTTON.png"):
+		failures.append("issue117: reroll painting art not in godot/assets/images — missing from exported builds (APK)")
+
+	# Store rules: invalid outside a pending visit, once per visit, deterministic pair swap.
+	var prev_phase := String(run_store.runPhase)
+	var prev_pending := bool(run_store.dealerPending)
+	var prev_offers: Variant = run_store.dealerOfferIds
+	var prev_used := bool(run_store.dealerRerollUsed)
+	run_store.runPhase = "running"
+	run_store.dealerPending = false
+	run_store.dealerOfferIds = null
+	run_store.dealerRerollUsed = false
+	if run_store.reroll_dealer_offer():
+		failures.append("issue117: reroll succeeded with no pending dealer visit")
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water", "item_pill"]
+	if not run_store.reroll_dealer_offer():
+		failures.append("issue117: reroll refused a valid pending visit")
+	else:
+		var offers := run_store.dealerOfferIds as Array
+		if offers.size() != 2 or (offers.has("item_water") and offers.has("item_pill")):
+			failures.append("issue117: reroll did not change the offer pair: %s" % str(offers))
+		if not run_store.dealerRerollUsed:
+			failures.append("issue117: reroll did not mark the painting as used")
+		if run_store.reroll_dealer_offer():
+			failures.append("issue117: painting rerolled twice in one visit")
+
+	# In-run UI: live painting glows, is enabled and focusable; used painting restores dark.
+	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	var button := dealer.get_node_or_null("RerollButton") as Button
+	var art := dealer.get_node_or_null("RerollButtonArt") as Sprite2D
+	if button == null or art == null:
+		failures.append("issue117: dealer painting button/art pair is missing")
+	else:
+		# dealerRerollUsed is still true from the store checks above: the scene must
+		# restore the SPENT state on entry (save/leave/reload mid-visit).
+		if not button.disabled:
+			failures.append("issue117: used painting is not disabled after scene re-entry")
+		if dealer._reroll_glow_tween != null and dealer._reroll_glow_tween.is_valid():
+			failures.append("issue117: used painting still glows")
+		# Recharge (a fresh visit) and refresh: the painting comes back to life.
+		run_store.dealerRerollUsed = false
+		dealer._refresh_painting_state()
+		if button.disabled:
+			failures.append("issue117: live painting is disabled")
+		if button.focus_mode != Control.FOCUS_ALL:
+			failures.append("issue117: live painting is not keyboard/controller focusable")
+		if dealer._reroll_glow_tween == null or not dealer._reroll_glow_tween.is_valid():
+			failures.append("issue117: live painting glow tween is not running")
+		if art.hframes != 2:
+			failures.append("issue117: painting art is not a 2-frame sheet")
+		button.button_down.emit()
+		if art.frame != 1:
+			failures.append("issue117: painting press did not switch to the pressed frame")
+		button.button_up.emit()
+		# Activation through the scene: reroll fires, feedback shows, painting spends.
+		var before := (run_store.dealerOfferIds as Array).duplicate()
+		dealer._on_painting_pressed()
+		var after := run_store.dealerOfferIds as Array
+		if after.has(before[0]) and after.has(before[1]):
+			failures.append("issue117: painting press did not reroll the offer")
+		if not bool(run_store.dealerRerollUsed):
+			failures.append("issue117: painting press did not spend the reroll")
+		if not button.disabled or button.focus_mode != Control.FOCUS_NONE:
+			failures.append("issue117: spent painting stayed pressable")
+		var message := dealer.get_node_or_null("Message") as Label
+		if message == null or message.text == "":
+			failures.append("issue117: painting reroll gave no feedback message")
+	dealer.queue_free()
+
+	# Pre-run shop: the pool is fixed, so the painting is not a control at all.
+	run_store.runPhase = "idle"
+	run_store.dealerPending = false
+	run_store.dealerOfferIds = null
+	run_store.dealerRerollUsed = false
+	var shop := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	var shop_button := shop.get_node_or_null("RerollButton") as Button
+	var shop_art := shop.get_node_or_null("RerollButtonArt") as Sprite2D
+	if shop_button != null and (shop_button.visible or not shop_button.disabled):
+		failures.append("issue117: pre-run painting should be hidden and disabled")
+	if shop_art != null and shop_art.visible:
+		failures.append("issue117: pre-run painting should not show the lit overlay")
+	shop.queue_free()
+
+	run_store.runPhase = prev_phase
+	run_store.dealerPending = prev_pending
+	run_store.dealerOfferIds = prev_offers
+	run_store.dealerRerollUsed = prev_used
 
 func _find_label_with_text(node: Node, text: String) -> Label:
 	if node is Label and (node as Label).text == text:
