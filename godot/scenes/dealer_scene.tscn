@@ -78,9 +78,9 @@ theme_override_font_sizes/font_size = 8
 
 [node name="TvNeg" type="Label" parent="." unique_id=2067611572]
 layout_mode = 0
-offset_left = 5.5
+offset_left = 5.0
 offset_top = 137.5
-offset_right = 85.5
+offset_right = 85.0
 offset_bottom = 146.5
 theme_override_colors/font_color = Color(0.94, 0.27, 0.27, 1)
 theme_override_fonts/font = ExtResource("5_0se43")
@@ -336,6 +336,15 @@ offset_left = 129.0
 offset_top = 9.0
 offset_right = 148.0
 offset_bottom = 40.0
+focus_mode = 0
+flat = true
+
+[node name="RerollButton" type="Button" parent="." unique_id=1177201117]
+layout_mode = 0
+offset_left = 2.0
+offset_top = 78.0
+offset_right = 31.0
+offset_bottom = 103.0
 focus_mode = 0
 flat = true
 

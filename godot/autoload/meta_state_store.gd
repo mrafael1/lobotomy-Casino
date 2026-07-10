@@ -134,25 +134,40 @@ func set_reward_amp_symbol(symbol: String) -> void:
 	meta_changed.emit()
 	save_state()
 
+# Generic wallet spend (pre-run shop reroll etc.). Returns false without side
+# effects when the wallet can't cover it.
+func spend_lucidity(amount: int) -> bool:
+	if amount <= 0 or lucidityWallet < amount:
+		return false
+	lucidityWallet -= amount
+	meta_changed.emit()
+	save_state()
+	return true
+
 func buy_consumable_charge(consumable_id: String) -> void:
 	buy_consumable_charge_with_limit(consumable_id, max_consumable_slots)
 
-func buy_consumable_charge_with_limit(consumable_id: String, slot_limit: int) -> void:
+# `price_override` (>= 0) lets callers charge a discounted price (Chip Augment
+# consumable discount) instead of the base shopCost.
+func buy_consumable_charge_with_limit(consumable_id: String, slot_limit: int, price_override := -1) -> void:
 	var cmap := Consumables.map()
 	var consumable: Variant = cmap.get(consumable_id, null)
 	if consumable == null:
 		return
-	if lucidityWallet < int(consumable["shopCost"]):
+	var price := price_override if price_override >= 0 else int(consumable["shopCost"])
+	if lucidityWallet < price:
 		return
 	if Consumables.total_copies(pendingConsumables) >= maxi(1, slot_limit):
 		return
-	lucidityWallet -= int(consumable["shopCost"])
+	lucidityWallet -= price
 	pendingConsumables = pendingConsumables.duplicate(true)
 	pendingConsumables[consumable_id] = int(pendingConsumables.get(consumable_id, 0)) + 1
 	meta_changed.emit()
 	save_state()
 
-func discard_pending_consumable(consumable_id: String) -> void:
+# `refund_override` mirrors buy's price_override so a discounted purchase never
+# sells back for more than it cost.
+func discard_pending_consumable(consumable_id: String, refund_override := -1) -> void:
 	var current := int(pendingConsumables.get(consumable_id, 0))
 	if current <= 0:
 		return
@@ -163,7 +178,10 @@ func discard_pending_consumable(consumable_id: String) -> void:
 		pendingConsumables.erase(consumable_id)
 	else:
 		pendingConsumables[consumable_id] = current - 1
-	lucidityWallet += (int(consumable["shopCost"]) if consumable != null else 0)
+	if refund_override >= 0:
+		lucidityWallet += refund_override
+	else:
+		lucidityWallet += (int(consumable["shopCost"]) if consumable != null else 0)
 	meta_changed.emit()
 	save_state()
 
