@@ -1431,10 +1431,16 @@ func _check_chip_augments(failures: Array) -> void:
 		if not shop._tv_pos.text.begins_with("+ ") \
 				or (shop._tv_neg.text != "" and not shop._tv_neg.text.begins_with("+ ")):
 			failures.append("augments: TV must show only beneficial (green) hints")
-		# A later normal-item selection restores the red negative line.
+		# Double positives share the exact same x on the TV.
+		if shop._tv_neg.position.x != shop._tv_pos.position.x:
+			failures.append("augments: double-positive TV lines are misaligned")
+		# A later normal-item selection restores the red negative line, nudged
+		# +0.5px so the narrower "-" glyph keeps the words column-aligned.
 		shop._select("cons_cigarette")
 		if not shop._tv_neg.text.begins_with("- "):
 			failures.append("augments: normal item selection lost its negative hint")
+		if shop._tv_neg.position.x != shop._tv_pos.position.x + 0.5:
+			failures.append("augments: negative TV line lost its half-pixel glyph nudge")
 		shop._select("aug_symbol_level")
 		# Selector cancellation: drop on the dealer opens the picker; cancel
 		# consumes nothing.

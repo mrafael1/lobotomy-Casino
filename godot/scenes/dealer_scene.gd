@@ -1199,6 +1199,9 @@ func _select(id: String) -> void:
 		_tv_pos.text = "+ %s" % String(h["pos"])
 		_tv_neg.text = "- %s" % String(h["neg"])
 		_tv_neg.add_theme_color_override(&"font_color", Color(0.94, 0.27, 0.27))
+	# The "-" glyph is half a pixel narrower than "+" in this font, so a "- " line
+	# needs a +0.5px nudge for its word to line up with the "+ " line above.
+	_tv_neg.position.x = _tv_pos.position.x + (0.5 if _tv_neg.text.begins_with("- ") else 0.0)
 	# Name under the selected item's icon, centred on its counter circle. Pre-run
 	# prices are separate tags above each consumable.
 	_name_label.text = _item_name(id)
