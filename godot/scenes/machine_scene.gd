@@ -2900,13 +2900,14 @@ func _show_score_table() -> void:
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
 
-	# Cross (X) close button in the top marquee band. The glyph lives on a child
+	# Cross (X) close button: a wide rounded rectangle centered in the top
+	# marquee band with the glyph in its middle. The glyph lives on a child
 	# Label: Button text inflates the minimum size well past the art-sized box
 	# (font metrics), which would bleed over the art's baked column header.
 	var close := Button.new()
 	close.name = "CloseButton"
-	close.position = Vector2(137.0, 9.0)
-	close.size = Vector2(14.0, 14.0)
+	close.size = Vector2(56.0, 14.0)
+	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 9.0)
 	var close_label := _score_label(close, "X", Vector2.ZERO, 9,
 		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.position.y = 2.0
