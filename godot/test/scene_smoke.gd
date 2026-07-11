@@ -3376,6 +3376,42 @@ func _check_upgrades_scene(failures: Array) -> void:
 	await create_timer(0.2).timeout
 	if brain.frame <= 0:
 		failures.append("upgrades: brain layer did not animate while scene was ticking")
+	# Issue #109: the closed computer terminals must read as buttons — the
+	# contour light blinks on a short cycle, hover/focus holds it on, a press
+	# dips it, and an open terminal (active UI, not a button) stays untinted.
+	scene._reset_eye_terminal()
+	scene._reset_memory_terminal()
+	scene._refresh_all()
+	for hitbox in [eye_hitbox, memory_hitbox]:
+		if hitbox.mouse_entered.get_connections().is_empty() \
+				or hitbox.focus_entered.get_connections().is_empty() \
+				or hitbox.button_down.get_connections().is_empty():
+			failures.append("issue109: %s has no hover/focus/press feedback wiring" % hitbox.name)
+	scene._terminal_blink_time = float(scene.TERMINAL_BLINK_TIME) * 0.5
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: closed eye terminal contour does not light mid-blink")
+	if memory_terminal.self_modulate != Color.WHITE:
+		failures.append("issue109: memory terminal should blink on the opposite half-cycle")
+	scene._terminal_blink_time = float(scene.TERMINAL_BLINK_MEMORY_OFFSET) \
+		+ float(scene.TERMINAL_BLINK_TIME) * 0.5
+	scene._step_terminal_glow(0.0)
+	if memory_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: closed memory terminal contour does not light mid-blink")
+	scene._set_terminal_hot("eye", true)
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: hover/focus does not hold the eye terminal light on")
+	scene._set_terminal_pressed("eye", true)
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r >= 1.0:
+		failures.append("issue109: press does not dip the eye terminal light")
+	scene._set_terminal_pressed("eye", false)
+	scene._set_terminal_hot("eye", false)
+	scene._activate_memory()
+	scene._step_terminal_glow(0.0)
+	if memory_terminal.self_modulate != Color.WHITE:
+		failures.append("issue109: open memory terminal should render untinted")
 	meta_store.ownedPermanents = saved_permanents
 	scene.queue_free()
 

@@ -54,6 +54,17 @@ const FRAME_TIME := 0.08
 const TERMINAL_FLOAT_PERIOD := 2.6
 const TERMINAL_FLOAT_AMPLITUDE := 1.0
 const TERMINAL_FLOAT_MEMORY_PHASE := PI * 0.5
+## Issue #109: closed terminals also flash their contours every couple of
+## seconds and answer hover/focus/press, so they read as pressable buttons.
+## The light rides self_modulate (the dealer LAB button trick, issue #84) —
+## channels >1 brighten the sprite against the dark lab, no new art needed.
+## The two computers blink on opposite half-cycles so the room feels alive.
+const TERMINAL_BLINK_PERIOD := 2.5
+const TERMINAL_BLINK_TIME := 0.7
+const TERMINAL_BLINK_MEMORY_OFFSET := TERMINAL_BLINK_PERIOD * 0.5
+const TERMINAL_GLOW_BLINK := Color(1.5, 1.45, 1.15)
+const TERMINAL_GLOW_HOVER := Color(1.3, 1.28, 1.12)
+const TERMINAL_GLOW_PRESSED := Color(0.78, 0.78, 0.88)
 const NAV_FLASH_TIME := 0.12
 const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
@@ -174,6 +185,11 @@ var _reward_amp_glows: Array[Sprite2D] = []
 var _terminal_float_time := 0.0
 var _eye_terminal_base_pos := Vector2.ZERO
 var _memory_terminal_base_pos := Vector2.ZERO
+var _terminal_blink_time := 0.0
+var _eye_hitbox_hot := false      # pointer hover or keyboard/controller focus
+var _eye_hitbox_pressed := false
+var _memory_hitbox_hot := false
+var _memory_hitbox_pressed := false
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(160.0, 320.0)
@@ -207,6 +223,7 @@ func _process(delta: float) -> void:
 	_step_leak(delta)
 	_step_eye_terminal(delta)
 	_step_terminal_float(delta)
+	_step_terminal_glow(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint() or _purchase_animating:
@@ -371,6 +388,8 @@ func _configure_layer_visibility() -> void:
 func _bind_buttons() -> void:
 	_connect_button(_eye_hitbox, _activate_eye)
 	_connect_button(_memory_hitbox, _activate_memory)
+	_bind_terminal_feedback(_eye_hitbox, "eye")
+	_bind_terminal_feedback(_memory_hitbox, "memory")
 	_connect_button(_context_buy_button, _buy_selected_upgrade)
 	_connect_button(_back_button, _go_back)
 	_connect_button(_eye_prev_button, _eye_prev)
@@ -1066,3 +1085,57 @@ func _apply_terminal_float(terminal: AnimatedSprite2D, base_pos: Vector2, phase:
 		terminal.position = base_pos
 		return
 	terminal.position = base_pos + Vector2(0.0, round(sin(phase) * TERMINAL_FLOAT_AMPLITUDE))
+
+## Issue #109: hover/focus and press feedback on the computer hitboxes, mirrored
+## onto the terminal art (the hitbox Buttons themselves are invisible).
+func _bind_terminal_feedback(hitbox: Button, terminal_id: String) -> void:
+	if hitbox == null:
+		return
+	hitbox.mouse_entered.connect(_set_terminal_hot.bind(terminal_id, true))
+	hitbox.mouse_exited.connect(_set_terminal_hot.bind(terminal_id, false))
+	hitbox.focus_entered.connect(_set_terminal_hot.bind(terminal_id, true))
+	hitbox.focus_exited.connect(_set_terminal_hot.bind(terminal_id, false))
+	hitbox.button_down.connect(_set_terminal_pressed.bind(terminal_id, true))
+	hitbox.button_up.connect(_set_terminal_pressed.bind(terminal_id, false))
+
+func _set_terminal_hot(terminal_id: String, hot: bool) -> void:
+	if terminal_id == "eye":
+		_eye_hitbox_hot = hot
+	else:
+		_memory_hitbox_hot = hot
+
+func _set_terminal_pressed(terminal_id: String, pressed: bool) -> void:
+	if terminal_id == "eye":
+		_eye_hitbox_pressed = pressed
+	else:
+		_memory_hitbox_pressed = pressed
+
+## Issue #109: while a terminal is closed (frame 0 — the "press me" state) its
+## contours flash bright once per blink cycle; hover/focus holds the light on
+## and a press dips it, so the computer answers the pointer like a real button.
+## Open terminals are active UI, not buttons — they render untinted.
+func _step_terminal_glow(delta: float) -> void:
+	_terminal_blink_time = fmod(_terminal_blink_time + delta, TERMINAL_BLINK_PERIOD)
+	_apply_terminal_glow(_eye_terminal, _eye_hitbox_hot, _eye_hitbox_pressed, 0.0)
+	_apply_terminal_glow(_memory_terminal, _memory_hitbox_hot, _memory_hitbox_pressed,
+		TERMINAL_BLINK_MEMORY_OFFSET)
+
+func _apply_terminal_glow(terminal: AnimatedSprite2D, hot: bool, pressed: bool,
+		blink_offset: float) -> void:
+	if terminal == null:
+		return
+	if terminal.frame != 0:
+		terminal.self_modulate = Color.WHITE
+		return
+	if pressed:
+		terminal.self_modulate = TERMINAL_GLOW_PRESSED
+		return
+	if hot:
+		terminal.self_modulate = TERMINAL_GLOW_HOVER
+		return
+	var t := fmod(_terminal_blink_time + blink_offset, TERMINAL_BLINK_PERIOD)
+	if t >= TERMINAL_BLINK_TIME:
+		terminal.self_modulate = Color.WHITE
+		return
+	# One smooth flash per cycle: sine ramp up to the glow peak and back down.
+	terminal.self_modulate = Color.WHITE.lerp(TERMINAL_GLOW_BLINK, sin(t / TERMINAL_BLINK_TIME * PI))
