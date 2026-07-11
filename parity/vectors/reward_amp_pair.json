@@ -1,0 +1,101 @@
+{
+  "description": "Issue #108 — Rewards Amplification scales the pair bonus. scoreReels with symbolRewardBonuses: pairs of the amped symbol pay round(base * (1 + bonus)); other symbols and existing reward behavior are unchanged. Tier bonuses stack I=0.15, II=+0.10, III=+0.15.",
+  "tiers": [
+    { "owned": [], "expect": 0.0 },
+    { "owned": ["corr_reward_amp_1"], "expect": 0.15 },
+    { "owned": ["corr_reward_amp_1", "corr_reward_amp_2"], "expect": 0.25 },
+    { "owned": ["corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"], "expect": 0.4 }
+  ],
+  "cases": [
+    {
+      "label": "eye pair, no upgrade",
+      "reels": ["eye", "eye", "pill"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": {},
+      "expect": { "winType": "pair", "scoreEarned": 10, "coinsEarned": 10, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "eye pair, tier I",
+      "reels": ["eye", "eye", "pill"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.15 },
+      "expect": { "winType": "pair", "scoreEarned": 12, "coinsEarned": 12, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "eye pair, tiers I+II",
+      "reels": ["eye", "eye", "pill"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.25 },
+      "expect": { "winType": "pair", "scoreEarned": 13, "coinsEarned": 13, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "eye pair, all tiers",
+      "reels": ["eye", "eye", "pill"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.4 },
+      "expect": { "winType": "pair", "scoreEarned": 14, "coinsEarned": 14, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "pill pair untouched when eye is amped",
+      "reels": ["pill", "pill", "vial"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.4 },
+      "expect": { "winType": "pair", "scoreEarned": 7, "coinsEarned": 7, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "eye triple unchanged by the pair fix",
+      "reels": ["eye", "eye", "eye"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.4 },
+      "expect": { "winType": "triple", "scoreEarned": 70, "coinsEarned": 70, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "brain pair, tier I",
+      "reels": ["brain", "brain", "eye"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "brain": 0.15 },
+      "expect": { "winType": "pair", "scoreEarned": 23, "coinsEarned": 23, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "brain jackpot unchanged by the pair fix",
+      "reels": ["brain", "brain", "brain"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "brain": 0.4 },
+      "expect": { "winType": "jackpot", "scoreEarned": 280, "coinsEarned": 280, "freeSpinsGranted": 1 }
+    },
+    {
+      "label": "amped pair stacks with lucidity multiplier",
+      "reels": ["eye", "eye", "pill"],
+      "lucidityMultiplier": 2.5,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": false,
+      "symbolRewardBonuses": { "eye": 0.4 },
+      "expect": { "winType": "pair", "scoreEarned": 35, "coinsEarned": 35, "freeSpinsGranted": 0 }
+    },
+    {
+      "label": "pattern23 doubled pair still amps",
+      "reels": ["pill", "eye", "eye"],
+      "lucidityMultiplier": 1,
+      "allowFreeSpinGrant": true,
+      "pattern23Triple": true,
+      "symbolRewardBonuses": { "eye": 0.4 },
+      "expect": { "winType": "pair", "scoreEarned": 28, "coinsEarned": 28, "freeSpinsGranted": 0 }
+    }
+  ]
+}
