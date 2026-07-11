@@ -171,6 +171,22 @@ static func check_dealer_reroll(out: Array) -> void:
 		if pair2.size() != 2 or (p.has(pair2[0]) and p.has(pair2[1])):
 			_fail(out, "rerollPoolPair unchanged seed=%d" % int(s), r, "pair != previous")
 
+# Rewards Amplification on the pair bonus (issue #108): pairs of the amped symbol
+# pay round(base * (1 + bonus)) — the same amplified value the score table shows —
+# while other symbols, triples/jackpots, and tier stacking stay pinned.
+static func check_reward_amp_pair(out: Array) -> void:
+	var data: Dictionary = _load("reward_amp_pair.json")
+	for t in data["tiers"]:
+		var got_bonus := Economy.compute_symbol_reward_amp_bonus(t["owned"])
+		if not deep_equal(got_bonus, t["expect"]):
+			_fail(out, "rewardAmp tiers " + str(t["owned"]), got_bonus, t["expect"])
+	for c in data["cases"]:
+		var got := Evaluate.score_reels(c["reels"], float(c["lucidityMultiplier"]),
+			bool(c["allowFreeSpinGrant"]), bool(c["pattern23Triple"]), false,
+			1.0, 0, false, 1.0, c["symbolRewardBonuses"])
+		if not deep_equal(got, c["expect"]):
+			_fail(out, "rewardAmpPair " + String(c["label"]), got, c["expect"])
+
 static func check_bank(out: Array) -> void:
 	var data: Dictionary = _load("bank.json")
 	for c in data["cases"]:
@@ -215,6 +231,7 @@ static func run_all() -> Array:
 	check_abilities(out)
 	check_dealer(out)
 	check_dealer_reroll(out)
+	check_reward_amp_pair(out)
 	check_bank(out)
 	check_lucidity(out)
 	check_endings(out)
