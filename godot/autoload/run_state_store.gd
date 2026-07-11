@@ -163,6 +163,10 @@ var oddsPhaseCompleted := false           # closed screens stay closed until the
 var runPhase := "idle" # idle | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
+## Issue #111: menu-selected Augmented Run tier waiting for the dealer's START.
+## The rule modifiers consume this run-local value; the menu itself only queues it.
+var pendingAugmentedRunTier := 0
+var augmentedRunTier := 0
 var pendingPowerRestores: Array = []
 
 func _forced_eye_reveal_symbols() -> Variant:
@@ -186,6 +190,10 @@ func _can_use_ability() -> bool:
 
 func _commit() -> void:
 	state_changed.emit()
+
+func queue_augmented_run(tier: int) -> void:
+	pendingAugmentedRunTier = clampi(tier, 0, 5)
+	_commit()
 
 # ── spin ──────────────────────────────────────────────────────────────────────────
 
@@ -506,6 +514,8 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	pendingAugmentedRunTier = 0
+	augmentedRunTier = 0
 	_commit()
 
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
@@ -514,6 +524,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	if consume_campaign_neuron and not MetaStateStore.consume_campaign_neuron_for_run():
 		_commit()
 		return false
+	augmentedRunTier = pendingAugmentedRunTier
+	pendingAugmentedRunTier = 0
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	scoreEarned = 0

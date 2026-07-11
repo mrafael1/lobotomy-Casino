@@ -23,6 +23,10 @@ var campaignNeuronsLeft: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
 var campaignActive: bool = true
 var campaignFailed: bool = false
 var wealthEndingReached: bool = false
+## Issue #111: Wealth permanently unlocks the Augmented Run menu, even after a
+## campaign reset. This is separate from wealthEndingReached, which describes
+## the current campaign's ending state.
+var augmentedRunUnlocked: bool = false
 var is_first_launch: bool = true
 # Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
 # phase, applied to every run, and only reset with a fresh campaign.
@@ -64,6 +68,7 @@ func _as_dict() -> Dictionary:
 		"campaignActive": campaignActive,
 		"campaignFailed": campaignFailed,
 		"wealthEndingReached": wealthEndingReached,
+		"augmentedRunUnlocked": augmentedRunUnlocked,
 		"is_first_launch": is_first_launch,
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
 		"oddsTokensBanked": oddsTokensBanked,
@@ -87,6 +92,7 @@ func _apply(meta: Dictionary) -> void:
 	campaignActive = bool(meta.get("campaignActive", true))
 	campaignFailed = bool(meta.get("campaignFailed", false))
 	wealthEndingReached = bool(meta.get("wealthEndingReached", endingsReached.has("wealth")))
+	augmentedRunUnlocked = bool(meta.get("augmentedRunUnlocked", wealthEndingReached or endingsReached.has("wealth")))
 	is_first_launch = bool(meta.get("is_first_launch", true))
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
@@ -100,6 +106,7 @@ func bank_run(run: Dictionary, ending: String) -> void:
 	_apply(next)
 	if ending == "wealth":
 		wealthEndingReached = true
+		augmentedRunUnlocked = true
 		campaignActive = false
 		campaignFailed = false
 	pendingConsumables = {} # cleared on bank, cleared on bank
@@ -191,6 +198,7 @@ func mark_ending_reached(ending: String) -> void:
 		endingsReached.append(ending)
 	if ending == "wealth":
 		wealthEndingReached = true
+		augmentedRunUnlocked = true
 		campaignActive = false
 		campaignFailed = false
 		if not history.has("wealthEndingReachedAt"):
@@ -349,6 +357,9 @@ func _migrate(record: Dictionary) -> Dictionary:
 	if not current.has("wealthEndingReached"):
 		var reached: Array = current.get("endingsReached", []) as Array
 		current["wealthEndingReached"] = reached.has("wealth")
+	if not current.has("augmentedRunUnlocked"):
+		var ending_list: Array = current.get("endingsReached", []) as Array
+		current["augmentedRunUnlocked"] = bool(current["wealthEndingReached"]) or ending_list.has("wealth")
 	if not current.has("is_first_launch"):
 		current["is_first_launch"] = true
 	if not current.has("oddsUpgrades"):

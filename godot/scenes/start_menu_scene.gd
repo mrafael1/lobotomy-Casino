@@ -14,6 +14,8 @@ extends Control
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
+const MENU_ART_UNLOCKED := "start_menu/start_menu_background_unlocked.png"
+const MENU_ART_LOCKED := "start_menu/start_menu_background_locked.png"
 const CANVAS_W := 160.0
 const MENU_W := 148.0
 # Title sits high so the whole column (titles, meter + count, hint, buttons) fits
@@ -22,6 +24,15 @@ const MENU_Y := 44.0
 const MENU_SEPARATION := 6
 const TITLE_SPACER_H := 8.0
 const CAMPAIGN_HINT_H := 18.0
+const AUGMENTED_TIER_NAMES: Array[String] = ["HEART", "SPADE", "DIAMOND", "CLUB", "JOKER"]
+const AUGMENTED_BUTTON_RECT := Rect2(18.0, 145.0, 124.0, 34.0)
+const AUGMENTED_LEFT_RECT := Rect2(12.0, 184.0, 18.0, 24.0)
+const AUGMENTED_RIGHT_RECT := Rect2(130.0, 184.0, 18.0, 24.0)
+const AUGMENTED_TIER_RECT := Rect2(52.0, 208.0, 56.0, 14.0)
+const TIER_CARD_HIGHLIGHT_POSITIONS: Array[Vector2] = [
+	Vector2(68.0, 184.0), Vector2(25.0, 184.0), Vector2(47.0, 184.0),
+	Vector2(91.0, 184.0), Vector2(112.0, 184.0),
+]
 
 @export_group("First Launch Tutorial")
 @export var tutorial_pauses_tree: bool = true
@@ -49,6 +60,8 @@ const CAMPAIGN_HINT_H := 18.0
 @export_group("Campaign")
 ## Game-over flatline copy — byte-for-byte from the GDD.
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
+## Editor-only preview toggle for the post-Wealth Augmented Run menu state.
+@export var editor_preview_augmented_run: bool = true
 
 var _font: FontFile = null
 var _background: Sprite2D = null
@@ -57,6 +70,15 @@ var _scores_button: Button = null
 var _campaign_label: Label = null
 var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
+var _menu_overlay: Control = null
+var _visual_start_button: Button = null
+var _visual_augmented_button: Button = null
+var _visual_scores_button: Button = null
+var _augmented_left_button: Button = null
+var _augmented_right_button: Button = null
+var _augmented_tier_label: Label = null
+var _augmented_tier_highlight: Panel = null
+var _augmented_tier := 0
 var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
@@ -94,33 +116,114 @@ func _bind_scene_nodes() -> void:
 	_tutorial_button = get_node_or_null("TutorialModal/Panel/Margin/Content/OkButton") as Button
 
 func _build_background() -> void:
-	if _background != null:
-		if _background.texture == null:
-			var tex := Assets.texture("dealer_shop_bg.png", true)
-			if tex == null:
-				return
-			_background.texture = tex
-			_background.centered = false
-			_background.scale = Vector2(160.0 / tex.get_width(), 320.0 / tex.get_height())
-		_background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if _background == null:
+		var bg := ColorRect.new()
+		bg.color = Color(0.055, 0.03, 0.11)
+		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(bg)
+		_background = Sprite2D.new()
+		_background.name = "GeneratedBackground"
+		_background.centered = false
+		_background.position = Vector2.ZERO
+		add_child(_background)
+	_refresh_background_art()
+
+func _refresh_background_art() -> void:
+	if _background == null:
 		return
-	var bg := ColorRect.new()
-	bg.color = Color(0.055, 0.03, 0.11)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	var tex := Assets.texture("dealer_shop_bg.png", true)
-	if tex != null:
-		var spr := Sprite2D.new()
-		spr.texture = tex
-		spr.centered = false
-		spr.position = Vector2.ZERO
-		spr.scale = Vector2(160.0 / tex.get_width(), 320.0 / tex.get_height())
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		add_child(spr)
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.01, 0.04, 0.62)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
+	var asset := MENU_ART_UNLOCKED if _augmented_run_unlocked() else MENU_ART_LOCKED
+	var tex := Assets.texture(asset, true)
+	if tex == null:
+		tex = Assets.texture("dealer_shop_bg.png", true)
+	if tex == null:
+		return
+	_background.texture = tex
+	_background.centered = false
+	_background.position = Vector2.ZERO
+	_background.scale = Vector2(CANVAS_W / float(tex.get_width()), 320.0 / float(tex.get_height()))
+	_background.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+func _augmented_run_unlocked() -> bool:
+	if Engine.is_editor_hint():
+		return editor_preview_augmented_run
+	return bool(MetaStateStore.augmentedRunUnlocked)
+
+func _build_art_menu() -> void:
+	if _menu_overlay != null:
+		return
+	var authored_column := get_node_or_null("MenuColumn") as Control
+	if authored_column != null:
+		authored_column.visible = false
+	_menu_overlay = Control.new()
+	_menu_overlay.name = "MenuOverlay"
+	_menu_overlay.size = Vector2(CANVAS_W, 320.0)
+	_menu_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu_overlay.z_index = 10
+	add_child(_menu_overlay)
+	_visual_start_button = _make_art_button(
+		&"StartRunButton", Rect2(22.0, 101.0, 116.0, 35.0), 8, _start_run)
+	_visual_augmented_button = _make_art_button(
+		&"AugmentedRunButton", AUGMENTED_BUTTON_RECT, 7, _start_augmented_run)
+	_visual_scores_button = _make_art_button(
+		&"ScoresButton", Rect2(26.0, 238.0, 108.0, 35.0), 9, _open_scores)
+	_visual_scores_button.text = "SCORES"
+	_augmented_left_button = _make_art_button(
+		&"AugmentedLeftButton", AUGMENTED_LEFT_RECT, 1, _select_augmented_tier.bind(-1))
+	_augmented_right_button = _make_art_button(
+		&"AugmentedRightButton", AUGMENTED_RIGHT_RECT, 1, _select_augmented_tier.bind(1))
+	_augmented_tier_label = _make_art_label(&"AugmentedTierLabel", AUGMENTED_TIER_RECT, 5)
+	_augmented_tier_highlight = Panel.new()
+	_augmented_tier_highlight.name = "AugmentedTierHighlight"
+	_augmented_tier_highlight.size = Vector2(19.0, 40.0)
+	_augmented_tier_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var highlight_style := StyleBoxFlat.new()
+	highlight_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	highlight_style.border_color = Color(1.0, 0.78, 0.25, 0.9)
+	highlight_style.set_border_width_all(1)
+	_augmented_tier_highlight.add_theme_stylebox_override(&"panel", highlight_style)
+	_menu_overlay.add_child(_augmented_tier_highlight)
+	_refresh_start_button()
+	_refresh_augmented_ui()
+
+func _make_art_label(node_name: StringName, rect: Rect2, font_size: int) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.position = rect.position
+	label.size = rect.size
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override(&"font_size", font_size)
+	label.add_theme_color_override(&"font_color", Color(1.0, 0.91, 0.68))
+	label.add_theme_color_override(&"font_outline_color", Color(0.04, 0.01, 0.06))
+	label.add_theme_constant_override(&"outline_size", 1)
+	if _font != null:
+		label.add_theme_font_override(&"font", _font)
+	_menu_overlay.add_child(label)
+	return label
+
+func _make_art_button(node_name: StringName, rect: Rect2, font_size: int, callback: Callable) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.position = rect.position
+	button.size = rect.size
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.add_theme_font_size_override(&"font_size", font_size)
+	button.add_theme_color_override(&"font_color", Color(1.0, 0.91, 0.68))
+	button.add_theme_color_override(&"font_hover_color", Color(1.0, 1.0, 0.88))
+	button.add_theme_color_override(&"font_pressed_color", Color(1.0, 0.78, 0.25))
+	button.add_theme_color_override(&"font_outline_color", Color(0.04, 0.01, 0.06))
+	button.add_theme_constant_override(&"outline_size", 1)
+	for state in [&"normal", &"hover", &"pressed", &"disabled", &"focus"]:
+		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	if _font != null:
+		button.add_theme_font_override(&"font", _font)
+	button.pressed.connect(callback)
+	_menu_overlay.add_child(button)
+	return button
 
 func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_CENTER) -> Label:
 	var l := Label.new()
@@ -150,6 +253,7 @@ func _build_menu() -> void:
 		_build_campaign_labels()
 		_connect_button(_start_button, _start_run)
 		_connect_button(_scores_button, _open_scores)
+		_build_art_menu()
 		_refresh_start_button()
 		_layout_menu_column()
 		return
@@ -179,6 +283,7 @@ func _build_menu() -> void:
 	col.add_child(start)
 	_start_button = start
 	col.add_child(_menu_button("SCORES", 8, _open_scores))
+	_build_art_menu()
 
 func _build_campaign_labels() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
@@ -232,13 +337,21 @@ func _refresh_start_button() -> void:
 		_start_button.add_theme_font_size_override("font_size", 11)
 	if _font != null:
 		_start_button.add_theme_font_override("font", _font)
+	if _visual_start_button != null:
+		_visual_start_button.text = _start_button.text
+		_visual_start_button.add_theme_font_size_override(
+			&"font_size", 8 if _start_button.text == "START FRESH AGAIN" else 9)
+	_refresh_augmented_ui()
 
 func _refresh_campaign_ui() -> void:
+	_refresh_background_art()
 	if _campaign_label == null or _campaign_hint == null:
+		_refresh_augmented_ui()
 		return
 	if Engine.is_editor_hint():
 		_campaign_label.text = "NEURONS"
 		_campaign_hint.text = "EACH RETURN COSTS ONE"
+		_refresh_augmented_ui()
 		return
 	# Issue #38: the neuron meter replaces the text; the label holds its menu slot.
 	_campaign_label.text = ""
@@ -259,6 +372,30 @@ func _refresh_campaign_ui() -> void:
 	else:
 		_campaign_hint.text = "EACH RETURN COSTS ONE. REACH WEALTH BEFORE ZERO."
 	_refresh_start_button()
+	_refresh_augmented_ui()
+
+func _refresh_augmented_ui() -> void:
+	if _visual_augmented_button == null:
+		return
+	var unlocked := _augmented_run_unlocked()
+	var active_run := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
+	_visual_augmented_button.visible = unlocked
+	_visual_augmented_button.disabled = active_run
+	_augmented_left_button.visible = unlocked
+	_augmented_right_button.visible = unlocked
+	_augmented_tier_label.visible = unlocked
+	_augmented_tier_highlight.visible = unlocked
+	if not unlocked:
+		return
+	_visual_augmented_button.text = "AUGMENTED RUN"
+	_augmented_tier_label.text = "%s T%d" % [AUGMENTED_TIER_NAMES[_augmented_tier], _augmented_tier + 1]
+	_augmented_tier_highlight.position = TIER_CARD_HIGHLIGHT_POSITIONS[_augmented_tier]
+
+func _select_augmented_tier(direction: int) -> void:
+	if not _augmented_run_unlocked():
+		return
+	_augmented_tier = posmod(_augmented_tier + direction, AUGMENTED_TIER_NAMES.size())
+	_refresh_augmented_ui()
 
 func _connect_button(button: Button, cb: Callable) -> void:
 	if button == null:
@@ -326,14 +463,31 @@ func _start_run() -> void:
 	if not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
 		MetaStateStore.start_new_campaign()
 		RunStateStore.reset_run_state()
+		RunStateStore.queue_augmented_run(0)
 		_refresh_campaign_ui()
 		return
 	if not Engine.is_editor_hint() and not MetaStateStore.can_start_campaign_run():
 		MetaStateStore.mark_campaign_failed()
 		_refresh_campaign_ui()
 		return
+	RunStateStore.queue_augmented_run(0)
 	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
 	# pre-run shop mode and starts the run once the player leaves the counter.
+	get_tree().change_scene_to_file(DEALER_SCENE)
+
+func _start_augmented_run() -> void:
+	if Engine.is_editor_hint() or not _augmented_run_unlocked():
+		return
+	if RunStateStore.runPhase == "running":
+		return
+	if MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached:
+		MetaStateStore.start_new_campaign()
+		RunStateStore.reset_run_state()
+	if not MetaStateStore.can_start_campaign_run():
+		MetaStateStore.mark_campaign_failed()
+		_refresh_campaign_ui()
+		return
+	RunStateStore.queue_augmented_run(_augmented_tier + 1)
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
 func _open_scores() -> void:

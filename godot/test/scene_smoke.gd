@@ -279,6 +279,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	var previous_wealth_reached := bool(meta_store.wealthEndingReached)
 	var previous_campaign_active := bool(meta_store.campaignActive)
 	var previous_campaign_left := int(meta_store.campaignNeuronsLeft)
+	var previous_augmented_unlocked := bool(meta_store.augmentedRunUnlocked)
 	meta_store.campaignFailed = false
 	meta_store.wealthEndingReached = false
 	meta_store.campaignActive = true
@@ -299,10 +300,53 @@ func _check_global_options_layout(failures: Array) -> void:
 	if start_button.text != "START RUN":
 		failures.append("menu: idle state should show START RUN")
 	run_store.runPhase = previous_phase
+	# Issue #111: the Augmented Run control is absent until Wealth has unlocked it,
+	# then exposes all five card-linked tiers through the left/right selector.
+	meta_store.augmentedRunUnlocked = false
+	var locked_augmented_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(locked_augmented_menu)
+	var locked_augmented_button := locked_augmented_menu.get_node_or_null(
+		"MenuOverlay/AugmentedRunButton") as Button
+	var locked_left_arrow := locked_augmented_menu.get_node_or_null(
+		"MenuOverlay/AugmentedLeftButton") as Button
+	var locked_tier_label := locked_augmented_menu.get_node_or_null(
+		"MenuOverlay/AugmentedTierLabel") as Label
+	if locked_augmented_button == null or locked_augmented_button.visible:
+		failures.append("issue111: Augmented Run button should be hidden before Wealth")
+	if locked_left_arrow == null or locked_left_arrow.visible:
+		failures.append("issue111: tier arrows should be hidden before Wealth")
+	if locked_tier_label == null or locked_tier_label.visible:
+		failures.append("issue111: tier label should be hidden before Wealth")
+	locked_augmented_menu.queue_free()
+
+	meta_store.augmentedRunUnlocked = true
+	var unlocked_augmented_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(unlocked_augmented_menu)
+	var augmented_button := unlocked_augmented_menu.get_node_or_null(
+		"MenuOverlay/AugmentedRunButton") as Button
+	var scores_button := unlocked_augmented_menu.get_node_or_null(
+		"MenuOverlay/ScoresButton") as Button
+	var tier_label := unlocked_augmented_menu.get_node_or_null(
+		"MenuOverlay/AugmentedTierLabel") as Label
+	if augmented_button == null or not augmented_button.visible or augmented_button.text != "AUGMENTED RUN":
+		failures.append("issue111: unlocked menu is missing AUGMENTED RUN")
+	if scores_button == null or not scores_button.visible or scores_button.text != "SCORES":
+		failures.append("issue111: unlocked menu is missing SCORES")
+	if tier_label == null or tier_label.text != "HEART T1":
+		failures.append("issue111: first tier should be HEART T1")
+	for _i in range(4):
+		unlocked_augmented_menu._select_augmented_tier(1)
+	if tier_label != null and tier_label.text != "JOKER T5":
+		failures.append("issue111: fifth tier should be JOKER T5")
+	unlocked_augmented_menu._select_augmented_tier(1)
+	if tier_label != null and tier_label.text != "HEART T1":
+		failures.append("issue111: tier selector did not wrap to HEART T1")
+	unlocked_augmented_menu.queue_free()
 	meta_store.campaignFailed = previous_campaign_failed
 	meta_store.wealthEndingReached = previous_wealth_reached
 	meta_store.campaignActive = previous_campaign_active
 	meta_store.campaignNeuronsLeft = previous_campaign_left
+	meta_store.augmentedRunUnlocked = previous_augmented_unlocked
 	start_menu.queue_free()
 
 	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
