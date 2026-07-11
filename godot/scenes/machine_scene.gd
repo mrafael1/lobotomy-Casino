@@ -1766,10 +1766,9 @@ func _refresh_tv_indicators() -> void:
 		_set_display_lucidity(RunStateStore.lucidityCoins)
 	# The wealth bar targets the campaign wealth goal (2000) — the same threshold
 	# the wealth ending checks — not the old lucidity objective.
-	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
-	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
+	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, _goal_bar_ratio())
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
+		_bar_labels["goal"].text = _goal_label_text()
 
 ## The real number of spins the player can still take: what the neuron pool affords
 ## (ceil(neurons / decay) — the SAME budget spin() uses) plus banked free spins.
@@ -1813,9 +1812,22 @@ func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 func _set_display_lucidity(value: int) -> void:
 	_display_lucidity = maxi(0, value)
 	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = "%d/%d" % [_display_lucidity, campaign_goal_score]
-	var goal_ratio := clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
-	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, goal_ratio)
+		_bar_labels["goal"].text = _goal_label_text()
+	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, _goal_bar_ratio())
+
+## Once the player continues past the wealth ending the campaign goal is spent:
+## the readout hides the completed target behind "???" and the bar stays pinned
+## full for the rest of that continued run (issue #110). A new run resets
+## wealthContinued, restoring the normal x/goal progression.
+func _goal_label_text() -> String:
+	if RunStateStore.wealthContinued:
+		return "???"
+	return "%d/%d" % [_display_lucidity, campaign_goal_score]
+
+func _goal_bar_ratio() -> float:
+	if RunStateStore.wealthContinued:
+		return 1.0
+	return clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
 
 func _start_lucidity_countup(target: int, visible_coin_count: int, first_arrival_time: float) -> void:
 	if _lucidity_count_tween != null and _lucidity_count_tween.is_valid():

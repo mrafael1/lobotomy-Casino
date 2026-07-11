@@ -1870,7 +1870,32 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	machine._continue_from_wealth()
 	if String(run_store.runPhase) != "running" or not bool(run_store.wealthContinued):
 		failures.append("wealth: CONTINUE did not resume the run (wealth-continue rules)")
+	# Issue #110: after choosing to continue, the completed goal disappears from the
+	# objective readout — the label shows "???" and the bar pins full, and it stays
+	# that way through every HUD refresh path for the rest of the continued run.
+	machine._refresh_tv_indicators()
+	if machine._bar_labels.has("goal"):
+		if String((machine._bar_labels["goal"] as Label).text) != "???":
+			failures.append("issue110: continued run goal label reads '%s', expected ???"
+				% String((machine._bar_labels["goal"] as Label).text))
+		# _set_display_lucidity is the rebuild/count-up path (scene re-entry after a
+		# save load repopulates the HUD through it) — it must also keep the mask.
+		machine._set_display_lucidity(450)
+		if String((machine._bar_labels["goal"] as Label).text) != "???":
+			failures.append("issue110: goal label lost the ??? mask on a lucidity update")
+		if machine._goal_fill_sprite != null \
+				and machine._goal_fill_sprite.region_rect.size.x \
+					< float(machine.WEALTH_BAR["width"]) * machine.ASSET_SCALE:
+			failures.append("issue110: continued-run wealth bar is not pinned full")
+	else:
+		failures.append("issue110: goal bar label missing from the HUD")
+	# A fresh standard run restores the normal x/goal progression.
 	run_store.reset_run_state()
+	machine._set_display_lucidity(300)
+	if machine._bar_labels.has("goal") \
+			and String((machine._bar_labels["goal"] as Label).text) != "300/%d" % int(machine.campaign_goal_score):
+		failures.append("issue110: new run goal label reads '%s', expected 300/%d"
+			% [String((machine._bar_labels["goal"] as Label).text), int(machine.campaign_goal_score)])
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
