@@ -293,13 +293,16 @@ func _check_global_options_layout(failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)
 	run_store.runPhase = "running"
 	start_menu._refresh_start_button()
-	var start_button := start_menu.get_node("MenuColumn/StartButton") as Button
-	if start_button.text != "CONTINUE":
+	# Art mode reparents the button out of MenuColumn; reach it via the scene.
+	var start_button := start_menu._start_button as Button
+	if start_button == null:
+		failures.append("menu: start button is missing")
+	elif start_button.text != "CONTINUE":
 		failures.append("menu: active run should show CONTINUE")
 	run_store.runPhase = "idle"
 	start_menu._refresh_start_button()
-	if start_button.text != "START RUN":
-		failures.append("menu: idle state should show START RUN")
+	if start_button != null and start_button.text != "CLASSIC RUN":
+		failures.append("menu: idle state should show CLASSIC RUN")
 	run_store.runPhase = previous_phase
 	meta_store.campaignFailed = previous_campaign_failed
 	meta_store.wealthEndingReached = previous_wealth_reached

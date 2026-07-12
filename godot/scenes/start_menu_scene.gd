@@ -42,6 +42,8 @@ const ART_SELECTOR_RECT := Rect2(11.0, 178.0, 139.0, 37.0)
 # and sized so the 0.8 squash still covers it, staying inside the bar interior.
 const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
+# Centre of the selector bar — the pivot the suit bounces around when it changes.
+const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -169,6 +171,7 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
+	spr.set_meta("base_scale", spr.scale) # suit-bounce anchor (_bounce_symbols)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
@@ -445,6 +448,24 @@ func _cycle_augmented_tier(step: int) -> void:
 	_selected_augmented_tier = cycle[idx]
 	_refresh_augmented_selector()
 	_refresh_start_button()
+	_bounce_symbols()
+
+## Bounce the incoming suit: the full-canvas symbols sprite pops from small to
+## rest around the selector-bar centre (position compensates so the scale
+## pivots on the bar, not the canvas origin).
+func _bounce_symbols() -> void:
+	if _symbols_sprite == null or not _symbols_sprite.visible:
+		return
+	var tw := create_tween()
+	tw.tween_method(_set_symbols_pop, 0.7, 1.0, 0.18) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _set_symbols_pop(f: float) -> void:
+	if _symbols_sprite == null:
+		return
+	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
+	_symbols_sprite.scale = base * f
+	_symbols_sprite.position = ART_SELECTOR_PIVOT * (1.0 - f)
 
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
@@ -479,7 +500,7 @@ func _refresh_start_button() -> void:
 		_start_button.text = "AUGMENTED RUN"
 		_start_button.add_theme_font_size_override("font_size", 9)
 	else:
-		_start_button.text = "START RUN"
+		_start_button.text = "CLASSIC RUN"
 		_start_button.add_theme_font_size_override("font_size", 10)
 	if _font != null:
 		_start_button.add_theme_font_override("font", _font)
