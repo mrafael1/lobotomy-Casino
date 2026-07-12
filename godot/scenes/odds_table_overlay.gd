@@ -29,21 +29,38 @@ const ART_SCALE := 6.0
 const ART_FRAME_W := 960.0
 const TOKEN_FRAMES := 9  # frame N = N tokens, 0..8
 
-# Measured opaque bounds of the sheets (image px, frame 0). Rows repeat every
-# 256 image px (42.67 source px).
-const ROW_PITCH_IMG := 256.0
+# Measured opaque bounds of the sheets (image px, frame 0). The authored sheets
+# tighten the pitch after the third row, so keeping these offsets explicit avoids
+# cutting into the syringe, vial, and flatline art.
+const ROW_OFFSETS_IMG := [0.0, 256.0, 512.0, 760.0, 1008.0, 1256.0]
 const BTN_PLUS_IMG := Rect2(656.0, 360.0, 152.0, 80.0)
 const BTN_MINUS_Y_OFFSET_IMG := 88.0
 const LEVEL_ROW_IMG := Rect2(344.0, 408.0, 264.0, 104.0)
 const LEVEL_LAST_ROW_IMG := Rect2(336.0, 1664.0, 264.0, 104.0)
+# Lift the authored table slightly so the final row and the DONE action have
+# breathing room on the compact canvas. The dimmer remains full-screen.
+const TABLE_Y_OFFSET := -8.0
 # Symbol box baked into the table art (source px): the selected symbol renders
 # inside it, scaled down slightly so it clears the box outline.
 const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
 const ODD_ICON_SIZE := 24.0
-# Live draw-chance readout, centered on the row's level meter.
+# Live draw-chance readout, centered below the row's level meter.
 const PCT_X := 57.3
 const PCT_W := 44.0
-const PCT_Y_OFFSET := 4.0
+const PCT_Y_OFFSET := 19.0
+const DONE_BUTTON_SIZE := Vector2(48.0, 12.0)
+const DONE_BUTTON_Y := 302.0
+
+# These are the opaque row colors in ODD-TABLE.png. Flatline has no colored
+# border, so its waveform red is used for the live percentage.
+const SYMBOL_PERCENT_COLORS := {
+	"brain": Color("#e86a73"),
+	"eye": Color("#ce3dde"),
+	"pill": Color("#e3e6ff"),
+	"syringe": Color("#f9a31b"),
+	"vial": Color("#b4202a"),
+	"flatline": Color("#8f0d16"),
+}
 
 @export_group("Odds Table Colors")
 @export var percent_color: Color = Color(0.0, 0.9, 1.0)
@@ -109,7 +126,7 @@ func _sheet_sprite(rel: String, hframes: int, frame: int) -> Sprite2D:
 	spr.hframes = hframes
 	spr.frame = frame
 	spr.centered = false
-	spr.position = Vector2.ZERO
+	spr.position = Vector2(0.0, TABLE_Y_OFFSET)
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -127,7 +144,7 @@ func _region_sprite(rel: String, rect_img: Rect2, frame: int) -> Sprite2D:
 	spr.centered = false
 	spr.region_enabled = true
 	spr.region_rect = Rect2(rect_img.position + Vector2(ART_FRAME_W * float(frame), 0.0), rect_img.size)
-	spr.position = rect_img.position / ART_SCALE
+	spr.position = rect_img.position / ART_SCALE + Vector2(0.0, TABLE_Y_OFFSET)
 	spr.scale = Vector2.ONE / ART_SCALE
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(spr)
@@ -166,8 +183,8 @@ func _rebuild() -> void:
 
 	var done := Button.new()
 	done.text = "DONE"
-	done.position = Vector2(50.0, 299.0)
-	done.size = Vector2(60.0, 14.0)
+	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
+	done.size = DONE_BUTTON_SIZE
 	done.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
@@ -180,18 +197,19 @@ func _rebuild() -> void:
 ## One authored row: the symbol inside the baked box, the level-meter region, the
 ## live % readout, and invisible hit buttons over the baked +/- art.
 func _build_row(symbol_id: String, row: int) -> void:
-	var row_offset_img := ROW_PITCH_IMG * float(row)
-	_row_y[symbol_id] = (LEVEL_ROW_IMG.position.y + row_offset_img) / ART_SCALE
+	var row_offset_img: float = float(ROW_OFFSETS_IMG[row])
 
-	_add_symbol_icon(symbol_id, SYMBOL_BOX_CENTER + Vector2(0.0, row_offset_img / ART_SCALE))
+	_add_symbol_icon(symbol_id, SYMBOL_BOX_CENTER + Vector2(0.0,
+		row_offset_img / ART_SCALE + TABLE_Y_OFFSET))
 
 	var level_rect := LEVEL_LAST_ROW_IMG if row == Symbols.BASE_SYMBOL_CYCLE.size() - 1 \
 		else Rect2(LEVEL_ROW_IMG.position + Vector2(0.0, row_offset_img), LEVEL_ROW_IMG.size)
+	_row_y[symbol_id] = level_rect.position.y / ART_SCALE + TABLE_Y_OFFSET
 	_level_sprites[symbol_id] = _region_sprite(ART_LEVELS, level_rect, 0)
 
 	# Live draw chance centered on the meter (issue #50: odds are visible).
 	var pct := _mk_label(self, "", Vector2(PCT_X, float(_row_y[symbol_id]) + PCT_Y_OFFSET),
-		5, percent_color, PCT_W, HORIZONTAL_ALIGNMENT_CENTER)
+		5, _percent_color(symbol_id), PCT_W, HORIZONTAL_ALIGNMENT_CENTER)
 	pct.z_index = 2
 	_pct_labels[symbol_id] = pct
 
@@ -221,7 +239,7 @@ func _add_symbol_icon(symbol_id: String, center: Vector2) -> void:
 ## to the sheet's pressed frame for tactile feedback.
 func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
 	var b := Button.new()
-	b.position = rect_img.position / ART_SCALE
+	b.position = rect_img.position / ART_SCALE + Vector2(0.0, TABLE_Y_OFFSET)
 	b.size = rect_img.size / ART_SCALE
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
@@ -240,6 +258,10 @@ func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
 		b.pressed.connect(_on_minus_pressed.bind(symbol_id))
 	add_child(b)
 	return b
+
+func _percent_color(symbol_id: String) -> Color:
+	var color: Variant = SYMBOL_PERCENT_COLORS.get(symbol_id, percent_color)
+	return color if color is Color else percent_color
 
 ## A symbol's current draw chance (percent) with all persisted + staged levels
 ## applied — the same additive weight layering Evaluate._build_weights uses for
