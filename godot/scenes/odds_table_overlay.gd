@@ -323,7 +323,7 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
-	bg_style.border_color = Color(1.0, 0.82, 0.28)
+	bg_style.border_color = _percent_color(symbol_id)
 	bg_style.set_border_width_all(1)
 	bg_style.set_corner_radius_all(3)
 	var bg := Panel.new()
