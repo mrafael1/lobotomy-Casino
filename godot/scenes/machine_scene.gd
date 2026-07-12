@@ -528,8 +528,10 @@ var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive s
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
 	_apply_balance_exports()
-	# Draw order (back -> front): reel background -> symbols -> cabinet (with
-	# transparent holes that mask symbol overflow) -> HUD -> spin button.
+	# Draw order (back -> front): casino backdrop -> reel background -> symbols
+	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
+	# spin button.
+	_build_neon_background()
 	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
 	_build_reel_animation_art()
 	_build_reel_covers()
@@ -674,6 +676,24 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+## The shared neon casino backdrop fills the canvas behind the cabinet, so the
+## machine sits in the same hall as the start menu instead of the clear color.
+func _build_neon_background() -> void:
+	var tex := _load_texture("start_menu/neon_casino_background.png", true)
+	if tex == null:
+		return
+	var spr := Sprite2D.new()
+	spr.name = "NeonBackground"
+	spr.texture = tex
+	spr.centered = false
+	spr.position = Vector2.ZERO
+	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	add_child(spr)
+	# The cabinet sprites are authored scene children, so a code-added node lands
+	# after (= above) them; force the backdrop to the very back of the tree.
+	move_child(spr, 0)
 
 func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
