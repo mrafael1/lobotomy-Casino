@@ -40,21 +40,16 @@ const LEVEL_LAST_ROW_IMG := Rect2(336.0, 1664.0, 264.0, 104.0)
 # Lift the authored table slightly so the final row and the DONE action have
 # breathing room on the compact canvas. The dimmer remains full-screen.
 const TABLE_Y_OFFSET := -8.0
-# The outer light-blue frame receives a narrow halo, leaving the pixel art
-# itself as the crisp neon core without washing the scene in broad light.
-const NEON_FRAME_RECT := Rect2(8.0, 20.0, 144.0, 299.0)
+# Measured outer frame of the authored modal, used to align the DONE action.
+const MODAL_FRAME_RECT := Rect2(8.0, 20.0, 144.0, 299.0)
 const SYMBOL_HIT_SIZE := Vector2(32.0, 32.0)
-const NEON_FRAME_COLOR := Color("#64b5de")
-const NEON_PULSE_LOW := 0.42
-const NEON_PULSE_HIGH := 0.78
-const NEON_PULSE_TIME := 0.9
 # Symbol box baked into the table art (source px): the selected symbol renders
 # inside it, scaled down slightly so it clears the box outline.
 const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
 const ODD_ICON_SIZE := 24.0
 const DONE_BUTTON_SIZE := Vector2(32.0, 8.0)
-const DONE_BUTTON_Y := NEON_FRAME_RECT.position.y + NEON_FRAME_RECT.size.y \
-	+ TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5
+const DONE_BUTTON_Y := MODAL_FRAME_RECT.position.y + MODAL_FRAME_RECT.size.y \
+	+ TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5 - 10.0
 
 # These are the opaque row colors in ODD-TABLE.png. Flatline has no colored
 # border, so its waveform red is used for the live percentage.
@@ -80,8 +75,6 @@ var _plus_art := {}         # symbol -> Sprite2D (region of the buttons sheet)
 var _minus_art := {}        # symbol -> Sprite2D
 var _level_sprites := {}    # symbol -> Sprite2D (region of the levels sheet)
 var _pct_popup: Control = null
-var _neon_glow_layer: Control = null
-var _neon_glow_tween: Tween = null
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -103,67 +96,6 @@ func _close() -> void:
 	RunStateStore.finalize_odds_phase()
 	visible = false
 	closed.emit()
-
-func _mk_label(parent: Control, text: String, pos: Vector2, font_size: int, color: Color,
-		width := 0.0, halign := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.position = pos
-	if width > 0.0:
-		l.size = Vector2(width, float(font_size) + 4.0)
-	l.horizontal_alignment = halign
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", font_size)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Color.BLACK)
-	l.add_theme_constant_override("outline_size", 1)
-	parent.add_child(l)
-	return l
-
-## Adds a restrained halo behind the authored modal frame. The panel border sits
-## over the art while its shadow spreads only a few source pixels outside it.
-func _spawn_neon_glows() -> void:
-	var layer := Control.new()
-	layer.name = "NeonGlow"
-	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.z_index = 1
-	layer.modulate.a = NEON_PULSE_HIGH
-	add_child(layer)
-	_neon_glow_layer = layer
-
-	_add_neon_outline(layer, Rect2(NEON_FRAME_RECT.position + Vector2(0.0, TABLE_Y_OFFSET),
-		NEON_FRAME_RECT.size), NEON_FRAME_COLOR)
-
-	_neon_glow_tween = create_tween().set_loops()
-	_neon_glow_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_LOW, NEON_PULSE_TIME)
-	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_HIGH, NEON_PULSE_TIME)
-
-func _add_neon_outline(parent: Control, rect: Rect2, color: Color) -> void:
-	var points := PackedVector2Array([
-		rect.position,
-		rect.position + Vector2(rect.size.x, 0.0),
-		rect.position + rect.size,
-		rect.position + Vector2(0.0, rect.size.y),
-	])
-	var halo := Line2D.new()
-	halo.name = "NeonHalo"
-	halo.points = points
-	halo.closed = true
-	halo.width = 3.0
-	halo.default_color = Color(color.r, color.g, color.b, 0.24)
-	halo.antialiased = false
-	parent.add_child(halo)
-	var core := Line2D.new()
-	core.name = "NeonCore"
-	core.points = points
-	core.closed = true
-	core.width = 1.0
-	core.default_color = Color(color.r, color.g, color.b, 0.82)
-	core.antialiased = false
-	parent.add_child(core)
 
 ## Full-canvas sheet sprite (dealer-scene pattern): scaled so one frame covers
 ## the 160x320 canvas exactly.
@@ -209,10 +141,6 @@ func _set_region_frame(spr: Sprite2D, base_x_img: float, frame: int) -> void:
 	spr.region_rect = r
 
 func _rebuild() -> void:
-	if _neon_glow_tween != null and _neon_glow_tween.is_valid():
-		_neon_glow_tween.kill()
-	_neon_glow_tween = null
-	_neon_glow_layer = null
 	_hide_pct_popup()
 	for child in get_children():
 		child.queue_free()
@@ -230,7 +158,6 @@ func _rebuild() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
 
-	_spawn_neon_glows()
 	_sheet_sprite(ART_TABLE, 1, 0)
 	_tokens_sprite = _sheet_sprite(ART_TOKENS, TOKEN_FRAMES, 0)
 
@@ -374,7 +301,7 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	var text := "%.1f%%" % _symbol_percent(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
-	var popup_size := Vector2(text_width + 8.0, 14.0)
+	var popup_size := Vector2(maxf(text_width + 8.0, 24.0), 14.0)
 
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
@@ -385,12 +312,27 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	bg.name = "PctBubble"
 	bg.add_theme_stylebox_override(&"panel", bg_style)
 	bg.size = popup_size
+	bg.clip_contents = true
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pct_popup.add_child(bg)
-	var label := _mk_label(bg, text, Vector2(4.0, 2.0), 5, _percent_color(symbol_id),
-		text_width, HORIZONTAL_ALIGNMENT_CENTER)
+	var label := Label.new()
 	label.name = "PctLabel"
-	label.z_index = 1
+	label.text = text
+	label.position = Vector2(3.0, 1.0)
+	label.size = popup_size - Vector2(6.0, 2.0)
+	label.custom_minimum_size = Vector2.ZERO
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.clip_text = true
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", _percent_color(symbol_id))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	label.set_deferred("size", popup_size - Vector2(6.0, 2.0))
 	_pct_popup.size = popup_size
 	var pos := button.position + Vector2(button.size.x * 0.5 - popup_size.x * 0.5,
 		-popup_size.y - 3.0)

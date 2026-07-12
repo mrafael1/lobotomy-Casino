@@ -58,7 +58,7 @@ func _run() -> void:
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
-	_check_odds_table_36(run_store, failures)
+	await _check_odds_table_36(run_store, failures)
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
@@ -1771,13 +1771,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	var symbol_buttons: Dictionary = overlay._symbol_buttons
 	if symbol_buttons.size() != 6:
 		failures.append("issue50: symbol boxes should be pressable for live draw chance")
-	if overlay._neon_glow_layer == null or overlay._neon_glow_tween == null \
-			or not overlay._neon_glow_tween.is_valid():
-		failures.append("issue130: odds-table neon glow layer is not active")
-	elif overlay._neon_glow_layer.get_child_count() != 2 \
-			or not (overlay._neon_glow_layer.get_child(0) is Line2D) \
-			or not (overlay._neon_glow_layer.get_child(1) is Line2D):
-		failures.append("issue130: odds-table neon should draw only the modal border")
+	if overlay.get_node_or_null("NeonGlow") != null:
+		failures.append("issue130: odds-table neon glow should be disabled")
 	var done_button: Button = null
 	for child in overlay.get_children():
 		if child is Button and (child as Button).text == "DONE":
@@ -1786,8 +1781,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if done_button == null:
 		failures.append("issue130: odds-table DONE button is missing")
 	else:
-		var modal_bottom: float = overlay.NEON_FRAME_RECT.position.y \
-			+ overlay.NEON_FRAME_RECT.size.y + overlay.TABLE_Y_OFFSET
+		var modal_bottom: float = overlay.MODAL_FRAME_RECT.position.y \
+			+ overlay.MODAL_FRAME_RECT.size.y + overlay.TABLE_Y_OFFSET - 10.0
 		var done_center: float = done_button.position.y + done_button.size.y * 0.5
 		if not is_equal_approx(done_center, modal_bottom):
 			failures.append("issue130: DONE button is not centered on the modal edge")
@@ -1800,12 +1795,17 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	else:
 		var icon_rest_scale := brain_icon.scale
 		brain_symbol_button.button_down.emit()
+		await process_frame
 		if overlay._pct_popup == null:
 			failures.append("issue50: pressing a symbol did not open its percentage popup")
 		else:
 			var popup_label := overlay._pct_popup.get_node_or_null("PctBubble/PctLabel") as Label
 			if popup_label == null or not popup_label.text.ends_with("%"):
 				failures.append("issue50: percentage popup is missing its current chance")
+			else:
+				var popup_bubble := overlay._pct_popup.get_node("PctBubble") as Panel
+				if not popup_bubble.get_global_rect().encloses(popup_label.get_global_rect()):
+					failures.append("issue50: percentage text extends outside its popup bubble")
 		if brain_icon.scale == icon_rest_scale:
 			failures.append("issue50: symbol press did not start the pressed animation")
 		brain_symbol_button.button_up.emit()
