@@ -14,6 +14,16 @@ extends Control
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 # Authored menu background (issue #111 sheet set); falls back to the shop bg.
 const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
+# Authored menu art (issue #111): the states sheet bakes the neon title, the
+# labelled buttons, and the suit selector bar. One panel spans the 160px canvas.
+const MENU_SHEET := "start_menu/start_menu_states_sheet.png"
+const SHEET_SCALE := 160.0 / 406.0
+const SHEET_TITLE_RECT := Rect2(115.0, 55.0, 224.0, 98.0)
+const SHEET_START_RECT := Rect2(113.0, 190.0, 228.0, 46.0)      # START A NEW RUN
+const SHEET_CONTINUE_RECT := Rect2(553.0, 190.0, 228.0, 46.0)   # CONTINUE
+const SHEET_AUGMENTED_RECT := Rect2(535.0, 625.0, 260.0, 50.0)  # AUGMENTED RUN
+const SHEET_SCORES_RECT := Rect2(113.0, 265.0, 228.0, 44.0)     # SCORES
+const SHEET_SELECTOR_RECT := Rect2(113.0, 688.0, 227.0, 45.0)   # < [suit] > bar
 # Augmented Run (issue #111): tier selector shown under START RUN once wealth
 # has been reached. Cycling picks one suit modifier (joker = all four).
 const AUGMENTED_DESCRIPTIONS := {
@@ -69,7 +79,7 @@ var _scores_button: Button = null
 var _campaign_label: Label = null
 var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
-var _augmented_row: HBoxContainer = null
+var _augmented_row: Control = null
 var _augmented_icon: TextureRect = null
 var _augmented_desc: Label = null
 var _selected_augmented_tier := ""
@@ -84,6 +94,8 @@ func _ready() -> void:
 	_bind_scene_nodes()
 	_build_background()
 	_build_menu()
+	_build_title_art()
+	_skin_menu_button(_scores_button, SHEET_SCORES_RECT)
 	_build_augmented_selector()
 	if not Engine.is_editor_hint() and not RunStateStore.state_changed.is_connected(_refresh_start_button):
 		RunStateStore.state_changed.connect(_refresh_start_button)
@@ -257,34 +269,47 @@ func _build_augmented_selector() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
 	if col == null or _start_button == null or _augmented_row != null:
 		return
-	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
-		_selected_augmented_tier = String(RunStateStore.augmentedTier)
-	_augmented_row = HBoxContainer.new()
+	var bar_size := SHEET_SELECTOR_RECT.size * SHEET_SCALE
+	_augmented_row = Control.new()
 	_augmented_row.name = "AugmentedSelector"
-	_augmented_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_augmented_row.add_theme_constant_override("separation", 2)
+	_augmented_row.custom_minimum_size = bar_size
+	_augmented_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(_augmented_row)
 	col.move_child(_augmented_row, _start_button.get_index() + 1)
 
-	_augmented_row.add_child(_augmented_arrow_button("<", -1))
-	var box := PanelContainer.new()
+	# Authored bar art (yellow bound, baked arrows); falls back to nothing if the
+	# sheet is missing — the invisible buttons still work over the empty rect.
+	var bar_tex := _sheet_crop(SHEET_SELECTOR_RECT)
+	if bar_tex != null:
+		var bar := TextureRect.new()
+		bar.name = "BarArt"
+		bar.texture = bar_tex
+		bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bar.stretch_mode = TextureRect.STRETCH_SCALE
+		bar.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		bar.position = Vector2.ZERO
+		bar.size = bar_size
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_augmented_row.add_child(bar)
+
+	var box := Control.new()
 	box.name = "SuitBox"
-	box.custom_minimum_size = Vector2(56.0, 14.0)
-	var box_style := StyleBoxFlat.new()
-	box_style.bg_color = Color(0.05, 0.06, 0.02, 0.9)
-	box_style.border_color = Color(0.78, 0.82, 0.18)
-	box_style.set_border_width_all(1)
-	box_style.set_corner_radius_all(2)
-	box.add_theme_stylebox_override("panel", box_style)
+	box.position = bar_size * 0.5 - Vector2(6.0, 6.0)
+	box.size = Vector2(12.0, 12.0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_augmented_row.add_child(box)
 	_augmented_icon = TextureRect.new()
 	_augmented_icon.name = "SuitIcon"
 	_augmented_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_augmented_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_augmented_icon.custom_minimum_size = Vector2(10.0, 10.0)
+	_augmented_icon.position = Vector2.ZERO
+	_augmented_icon.size = box.size
 	_augmented_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_augmented_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(_augmented_icon)
-	_augmented_row.add_child(box)
-	_augmented_row.add_child(_augmented_arrow_button(">", 1))
+
+	_augmented_row.add_child(_augmented_arrow_button(-1, bar_size))
+	_augmented_row.add_child(_augmented_arrow_button(1, bar_size))
 
 	_augmented_desc = _label("", 5, Color(0.9, 0.9, 0.62))
 	_augmented_desc.name = "AugmentedDescription"
@@ -292,16 +317,81 @@ func _build_augmented_selector() -> void:
 	col.move_child(_augmented_desc, _augmented_row.get_index() + 1)
 	_refresh_augmented_selector()
 
-func _augmented_arrow_button(glyph: String, step: int) -> Button:
+## Invisible hit area over a baked arrow third of the selector bar.
+func _augmented_arrow_button(step: int, bar_size: Vector2) -> Button:
 	var b := Button.new()
 	b.name = "CycleLeft" if step < 0 else "CycleRight"
-	b.text = glyph
-	b.custom_minimum_size = Vector2(16.0, 14.0)
-	b.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
+	b.position = Vector2(0.0 if step < 0 else bar_size.x * 0.7, 0.0)
+	b.size = Vector2(bar_size.x * 0.3, bar_size.y)
+	b.flat = true
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	b.pressed.connect(_cycle_augmented_tier.bind(step))
 	return b
+
+func _sheet_crop(rect: Rect2) -> AtlasTexture:
+	var tex := Assets.texture(MENU_SHEET, true)
+	if tex == null:
+		return null
+	var at := AtlasTexture.new()
+	at.atlas = tex
+	at.region = rect
+	return at
+
+## Skins a menu Button with a baked-label crop of the states sheet. The Button's
+## own text stays (logic and tests read it) but renders transparent; hover and
+## press feedback come from modulating the art. Returns false if art is missing.
+func _skin_menu_button(b: Button, rect: Rect2) -> bool:
+	var tex := Assets.texture(MENU_SHEET, true)
+	if tex == null or b == null:
+		return false
+	var states := { "normal": Color.WHITE, "hover": Color(1.2, 1.2, 1.2),
+		"pressed": Color(0.65, 0.65, 0.65), "disabled": Color(0.5, 0.5, 0.5),
+		"focus": Color(1.25, 1.25, 1.25) }
+	for state in states:
+		var sb := StyleBoxTexture.new()
+		sb.texture = tex
+		sb.region_rect = rect
+		sb.modulate_color = states[state]
+		b.add_theme_stylebox_override(String(state), sb)
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color",
+			"font_focus_color", "font_disabled_color"]:
+		b.add_theme_color_override(String(color_name), Color(0, 0, 0, 0))
+	b.custom_minimum_size = rect.size * SHEET_SCALE
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return true
+
+func _unskin_menu_button(b: Button) -> void:
+	if b == null:
+		return
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.remove_theme_stylebox_override(String(state))
+	for color_name in ["font_color", "font_hover_color", "font_pressed_color",
+			"font_focus_color", "font_disabled_color"]:
+		b.remove_theme_color_override(String(color_name))
+	b.custom_minimum_size = Vector2(120.0, 22.0)
+
+## Replaces the two title Labels with the authored neon LOBOTOMY CASINO frame.
+func _build_title_art() -> void:
+	var col := get_node_or_null("MenuColumn") as VBoxContainer
+	var title_tex := _sheet_crop(SHEET_TITLE_RECT)
+	if col == null or title_tex == null or col.get_node_or_null("TitleArt") != null:
+		return
+	for node_name in ["TitleTop", "TitleBottom"]:
+		var l := col.get_node_or_null(String(node_name)) as Label
+		if l != null:
+			l.visible = false
+	var art := TextureRect.new()
+	art.name = "TitleArt"
+	art.texture = title_tex
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.custom_minimum_size = SHEET_TITLE_RECT.size * SHEET_SCALE
+	art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(art)
+	col.move_child(art, 0)
 
 func _cycle_augmented_tier(step: int) -> void:
 	var cycle := RunStateStore.AUGMENTED_TIER_CYCLE
@@ -314,10 +404,13 @@ func _cycle_augmented_tier(step: int) -> void:
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
 		return
-	var unlocked := Engine.is_editor_hint() or MetaStateStore.augmentedRunUnlocked
-	_augmented_row.visible = unlocked
+	# The selector only applies to a FRESH run: while a run is held (CONTINUE)
+	# it hides entirely — modifiers can't change mid-run (states sheet, panel 2).
+	var run_held := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
+	var shown := (Engine.is_editor_hint() or MetaStateStore.augmentedRunUnlocked) and not run_held
+	_augmented_row.visible = shown
 	if _augmented_desc != null:
-		_augmented_desc.visible = unlocked
+		_augmented_desc.visible = shown
 		_augmented_desc.text = String(AUGMENTED_DESCRIPTIONS.get(_selected_augmented_tier, ""))
 	if _augmented_icon != null:
 		_augmented_icon.texture = null if Engine.is_editor_hint() \
@@ -326,20 +419,27 @@ func _refresh_augmented_selector() -> void:
 func _refresh_start_button() -> void:
 	if _start_button == null:
 		return
+	# Run-phase changes also gate the selector (hidden while a run is held).
+	_refresh_augmented_selector()
 	var continuing := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
 	if continuing:
 		_start_button.text = "CONTINUE"
 		_start_button.add_theme_font_size_override("font_size", 10)
+		_skin_menu_button(_start_button, SHEET_CONTINUE_RECT)
 	elif not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
+		# No authored art for this state: fall back to the plain themed button.
 		_start_button.text = "START FRESH AGAIN"
 		_start_button.add_theme_font_size_override("font_size", 8)
+		_unskin_menu_button(_start_button)
 	elif not Engine.is_editor_hint() and MetaStateStore.augmentedRunUnlocked \
 			and _selected_augmented_tier != "":
 		_start_button.text = "AUGMENTED RUN"
 		_start_button.add_theme_font_size_override("font_size", 9)
+		_skin_menu_button(_start_button, SHEET_AUGMENTED_RECT)
 	else:
 		_start_button.text = "START RUN"
 		_start_button.add_theme_font_size_override("font_size", 11)
+		_skin_menu_button(_start_button, SHEET_START_RECT)
 	if _font != null:
 		_start_button.add_theme_font_override("font", _font)
 

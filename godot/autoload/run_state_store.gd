@@ -212,6 +212,13 @@ func augmented_modifier_active(modifier: int) -> bool:
 func _augmented_powers_blocked() -> bool:
 	return augmented_modifier_active(3) and powersUsedThisSpin >= 2
 
+## Heart modifier: how much of a jackpot's evaluated score is cut (200 -> 100 at
+## base; halving the whole score keeps reward bonuses/scales proportional).
+func _augmented_jackpot_cut(score: int, win_type: String) -> int:
+	if not augmented_modifier_active(1) or win_type != "jackpot":
+		return 0
+	return score - roundi(float(score) * 0.5)
+
 func _commit() -> void:
 	state_changed.emit()
 
@@ -350,12 +357,10 @@ func spin(compulsive := false) -> Variant:
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), pairTripleAugmentChoice)
 	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
-	# 200 (the cut scales with the spin multiplier, like the pinned base) and no
-	# longer grants its free spin. Rides on top of evaluate() like the boosts above.
-	var augmented_jackpot_cut := 0
-	if augmented_modifier_active(1) and String(result["winType"]) == "jackpot":
-		augmented_jackpot_cut = floori(
-			float(Payouts.JACKPOT_SCORE) * 0.5 * float(result["scoreMultiplier"]))
+	# 200 and no longer grants its free spin. Rides on top of evaluate() like the
+	# boosts above.
+	var augmented_jackpot_cut := _augmented_jackpot_cut(
+		int(result["scoreEarned"]), String(result["winType"]))
 	var final_result: Dictionary = result
 	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
 			or specialist_bonus > 0 or hidden_reel_count > 0 or augmented_jackpot_cut > 0:

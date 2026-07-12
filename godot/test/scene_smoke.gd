@@ -3970,6 +3970,38 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 	machine._apply_symbol_triple("brain", 0, false)
 	if int(run_store.freeSpinsRemaining) != spins_before:
 		failures.append("issue111: heart brain triple still granted a free spin")
+	# Heart: the TABLES popup shows the halved jackpot value.
+	machine._close_score_table()
+	machine._show_score_table()
+	if machine._score_overlay == null:
+		failures.append("issue111: score table failed to open for the heart check")
+	else:
+		var table_texts := _overlay_label_texts(machine._score_overlay)
+		if not table_texts.has("+100"):
+			failures.append("issue111: score table does not show the heart jackpot (+100)")
+		if table_texts.has("+200"):
+			failures.append("issue111: score table still shows the classic jackpot (+200)")
+	machine._close_score_table()
+	# Heart: the jackpot's evaluated score is halved (200 -> 100), classic isn't.
+	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 100:
+		failures.append("issue111: heart did not cut the jackpot score to 100")
+	if int(run_store._augmented_jackpot_cut(200, "triple")) != 0:
+		failures.append("issue111: heart cut a non-jackpot win")
+	run_store.augmentedTier = ""
+	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 0:
+		failures.append("issue111: classic runs must not cut the jackpot")
+
+	# The tier survives start_new_run (menu -> pre-run shop -> run handoff).
+	run_store.runPhase = "idle"
+	run_store.augmentedTier = "heart"
+	var prev_neurons_left := int(meta_store.campaignNeuronsLeft)
+	meta_store.campaignNeuronsLeft = maxi(prev_neurons_left, 1)
+	if run_store.start_new_run([], {}, false):
+		if String(run_store.augmentedTier) != "heart":
+			failures.append("issue111: start_new_run dropped the augmented tier")
+	else:
+		failures.append("issue111: start_new_run refused a plain fresh run")
+	meta_store.campaignNeuronsLeft = prev_neurons_left
 
 	# A full run reset clears the tier; starting a new run keeps it.
 	run_store.augmentedTier = "club"
@@ -4031,6 +4063,13 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 		menu._cycle_augmented_tier(-1) # heart -> ""
 		if start.text == "AUGMENTED RUN":
 			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
+		# Modifiers can't change mid-run: a held run hides the whole selector.
+		var prev_phase := String(run_store.runPhase)
+		run_store.runPhase = "running"
+		menu._refresh_augmented_selector()
+		if selector.visible:
+			failures.append("issue111: selector still shown while a run is held")
+		run_store.runPhase = prev_phase
 	menu.queue_free()
 	run_store.augmentedTier = ""
 	meta_store._apply(meta_before)

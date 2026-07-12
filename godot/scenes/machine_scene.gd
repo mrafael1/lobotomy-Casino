@@ -2961,6 +2961,9 @@ func _show_score_table() -> void:
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
 		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
+		# Augmented heart modifier (issue #111): the table shows the halved jackpot.
+		if symbol_id == "brain" and RunStateStore.augmented_modifier_active(1):
+			triple_base = Payouts.JACKPOT_SCORE / 2
 		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
 		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
