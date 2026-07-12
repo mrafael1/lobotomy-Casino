@@ -45,7 +45,12 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
 @export_group("Dealer Odds Table")
 @export var odds_budget: int = 4
-@export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3 }
+## Hard ceiling on the token pool (issue #130): at most 8 tokens can be kept or
+## used — banked leftovers past the cap are forfeited, and the ODD-TABLE_tokens
+## art (frames 0..8) can always display the pool.
+@export var odds_max_tokens: int = 8
+## Per-symbol costs match the numbers baked into the ODD-TABLE art (issue #130).
+@export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3, "syringe": 2, "vial": 2, "flatline": 1 }
 @export var odds_default_token_cost: int = 2
 @export var probability_increase_per_upgrade: int = 1
 ## Permanent odds upgrades cap out at this many levels per symbol (issue #50: 8 bars).
@@ -961,7 +966,10 @@ func begin_odds_phase() -> void:
 	# staged picks (and the tokens already spent on them) instead of resetting.
 	if not oddsPendingUpgrades.is_empty():
 		return
-	oddsTokensRemaining = int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget)
+	# Banked + fresh, capped at odds_max_tokens (issue #130): at most 8 tokens
+	# can ever be held or spent in one menu.
+	oddsTokensRemaining = mini(
+		int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget), odds_max_tokens)
 	oddsPendingUpgrades = {}
 	_commit()
 
@@ -1013,7 +1021,7 @@ func finalize_odds_phase() -> void:
 		return
 	if not oddsPendingUpgrades.is_empty():
 		MetaStateStore.add_odds_upgrades(oddsPendingUpgrades, odds_max_level)
-	MetaStateStore.set_odds_tokens_banked(oddsTokensRemaining)
+	MetaStateStore.set_odds_tokens_banked(mini(oddsTokensRemaining, odds_max_tokens))
 	oddsPendingUpgrades = {}
 	oddsTokensRemaining = 0
 	oddsPhaseCompleted = true
