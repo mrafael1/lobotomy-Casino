@@ -15,15 +15,16 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 # Authored menu background (issue #111 sheet set); falls back to the shop bg.
 const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
 # Authored menu art (issue #111): the states sheet bakes the neon title, the
-# labelled buttons, and the suit selector bar. One panel spans the 160px canvas.
+# labelled buttons, and the suit selector bar. The sheet is 320x1280 — eight
+# native 160x320 panels — so crops land on the canvas at 1:1.
 const MENU_SHEET := "start_menu/start_menu_states_sheet.png"
-const SHEET_SCALE := 160.0 / 406.0
-const SHEET_TITLE_RECT := Rect2(115.0, 55.0, 224.0, 98.0)
-const SHEET_START_RECT := Rect2(113.0, 190.0, 228.0, 46.0)      # START A NEW RUN
-const SHEET_CONTINUE_RECT := Rect2(553.0, 190.0, 228.0, 46.0)   # CONTINUE
-const SHEET_AUGMENTED_RECT := Rect2(535.0, 625.0, 260.0, 50.0)  # AUGMENTED RUN
-const SHEET_SCORES_RECT := Rect2(113.0, 265.0, 228.0, 44.0)     # SCORES
-const SHEET_SELECTOR_RECT := Rect2(113.0, 688.0, 227.0, 45.0)   # < [suit] > bar
+const SHEET_SCALE := 1.0
+const SHEET_TITLE_RECT := Rect2(7.0, 46.0, 150.0, 71.0)
+const SHEET_START_RECT := Rect2(8.0, 133.0, 150.0, 34.0)       # START A NEW RUN
+const SHEET_CONTINUE_RECT := Rect2(162.0, 133.0, 153.0, 34.0)  # CONTINUE
+const SHEET_AUGMENTED_RECT := Rect2(163.0, 450.0, 151.0, 32.0) # AUGMENTED RUN
+const SHEET_SCORES_RECT := Rect2(16.0, 182.0, 133.0, 30.0)     # SCORES
+const SHEET_SELECTOR_RECT := Rect2(4.0, 487.0, 152.0, 28.0)    # < [suit] > bar
 # Augmented Run (issue #111): tier selector shown under START RUN once wealth
 # has been reached. Cycling picks one suit modifier (joker = all four).
 const AUGMENTED_DESCRIPTIONS := {
@@ -38,11 +39,12 @@ const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const CANVAS_W := 160.0
 const MENU_W := 148.0
-# Title sits high so the whole column (titles, meter + count, hint, buttons) fits
-# the 160x320 canvas without clipping.
-const MENU_Y := 44.0
-const MENU_SEPARATION := 6
-const TITLE_SPACER_H := 8.0
+# Title sits high so the whole column (title art, meter + count, hint, buttons,
+# suit selector) fits the 160x320 canvas without clipping — the authored sheet
+# panels also anchor the neon title near the top edge.
+const MENU_Y := 8.0
+const MENU_SEPARATION := 4
+const TITLE_SPACER_H := 4.0
 const CAMPAIGN_HINT_H := 18.0
 
 @export_group("First Launch Tutorial")
@@ -294,8 +296,9 @@ func _build_augmented_selector() -> void:
 
 	var box := Control.new()
 	box.name = "SuitBox"
-	box.position = bar_size * 0.5 - Vector2(6.0, 6.0)
-	box.size = Vector2(12.0, 12.0)
+	# Native-size icons (~23x21; joker 30x31 shrinks to fit) centered in the bar.
+	box.position = bar_size * 0.5 - Vector2(13.0, 11.0)
+	box.size = Vector2(26.0, 22.0)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_augmented_row.add_child(box)
 	_augmented_icon = TextureRect.new()

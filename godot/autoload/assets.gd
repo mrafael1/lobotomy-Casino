@@ -70,16 +70,16 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 	return null
 
 # ── Augmented Run (issue #111) ───────────────────────────────────────────────────────
-# Suit tier icons cropped from the authored start-menu states sheet (887x1774):
-# the selector art per tier. Shared by the start menu selector and the machine's
-# in-run restriction badge.
+# Suit tier icons cropped from the authored start-menu states sheet (320x1280,
+# eight native 160x320 panels). Shared by the start menu selector and the
+# machine's in-run restriction badge.
 const AUGMENTED_SHEET_REL := "start_menu/start_menu_states_sheet.png"
 const AUGMENTED_ICON_RECTS := {
-	"heart": Rect2(642.0, 689.0, 36.0, 36.0),
-	"spade": Rect2(209.0, 1132.0, 36.0, 36.0),
-	"diamond": Rect2(642.0, 1132.0, 36.0, 36.0),
-	"club": Rect2(209.0, 1574.0, 36.0, 36.0),
-	"joker": Rect2(638.0, 1570.0, 44.0, 44.0),
+	"heart": Rect2(225.0, 491.0, 23.0, 21.0),
+	"spade": Rect2(65.0, 811.0, 23.0, 21.0),
+	"diamond": Rect2(225.0, 811.0, 23.0, 21.0),
+	"club": Rect2(65.0, 1131.0, 23.0, 21.0),
+	"joker": Rect2(222.0, 1119.0, 30.0, 31.0),
 }
 
 ## AtlasTexture of one suit tier's icon, or null for "" / unknown tiers.
