@@ -30,6 +30,12 @@ const MENU_W := 148.0
 const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # 2 frames
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
 const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
+# Standalone button plates (full-canvas overlays): the plate squashes together
+# with its label on press. START is one frame; SCORES/OPTIONS carry two frames
+# (locked | unlocked positions). The selector bar stays baked — no press art.
+const MENU_START_PLATE_ASSET := "start_menu/start_menu_start_button.png"
+const MENU_SCORES_PLATE_ASSET := "start_menu/start_menu_score_button.png"
+const MENU_OPTIONS_PLATE_ASSET := "start_menu/start_menu_options_button.png"
 
 # Baked plate rects (canvas px, frame-relative), measured on start_menu.png.
 const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
@@ -103,6 +109,7 @@ var _font: FontFile = null
 var _use_art := false
 var _menu_sprite: Sprite2D = null      # start_menu.png, frame 0 locked / 1 unlocked
 var _symbols_sprite: Sprite2D = null   # suit overlay, frame per selection
+var _plate_sprites := {}               # Button -> full-canvas plate Sprite2D
 var _background: Sprite2D = null
 var _start_button: Button = null
 var _scores_button: Button = null
@@ -191,7 +198,7 @@ func _build_art_menu() -> void:
 		_symbols_sprite.name = "AugmentedSymbols"
 		_symbols_sprite.visible = false
 
-	# The scene's buttons move out of the VBox onto the baked plates.
+	# The scene's buttons move out of the VBox onto their standalone plates.
 	_reparent_plate_button(_start_button, col, ART_START_RECT, ART_CYAN, 10, _start_run)
 	_reparent_plate_button(_scores_button, col, ART_SCORES_LOCKED_RECT, ART_PINK, 8, _open_scores)
 	_options_button = Button.new()
@@ -200,6 +207,16 @@ func _build_art_menu() -> void:
 	add_child(_options_button)
 	_style_plate_button(_options_button, ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
 	_options_button.pressed.connect(_toggle_options_overlay)
+	# Standalone plate overlays (drawn above the frame, below the labels).
+	_plate_sprites[_start_button] = _frame_sprite(MENU_START_PLATE_ASSET, 1)
+	_plate_sprites[_scores_button] = _frame_sprite(MENU_SCORES_PLATE_ASSET, 2)
+	_plate_sprites[_options_button] = _frame_sprite(MENU_OPTIONS_PLATE_ASSET, 2)
+	# Plates were added after the buttons, so raise the buttons back above them —
+	# the labels must draw over their plates (the tutorial modal stays on top
+	# via its z_index).
+	for b in [_start_button, _scores_button, _options_button]:
+		if b != null:
+			move_child(b, get_child_count() - 1)
 	if col != null:
 		col.visible = false
 
@@ -286,6 +303,7 @@ func _on_plate_button_down(b: Button) -> void:
 	var tw := create_tween()
 	tw.tween_property(b, "scale", Vector2.ONE * 0.92, 0.06) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_tween_plate(b, 0.92, 0.06, Tween.TRANS_QUAD)
 
 func _on_plate_button_up(b: Button) -> void:
 	if not is_instance_valid(b):
@@ -293,6 +311,28 @@ func _on_plate_button_up(b: Button) -> void:
 	var tw := create_tween()
 	tw.tween_property(b, "scale", Vector2.ONE, 0.1) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_tween_plate(b, 1.0, 0.1, Tween.TRANS_BACK)
+
+## Squashes a button's standalone plate in step with its label. The plate is a
+## full-canvas sprite, so the scale pivots on the button's centre via position
+## compensation (same trick as the suit bounce).
+func _tween_plate(b: Button, target: float, duration: float, trans: Tween.TransitionType) -> void:
+	var plate := _plate_sprites.get(b) as Sprite2D
+	if plate == null or not is_instance_valid(plate):
+		return
+	var pivot := b.position + b.size * 0.5
+	var from := float(plate.get_meta("pop_f", 1.0))
+	var tw := create_tween()
+	tw.tween_method(_set_plate_pop.bind(plate, pivot), from, target, duration) \
+		.set_trans(trans).set_ease(Tween.EASE_OUT)
+
+func _set_plate_pop(f: float, plate: Sprite2D, pivot: Vector2) -> void:
+	if not is_instance_valid(plate):
+		return
+	var base: Vector2 = plate.get_meta("base_scale", Vector2.ONE)
+	plate.scale = base * f
+	plate.position = pivot * (1.0 - f)
+	plate.set_meta("pop_f", f)
 
 ## Live copy of one baked arrow segment, parented to the selector row so it can
 ## squash on press (the frame art underneath can't move). Centered on the arrow
@@ -368,6 +408,11 @@ func _layout_art_menu(augmented: bool) -> void:
 	if _options_button != null:
 		_style_plate_button(_options_button,
 			ART_OPTIONS_UNLOCKED_RECT if augmented else ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
+	# SCORES/OPTIONS plates carry both layout positions as frames.
+	for b in [_scores_button, _options_button]:
+		var plate := _plate_sprites.get(b) as Sprite2D
+		if plate != null and is_instance_valid(plate):
+			plate.frame = 1 if augmented else 0
 	_place_campaign_meter(augmented)
 
 ## The meter sizes itself from its art; the unlocked frame only leaves the strip
