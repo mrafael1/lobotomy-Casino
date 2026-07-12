@@ -70,10 +70,12 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 	return null
 
 # ── Augmented Run (issue #111) ───────────────────────────────────────────────────────
-# Suit tier icons cropped from the authored start-menu states sheet (320x1280,
-# eight native 160x320 panels). Shared by the start menu selector and the
-# machine's in-run restriction badge.
+# Suit tier icons cropped from the authored start-menu states sheet (two
+# columns of four 160x320 panels). Rects are in NATIVE CANVAS units (sheet at
+# 320x1280); augmented_sheet_scale() maps them onto whatever resolution the
+# sheet was exported at, so a higher-res re-export needs no code change.
 const AUGMENTED_SHEET_REL := "start_menu/start_menu_states_sheet.png"
+const AUGMENTED_SHEET_NATIVE_W := 320.0
 const AUGMENTED_ICON_RECTS := {
 	"heart": Rect2(225.0, 491.0, 23.0, 21.0),
 	"spade": Rect2(65.0, 811.0, 23.0, 21.0),
@@ -82,6 +84,11 @@ const AUGMENTED_ICON_RECTS := {
 	"joker": Rect2(222.0, 1119.0, 30.0, 31.0),
 }
 
+## Export multiple of the states sheet (1.0 = native 320x1280).
+func augmented_sheet_scale() -> float:
+	var tex := texture(AUGMENTED_SHEET_REL, true)
+	return 1.0 if tex == null else float(tex.get_width()) / AUGMENTED_SHEET_NATIVE_W
+
 ## AtlasTexture of one suit tier's icon, or null for "" / unknown tiers.
 func augmented_suit_icon(tier: String) -> AtlasTexture:
 	if not AUGMENTED_ICON_RECTS.has(tier):
@@ -89,9 +96,11 @@ func augmented_suit_icon(tier: String) -> AtlasTexture:
 	var tex := texture(AUGMENTED_SHEET_REL, true)
 	if tex == null:
 		return null
+	var s := augmented_sheet_scale()
+	var r: Rect2 = AUGMENTED_ICON_RECTS[tier]
 	var at := AtlasTexture.new()
 	at.atlas = tex
-	at.region = AUGMENTED_ICON_RECTS[tier]
+	at.region = Rect2(r.position * s, r.size * s)
 	return at
 
 # ── Skinned buttons ─────────────────────────────────────────────────────────────────

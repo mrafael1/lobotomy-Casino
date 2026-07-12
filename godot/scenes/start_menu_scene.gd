@@ -15,10 +15,11 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 # Authored menu background (issue #111 sheet set); falls back to the shop bg.
 const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
 # Authored menu art (issue #111): the states sheet bakes the neon title, the
-# labelled buttons, and the suit selector bar. The sheet is 320x1280 — eight
-# native 160x320 panels — so crops land on the canvas at 1:1.
+# labelled buttons, and the suit selector bar. Rects are in NATIVE CANVAS units
+# (sheet at 320x1280 = eight 160x320 panels); regions are multiplied by the
+# sheet's export scale at load, so a higher-res export sharpens the menu with
+# no code change (same composition, e.g. x4 = 1280x5120).
 const MENU_SHEET := "start_menu/start_menu_states_sheet.png"
-const SHEET_SCALE := 1.0
 const SHEET_TITLE_RECT := Rect2(7.0, 46.0, 150.0, 71.0)
 const SHEET_START_RECT := Rect2(8.0, 133.0, 150.0, 34.0)       # START A NEW RUN
 const SHEET_CONTINUE_RECT := Rect2(162.0, 133.0, 153.0, 34.0)  # CONTINUE
@@ -271,7 +272,7 @@ func _build_augmented_selector() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
 	if col == null or _start_button == null or _augmented_row != null:
 		return
-	var bar_size := SHEET_SELECTOR_RECT.size * SHEET_SCALE
+	var bar_size := SHEET_SELECTOR_RECT.size # rects are in canvas units
 	_augmented_row = Control.new()
 	_augmented_row.name = "AugmentedSelector"
 	_augmented_row.custom_minimum_size = bar_size
@@ -337,9 +338,10 @@ func _sheet_crop(rect: Rect2) -> AtlasTexture:
 	var tex := Assets.texture(MENU_SHEET, true)
 	if tex == null:
 		return null
+	var s: float = Assets.augmented_sheet_scale()
 	var at := AtlasTexture.new()
 	at.atlas = tex
-	at.region = rect
+	at.region = Rect2(rect.position * s, rect.size * s)
 	return at
 
 ## Skins a menu Button with a baked-label crop of the states sheet. The Button's
@@ -349,19 +351,20 @@ func _skin_menu_button(b: Button, rect: Rect2) -> bool:
 	var tex := Assets.texture(MENU_SHEET, true)
 	if tex == null or b == null:
 		return false
+	var s: float = Assets.augmented_sheet_scale()
 	var states := { "normal": Color.WHITE, "hover": Color(1.2, 1.2, 1.2),
 		"pressed": Color(0.65, 0.65, 0.65), "disabled": Color(0.5, 0.5, 0.5),
 		"focus": Color(1.25, 1.25, 1.25) }
 	for state in states:
 		var sb := StyleBoxTexture.new()
 		sb.texture = tex
-		sb.region_rect = rect
+		sb.region_rect = Rect2(rect.position * s, rect.size * s)
 		sb.modulate_color = states[state]
 		b.add_theme_stylebox_override(String(state), sb)
 	for color_name in ["font_color", "font_hover_color", "font_pressed_color",
 			"font_focus_color", "font_disabled_color"]:
 		b.add_theme_color_override(String(color_name), Color(0, 0, 0, 0))
-	b.custom_minimum_size = rect.size * SHEET_SCALE
+	b.custom_minimum_size = rect.size # rects are in canvas units
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return true
 
@@ -391,7 +394,7 @@ func _build_title_art() -> void:
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	art.custom_minimum_size = SHEET_TITLE_RECT.size * SHEET_SCALE
+	art.custom_minimum_size = SHEET_TITLE_RECT.size # rects are in canvas units
 	art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(art)
 	col.move_child(art, 0)
