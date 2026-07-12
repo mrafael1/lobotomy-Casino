@@ -677,8 +677,27 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
-## The shared neon casino backdrop fills the canvas behind the cabinet, so the
-## machine sits in the same hall as the start menu instead of the clear color.
+# Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
+# hall reads as out-of-focus scenery so the cabinet pops in front of it.
+const NEON_BG_BLUR_SHADER := "
+shader_type canvas_item;
+uniform float blur_size : hint_range(0.0, 16.0) = 6.0;
+void fragment() {
+	vec2 px = TEXTURE_PIXEL_SIZE * blur_size;
+	vec4 sum = vec4(0.0);
+	float wsum = 0.0;
+	for (int x = -2; x <= 2; x++) {
+		for (int y = -2; y <= 2; y++) {
+			float w = exp(-float(x * x + y * y) / 4.0);
+			sum += texture(TEXTURE, UV + vec2(float(x), float(y)) * px) * w;
+			wsum += w;
+		}
+	}
+	COLOR = sum / wsum;
+}"
+
+## The shared neon casino backdrop fills the canvas behind the cabinet (blurred,
+## so the machine sits in focus inside the same hall as the start menu).
 func _build_neon_background() -> void:
 	var tex := _load_texture("start_menu/neon_casino_background.png", true)
 	if tex == null:
@@ -690,6 +709,11 @@ func _build_neon_background() -> void:
 	spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var shader := Shader.new()
+	shader.code = NEON_BG_BLUR_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	spr.material = mat
 	add_child(spr)
 	# The cabinet sprites are authored scene children, so a code-added node lands
 	# after (= above) them; force the backdrop to the very back of the tree.
