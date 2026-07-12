@@ -1784,11 +1784,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		if overlay._pct_popup == null:
 			failures.append("issue50: pressing a symbol did not open its percentage popup")
 		else:
-			var popup_has_percent := false
-			for popup_text in _overlay_label_texts(overlay._pct_popup):
-				if String(popup_text).ends_with("%"):
-					popup_has_percent = true
-			if not popup_has_percent:
+			var popup_label := overlay._pct_popup.get_node_or_null("PctBubble/PctLabel") as Label
+			if popup_label == null or not popup_label.text.ends_with("%"):
 				failures.append("issue50: percentage popup is missing its current chance")
 		if brain_icon.scale == icon_rest_scale:
 			failures.append("issue50: symbol press did not start the pressed animation")

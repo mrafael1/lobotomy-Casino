@@ -40,10 +40,9 @@ const LEVEL_LAST_ROW_IMG := Rect2(336.0, 1664.0, 264.0, 104.0)
 # Lift the authored table slightly so the final row and the DONE action have
 # breathing room on the compact canvas. The dimmer remains full-screen.
 const TABLE_Y_OFFSET := -8.0
-# The outer light-blue frame and each authored symbol box receive a subtle
-# additive shadow, leaving the pixel art itself as the crisp neon core.
+# The outer light-blue frame receives a narrow halo, leaving the pixel art
+# itself as the crisp neon core without washing the scene in broad light.
 const NEON_FRAME_RECT := Rect2(8.0, 20.0, 144.0, 299.0)
-const SYMBOL_NEON_SIZE := Vector2(31.0, 32.0)
 const SYMBOL_HIT_SIZE := Vector2(32.0, 32.0)
 const NEON_FRAME_COLOR := Color("#64b5de")
 const NEON_PULSE_LOW := 0.42
@@ -53,8 +52,9 @@ const NEON_PULSE_TIME := 0.9
 # inside it, scaled down slightly so it clears the box outline.
 const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
 const ODD_ICON_SIZE := 24.0
-const DONE_BUTTON_SIZE := Vector2(40.0, 10.0)
-const DONE_BUTTON_Y := SRC_H + TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5
+const DONE_BUTTON_SIZE := Vector2(32.0, 8.0)
+const DONE_BUTTON_Y := NEON_FRAME_RECT.position.y + NEON_FRAME_RECT.size.y \
+	+ TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5
 
 # These are the opaque row colors in ODD-TABLE.png. Flatline has no colored
 # border, so its waveform red is used for the live percentage.
@@ -122,9 +122,8 @@ func _mk_label(parent: Control, text: String, pos: Vector2, font_size: int, colo
 	parent.add_child(l)
 	return l
 
-## Adds a restrained additive halo behind the authored frame and symbol boxes.
-## The panel border sits over the art while its shadow spreads outside it, so the
-## pixel edges remain sharp and the light reads as a neon sign rather than blur.
+## Adds a restrained halo behind the authored modal frame. The panel border sits
+## over the art while its shadow spreads only a few source pixels outside it.
 func _spawn_neon_glows() -> void:
 	var layer := Control.new()
 	layer.name = "NeonGlow"
@@ -134,36 +133,25 @@ func _spawn_neon_glows() -> void:
 	add_child(layer)
 	_neon_glow_layer = layer
 
-	var add_material := CanvasItemMaterial.new()
-	add_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_add_neon_outline(layer, Rect2(NEON_FRAME_RECT.position + Vector2(0.0, TABLE_Y_OFFSET),
-		NEON_FRAME_RECT.size), NEON_FRAME_COLOR, 4, add_material)
-	for i in Symbols.BASE_SYMBOL_CYCLE.size():
-		var symbol_id := String(Symbols.BASE_SYMBOL_CYCLE[i])
-		var row_offset_img: float = float(ROW_OFFSETS_IMG[i])
-		var box_position := SYMBOL_BOX_CENTER - SYMBOL_NEON_SIZE * 0.5 + Vector2(0.0,
-			row_offset_img / ART_SCALE + TABLE_Y_OFFSET)
-		_add_neon_outline(layer, Rect2(box_position, SYMBOL_NEON_SIZE),
-			_percent_color(symbol_id), 3, add_material)
+		NEON_FRAME_RECT.size), NEON_FRAME_COLOR, 2)
 
 	_neon_glow_tween = create_tween().set_loops()
 	_neon_glow_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_LOW, NEON_PULSE_TIME)
 	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_HIGH, NEON_PULSE_TIME)
 
-func _add_neon_outline(parent: Control, rect: Rect2, color: Color, shadow_size: int,
-		material: CanvasItemMaterial) -> void:
+func _add_neon_outline(parent: Control, rect: Rect2, color: Color, shadow_size: int) -> void:
 	var outline := Panel.new()
 	outline.name = "NeonOutline"
 	outline.position = rect.position
 	outline.size = rect.size
 	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	outline.material = material
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	style.border_color = Color(color.r, color.g, color.b, 0.62)
+	style.border_color = Color(color.r, color.g, color.b, 0.72)
 	style.set_border_width_all(1)
-	style.shadow_color = Color(color.r, color.g, color.b, 0.72)
+	style.shadow_color = Color(color.r, color.g, color.b, 0.42)
 	style.shadow_size = shadow_size
 	style.shadow_offset = Vector2.ZERO
 	style.anti_aliasing = false
@@ -246,7 +234,8 @@ func _rebuild() -> void:
 	done.text = "DONE"
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
 	done.size = DONE_BUTTON_SIZE
-	done.add_theme_font_size_override("font_size", 6)
+	done.z_index = 4
+	done.add_theme_font_size_override("font_size", 5)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
 	Assets.skin_negative_button(done)
@@ -305,13 +294,8 @@ func _build_symbol_button(symbol_id: String, row_offset_img: float, icon: Sprite
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.z_index = 3
-	for state in [&"normal", &"hover", &"pressed", &"disabled"]:
+	for state in [&"normal", &"hover", &"pressed", &"disabled", &"focus"]:
 		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	var focus := StyleBoxFlat.new()
-	focus.draw_center = false
-	focus.border_color = NEON_FRAME_COLOR
-	focus.set_border_width_all(1)
-	b.add_theme_stylebox_override(&"focus", focus)
 	b.button_down.connect(_on_symbol_button_down.bind(symbol_id, b, icon))
 	b.button_up.connect(_on_symbol_button_up.bind(icon))
 	add_child(b)
@@ -368,8 +352,6 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
 	var popup_size := Vector2(text_width + 8.0, 14.0)
-	_mk_label(_pct_popup, text, Vector2(4.0, 2.0), 5, _percent_color(symbol_id),
-		text_width, HORIZONTAL_ALIGNMENT_CENTER)
 
 	var bg_style := StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
@@ -377,11 +359,16 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	bg_style.set_border_width_all(1)
 	bg_style.set_corner_radius_all(3)
 	var bg := Panel.new()
+	bg.name = "PctBubble"
 	bg.add_theme_stylebox_override(&"panel", bg_style)
 	bg.size = popup_size
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pct_popup.add_child(bg)
-	_pct_popup.move_child(bg, 0)
+	var label := _mk_label(bg, text, Vector2(4.0, 2.0), 5, _percent_color(symbol_id),
+		text_width, HORIZONTAL_ALIGNMENT_CENTER)
+	label.name = "PctLabel"
+	label.z_index = 1
+	_pct_popup.size = popup_size
 	var pos := button.position + Vector2(button.size.x * 0.5 - popup_size.x * 0.5,
 		-popup_size.y - 3.0)
 	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
