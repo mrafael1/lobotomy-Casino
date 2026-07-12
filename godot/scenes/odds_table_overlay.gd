@@ -47,7 +47,8 @@ const ODD_ICON_SIZE := 24.0
 # Live draw-chance readout, centered below the row's level meter.
 const PCT_X := 57.3
 const PCT_W := 44.0
-const PCT_Y_OFFSET := 19.0
+# Keep the glyph below the meter while staying inside the row's green border.
+const PCT_Y_OFFSET := 16.0
 const DONE_BUTTON_SIZE := Vector2(48.0, 12.0)
 const DONE_BUTTON_Y := 302.0
 
