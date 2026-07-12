@@ -2351,6 +2351,24 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
 	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
 		failures.append("issue76: boost icons did not stack horizontally (%s vs %s)" % [p0, p1])
+	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slot 0 is
+	# the Energy Drink no-decay rush (pure upside → "+" only); slot 1 is the Cocktail
+	# (rarity bonus with a live pair/triple tax → mixed, both "+" and "-").
+	if not (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
+		failures.append("issue113: pure-positive boost should show only the + mark")
+	if not (slots[1]["pos_mark"] as Label).visible or not (slots[1]["neg_mark"] as Label).visible:
+		failures.append("issue113: mixed Cocktail boost should show both + and - marks")
+	# A pure downside (Serum's blur tail) shows only the "-" mark.
+	run_store.cocktailBoostSpins = 0
+	run_store.decaySkips = 0
+	run_store.blurReelsSpins = 2
+	machine._refresh_boost_indicators()
+	if (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
+		failures.append("issue113: pure-negative boost should show only the - mark")
+	run_store.blurReelsSpins = 0
+	run_store.cocktailBoostSpins = 2
+	run_store.decaySkips = 3
+	machine._refresh_boost_indicators()
 
 	# Boosts end: icons clear.
 	run_store.cocktailBoostSpins = 0

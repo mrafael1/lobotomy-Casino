@@ -214,13 +214,17 @@ const ITEM_ICONS := {
 # each entry maps a RunStateStore spins-remaining counter to the consumable that set it,
 # so the player can see WHICH boost is active and for HOW MANY more spins. Ordered by how
 # it stacks top-down in the corner.
+# Polarity (issue #113): "negative" marks a pure downside, "mixed" a boost whose
+# benefit carries a live cost (Cocktail's 15% pair/triple tax, Tobacco's hidden
+# reel). Unmarked entries are pure upside. The badges surface this as +/- corner
+# glyphs so polarity never rides on the count colour alone.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
 	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
 		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
-	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" }, # rarity bonus
-	{ "counter": "pairBoostSpins", "id": "cons_cigarette" },   # 3x pairs + hidden reel
+	{ "counter": "cocktailBoostSpins", "id": "item_cocktail", "mixed": true }, # rarity bonus - pair/triple tax
+	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true },   # 3x pairs - hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
 ]
 
@@ -863,6 +867,11 @@ const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
+# Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
+# top-right when it hurts, both on a mixed boost. Sign shape carries the meaning,
+# colour (HintLabel's shared green/red) only reinforces it — never colour alone.
+const BOOST_MARK_POS_COLOR := Color(0.13, 0.77, 0.37)
+const BOOST_MARK_NEG_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
@@ -895,7 +904,35 @@ func _build_boost_indicators() -> void:
 		count.add_theme_constant_override("outline_size", 1)
 		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(count)
-		_boost_indicator_slots.append({ "slot": slot, "icon": icon, "count": count })
+		# Polarity glyphs (issue #113): "+" pinned top-left, "-" pinned top-right.
+		var pos_mark := _make_boost_mark("+", HORIZONTAL_ALIGNMENT_LEFT, BOOST_MARK_POS_COLOR)
+		slot.add_child(pos_mark)
+		var neg_mark := _make_boost_mark("-", HORIZONTAL_ALIGNMENT_RIGHT, BOOST_MARK_NEG_COLOR)
+		slot.add_child(neg_mark)
+		_boost_indicator_slots.append({
+			"slot": slot, "icon": icon, "count": count,
+			"pos_mark": pos_mark, "neg_mark": neg_mark,
+		})
+
+func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Color) -> Label:
+	var mark := Label.new()
+	mark.text = glyph
+	mark.horizontal_alignment = alignment
+	mark.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	mark.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		mark.add_theme_font_override("font", _font)
+	mark.add_theme_color_override("font_color", color)
+	mark.add_theme_color_override("font_outline_color", Color.BLACK)
+	mark.add_theme_constant_override("outline_size", 1)
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Same min-height trick as the count badge: size the box from the font's real
+	# min height and pin it to the icon's top edge, nudged 3px up so the sign
+	# reads as a corner badge instead of covering the art.
+	mark.size = Vector2(BOOST_ICON_SIZE, mark.get_minimum_size().y)
+	mark.position = Vector2(0.0, -3.0)
+	mark.visible = false
+	return mark
 
 ## Shows one icon per active multi-spin boost, stacked horizontally inside the TV's
 ## top-right, each with a spins-remaining badge. A boost whose icon is missing is skipped
@@ -931,6 +968,12 @@ func _refresh_boost_indicators() -> void:
 		cn.add_theme_color_override(
 			"font_color",
 			BOOST_NEGATIVE_COUNT_COLOR if bool(boost.get("negative", false)) else BOOST_COUNT_COLOR)
+		# Issue #113: polarity is a sign glyph, not just the count colour — "+" for
+		# a helping boost, "-" for a hurting one, both when the boost is mixed.
+		var is_negative := bool(boost.get("negative", false))
+		var is_mixed := bool(boost.get("mixed", false))
+		(s["pos_mark"] as Label).visible = not is_negative or is_mixed
+		(s["neg_mark"] as Label).visible = is_negative or is_mixed
 		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
 		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
 		var mh := cn.get_minimum_size().y
