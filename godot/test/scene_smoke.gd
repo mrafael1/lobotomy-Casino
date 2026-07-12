@@ -4070,6 +4070,8 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 		menu._cycle_augmented_tier(-1) # heart -> ""
 		if start.text == "AUGMENTED RUN":
 			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
+		if start.pivot_offset != start.size * 0.5:
+			failures.append("issue111: plate buttons need a centered pivot for the press squash")
 		# Modifiers can't change mid-run: a held run drops back to the locked
 		# layout (frame 0) and hides the selector.
 		var prev_phase := String(run_store.runPhase)

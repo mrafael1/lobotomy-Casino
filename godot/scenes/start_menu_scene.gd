@@ -36,6 +36,9 @@ const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
 const ART_SCORES_LOCKED_RECT := Rect2(30.0, 178.0, 101.0, 25.0)
 const ART_OPTIONS_LOCKED_RECT := Rect2(30.0, 213.0, 101.0, 25.0)
 const ART_SELECTOR_RECT := Rect2(11.0, 178.0, 139.0, 37.0)
+# Centre of the selector bar — the pivot the suit symbol squashes around when
+# an arrow is held (the arrows themselves are baked into the frame art).
+const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -163,6 +166,7 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
+	spr.set_meta("base_scale", spr.scale) # press-pop anchor (arrows squash the suit)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
@@ -263,6 +267,25 @@ func _style_plate_button(b: Button, rect: Rect2, color: Color, font_size: int) -
 	b.add_theme_color_override("font_hover_color", Color.WHITE)
 	b.add_theme_color_override("font_pressed_color", Color.WHITE)
 	b.add_theme_color_override("font_focus_color", color)
+	# Pressed squash: shrink around the centre while held, spring back on release
+	# (same feel as the machine's buttons). Signals connect once; layout refreshes
+	# re-run this styling on the same button.
+	b.pivot_offset = rect.size * 0.5
+	if not b.button_down.is_connected(_on_plate_button_down):
+		b.button_down.connect(_on_plate_button_down.bind(b))
+		b.button_up.connect(_on_plate_button_up.bind(b))
+
+func _on_plate_button_down(b: Button) -> void:
+	var tw := create_tween()
+	tw.tween_property(b, "scale", Vector2.ONE * 0.92, 0.06) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _on_plate_button_up(b: Button) -> void:
+	if not is_instance_valid(b):
+		return
+	var tw := create_tween()
+	tw.tween_property(b, "scale", Vector2.ONE, 0.1) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 ## Invisible hit area over a baked arrow third of the selector bar.
 func _augmented_arrow_button(step: int, bar_size: Vector2) -> Button:
@@ -274,8 +297,34 @@ func _augmented_arrow_button(step: int, bar_size: Vector2) -> Button:
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	# The arrow art is baked into the frame, so the press feedback squashes the
+	# suit symbol instead; release springs it back as the new suit lands.
+	b.button_down.connect(_on_arrow_down)
+	b.button_up.connect(_on_arrow_up)
 	b.pressed.connect(_cycle_augmented_tier.bind(step))
 	return b
+
+## Scales the full-canvas symbols sprite by `f` around the selector-bar centre.
+func _set_symbols_pop(f: float) -> void:
+	if _symbols_sprite == null:
+		return
+	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
+	_symbols_sprite.scale = base * f
+	_symbols_sprite.position = ART_SELECTOR_PIVOT * (1.0 - f)
+
+func _on_arrow_down() -> void:
+	if _symbols_sprite == null or not _symbols_sprite.visible:
+		return
+	var tw := create_tween()
+	tw.tween_method(_set_symbols_pop, 1.0, 0.82, 0.06) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _on_arrow_up() -> void:
+	if _symbols_sprite == null:
+		return
+	var tw := create_tween()
+	tw.tween_method(_set_symbols_pop, 0.82, 1.0, 0.12) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _toggle_options_overlay() -> void:
 	if _options_overlay != null:
