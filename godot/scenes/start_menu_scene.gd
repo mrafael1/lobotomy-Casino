@@ -36,9 +36,12 @@ const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
 const ART_SCORES_LOCKED_RECT := Rect2(30.0, 178.0, 101.0, 25.0)
 const ART_OPTIONS_LOCKED_RECT := Rect2(30.0, 213.0, 101.0, 25.0)
 const ART_SELECTOR_RECT := Rect2(11.0, 178.0, 139.0, 37.0)
-# Centre of the selector bar — the pivot the suit symbol squashes around when
-# an arrow is held (the arrows themselves are baked into the frame art).
-const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
+# Live copies of the baked arrows sit over the frame art so pressing can squash
+# them. Boxes are CENTERED on the measured glyphs (8x15 at 15,190 / 137,190) —
+# an off-centre box squashes the copy sideways and un-covers the baked glyph —
+# and sized so the 0.8 squash still covers it, staying inside the bar interior.
+const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
+const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -166,7 +169,6 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
-	spr.set_meta("base_scale", spr.scale) # press-pop anchor (arrows squash the suit)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
@@ -205,8 +207,10 @@ func _build_art_menu() -> void:
 	_augmented_row.position = ART_SELECTOR_RECT.position
 	_augmented_row.size = ART_SELECTOR_RECT.size
 	add_child(_augmented_row)
-	_augmented_row.add_child(_augmented_arrow_button(-1, ART_SELECTOR_RECT.size))
-	_augmented_row.add_child(_augmented_arrow_button(1, ART_SELECTOR_RECT.size))
+	_augmented_row.add_child(_augmented_arrow_button(-1, ART_SELECTOR_RECT.size,
+		_arrow_art(ART_ARROW_LEFT_RECT)))
+	_augmented_row.add_child(_augmented_arrow_button(1, ART_SELECTOR_RECT.size,
+		_arrow_art(ART_ARROW_RIGHT_RECT)))
 	_augmented_desc = _overlay_label("AugmentedDescription", ART_DESC_RECT, 5, ART_YELLOW)
 
 	# Campaign meter + hint live in the frame's free strips (issue #38).
@@ -287,8 +291,30 @@ func _on_plate_button_up(b: Button) -> void:
 	tw.tween_property(b, "scale", Vector2.ONE, 0.1) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-## Invisible hit area over a baked arrow third of the selector bar.
-func _augmented_arrow_button(step: int, bar_size: Vector2) -> Button:
+## Live copy of one baked arrow segment, parented to the selector row so it can
+## squash on press (the frame art underneath can't move). Centered on the arrow
+## so the scale pivots in place; NEAREST like the frame it copies.
+func _arrow_art(rect: Rect2) -> Sprite2D:
+	var tex := Assets.texture(MENU_FRAMES_ASSET)
+	if tex == null:
+		return null
+	var s := float(tex.get_width()) * 0.5 / CANVAS_W # export scale of one frame
+	var spr := Sprite2D.new()
+	spr.texture = tex
+	spr.region_enabled = true
+	# The arrows only exist on the unlocked layout: frame 1, one frame-width in.
+	spr.region_rect = Rect2((rect.position + Vector2(CANVAS_W, 0.0)) * s, rect.size * s)
+	spr.centered = true
+	spr.position = rect.position + rect.size * 0.5 - ART_SELECTOR_RECT.position
+	spr.scale = Vector2.ONE / s
+	spr.set_meta("rest_scale", spr.scale)
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_augmented_row.add_child(spr)
+	return spr
+
+## Invisible hit area over a baked arrow third of the selector bar; pressing
+## squashes the arrow's live copy, release springs it back as the suit changes.
+func _augmented_arrow_button(step: int, bar_size: Vector2, art: Sprite2D) -> Button:
 	var b := Button.new()
 	b.name = "CycleLeft" if step < 0 else "CycleRight"
 	b.position = Vector2(0.0 if step < 0 else bar_size.x * 0.7, 0.0)
@@ -297,33 +323,25 @@ func _augmented_arrow_button(step: int, bar_size: Vector2) -> Button:
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	# The arrow art is baked into the frame, so the press feedback squashes the
-	# suit symbol instead; release springs it back as the new suit lands.
-	b.button_down.connect(_on_arrow_down)
-	b.button_up.connect(_on_arrow_up)
+	b.button_down.connect(_on_arrow_down.bind(art))
+	b.button_up.connect(_on_arrow_up.bind(art))
 	b.pressed.connect(_cycle_augmented_tier.bind(step))
 	return b
 
-## Scales the full-canvas symbols sprite by `f` around the selector-bar centre.
-func _set_symbols_pop(f: float) -> void:
-	if _symbols_sprite == null:
+func _on_arrow_down(art: Sprite2D) -> void:
+	if art == null:
 		return
-	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
-	_symbols_sprite.scale = base * f
-	_symbols_sprite.position = ART_SELECTOR_PIVOT * (1.0 - f)
-
-func _on_arrow_down() -> void:
-	if _symbols_sprite == null or not _symbols_sprite.visible:
-		return
+	var rest: Vector2 = art.get_meta("rest_scale", Vector2.ONE)
 	var tw := create_tween()
-	tw.tween_method(_set_symbols_pop, 1.0, 0.82, 0.06) \
+	tw.tween_property(art, "scale", rest * 0.8, 0.06) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-func _on_arrow_up() -> void:
-	if _symbols_sprite == null:
+func _on_arrow_up(art: Sprite2D) -> void:
+	if art == null or not is_instance_valid(art):
 		return
+	var rest: Vector2 = art.get_meta("rest_scale", Vector2.ONE)
 	var tw := create_tween()
-	tw.tween_method(_set_symbols_pop, 0.82, 1.0, 0.12) \
+	tw.tween_property(art, "scale", rest, 0.12) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _toggle_options_overlay() -> void:
