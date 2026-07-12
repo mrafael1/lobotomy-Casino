@@ -4059,8 +4059,8 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 			failures.append("issue111: unlocked menu should show frame 1 of start_menu.png")
 		if not symbols.visible or symbols.frame != 0:
 			failures.append("issue111: empty selection should show symbols frame 0 (no augment)")
-		if desc.text != "CLASSIC RUN":
-			failures.append("issue111: empty selection should read CLASSIC RUN")
+		if desc.text != "NO AUGMENT":
+			failures.append("issue111: empty selection should read NO AUGMENT")
 		menu._cycle_augmented_tier(1) # "" -> heart (art frame order)
 		if String(menu._selected_augmented_tier) != "heart":
 			failures.append("issue111: cycling right did not select heart")

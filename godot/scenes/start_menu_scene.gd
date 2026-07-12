@@ -64,7 +64,7 @@ const ART_YELLOW := Color(1.0, 0.86, 0.36)
 # Augmented Run (issue #111): tier selector shown under START RUN once wealth
 # has been reached. Cycling picks one suit modifier (joker = all four).
 const AUGMENTED_DESCRIPTIONS := {
-	"": "CLASSIC RUN",
+	"": "NO AUGMENT",
 	"heart": "JACKPOT 100, NO FREE SPIN",
 	"spade": "END-OF-RUN GAIN HALVED",
 	"diamond": "MAX 2 POWERS PER SPIN",
