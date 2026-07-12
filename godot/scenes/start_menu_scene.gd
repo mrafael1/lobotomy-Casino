@@ -147,10 +147,12 @@ func _bind_scene_nodes() -> void:
 
 # ── authored-frame menu (issue #111) ─────────────────────────────────────────────────
 
-## Full-canvas sheet sprite scaled so one frame covers the 160x320 canvas —
-## resolution-independent, like the dealer/odds sheets.
+## Full-canvas sheet sprite scaled so one frame covers the 160x320 canvas.
+## The frames are authored at native canvas resolution and only ever UPSCALE
+## on screen, so they sample NEAREST — linear would soften the pixel art
+## (mipmapped linear is only right for the high-res downscaled sheets).
 func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
-	var tex := Assets.texture(rel, true)
+	var tex := Assets.texture(rel)
 	if tex == null:
 		return null
 	var spr := Sprite2D.new()
@@ -161,7 +163,7 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
