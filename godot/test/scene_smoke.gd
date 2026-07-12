@@ -1763,13 +1763,38 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	elif (plus_buttons["vial"] as Button).disabled:
 		failures.append("issue36: affordable + button is disabled")
 	# Issue #130: the wallet renders on the ODD-TABLE_tokens sheet, one frame per
-	# token count (fresh budget => frame 4), and every row shows its live chance.
+	# token count (fresh budget => frame 4). Percentages are revealed on symbol
+	# press so the authored rows stay uncluttered.
 	if overlay._tokens_sprite == null \
 			or int((overlay._tokens_sprite as Sprite2D).frame) != int(run_store.odds_budget):
 		failures.append("issue130: tokens sheet should sit on frame %d" % int(run_store.odds_budget))
-	var pct_labels: Dictionary = overlay._pct_labels
-	if pct_labels.size() != 6 or not String((pct_labels["brain"] as Label).text).ends_with("%"):
-		failures.append("issue50: rows are missing the live draw-chance readout")
+	var symbol_buttons: Dictionary = overlay._symbol_buttons
+	if symbol_buttons.size() != 6:
+		failures.append("issue50: symbol boxes should be pressable for live draw chance")
+	if overlay._neon_glow_layer == null or overlay._neon_glow_tween == null \
+			or not overlay._neon_glow_tween.is_valid():
+		failures.append("issue130: odds-table neon glow layer is not active")
+	var brain_symbol_button := symbol_buttons.get("brain") as Button
+	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
+	if brain_symbol_button == null or brain_icon == null:
+		failures.append("issue50: brain symbol is missing its press target or icon")
+	else:
+		var icon_rest_scale := brain_icon.scale
+		brain_symbol_button.button_down.emit()
+		if overlay._pct_popup == null:
+			failures.append("issue50: pressing a symbol did not open its percentage popup")
+		else:
+			var popup_has_percent := false
+			for popup_text in _overlay_label_texts(overlay._pct_popup):
+				if String(popup_text).ends_with("%"):
+					popup_has_percent = true
+			if not popup_has_percent:
+				failures.append("issue50: percentage popup is missing its current chance")
+		if brain_icon.scale == icon_rest_scale:
+			failures.append("issue50: symbol press did not start the pressed animation")
+		brain_symbol_button.button_up.emit()
+		if overlay._pct_popup != null:
+			failures.append("issue50: releasing a symbol did not hide its percentage popup")
 	# Every row's symbol sits inside the baked box, scaled down to fit (issue #130).
 	var box_icons := 0
 	for child in overlay.get_children():
@@ -1785,8 +1810,6 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	overlay._on_plus_pressed("brain")
 	if run_store.odds_upgrade_level("brain") != 1:
 		failures.append("issue36: overlay + did not reach the store")
-	if overlay.get_node_or_null("PctFeedback") == null:
-		failures.append("issue50: buying odds did not float the percent-gained feedback popup")
 	# The bought level advances the row's meter to the next sheet frame.
 	if (level_sprites["brain"] as Sprite2D).region_rect.position.x \
 			!= brain_level_x0 + float(overlay.ART_FRAME_W):

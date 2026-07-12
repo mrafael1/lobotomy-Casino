@@ -40,17 +40,21 @@ const LEVEL_LAST_ROW_IMG := Rect2(336.0, 1664.0, 264.0, 104.0)
 # Lift the authored table slightly so the final row and the DONE action have
 # breathing room on the compact canvas. The dimmer remains full-screen.
 const TABLE_Y_OFFSET := -8.0
+# The outer light-blue frame and each authored symbol box receive a subtle
+# additive shadow, leaving the pixel art itself as the crisp neon core.
+const NEON_FRAME_RECT := Rect2(8.0, 20.0, 144.0, 299.0)
+const SYMBOL_NEON_SIZE := Vector2(31.0, 32.0)
+const SYMBOL_HIT_SIZE := Vector2(32.0, 32.0)
+const NEON_FRAME_COLOR := Color("#64b5de")
+const NEON_PULSE_LOW := 0.42
+const NEON_PULSE_HIGH := 0.78
+const NEON_PULSE_TIME := 0.9
 # Symbol box baked into the table art (source px): the selected symbol renders
 # inside it, scaled down slightly so it clears the box outline.
 const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
 const ODD_ICON_SIZE := 24.0
-# Live draw-chance readout, centered below the row's level meter.
-const PCT_X := 57.3
-const PCT_W := 44.0
-# Keep the glyph below the meter while staying inside the row's green border.
-const PCT_Y_OFFSET := 16.0
-const DONE_BUTTON_SIZE := Vector2(48.0, 12.0)
-const DONE_BUTTON_Y := 302.0
+const DONE_BUTTON_SIZE := Vector2(40.0, 10.0)
+const DONE_BUTTON_Y := SRC_H + TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5
 
 # These are the opaque row colors in ODD-TABLE.png. Flatline has no colored
 # border, so its waveform red is used for the live percentage.
@@ -65,18 +69,19 @@ const SYMBOL_PERCENT_COLORS := {
 
 @export_group("Odds Table Colors")
 @export var percent_color: Color = Color(0.0, 0.9, 1.0)
-@export var minus_color: Color = Color(0.94, 0.27, 0.27)
-@export var plus_color: Color = Color(0.13, 0.77, 0.37)
 
 var _font: FontFile = null
 var _tokens_sprite: Sprite2D = null
 var _plus_buttons := {}     # symbol -> Button (invisible hit area over the art)
 var _minus_buttons := {}    # symbol -> Button
+var _symbol_buttons := {}   # symbol -> Button (pressable symbol box)
+var _symbol_icons := {}     # symbol -> Sprite2D
 var _plus_art := {}         # symbol -> Sprite2D (region of the buttons sheet)
 var _minus_art := {}        # symbol -> Sprite2D
 var _level_sprites := {}    # symbol -> Sprite2D (region of the levels sheet)
-var _pct_labels := {}       # symbol -> Label (live draw-chance readout)
-var _row_y := {}            # symbol -> float (row top, anchors the % feedback popup)
+var _pct_popup: Control = null
+var _neon_glow_layer: Control = null
+var _neon_glow_tween: Tween = null
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -94,6 +99,7 @@ func open_overlay() -> void:
 func _close() -> void:
 	# Closing finalizes: staged purchases become permanent, leftover tokens are
 	# banked for the next odds menu, and the screen locks until the next run.
+	_hide_pct_popup()
 	RunStateStore.finalize_odds_phase()
 	visible = false
 	closed.emit()
@@ -115,6 +121,54 @@ func _mk_label(parent: Control, text: String, pos: Vector2, font_size: int, colo
 	l.add_theme_constant_override("outline_size", 1)
 	parent.add_child(l)
 	return l
+
+## Adds a restrained additive halo behind the authored frame and symbol boxes.
+## The panel border sits over the art while its shadow spreads outside it, so the
+## pixel edges remain sharp and the light reads as a neon sign rather than blur.
+func _spawn_neon_glows() -> void:
+	var layer := Control.new()
+	layer.name = "NeonGlow"
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.z_index = 1
+	layer.modulate.a = NEON_PULSE_HIGH
+	add_child(layer)
+	_neon_glow_layer = layer
+
+	var add_material := CanvasItemMaterial.new()
+	add_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_add_neon_outline(layer, Rect2(NEON_FRAME_RECT.position + Vector2(0.0, TABLE_Y_OFFSET),
+		NEON_FRAME_RECT.size), NEON_FRAME_COLOR, 4, add_material)
+	for i in Symbols.BASE_SYMBOL_CYCLE.size():
+		var symbol_id := String(Symbols.BASE_SYMBOL_CYCLE[i])
+		var row_offset_img: float = float(ROW_OFFSETS_IMG[i])
+		var box_position := SYMBOL_BOX_CENTER - SYMBOL_NEON_SIZE * 0.5 + Vector2(0.0,
+			row_offset_img / ART_SCALE + TABLE_Y_OFFSET)
+		_add_neon_outline(layer, Rect2(box_position, SYMBOL_NEON_SIZE),
+			_percent_color(symbol_id), 3, add_material)
+
+	_neon_glow_tween = create_tween().set_loops()
+	_neon_glow_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_LOW, NEON_PULSE_TIME)
+	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_HIGH, NEON_PULSE_TIME)
+
+func _add_neon_outline(parent: Control, rect: Rect2, color: Color, shadow_size: int,
+		material: CanvasItemMaterial) -> void:
+	var outline := Panel.new()
+	outline.name = "NeonOutline"
+	outline.position = rect.position
+	outline.size = rect.size
+	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	outline.material = material
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = Color(color.r, color.g, color.b, 0.62)
+	style.set_border_width_all(1)
+	style.shadow_color = Color(color.r, color.g, color.b, 0.72)
+	style.shadow_size = shadow_size
+	style.shadow_offset = Vector2.ZERO
+	style.anti_aliasing = false
+	outline.add_theme_stylebox_override(&"panel", style)
+	parent.add_child(outline)
 
 ## Full-canvas sheet sprite (dealer-scene pattern): scaled so one frame covers
 ## the 160x320 canvas exactly.
@@ -160,15 +214,20 @@ func _set_region_frame(spr: Sprite2D, base_x_img: float, frame: int) -> void:
 	spr.region_rect = r
 
 func _rebuild() -> void:
+	if _neon_glow_tween != null and _neon_glow_tween.is_valid():
+		_neon_glow_tween.kill()
+	_neon_glow_tween = null
+	_neon_glow_layer = null
+	_hide_pct_popup()
 	for child in get_children():
 		child.queue_free()
 	_plus_buttons.clear()
 	_minus_buttons.clear()
+	_symbol_buttons.clear()
+	_symbol_icons.clear()
 	_plus_art.clear()
 	_minus_art.clear()
 	_level_sprites.clear()
-	_pct_labels.clear()
-	_row_y.clear()
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.78)
@@ -176,6 +235,7 @@ func _rebuild() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
 
+	_spawn_neon_glows()
 	_sheet_sprite(ART_TABLE, 1, 0)
 	_tokens_sprite = _sheet_sprite(ART_TOKENS, TOKEN_FRAMES, 0)
 
@@ -186,7 +246,7 @@ func _rebuild() -> void:
 	done.text = "DONE"
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
 	done.size = DONE_BUTTON_SIZE
-	done.add_theme_font_size_override("font_size", 7)
+	done.add_theme_font_size_override("font_size", 6)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
 	Assets.skin_negative_button(done)
@@ -195,24 +255,19 @@ func _rebuild() -> void:
 
 	_refresh()
 
-## One authored row: the symbol inside the baked box, the level-meter region, the
-## live % readout, and invisible hit buttons over the baked +/- art.
+## One authored row: the pressable symbol inside the baked box, the level-meter
+## region, and invisible hit buttons over the baked +/- art.
 func _build_row(symbol_id: String, row: int) -> void:
 	var row_offset_img: float = float(ROW_OFFSETS_IMG[row])
 
-	_add_symbol_icon(symbol_id, SYMBOL_BOX_CENTER + Vector2(0.0,
+	var icon := _add_symbol_icon(symbol_id, SYMBOL_BOX_CENTER + Vector2(0.0,
 		row_offset_img / ART_SCALE + TABLE_Y_OFFSET))
+	_symbol_icons[symbol_id] = icon
+	_symbol_buttons[symbol_id] = _build_symbol_button(symbol_id, row_offset_img, icon)
 
 	var level_rect := LEVEL_LAST_ROW_IMG if row == Symbols.BASE_SYMBOL_CYCLE.size() - 1 \
 		else Rect2(LEVEL_ROW_IMG.position + Vector2(0.0, row_offset_img), LEVEL_ROW_IMG.size)
-	_row_y[symbol_id] = level_rect.position.y / ART_SCALE + TABLE_Y_OFFSET
 	_level_sprites[symbol_id] = _region_sprite(ART_LEVELS, level_rect, 0)
-
-	# Live draw chance centered on the meter (issue #50: odds are visible).
-	var pct := _mk_label(self, "", Vector2(PCT_X, float(_row_y[symbol_id]) + PCT_Y_OFFSET),
-		5, _percent_color(symbol_id), PCT_W, HORIZONTAL_ALIGNMENT_CENTER)
-	pct.z_index = 2
-	_pct_labels[symbol_id] = pct
 
 	var plus_rect := Rect2(BTN_PLUS_IMG.position + Vector2(0.0, row_offset_img), BTN_PLUS_IMG.size)
 	var minus_rect := Rect2(plus_rect.position + Vector2(0.0, BTN_MINUS_Y_OFFSET_IMG), plus_rect.size)
@@ -222,19 +277,45 @@ func _build_row(symbol_id: String, row: int) -> void:
 	_plus_buttons[symbol_id] = _hit_button(plus_rect, symbol_id, true)
 	_minus_buttons[symbol_id] = _hit_button(minus_rect, symbol_id, false)
 
-func _add_symbol_icon(symbol_id: String, center: Vector2) -> void:
+func _add_symbol_icon(symbol_id: String, center: Vector2) -> Sprite2D:
 	var tex := Assets.texture("symbols/%s.png" % symbol_id, true)
 	if tex == null:
-		return
+		return null
 	var icon := Sprite2D.new()
 	icon.texture = tex
 	icon.centered = true
 	icon.position = center
 	# Scaled down slightly so the symbol fits cleanly inside the baked box (#130).
 	icon.scale = Vector2.ONE * (ODD_ICON_SIZE / float(maxi(tex.get_width(), tex.get_height())))
+	icon.set_meta("rest_scale", icon.scale)
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	icon.z_index = 2
 	add_child(icon)
+	return icon
+
+## Invisible hit area over a symbol box. Holding it uses the same squash-and-pop
+## interaction as the score-table information buttons, while the popup reports
+## the current staged draw chance for that symbol.
+func _build_symbol_button(symbol_id: String, row_offset_img: float, icon: Sprite2D) -> Button:
+	var b := Button.new()
+	b.name = "SymbolButton_%s" % symbol_id
+	b.position = SYMBOL_BOX_CENTER - SYMBOL_HIT_SIZE * 0.5 + Vector2(0.0,
+		row_offset_img / ART_SCALE + TABLE_Y_OFFSET)
+	b.size = SYMBOL_HIT_SIZE
+	b.focus_mode = Control.FOCUS_ALL
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.z_index = 3
+	for state in [&"normal", &"hover", &"pressed", &"disabled"]:
+		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var focus := StyleBoxFlat.new()
+	focus.draw_center = false
+	focus.border_color = NEON_FRAME_COLOR
+	focus.set_border_width_all(1)
+	b.add_theme_stylebox_override(&"focus", focus)
+	b.button_down.connect(_on_symbol_button_down.bind(symbol_id, b, icon))
+	b.button_up.connect(_on_symbol_button_up.bind(icon))
+	add_child(b)
+	return b
 
 ## Invisible hit button over a baked button's art; pressing swaps the art region
 ## to the sheet's pressed frame for tactile feedback.
@@ -260,6 +341,59 @@ func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
 	add_child(b)
 	return b
 
+func _on_symbol_button_down(symbol_id: String, button: Button, icon: Sprite2D) -> void:
+	if icon != null:
+		var rest_scale: Vector2 = icon.get_meta("rest_scale", Vector2.ONE)
+		icon.scale = rest_scale * 0.7
+		var tw := create_tween()
+		var scale_tween := tw.tween_property(icon, "scale", rest_scale * 0.82, 0.08)
+		scale_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_show_pct_popup(symbol_id, button)
+
+func _on_symbol_button_up(icon: Sprite2D) -> void:
+	if is_instance_valid(icon):
+		var rest_scale: Vector2 = icon.get_meta("rest_scale", Vector2.ONE)
+		var tw := create_tween()
+		var scale_tween := tw.tween_property(icon, "scale", rest_scale, 0.1)
+		scale_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_hide_pct_popup()
+
+func _show_pct_popup(symbol_id: String, button: Button) -> void:
+	_hide_pct_popup()
+	_pct_popup = Control.new()
+	_pct_popup.name = "PctPopup"
+	_pct_popup.z_index = 5
+	_pct_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var text := "%.1f%%" % _symbol_percent(symbol_id)
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
+	var popup_size := Vector2(text_width + 8.0, 14.0)
+	_mk_label(_pct_popup, text, Vector2(4.0, 2.0), 5, _percent_color(symbol_id),
+		text_width, HORIZONTAL_ALIGNMENT_CENTER)
+
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
+	bg_style.border_color = Color(1.0, 0.82, 0.28)
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.add_theme_stylebox_override(&"panel", bg_style)
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pct_popup.add_child(bg)
+	_pct_popup.move_child(bg, 0)
+	var pos := button.position + Vector2(button.size.x * 0.5 - popup_size.x * 0.5,
+		-popup_size.y - 3.0)
+	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+	_pct_popup.position = pos.round()
+	add_child(_pct_popup)
+
+func _hide_pct_popup() -> void:
+	if _pct_popup != null:
+		_pct_popup.queue_free()
+		_pct_popup = null
+
 func _percent_color(symbol_id: String) -> Color:
 	var color: Variant = SYMBOL_PERCENT_COLORS.get(symbol_id, percent_color)
 	return color if color is Color else percent_color
@@ -280,32 +414,12 @@ func _symbol_percent(symbol_id: String) -> float:
 	return (weight / total) * 100.0 if total > 0.0 else 0.0
 
 func _on_plus_pressed(symbol_id: String) -> void:
-	var before := _symbol_percent(symbol_id)
 	if RunStateStore.buy_odds_upgrade(symbol_id):
 		_refresh()
-		_spawn_pct_feedback(symbol_id, _symbol_percent(symbol_id) - before)
 
 func _on_minus_pressed(symbol_id: String) -> void:
-	var before := _symbol_percent(symbol_id)
 	if RunStateStore.undo_odds_upgrade(symbol_id):
 		_refresh()
-		_spawn_pct_feedback(symbol_id, _symbol_percent(symbol_id) - before)
-
-## Floats a "+x.x%" (or "-x.x%") popup up from the row's meter — the user-visible
-## proof of how much draw chance the purchase actually moved (issue #50).
-func _spawn_pct_feedback(symbol_id: String, delta: float) -> void:
-	if absf(delta) < 0.001:
-		return
-	var y := float(_row_y.get(symbol_id, 68.0))
-	var popup := _mk_label(self, "%+.1f%%" % delta, Vector2(PCT_X, y - 2.0), 7,
-		plus_color if delta > 0.0 else minus_color, PCT_W, HORIZONTAL_ALIGNMENT_CENTER)
-	popup.name = "PctFeedback"
-	popup.z_index = 5
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(popup, "position:y", y - 14.0, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(popup, "modulate:a", 0.0, 0.45).set_delay(0.25)
-	tw.chain().tween_callback(popup.queue_free)
 
 func _refresh() -> void:
 	if _tokens_sprite != null:
@@ -320,9 +434,6 @@ func _refresh() -> void:
 				if String(symbol_id) == String(Symbols.BASE_SYMBOL_CYCLE[Symbols.BASE_SYMBOL_CYCLE.size() - 1]) \
 				else LEVEL_ROW_IMG.position.x
 			_set_region_frame(spr, base_x, clampi(level, 0, 9))
-		var pct := _pct_labels.get(symbol_id) as Label
-		if pct != null:
-			pct.text = "%.1f%%" % _symbol_percent(String(symbol_id))
 		var plus := _plus_buttons.get(symbol_id) as Button
 		if plus != null:
 			plus.disabled = level >= RunStateStore.odds_max_level \
