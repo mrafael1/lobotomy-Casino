@@ -58,7 +58,7 @@ func _run() -> void:
 	_check_consumable_roster_32(run_store, failures)
 	_check_machine_reactions_35(machine, run_store, failures)
 	_check_campaign_rebalance_38(machine, failures)
-	_check_odds_table_36(run_store, failures)
+	await _check_odds_table_36(run_store, failures)
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
@@ -1724,7 +1724,30 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	meta_store.oddsTokensBanked = 0
 	run_store.reset_run_state()
 
-	# The odds overlay scene: +/- controls, level bars, close finalizes.
+	# Issue #130: the pool starts at the 4-token default and is hard-capped at 8
+	# kept or used — a banked hoard past the cap is clamped when the menu opens.
+	if int(run_store.odds_budget) != 4:
+		failures.append("issue130: default token budget should be 4, got %d" % int(run_store.odds_budget))
+	if int(run_store.odds_max_tokens) != 8:
+		failures.append("issue130: token cap should be 8, got %d" % int(run_store.odds_max_tokens))
+	meta_store.oddsTokensBanked = 20
+	run_store.begin_odds_phase()
+	if int(run_store.oddsTokensRemaining) != int(run_store.odds_max_tokens):
+		failures.append("issue130: token pool exceeded the 8 cap (got %d)" % int(run_store.oddsTokensRemaining))
+	run_store.finalize_odds_phase()
+	if int(meta_store.oddsTokensBanked) > int(run_store.odds_max_tokens):
+		failures.append("issue130: banked tokens exceeded the 8 cap (got %d)" % int(meta_store.oddsTokensBanked))
+	# Costs match the numbers baked into the ODD-TABLE art (4/3/3/2/2/1).
+	var baked_costs := { "brain": 4, "eye": 3, "pill": 3, "syringe": 2, "vial": 2, "flatline": 1 }
+	for sym in baked_costs:
+		if int(run_store.odds_token_cost(String(sym))) != int(baked_costs[sym]):
+			failures.append("issue130: %s token cost %d does not match the baked art (%d)"
+				% [String(sym), int(run_store.odds_token_cost(String(sym))), int(baked_costs[sym])])
+	meta_store.oddsUpgrades = {}
+	meta_store.oddsTokensBanked = 0
+	run_store.reset_run_state()
+
+	# The odds overlay scene: +/- controls, level meters, close finalizes.
 	var overlay_ps := load("res://scenes/odds_table_overlay.tscn") as PackedScene
 	var overlay: Node = overlay_ps.instantiate()
 	get_root().add_child(overlay)
@@ -1734,29 +1757,87 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if int(run_store.oddsTokensRemaining) != int(run_store.odds_budget):
 		failures.append("issue36: open_overlay did not begin the odds phase")
 	var plus_buttons: Dictionary = overlay._plus_buttons
-	var level_bars: Dictionary = overlay._level_bars
-	if plus_buttons.size() != 6 or level_bars.size() != 6:
+	var level_sprites: Dictionary = overlay._level_sprites
+	if plus_buttons.size() != 6 or level_sprites.size() != 6:
 		failures.append("issue36: overlay should list all 6 reel-cycle symbols")
-	elif (level_bars["vial"] as Array).size() != int(run_store.odds_max_level):
-		failures.append("issue36: overlay rows should show 8 level bars")
 	elif (plus_buttons["vial"] as Button).disabled:
 		failures.append("issue36: affordable + button is disabled")
-	# Issue #50: the token readout is a plain count (never "x/4"), and every row
-	# shows its live draw chance.
-	if String((overlay._tokens_label as Label).text) != "%d TOKENS" % int(run_store.odds_budget):
-		failures.append("issue50: tokens label should read '%d TOKENS', got '%s'"
-			% [int(run_store.odds_budget), String((overlay._tokens_label as Label).text)])
-	var pct_labels: Dictionary = overlay._pct_labels
-	if pct_labels.size() != 6 or not String((pct_labels["brain"] as Label).text).ends_with("%"):
-		failures.append("issue50: rows are missing the live draw-chance readout")
+	# Issue #130: the wallet renders on the ODD-TABLE_tokens sheet, one frame per
+	# token count (fresh budget => frame 4). Percentages are revealed on symbol
+	# press so the authored rows stay uncluttered.
+	if overlay._tokens_sprite == null \
+			or int((overlay._tokens_sprite as Sprite2D).frame) != int(run_store.odds_budget):
+		failures.append("issue130: tokens sheet should sit on frame %d" % int(run_store.odds_budget))
+	var symbol_buttons: Dictionary = overlay._symbol_buttons
+	if symbol_buttons.size() != 6:
+		failures.append("issue50: symbol boxes should be pressable for live draw chance")
+	if overlay.get_node_or_null("NeonGlow") != null:
+		failures.append("issue130: odds-table neon glow should be disabled")
+	var done_button: Button = null
+	for child in overlay.get_children():
+		if child is Button and (child as Button).text == "DONE":
+			done_button = child as Button
+			break
+	if done_button == null:
+		failures.append("issue130: odds-table DONE button is missing")
+	else:
+		var modal_bottom: float = overlay.MODAL_FRAME_RECT.position.y \
+			+ overlay.MODAL_FRAME_RECT.size.y + overlay.TABLE_Y_OFFSET - 10.0
+		var done_center: float = done_button.position.y + done_button.size.y * 0.5
+		if not is_equal_approx(done_center, modal_bottom):
+			failures.append("issue130: DONE button is not centered on the modal edge")
+		# Sized up to read as a real button (follow-up tweak), but still well
+		# inside the 144px-wide modal frame.
+		if done_button.size.x < 40.0 or done_button.size.y < 10.0:
+			failures.append("issue130: DONE button too small to read as a button")
+		if done_button.size.x > 64.0 or done_button.size.y > 16.0:
+			failures.append("issue130: DONE button is oversized for the modal")
+		if done_button.pivot_offset != done_button.size * 0.5:
+			failures.append("issue130: DONE button press animation needs a centered pivot")
+	var brain_symbol_button := symbol_buttons.get("brain") as Button
+	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
+	if brain_symbol_button == null or brain_icon == null:
+		failures.append("issue50: brain symbol is missing its press target or icon")
+	else:
+		var icon_rest_scale := brain_icon.scale
+		brain_symbol_button.button_down.emit()
+		await process_frame
+		if overlay._pct_popup == null:
+			failures.append("issue50: pressing a symbol did not open its percentage popup")
+		else:
+			var popup_label := overlay._pct_popup.get_node_or_null("PctBubble/PctLabel") as Label
+			if popup_label == null or not popup_label.text.ends_with("%"):
+				failures.append("issue50: percentage popup is missing its current chance")
+			else:
+				var popup_bubble := overlay._pct_popup.get_node("PctBubble") as Panel
+				if not popup_bubble.get_global_rect().encloses(popup_label.get_global_rect()):
+					failures.append("issue50: percentage text extends outside its popup bubble")
+		if brain_icon.scale == icon_rest_scale:
+			failures.append("issue50: symbol press did not start the pressed animation")
+		brain_symbol_button.button_up.emit()
+		if overlay._pct_popup != null:
+			failures.append("issue50: releasing a symbol did not hide its percentage popup")
+	# Every row's symbol sits inside the baked box, scaled down to fit (issue #130).
+	var box_icons := 0
+	for child in overlay.get_children():
+		if child is Sprite2D and (child as Sprite2D).centered \
+				and is_equal_approx((child as Sprite2D).position.x, float(overlay.SYMBOL_BOX_CENTER.x)):
+			var icon := child as Sprite2D
+			var icon_w: float = float(icon.texture.get_width()) * icon.scale.x
+			if icon_w <= float(overlay.ODD_ICON_SIZE) + 0.01:
+				box_icons += 1
+	if box_icons != 6:
+		failures.append("issue130: expected 6 boxed symbol icons scaled to fit, found %d" % box_icons)
+	var brain_level_x0: float = (level_sprites["brain"] as Sprite2D).region_rect.position.x
 	overlay._on_plus_pressed("brain")
 	if run_store.odds_upgrade_level("brain") != 1:
 		failures.append("issue36: overlay + did not reach the store")
-	if overlay.get_node_or_null("PctFeedback") == null:
-		failures.append("issue50: buying odds did not float the percent-gained feedback popup")
-	var brain_bars: Array = level_bars["brain"]
-	if (brain_bars[0] as ColorRect).color != overlay.bar_fill_color:
-		failures.append("issue36: bought level did not fill a bar yellow")
+	# The bought level advances the row's meter to the next sheet frame.
+	if (level_sprites["brain"] as Sprite2D).region_rect.position.x \
+			!= brain_level_x0 + float(overlay.ART_FRAME_W):
+		failures.append("issue130: bought level did not advance the meter frame")
+	if int((overlay._tokens_sprite as Sprite2D).frame) != int(run_store.odds_budget) - 4:
+		failures.append("issue130: tokens sheet frame did not track the spend")
 	if not (plus_buttons["vial"] as Button).disabled:
 		failures.append("issue36: unaffordable + button stayed enabled")
 	overlay._on_minus_pressed("brain")
@@ -2983,10 +3064,34 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	else:
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
-		if close.get_node_or_null(close.focus_neighbor_bottom) != info_buttons[0]:
-			failures.append("issue119: CLOSE does not link down to the first info row")
-		if (info_buttons[0] as Button).get_node_or_null((info_buttons[0] as Button).focus_neighbor_top) != close:
-			failures.append("issue119: first info row does not link back up to CLOSE")
+		# The chain now interleaves each row's symbol pct-peek button before its
+		# info button, so CLOSE links down into the first symbol button.
+		var first_symbol := machine._score_symbol_buttons[0] as Button
+		if close.get_node_or_null(close.focus_neighbor_bottom) != first_symbol:
+			failures.append("issue119: CLOSE does not link down to the first symbol row")
+		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_top) != close:
+			failures.append("issue119: first symbol row does not link back up to CLOSE")
+		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_bottom) != info_buttons[0]:
+			failures.append("issue119: first symbol row does not link down to its info button")
+	# Holding a symbol box peeks at the symbol's live draw chance (odds-table
+	# mechanic shared onto the score table).
+	if machine._score_symbol_buttons.size() != 6:
+		failures.append("score-pct: every row should have a symbol pct-peek button")
+	else:
+		var pct_button := machine._score_symbol_buttons[1] as Button
+		pct_button.button_down.emit()
+		var pct_popup: Control = machine._score_info_popup
+		if pct_popup == null or pct_popup.name != "PctPopup":
+			failures.append("score-pct: holding a symbol box did not show the pct bubble")
+		else:
+			var panel := pct_popup.get_child(0) as Panel
+			var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+			var expected: Color = machine.SCORE_TABLE_PCT_COLORS["eye"]
+			if style == null or not style.border_color.is_equal_approx(expected):
+				failures.append("score-pct: bubble contour is not the symbol row color")
+		pct_button.button_up.emit()
+		if machine._score_info_popup != null:
+			failures.append("score-pct: releasing the symbol box did not hide the pct bubble")
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
