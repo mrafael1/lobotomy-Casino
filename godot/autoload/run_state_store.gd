@@ -53,6 +53,18 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 @export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3, "syringe": 2, "vial": 2, "flatline": 1 }
 @export var odds_default_token_cost: int = 2
 @export var probability_increase_per_upgrade: int = 1
+
+# ── Augmented Run (issue #111) ─────────────────────────────────────────────────────
+# Post-wealth difficulty mode picked on the start menu: one suit selects a single
+# modifier; the joker activates all four at once.
+#   heart   (1): jackpot pays 100 instead of 200 and grants no free spin
+#   spade   (2): end-of-run lucidity kept is halved (10% -> 5%)
+#   diamond (3): only two powers may be used per spin
+#   club    (4): dealer visits and spin rewards are halved
+const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
+const AUGMENTED_TIER_CYCLE: Array[String] = ["", "heart", "spade", "diamond", "club", "joker"]
+var augmentedTier := ""       # "" (classic) | heart | spade | diamond | club | joker
+var powersUsedThisSpin := 0   # diamond modifier: hard cap of 2 power uses per spin
 ## Permanent odds upgrades cap out at this many levels per symbol (issue #50: 8 bars).
 @export var odds_max_level: int = 8
 @export_range(0.0, 2.0, 0.01) var odds_max_level_reward_bonus: float = 0.25
@@ -187,7 +199,18 @@ func _can_act() -> bool:
 	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
 
 func _can_use_ability() -> bool:
-	return _can_act() and lastResult != null and blockPowersSpins <= 0
+	return _can_act() and lastResult != null and blockPowersSpins <= 0 \
+		and not _augmented_powers_blocked()
+
+## Whether a numbered Augmented modifier applies to this run (joker = all four).
+func augmented_modifier_active(modifier: int) -> bool:
+	if augmentedTier == "joker":
+		return true
+	return int(AUGMENTED_TIER_MODIFIERS.get(augmentedTier, 0)) == modifier
+
+## Diamond modifier: the third power use of a spin is locked by the game.
+func _augmented_powers_blocked() -> bool:
+	return augmented_modifier_active(3) and powersUsedThisSpin >= 2
 
 func _commit() -> void:
 	state_changed.emit()
@@ -326,9 +349,16 @@ func spin(compulsive := false) -> Variant:
 	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), pairTripleAugmentChoice)
+	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
+	# 200 (the cut scales with the spin multiplier, like the pinned base) and no
+	# longer grants its free spin. Rides on top of evaluate() like the boosts above.
+	var augmented_jackpot_cut := 0
+	if augmented_modifier_active(1) and String(result["winType"]) == "jackpot":
+		augmented_jackpot_cut = floori(
+			float(Payouts.JACKPOT_SCORE) * 0.5 * float(result["scoreMultiplier"]))
 	var final_result: Dictionary = result
 	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
-			or specialist_bonus > 0 or hidden_reel_count > 0:
+			or specialist_bonus > 0 or hidden_reel_count > 0 or augmented_jackpot_cut > 0:
 		final_result = result.duplicate(true)
 		final_result["scoreEarned"] = base_score + flatline_boost + specialist_bonus
 		final_result["coinsEarned"] = base_score + flatline_boost + specialist_bonus
@@ -344,6 +374,15 @@ func spin(compulsive := false) -> Variant:
 			final_result["flatlineBoostBonus"] = flatline_boost
 		if specialist_bonus > 0:
 			final_result["specialistBonus"] = specialist_bonus
+		if augmented_jackpot_cut > 0:
+			final_result["scoreEarned"] = maxi(0, int(final_result["scoreEarned"]) - augmented_jackpot_cut)
+			final_result["coinsEarned"] = final_result["scoreEarned"]
+			# Evaluate only adds freeSpinsGranted on non-free spins; undo exactly that.
+			if not bool(final_result["isFreeSpin"]):
+				final_result["freeSpinsAfter"] = maxi(0,
+					int(final_result["freeSpinsAfter"]) - int(final_result["freeSpinsGranted"]))
+			final_result["freeSpinsGranted"] = 0
+			final_result["augmentedJackpotCut"] = augmented_jackpot_cut
 
 	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
@@ -382,6 +421,7 @@ func spin(compulsive := false) -> Variant:
 	lastPotionEffect = potion_pick
 	lastEffectiveBet = clampi(eff_bet, 1, 3)
 	spinCount += 1
+	powersUsedThisSpin = 0 # diamond modifier counts power uses per spin
 	nextSpinLucidityMultiplier = 1.0
 	if stasis:
 		decaySkips -= 1
@@ -511,6 +551,8 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	augmentedTier = ""
+	powersUsedThisSpin = 0
 	_commit()
 
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
@@ -533,6 +575,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	lockedReelSpins = [0, 0, 0]
 	runConsumables = pending_consumables.duplicate(true)
 	abilitiesUsed = []
+	# augmentedTier survives: the menu sets it before the pre-run dealer shop, and
+	# it applies to the run this call starts (issue #111).
+	powersUsedThisSpin = 0
 	ownedUpgrades = owned_permanents.duplicate()
 	# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power —
 	# grant it every run regardless of meta-shop purchases, consistently across
@@ -720,7 +765,11 @@ func _active_hidden_reel_count(pair_boost_active: bool) -> int:
 	return clampi(hidden, 0, 2)
 
 func _active_reward_scale() -> float:
-	return Economy.compute_hallucination_reward_scale(ownedUpgrades)
+	var scale := Economy.compute_hallucination_reward_scale(ownedUpgrades)
+	# Augmented club modifier (issue #111): all spin rewards/gains are halved.
+	if augmented_modifier_active(4):
+		scale *= 0.5
+	return scale
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed, coins_per_power_restore)
@@ -793,6 +842,7 @@ func reroll_reel(reel_index: int) -> bool:
 		symbolRewardBonuses)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("reroll")
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, marked, seed)
 	_commit()
 	return true
@@ -815,6 +865,7 @@ func move_reel(reel_index: int, direction: int) -> bool:
 	var seed := _seed(spinCount * 0x27d4eb2f + reel_index)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("shift")
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, marked, seed)
 	_commit()
 	return true
@@ -837,10 +888,13 @@ func lock_reel(reel_index: int) -> void:
 		eyeRevealSymbol = ""
 	abilitiesUsed = abilitiesUsed.duplicate()
 	abilitiesUsed.append("memory")
+	powersUsedThisSpin += 1
 	_commit()
 
 func copy_reel(source_reel: int, target_reel: int) -> bool:
 	if not _can_act() or lastResult == null:
+		return false
+	if _augmented_powers_blocked():
 		return false
 	var book_w := Economy.compute_book_weight(ownedUpgrades)
 	var pair_boost_active := pairBoostSpins > 0
@@ -852,6 +906,7 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 		symbolRewardBonuses)
 
 	var seed := _seed(spinCount * 0x165667b1)
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed)
 	_commit()
 	return true
@@ -1056,7 +1111,10 @@ func _symbol_reward_bonuses_from_meta(owned: Array) -> Dictionary:
 func _dealer_effective_proc() -> float:
 	var bet := clampi(betMultiplier, 1, 3)
 	var spins_over := maxi(0, spinCount - dealerLastSpinCount - dealer_min_spin_gap)
-	return clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
+	var proc := clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
+	# Augmented club modifier (issue #111): the dealer shows up half as often (the
+	# pinned 65%/35% HP safety triggers are untouched, like the ramp itself).
+	return proc * 0.5 if augmented_modifier_active(4) else proc
 
 func check_dealer_trigger() -> void:
 	if runPhase != "running" or dealerPending or dealerIncoming:

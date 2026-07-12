@@ -78,6 +78,8 @@ func _run() -> void:
 	_check_free_spin_multiplier_cost(run_store, failures)
 	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
 	_check_starting_powers_and_random_118(run_store, failures)
+	_check_augmented_run_111(machine, run_store, meta_store, failures)
+	await _check_augmented_menu_111(run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -3895,3 +3897,142 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	run_store.runConsumables = prev_cons
 	run_store.lastUsedConsumableId = prev_lastused
 	run_store.runPhase = prev_phase
+
+# Augmented Run (issue #111): unlock persistence and the four suit modifiers.
+func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	var prev_tier := String(run_store.augmentedTier)
+	var prev_phase := String(run_store.runPhase)
+	var prev_powers := int(run_store.powersUsedThisSpin)
+
+	# Unlock: banking a wealth run sets the permanent flag, and it survives a
+	# fresh campaign (unlike wealthEndingReached) plus a save round-trip.
+	meta_store.augmentedRunUnlocked = false
+	meta_store.bank_run({ "lucidityCoins": 0, "scoreEarned": 0, "neurons": 1 }, "wealth")
+	if not bool(meta_store.augmentedRunUnlocked):
+		failures.append("issue111: wealth bank did not unlock Augmented Run")
+	meta_store.start_new_campaign(false)
+	if not bool(meta_store.augmentedRunUnlocked):
+		failures.append("issue111: a new campaign wiped the Augmented unlock")
+	var round_trip: Dictionary = meta_store._as_dict()
+	if not bool(round_trip.get("augmentedRunUnlocked", false)):
+		failures.append("issue111: unlock flag missing from the save payload")
+
+	# Tier mapping: each suit activates exactly its modifier; joker all four.
+	run_store.augmentedTier = "heart"
+	if not run_store.augmented_modifier_active(1) or run_store.augmented_modifier_active(2):
+		failures.append("issue111: heart should map to modifier 1 only")
+	run_store.augmentedTier = "joker"
+	for m in [1, 2, 3, 4]:
+		if not run_store.augmented_modifier_active(m):
+			failures.append("issue111: joker should activate modifier %d" % m)
+			break
+	run_store.augmentedTier = ""
+	if run_store.augmented_modifier_active(1):
+		failures.append("issue111: classic runs must activate no modifier")
+
+	# Diamond: the third power use of a spin is refused.
+	run_store.augmentedTier = "diamond"
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.compulsiveSpinSkips = 0
+	run_store.blockPowersSpins = 0
+	run_store.powersUsedThisSpin = 2
+	if run_store._can_use_ability():
+		failures.append("issue111: diamond did not block the third power of a spin")
+	run_store.powersUsedThisSpin = 1
+	if run_store.lastResult != null and not run_store._can_use_ability():
+		failures.append("issue111: diamond blocked the second power of a spin")
+
+	# Club: dealer procs and spin rewards are halved.
+	run_store.augmentedTier = ""
+	var base_proc: float = run_store._dealer_effective_proc()
+	var base_scale: float = run_store._active_reward_scale()
+	run_store.augmentedTier = "club"
+	if not is_equal_approx(run_store._dealer_effective_proc(), base_proc * 0.5):
+		failures.append("issue111: club did not halve the dealer proc chance")
+	if not is_equal_approx(run_store._active_reward_scale(), base_scale * 0.5):
+		failures.append("issue111: club did not halve the spin reward scale")
+
+	# Spade: the banked end-of-run gain is halved (10% -> 5%).
+	run_store.augmentedTier = "spade"
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	meta_store.bank_run({ "lucidityCoins": 200, "scoreEarned": 0, "neurons": 1 }, "flatline")
+	if int(meta_store.lucidityWallet) != 10:
+		failures.append("issue111: spade banked %d of 200, expected 5%% = 10" % int(meta_store.lucidityWallet))
+	if not is_equal_approx(machine._end_run_lucidity_kept_fraction(), 0.05):
+		failures.append("issue111: machine kept-fraction display does not match the spade bank")
+
+	# Heart: the machine no longer tops up a brain-triple free spin.
+	run_store.augmentedTier = "heart"
+	var spins_before := int(run_store.freeSpinsRemaining)
+	machine._apply_symbol_triple("brain", 0, false)
+	if int(run_store.freeSpinsRemaining) != spins_before:
+		failures.append("issue111: heart brain triple still granted a free spin")
+
+	# A full run reset clears the tier; starting a new run keeps it.
+	run_store.augmentedTier = "club"
+	run_store.reset_run_state()
+	if String(run_store.augmentedTier) != "":
+		failures.append("issue111: reset_run_state kept the augmented tier")
+
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+	run_store.reset_run_state()
+	run_store.augmentedTier = prev_tier
+	run_store.runPhase = prev_phase
+	run_store.powersUsedThisSpin = prev_powers
+
+# Augmented Run menu (issue #111): the selector is hidden before the unlock and
+# appears under START RUN afterwards, communicating the tier before the start.
+func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.is_first_launch = false
+
+	meta_store.augmentedRunUnlocked = false
+	var menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(menu)
+	await process_frame
+	var selector := menu.get_node_or_null("MenuColumn/AugmentedSelector") as Control
+	if selector == null:
+		failures.append("issue111: menu has no augmented selector node")
+	elif selector.visible:
+		failures.append("issue111: selector visible before the wealth unlock")
+	menu.queue_free()
+
+	meta_store.augmentedRunUnlocked = true
+	menu = (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(menu)
+	await process_frame
+	selector = menu.get_node_or_null("MenuColumn/AugmentedSelector") as Control
+	var desc := menu.get_node_or_null("MenuColumn/AugmentedDescription") as Label
+	var start := menu.get_node_or_null("MenuColumn/StartButton") as Button
+	if selector == null or not selector.visible:
+		failures.append("issue111: selector hidden after the wealth unlock")
+	elif desc == null or start == null:
+		failures.append("issue111: selector is missing its description or start button")
+	else:
+		# The selector sits directly below START RUN, per the authored sheet.
+		if selector.get_index() != start.get_index() + 1:
+			failures.append("issue111: selector is not directly below START RUN")
+		if desc.text != "CLASSIC RUN":
+			failures.append("issue111: empty selection should read CLASSIC RUN")
+		menu._cycle_augmented_tier(1) # "" -> heart
+		if String(menu._selected_augmented_tier) != "heart":
+			failures.append("issue111: cycling right did not select heart")
+		if desc.text != "JACKPOT 100, NO FREE SPIN":
+			failures.append("issue111: heart description not communicated before start")
+		if start.text != "AUGMENTED RUN":
+			failures.append("issue111: start button did not switch to AUGMENTED RUN")
+		var icon := menu.get_node_or_null("MenuColumn/AugmentedSelector/SuitBox/SuitIcon") as TextureRect
+		if icon == null or icon.texture == null:
+			failures.append("issue111: heart selection shows no suit icon")
+		menu._cycle_augmented_tier(-1) # heart -> ""
+		if start.text == "AUGMENTED RUN":
+			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
+	menu.queue_free()
+	run_store.augmentedTier = ""
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+

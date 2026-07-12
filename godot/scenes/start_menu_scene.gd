@@ -12,6 +12,18 @@ extends Control
 ## state has to be threaded through the scene change here.
 
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
+# Authored menu background (issue #111 sheet set); falls back to the shop bg.
+const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
+# Augmented Run (issue #111): tier selector shown under START RUN once wealth
+# has been reached. Cycling picks one suit modifier (joker = all four).
+const AUGMENTED_DESCRIPTIONS := {
+	"": "CLASSIC RUN",
+	"heart": "JACKPOT 100, NO FREE SPIN",
+	"spade": "END-OF-RUN GAIN HALVED",
+	"diamond": "MAX 2 POWERS PER SPIN",
+	"club": "DEALER + REWARDS HALVED",
+	"joker": "ALL FOUR MODIFIERS",
+}
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const CANVAS_W := 160.0
@@ -57,6 +69,10 @@ var _scores_button: Button = null
 var _campaign_label: Label = null
 var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
+var _augmented_row: HBoxContainer = null
+var _augmented_icon: TextureRect = null
+var _augmented_desc: Label = null
+var _selected_augmented_tier := ""
 var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
@@ -68,6 +84,7 @@ func _ready() -> void:
 	_bind_scene_nodes()
 	_build_background()
 	_build_menu()
+	_build_augmented_selector()
 	if not Engine.is_editor_hint() and not RunStateStore.state_changed.is_connected(_refresh_start_button):
 		RunStateStore.state_changed.connect(_refresh_start_button)
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_refresh_campaign_ui):
@@ -95,7 +112,20 @@ func _bind_scene_nodes() -> void:
 
 func _build_background() -> void:
 	if _background != null:
-		if _background.texture == null:
+		# Prefer the authored neon casino backdrop (issue #111); the scene's
+		# placeholder/legacy texture is replaced when the asset exists.
+		var neon := Assets.texture(MENU_BG_ASSET, true)
+		if neon != null:
+			_background.texture = neon
+			_background.centered = false
+			_background.position = Vector2.ZERO
+			_background.scale = Vector2(160.0 / neon.get_width(), 320.0 / neon.get_height())
+			# The scene's Dim rect is fully opaque (tuned for the legacy black
+			# bg); soften it so the neon backdrop reads while text stays legible.
+			var dim := get_node_or_null("Dim") as ColorRect
+			if dim != null:
+				dim.color = Color(0.02, 0.01, 0.04, 0.42)
+		elif _background.texture == null:
 			var tex := Assets.texture("dealer_shop_bg.png", true)
 			if tex == null:
 				return
@@ -217,6 +247,82 @@ func _layout_menu_column() -> void:
 	if spacer != null:
 		spacer.custom_minimum_size = Vector2(0.0, TITLE_SPACER_H)
 
+# ── Augmented Run selector (issue #111) ────────────────────────────────────────────
+# A yellow-bound suit selector under START RUN, matching the authored states
+# sheet: < [suit] >. Hidden until MetaStateStore.augmentedRunUnlocked; empty
+# selection = classic run. The description line spells the modifier out before
+# the run starts.
+
+func _build_augmented_selector() -> void:
+	var col := get_node_or_null("MenuColumn") as VBoxContainer
+	if col == null or _start_button == null or _augmented_row != null:
+		return
+	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
+		_selected_augmented_tier = String(RunStateStore.augmentedTier)
+	_augmented_row = HBoxContainer.new()
+	_augmented_row.name = "AugmentedSelector"
+	_augmented_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_augmented_row.add_theme_constant_override("separation", 2)
+	col.add_child(_augmented_row)
+	col.move_child(_augmented_row, _start_button.get_index() + 1)
+
+	_augmented_row.add_child(_augmented_arrow_button("<", -1))
+	var box := PanelContainer.new()
+	box.name = "SuitBox"
+	box.custom_minimum_size = Vector2(56.0, 14.0)
+	var box_style := StyleBoxFlat.new()
+	box_style.bg_color = Color(0.05, 0.06, 0.02, 0.9)
+	box_style.border_color = Color(0.78, 0.82, 0.18)
+	box_style.set_border_width_all(1)
+	box_style.set_corner_radius_all(2)
+	box.add_theme_stylebox_override("panel", box_style)
+	_augmented_icon = TextureRect.new()
+	_augmented_icon.name = "SuitIcon"
+	_augmented_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_augmented_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_augmented_icon.custom_minimum_size = Vector2(10.0, 10.0)
+	_augmented_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	box.add_child(_augmented_icon)
+	_augmented_row.add_child(box)
+	_augmented_row.add_child(_augmented_arrow_button(">", 1))
+
+	_augmented_desc = _label("", 5, Color(0.9, 0.9, 0.62))
+	_augmented_desc.name = "AugmentedDescription"
+	col.add_child(_augmented_desc)
+	col.move_child(_augmented_desc, _augmented_row.get_index() + 1)
+	_refresh_augmented_selector()
+
+func _augmented_arrow_button(glyph: String, step: int) -> Button:
+	var b := Button.new()
+	b.name = "CycleLeft" if step < 0 else "CycleRight"
+	b.text = glyph
+	b.custom_minimum_size = Vector2(16.0, 14.0)
+	b.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
+	b.pressed.connect(_cycle_augmented_tier.bind(step))
+	return b
+
+func _cycle_augmented_tier(step: int) -> void:
+	var cycle := RunStateStore.AUGMENTED_TIER_CYCLE
+	var idx := cycle.find(_selected_augmented_tier)
+	idx = (idx + step + cycle.size()) % cycle.size()
+	_selected_augmented_tier = cycle[idx]
+	_refresh_augmented_selector()
+	_refresh_start_button()
+
+func _refresh_augmented_selector() -> void:
+	if _augmented_row == null:
+		return
+	var unlocked := Engine.is_editor_hint() or MetaStateStore.augmentedRunUnlocked
+	_augmented_row.visible = unlocked
+	if _augmented_desc != null:
+		_augmented_desc.visible = unlocked
+		_augmented_desc.text = String(AUGMENTED_DESCRIPTIONS.get(_selected_augmented_tier, ""))
+	if _augmented_icon != null:
+		_augmented_icon.texture = null if Engine.is_editor_hint() \
+			else Assets.augmented_suit_icon(_selected_augmented_tier)
+
 func _refresh_start_button() -> void:
 	if _start_button == null:
 		return
@@ -227,6 +333,10 @@ func _refresh_start_button() -> void:
 	elif not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
 		_start_button.text = "START FRESH AGAIN"
 		_start_button.add_theme_font_size_override("font_size", 8)
+	elif not Engine.is_editor_hint() and MetaStateStore.augmentedRunUnlocked \
+			and _selected_augmented_tier != "":
+		_start_button.text = "AUGMENTED RUN"
+		_start_button.add_theme_font_size_override("font_size", 9)
 	else:
 		_start_button.text = "START RUN"
 		_start_button.add_theme_font_size_override("font_size", 11)
@@ -258,6 +368,7 @@ func _refresh_campaign_ui() -> void:
 		_campaign_hint.text = "NO NEURONS. RETURNING ENDS THIS MIND."
 	else:
 		_campaign_hint.text = "EACH RETURN COSTS ONE. REACH WEALTH BEFORE ZERO."
+	_refresh_augmented_selector()
 	_refresh_start_button()
 
 func _connect_button(button: Button, cb: Callable) -> void:
@@ -332,6 +443,11 @@ func _start_run() -> void:
 		MetaStateStore.mark_campaign_failed()
 		_refresh_campaign_ui()
 		return
+	# Augmented Run (issue #111): the picked suit applies to the run this visit
+	# starts. Set here (after every reset path above) so start_new_run keeps it.
+	if not Engine.is_editor_hint():
+		RunStateStore.augmentedTier = _selected_augmented_tier \
+			if MetaStateStore.augmentedRunUnlocked else ""
 	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
 	# pre-run shop mode and starts the run once the player leaves the counter.
 	get_tree().change_scene_to_file(DEALER_SCENE)

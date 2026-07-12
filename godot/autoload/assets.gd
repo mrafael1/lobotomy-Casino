@@ -69,6 +69,31 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 	_fonts[rel] = null
 	return null
 
+# ── Augmented Run (issue #111) ───────────────────────────────────────────────────────
+# Suit tier icons cropped from the authored start-menu states sheet (887x1774):
+# the selector art per tier. Shared by the start menu selector and the machine's
+# in-run restriction badge.
+const AUGMENTED_SHEET_REL := "start_menu/start_menu_states_sheet.png"
+const AUGMENTED_ICON_RECTS := {
+	"heart": Rect2(642.0, 689.0, 36.0, 36.0),
+	"spade": Rect2(209.0, 1132.0, 36.0, 36.0),
+	"diamond": Rect2(642.0, 1132.0, 36.0, 36.0),
+	"club": Rect2(209.0, 1574.0, 36.0, 36.0),
+	"joker": Rect2(638.0, 1570.0, 44.0, 44.0),
+}
+
+## AtlasTexture of one suit tier's icon, or null for "" / unknown tiers.
+func augmented_suit_icon(tier: String) -> AtlasTexture:
+	if not AUGMENTED_ICON_RECTS.has(tier):
+		return null
+	var tex := texture(AUGMENTED_SHEET_REL, true)
+	if tex == null:
+		return null
+	var at := AtlasTexture.new()
+	at.atlas = tex
+	at.region = AUGMENTED_ICON_RECTS[tier]
+	return at
+
 # ── Skinned buttons ─────────────────────────────────────────────────────────────────
 # Button art lives in horizontal sprite sheets under ui/. Frame order by count:
 #   2 -> [normal, pressed]   3 -> [normal, hover, pressed]   4 -> [+ disabled]
