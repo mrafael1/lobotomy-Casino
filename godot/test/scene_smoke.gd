@@ -1786,8 +1786,14 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		var done_center: float = done_button.position.y + done_button.size.y * 0.5
 		if not is_equal_approx(done_center, modal_bottom):
 			failures.append("issue130: DONE button is not centered on the modal edge")
-		if done_button.size.x >= 40.0 or done_button.size.y >= 10.0:
-			failures.append("issue130: DONE button is still oversized")
+		# Sized up to read as a real button (follow-up tweak), but still well
+		# inside the 144px-wide modal frame.
+		if done_button.size.x < 40.0 or done_button.size.y < 10.0:
+			failures.append("issue130: DONE button too small to read as a button")
+		if done_button.size.x > 64.0 or done_button.size.y > 16.0:
+			failures.append("issue130: DONE button is oversized for the modal")
+		if done_button.pivot_offset != done_button.size * 0.5:
+			failures.append("issue130: DONE button press animation needs a centered pivot")
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
 	if brain_symbol_button == null or brain_icon == null:

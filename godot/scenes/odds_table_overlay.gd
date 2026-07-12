@@ -47,7 +47,7 @@ const SYMBOL_HIT_SIZE := Vector2(32.0, 32.0)
 # inside it, scaled down slightly so it clears the box outline.
 const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
 const ODD_ICON_SIZE := 24.0
-const DONE_BUTTON_SIZE := Vector2(32.0, 8.0)
+const DONE_BUTTON_SIZE := Vector2(44.0, 12.0)
 const DONE_BUTTON_Y := MODAL_FRAME_RECT.position.y + MODAL_FRAME_RECT.size.y \
 	+ TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5 - 10.0
 
@@ -168,7 +168,7 @@ func _rebuild() -> void:
 	done.text = "DONE"
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
 	done.z_index = 4
-	done.add_theme_font_size_override("font_size", 4)
+	done.add_theme_font_size_override("font_size", 5)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
 	done.add_theme_color_override("font_color", Color.WHITE)
@@ -188,9 +188,11 @@ func _rebuild() -> void:
 	done.add_theme_stylebox_override(&"pressed", done_pressed)
 	done.add_theme_stylebox_override(&"focus", done_hover)
 	done.custom_minimum_size = Vector2.ZERO
-	done.pressed.connect(_close)
+	done.button_down.connect(_on_done_button_down.bind(done))
+	done.button_up.connect(_on_done_button_up.bind(done))
 	add_child(done)
 	done.size = DONE_BUTTON_SIZE
+	done.pivot_offset = DONE_BUTTON_SIZE * 0.5
 
 	_refresh()
 
@@ -275,6 +277,22 @@ func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
 	add_child(b)
 	return b
 
+## DONE press feedback: squash while held, pop back on release, then commit.
+## The close is deferred until the release tween ends so the tap reads on screen.
+func _on_done_button_down(done: Button) -> void:
+	done.scale = Vector2.ONE * 0.85
+	var tw := create_tween()
+	tw.tween_property(done, "scale", Vector2.ONE * 0.9, 0.06) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _on_done_button_up(done: Button) -> void:
+	var was_click := done.is_hovered()
+	var tw := create_tween()
+	tw.tween_property(done, "scale", Vector2.ONE, 0.08) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if was_click:
+		tw.finished.connect(_close)
+
 func _on_symbol_button_down(symbol_id: String, button: Button, icon: Sprite2D) -> void:
 	if icon != null:
 		var rest_scale: Vector2 = icon.get_meta("rest_scale", Vector2.ONE)
@@ -318,8 +336,10 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	var label := Label.new()
 	label.name = "PctLabel"
 	label.text = text
-	label.position = Vector2(3.0, 1.0)
-	label.size = popup_size - Vector2(6.0, 2.0)
+	# Fill the whole bubble so the centered alignment is symmetric (the old
+	# fixed insets left the text visibly off-centre).
+	label.position = Vector2.ZERO
+	label.size = popup_size
 	label.custom_minimum_size = Vector2.ZERO
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.clip_text = true
@@ -332,7 +352,7 @@ func _show_pct_popup(symbol_id: String, button: Button) -> void:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	bg.add_child(label)
-	label.set_deferred("size", popup_size - Vector2(6.0, 2.0))
+	label.set_deferred("size", popup_size)
 	_pct_popup.size = popup_size
 	var pos := button.position + Vector2(button.size.x * 0.5 - popup_size.x * 0.5,
 		-popup_size.y - 3.0)
