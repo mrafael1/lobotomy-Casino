@@ -4026,49 +4026,59 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 	var menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(menu)
 	await process_frame
-	var selector := menu.get_node_or_null("MenuColumn/AugmentedSelector") as Control
+	var selector := menu.get_node_or_null("AugmentedSelector") as Control
+	var menu_art := menu.get_node_or_null("MenuArt") as Sprite2D
 	if selector == null:
 		failures.append("issue111: menu has no augmented selector node")
 	elif selector.visible:
 		failures.append("issue111: selector visible before the wealth unlock")
+	if menu_art == null:
+		failures.append("issue111: menu is not built on the start_menu frames")
+	elif menu_art.frame != 0:
+		failures.append("issue111: locked menu should show frame 0 of start_menu.png")
 	menu.queue_free()
 
 	meta_store.augmentedRunUnlocked = true
 	menu = (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(menu)
 	await process_frame
-	selector = menu.get_node_or_null("MenuColumn/AugmentedSelector") as Control
-	var desc := menu.get_node_or_null("MenuColumn/AugmentedDescription") as Label
-	var start := menu.get_node_or_null("MenuColumn/StartButton") as Button
+	selector = menu.get_node_or_null("AugmentedSelector") as Control
+	menu_art = menu.get_node_or_null("MenuArt") as Sprite2D
+	var symbols := menu.get_node_or_null("AugmentedSymbols") as Sprite2D
+	var desc := menu.get_node_or_null("AugmentedDescription") as Label
+	var start := menu._start_button as Button
 	if selector == null or not selector.visible:
 		failures.append("issue111: selector hidden after the wealth unlock")
-	elif desc == null or start == null:
-		failures.append("issue111: selector is missing its description or start button")
+	elif desc == null or start == null or symbols == null or menu_art == null:
+		failures.append("issue111: unlocked menu is missing selector/description/symbols nodes")
 	else:
-		# The selector sits directly below START RUN, per the authored sheet.
-		if selector.get_index() != start.get_index() + 1:
-			failures.append("issue111: selector is not directly below START RUN")
+		if menu_art.frame != 1:
+			failures.append("issue111: unlocked menu should show frame 1 of start_menu.png")
+		if not symbols.visible or symbols.frame != 0:
+			failures.append("issue111: empty selection should show symbols frame 0 (no augment)")
 		if desc.text != "CLASSIC RUN":
 			failures.append("issue111: empty selection should read CLASSIC RUN")
-		menu._cycle_augmented_tier(1) # "" -> heart
+		menu._cycle_augmented_tier(1) # "" -> heart (art frame order)
 		if String(menu._selected_augmented_tier) != "heart":
 			failures.append("issue111: cycling right did not select heart")
+		if symbols.frame != 1:
+			failures.append("issue111: heart selection should show symbols frame 1")
 		if desc.text != "JACKPOT 100, NO FREE SPIN":
 			failures.append("issue111: heart description not communicated before start")
 		if start.text != "AUGMENTED RUN":
 			failures.append("issue111: start button did not switch to AUGMENTED RUN")
-		var icon := menu.get_node_or_null("MenuColumn/AugmentedSelector/SuitBox/SuitIcon") as TextureRect
-		if icon == null or icon.texture == null:
-			failures.append("issue111: heart selection shows no suit icon")
 		menu._cycle_augmented_tier(-1) # heart -> ""
 		if start.text == "AUGMENTED RUN":
 			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
-		# Modifiers can't change mid-run: a held run hides the whole selector.
+		# Modifiers can't change mid-run: a held run drops back to the locked
+		# layout (frame 0) and hides the selector.
 		var prev_phase := String(run_store.runPhase)
 		run_store.runPhase = "running"
 		menu._refresh_augmented_selector()
 		if selector.visible:
 			failures.append("issue111: selector still shown while a run is held")
+		if menu_art.frame != 0:
+			failures.append("issue111: held run should show the selector-less frame 0")
 		run_store.runPhase = prev_phase
 	menu.queue_free()
 	run_store.augmentedTier = ""

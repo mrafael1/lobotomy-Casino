@@ -62,7 +62,9 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 #   diamond (3): only two powers may be used per spin
 #   club    (4): dealer visits and spin rewards are halved
 const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
-const AUGMENTED_TIER_CYCLE: Array[String] = ["", "heart", "spade", "diamond", "club", "joker"]
+# Selector cycle in the authored frame order of start_menu_augmented symbols.png
+# (frame index = position here): no augment, heart, diamond, spade, club, joker.
+const AUGMENTED_TIER_CYCLE: Array[String] = ["", "heart", "diamond", "spade", "club", "joker"]
 var augmentedTier := ""       # "" (classic) | heart | spade | diamond | club | joker
 var powersUsedThisSpin := 0   # diamond modifier: hard cap of 2 power uses per spin
 ## Permanent odds upgrades cap out at this many levels per symbol (issue #50: 8 bars).
