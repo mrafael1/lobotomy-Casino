@@ -1774,6 +1774,25 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if overlay._neon_glow_layer == null or overlay._neon_glow_tween == null \
 			or not overlay._neon_glow_tween.is_valid():
 		failures.append("issue130: odds-table neon glow layer is not active")
+	elif overlay._neon_glow_layer.get_child_count() != 2 \
+			or not (overlay._neon_glow_layer.get_child(0) is Line2D) \
+			or not (overlay._neon_glow_layer.get_child(1) is Line2D):
+		failures.append("issue130: odds-table neon should draw only the modal border")
+	var done_button: Button = null
+	for child in overlay.get_children():
+		if child is Button and (child as Button).text == "DONE":
+			done_button = child as Button
+			break
+	if done_button == null:
+		failures.append("issue130: odds-table DONE button is missing")
+	else:
+		var modal_bottom: float = overlay.NEON_FRAME_RECT.position.y \
+			+ overlay.NEON_FRAME_RECT.size.y + overlay.TABLE_Y_OFFSET
+		var done_center: float = done_button.position.y + done_button.size.y * 0.5
+		if not is_equal_approx(done_center, modal_bottom):
+			failures.append("issue130: DONE button is not centered on the modal edge")
+		if done_button.size.x >= 40.0 or done_button.size.y >= 10.0:
+			failures.append("issue130: DONE button is still oversized")
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
 	if brain_symbol_button == null or brain_icon == null:

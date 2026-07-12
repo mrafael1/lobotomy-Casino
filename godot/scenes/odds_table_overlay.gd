@@ -134,29 +134,36 @@ func _spawn_neon_glows() -> void:
 	_neon_glow_layer = layer
 
 	_add_neon_outline(layer, Rect2(NEON_FRAME_RECT.position + Vector2(0.0, TABLE_Y_OFFSET),
-		NEON_FRAME_RECT.size), NEON_FRAME_COLOR, 2)
+		NEON_FRAME_RECT.size), NEON_FRAME_COLOR)
 
 	_neon_glow_tween = create_tween().set_loops()
 	_neon_glow_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_LOW, NEON_PULSE_TIME)
 	_neon_glow_tween.tween_property(layer, "modulate:a", NEON_PULSE_HIGH, NEON_PULSE_TIME)
 
-func _add_neon_outline(parent: Control, rect: Rect2, color: Color, shadow_size: int) -> void:
-	var outline := Panel.new()
-	outline.name = "NeonOutline"
-	outline.position = rect.position
-	outline.size = rect.size
-	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	style.border_color = Color(color.r, color.g, color.b, 0.72)
-	style.set_border_width_all(1)
-	style.shadow_color = Color(color.r, color.g, color.b, 0.42)
-	style.shadow_size = shadow_size
-	style.shadow_offset = Vector2.ZERO
-	style.anti_aliasing = false
-	outline.add_theme_stylebox_override(&"panel", style)
-	parent.add_child(outline)
+func _add_neon_outline(parent: Control, rect: Rect2, color: Color) -> void:
+	var points := PackedVector2Array([
+		rect.position,
+		rect.position + Vector2(rect.size.x, 0.0),
+		rect.position + rect.size,
+		rect.position + Vector2(0.0, rect.size.y),
+	])
+	var halo := Line2D.new()
+	halo.name = "NeonHalo"
+	halo.points = points
+	halo.closed = true
+	halo.width = 3.0
+	halo.default_color = Color(color.r, color.g, color.b, 0.24)
+	halo.antialiased = false
+	parent.add_child(halo)
+	var core := Line2D.new()
+	core.name = "NeonCore"
+	core.points = points
+	core.closed = true
+	core.width = 1.0
+	core.default_color = Color(color.r, color.g, color.b, 0.82)
+	core.antialiased = false
+	parent.add_child(core)
 
 ## Full-canvas sheet sprite (dealer-scene pattern): scaled so one frame covers
 ## the 160x320 canvas exactly.
@@ -233,14 +240,30 @@ func _rebuild() -> void:
 	var done := Button.new()
 	done.text = "DONE"
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
-	done.size = DONE_BUTTON_SIZE
 	done.z_index = 4
-	done.add_theme_font_size_override("font_size", 5)
+	done.add_theme_font_size_override("font_size", 4)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(done)
+	done.add_theme_color_override("font_color", Color.WHITE)
+	done.add_theme_color_override("font_hover_color", Color.WHITE)
+	done.add_theme_color_override("font_pressed_color", Color.WHITE)
+	var done_style := StyleBoxFlat.new()
+	done_style.bg_color = Color("#b4202a")
+	done_style.border_color = Color("#e86a73")
+	done_style.set_border_width_all(1)
+	done_style.set_corner_radius_all(1)
+	var done_hover := done_style.duplicate() as StyleBoxFlat
+	done_hover.bg_color = Color("#d3414d")
+	var done_pressed := done_style.duplicate() as StyleBoxFlat
+	done_pressed.bg_color = Color("#73172d")
+	done.add_theme_stylebox_override(&"normal", done_style)
+	done.add_theme_stylebox_override(&"hover", done_hover)
+	done.add_theme_stylebox_override(&"pressed", done_pressed)
+	done.add_theme_stylebox_override(&"focus", done_hover)
+	done.custom_minimum_size = Vector2.ZERO
 	done.pressed.connect(_close)
 	add_child(done)
+	done.size = DONE_BUTTON_SIZE
 
 	_refresh()
 
