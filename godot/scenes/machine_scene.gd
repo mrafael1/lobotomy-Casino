@@ -143,6 +143,21 @@ const SCORE_TABLE_INFO_ROW_Y := [58.3, 101.7, 145.1, 188.6, 232.0, 276.6]
 # Vertical centers of the art's row bands (dark grid lines sit at canvas y 23.4,
 # 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
 const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
+# Baked symbol column (the icon boxes on the left): hold one to peek at the
+# symbol's live draw chance, same mechanic as the dealer odds table.
+const SCORE_TABLE_SYMBOL_CX := 30.0
+const SCORE_TABLE_SYMBOL_HIT := Vector2(34.0, 35.0)
+# Per-symbol bubble colors — keep in sync with OddsTableOverlay.SYMBOL_PERCENT_COLORS
+# (can't reference the class here: pulling odds_table_overlay.gd into this
+# script's compile chain breaks headless -s runs, which compile before autoloads).
+const SCORE_TABLE_PCT_COLORS := {
+	"brain": Color("#e86a73"),
+	"eye": Color("#ce3dde"),
+	"pill": Color("#e3e6ff"),
+	"syringe": Color("#f9a31b"),
+	"vial": Color("#b4202a"),
+	"flatline": Color("#8f0d16"),
+}
 const SCORE_TABLE_LVL_CX := 66.0
 const SCORE_TABLE_PAIR_CX := 99.0
 const SCORE_TABLE_TRIPLE_CX := 131.5
@@ -386,6 +401,7 @@ var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
+var _score_symbol_buttons: Array[Button] = []
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -2893,6 +2909,7 @@ func _show_score_table() -> void:
 		return
 	_clear_targeting()
 	_score_info_buttons.clear()
+	_score_symbol_buttons.clear()
 	_score_overlay = Control.new()
 	_score_overlay.size = Vector2(SRC_W, SRC_H)
 	_score_overlay.z_index = 130 # above HUD extras, below the options overlay (140)
@@ -2954,6 +2971,9 @@ func _show_score_table() -> void:
 		# shows while the button is held (button_down/button_up also fire from
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
+		# Hold-to-peek draw chance on the baked symbol box, same mechanic as the
+		# dealer odds table's symbol buttons.
+		_score_symbol_buttons.append(_build_score_symbol_button(symbol_id, row_cy))
 
 	# BACK close button: a wide rounded rectangle centered in the bottom
 	# red band with the text in its middle. The text lives on a child
@@ -3008,7 +3028,11 @@ func _show_score_table() -> void:
 	# Vertical focus chain (close -> rows -> close, wrapping) so keyboard and
 	# controller navigation can reach every interactive element (issue #119).
 	var chain: Array[Button] = [close]
-	chain.append_array(_score_info_buttons)
+	# Interleave per row: symbol pct peek, then the row's info button.
+	for i in _score_info_buttons.size():
+		if i < _score_symbol_buttons.size():
+			chain.append(_score_symbol_buttons[i])
+		chain.append(_score_info_buttons[i])
 	for c in chain.size():
 		var node := chain[c]
 		var up := chain[(c - 1 + chain.size()) % chain.size()]
@@ -3102,6 +3126,91 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 	b.button_up.connect(_on_score_info_up.bind(icon))
 	_score_overlay.add_child(b)
 	return b
+
+## Invisible hold area over a row's baked symbol box: while held, a bubble shows
+## the symbol's live draw chance — the same peek the dealer odds table offers.
+func _build_score_symbol_button(symbol_id: String, row_cy: float) -> Button:
+	var b := Button.new()
+	b.name = "SymbolPctButton_%s" % symbol_id
+	b.position = Vector2(SCORE_TABLE_SYMBOL_CX, row_cy) - SCORE_TABLE_SYMBOL_HIT * 0.5
+	b.size = SCORE_TABLE_SYMBOL_HIT
+	b.focus_mode = Control.FOCUS_ALL
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var focus := StyleBoxFlat.new()
+	focus.draw_center = false
+	focus.border_color = Color(0.0, 0.9, 1.0)
+	focus.set_border_width_all(1)
+	b.add_theme_stylebox_override("focus", focus)
+	b.button_down.connect(_show_score_pct_popup.bind(symbol_id, b))
+	b.button_up.connect(_hide_score_info_popup)
+	_score_overlay.add_child(b)
+	return b
+
+## Draw-chance bubble for a score-table symbol row: percent text and contour in
+## the symbol's row color, anchored right of the held symbol box.
+func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
+	_hide_score_info_popup()
+	if _score_overlay == null:
+		return
+	_score_info_popup = Control.new()
+	_score_info_popup.name = "PctPopup"
+	_score_info_popup.z_index = 5
+	_score_info_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var color_v: Variant = SCORE_TABLE_PCT_COLORS.get(symbol_id, Color(0.0, 0.9, 1.0))
+	var color: Color = color_v if color_v is Color else Color(0.0, 0.9, 1.0)
+	var text := "%.1f%%" % _symbol_draw_percent(symbol_id)
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
+	var popup_size := Vector2(maxf(text_width + 8.0, 24.0), 14.0)
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
+	bg_style.border_color = color
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.add_theme_stylebox_override("panel", bg_style)
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_info_popup.add_child(bg)
+	var label := Label.new()
+	label.text = text
+	label.size = popup_size
+	label.custom_minimum_size = Vector2.ZERO
+	label.clip_text = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	label.set_deferred("size", popup_size)
+	# Right of the symbol box, vertically centered on the row.
+	var pos := button.position + Vector2(button.size.x + 3.0,
+		button.size.y * 0.5 - popup_size.y * 0.5)
+	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+	_score_info_popup.position = pos.round() # off-grid blurs the pixel font
+	_score_overlay.add_child(_score_info_popup)
+
+## A symbol's current draw chance (percent) with all persisted levels applied —
+## mirrors OddsTableOverlay._symbol_percent / Evaluate._build_weights.
+func _symbol_draw_percent(symbol_id: String) -> float:
+	var total := 0.0
+	var weight := 0.0
+	for sym in Symbols.BASE_SYMBOL_CYCLE:
+		var s := String(sym)
+		var w := float(int(Symbols.WEIGHT[s])
+			+ RunStateStore.odds_upgrade_level(s) * RunStateStore.probability_increase_per_upgrade)
+		total += w
+		if s == symbol_id:
+			weight = w
+	return (weight / total) * 100.0 if total > 0.0 else 0.0
 
 ## Pressed state (issue #119): squash the "i" icon and pop up the triple-effect
 ## blurb next to the row for as long as the button is held.
@@ -3238,6 +3347,7 @@ func _info_line_segments(symbol_id: String, line: String) -> Array:
 func _close_score_table() -> void:
 	_hide_score_info_popup()
 	_score_info_buttons.clear()
+	_score_symbol_buttons.clear()
 	if _score_bulb_tween != null:
 		_score_bulb_tween.kill()
 		_score_bulb_tween = null

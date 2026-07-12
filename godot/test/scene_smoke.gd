@@ -3064,10 +3064,34 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	else:
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
-		if close.get_node_or_null(close.focus_neighbor_bottom) != info_buttons[0]:
-			failures.append("issue119: CLOSE does not link down to the first info row")
-		if (info_buttons[0] as Button).get_node_or_null((info_buttons[0] as Button).focus_neighbor_top) != close:
-			failures.append("issue119: first info row does not link back up to CLOSE")
+		# The chain now interleaves each row's symbol pct-peek button before its
+		# info button, so CLOSE links down into the first symbol button.
+		var first_symbol := machine._score_symbol_buttons[0] as Button
+		if close.get_node_or_null(close.focus_neighbor_bottom) != first_symbol:
+			failures.append("issue119: CLOSE does not link down to the first symbol row")
+		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_top) != close:
+			failures.append("issue119: first symbol row does not link back up to CLOSE")
+		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_bottom) != info_buttons[0]:
+			failures.append("issue119: first symbol row does not link down to its info button")
+	# Holding a symbol box peeks at the symbol's live draw chance (odds-table
+	# mechanic shared onto the score table).
+	if machine._score_symbol_buttons.size() != 6:
+		failures.append("score-pct: every row should have a symbol pct-peek button")
+	else:
+		var pct_button := machine._score_symbol_buttons[1] as Button
+		pct_button.button_down.emit()
+		var pct_popup: Control = machine._score_info_popup
+		if pct_popup == null or pct_popup.name != "PctPopup":
+			failures.append("score-pct: holding a symbol box did not show the pct bubble")
+		else:
+			var panel := pct_popup.get_child(0) as Panel
+			var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+			var expected: Color = machine.SCORE_TABLE_PCT_COLORS["eye"]
+			if style == null or not style.border_color.is_equal_approx(expected):
+				failures.append("score-pct: bubble contour is not the symbol row color")
+		pct_button.button_up.emit()
+		if machine._score_info_popup != null:
+			failures.append("score-pct: releasing the symbol box did not hide the pct bubble")
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []

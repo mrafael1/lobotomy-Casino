@@ -372,7 +372,9 @@ func _percent_color(symbol_id: String) -> Color:
 
 ## A symbol's current draw chance (percent) with all persisted + staged levels
 ## applied — the same additive weight layering Evaluate._build_weights uses for
-## the reel roll, minus run-only modifiers (book/brain boosts).
+## the reel roll, minus run-only modifiers (book/brain boosts). The machine
+## scene's score table duplicates this math (autoloads are unreachable from
+## static funcs, so it can't be shared as a static helper).
 func _symbol_percent(symbol_id: String) -> float:
 	var total := 0.0
 	var weight := 0.0
