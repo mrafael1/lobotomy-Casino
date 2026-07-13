@@ -4147,8 +4147,8 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	run_store.load_run_state()
 	if String(run_store.runPhase) != "pre_run" or String(run_store.augmentedTier) != "heart":
 		failures.append("persistence: dealer pre-run was not restored")
-	# A post-flatline dealer visit remains resumable while its odds phase is open,
-	# and only clears once that phase has been finalized.
+	# A post-flatline dealer visit remains resumable before and after its odds
+	# phase; a new run or GIVE UP owns the explicit reset.
 	run_store.reset_run_state()
 	run_store.runPhase = "over"
 	run_store.lastEnding = "flatline"
@@ -4172,15 +4172,18 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	var post_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
 	if post_run_stats == null or post_run_stats.text != "CURRENT COINS : 250":
 		failures.append("persistence: post-run CONTINUE modal lost the run coin balance")
-	start_menu.queue_free()
 	dealer.queue_free()
 	run_store.oddsPhaseCompleted = true
 	var finalized_dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(finalized_dealer)
 	finalized_dealer._on_options_return_to_menu()
-	if String(run_store.runPhase) != "idle":
-		failures.append("persistence: finalized odds dealer did not clear the finished run")
+	if String(run_store.runPhase) != "over" or not run_store.has_resume_state():
+		failures.append("persistence: finalized odds dealer lost the CONTINUE state")
+	start_menu._refresh_start_button()
+	if start_button == null or start_button.text != "CONTINUE":
+		failures.append("persistence: returning after odds completion should still show CONTINUE")
 	finalized_dealer.queue_free()
+	start_menu.queue_free()
 	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):

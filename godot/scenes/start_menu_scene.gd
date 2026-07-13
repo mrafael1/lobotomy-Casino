@@ -777,7 +777,7 @@ func _current_coins() -> int:
 
 func _resume_run() -> void:
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
-		or (RunStateStore.runPhase == "over" and not RunStateStore.oddsPhaseCompleted)
+		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline")
 	var resume_scene := DEALER_SCENE if resume_dealer else MACHINE_SCENE
 	get_tree().change_scene_to_file(resume_scene)
 

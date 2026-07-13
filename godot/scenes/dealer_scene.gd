@@ -1392,13 +1392,12 @@ func _on_leave() -> void:
 	if Engine.is_editor_hint():
 		return
 	if _pre_run:
-		if _post_run and RunStateStore.oddsPhaseCompleted:
-			RunStateStore.reset_run_state()
 		get_tree().change_scene_to_file(MENU_SCENE) # back to the menu hub
 		return
 	RunStateStore.decline_dealer_offer()
 	await _react_then_return()
 
 func _on_options_return_to_menu() -> void:
-	if _post_run and RunStateStore.oddsPhaseCompleted:
-		RunStateStore.reset_run_state()
+	# Keep a post-run session resumable on the menu; a new run or GIVE UP owns
+	# the explicit reset so returning here never loses the held coin balance.
+	pass
