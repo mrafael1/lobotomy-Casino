@@ -186,7 +186,7 @@ var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until fi
 var oddsPhaseCompleted := false           # closed screens stay closed until the next run
 
 # RunStore extras
-var runPhase := "idle" # idle | running | over
+var runPhase := "idle" # idle | pre_run | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
 var pendingPowerRestores: Array = []
@@ -250,7 +250,7 @@ func _run_state_properties() -> Array[String]:
 func _save_run_state() -> void:
 	if Engine.is_editor_hint():
 		return
-	if runPhase != "running":
+	if runPhase != "running" and runPhase != "pre_run":
 		# No live run, nothing to resume: a stale file must not offer CONTINUE.
 		if FileAccess.file_exists(RUN_SAVE_PATH):
 			DirAccess.remove_absolute(RUN_SAVE_PATH)
@@ -274,7 +274,8 @@ func load_run_state() -> void:
 	if not (data is Dictionary):
 		return
 	var saved := data as Dictionary
-	if String(saved.get("runPhase", "")) != "running":
+	var saved_phase := String(saved.get("runPhase", ""))
+	if saved_phase != "running" and saved_phase != "pre_run":
 		return
 	for prop in _run_state_properties():
 		if saved.has(prop):
@@ -618,6 +619,18 @@ func reset_run_state() -> void:
 	augmentedTier = ""
 	powersUsedThisSpin = 0
 	_commit()
+
+## Marks the pre-run dealer shop as a resumable session without spending a
+## campaign neuron. The dealer spends that neuron only when START is confirmed.
+func begin_pre_run() -> void:
+	if runPhase == "running":
+		return
+	runPhase = "pre_run"
+	lastEnding = null
+	_commit()
+
+func has_resume_state() -> bool:
+	return runPhase == "pre_run" or runPhase == "running"
 
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
 	if runPhase == "running":

@@ -1560,6 +1560,10 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 		failures.append("menu: the neuron meter should not render on the start menu")
 
 	var prev_phase := String(run_store.runPhase)
+	run_store.runPhase = "pre_run"
+	start_menu._refresh_start_button()
+	if start_menu._start_button == null or (start_menu._start_button as Button).text != "CONTINUE":
+		failures.append("menu: pre-run dealer return should show CONTINUE")
 	run_store.runPhase = "running"
 	run_store.lucidityCoins = 200
 	run_store.scoreEarned = 40
@@ -4064,6 +4068,17 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	if String(run_store.runPhase) != "running" or int(run_store.scoreEarned) != 123 \
 			or String(run_store.augmentedTier) != "heart" or int(run_store.betMultiplier) != 2:
 		failures.append("persistence: restart did not restore the live run")
+	# A dealer pre-run is also resumable, but it must return to the dealer rather
+	# than skipping straight to the machine.
+	run_store.reset_run_state()
+	run_store.begin_pre_run()
+	run_store.augmentedTier = "heart"
+	run_store._commit()
+	run_store.runPhase = "idle"
+	run_store.augmentedTier = ""
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "pre_run" or String(run_store.augmentedTier) != "heart":
+		failures.append("persistence: dealer pre-run was not restored")
 	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):

@@ -481,7 +481,7 @@ func _build_campaign_labels() -> void:
 # ── Augmented Run selector state (issue #111) ────────────────────────────────────────
 
 func _cycle_augmented_tier(step: int) -> void:
-	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
+	if not Engine.is_editor_hint() and RunStateStore.has_resume_state():
 		return # locked while a run is held
 	var cycle := RunStateStore.AUGMENTED_TIER_CYCLE
 	var idx := cycle.find(_selected_augmented_tier)
@@ -512,7 +512,7 @@ func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
 		return
 	var shown := _augmented_layout_active()
-	var run_held := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
+	var run_held := not Engine.is_editor_hint() and RunStateStore.has_resume_state()
 	_augmented_row.visible = shown
 	if _use_art:
 		_layout_art_menu(shown)
@@ -540,7 +540,7 @@ func _refresh_start_button() -> void:
 		return
 	# Run-phase changes also gate the selector (hidden while a run is held).
 	_refresh_augmented_selector()
-	var continuing := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
+	var continuing := not Engine.is_editor_hint() and RunStateStore.has_resume_state()
 	if continuing:
 		_start_button.text = "CONTINUE"
 		_start_button.add_theme_font_size_override("font_size", 10)
@@ -635,7 +635,7 @@ func _dismiss_tutorial(save_immediately := true) -> void:
 		MetaStateStore.mark_tutorial_seen(save_immediately)
 
 func _start_run() -> void:
-	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
+	if not Engine.is_editor_hint() and RunStateStore.has_resume_state():
 		# CONTINUE first shows the run's state (neurons, score) with the choice
 		# to resume or abandon, instead of jumping straight into the machine.
 		_show_continue_modal()
@@ -654,6 +654,7 @@ func _start_run() -> void:
 	if not Engine.is_editor_hint():
 		RunStateStore.augmentedTier = _selected_augmented_tier \
 			if MetaStateStore.augmentedRunUnlocked else ""
+		RunStateStore.begin_pre_run()
 	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
 	# pre-run shop mode and starts the run once the player leaves the counter.
 	get_tree().change_scene_to_file(DEALER_SCENE)
@@ -744,7 +745,8 @@ func _hide_continue_modal() -> void:
 		_continue_modal = null
 
 func _resume_run() -> void:
-	get_tree().change_scene_to_file(MACHINE_SCENE)
+	var resume_scene := DEALER_SCENE if RunStateStore.runPhase == "pre_run" else MACHINE_SCENE
+	get_tree().change_scene_to_file(resume_scene)
 
 ## Abandoning starts a fresh campaign: nothing is banked, the held run is
 ## cleared, and the campaign neuron meter returns to its full starting count.
