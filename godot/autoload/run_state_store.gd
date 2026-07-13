@@ -633,7 +633,12 @@ func begin_pre_run() -> void:
 	_commit()
 
 func has_resume_state() -> bool:
-	return runPhase == "pre_run" or runPhase == "running"
+	if runPhase == "pre_run" or runPhase == "running":
+		return true
+	# A flatline with an unfinished odds phase is still a resumable post-run
+	# dealer visit. Wealth exits go straight to the menu and must not reopen it.
+	return runPhase == "over" and str(lastEnding) == "flatline" \
+		and not oddsPhaseCompleted and int(MetaStateStore.campaignNeuronsLeft) > 0
 
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
 	if runPhase == "running":

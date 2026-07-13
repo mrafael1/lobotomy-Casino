@@ -640,8 +640,8 @@ func _dismiss_tutorial(save_immediately := true) -> void:
 
 func _start_run() -> void:
 	if not Engine.is_editor_hint() and RunStateStore.has_resume_state():
-		# CONTINUE first shows the run's state (neurons, score) with the choice
-		# to resume or abandon, instead of jumping straight into the machine.
+		# CONTINUE first shows the held session with the choice to resume or
+		# abandon, instead of jumping straight into another scene.
 		_show_continue_modal()
 		return
 	if not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
@@ -700,7 +700,7 @@ func _show_continue_modal() -> void:
 	NeuronMeter.attach(panel, Vector2(w * 0.5, 46.0))
 	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "CURRENT COINS : %d" % int(RunStateStore.lucidityCoins)
+	stats.text = "CURRENT COINS : %d" % _current_coins()
 	var close := _modal_close_button(w)
 	panel.add_child(close)
 
@@ -770,8 +770,15 @@ func _hide_continue_modal() -> void:
 		_continue_modal.queue_free()
 		_continue_modal = null
 
+func _current_coins() -> int:
+	if RunStateStore.runPhase == "pre_run":
+		return int(MetaStateStore.lucidityWallet)
+	return int(RunStateStore.lucidityCoins)
+
 func _resume_run() -> void:
-	var resume_scene := DEALER_SCENE if RunStateStore.runPhase == "pre_run" else MACHINE_SCENE
+	var resume_dealer := RunStateStore.runPhase == "pre_run" \
+		or (RunStateStore.runPhase == "over" and not RunStateStore.oddsPhaseCompleted)
+	var resume_scene := DEALER_SCENE if resume_dealer else MACHINE_SCENE
 	get_tree().change_scene_to_file(resume_scene)
 
 ## Abandoning starts a fresh campaign: nothing is banked, the held run is

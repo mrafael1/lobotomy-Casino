@@ -1596,10 +1596,28 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 		elif count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
 			failures.append("menu: modal neuron count reads '%s'" % count.text)
 	var stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
-	if stats == null or stats.text != "SCORE 40   L-COIN : 200":
-		failures.append("menu: CONTINUE modal stats should show score and L-COIN only")
-	if stats != null and stats.text.contains("LUCIDITY"):
-		failures.append("menu: CONTINUE modal still shows the old lucidity label")
+	if stats == null or stats.text != "CURRENT COINS : 200":
+		failures.append("menu: CONTINUE modal should show current coins only")
+	if stats != null and (stats.text.contains("SCORE") or stats.text.contains("LUCIDITY") \
+			or stats.text.contains("L-COIN")):
+		failures.append("menu: CONTINUE modal still shows the old score/coin label")
+	# A held pre-run dealer uses the banked wallet until the machine starts, so
+	# returning from that shop must not make the modal look empty.
+	var wallet_before_preview := int(meta_store.lucidityWallet)
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "pre_run"
+	meta_store.lucidityWallet = 321
+	start_menu._show_continue_modal()
+	var pre_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if pre_run_stats == null or pre_run_stats.text != "CURRENT COINS : 321":
+		failures.append("menu: pre-run CONTINUE modal should show the dealer wallet")
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "running"
+	meta_store.lucidityWallet = wallet_before_preview
+	start_menu._show_continue_modal()
+	await process_frame
 	var panel := start_menu.get_node_or_null("ContinueModal/Panel") as Panel
 	var close := start_menu.get_node_or_null("ContinueModal/Panel/CloseButton") as Button
 	if close == null:
@@ -1608,9 +1626,11 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 			or close.position.y >= 16.0):
 		failures.append("menu: CONTINUE modal close button is not in the top-right corner")
 	var resume := start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if stats != null and stats.position.y < 86.0:
+		failures.append("menu: current-coins label is too high under the neuron number")
 	if stats != null and resume != null \
-			and stats.position.y + stats.size.y + 8.0 > resume.position.y:
-		failures.append("menu: CONTINUE modal stats are too close to CONTINUE")
+			and stats.position.y + stats.size.y + 6.0 > resume.position.y:
+		failures.append("menu: current-coins label is too close to CONTINUE")
 	if close != null:
 		close.pressed.emit()
 		if start_menu._continue_modal != null or String(run_store.runPhase) != "running":
@@ -4127,18 +4147,40 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	run_store.load_run_state()
 	if String(run_store.runPhase) != "pre_run" or String(run_store.augmentedTier) != "heart":
 		failures.append("persistence: dealer pre-run was not restored")
-	# A post-flatline dealer visit must not leave a finished run resumable when
-	# the player backs out through its options menu.
+	# A post-flatline dealer visit remains resumable while its odds phase is open,
+	# and only clears once that phase has been finalized.
 	run_store.reset_run_state()
 	run_store.runPhase = "over"
+	run_store.lastEnding = "flatline"
+	run_store.lucidityCoins = 250
+	run_store.oddsPhaseCompleted = false
+	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsLeft))
 	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(dealer)
 	if not bool(dealer._post_run):
 		failures.append("persistence: dealer did not identify the finished-run visit")
 	dealer._on_options_return_to_menu()
-	if String(run_store.runPhase) != "idle":
-		failures.append("persistence: leaving post-flatline dealer left a resumable state")
+	if String(run_store.runPhase) != "over" or not run_store.has_resume_state():
+		failures.append("persistence: leaving pending odds dealer lost the resumable state")
+	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(start_menu)
+	start_menu._refresh_start_button()
+	var start_button := start_menu._start_button as Button
+	if start_button == null or start_button.text != "CONTINUE":
+		failures.append("persistence: pending odds dealer should show CONTINUE on the menu")
+	start_menu._show_continue_modal()
+	var post_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if post_run_stats == null or post_run_stats.text != "CURRENT COINS : 250":
+		failures.append("persistence: post-run CONTINUE modal lost the run coin balance")
+	start_menu.queue_free()
 	dealer.queue_free()
+	run_store.oddsPhaseCompleted = true
+	var finalized_dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(finalized_dealer)
+	finalized_dealer._on_options_return_to_menu()
+	if String(run_store.runPhase) != "idle":
+		failures.append("persistence: finalized odds dealer did not clear the finished run")
+	finalized_dealer.queue_free()
 	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):

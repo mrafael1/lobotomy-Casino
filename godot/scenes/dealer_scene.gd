@@ -1392,7 +1392,7 @@ func _on_leave() -> void:
 	if Engine.is_editor_hint():
 		return
 	if _pre_run:
-		if _post_run:
+		if _post_run and RunStateStore.oddsPhaseCompleted:
 			RunStateStore.reset_run_state()
 		get_tree().change_scene_to_file(MENU_SCENE) # back to the menu hub
 		return
@@ -1400,5 +1400,5 @@ func _on_leave() -> void:
 	await _react_then_return()
 
 func _on_options_return_to_menu() -> void:
-	if _post_run:
+	if _post_run and RunStateStore.oddsPhaseCompleted:
 		RunStateStore.reset_run_state()
