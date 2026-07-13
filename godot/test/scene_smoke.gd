@@ -978,6 +978,7 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 			failures.append("issue84: CANCEL did not dismiss the start-confirm modal")
 
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
+	_check_dealer_shop_light_art(dealer, failures)
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
 	for rel in ["dealer_scene_LAB_BUTTON.png", "dealer_scene_machine_BUTTON.png"]:
@@ -1034,6 +1035,39 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 			failures.append("issue55: dealer message is not just above the dealer: %s" % message.position)
 	if dealer.get_node_or_null("OfferSlot6") != null:
 		failures.append("issue55: the 1-Lucidity placeholder offer slot should be gone")
+
+func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
+	var expected_sizes: Dictionary = {
+		"dealer_shop/dealer_shop_bg_x8.png": Vector2i(1280, 2560),
+		"dealer_shop/dealer_shop_counter_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_LAB_BUTTON_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_machine_BUTTON_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_reroll_BUTTON_x8.png": Vector2i(2560, 2560),
+	}
+	for rel in expected_sizes:
+		var path := "res://assets/images/" + String(rel)
+		if not ResourceLoader.exists(path):
+			failures.append("dealer shop: missing scaled art %s" % rel)
+			continue
+		var texture := load(path) as Texture2D
+		var expected: Vector2i = expected_sizes[rel]
+		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
+			failures.append("dealer shop: %s is not an NN 8x sheet at %s" % [rel, expected])
+
+	var background := dealer.get_node_or_null("Background") as Sprite2D
+	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("dealer shop: background is not nearest-neighbor filtered")
+	var counter := dealer.get_node_or_null("Counter") as Sprite2D
+	if counter == null:
+		failures.append("dealer shop: counter node is missing")
+	elif counter.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+			or counter.hframes != 2 or counter.scale != Vector2(0.125, 0.125):
+		failures.append("dealer shop: counter is not a nearest-neighbor 2-frame 8x sheet")
+	for art_name in ["LabButtonArt", "MachineButtonArt", "RerollButtonArt"]:
+		var art := dealer.get_node_or_null(art_name) as Sprite2D
+		if art == null or art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+				or art.hframes != 2 or art.scale != Vector2(0.125, 0.125):
+			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame 8x sheet" % art_name)
 
 # Issue #117 (repriced): the dealer-scene painting rerolls the current offer for
 # an escalating Lucidity price (5, 10, 15, …) in BOTH dealer phases. Covers the

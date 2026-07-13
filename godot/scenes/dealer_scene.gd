@@ -65,15 +65,16 @@ const SETTINGS_ASSET := "ui/settings.png"
 const COIN_ASSET := "ui/coin.png"
 # Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
 # they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
-const MACHINE_BUTTON_ASSET := "dealer_scene_machine_BUTTON.png"
-const LAB_BUTTON_ASSET := "dealer_scene_LAB_BUTTON.png"
+const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
+const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON_x8.png"
+const LAB_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_LAB_BUTTON_x8.png"
 # Opaque bounds of each button's art (source px, measured with pngjs) — the
 # invisible hit buttons cover exactly these rects.
 const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
 const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
-const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
+const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_reroll_BUTTON_x8.png"
 const PAINTING_BUTTON_RECT := Rect2(2.0, 78.0, 29.0, 25.0)
 const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
@@ -242,7 +243,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, rel: String, hframes := 1, fra
 		spr.centered = false
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return spr
 
 func _full_canvas_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
@@ -257,23 +258,24 @@ func _full_canvas_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_full_canvas_sprite(_background_sprite, "dealer_shop_bg.png")
+		_configure_full_canvas_sprite(_background_sprite, DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 		_portrait_sprite = _configure_full_canvas_sprite(_portrait_sprite, "dealer_portrait.png", 2, 0)
-		_configure_full_canvas_sprite(_counter_sprite, "dealer_shop_counter.png")
+		_configure_full_canvas_sprite(_counter_sprite,
+				DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_x8.png", 2, 0)
 		return
 	var bg := ColorRect.new() # wall colour behind any gap
 	bg.color = Color(0.055, 0.03, 0.11)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	_full_canvas_sprite("dealer_shop_bg.png")
+	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 	_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
-	_full_canvas_sprite("dealer_shop_counter.png")
+	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_x8.png", 2, 0)
 
 # Brief dealer reaction: swap the 2-frame portrait.
 func _dealer_react() -> void:
