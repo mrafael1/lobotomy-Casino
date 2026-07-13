@@ -1565,12 +1565,14 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 	if start_menu._start_button == null or (start_menu._start_button as Button).text != "CONTINUE":
 		failures.append("menu: pre-run dealer return should show CONTINUE")
 	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
 	run_store.lucidityCoins = 200
 	run_store.scoreEarned = 40
 	meta_store.ownedPermanents = []
 	meta_store.lucidityWallet = 0
-	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsMax) - 1)
+	meta_store.campaignNeuronsLeft = int(meta_store.campaignNeuronsMax)
 	start_menu._show_continue_modal()
+	await process_frame
 	var meter := _find_neuron_meter(start_menu)
 	if meter == null:
 		failures.append("menu: CONTINUE modal is missing the neuron meter")
@@ -1593,8 +1595,29 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 			failures.append("menu: modal meter is missing the numeric neuron count")
 		elif count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
 			failures.append("menu: modal neuron count reads '%s'" % count.text)
-	var give_up := start_menu.get_node_or_null("ContinueModal/Panel/GiveUpButton") as Button
+	var stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if stats == null or stats.text != "SCORE 40   L-COIN : 200":
+		failures.append("menu: CONTINUE modal stats should show score and L-COIN only")
+	if stats != null and stats.text.contains("LUCIDITY"):
+		failures.append("menu: CONTINUE modal still shows the old lucidity label")
+	var panel := start_menu.get_node_or_null("ContinueModal/Panel") as Panel
+	var close := start_menu.get_node_or_null("ContinueModal/Panel/CloseButton") as Button
+	if close == null:
+		failures.append("menu: CONTINUE modal has no close button")
+	elif panel != null and (close.position.x + close.size.x > panel.size.x \
+			or close.position.y >= 16.0):
+		failures.append("menu: CONTINUE modal close button is not in the top-right corner")
 	var resume := start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if stats != null and resume != null \
+			and stats.position.y + stats.size.y + 8.0 > resume.position.y:
+		failures.append("menu: CONTINUE modal stats are too close to CONTINUE")
+	if close != null:
+		close.pressed.emit()
+		if start_menu._continue_modal != null or String(run_store.runPhase) != "running":
+			failures.append("menu: modal close did not dismiss without losing the run")
+	start_menu._show_continue_modal()
+	var give_up := start_menu.get_node_or_null("ContinueModal/Panel/GiveUpButton") as Button
+	resume = start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
 	if resume == null:
 		failures.append("menu: CONTINUE modal has no resume button")
 	if give_up == null:
@@ -1613,6 +1636,10 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 		# queue_free is deferred; the scene's reference clears immediately.
 		if start_menu._continue_modal != null:
 			failures.append("menu: GIVE UP left the run-state modal open")
+	run_store.runPhase = "over"
+	start_menu._refresh_start_button()
+	if start_menu._start_button != null and (start_menu._start_button as Button).text == "CONTINUE":
+		failures.append("menu: finished flatline state incorrectly shows CONTINUE")
 	run_store.reset_run_state()
 	run_store.runPhase = prev_phase
 	meta_store._apply(meta_before)
@@ -4050,6 +4077,27 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 # Run persistence (issue #111 follow-up): a live run survives an app restart so
 # the menu can offer CONTINUE; ending the run deletes the snapshot.
 func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.wealthEndingReached = false
+	meta_store.campaignNeuronsLeft = int(meta_store.campaignNeuronsMax)
+	run_store.reset_run_state()
+	var campaign_neurons_before := int(meta_store.campaignNeuronsLeft)
+	if not run_store.start_new_run([], {}, true):
+		failures.append("persistence: a fresh run could not be prepared")
+	elif int(meta_store.campaignNeuronsLeft) != campaign_neurons_before \
+			or not bool(run_store.campaignNeuronPending):
+		failures.append("persistence: campaign neuron was consumed before machine end")
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != campaign_neurons_before - 1 \
+			or bool(run_store.campaignNeuronPending):
+		failures.append("persistence: campaign neuron was not consumed at machine end")
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.scoreEarned = 123
@@ -4079,6 +4127,18 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	run_store.load_run_state()
 	if String(run_store.runPhase) != "pre_run" or String(run_store.augmentedTier) != "heart":
 		failures.append("persistence: dealer pre-run was not restored")
+	# A post-flatline dealer visit must not leave a finished run resumable when
+	# the player backs out through its options menu.
+	run_store.reset_run_state()
+	run_store.runPhase = "over"
+	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	if not bool(dealer._post_run):
+		failures.append("persistence: dealer did not identify the finished-run visit")
+	dealer._on_options_return_to_menu()
+	if String(run_store.runPhase) != "idle":
+		failures.append("persistence: leaving post-flatline dealer left a resumable state")
+	dealer.queue_free()
 	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):

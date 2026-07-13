@@ -253,6 +253,20 @@ func campaign_status_text() -> String:
 func can_start_campaign_run() -> bool:
 	return campaignActive and not campaignFailed and not wealthEndingReached and campaignNeuronsLeft > 0
 
+## Validates a new run without spending its campaign neuron. The run store
+## finalizes the cost when the machine run reaches an ending.
+func reserve_campaign_neuron_for_run() -> bool:
+	if not campaignActive and not wealthEndingReached:
+		start_new_campaign(false)
+	if not can_start_campaign_run():
+		if campaignNeuronsLeft <= 0 and not wealthEndingReached:
+			mark_campaign_failed()
+		return false
+	return true
+
+func finalize_campaign_neuron_for_run(save_immediately := true) -> bool:
+	return consume_campaign_neuron_for_run(save_immediately)
+
 func consume_campaign_neuron_for_run(save_immediately := true) -> bool:
 	if not campaignActive and not wealthEndingReached:
 		start_new_campaign(false)

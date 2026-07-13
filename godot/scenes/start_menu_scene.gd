@@ -6,8 +6,8 @@ extends Control
 ## directly in the machine.
 ##
 ## Flow: launch -> this menu -> START RUN -> dealer (pre-run shop) -> machine run.
-## If RunStateStore still has an active run, START RUN becomes CONTINUE and routes
-## straight back to the machine with the current score/spins/consumables intact.
+## If RunStateStore still has a resumable session, START RUN becomes CONTINUE and
+## routes back to the dealer or machine with the current session intact.
 ## The dealer scene self-detects pre-run mode from RunStateStore.runPhase, so no
 ## state has to be threaded through the scene change here.
 ##
@@ -268,7 +268,11 @@ func _overlay_label(label_name: String, rect: Rect2, font_size: int, color: Colo
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", Color.BLACK)
 	l.add_theme_constant_override("outline_size", 1)
-	(parent if parent != null else self).add_child(l)
+	l.custom_minimum_size = Vector2.ZERO
+	l.clip_text = true
+	var host := parent if parent != null else self
+	host.add_child(l)
+	l.set_deferred("size", rect.size)
 	return l
 
 ## Moves a tscn menu button out of the VBox and turns it into live text over a
@@ -661,7 +665,7 @@ func _start_run() -> void:
 
 # ── run-state modal (held run) ───────────────────────────────────────────────────────
 # CONTINUE opens this instead of switching scenes: the neuron meter (moved off
-# the menu), the run's score/lucidity, and the resume-or-abandon choice.
+# the menu), the run's score/L-coin bank, and the resume-or-abandon choice.
 
 func _show_continue_modal() -> void:
 	_hide_continue_modal()
@@ -693,16 +697,39 @@ func _show_continue_modal() -> void:
 	var w := CONTINUE_MODAL_PANEL_RECT.size.x
 	var title := _overlay_label("Title", Rect2(0.0, 4.0, w, 10.0), 7, ART_CYAN, panel)
 	title.text = "RUN IN PROGRESS"
-	NeuronMeter.attach(panel, Vector2(w * 0.5, 56.0))
-	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
+	NeuronMeter.attach(panel, Vector2(w * 0.5, 48.0))
+	var stats := _overlay_label("Stats", Rect2(0.0, 82.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "SCORE %d   LUCIDITY %d" % [int(RunStateStore.scoreEarned),
+	stats.text = "SCORE %d   L-COIN : %d" % [int(RunStateStore.scoreEarned),
 		int(RunStateStore.lucidityCoins)]
+	var close := _modal_close_button(w)
+	panel.add_child(close)
 
 	panel.add_child(_modal_button("ContinueButton", "CONTINUE",
-		Rect2(16.0, 102.0, 88.0, 18.0), ART_CYAN, _resume_run))
+		Rect2(16.0, 104.0, 88.0, 18.0), ART_CYAN, _resume_run))
 	panel.add_child(_modal_button("GiveUpButton", "GIVE UP",
-		Rect2(16.0, 126.0, 88.0, 18.0), Color(1.0, 0.4, 0.45), _give_up_run))
+		Rect2(16.0, 128.0, 88.0, 18.0), Color(1.0, 0.4, 0.45), _give_up_run))
+
+func _modal_close_button(panel_width: float) -> Button:
+	var close := Button.new()
+	close.name = "CloseButton"
+	close.text = "X"
+	close.position = Vector2(panel_width - 16.0, 3.0)
+	close.size = Vector2(12.0, 12.0)
+	close.custom_minimum_size = Vector2.ZERO
+	close.focus_mode = Control.FOCUS_NONE
+	close.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	close.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		close.add_theme_font_override("font", _font)
+	close.add_theme_color_override("font_color", ART_CYAN)
+	close.add_theme_color_override("font_hover_color", Color.WHITE)
+	close.add_theme_color_override("font_pressed_color", Color.WHITE)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		close.add_theme_stylebox_override(String(state), StyleBoxEmpty.new())
+	close.pressed.connect(_hide_continue_modal)
+	close.set_deferred("size", Vector2(12.0, 12.0))
+	return close
 
 func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
 		cb: Callable) -> Button:

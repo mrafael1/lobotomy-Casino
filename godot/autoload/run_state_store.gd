@@ -189,6 +189,7 @@ var oddsPhaseCompleted := false           # closed screens stay closed until the
 var runPhase := "idle" # idle | pre_run | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
+var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
 
 func _forced_eye_reveal_symbols() -> Variant:
@@ -616,6 +617,7 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	campaignNeuronPending = false
 	augmentedTier = ""
 	powersUsedThisSpin = 0
 	_commit()
@@ -627,6 +629,7 @@ func begin_pre_run() -> void:
 		return
 	runPhase = "pre_run"
 	lastEnding = null
+	campaignNeuronPending = false
 	_commit()
 
 func has_resume_state() -> bool:
@@ -635,9 +638,11 @@ func has_resume_state() -> bool:
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
 	if runPhase == "running":
 		return true
-	if consume_campaign_neuron and not MetaStateStore.consume_campaign_neuron_for_run():
-		_commit()
-		return false
+	if consume_campaign_neuron:
+		if not MetaStateStore.reserve_campaign_neuron_for_run():
+			_commit()
+			return false
+	campaignNeuronPending = consume_campaign_neuron
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	scoreEarned = 0
@@ -727,6 +732,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 func end_run(ending: String) -> void:
 	runPhase = "over"
 	lastEnding = ending
+	if campaignNeuronPending:
+		MetaStateStore.finalize_campaign_neuron_for_run()
+		campaignNeuronPending = false
 	_commit()
 
 func continue_run() -> void:
