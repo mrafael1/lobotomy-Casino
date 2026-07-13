@@ -3199,8 +3199,8 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
 	_check_neon_button_style(machine._score_button, Color(0.42, 1.0, 0.95),
-	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
 		"issue51: TABLES", failures)
+	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)
 	for stat in ["BEST", "RUNS", "CREDITS"]:
 		if texts.has(stat):
