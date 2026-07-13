@@ -11,6 +11,16 @@ const PALE_GOLD := Color("#fff0a3")
 const DEEP_PURPLE := Color("#16091c")
 const HOT_MAGENTA := Color("#ff2f87")
 const NEON_CYAN := Color("#3ff5eb")
+const COIN_TEXTURE_PATH := "res://assets/images/ui/coin.png"
+const COIN_SIZE := 8.0
+const CASH_TRAY_ORIGIN := Vector2(80.0, 298.0)
+const COIN_ROWS := [
+	{ "count": 16, "start_x": 5.0, "y": 316.0 },
+	{ "count": 15, "start_x": 10.0, "y": 308.0 },
+	{ "count": 13, "start_x": 20.0, "y": 300.0 },
+	{ "count": 11, "start_x": 30.0, "y": 292.0 },
+	{ "count": 9, "start_x": 40.0, "y": 284.0 },
+]
 
 @onready var light_layer: Control = %LightLayer
 @onready var title_label: Label = %TitleLabel
@@ -19,7 +29,7 @@ const NEON_CYAN := Color("#3ff5eb")
 @onready var score_label: Label = %ScoreLabel
 @onready var enough_button: Button = %EnoughButton
 @onready var exit_button: Button = %ExitButton
-@onready var coin_pile: TextureRect = %CoinPile
+@onready var coin_layer: Control = %CoinLayer
 
 var _font: FontFile = null
 
@@ -34,6 +44,7 @@ func _ready() -> void:
 		enough_button.pressed.connect(_on_enough_pressed)
 	if not exit_button.pressed.is_connected(_on_exit_pressed):
 		exit_button.pressed.connect(_on_exit_pressed)
+	_build_coin_pile(not Engine.is_editor_hint())
 	if Engine.is_editor_hint():
 		set_final_score(999999)
 		return
@@ -123,8 +134,6 @@ func _play_reveal() -> void:
 	exit_button.modulate.a = 0.0
 	title_label.scale = Vector2(0.9, 0.9)
 	title_label.pivot_offset = title_label.size * 0.5
-	coin_pile.pivot_offset = Vector2(coin_pile.size.x * 0.5, coin_pile.size.y)
-	coin_pile.scale = Vector2(1.0, 0.04)
 
 	var ui_tween := create_tween()
 	ui_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -135,10 +144,53 @@ func _play_reveal() -> void:
 	ui_tween.tween_property(enough_button, "modulate:a", 1.0, 0.16)
 	ui_tween.tween_property(exit_button, "modulate:a", 1.0, 0.1)
 
-	var coin_tween := create_tween()
-	coin_tween.tween_interval(0.28)
-	coin_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	coin_tween.tween_property(coin_pile, "scale", Vector2.ONE, 1.15)
+
+func _build_coin_pile(animate: bool) -> void:
+	var coin_texture := load(COIN_TEXTURE_PATH) as Texture2D
+	if coin_texture == null:
+		return
+	var coin_scale := COIN_SIZE / float(maxi(1, coin_texture.get_width()))
+	var sequence := 0
+	for row_data: Dictionary in COIN_ROWS:
+		var count := int(row_data["count"])
+		var start_x := float(row_data["start_x"])
+		var target_y := float(row_data["y"])
+		for column: int in count:
+			var coin := Sprite2D.new()
+			coin.texture = coin_texture
+			coin.centered = true
+			coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			var target := Vector2(start_x + float(column) * 10.0, target_y)
+			coin.position = CASH_TRAY_ORIGIN if animate else target
+			coin.scale = Vector2.ONE * coin_scale
+			coin.modulate.a = 0.0 if animate else 1.0
+			coin_layer.add_child(coin)
+			if animate:
+				var tween := create_tween()
+				tween.tween_interval(0.22 + float(sequence) * 0.012)
+				tween.tween_method(
+					_drive_coin_to_pile.bind(coin, CASH_TRAY_ORIGIN, target, coin_scale),
+					0.0,
+					1.0,
+					0.32,
+				)
+			sequence += 1
+
+
+func _drive_coin_to_pile(
+	t: float,
+	coin: Sprite2D,
+	from_pos: Vector2,
+	to_pos: Vector2,
+	base_scale: float,
+) -> void:
+	if not is_instance_valid(coin):
+		return
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	coin.position = from_pos.lerp(to_pos, eased) + Vector2(0.0, -sin(t * PI) * 7.0)
+	coin.modulate.a = minf(t / 0.12, 1.0)
+	var pop_scale := lerpf(0.7, 1.0, eased) * base_scale
+	coin.scale = Vector2.ONE * pop_scale
 
 
 func _play_light_pulse() -> void:
