@@ -2163,18 +2163,19 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var wallet_before := int(meta_store.lucidityWallet)
 	var continue_button: Button = null
 	var exit_button: Button = null
-	for node: Node in machine._overlay.find_children("*", "Button", true, false):
-		var button := node as Button
-		if button.text == "IS IT ENOUGH ?":
-			continue_button = button
-		elif button.text == "EXIT CASINO":
-			exit_button = button
-		elif button.text == "BANK & LAB":
-			failures.append("wealth: bank/lab button still on the wealth screen")
+	for child in machine._overlay.get_children():
+		if child is Button:
+			var b := child as Button
+			if b.text == "CONTINUE":
+				continue_button = b
+			elif b.text == "EXIT CASINO":
+				exit_button = b
+			elif b.text == "BANK & LAB":
+				failures.append("wealth: bank/lab button still on the wealth screen")
 	if continue_button == null:
-		failures.append("wealth: IS IT ENOUGH ? button missing from the wealth screen")
+		failures.append("wealth: CONTINUE button missing from the wealth screen")
 	elif continue_button.disabled:
-		failures.append("wealth: IS IT ENOUGH ? disabled although another spin is possible")
+		failures.append("wealth: CONTINUE disabled although another spin is possible")
 	if exit_button == null:
 		failures.append("wealth: EXIT CASINO button missing from the wealth screen")
 	if int(meta_store.lucidityWallet) != wallet_before:
@@ -2237,18 +2238,19 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	var cont: Button = null
 	var exit_button: Button = null
 	if machine._overlay != null:
-		for node: Node in machine._overlay.find_children("*", "Button", true, false):
-			var button := node as Button
-			if button.text == "IS IT ENOUGH ?":
-				cont = button
-			elif button.text == "EXIT CASINO":
-				exit_button = button
+		for child in machine._overlay.get_children():
+			if child is Button:
+				var b := child as Button
+				if b.text == "CONTINUE":
+					cont = b
+				elif b.text == "EXIT CASINO":
+					exit_button = b
 	if exit_button == null or exit_button.disabled:
 		failures.append("issue62: EXIT CASINO missing/disabled on the 0-spin wealth screen")
 	if cont == null:
-		failures.append("issue62: IS IT ENOUGH ? missing from the 0-spin wealth screen")
+		failures.append("issue62: CONTINUE missing from the 0-spin wealth screen")
 	elif not cont.disabled:
-		failures.append("issue62: IS IT ENOUGH ? should be disabled when no spin can follow")
+		failures.append("issue62: CONTINUE should be disabled when no spin can follow")
 	# Even a forced continue must not strand a dead machine: it falls through to
 	# the flatline flow (which always offers an action).
 	machine._continue_from_wealth()
@@ -3196,8 +3198,8 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
-	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	_check_neon_button_style(machine._score_button, Color(0.42, 1.0, 0.95),
+	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
 		"issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)
 	for stat in ["BEST", "RUNS", "CREDITS"]:

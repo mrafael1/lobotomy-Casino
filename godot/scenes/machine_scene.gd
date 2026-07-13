@@ -85,7 +85,6 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
-const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
@@ -1271,8 +1270,8 @@ func _build_score_button() -> void:
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
 	Assets.neon_button_style(_score_button, NEON_CYAN, 7)
-	if not _score_button.pressed.is_connected(_show_score_table):
 	Assets.neon_button_press_feedback(_score_button)
+	if not _score_button.pressed.is_connected(_show_score_table):
 		_score_button.pressed.connect(_show_score_table)
 
 func _build_options_controls() -> void:
@@ -4415,9 +4414,6 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the dimmed overlay.
 	_set_stash_tray_visible(false)
-	if ending == "wealth":
-		_build_wealth_screen(run)
-		return
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -4448,6 +4444,9 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	if ending == "flatline":
 		_build_flatline_countdown(run)
+	elif ending == "wealth":
+		_build_wealth_screen(run)
+		return
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(20, 145)
@@ -4473,11 +4472,34 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 ## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
 ## continue can still bank the full total later) and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
-	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
-	_overlay.add_child(wealth_screen)
-	wealth_screen.present(int(run["scoreEarned"]), _can_resume_after_wealth())
-	wealth_screen.enough_pressed.connect(_continue_from_wealth)
-	wealth_screen.exit_casino_pressed.connect(_exit_casino.bind(run))
+	_score_label(_overlay, "YOU MADE IT OUT RICH", Vector2(20.0, 148.0), 8,
+		Color(0.9, 0.95, 0.85), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_score_label(_overlay, "SCORE %d" % int(run["scoreEarned"]), Vector2(20.0, 162.0), 8,
+		Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+
+	var cont := Button.new()
+	cont.text = "CONTINUE"
+	cont.position = Vector2(30.0, 192.0)
+	cont.size = Vector2(100.0, 20.0)
+	cont.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		cont.add_theme_font_override("font", _font)
+	# Continuing with no possible next spin (0 neurons/free spins, or the hard
+	# spin cap already hit) would strand a dead machine (issue #62).
+	cont.disabled = not _can_resume_after_wealth()
+	cont.pressed.connect(_continue_from_wealth)
+	_overlay.add_child(cont)
+
+	var exit := Button.new()
+	exit.text = "EXIT CASINO"
+	exit.position = Vector2(30.0, 218.0)
+	exit.size = Vector2(100.0, 20.0)
+	exit.add_theme_font_size_override("font_size", 9)
+	if _font != null:
+		exit.add_theme_font_override("font", _font)
+	Assets.skin_negative_button(exit)
+	exit.pressed.connect(_exit_casino.bind(run))
+	_overlay.add_child(exit)
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
