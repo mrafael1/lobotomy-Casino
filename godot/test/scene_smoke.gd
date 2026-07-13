@@ -438,6 +438,11 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: close button is not in the panel's top-right corner")
 	overlay.queue_free()
 
+	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(settings)
+	_check_settings_neon(settings, failures)
+	settings.queue_free()
+
 func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
 	if button == null:
 		return
@@ -973,6 +978,25 @@ func _check_neon_press_feedback(button: Button, label: String, failures: Array) 
 		failures.append("%s: press feedback did not squash the button" % label)
 	button.button_up.emit()
 
+func _check_settings_neon(settings: Node, failures: Array) -> void:
+	var panel := settings.get_node_or_null("Panel") as PanelContainer
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat \
+		if panel != null else null
+	if panel_style == null or not panel_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)) \
+			or panel_style.shadow_size < 1:
+		failures.append("settings: panel is missing the neon contour style")
+	var slider := settings.get_node_or_null("Panel/Rows/VolumeRow/VolumeSlider") as HSlider
+	var slider_style := slider.get_theme_stylebox("slider") as StyleBoxFlat \
+		if slider != null else null
+	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
+		failures.append("settings: volume slider is missing the neon track")
+	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
+	_check_neon_button_style(mute, Color(1.0, 0.5, 0.7), "settings: MUTE", failures)
+	_check_neon_press_feedback(mute, "settings: MUTE", failures)
+	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
+	_check_neon_button_style(back, Color(0.42, 1.0, 0.95), "settings: BACK", failures)
+	_check_neon_press_feedback(back, "settings: BACK", failures)
+
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
 func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void:
@@ -1020,6 +1044,8 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 				"issue84: CANCEL", failures)
 			_check_neon_button_style(enter_button, Color(0.42, 1.0, 0.95),
 				"issue84: ENTER", failures)
+			_check_neon_press_feedback(cancel_button, "issue84: CANCEL", failures)
+			_check_neon_press_feedback(enter_button, "issue84: ENTER", failures)
 		# Cancelling dismisses the modal (and does not start the run).
 		dealer._on_start_cancelled()
 		if modal.visible:
@@ -3172,6 +3198,7 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
+	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	_check_neon_button_style(machine._score_button, Color(0.42, 1.0, 0.95),
 		"issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)

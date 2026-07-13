@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/settings_scene.gd" id="1_settings"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
@@ -13,10 +13,44 @@ border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.92, 0.86, 0.56, 0.82)
+border_color = Color(0.42, 1, 0.95, 0.9)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+shadow_color = Color(1, 0.5, 0.7, 0.42)
+shadow_size = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
-bg_color = Color(0.02, 0.01, 0.04, 1)
+bg_color = Color(0.01, 0.005, 0.02, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slider"]
+bg_color = Color(0.03, 0.01, 0.05, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.5, 0.7, 1)
+corner_radius_top_left = 1
+corner_radius_top_right = 1
+corner_radius_bottom_right = 1
+corner_radius_bottom_left = 1
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slider_fill"]
+bg_color = Color(0.42, 1, 0.95, 0.72)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.42, 1, 0.95, 1)
+corner_radius_top_left = 1
+corner_radius_top_right = 1
+corner_radius_bottom_right = 1
+corner_radius_bottom_left = 1
+content_margin_top = 2.0
+content_margin_bottom = 2.0
 
 [node name="SettingsScene" type="Control"]
 layout_mode = 3
@@ -51,7 +85,7 @@ theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Panel/Rows"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
+theme_override_colors/font_color = Color(0.42, 1, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 12
 text = "SETTINGS"
@@ -59,7 +93,7 @@ horizontal_alignment = 1
 
 [node name="VolumeTitle" type="Label" parent="Panel/Rows"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
+theme_override_colors/font_color = Color(1, 0.5, 0.7, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
 text = "VOLUME"
@@ -76,11 +110,14 @@ min_value = 0.0
 max_value = 100.0
 step = 1.0
 value = 100.0
+theme_override_styles/slider = SubResource("StyleBoxFlat_slider")
+theme_override_styles/grabber_area = SubResource("StyleBoxFlat_slider_fill")
+theme_override_styles/grabber_area_highlight = SubResource("StyleBoxFlat_slider_fill")
 
 [node name="ValueLabel" type="Label" parent="Panel/Rows/VolumeRow"]
 custom_minimum_size = Vector2(34, 16)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.75, 1, 0.8, 1)
+theme_override_colors/font_color = Color(0.42, 1, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
 text = "100%"
@@ -89,7 +126,7 @@ vertical_alignment = 1
 
 [node name="MuteCheck" type="CheckBox" parent="Panel/Rows"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
+theme_override_colors/font_color = Color(1, 0.5, 0.7, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
 text = "MUTE"

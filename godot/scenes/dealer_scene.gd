@@ -1117,6 +1117,7 @@ func _confirm_button(node_name: String, text: String, border_color: Color, cb: C
 	b.text = text
 	b.custom_minimum_size = Vector2(44.0, 18.0)
 	Assets.neon_button_style(b, border_color, 7)
+	Assets.neon_button_press_feedback(b)
 	_apply_button_text_margin(b)
 	b.pressed.connect(cb)
 	return b

@@ -1271,6 +1271,7 @@ func _build_score_button() -> void:
 		_score_button.add_theme_font_override("font", _font)
 	Assets.neon_button_style(_score_button, NEON_CYAN, 7)
 	if not _score_button.pressed.is_connected(_show_score_table):
+	Assets.neon_button_press_feedback(_score_button)
 		_score_button.pressed.connect(_show_score_table)
 
 func _build_options_controls() -> void:
