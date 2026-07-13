@@ -1565,6 +1565,7 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 	run_store.scoreEarned = 40
 	meta_store.ownedPermanents = []
 	meta_store.lucidityWallet = 0
+	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsMax) - 1)
 	start_menu._show_continue_modal()
 	var meter := _find_neuron_meter(start_menu)
 	if meter == null:
@@ -1601,6 +1602,8 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 			failures.append("menu: GIVE UP did not end the held run")
 		if int(run_store.scoreEarned) != 0 or int(run_store.lucidityCoins) != 0:
 			failures.append("menu: GIVE UP did not reset the run state")
+		if int(meta_store.campaignNeuronsLeft) != int(meta_store.campaignNeuronsMax):
+			failures.append("menu: GIVE UP did not restore the campaign neuron count")
 		if int(meta_store.lucidityWallet) != 0:
 			failures.append("menu: GIVE UP banked lucidity; abandoning should bank nothing")
 		# queue_free is deferred; the scene's reference clears immediately.

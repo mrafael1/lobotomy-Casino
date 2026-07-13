@@ -746,10 +746,11 @@ func _hide_continue_modal() -> void:
 func _resume_run() -> void:
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
-## Abandoning simply resets the current run — nothing is banked; the spent
-## campaign neuron stays spent. The menu then offers a fresh start.
+## Abandoning starts a fresh campaign: nothing is banked, the held run is
+## cleared, and the campaign neuron meter returns to its full starting count.
 func _give_up_run() -> void:
 	RunStateStore.reset_run_state()
+	MetaStateStore.start_new_campaign()
 	_hide_continue_modal()
 	_refresh_campaign_ui()
 
