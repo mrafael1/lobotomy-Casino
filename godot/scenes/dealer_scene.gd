@@ -95,6 +95,8 @@ const AUGMENT_RARITY_COLORS := {
 const AUGMENT_BOUGHT_MESSAGE := "THE CHIP SLOTS INTO PLACE"
 const AUGMENT_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const NEON_CYAN := Color(0.42, 1.0, 0.95)
+const NEON_PINK := Color(1.0, 0.5, 0.7)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
@@ -954,11 +956,11 @@ func _open_pair_triple_picker(id: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
-	row.add_child(_confirm_button("PairButton", "PAIR", "ui/green_button.png",
+	row.add_child(_confirm_button("PairButton", "PAIR", NEON_CYAN,
 		Callable(self, "_commit_augment_purchase").bind(id, "pair")))
-	row.add_child(_confirm_button("TripleButton", "TRIPLE", "ui/green_button.png",
+	row.add_child(_confirm_button("TripleButton", "TRIPLE", NEON_CYAN,
 		Callable(self, "_commit_augment_purchase").bind(id, "triple")))
-	row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png",
+	row.add_child(_confirm_button("CancelButton", "CANCEL", NEON_PINK,
 		Callable(self, "_close_augment_picker")))
 
 # Full-canvas dim root shared by both selectors (modal: swallows input behind it).
@@ -1086,8 +1088,8 @@ func _build_start_confirm_modal() -> Control:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", 8)
 		panel.add_child(row)
-		row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png", Callable(self, "_on_start_cancelled")))
-		row.add_child(_confirm_button("EnterButton", "ENTER", "ui/green_button.png", Callable(self, "_on_start_confirmed")))
+		row.add_child(_confirm_button("CancelButton", "CANCEL", NEON_PINK, Callable(self, "_on_start_cancelled")))
+		row.add_child(_confirm_button("EnterButton", "ENTER", NEON_CYAN, Callable(self, "_on_start_confirmed")))
 	panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_theme_constant_override("separation", 6)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1109,16 +1111,12 @@ func _confirm_label(node_name: String, text: String, size: int, color: Color) ->
 		l.add_theme_font_override("font", _font)
 	return l
 
-func _confirm_button(node_name: String, text: String, asset: String, cb: Callable) -> Button:
+func _confirm_button(node_name: String, text: String, border_color: Color, cb: Callable) -> Button:
 	var b := Button.new()
 	b.name = node_name
 	b.text = text
 	b.custom_minimum_size = Vector2(44.0, 18.0)
-	b.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	# Issue #84: CANCEL rides the red sheet, ENTER the green sheet (4-frame skins).
-	Assets.skin_sheet_button(b, asset, 4)
+	Assets.neon_button_style(b, border_color, 7)
 	_apply_button_text_margin(b)
 	b.pressed.connect(cb)
 	return b

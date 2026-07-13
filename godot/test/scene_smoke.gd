@@ -944,14 +944,21 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 
 	run_store.reset_run_state()
 
-# Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
-# text bubble, outlined feedback messages above the dealer, no 1-Lucidity
-# placeholder slot.
-func _button_sheet_file(button: Button) -> String:
-	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
-	if style == null or style.texture == null:
-		return ""
-	return style.texture.resource_path.get_file()
+func _check_neon_button_style(button: Button, expected_border: Color, label: String,
+		failures: Array) -> void:
+	if button == null:
+		failures.append("%s: button is missing" % label)
+		return
+	var style := button.get_theme_stylebox("normal") as StyleBoxFlat
+	if style == null:
+		failures.append("%s: button is not using a neon StyleBoxFlat" % label)
+		return
+	if not style.border_color.is_equal_approx(expected_border):
+		failures.append("%s: neon contour color is %s, expected %s" % [
+			label, str(style.border_color), str(expected_border)])
+	if style.border_width_left != 1 or style.border_width_top != 1 \
+			or style.border_width_right != 1 or style.border_width_bottom != 1:
+		failures.append("%s: neon contour should be one pixel" % label)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
@@ -996,10 +1003,10 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		if enter_button == null or cancel_button == null:
 			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
 		else:
-			if _button_sheet_file(cancel_button) != "red_button.png":
-				failures.append("issue84: CANCEL is not skinned with the red button asset")
-			if _button_sheet_file(enter_button) != "green_button.png":
-				failures.append("issue84: ENTER is not skinned with the green button asset")
+			_check_neon_button_style(cancel_button, Color(1.0, 0.5, 0.7),
+				"issue84: CANCEL", failures)
+			_check_neon_button_style(enter_button, Color(0.42, 1.0, 0.95),
+				"issue84: ENTER", failures)
 		# Cancelling dismisses the modal (and does not start the run).
 		dealer._on_start_cancelled()
 		if modal.visible:
@@ -1979,6 +1986,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 			failures.append("issue130: DONE button is oversized for the modal")
 		if done_button.pivot_offset != done_button.size * 0.5:
 			failures.append("issue130: DONE button press animation needs a centered pivot")
+		_check_neon_button_style(done_button, Color(0.42, 1.0, 0.95),
+			"issue130: DONE", failures)
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
 	if brain_symbol_button == null or brain_icon == null:
@@ -3150,6 +3159,8 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
+	_check_neon_button_style(machine._score_button, Color(0.42, 1.0, 0.95),
+		"issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)
 	for stat in ["BEST", "RUNS", "CREDITS"]:
 		if texts.has(stat):
@@ -3247,6 +3258,8 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	if close == null:
 		failures.append("issue119: table has no CLOSE button")
 	else:
+		_check_neon_button_style(close, Color(1.0, 0.86, 0.36),
+			"issue119: BACK", failures)
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
 		# The chain now interleaves each row's symbol pct-peek button before its
