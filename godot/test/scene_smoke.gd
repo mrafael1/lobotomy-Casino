@@ -318,6 +318,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: dealer scene missing renamed options button")
 	elif dealer_options.position.x > 20.0:
 		failures.append("options: dealer options button is not top-left")
+	_check_settings_icon(dealer_options, "dealer", failures)
 	if dealer.get_node_or_null("BackButton") != null:
 		failures.append("options: dealer scene still has BackButton node")
 	_check_dealer_scene_revamp_55(dealer, failures)
@@ -374,6 +375,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: machine scene missing options button")
 	elif machine_options.position.x > 20.0:
 		failures.append("options: machine options button is not top-left")
+	_check_settings_icon(machine_options, "machine", failures)
 	if machine.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
@@ -435,6 +437,19 @@ func _check_global_options_layout(failures: Array) -> void:
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
 	overlay.queue_free()
+
+func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
+	if button == null:
+		return
+	const asset_path := "res://assets/images/ui/setting_icon.png"
+	if not ResourceLoader.exists(asset_path):
+		failures.append("options: %s is missing the new setting icon" % scene_name)
+		return
+	var icon := button.texture_normal
+	if icon == null or icon.get_width() != 69 or icon.get_height() != 66:
+		failures.append("options: %s is not using the 69x66 setting icon" % scene_name)
+	if button.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("options: %s setting icon is not nearest-neighbor filtered" % scene_name)
 
 func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)

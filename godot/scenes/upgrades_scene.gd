@@ -11,7 +11,7 @@ extends Control
 ## reads better than a dead-ended arrow.
 
 const START_MENU_SCENE := "res://scenes/start_menu_scene.tscn"
-const SETTINGS_ASSET := "ui/settings.png"
+const SETTINGS_ASSET := "ui/setting_icon.png"
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
 const REWARD_AMP_IDS: Array[String] = ["corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"]
 ## "" marks the locked/future-achievement slot baked into the new terminal art.
@@ -442,7 +442,7 @@ func _connect_button(button: Button, cb: Callable) -> void:
 func _bind_options_button() -> void:
 	if _options_button == null:
 		return
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 

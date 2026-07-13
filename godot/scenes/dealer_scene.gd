@@ -60,8 +60,8 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 ## Authored name colour restored for non-corrupted items.
 @export var name_color: Color = Color(0.0, 0.9, 1.0)
 
-# New UI assets (issue #25). The settings sheet is 2 frames (normal, pressed).
-const SETTINGS_ASSET := "ui/settings.png"
+# New UI assets (issue #25). The settings control uses one authored icon.
+const SETTINGS_ASSET := "ui/setting_icon.png"
 const COIN_ASSET := "ui/coin.png"
 # Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
 # they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
@@ -559,7 +559,7 @@ func _build_hud() -> void:
 	_build_campaign_label()
 	if _options_button != null or _start_button != null or _credits_row != null:
 		if _options_button != null:
-			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 			var options_cb := Callable(self, "_toggle_options_overlay")
 			if not _options_button.pressed.is_connected(options_cb):
 				_options_button.pressed.connect(options_cb)
@@ -577,7 +577,7 @@ func _build_hud() -> void:
 	back.custom_minimum_size = Vector2(20.0, 18.0)
 	back.size = Vector2(20.0, 18.0)
 	back.position = Vector2(9.0, 15.0)
-	Assets.skin_icon_button(back, SETTINGS_ASSET, 2)
+	Assets.skin_icon_button(back, SETTINGS_ASSET, 1)
 	back.pressed.connect(_toggle_options_overlay)
 	add_child(back)
 	_options_button = back

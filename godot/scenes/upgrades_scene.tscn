@@ -82,7 +82,7 @@
 [ext_resource type="Texture2D" uid="uid://b3o4yi7e744vh" path="res://assets/images/ui/green_button.png" id="68_mrfpu"]
 [ext_resource type="Texture2D" uid="uid://ckf78hj8fjggk" path="res://assets/images/ui/red_button.png" id="69_sjg8e"]
 [ext_resource type="Texture2D" uid="uid://cln5cqx2bn0x4" path="res://assets/images/ui/coin.png" id="70_coin"]
-[ext_resource type="Texture2D" uid="uid://08wob2rti106" path="res://assets/images/ui/settings.png" id="71_settings"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/setting_icon.png" id="71_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="72_options"]
 [ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/upgrades_scene_eye_buttons.png" id="73_eyebtn"]
 [ext_resource type="Texture2D" path="res://assets/images/upgrade_scene/upgrades_scene_memory_buttons.png" id="74_membtn"]
@@ -704,18 +704,6 @@ content_margin_bottom = 2.0
 texture = ExtResource("69_sjg8e")
 region_rect = Rect2(0, 0, 24, 12)
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_gv5j0"]
-atlas = ExtResource("71_settings")
-region = Rect2(0, 0, 25, 23)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_wecsn"]
-atlas = ExtResource("71_settings")
-region = Rect2(25, 0, 25, 23)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_p46ef"]
-atlas = ExtResource("71_settings")
-region = Rect2(25, 0, 25, 23)
-
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8qc3m"]
 content_margin_left = 0.0
 content_margin_right = 0.0
@@ -1169,9 +1157,9 @@ offset_left = 131.0
 offset_top = 9.0
 offset_right = 151.0
 offset_bottom = 27.0
-texture_normal = SubResource("AtlasTexture_gv5j0")
-texture_pressed = SubResource("AtlasTexture_wecsn")
-texture_hover = SubResource("AtlasTexture_p46ef")
+texture_normal = ExtResource("71_settings")
+texture_pressed = ExtResource("71_settings")
+texture_hover = ExtResource("71_settings")
 ignore_texture_size = true
 stretch_mode = 5
 

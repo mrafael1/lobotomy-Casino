@@ -86,7 +86,7 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
-const SETTINGS_ASSET := "ui/settings.png"
+const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
 	&"reel_spin": "reel-spinning.mp3",
@@ -1279,7 +1279,7 @@ func _build_options_controls() -> void:
 		_options_button.position = Vector2(9.0, 9.0)
 		_options_button.size = Vector2(20.0, 18.0)
 		add_child(_options_button)
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay

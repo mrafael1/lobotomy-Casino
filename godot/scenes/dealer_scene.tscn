@@ -5,22 +5,10 @@
 [ext_resource type="Texture2D" uid="uid://cpsspqyhnt8lr" path="res://assets/images/dealer_portrait.png" id="3_stsde"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_shop/dealer_shop_counter_base_x8.png" id="4_h5iqj"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="5_0se43"]
-[ext_resource type="Texture2D" uid="uid://08wob2rti106" path="res://assets/images/ui/settings.png" id="7_cijoo"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/setting_icon.png" id="7_cijoo"]
 [ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="8_stsde"]
 [ext_resource type="Texture2D" uid="uid://cln5cqx2bn0x4" path="res://assets/images/ui/coin.png" id="9_i73ov"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="10_options"]
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_h5iqj"]
-atlas = ExtResource("7_cijoo")
-region = Rect2(0, 0, 25, 23)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_0se43"]
-atlas = ExtResource("7_cijoo")
-region = Rect2(25, 0, 25, 23)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_k4l0b"]
-atlas = ExtResource("7_cijoo")
-region = Rect2(25, 0, 25, 23)
 
 [node name="DealerScene" type="Control" unique_id=413026863]
 layout_mode = 3
@@ -325,9 +313,9 @@ offset_left = 9.0
 offset_top = 15.0
 offset_right = 29.0
 offset_bottom = 33.0
-texture_normal = SubResource("AtlasTexture_h5iqj")
-texture_pressed = SubResource("AtlasTexture_0se43")
-texture_hover = SubResource("AtlasTexture_k4l0b")
+texture_normal = ExtResource("7_cijoo")
+texture_pressed = ExtResource("7_cijoo")
+texture_hover = ExtResource("7_cijoo")
 ignore_texture_size = true
 stretch_mode = 5
 

@@ -218,16 +218,25 @@ func skin_negative_button(b: Button) -> void:
 func skin_cancel_button(b: Button) -> void:
 	skin_sheet_button(b, _CANCEL_BUTTON_REL, 2)
 
-# Skin an ICON TextureButton from a sheet (no text). Adds a 1-2px sink on press.
+# Skin an ICON TextureButton (no text). `frames <= 1` uses a single icon; larger
+# values use the normal/hover/pressed horizontal sheet convention. Adds a 1-2px
+# sink on press.
 func skin_icon_button(b: TextureButton, rel: String, frames: int) -> void:
-	if texture(rel) == null:
+	var tex := texture(rel)
+	if tex == null:
 		return
-	var sf := _sheet_state_frames(frames)
-	b.texture_normal = sheet_frame(rel, sf["normal"], frames)
-	b.texture_hover = sheet_frame(rel, sf["hover"], frames)
-	b.texture_pressed = sheet_frame(rel, sf["pressed"], frames)
-	if frames >= 4:
-		b.texture_disabled = sheet_frame(rel, sf["disabled"], frames)
+	if frames <= 1:
+		b.texture_normal = tex
+		b.texture_hover = tex
+		b.texture_pressed = tex
+		b.texture_disabled = tex
+	else:
+		var sf := _sheet_state_frames(frames)
+		b.texture_normal = sheet_frame(rel, sf["normal"], frames)
+		b.texture_hover = sheet_frame(rel, sf["hover"], frames)
+		b.texture_pressed = sheet_frame(rel, sf["pressed"], frames)
+		if frames >= 4:
+			b.texture_disabled = sheet_frame(rel, sf["disabled"], frames)
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	b.ignore_texture_size = true
 	b.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
