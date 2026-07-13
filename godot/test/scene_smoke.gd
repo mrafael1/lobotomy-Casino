@@ -412,9 +412,28 @@ func _check_global_options_layout(failures: Array) -> void:
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
 	get_root().add_child(overlay)
+	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
+	var options_contour := overlay.get_node_or_null("Contour") as Panel
+	if options_contour == null:
+		failures.append("options: overlay missing neon contour")
+	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxFlat \
+		if options_panel != null else null
+	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
+		failures.append("options: panel is missing the neon contour style")
 	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/MenuButton"]:
-		if overlay.get_node_or_null(path) == null:
+		var option_button := overlay.get_node_or_null(path) as Button
+		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
+		else:
+			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxFlat
+			if button_style == null or button_style.border_width_left != 1 \
+					or button_style.corner_radius_top_left != 2:
+				failures.append("options: %s is not a neon outlined button" % path)
+	var close_button := overlay.get_node_or_null("CloseButton") as Button
+	if close_button == null or close_button.text != "X":
+		failures.append("options: overlay close button is not the neon X control")
+	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
+		failures.append("options: close button is not in the panel's top-right corner")
 	overlay.queue_free()
 
 func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:

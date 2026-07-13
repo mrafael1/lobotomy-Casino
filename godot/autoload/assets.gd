@@ -111,6 +111,8 @@ const _RED_BUTTON_REL := "ui/red_button.png"
 const _CANCEL_BUTTON_REL := "ui/cancel_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
 const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
+const NEON_BUTTON_FILL := Color(0.09, 0.07, 0.14, 1.0)
+const NEON_PANEL_FILL := Color(0.05, 0.04, 0.09, 0.97)
 const SYMBOL_PICKER_FRAME_REL := "ui/symbol_chosing.png"
 const SYMBOL_PICKER_TITLE_COLOR := Color(0.72, 1.0, 0.65)
 const SYMBOL_PICKER_PANEL_COLOR := Color(0.05, 0.03, 0.1, 0.94)
@@ -170,6 +172,44 @@ func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
 	b.add_theme_color_override("font_pressed_color", Color.WHITE)
 	b.add_theme_color_override("font_focus_color", Color.WHITE)
 	b.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
+
+## Shared outlined pixel-neon button style used by the start menu and modal menus.
+func neon_button_style(button: Button, border_color: Color, font_size: int = 6) -> void:
+	if button == null:
+		return
+	button.add_theme_font_size_override("font_size", font_size)
+	if font() != null:
+		button.add_theme_font_override("font", font())
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var style := StyleBoxFlat.new()
+	style.bg_color = NEON_BUTTON_FILL
+	style.border_color = border_color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
+	style.set_content_margin_all(1)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(String(state), style)
+	button.add_theme_color_override("font_color", border_color)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	button.add_theme_color_override("font_focus_color", border_color)
+	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
+	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+## Shared dark panel with a small neon contour for overlays and modal surfaces.
+func neon_panel_style(border_color: Color, content_margin: float = 0.0) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = NEON_PANEL_FILL
+	style.border_color = border_color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(3)
+	style.shadow_color = Color(border_color.r, border_color.g, border_color.b, 0.32)
+	style.shadow_size = 2
+	style.content_margin_left = content_margin
+	style.content_margin_top = content_margin
+	style.content_margin_right = content_margin
+	style.content_margin_bottom = content_margin
+	return style
 
 # Shared "negative" skin (ignore / leave / back / close / decline) — the red sheet.
 func skin_negative_button(b: Button) -> void:
