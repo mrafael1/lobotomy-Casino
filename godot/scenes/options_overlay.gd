@@ -15,7 +15,6 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const NEON_YELLOW := Color(1.0, 0.86, 0.36)
-const NEON_GREEN := Color(0.62, 1.0, 0.7)
 
 @export var editor_preview_visible := true:
 	set(value):
@@ -38,7 +37,7 @@ func _ready() -> void:
 	_style_panel()
 	_style_menu_button(_scores_button, NEON_PINK)
 	_style_menu_button(_settings_button, NEON_YELLOW)
-	_style_menu_button(_collection_button, NEON_GREEN)
+	_style_menu_button(_collection_button, NEON_CYAN)
 	_style_menu_button(_menu_button, NEON_CYAN)
 	_style_close_button(_close_button)
 	_connect_button(_scores_button, _open_scores)
@@ -89,7 +88,7 @@ func _style_menu_button(button: Button, border_color: Color) -> void:
 	if button == null:
 		return
 	button.custom_minimum_size = Vector2(104.0, 20.0)
-	Assets.neon_button_style(button, border_color, 7)
+	Assets.start_menu_button_style(button, border_color, 7)
 	button.pivot_offset = button.custom_minimum_size * 0.5
 	if not button.button_down.is_connected(_on_menu_button_down):
 		button.button_down.connect(_on_menu_button_down.bind(button))

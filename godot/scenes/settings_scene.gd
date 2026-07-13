@@ -73,8 +73,8 @@ func _style_controls() -> void:
 		_mute_check.custom_minimum_size = Vector2(108.0, 20.0)
 		_mute_check.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_mute_check.add_theme_constant_override("icon_max_width", 9)
-		Assets.neon_button_style(_mute_check, NEON_PINK, 7)
-		Assets.neon_button_press_feedback(_mute_check)
+		Assets.start_menu_button_style(_mute_check, NEON_PINK, 7)
+		Assets.start_menu_button_press_feedback(_mute_check)
 		var unchecked_icon := _make_checkbox_icon(false)
 		var checked_icon := _make_checkbox_icon(true)
 		_mute_check.add_theme_icon_override("unchecked", unchecked_icon)
@@ -82,8 +82,8 @@ func _style_controls() -> void:
 		_mute_check.add_theme_icon_override("unchecked_disabled", unchecked_icon)
 		_mute_check.add_theme_icon_override("checked_disabled", checked_icon)
 	if _back_button != null:
-		Assets.neon_button_style(_back_button, NEON_CYAN, 8)
-		Assets.neon_button_press_feedback(_back_button)
+		Assets.start_menu_button_style(_back_button, NEON_CYAN, 8)
+		Assets.start_menu_button_press_feedback(_back_button)
 
 func _style_label(label: Label, color: Color, font_size: int) -> void:
 	if label == null:

@@ -427,13 +427,12 @@ func _check_global_options_layout(failures: Array) -> void:
 		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
 		else:
-			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxFlat
-			if button_style == null or button_style.border_width_left != 1 \
-					or button_style.corner_radius_top_left != 2:
-				failures.append("options: %s is not a neon outlined button" % path)
+			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxTexture
+			if button_style == null or button_style.texture == null:
+				failures.append("options: %s is not using start-menu button art" % path)
 	var close_button := overlay.get_node_or_null("CloseButton") as Button
 	if close_button == null or close_button.text != "X":
-		failures.append("options: overlay close button is not the neon X control")
+		failures.append("options: overlay close button is not the pixel X control")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
 	overlay.queue_free()
@@ -949,28 +948,36 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 
 	run_store.reset_run_state()
 
-func _check_neon_button_style(button: Button, expected_border: Color, label: String,
-		failures: Array) -> void:
+func _check_start_menu_button_style(button: Button, expected_color: Color, label: String,
+		failures: Array, expect_small: bool = false) -> void:
 	if button == null:
 		failures.append("%s: button is missing" % label)
 		return
-	var style := button.get_theme_stylebox("normal") as StyleBoxFlat
+	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
 	if style == null:
-		failures.append("%s: button is not using a neon StyleBoxFlat" % label)
+		failures.append("%s: button is not using a start-menu StyleBoxTexture" % label)
 		return
-	if not style.border_color.is_equal_approx(expected_border):
-		failures.append("%s: neon contour color is %s, expected %s" % [
-			label, str(style.border_color), str(expected_border)])
-	if style.border_width_left != 1 or style.border_width_top != 1 \
-			or style.border_width_right != 1 or style.border_width_bottom != 1:
-		failures.append("%s: neon contour should be one pixel" % label)
+	if style.texture == null:
+		failures.append("%s: start-menu plate texture is missing" % label)
+	var resolved_color: Color = button.get_meta(&"_start_menu_button_color", Color.TRANSPARENT)
+	if not resolved_color.is_equal_approx(expected_color):
+		failures.append("%s: start-menu plate color is %s, expected %s" % [
+			label, str(resolved_color), str(expected_color)])
+	if style.texture_margin_left < 1.0 or style.texture_margin_top < 1.0:
+		failures.append("%s: start-menu plate is not configured as a nine-slice" % label)
+	if expect_small:
+		var small_asset := String(button.get_meta(&"_small_neon_button_asset", ""))
+		if not small_asset.begins_with("ui/neon_small_"):
+			failures.append("%s: compact control is not using neon_small button art" % label)
+		if style.content_margin_bottom <= style.content_margin_top:
+			failures.append("%s: compact label is not visually centered in its plate" % label)
 
-func _check_neon_press_feedback(button: Button, label: String, failures: Array) -> void:
+func _check_start_menu_press_feedback(button: Button, label: String, failures: Array) -> void:
 	if button == null:
 		failures.append("%s: button is missing for press feedback" % label)
 		return
-	if not button.has_meta(&"_neon_press_feedback"):
-		failures.append("%s: neon button is missing press feedback" % label)
+	if not button.has_meta(&"_start_menu_press_feedback"):
+		failures.append("%s: start-menu button is missing press feedback" % label)
 		return
 	var resting_scale := button.scale
 	button.button_down.emit()
@@ -991,11 +998,11 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
 		failures.append("settings: volume slider is missing the neon track")
 	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
-	_check_neon_button_style(mute, Color(1.0, 0.5, 0.7), "settings: MUTE", failures)
-	_check_neon_press_feedback(mute, "settings: MUTE", failures)
+	_check_start_menu_button_style(mute, Assets.START_MENU_BUTTON_PINK, "settings: MUTE", failures)
+	_check_start_menu_press_feedback(mute, "settings: MUTE", failures)
 	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
-	_check_neon_button_style(back, Color(0.42, 1.0, 0.95), "settings: BACK", failures)
-	_check_neon_press_feedback(back, "settings: BACK", failures)
+	_check_start_menu_button_style(back, Assets.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
+	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
@@ -1040,12 +1047,12 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		if enter_button == null or cancel_button == null:
 			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
 		else:
-			_check_neon_button_style(cancel_button, Color(1.0, 0.5, 0.7),
-				"issue84: CANCEL", failures)
-			_check_neon_button_style(enter_button, Color(0.42, 1.0, 0.95),
-				"issue84: ENTER", failures)
-			_check_neon_press_feedback(cancel_button, "issue84: CANCEL", failures)
-			_check_neon_press_feedback(enter_button, "issue84: ENTER", failures)
+			_check_start_menu_button_style(cancel_button, Assets.START_MENU_BUTTON_PINK,
+				"issue84: CANCEL", failures, true)
+			_check_start_menu_button_style(enter_button, Assets.START_MENU_BUTTON_CYAN,
+				"issue84: ENTER", failures, true)
+			_check_start_menu_press_feedback(cancel_button, "issue84: CANCEL", failures)
+			_check_start_menu_press_feedback(enter_button, "issue84: ENTER", failures)
 		# Cancelling dismisses the modal (and does not start the run).
 		dealer._on_start_cancelled()
 		if modal.visible:
@@ -2025,8 +2032,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 			failures.append("issue130: DONE button is oversized for the modal")
 		if done_button.pivot_offset != done_button.size * 0.5:
 			failures.append("issue130: DONE button press animation needs a centered pivot")
-		_check_neon_button_style(done_button, Color(0.42, 1.0, 0.95),
-			"issue130: DONE", failures)
+		_check_start_menu_button_style(done_button, Assets.START_MENU_BUTTON_CYAN,
+			"issue130: DONE", failures, true)
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
 	if brain_symbol_button == null or brain_icon == null:
@@ -3198,9 +3205,9 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
-	_check_neon_button_style(machine._score_button, Color(0.42, 1.0, 0.95),
-		"issue51: TABLES", failures)
-	_check_neon_press_feedback(machine._score_button, "issue51: TABLES", failures)
+	_check_start_menu_button_style(machine._score_button, Assets.START_MENU_BUTTON_CYAN,
+		"issue51: TABLES", failures, true)
+	_check_start_menu_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)
 	for stat in ["BEST", "RUNS", "CREDITS"]:
 		if texts.has(stat):
@@ -3298,8 +3305,8 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	if close == null:
 		failures.append("issue119: table has no CLOSE button")
 	else:
-		_check_neon_button_style(close, Color(1.0, 0.86, 0.36),
-			"issue119: BACK", failures)
+		_check_start_menu_button_style(close, Assets.START_MENU_BUTTON_YELLOW,
+			"issue119: BACK", failures, true)
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
 		# The chain now interleaves each row's symbol pct-peek button before its
@@ -3594,11 +3601,11 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
 	if not buy_stele.visible:
 		failures.append("upgrades: buy stele should be visible even before a terminal is open")
-	_check_neon_button_style(context_buy, Color(0.42, 1.0, 0.95),
-		"upgrades: BUY", failures)
-	_check_neon_press_feedback(context_buy, "upgrades: BUY", failures)
+	_check_start_menu_button_style(context_buy, Assets.START_MENU_BUTTON_CYAN,
+		"upgrades: BUY", failures, true)
+	_check_start_menu_press_feedback(context_buy, "upgrades: BUY", failures)
 	if context_buy.size != Vector2(22.0, 10.0):
-		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
+		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size (got %s)" % str(context_buy.size))
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
 	if context_buy_disabled_style != null:
 		if context_buy_disabled_style.content_margin_left != 0.0 or context_buy_disabled_style.content_margin_right != 0.0:
@@ -3608,9 +3615,9 @@ func _check_upgrades_scene(failures: Array) -> void:
 	if context_price_coin.texture == null:
 		failures.append("upgrades: contextual price is missing lucidity coin icon")
 	var back_button := scene.get_node("CanvasLayer/UI_Container/BackButton") as Button
-	_check_neon_button_style(back_button, Color(1.0, 0.5, 0.7),
+	_check_start_menu_button_style(back_button, Assets.START_MENU_BUTTON_PINK,
 		"upgrades: RETURN TO BAR", failures)
-	_check_neon_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
+	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
 	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
 	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
 		failures.append("upgrades: power name box is missing its cyan neon contour")

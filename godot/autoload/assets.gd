@@ -111,8 +111,22 @@ const _RED_BUTTON_REL := "ui/red_button.png"
 const _CANCEL_BUTTON_REL := "ui/cancel_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
 const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
-const NEON_BUTTON_FILL := Color(0.09, 0.07, 0.14, 1.0)
 const NEON_PANEL_FILL := Color(0.05, 0.04, 0.09, 0.97)
+const START_MENU_BUTTON_CYAN := Color(0.42, 1.0, 0.95)
+const START_MENU_BUTTON_PINK := Color(1.0, 0.5, 0.7)
+const START_MENU_BUTTON_YELLOW := Color(1.0, 0.86, 0.36)
+const _START_MENU_START_BUTTON_REL := "start_menu/start_menu_start_button.png"
+const _START_MENU_SCORE_BUTTON_REL := "start_menu/start_menu_score_button.png"
+const _START_MENU_OPTIONS_BUTTON_REL := "start_menu/start_menu_options_button.png"
+const _START_MENU_START_BUTTON_REGION := Rect2(8.0, 142.0, 144.0, 28.0)
+const _START_MENU_SCORE_BUTTON_REGION := Rect2(26.0, 176.0, 108.0, 30.0)
+const _START_MENU_OPTIONS_BUTTON_REGION := Rect2(26.0, 211.0, 108.0, 30.0)
+const _START_MENU_BUTTON_TEXTURE_MARGIN := 2.0
+const _SMALL_NEON_BLUE_BUTTON_REL := "ui/neon_small_blue_button.png"
+const _SMALL_NEON_PINK_BUTTON_REL := "ui/neon_small_pink_button.png"
+const _SMALL_NEON_YELLOW_BUTTON_REL := "ui/neon_small_yellow_button.png"
+const _SMALL_NEON_BUTTON_REGION := Rect2(0.0, 0.0, 45.0, 22.0)
+const _SMALL_NEON_BUTTON_TEXTURE_MARGIN := 4.0
 const SYMBOL_PICKER_FRAME_REL := "ui/symbol_chosing.png"
 const SYMBOL_PICKER_TITLE_COLOR := Color(0.72, 1.0, 0.65)
 const SYMBOL_PICKER_PANEL_COLOR := Color(0.05, 0.03, 0.1, 0.94)
@@ -173,45 +187,139 @@ func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
 	b.add_theme_color_override("font_focus_color", Color.WHITE)
 	b.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
 
-## Shared outlined pixel-neon button style used by the start menu and modal menus.
-func neon_button_style(button: Button, border_color: Color, font_size: int = 6) -> void:
+## Reuses the authored cyan, pink, or yellow start-menu plate as a scalable
+## nine-slice skin. The nearest existing plate is selected for callers that pass
+## a slightly adjusted label color, keeping every button on the same pixel grid.
+func start_menu_button_style(button: Button, plate_color: Color, font_size: int = 6,
+		texture_margin: float = _START_MENU_BUTTON_TEXTURE_MARGIN) -> void:
 	if button == null:
 		return
+	var plate := _start_menu_button_plate(plate_color)
+	_apply_authored_button_style(button, plate, font_size, texture_margin)
+	button.set_meta(&"_start_menu_button_color", plate[&"color"])
+
+## Uses the dedicated 45x22 button art for compact controls. Callers with
+## sub-22px authored hit areas can lower the slice margin without changing size.
+func small_neon_button_style(button: Button, plate_color: Color, font_size: int = 6,
+		texture_margin: float = _SMALL_NEON_BUTTON_TEXTURE_MARGIN) -> void:
+	if button == null:
+		return
+	var plate := _small_neon_button_plate(plate_color)
+	_apply_authored_button_style(button, plate, font_size, texture_margin)
+	# DTM Sans leaves more visual slack below these short all-caps labels. Keep
+	# the same total inset, but move that space below the glyphs so ENTER,
+	# CANCEL, TABLES, etc. sit on the plate's visible pixel centre.
+	var bottom_margin := 2.0 if texture_margin <= 1.0 else 3.0
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var style := button.get_theme_stylebox(String(state))
+		style.content_margin_top = 0.0
+		style.content_margin_bottom = bottom_margin
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.set_meta(&"_start_menu_button_color", plate[&"color"])
+	button.set_meta(&"_small_neon_button_asset", plate[&"asset"])
+
+func _apply_authored_button_style(button: Button, plate: Dictionary, font_size: int,
+		texture_margin: float) -> void:
+	var plate_texture := texture(String(plate[&"asset"]))
+	if plate_texture == null:
+		return
+	var region: Rect2 = plate[&"region"]
+	var resolved_color: Color = plate[&"color"]
 	button.add_theme_font_size_override("font_size", font_size)
 	if font() != null:
 		button.add_theme_font_override("font", font())
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var style := StyleBoxFlat.new()
-	style.bg_color = NEON_BUTTON_FILL
-	style.border_color = border_color
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(2)
-	style.set_content_margin_all(1)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var style := StyleBoxTexture.new()
+		style.texture = plate_texture
+		style.region_rect = region
+		var margin := maxf(texture_margin, 0.0)
+		style.texture_margin_left = margin
+		style.texture_margin_top = margin
+		style.texture_margin_right = margin
+		style.texture_margin_bottom = margin
+		style.content_margin_left = 1.0
+		style.content_margin_top = 1.0
+		style.content_margin_right = 1.0
+		style.content_margin_bottom = 1.0 if margin <= 1.0 else _BUTTON_TEXT_BOTTOM_MARGIN
+		if state == "pressed":
+			style.content_margin_top = 1.0 if margin <= 1.0 else _PRESS_DROP
+		elif state == "disabled":
+			style.modulate_color = Color(1.0, 1.0, 1.0, 0.45)
 		button.add_theme_stylebox_override(String(state), style)
-	button.add_theme_color_override("font_color", border_color)
+	button.add_theme_color_override("font_color", resolved_color)
 	button.add_theme_color_override("font_hover_color", Color.WHITE)
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	button.add_theme_color_override("font_focus_color", border_color)
+	button.add_theme_color_override("font_focus_color", resolved_color)
 	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
 	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-## Give a neon text button a small squash-and-release animation while held.
+func _start_menu_button_plate(requested_color: Color) -> Dictionary:
+	var cyan_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_CYAN)
+	var pink_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_PINK)
+	var yellow_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_YELLOW)
+	if cyan_distance <= pink_distance and cyan_distance <= yellow_distance:
+		return {
+			&"asset": _START_MENU_START_BUTTON_REL,
+			&"region": _START_MENU_START_BUTTON_REGION,
+			&"color": START_MENU_BUTTON_CYAN,
+		}
+	if pink_distance <= yellow_distance:
+		return {
+			&"asset": _START_MENU_SCORE_BUTTON_REL,
+			&"region": _START_MENU_SCORE_BUTTON_REGION,
+			&"color": START_MENU_BUTTON_PINK,
+		}
+	return {
+		&"asset": _START_MENU_OPTIONS_BUTTON_REL,
+		&"region": _START_MENU_OPTIONS_BUTTON_REGION,
+		&"color": START_MENU_BUTTON_YELLOW,
+	}
+
+func _small_neon_button_plate(requested_color: Color) -> Dictionary:
+	var cyan_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_CYAN)
+	var pink_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_PINK)
+	var yellow_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_YELLOW)
+	if cyan_distance <= pink_distance and cyan_distance <= yellow_distance:
+		return {
+			&"asset": _SMALL_NEON_BLUE_BUTTON_REL,
+			&"region": _SMALL_NEON_BUTTON_REGION,
+			&"color": START_MENU_BUTTON_CYAN,
+		}
+	if pink_distance <= yellow_distance:
+		return {
+			&"asset": _SMALL_NEON_PINK_BUTTON_REL,
+			&"region": _SMALL_NEON_BUTTON_REGION,
+			&"color": START_MENU_BUTTON_PINK,
+		}
+	return {
+		&"asset": _SMALL_NEON_YELLOW_BUTTON_REL,
+		&"region": _SMALL_NEON_BUTTON_REGION,
+		&"color": START_MENU_BUTTON_YELLOW,
+	}
+
+func _color_distance_squared(first: Color, second: Color) -> float:
+	var red := first.r - second.r
+	var green := first.g - second.g
+	var blue := first.b - second.b
+	return red * red + green * green + blue * blue
+
+## Give a start-menu text button a small squash-and-release animation while held.
 ## The metadata guard keeps callers that refresh their styles from wiring it twice.
-func neon_button_press_feedback(button: Button, pressed_scale: float = 0.9) -> void:
-	if button == null or button.has_meta(&"_neon_press_feedback"):
+func start_menu_button_press_feedback(button: Button, pressed_scale: float = 0.9) -> void:
+	if button == null or button.has_meta(&"_start_menu_press_feedback"):
 		return
-	button.set_meta(&"_neon_press_feedback", true)
+	button.set_meta(&"_start_menu_press_feedback", true)
 	var visual_size := button.size
 	if visual_size == Vector2.ZERO:
 		visual_size = button.custom_minimum_size
 	if visual_size != Vector2.ZERO:
 		button.pivot_offset = visual_size * 0.5
 	var clamped_scale := clampf(pressed_scale, 0.75, 0.98)
-	button.button_down.connect(_neon_button_down.bind(button, clamped_scale))
-	button.button_up.connect(_neon_button_up.bind(button))
+	button.button_down.connect(_start_menu_button_down.bind(button, clamped_scale))
+	button.button_up.connect(_start_menu_button_up.bind(button))
 
-func _neon_button_down(button: Button, pressed_scale: float) -> void:
+func _start_menu_button_down(button: Button, pressed_scale: float) -> void:
 	if not is_instance_valid(button):
 		return
 	button.scale = Vector2.ONE * pressed_scale
@@ -219,7 +327,7 @@ func _neon_button_down(button: Button, pressed_scale: float) -> void:
 	tween.tween_property(button, "scale", Vector2.ONE * minf(1.0, pressed_scale + 0.03), 0.06) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-func _neon_button_up(button: Button) -> void:
+func _start_menu_button_up(button: Button) -> void:
 	if not is_instance_valid(button):
 		return
 	var tween := button.create_tween()

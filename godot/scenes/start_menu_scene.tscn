@@ -90,9 +90,9 @@ theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 8
 text = "SCORES"
 
-[node name="TutorialModal" type="Control" parent="."]
-visible = false
+[node name="TutorialModal" type="Control" parent="." unique_id=579738888]
 process_mode = 3
+visible = false
 z_index = 200
 layout_mode = 1
 anchors_preset = 15
@@ -100,19 +100,17 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
 
-[node name="Blocker" type="ColorRect" parent="TutorialModal"]
+[node name="Blocker" type="ColorRect" parent="TutorialModal" unique_id=1396232904]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
 color = Color(0.02, 0.01, 0.04, 0.74)
 
-[node name="Panel" type="PanelContainer" parent="TutorialModal"]
+[node name="Panel" type="PanelContainer" parent="TutorialModal" unique_id=763748469]
 layout_mode = 0
 offset_left = 6.0
 offset_top = 20.0
@@ -121,23 +119,18 @@ offset_bottom = 300.0
 mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_tutorial_panel")
 
-[node name="Margin" type="MarginContainer" parent="TutorialModal/Panel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Margin" type="MarginContainer" parent="TutorialModal/Panel" unique_id=764585152]
+layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="Content" type="VBoxContainer" parent="TutorialModal/Panel/Margin"]
+[node name="Content" type="VBoxContainer" parent="TutorialModal/Panel/Margin" unique_id=1210256072]
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="Title" type="Label" parent="TutorialModal/Panel/Margin/Content"]
+[node name="Title" type="Label" parent="TutorialModal/Panel/Margin/Content" unique_id=1800922222]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.86, 0.94, 1, 1)
 theme_override_fonts/font = ExtResource("2_font")
@@ -145,7 +138,7 @@ theme_override_font_sizes/font_size = 10
 text = "HOW TO PLAY"
 horizontal_alignment = 1
 
-[node name="Body" type="RichTextLabel" parent="TutorialModal/Panel/Margin/Content"]
+[node name="Body" type="RichTextLabel" parent="TutorialModal/Panel/Margin/Content" unique_id=1180094818]
 custom_minimum_size = Vector2(132, 221)
 layout_mode = 2
 theme_override_colors/default_color = Color(0.94, 0.88, 1, 1)
@@ -172,11 +165,10 @@ text = "[color=#d9f0ff][b]The Objective[/b][/color]
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the \"Reroll\" power.
 - 1 random power restores every 50 coins obtained."
-fit_content = false
 scroll_active = false
 autowrap_mode = 2
 
-[node name="OkButton" type="Button" parent="TutorialModal/Panel/Margin/Content"]
+[node name="OkButton" type="Button" parent="TutorialModal/Panel/Margin/Content" unique_id=1245709796]
 custom_minimum_size = Vector2(88, 18)
 layout_mode = 2
 size_flags_horizontal = 4

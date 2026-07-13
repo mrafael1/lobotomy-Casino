@@ -54,6 +54,7 @@ const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 # Centre of the selector bar — the pivot the suit bounces around when it changes.
 const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
+const ART_SYMBOL_OFFSET := Vector2(0.0, -4.0)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -206,6 +207,7 @@ func _build_art_menu() -> void:
 	_symbols_sprite = _frame_sprite(MENU_SYMBOLS_ASSET, 6)
 	if _symbols_sprite != null:
 		_symbols_sprite.name = "AugmentedSymbols"
+		_symbols_sprite.position = ART_SYMBOL_OFFSET
 		_symbols_sprite.visible = false
 
 	# The scene's buttons move out of the VBox onto their standalone plates.
@@ -513,7 +515,7 @@ func _set_symbols_pop(f: float) -> void:
 		return
 	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
 	_symbols_sprite.scale = base * f
-	_symbols_sprite.position = ART_SELECTOR_PIVOT * (1.0 - f)
+	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SELECTOR_PIVOT * (1.0 - f)
 
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
@@ -734,7 +736,7 @@ func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
 	var b := Button.new()
 	b.name = button_name
 	b.text = text
-	Assets.neon_button_style(b, color, 6)
+	Assets.start_menu_button_style(b, color, 6)
 	b.custom_minimum_size = Vector2.ZERO
 	b.position = rect.position
 	b.size = rect.size

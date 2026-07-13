@@ -487,11 +487,13 @@ func _style_buttons(node: Node) -> void:
 			var button := child as Button
 			if not skip_names.has(button.name):
 				if button.name == "BackButton":
-					Assets.neon_button_style(button, NEON_PINK, 7)
-					Assets.neon_button_press_feedback(button)
+					Assets.start_menu_button_style(button, NEON_PINK, 7)
+					Assets.start_menu_button_press_feedback(button)
 				elif button.name == "ContextBuyButton":
-					Assets.neon_button_style(button, NEON_CYAN, 6)
-					Assets.neon_button_press_feedback(button)
+					# This authored hit area is only 22x10, so its nine-slice keeps
+					# one-pixel margins instead of increasing the stele geometry.
+					Assets.small_neon_button_style(button, NEON_CYAN, 6, 1.0)
+					Assets.start_menu_button_press_feedback(button)
 				else:
 					Assets.skin_sheet_button(button, "ui/green_button.png", 4)
 		_style_buttons(child)

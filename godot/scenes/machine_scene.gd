@@ -1269,8 +1269,8 @@ func _build_score_button() -> void:
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
-	Assets.neon_button_style(_score_button, NEON_CYAN, 7)
-	Assets.neon_button_press_feedback(_score_button)
+	Assets.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
+	Assets.start_menu_button_press_feedback(_score_button)
 	if not _score_button.pressed.is_connected(_show_score_table):
 		_score_button.pressed.connect(_show_score_table)
 
@@ -3049,7 +3049,7 @@ func _show_score_table() -> void:
 	# vertical center reads low in the 14px band — pull the label up to comp.
 	close_label.position.y = -4.0
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Assets.neon_button_style(close, NEON_GOLD, 6)
+	Assets.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
 	# Pressed squash: shrink around the centre while held, spring back on release
 	# (same feel as the row info buttons).
 	close.pivot_offset = close.size * 0.5
