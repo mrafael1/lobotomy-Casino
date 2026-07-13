@@ -771,9 +771,11 @@ func _hide_continue_modal() -> void:
 		_continue_modal = null
 
 func _current_coins() -> int:
-	# The modal is a run snapshot readout; the banked meta wallet belongs to the
-	# dealer shop and must not replace the run's live Lucidity Coins balance.
-	return int(RunStateStore.lucidityCoins)
+	# The active machine owns the live run balance. Dealer and post-run states
+	# show the persistent wallet that the dealer actually spends and displays.
+	if RunStateStore.runPhase == "running":
+		return int(RunStateStore.lucidityCoins)
+	return int(MetaStateStore.lucidityWallet)
 
 func _resume_run() -> void:
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \

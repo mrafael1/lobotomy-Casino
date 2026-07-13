@@ -12,10 +12,10 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
-## Run persistence (issue #111 follow-up): a live run survives app restarts so
-## the menu can offer CONTINUE. The whole run state is snapshotted on every
-## commit while running (var_to_str keeps ints/bools exact, unlike JSON) and
-## the file is deleted the moment the run isn't running anymore.
+## Run persistence (issue #111 follow-up): a live run and a resumable flatline
+## dealer visit survive app restarts so the menu can offer CONTINUE. The whole
+## run state is snapshotted on every commit (var_to_str keeps ints/bools exact,
+## unlike JSON) and removed only when no resumable session remains.
 const RUN_SAVE_PATH := "user://lobotomy-run.save"
 const RUN_SAVE_SCHEMA_VERSION := 1
 
@@ -251,8 +251,8 @@ func _run_state_properties() -> Array[String]:
 func _save_run_state() -> void:
 	if Engine.is_editor_hint():
 		return
-	if runPhase != "running" and runPhase != "pre_run":
-		# No live run, nothing to resume: a stale file must not offer CONTINUE.
+	if not has_resume_state():
+		# No live or resumable post-run session: a stale file must not offer CONTINUE.
 		if FileAccess.file_exists(RUN_SAVE_PATH):
 			DirAccess.remove_absolute(RUN_SAVE_PATH)
 		return
@@ -276,7 +276,11 @@ func load_run_state() -> void:
 		return
 	var saved := data as Dictionary
 	var saved_phase := String(saved.get("runPhase", ""))
-	if saved_phase != "running" and saved_phase != "pre_run":
+	var saved_flatline := saved_phase == "over" \
+		and str(saved.get("lastEnding", "")) == "flatline" \
+		and int(MetaStateStore.campaignNeuronsLeft) > 0
+	if saved_phase != "running" and saved_phase != "pre_run" and not saved_flatline:
+		DirAccess.remove_absolute(RUN_SAVE_PATH)
 		return
 	for prop in _run_state_properties():
 		if saved.has(prop):
