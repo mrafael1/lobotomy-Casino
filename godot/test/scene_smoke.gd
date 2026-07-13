@@ -946,6 +946,19 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		failures.append("issue84: LAB button glow tween is not running")
 	elif not dealer._lab_glow_tween.is_running():
 		failures.append("issue84: LAB button glow tween is not looping")
+	var lab_glow := dealer.get_node_or_null("LabButtonGlowArt") as Sprite2D
+	if lab_glow == null:
+		failures.append("issue84: LAB sign-only glow layer is missing")
+	elif dealer._lab_button_sprite.self_modulate != Color.WHITE:
+		failures.append("issue84: LAB glow still modulates the label layer")
+	var lab_button := dealer.get_node_or_null("LabButton") as Button
+	if lab_button != null and lab_glow != null:
+		lab_button.button_down.emit()
+		if lab_glow.position != Vector2(62.0, 12.0):
+			failures.append("issue84: LAB glow did not follow the pressed sign frame")
+		lab_button.button_up.emit()
+		if lab_glow.position != Vector2(59.0, 0.0):
+			failures.append("issue84: LAB glow did not restore the normal sign frame")
 
 	# The machine button is wired to the confirm guard, not straight to _start_run.
 	var start_button := dealer.get_node_or_null("StartButton") as Button

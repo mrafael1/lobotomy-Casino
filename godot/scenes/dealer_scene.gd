@@ -104,6 +104,10 @@ const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 const LAB_GLOW_DIM := Color(0.82, 0.82, 0.82)
 const LAB_GLOW_BRIGHT := Color(1.55, 1.5, 1.15)
 const LAB_GLOW_PERIOD := 0.85
+const LAB_SIGN_GLOW_DIM := Color(1.0, 1.0, 1.0, 0.0)
+const LAB_SIGN_GLOW_BRIGHT := Color(1.55, 1.5, 1.15, 0.55)
+const LAB_NORMAL_SIGN_RECT := Rect2(59.0, 0.0, 43.0, 40.0)
+const LAB_PRESSED_SIGN_RECT := Rect2(62.0, 12.0, 37.0, 25.0)
 
 # Issue #84: confirm before the machine button starts the run (misclick guard).
 const CANVAS_W := 160.0
@@ -139,6 +143,8 @@ var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _lab_button: Button = null
 var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
+var _lab_glow_sprite: Sprite2D = null        # sign-only pulse overlay
+var _lab_glow_frames: Array[AtlasTexture] = []
 var _lab_glow_tween: Tween = null            # issue #84: looping lab-button glow
 var _start_button: Button = null
 var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
@@ -645,22 +651,52 @@ func _configure_lab_button() -> void:
 	_lab_button.size = LAB_BUTTON_RECT.size
 	if _lab_button_sprite == null:
 		_lab_button_sprite = _build_button_art(LAB_BUTTON_ASSET, "LabButtonArt")
+	if _lab_glow_sprite == null:
+		_lab_glow_sprite = _build_lab_glow_art()
 	_wire_art_button(_lab_button, _lab_button_sprite, Callable(self, "_open_lab"))
 	_start_lab_glow()
 
 ## Issue #84: give the LAB button a looping glow so it reads as a pressable button.
-## The pulse rides self_modulate, independent of the press-frame swap on the sheet.
+## Only the sign is pulsed; the pressed frame's label above it stays unlit.
 func _start_lab_glow() -> void:
-	if _lab_button_sprite == null or Engine.is_editor_hint():
+	if _lab_button_sprite == null or _lab_glow_sprite == null or Engine.is_editor_hint():
 		return
 	if _lab_glow_tween != null and _lab_glow_tween.is_valid():
 		return
-	_lab_button_sprite.self_modulate = LAB_GLOW_DIM
+	_lab_button_sprite.self_modulate = Color.WHITE
+	_lab_glow_sprite.self_modulate = LAB_SIGN_GLOW_DIM
 	_lab_glow_tween = create_tween().set_loops()
-	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
+	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_DIM, LAB_GLOW_PERIOD) \
+	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_DIM, LAB_GLOW_PERIOD) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _build_lab_glow_art() -> Sprite2D:
+	var texture := Assets.texture(LAB_BUTTON_ASSET, true)
+	if texture == null:
+		return null
+	var frame_width := float(texture.get_width()) / 2.0
+	var source_scale := frame_width / CANVAS_W
+	_lab_glow_frames.clear()
+	for frame in 2:
+		var sign_rect := LAB_NORMAL_SIGN_RECT if frame == 0 else LAB_PRESSED_SIGN_RECT
+		var atlas := AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(
+			Vector2(float(frame) * frame_width, 0.0) + sign_rect.position * source_scale,
+			sign_rect.size * source_scale
+		)
+		_lab_glow_frames.append(atlas)
+	var glow := Sprite2D.new()
+	glow.name = "LabButtonGlowArt"
+	glow.texture = _lab_glow_frames[0]
+	glow.centered = false
+	glow.position = LAB_NORMAL_SIGN_RECT.position
+	glow.scale = Vector2.ONE / source_scale
+	glow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	glow.self_modulate = LAB_SIGN_GLOW_DIM
+	add_child(glow)
+	return glow
 
 func _configure_machine_button() -> void:
 	if _start_button == null:
@@ -973,6 +1009,16 @@ func _wire_art_button(button: Button, spr: Sprite2D, cb: Callable) -> void:
 func _set_button_art_frame(spr: Sprite2D, frame: int) -> void:
 	if spr != null and is_instance_valid(spr):
 		spr.frame = frame
+		if spr == _lab_button_sprite:
+			_set_lab_glow_frame(frame)
+
+func _set_lab_glow_frame(frame: int) -> void:
+	if _lab_glow_sprite == null or _lab_glow_frames.is_empty():
+		return
+	var clamped_frame := clampi(frame, 0, _lab_glow_frames.size() - 1)
+	_lab_glow_sprite.texture = _lab_glow_frames[clamped_frame]
+	_lab_glow_sprite.position = LAB_NORMAL_SIGN_RECT.position \
+			if clamped_frame == 0 else LAB_PRESSED_SIGN_RECT.position
 
 func _toggle_options_overlay() -> void:
 	if _options_overlay == null:
