@@ -1,5 +1,8 @@
-@tool
 extends Control
+
+# The visual menu is assembled at runtime. Keep this script runtime-only so
+# generated layers and reparented buttons cannot be serialized into the scene
+# while it is open in the 2D editor.
 
 ## Start-run menu (issue #21) — the game's launch screen. From here the player
 ## starts a new run through the dealer pre-run shop, or continues an active run
@@ -57,7 +60,7 @@ const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 const ART_HINT_RECT := Rect2(5.0, 118.0, 150.0, 22.0)
 # The pixel font's line box leaves its slack above the glyphs, so the rect sits
 # a few px above the selector-to-SCORES gap to land the text inside it.
-const ART_DESC_RECT := Rect2(5.0, 209.0, 150.0, 10.0)
+const ART_DESC_RECT := Rect2(5.0, 207.0, 150.0, 10.0)
 # Run-state modal (opened by CONTINUE while a run is held): the neuron meter
 # lives here now, not on the menu, next to the resume/abandon choice.
 const CONTINUE_MODAL_PANEL_RECT := Rect2(20.0, 84.0, 120.0, 152.0)
@@ -640,8 +643,8 @@ func _dismiss_tutorial(save_immediately := true) -> void:
 
 func _start_run() -> void:
 	if not Engine.is_editor_hint() and RunStateStore.has_resume_state():
-		# CONTINUE first shows the run's state (neurons, score) with the choice
-		# to resume or abandon, instead of jumping straight into the machine.
+		# CONTINUE first shows the held session with the choice to resume or
+		# abandon, instead of jumping straight into another scene.
 		_show_continue_modal()
 		return
 	if not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
@@ -665,7 +668,7 @@ func _start_run() -> void:
 
 # ── run-state modal (held run) ───────────────────────────────────────────────────────
 # CONTINUE opens this instead of switching scenes: the neuron meter (moved off
-# the menu), the run's score/L-coin bank, and the resume-or-abandon choice.
+# the menu), the run's current coin balance, and the resume-or-abandon choice.
 
 func _show_continue_modal() -> void:
 	_hide_continue_modal()
@@ -695,13 +698,12 @@ func _show_continue_modal() -> void:
 	_continue_modal.add_child(panel)
 
 	var w := CONTINUE_MODAL_PANEL_RECT.size.x
-	var title := _overlay_label("Title", Rect2(0.0, 4.0, w, 10.0), 7, ART_CYAN, panel)
+	var title := _overlay_label("Title", Rect2(0.0, 7.0, w, 10.0), 7, ART_CYAN, panel)
 	title.text = "RUN IN PROGRESS"
-	NeuronMeter.attach(panel, Vector2(w * 0.5, 48.0))
-	var stats := _overlay_label("Stats", Rect2(0.0, 82.0, w, 10.0), 5,
+	NeuronMeter.attach(panel, Vector2(w * 0.5, 46.0))
+	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "SCORE %d   L-COIN : %d" % [int(RunStateStore.scoreEarned),
-		int(RunStateStore.lucidityCoins)]
+	stats.text = "CURRENT COINS : %d" % _current_coins()
 	var close := _modal_close_button(w)
 	panel.add_child(close)
 
@@ -771,8 +773,17 @@ func _hide_continue_modal() -> void:
 		_continue_modal.queue_free()
 		_continue_modal = null
 
+func _current_coins() -> int:
+	# The active machine owns the live run balance. Dealer and post-run states
+	# show the persistent wallet that the dealer actually spends and displays.
+	if RunStateStore.runPhase == "running":
+		return int(RunStateStore.lucidityCoins)
+	return int(MetaStateStore.lucidityWallet)
+
 func _resume_run() -> void:
-	var resume_scene := DEALER_SCENE if RunStateStore.runPhase == "pre_run" else MACHINE_SCENE
+	var resume_dealer := RunStateStore.runPhase == "pre_run" \
+		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline")
+	var resume_scene := DEALER_SCENE if resume_dealer else MACHINE_SCENE
 	get_tree().change_scene_to_file(resume_scene)
 
 ## Abandoning starts a fresh campaign: nothing is banked, the held run is
