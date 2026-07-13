@@ -1039,7 +1039,7 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 	var expected_sizes: Dictionary = {
 		"dealer_shop/dealer_shop_bg_x8.png": Vector2i(1280, 2560),
-		"dealer_shop/dealer_shop_counter_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_counter_base_x8.png": Vector2i(2560, 2560),
 		"dealer_shop/dealer_shop_LAB_BUTTON_x8.png": Vector2i(2560, 2560),
 		"dealer_shop/dealer_shop_machine_BUTTON_x8.png": Vector2i(2560, 2560),
 		"dealer_shop/dealer_shop_reroll_BUTTON_x8.png": Vector2i(2560, 2560),
@@ -1053,6 +1053,30 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 		var expected: Vector2i = expected_sizes[rel]
 		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
 			failures.append("dealer shop: %s is not an NN 8x sheet at %s" % [rel, expected])
+	var counter_base := load("res://assets/images/dealer_shop/dealer_shop_counter_base.png") as Texture2D
+	var counter_image := counter_base.get_image() if counter_base != null else null
+	if counter_image == null:
+		failures.append("dealer shop: counter-only base art is missing")
+	else:
+		for button_filename in [
+			"dealer_shop_LAB_BUTTON.png",
+			"dealer_shop_machine_BUTTON.png",
+			"dealer_shop_reroll_BUTTON.png",
+		]:
+			var button_texture := load("res://assets/images/dealer_shop/" + button_filename) as Texture2D
+			var button_image := button_texture.get_image() if button_texture != null else null
+			var overlaps := false
+			if button_image != null:
+				for y in counter_image.get_height():
+					for x in counter_image.get_width():
+						if counter_image.get_pixel(x, y).a > 0.0 \
+								and button_image.get_pixel(x, y).a > 0.0:
+							overlaps = true
+							break
+					if overlaps:
+						break
+			if overlaps:
+				failures.append("dealer shop: counter base still contains %s" % button_filename)
 
 	var background := dealer.get_node_or_null("Background") as Sprite2D
 	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:

@@ -66,6 +66,7 @@ const COIN_ASSET := "ui/coin.png"
 # Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
 # they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
+const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_base_x8.png"
 const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON_x8.png"
 const LAB_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_LAB_BUTTON_x8.png"
 # Opaque bounds of each button's art (source px, measured with pngjs) — the
@@ -266,8 +267,7 @@ func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
 		_configure_full_canvas_sprite(_background_sprite, DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 		_portrait_sprite = _configure_full_canvas_sprite(_portrait_sprite, "dealer_portrait.png", 2, 0)
-		_configure_full_canvas_sprite(_counter_sprite,
-				DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_x8.png", 2, 0)
+		_configure_full_canvas_sprite(_counter_sprite, DEALER_COUNTER_ASSET, 2, 0)
 		return
 	var bg := ColorRect.new() # wall colour behind any gap
 	bg.color = Color(0.055, 0.03, 0.11)
@@ -275,7 +275,7 @@ func _build_art() -> void:
 	add_child(bg)
 	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 	_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
-	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_x8.png", 2, 0)
+	_full_canvas_sprite(DEALER_COUNTER_ASSET, 2, 0)
 
 # Brief dealer reaction: swap the 2-frame portrait.
 func _dealer_react() -> void:
