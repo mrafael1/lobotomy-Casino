@@ -1601,17 +1601,18 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 	if stats != null and (stats.text.contains("SCORE") or stats.text.contains("LUCIDITY") \
 			or stats.text.contains("L-COIN")):
 		failures.append("menu: CONTINUE modal still shows the old score/coin label")
-	# A held pre-run dealer uses the banked wallet until the machine starts, so
-	# returning from that shop must not make the modal look empty.
+	# The modal always reads the run's Lucidity Coins wallet, even if the banked
+	# dealer wallet has a different value.
 	var wallet_before_preview := int(meta_store.lucidityWallet)
 	start_menu._hide_continue_modal()
 	await process_frame
 	run_store.runPhase = "pre_run"
+	run_store.lucidityCoins = 222
 	meta_store.lucidityWallet = 321
 	start_menu._show_continue_modal()
 	var pre_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
-	if pre_run_stats == null or pre_run_stats.text != "CURRENT COINS : 321":
-		failures.append("menu: pre-run CONTINUE modal should show the dealer wallet")
+	if pre_run_stats == null or pre_run_stats.text != "CURRENT COINS : 222":
+		failures.append("menu: CONTINUE modal should show the run Lucidity Coins wallet")
 	start_menu._hide_continue_modal()
 	await process_frame
 	run_store.runPhase = "running"
