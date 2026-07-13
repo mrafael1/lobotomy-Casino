@@ -746,14 +746,9 @@ func _hide_continue_modal() -> void:
 func _resume_run() -> void:
 	get_tree().change_scene_to_file(MACHINE_SCENE)
 
-## Abandoning banks the run like a flatline (the kept lucidity fraction still
-## applies), then frees the menu for a fresh start.
+## Abandoning simply resets the current run — nothing is banked; the spent
+## campaign neuron stays spent. The menu then offers a fresh start.
 func _give_up_run() -> void:
-	MetaStateStore.bank_run({
-		"lucidityCoins": RunStateStore.lucidityCoins,
-		"scoreEarned": RunStateStore.scoreEarned,
-		"neurons": RunStateStore.neurons,
-	}, "flatline")
 	RunStateStore.reset_run_state()
 	_hide_continue_modal()
 	_refresh_campaign_ui()

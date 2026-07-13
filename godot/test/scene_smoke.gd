@@ -1595,12 +1595,14 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 	if give_up == null:
 		failures.append("menu: CONTINUE modal has no GIVE UP button")
 	else:
-		# Abandoning banks the run like a flatline (10% of 200 = 20) and frees the menu.
+		# Abandoning resets the run outright: nothing banks, the menu frees up.
 		give_up.pressed.emit()
 		if String(run_store.runPhase) == "running":
 			failures.append("menu: GIVE UP did not end the held run")
-		if int(meta_store.lucidityWallet) != 20:
-			failures.append("menu: GIVE UP banked %d of 200, expected 20" % int(meta_store.lucidityWallet))
+		if int(run_store.scoreEarned) != 0 or int(run_store.lucidityCoins) != 0:
+			failures.append("menu: GIVE UP did not reset the run state")
+		if int(meta_store.lucidityWallet) != 0:
+			failures.append("menu: GIVE UP banked lucidity; abandoning should bank nothing")
 		# queue_free is deferred; the scene's reference clears immediately.
 		if start_menu._continue_modal != null:
 			failures.append("menu: GIVE UP left the run-state modal open")
