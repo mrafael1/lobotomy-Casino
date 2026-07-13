@@ -1,5 +1,8 @@
-@tool
 extends Control
+
+# The visual menu is assembled at runtime. Keep this script runtime-only so
+# generated layers and reparented buttons cannot be serialized into the scene
+# while it is open in the 2D editor.
 
 ## Start-run menu (issue #21) — the game's launch screen. From here the player
 ## starts a new run through the dealer pre-run shop, or continues an active run
@@ -57,7 +60,7 @@ const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 const ART_HINT_RECT := Rect2(5.0, 118.0, 150.0, 22.0)
 # The pixel font's line box leaves its slack above the glyphs, so the rect sits
 # a few px above the selector-to-SCORES gap to land the text inside it.
-const ART_DESC_RECT := Rect2(5.0, 206.0, 150.0, 10.0)
+const ART_DESC_RECT := Rect2(5.0, 207.0, 150.0, 10.0)
 # Run-state modal (opened by CONTINUE while a run is held): the neuron meter
 # lives here now, not on the menu, next to the resume/abandon choice.
 const CONTINUE_MODAL_PANEL_RECT := Rect2(20.0, 84.0, 120.0, 152.0)
