@@ -70,6 +70,8 @@ const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
 const COIN_ASSET := "ui/coin.png"
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const NEON_CYAN := Color(0.42, 1.0, 0.95)
+const NEON_PINK := Color(1.0, 0.5, 0.7)
 ## Corrupted upgrades render their NAME in purple (issue #37). This is an explicit
 ## per-upgrade flag, DECOUPLED from the mechanical "corrupted" category: Hallucination
 ## is a positive-category upgrade but must read as corrupted, while other
@@ -137,6 +139,7 @@ const DESCRIPTIONS := {
 @onready var _wallet_coin := $CanvasLayer/UI_Container/LucidtyCoinDisplay/Coin as TextureRect
 @onready var _power_name_box := $CanvasLayer/UI_Container/PowerNameBox as Control
 @onready var _power_name_label := $CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PowerNameLabel as Label
+@onready var _description_bubble := $CanvasLayer/UI_Container/DescriptionBubble as PanelContainer
 @onready var _description_label := $CanvasLayer/UI_Container/DescriptionBubble/DescriptionCenter/Text as RichTextLabel
 @onready var _eye_hitbox := $CanvasLayer/UI_Container/EyeComputerHitbox as Button
 @onready var _memory_hitbox := $CanvasLayer/UI_Container/MemoryComputerHitbox as Button
@@ -484,7 +487,11 @@ func _style_buttons(node: Node) -> void:
 			var button := child as Button
 			if not skip_names.has(button.name):
 				if button.name == "BackButton":
-					Assets.skin_negative_button(button)
+					Assets.neon_button_style(button, NEON_PINK, 7)
+					Assets.neon_button_press_feedback(button)
+				elif button.name == "ContextBuyButton":
+					Assets.neon_button_style(button, NEON_CYAN, 6)
+					Assets.neon_button_press_feedback(button)
 				else:
 					Assets.skin_sheet_button(button, "ui/green_button.png", 4)
 		_style_buttons(child)
@@ -502,6 +509,16 @@ func _style_lucidity_displays() -> void:
 		_context_price_label.add_theme_color_override("font_color", LUCIDITY_COLOR)
 		_context_price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_context_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if _power_name_box != null:
+		var power_style := Assets.neon_panel_style(NEON_CYAN, 3.0)
+		power_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.48)
+		power_style.shadow_size = 3
+		_power_name_box.add_theme_stylebox_override(&"panel", power_style)
+	if _description_bubble != null:
+		var description_style := Assets.neon_panel_style(NEON_PINK, 6.0)
+		description_style.shadow_color = Color(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, 0.42)
+		description_style.shadow_size = 3
+		_description_bubble.add_theme_stylebox_override(&"panel", description_style)
 	if _description_label != null:
 		_description_label.fit_content = true
 		_description_label.scroll_active = false
@@ -509,6 +526,9 @@ func _style_lucidity_displays() -> void:
 		_description_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if _power_name_label != null:
 		_power_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_power_name_label.add_theme_color_override(&"font_color", NEON_CYAN)
+		_power_name_label.add_theme_color_override(&"font_outline_color", Color.BLACK)
+		_power_name_label.add_theme_constant_override(&"outline_size", 1)
 	if _context_buy_button != null:
 		_center_button_text(_context_buy_button)
 

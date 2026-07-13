@@ -960,6 +960,19 @@ func _check_neon_button_style(button: Button, expected_border: Color, label: Str
 			or style.border_width_right != 1 or style.border_width_bottom != 1:
 		failures.append("%s: neon contour should be one pixel" % label)
 
+func _check_neon_press_feedback(button: Button, label: String, failures: Array) -> void:
+	if button == null:
+		failures.append("%s: button is missing for press feedback" % label)
+		return
+	if not button.has_meta(&"_neon_press_feedback"):
+		failures.append("%s: neon button is missing press feedback" % label)
+		return
+	var resting_scale := button.scale
+	button.button_down.emit()
+	if button.scale == resting_scale:
+		failures.append("%s: press feedback did not squash the button" % label)
+	button.button_up.emit()
+
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
 func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void:
@@ -3554,6 +3567,9 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
 	if not buy_stele.visible:
 		failures.append("upgrades: buy stele should be visible even before a terminal is open")
+	_check_neon_button_style(context_buy, Color(0.42, 1.0, 0.95),
+		"upgrades: BUY", failures)
+	_check_neon_press_feedback(context_buy, "upgrades: BUY", failures)
 	if context_buy.size != Vector2(22.0, 10.0):
 		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
@@ -3565,9 +3581,15 @@ func _check_upgrades_scene(failures: Array) -> void:
 	if context_price_coin.texture == null:
 		failures.append("upgrades: contextual price is missing lucidity coin icon")
 	var back_button := scene.get_node("CanvasLayer/UI_Container/BackButton") as Button
-	var back_style := back_button.get_theme_stylebox("normal") as StyleBoxTexture
-	if back_style == null or back_style.texture == null or back_style.texture.resource_path.get_file() != "red_button.png":
-		failures.append("upgrades: back button is not using the red button skin")
+	_check_neon_button_style(back_button, Color(1.0, 0.5, 0.7),
+		"upgrades: RETURN TO BAR", failures)
+	_check_neon_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
+	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
+		failures.append("upgrades: power name box is missing its cyan neon contour")
+	var description_style := description.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if description_style == null or not description_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
+		failures.append("upgrades: description bubble is missing its pink neon contour")
 	if back_button.z_index <= description.z_index:
 		failures.append("upgrades: back button should render above description bubble")
 	scene._activate_memory()

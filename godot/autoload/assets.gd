@@ -196,6 +196,36 @@ func neon_button_style(button: Button, border_color: Color, font_size: int = 6) 
 	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
 	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
+## Give a neon text button a small squash-and-release animation while held.
+## The metadata guard keeps callers that refresh their styles from wiring it twice.
+func neon_button_press_feedback(button: Button, pressed_scale: float = 0.9) -> void:
+	if button == null or button.has_meta(&"_neon_press_feedback"):
+		return
+	button.set_meta(&"_neon_press_feedback", true)
+	var visual_size := button.size
+	if visual_size == Vector2.ZERO:
+		visual_size = button.custom_minimum_size
+	if visual_size != Vector2.ZERO:
+		button.pivot_offset = visual_size * 0.5
+	var clamped_scale := clampf(pressed_scale, 0.75, 0.98)
+	button.button_down.connect(_neon_button_down.bind(button, clamped_scale))
+	button.button_up.connect(_neon_button_up.bind(button))
+
+func _neon_button_down(button: Button, pressed_scale: float) -> void:
+	if not is_instance_valid(button):
+		return
+	button.scale = Vector2.ONE * pressed_scale
+	var tween := button.create_tween()
+	tween.tween_property(button, "scale", Vector2.ONE * minf(1.0, pressed_scale + 0.03), 0.06) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _neon_button_up(button: Button) -> void:
+	if not is_instance_valid(button):
+		return
+	var tween := button.create_tween()
+	tween.tween_property(button, "scale", Vector2.ONE, 0.1) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 ## Shared dark panel with a small neon contour for overlays and modal surfaces.
 func neon_panel_style(border_color: Color, content_margin: float = 0.0) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
