@@ -12,6 +12,13 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
+## Run persistence (issue #111 follow-up): a live run survives app restarts so
+## the menu can offer CONTINUE. The whole run state is snapshotted on every
+## commit while running (var_to_str keeps ints/bools exact, unlike JSON) and
+## the file is deleted the moment the run isn't running anymore.
+const RUN_SAVE_PATH := "user://lobotomy-run.save"
+const RUN_SAVE_SCHEMA_VERSION := 1
+
 ## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
 ## reroll adds the base again (5, 10, 15, …).
 const DEALER_REROLL_BASE_COST := 5
@@ -221,8 +228,58 @@ func _augmented_jackpot_cut(score: int, win_type: String) -> int:
 		return 0
 	return score - roundi(float(score) * 0.5)
 
+func _ready() -> void:
+	load_run_state()
+
 func _commit() -> void:
 	state_changed.emit()
+	_save_run_state()
+
+# ── run persistence ──────────────────────────────────────────────────────────────
+
+## Every non-exported script variable of the store IS the run state; exports are
+## balance tunables and stay out of the save.
+func _run_state_properties() -> Array[String]:
+	var names: Array[String] = []
+	for p in get_property_list():
+		if (int(p["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 \
+				and (int(p["usage"]) & PROPERTY_USAGE_EDITOR) == 0:
+			names.append(String(p["name"]))
+	return names
+
+func _save_run_state() -> void:
+	if Engine.is_editor_hint():
+		return
+	if runPhase != "running":
+		# No live run, nothing to resume: a stale file must not offer CONTINUE.
+		if FileAccess.file_exists(RUN_SAVE_PATH):
+			DirAccess.remove_absolute(RUN_SAVE_PATH)
+		return
+	var out := { "schemaVersion": RUN_SAVE_SCHEMA_VERSION }
+	for prop in _run_state_properties():
+		out[prop] = get(prop)
+	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(var_to_str(out))
+
+## Restores a live run snapshot, if one exists. Unknown keys (removed fields)
+## are skipped; missing keys (new fields) keep their reset defaults.
+func load_run_state() -> void:
+	if Engine.is_editor_hint() or not FileAccess.file_exists(RUN_SAVE_PATH):
+		return
+	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var data: Variant = str_to_var(f.get_as_text())
+	if not (data is Dictionary):
+		return
+	var saved := data as Dictionary
+	if String(saved.get("runPhase", "")) != "running":
+		return
+	for prop in _run_state_properties():
+		if saved.has(prop):
+			set(prop, saved[prop])
+	_commit()
 
 # ── spin ──────────────────────────────────────────────────────────────────────────
 

@@ -80,6 +80,7 @@ func _run() -> void:
 	_check_starting_powers_and_random_118(run_store, failures)
 	_check_augmented_run_111(machine, run_store, meta_store, failures)
 	await _check_augmented_menu_111(run_store, meta_store, failures)
+	_check_run_persistence_111(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -4036,6 +4037,32 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 	run_store.augmentedTier = prev_tier
 	run_store.runPhase = prev_phase
 	run_store.powersUsedThisSpin = prev_powers
+
+# Run persistence (issue #111 follow-up): a live run survives an app restart so
+# the menu can offer CONTINUE; ending the run deletes the snapshot.
+func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 123
+	run_store.augmentedTier = "heart"
+	run_store.betMultiplier = 2
+	run_store._commit() # snapshots the live run to disk
+	if not FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("persistence: a live run did not write its snapshot")
+	# Simulate a fresh launch: wipe the in-memory state WITHOUT committing, then
+	# load the snapshot back like the autoload's _ready does.
+	run_store.runPhase = "idle"
+	run_store.scoreEarned = 0
+	run_store.augmentedTier = ""
+	run_store.betMultiplier = 1
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "running" or int(run_store.scoreEarned) != 123 \
+			or String(run_store.augmentedTier) != "heart" or int(run_store.betMultiplier) != 2:
+		failures.append("persistence: restart did not restore the live run")
+	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
+	run_store.reset_run_state()
+	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("persistence: reset left a stale run snapshot behind")
 
 # Augmented Run menu (issue #111): the selector is hidden before the unlock and
 # appears under START RUN afterwards, communicating the tier before the start.
