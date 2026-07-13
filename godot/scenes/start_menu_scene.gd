@@ -26,9 +26,10 @@ const CANVAS_W := 160.0
 const CANVAS_H := 320.0
 const MENU_W := 148.0
 
-# Authored menu frames (issue #111). Legacy fallback background if missing.
-const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # 2 frames
+# Authored menu art (issue #111). Legacy fallback background if missing.
+const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # bg + title
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
+const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
 const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
 # Standalone button plates (full-canvas overlays): the plate squashes together
 # with its label on press. START is one frame; SCORES/OPTIONS carry two frames
@@ -57,10 +58,9 @@ const ART_HINT_RECT := Rect2(5.0, 118.0, 150.0, 22.0)
 # The pixel font's line box leaves its slack above the glyphs, so the rect sits
 # a few px above the selector-to-SCORES gap to land the text inside it.
 const ART_DESC_RECT := Rect2(5.0, 209.0, 150.0, 10.0)
-const ART_METER_CENTER_LOCKED := Vector2(80.0, 262.0)
-const ART_METER_CENTER_UNLOCKED := Vector2(80.0, 301.0)
-const ART_METER_SCALE_LOCKED := 1.0
-const ART_METER_SCALE_UNLOCKED := 2.5
+# Run-state modal (opened by CONTINUE while a run is held): the neuron meter
+# lives here now, not on the menu, next to the resume/abandon choice.
+const CONTINUE_MODAL_PANEL_RECT := Rect2(20.0, 84.0, 120.0, 152.0)
 
 # Neon label colors matching the baked plate outlines.
 const ART_CYAN := Color(0.42, 1.0, 0.95)
@@ -107,7 +107,8 @@ const AUGMENTED_DESCRIPTIONS := {
 
 var _font: FontFile = null
 var _use_art := false
-var _menu_sprite: Sprite2D = null      # start_menu.png, frame 0 locked / 1 unlocked
+var _menu_sprite: Sprite2D = null      # start_menu.png (background + title)
+var _bar_sprite: Sprite2D = null       # selector bar overlay, shown once unlocked
 var _symbols_sprite: Sprite2D = null   # suit overlay, frame per selection
 var _plate_sprites := {}               # Button -> full-canvas plate Sprite2D
 var _background: Sprite2D = null
@@ -116,10 +117,12 @@ var _scores_button: Button = null
 var _options_button: Button = null
 var _options_overlay: OptionsOverlay = null
 var _campaign_label: Label = null
-var _campaign_meter: NeuronMeter = null # issue #38 pixel-art neuron meter
 var _campaign_hint: Label = null
 var _augmented_row: Control = null
 var _augmented_desc: Label = null
+var _arrow_buttons: Array[Button] = []
+var _arrow_arts: Array[Sprite2D] = []
+var _continue_modal: Control = null
 var _selected_augmented_tier := ""
 var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
@@ -191,8 +194,12 @@ func _build_art_menu() -> void:
 		if n != null:
 			n.visible = false
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
-	_menu_sprite = _frame_sprite(MENU_FRAMES_ASSET, 2)
+	_menu_sprite = _frame_sprite(MENU_FRAMES_ASSET, 1)
 	_menu_sprite.name = "MenuArt"
+	_bar_sprite = _frame_sprite(MENU_AUGMENTED_BAR_ASSET, 1)
+	if _bar_sprite != null:
+		_bar_sprite.name = "AugmentedBar"
+		_bar_sprite.visible = false
 	_symbols_sprite = _frame_sprite(MENU_SYMBOLS_ASSET, 6)
 	if _symbols_sprite != null:
 		_symbols_sprite.name = "AugmentedSymbols"
@@ -227,10 +234,13 @@ func _build_art_menu() -> void:
 	_augmented_row.position = ART_SELECTOR_RECT.position
 	_augmented_row.size = ART_SELECTOR_RECT.size
 	add_child(_augmented_row)
-	_augmented_row.add_child(_augmented_arrow_button(-1, ART_SELECTOR_RECT.size,
-		_arrow_art(ART_ARROW_LEFT_RECT)))
-	_augmented_row.add_child(_augmented_arrow_button(1, ART_SELECTOR_RECT.size,
-		_arrow_art(ART_ARROW_RIGHT_RECT)))
+	for arrow in [[-1, ART_ARROW_LEFT_RECT], [1, ART_ARROW_RIGHT_RECT]]:
+		var art := _arrow_art(arrow[1] as Rect2)
+		var btn := _augmented_arrow_button(int(arrow[0]), ART_SELECTOR_RECT.size, art)
+		_augmented_row.add_child(btn)
+		_arrow_buttons.append(btn)
+		if art != null:
+			_arrow_arts.append(art)
 	_augmented_desc = _overlay_label("AugmentedDescription", ART_DESC_RECT, 5, ART_YELLOW)
 
 	# Campaign meter + hint live in the frame's free strips (issue #38).
@@ -243,7 +253,8 @@ func _build_art_menu() -> void:
 		_options_overlay.name = "OptionsOverlay"
 		add_child(_options_overlay)
 
-func _overlay_label(label_name: String, rect: Rect2, font_size: int, color: Color) -> Label:
+func _overlay_label(label_name: String, rect: Rect2, font_size: int, color: Color,
+		parent: Control = null) -> Label:
 	var l := Label.new()
 	l.name = label_name
 	l.position = rect.position
@@ -257,7 +268,7 @@ func _overlay_label(label_name: String, rect: Rect2, font_size: int, color: Colo
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_outline_color", Color.BLACK)
 	l.add_theme_constant_override("outline_size", 1)
-	add_child(l)
+	(parent if parent != null else self).add_child(l)
 	return l
 
 ## Moves a tscn menu button out of the VBox and turns it into live text over a
@@ -334,19 +345,18 @@ func _set_plate_pop(f: float, plate: Sprite2D, pivot: Vector2) -> void:
 	plate.position = pivot * (1.0 - f)
 	plate.set_meta("pop_f", f)
 
-## Live copy of one baked arrow segment, parented to the selector row so it can
-## squash on press (the frame art underneath can't move). Centered on the arrow
-## so the scale pivots in place; NEAREST like the frame it copies.
+## Live copy of one baked arrow, cropped from the bar overlay asset so it can
+## squash on press (the bar art underneath can't move). Centered on the arrow
+## so the scale pivots in place; NEAREST like the art it copies.
 func _arrow_art(rect: Rect2) -> Sprite2D:
-	var tex := Assets.texture(MENU_FRAMES_ASSET)
+	var tex := Assets.texture(MENU_AUGMENTED_BAR_ASSET)
 	if tex == null:
 		return null
-	var s := float(tex.get_width()) * 0.5 / CANVAS_W # export scale of one frame
+	var s := float(tex.get_width()) / CANVAS_W # export scale of the overlay
 	var spr := Sprite2D.new()
 	spr.texture = tex
 	spr.region_enabled = true
-	# The arrows only exist on the unlocked layout: frame 1, one frame-width in.
-	spr.region_rect = Rect2((rect.position + Vector2(CANVAS_W, 0.0)) * s, rect.size * s)
+	spr.region_rect = Rect2(rect.position * s, rect.size * s)
 	spr.centered = true
 	spr.position = rect.position + rect.size * 0.5 - ART_SELECTOR_RECT.position
 	spr.scale = Vector2.ONE / s
@@ -391,17 +401,19 @@ func _toggle_options_overlay() -> void:
 	if _options_overlay != null:
 		_options_overlay.toggle_overlay()
 
-## Which authored layout is on screen: frame 1 only when the selector is usable
-## (unlocked AND no held run — modifiers can't change mid-run).
+## Which authored layout is on screen: frame 1 once Augmented Run is unlocked.
+## A held run keeps the selector visible but LOCKED (arrows disabled, showing
+## the active run's suit) — modifiers can't change mid-run.
 func _augmented_layout_active() -> bool:
 	if Engine.is_editor_hint():
 		return false
-	return MetaStateStore.augmentedRunUnlocked and RunStateStore.runPhase != "running"
+	return MetaStateStore.augmentedRunUnlocked
 
-## Repositions the plate buttons, meter and hint for the current frame layout.
+## Repositions the plate buttons for the current layout; the selector bar
+## overlay only shows once Augmented Run is unlocked.
 func _layout_art_menu(augmented: bool) -> void:
-	if _menu_sprite != null:
-		_menu_sprite.frame = 1 if augmented else 0
+	if _bar_sprite != null:
+		_bar_sprite.visible = augmented
 	if _scores_button != null:
 		_style_plate_button(_scores_button,
 			ART_SCORES_UNLOCKED_RECT if augmented else ART_SCORES_LOCKED_RECT, ART_PINK, 8)
@@ -413,24 +425,6 @@ func _layout_art_menu(augmented: bool) -> void:
 		var plate := _plate_sprites.get(b) as Sprite2D
 		if plate != null and is_instance_valid(plate):
 			plate.frame = 1 if augmented else 0
-	_place_campaign_meter(augmented)
-
-## The meter sizes itself from its art; the unlocked frame only leaves the strip
-## under OPTIONS, so it renders at half size there (asset_scale escape hatch).
-func _place_campaign_meter(augmented: bool) -> void:
-	if Engine.is_editor_hint():
-		return
-	var wanted_scale := ART_METER_SCALE_UNLOCKED if augmented else ART_METER_SCALE_LOCKED
-	if _campaign_meter != null and not is_equal_approx(_campaign_meter.asset_scale, wanted_scale):
-		_campaign_meter.queue_free()
-		_campaign_meter = null
-	if _campaign_meter == null:
-		_campaign_meter = NeuronMeter.new()
-		_campaign_meter.asset_scale = wanted_scale
-		add_child(_campaign_meter) # _ready sizes the control to the authored frame
-	var center := ART_METER_CENTER_UNLOCKED if augmented else ART_METER_CENTER_LOCKED
-	_campaign_meter.position = center - _campaign_meter.size * 0.5
-	_campaign_meter.refresh()
 
 # ── legacy fallback (frames asset missing) ───────────────────────────────────────────
 
@@ -487,6 +481,8 @@ func _build_campaign_labels() -> void:
 # ── Augmented Run selector state (issue #111) ────────────────────────────────────────
 
 func _cycle_augmented_tier(step: int) -> void:
+	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
+		return # locked while a run is held
 	var cycle := RunStateStore.AUGMENTED_TIER_CYCLE
 	var idx := cycle.find(_selected_augmented_tier)
 	idx = (idx + step + cycle.size()) % cycle.size()
@@ -516,17 +512,28 @@ func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
 		return
 	var shown := _augmented_layout_active()
+	var run_held := not Engine.is_editor_hint() and RunStateStore.runPhase == "running"
 	_augmented_row.visible = shown
 	if _use_art:
 		_layout_art_menu(shown)
+	# While a run is held the row locks: arrows disabled (dimmed), and the suit
+	# shown is the ACTIVE run's tier, not the menu selection.
+	var displayed := _selected_augmented_tier
+	if run_held:
+		displayed = String(RunStateStore.augmentedTier)
+	for b in _arrow_buttons:
+		b.disabled = run_held
+	for art in _arrow_arts:
+		if is_instance_valid(art):
+			art.modulate = Color(0.45, 0.45, 0.5) if run_held else Color.WHITE
 	if _symbols_sprite != null:
 		_symbols_sprite.visible = shown
 		var cycle := RunStateStore.AUGMENTED_TIER_CYCLE
-		_symbols_sprite.frame = clampi(cycle.find(_selected_augmented_tier), 0,
+		_symbols_sprite.frame = clampi(cycle.find(displayed), 0,
 			_symbols_sprite.hframes - 1)
 	if _augmented_desc != null:
 		_augmented_desc.visible = shown
-		_augmented_desc.text = String(AUGMENTED_DESCRIPTIONS.get(_selected_augmented_tier, ""))
+		_augmented_desc.text = String(AUGMENTED_DESCRIPTIONS.get(displayed, ""))
 
 func _refresh_start_button() -> void:
 	if _start_button == null:
@@ -556,16 +563,8 @@ func _refresh_campaign_ui() -> void:
 	if Engine.is_editor_hint():
 		_campaign_hint.text = "EACH RETURN COSTS ONE"
 		return
-	if not _use_art:
-		# Issue #38: the meter replaces the text; the label holds its menu slot.
-		if _campaign_label != null:
-			_campaign_label.text = ""
-			if _campaign_meter == null:
-				_campaign_meter = NeuronMeter.attach(_campaign_label, Vector2(MENU_W * 0.5, 0.0))
-				_campaign_label.custom_minimum_size = Vector2(0.0, _campaign_meter.size.y)
-				_campaign_meter.position = Vector2(MENU_W * 0.5, _campaign_meter.size.y * 0.5) \
-					- _campaign_meter.size * 0.5
-			_campaign_meter.refresh()
+	# The neuron meter no longer lives on the menu — CONTINUE opens the
+	# run-state modal, which carries it (see _show_continue_modal).
 	if MetaStateStore.campaignFailed:
 		_campaign_hint.text = fatal_flatline_text
 	elif MetaStateStore.wealthEndingReached:
@@ -637,7 +636,9 @@ func _dismiss_tutorial(save_immediately := true) -> void:
 
 func _start_run() -> void:
 	if not Engine.is_editor_hint() and RunStateStore.runPhase == "running":
-		get_tree().change_scene_to_file(MACHINE_SCENE)
+		# CONTINUE first shows the run's state (neurons, score) with the choice
+		# to resume or abandon, instead of jumping straight into the machine.
+		_show_continue_modal()
 		return
 	if not Engine.is_editor_hint() and (MetaStateStore.campaignFailed or MetaStateStore.wealthEndingReached):
 		MetaStateStore.start_new_campaign()
@@ -656,6 +657,106 @@ func _start_run() -> void:
 	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
 	# pre-run shop mode and starts the run once the player leaves the counter.
 	get_tree().change_scene_to_file(DEALER_SCENE)
+
+# ── run-state modal (held run) ───────────────────────────────────────────────────────
+# CONTINUE opens this instead of switching scenes: the neuron meter (moved off
+# the menu), the run's score/lucidity, and the resume-or-abandon choice.
+
+func _show_continue_modal() -> void:
+	_hide_continue_modal()
+	_continue_modal = Control.new()
+	_continue_modal.name = "ContinueModal"
+	_continue_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_continue_modal.z_index = 150
+	_continue_modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_continue_modal)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.74)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_continue_modal.add_child(dim)
+
+	var panel := Panel.new()
+	panel.name = "Panel"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.04, 0.09, 0.97)
+	style.border_color = ART_CYAN
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(3)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.position = CONTINUE_MODAL_PANEL_RECT.position
+	panel.size = CONTINUE_MODAL_PANEL_RECT.size
+	_continue_modal.add_child(panel)
+
+	var w := CONTINUE_MODAL_PANEL_RECT.size.x
+	var title := _overlay_label("Title", Rect2(0.0, 4.0, w, 10.0), 7, ART_CYAN, panel)
+	title.text = "RUN IN PROGRESS"
+	NeuronMeter.attach(panel, Vector2(w * 0.5, 56.0))
+	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
+		Color(0.9, 0.94, 1.0), panel)
+	stats.text = "SCORE %d   LUCIDITY %d" % [int(RunStateStore.scoreEarned),
+		int(RunStateStore.lucidityCoins)]
+
+	panel.add_child(_modal_button("ContinueButton", "CONTINUE",
+		Rect2(16.0, 102.0, 88.0, 18.0), ART_CYAN, _resume_run))
+	panel.add_child(_modal_button("GiveUpButton", "GIVE UP",
+		Rect2(16.0, 126.0, 88.0, 18.0), Color(1.0, 0.4, 0.45), _give_up_run))
+
+func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
+		cb: Callable) -> Button:
+	var b := Button.new()
+	b.name = button_name
+	b.text = text
+	b.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
+	b.add_theme_color_override("font_color", color)
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", Color.WHITE)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.07, 0.14)
+	style.border_color = color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
+	# Flat margins: the default content margins inflate the minimum size past
+	# the authored rect, which is why size is set AFTER the overrides.
+	style.set_content_margin_all(1)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(String(state), style)
+	b.custom_minimum_size = Vector2.ZERO
+	b.position = rect.position
+	b.size = rect.size
+	# Something in the enter-tree pass re-inflates the rect (same class of issue
+	# as the dealer confirm modal's anchor warning); re-assert it post-layout.
+	b.set_deferred("size", rect.size)
+	b.pivot_offset = rect.size * 0.5
+	# Same squash feel as the plate buttons (no plate sprite mapped -> label only).
+	b.pivot_offset = rect.size * 0.5
+	b.button_down.connect(_on_plate_button_down.bind(b))
+	b.button_up.connect(_on_plate_button_up.bind(b))
+	b.pressed.connect(cb)
+	return b
+
+func _hide_continue_modal() -> void:
+	if _continue_modal != null:
+		_continue_modal.queue_free()
+		_continue_modal = null
+
+func _resume_run() -> void:
+	get_tree().change_scene_to_file(MACHINE_SCENE)
+
+## Abandoning banks the run like a flatline (the kept lucidity fraction still
+## applies), then frees the menu for a fresh start.
+func _give_up_run() -> void:
+	MetaStateStore.bank_run({
+		"lucidityCoins": RunStateStore.lucidityCoins,
+		"scoreEarned": RunStateStore.scoreEarned,
+		"neurons": RunStateStore.neurons,
+	}, "flatline")
+	RunStateStore.reset_run_state()
+	_hide_continue_modal()
+	_refresh_campaign_ui()
 
 func _open_scores() -> void:
 	var scene_nav := get_node_or_null("/root/SceneNav")

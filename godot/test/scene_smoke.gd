@@ -1545,50 +1545,68 @@ func _find_neuron_meter(node: Node) -> NeuronMeter:
 			return found
 	return null
 
-# Start menu keeps the meter, now with a numeric "left/max" count under the art.
+# The neuron meter left the menu: CONTINUE opens the run-state modal, which
+# carries it plus the resume/abandon choice (issue #111 follow-up).
 func _check_neuron_meter_on_menu(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.is_first_launch = false
 	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(start_menu)
+	await process_frame
+	if _find_neuron_meter(start_menu) != null:
+		failures.append("menu: the neuron meter should not render on the start menu")
+
+	var prev_phase := String(run_store.runPhase)
+	run_store.runPhase = "running"
+	run_store.lucidityCoins = 200
+	run_store.scoreEarned = 40
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	start_menu._show_continue_modal()
 	var meter := _find_neuron_meter(start_menu)
 	if meter == null:
-		failures.append("menu: neuron meter is missing from the start menu")
-		start_menu.queue_free()
-		return
-	var sprite: Sprite2D = null
-	for child in meter.get_children():
-		if child is Sprite2D:
-			sprite = child
-			break
-	if sprite == null:
-		failures.append("menu: neuron meter built no sprite (sheet missing?)")
+		failures.append("menu: CONTINUE modal is missing the neuron meter")
 	else:
-		if sprite.hframes != meter.frame_count:
-			failures.append("menu: meter hframes do not match frame_count")
-		var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
-		if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
-			failures.append("menu: meter frame is not wired to neurons lost")
-	var count := meter.get_node_or_null("CountLabel") as Label
-	if count == null:
-		failures.append("menu: meter is missing the numeric neuron count")
+		var sprite: Sprite2D = null
+		for child in meter.get_children():
+			if child is Sprite2D:
+				sprite = child
+				break
+		if sprite == null:
+			failures.append("menu: modal meter built no sprite (sheet missing?)")
+		else:
+			if sprite.hframes != meter.frame_count:
+				failures.append("menu: meter hframes do not match frame_count")
+			var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
+			if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
+				failures.append("menu: meter frame is not wired to neurons lost")
+		var count := meter.get_node_or_null("CountLabel") as Label
+		if count == null:
+			failures.append("menu: modal meter is missing the numeric neuron count")
+		elif count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
+			failures.append("menu: modal neuron count reads '%s'" % count.text)
+	var give_up := start_menu.get_node_or_null("ContinueModal/Panel/GiveUpButton") as Button
+	var resume := start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if resume == null:
+		failures.append("menu: CONTINUE modal has no resume button")
+	if give_up == null:
+		failures.append("menu: CONTINUE modal has no GIVE UP button")
 	else:
-		var expected := "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]
-		if count.text != expected:
-			failures.append("menu: neuron count reads '%s', expected '%s'" % [count.text, expected])
-		# Count updates when neurons change.
-		if int(meta_store.campaignNeuronsLeft) > 0:
-			meta_store.campaignNeuronsLeft -= 1
-			meta_store.meta_changed.emit()
-			if count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
-				failures.append("menu: neuron count did not update on meta change")
-			meta_store.campaignNeuronsLeft += 1
-			meta_store.meta_changed.emit()
-	# The whole menu column fits the 160x320 virtual canvas.
-	var col := start_menu.get_node_or_null("MenuColumn") as VBoxContainer
-	if col != null:
-		await process_frame
-		if col.position.y < 0.0 or col.position.y + col.size.y > 320.0:
-			failures.append("menu: menu column clips the 160x320 canvas: y %s h %s" % [col.position.y, col.size.y])
+		# Abandoning banks the run like a flatline (10% of 200 = 20) and frees the menu.
+		give_up.pressed.emit()
+		if String(run_store.runPhase) == "running":
+			failures.append("menu: GIVE UP did not end the held run")
+		if int(meta_store.lucidityWallet) != 20:
+			failures.append("menu: GIVE UP banked %d of 200, expected 20" % int(meta_store.lucidityWallet))
+		# queue_free is deferred; the scene's reference clears immediately.
+		if start_menu._continue_modal != null:
+			failures.append("menu: GIVE UP left the run-state modal open")
+	run_store.reset_run_state()
+	run_store.runPhase = prev_phase
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 	start_menu.queue_free()
 
 # Issue #38: campaign rebalance — save reclamp, exact fatal text, goal threshold.
@@ -4030,15 +4048,17 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 	get_root().add_child(menu)
 	await process_frame
 	var selector := menu.get_node_or_null("AugmentedSelector") as Control
-	var menu_art := menu.get_node_or_null("MenuArt") as Sprite2D
+	var bar := menu.get_node_or_null("AugmentedBar") as Sprite2D
 	if selector == null:
 		failures.append("issue111: menu has no augmented selector node")
 	elif selector.visible:
 		failures.append("issue111: selector visible before the wealth unlock")
-	if menu_art == null:
-		failures.append("issue111: menu is not built on the start_menu frames")
-	elif menu_art.frame != 0:
-		failures.append("issue111: locked menu should show frame 0 of start_menu.png")
+	if menu.get_node_or_null("MenuArt") == null:
+		failures.append("issue111: menu is not built on the start_menu art")
+	if bar == null:
+		failures.append("issue111: menu has no selector bar overlay")
+	elif bar.visible:
+		failures.append("issue111: selector bar visible before the wealth unlock")
 	menu.queue_free()
 
 	meta_store.augmentedRunUnlocked = true
@@ -4046,17 +4066,17 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 	get_root().add_child(menu)
 	await process_frame
 	selector = menu.get_node_or_null("AugmentedSelector") as Control
-	menu_art = menu.get_node_or_null("MenuArt") as Sprite2D
+	bar = menu.get_node_or_null("AugmentedBar") as Sprite2D
 	var symbols := menu.get_node_or_null("AugmentedSymbols") as Sprite2D
 	var desc := menu.get_node_or_null("AugmentedDescription") as Label
 	var start := menu._start_button as Button
 	if selector == null or not selector.visible:
 		failures.append("issue111: selector hidden after the wealth unlock")
-	elif desc == null or start == null or symbols == null or menu_art == null:
-		failures.append("issue111: unlocked menu is missing selector/description/symbols nodes")
+	elif desc == null or start == null or symbols == null or bar == null:
+		failures.append("issue111: unlocked menu is missing selector/bar/symbols nodes")
 	else:
-		if menu_art.frame != 1:
-			failures.append("issue111: unlocked menu should show frame 1 of start_menu.png")
+		if not bar.visible:
+			failures.append("issue111: unlocked menu should show the selector bar overlay")
 		if not symbols.visible or symbols.frame != 0:
 			failures.append("issue111: empty selection should show symbols frame 0 (no augment)")
 		if desc.text != "NO AUGMENT":
@@ -4075,15 +4095,24 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
 		if start.pivot_offset != start.size * 0.5:
 			failures.append("issue111: plate buttons need a centered pivot for the press squash")
-		# Modifiers can't change mid-run: a held run drops back to the locked
-		# layout (frame 0) and hides the selector.
+		# Modifiers can't change mid-run: a held run keeps the selector visible
+		# but LOCKED — arrows disabled, showing the active run's suit.
 		var prev_phase := String(run_store.runPhase)
 		run_store.runPhase = "running"
+		run_store.augmentedTier = "club"
 		menu._refresh_augmented_selector()
-		if selector.visible:
-			failures.append("issue111: selector still shown while a run is held")
-		if menu_art.frame != 0:
-			failures.append("issue111: held run should show the selector-less frame 0")
+		if not selector.visible:
+			failures.append("issue111: locked selector should stay visible during a held run")
+		var left_arrow := selector.get_node_or_null("CycleLeft") as Button
+		if left_arrow == null or not left_arrow.disabled:
+			failures.append("issue111: selector arrows should lock during a held run")
+		if symbols.frame != 4:
+			failures.append("issue111: locked selector should show the run's suit (club = frame 4)")
+		var pre_cycle := String(menu._selected_augmented_tier)
+		menu._cycle_augmented_tier(1)
+		if String(menu._selected_augmented_tier) != pre_cycle:
+			failures.append("issue111: cycling changed the selection during a held run")
+		run_store.augmentedTier = ""
 		run_store.runPhase = prev_phase
 	menu.queue_free()
 	run_store.augmentedTier = ""
