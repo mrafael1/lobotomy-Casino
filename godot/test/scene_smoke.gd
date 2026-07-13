@@ -4065,6 +4065,15 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 		failures.append("issue111: heart did not cut the jackpot score to 100")
 	if int(run_store._augmented_jackpot_cut(200, "triple")) != 0:
 		failures.append("issue111: heart cut a non-jackpot win")
+	# Heart applies after the Flatline boost: a 200-point jackpot doubled to 400
+	# still pays 200, rather than subtracting only the original 100-point cut.
+	var jackpot_base_score := 200
+	var flatline_jackpot_boost := jackpot_base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
+	var adjusted_jackpot: Dictionary = run_store._apply_augmented_jackpot(
+		jackpot_base_score + flatline_jackpot_boost, "jackpot")
+	if int(adjusted_jackpot["score"]) != jackpot_base_score \
+			or int(adjusted_jackpot["cut"]) != jackpot_base_score:
+		failures.append("issue111: heart did not halve the boosted jackpot payout")
 	run_store.augmentedTier = ""
 	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 0:
 		failures.append("issue111: classic runs must not cut the jackpot")

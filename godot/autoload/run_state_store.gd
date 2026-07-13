@@ -229,6 +229,15 @@ func _augmented_jackpot_cut(score: int, win_type: String) -> int:
 		return 0
 	return score - roundi(float(score) * 0.5)
 
+## Applies Heart to the complete post-evaluate score, including any Flatline or
+## specialist bonuses that were added after the base evaluation.
+func _apply_augmented_jackpot(score: int, win_type: String) -> Dictionary:
+	var cut := _augmented_jackpot_cut(score, win_type)
+	return {
+		"score": maxi(0, score - cut),
+		"cut": cut,
+	}
+
 func _ready() -> void:
 	load_run_state()
 
@@ -422,16 +431,19 @@ func spin(compulsive := false) -> Variant:
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), pairTripleAugmentChoice)
 	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
-	# 200 and no longer grants its free spin. Rides on top of evaluate() like the
-	# boosts above.
-	var augmented_jackpot_cut := _augmented_jackpot_cut(
-		int(result["scoreEarned"]), String(result["winType"]))
+	# 200 and no longer grants its free spin. Apply it after the other score boosts
+	# so the whole jackpot payout remains proportional.
+	var complete_score := base_score + flatline_boost + specialist_bonus
+	var augmented_jackpot: Dictionary = _apply_augmented_jackpot(
+		complete_score, String(result["winType"]))
+	var final_score := int(augmented_jackpot["score"])
+	var augmented_jackpot_cut := int(augmented_jackpot["cut"])
 	var final_result: Dictionary = result
 	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
 			or specialist_bonus > 0 or hidden_reel_count > 0 or augmented_jackpot_cut > 0:
 		final_result = result.duplicate(true)
-		final_result["scoreEarned"] = base_score + flatline_boost + specialist_bonus
-		final_result["coinsEarned"] = base_score + flatline_boost + specialist_bonus
+		final_result["scoreEarned"] = final_score
+		final_result["coinsEarned"] = final_score
 		if hidden_reel_count > 0:
 			final_result["hiddenReelCount"] = hidden_reel_count
 		if cocktail_bonus > 0:
@@ -445,8 +457,6 @@ func spin(compulsive := false) -> Variant:
 		if specialist_bonus > 0:
 			final_result["specialistBonus"] = specialist_bonus
 		if augmented_jackpot_cut > 0:
-			final_result["scoreEarned"] = maxi(0, int(final_result["scoreEarned"]) - augmented_jackpot_cut)
-			final_result["coinsEarned"] = final_result["scoreEarned"]
 			# Evaluate only adds freeSpinsGranted on non-free spins; undo exactly that.
 			if not bool(final_result["isFreeSpin"]):
 				final_result["freeSpinsAfter"] = maxi(0,
