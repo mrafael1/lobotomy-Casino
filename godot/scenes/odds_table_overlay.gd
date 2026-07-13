@@ -171,22 +171,7 @@ func _rebuild() -> void:
 	done.add_theme_font_size_override("font_size", 5)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
-	done.add_theme_color_override("font_color", Color.WHITE)
-	done.add_theme_color_override("font_hover_color", Color.WHITE)
-	done.add_theme_color_override("font_pressed_color", Color.WHITE)
-	var done_style := StyleBoxFlat.new()
-	done_style.bg_color = Color("#b4202a")
-	done_style.border_color = Color("#e86a73")
-	done_style.set_border_width_all(1)
-	done_style.set_corner_radius_all(1)
-	var done_hover := done_style.duplicate() as StyleBoxFlat
-	done_hover.bg_color = Color("#d3414d")
-	var done_pressed := done_style.duplicate() as StyleBoxFlat
-	done_pressed.bg_color = Color("#73172d")
-	done.add_theme_stylebox_override(&"normal", done_style)
-	done.add_theme_stylebox_override(&"hover", done_hover)
-	done.add_theme_stylebox_override(&"pressed", done_pressed)
-	done.add_theme_stylebox_override(&"focus", done_hover)
+	Assets.small_neon_button_style(done, Assets.START_MENU_BUTTON_CYAN, 5, 2.0)
 	done.custom_minimum_size = Vector2.ZERO
 	done.button_down.connect(_on_done_button_down.bind(done))
 	done.button_up.connect(_on_done_button_up.bind(done))

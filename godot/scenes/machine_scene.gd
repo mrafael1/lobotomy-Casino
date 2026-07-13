@@ -86,7 +86,7 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
-const SETTINGS_ASSET := "ui/settings.png"
+const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
 	&"reel_spin": "reel-spinning.mp3",
@@ -128,6 +128,8 @@ const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_REWARD_AMP_COLOR := Color(1.0, 0.86, 0.2)
 const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
+const NEON_CYAN := Color(0.42, 1.0, 0.95)
+const NEON_GOLD := Color(1.0, 0.86, 0.36)
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
 # vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
@@ -1267,7 +1269,8 @@ func _build_score_button() -> void:
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(_score_button)
+	Assets.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
+	Assets.start_menu_button_press_feedback(_score_button)
 	if not _score_button.pressed.is_connected(_show_score_table):
 		_score_button.pressed.connect(_show_score_table)
 
@@ -1279,7 +1282,7 @@ func _build_options_controls() -> void:
 		_options_button.position = Vector2(9.0, 9.0)
 		_options_button.size = Vector2(20.0, 18.0)
 		add_child(_options_button)
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
@@ -3039,30 +3042,14 @@ func _show_score_table() -> void:
 	# last row's grid line and the marquee bulbs).
 	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
 	var close_label := _score_label(close, "BACK", Vector2.ZERO, 9,
-		Color(1.0, 0.82, 0.28), close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+		NEON_GOLD, close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	close_label.size = close.size
 	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# The pixel font's line box leaves its slack above the glyph, so a pure
 	# vertical center reads low in the 14px band — pull the label up to comp.
 	close_label.position.y = -4.0
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Flat pixel style: the shared textured skin draws past the button rect and
-	# would bleed over the art's baked column header.
-	var close_style := StyleBoxFlat.new()
-	close_style.bg_color = Color(0.11, 0.05, 0.07)
-	close_style.border_color = Color(1.0, 0.82, 0.28)
-	close_style.set_border_width_all(1)
-	close_style.set_corner_radius_all(3)
-	var close_pressed := close_style.duplicate() as StyleBoxFlat
-	close_pressed.bg_color = Color(0.35, 0.1, 0.12)
-	close.add_theme_stylebox_override("normal", close_style)
-	close.add_theme_stylebox_override("hover", close_pressed)
-	close.add_theme_stylebox_override("pressed", close_pressed)
-	# Focus reads as a brighter gold edge, not a colored ring, so the default
-	# keyboard/controller focus doesn't clash with the art.
-	var close_focus := close_style.duplicate() as StyleBoxFlat
-	close_focus.border_color = Color(1.0, 0.95, 0.7)
-	close.add_theme_stylebox_override("focus", close_focus)
+	Assets.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
 	# Pressed squash: shrink around the centre while held, spring back on release
 	# (same feel as the row info buttons).
 	close.pivot_offset = close.size * 0.5

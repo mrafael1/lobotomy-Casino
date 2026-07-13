@@ -318,6 +318,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: dealer scene missing renamed options button")
 	elif dealer_options.position.x > 20.0:
 		failures.append("options: dealer options button is not top-left")
+	_check_settings_icon(dealer_options, "dealer", failures)
 	if dealer.get_node_or_null("BackButton") != null:
 		failures.append("options: dealer scene still has BackButton node")
 	_check_dealer_scene_revamp_55(dealer, failures)
@@ -374,6 +375,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: machine scene missing options button")
 	elif machine_options.position.x > 20.0:
 		failures.append("options: machine options button is not top-left")
+	_check_settings_icon(machine_options, "machine", failures)
 	if machine.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
@@ -412,10 +414,46 @@ func _check_global_options_layout(failures: Array) -> void:
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
 	get_root().add_child(overlay)
+	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
+	var options_contour := overlay.get_node_or_null("Contour") as Panel
+	if options_contour == null:
+		failures.append("options: overlay missing neon contour")
+	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxFlat \
+		if options_panel != null else null
+	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
+		failures.append("options: panel is missing the neon contour style")
 	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/MenuButton"]:
-		if overlay.get_node_or_null(path) == null:
+		var option_button := overlay.get_node_or_null(path) as Button
+		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
+		else:
+			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxTexture
+			if button_style == null or button_style.texture == null:
+				failures.append("options: %s is not using start-menu button art" % path)
+	var close_button := overlay.get_node_or_null("CloseButton") as Button
+	if close_button == null or close_button.text != "X":
+		failures.append("options: overlay close button is not the pixel X control")
+	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
+		failures.append("options: close button is not in the panel's top-right corner")
 	overlay.queue_free()
+
+	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(settings)
+	_check_settings_neon(settings, failures)
+	settings.queue_free()
+
+func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
+	if button == null:
+		return
+	const asset_path := "res://assets/images/ui/setting_icon.png"
+	if not ResourceLoader.exists(asset_path):
+		failures.append("options: %s is missing the new setting icon" % scene_name)
+		return
+	var icon := button.texture_normal
+	if icon == null or icon.get_width() != 69 or icon.get_height() != 66:
+		failures.append("options: %s is not using the 69x66 setting icon" % scene_name)
+	if button.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("options: %s setting icon is not nearest-neighbor filtered" % scene_name)
 
 func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)
@@ -910,14 +948,61 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 
 	run_store.reset_run_state()
 
-# Issue #55: dealer scene revamp — authored 2-frame lab/machine button art, no
-# text bubble, outlined feedback messages above the dealer, no 1-Lucidity
-# placeholder slot.
-func _button_sheet_file(button: Button) -> String:
+func _check_start_menu_button_style(button: Button, expected_color: Color, label: String,
+		failures: Array, expect_small: bool = false) -> void:
+	if button == null:
+		failures.append("%s: button is missing" % label)
+		return
 	var style := button.get_theme_stylebox("normal") as StyleBoxTexture
-	if style == null or style.texture == null:
-		return ""
-	return style.texture.resource_path.get_file()
+	if style == null:
+		failures.append("%s: button is not using a start-menu StyleBoxTexture" % label)
+		return
+	if style.texture == null:
+		failures.append("%s: start-menu plate texture is missing" % label)
+	var resolved_color: Color = button.get_meta(&"_start_menu_button_color", Color.TRANSPARENT)
+	if not resolved_color.is_equal_approx(expected_color):
+		failures.append("%s: start-menu plate color is %s, expected %s" % [
+			label, str(resolved_color), str(expected_color)])
+	if style.texture_margin_left < 1.0 or style.texture_margin_top < 1.0:
+		failures.append("%s: start-menu plate is not configured as a nine-slice" % label)
+	if expect_small:
+		var small_asset := String(button.get_meta(&"_small_neon_button_asset", ""))
+		if not small_asset.begins_with("ui/neon_small_"):
+			failures.append("%s: compact control is not using neon_small button art" % label)
+		if style.content_margin_bottom <= style.content_margin_top:
+			failures.append("%s: compact label is not visually centered in its plate" % label)
+
+func _check_start_menu_press_feedback(button: Button, label: String, failures: Array) -> void:
+	if button == null:
+		failures.append("%s: button is missing for press feedback" % label)
+		return
+	if not button.has_meta(&"_start_menu_press_feedback"):
+		failures.append("%s: start-menu button is missing press feedback" % label)
+		return
+	var resting_scale := button.scale
+	button.button_down.emit()
+	if button.scale == resting_scale:
+		failures.append("%s: press feedback did not squash the button" % label)
+	button.button_up.emit()
+
+func _check_settings_neon(settings: Node, failures: Array) -> void:
+	var panel := settings.get_node_or_null("Panel") as PanelContainer
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat \
+		if panel != null else null
+	if panel_style == null or not panel_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)) \
+			or panel_style.shadow_size < 1:
+		failures.append("settings: panel is missing the neon contour style")
+	var slider := settings.get_node_or_null("Panel/Rows/VolumeRow/VolumeSlider") as HSlider
+	var slider_style := slider.get_theme_stylebox("slider") as StyleBoxFlat \
+		if slider != null else null
+	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
+		failures.append("settings: volume slider is missing the neon track")
+	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
+	_check_start_menu_button_style(mute, Assets.START_MENU_BUTTON_PINK, "settings: MUTE", failures)
+	_check_start_menu_press_feedback(mute, "settings: MUTE", failures)
+	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
+	_check_start_menu_button_style(back, Assets.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
+	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
 ## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
@@ -927,6 +1012,19 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		failures.append("issue84: LAB button glow tween is not running")
 	elif not dealer._lab_glow_tween.is_running():
 		failures.append("issue84: LAB button glow tween is not looping")
+	var lab_glow := dealer.get_node_or_null("LabButtonGlowArt") as Sprite2D
+	if lab_glow == null:
+		failures.append("issue84: LAB sign-only glow layer is missing")
+	elif dealer._lab_button_sprite.self_modulate != Color.WHITE:
+		failures.append("issue84: LAB glow still modulates the label layer")
+	var lab_button := dealer.get_node_or_null("LabButton") as Button
+	if lab_button != null and lab_glow != null:
+		lab_button.button_down.emit()
+		if lab_glow.position != Vector2(62.0, 12.0):
+			failures.append("issue84: LAB glow did not follow the pressed sign frame")
+		lab_button.button_up.emit()
+		if lab_glow.position != Vector2(59.0, 0.0):
+			failures.append("issue84: LAB glow did not restore the normal sign frame")
 
 	# The machine button is wired to the confirm guard, not straight to _start_run.
 	var start_button := dealer.get_node_or_null("StartButton") as Button
@@ -949,16 +1047,19 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		if enter_button == null or cancel_button == null:
 			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
 		else:
-			if _button_sheet_file(cancel_button) != "red_button.png":
-				failures.append("issue84: CANCEL is not skinned with the red button asset")
-			if _button_sheet_file(enter_button) != "green_button.png":
-				failures.append("issue84: ENTER is not skinned with the green button asset")
+			_check_start_menu_button_style(cancel_button, Assets.START_MENU_BUTTON_PINK,
+				"issue84: CANCEL", failures, true)
+			_check_start_menu_button_style(enter_button, Assets.START_MENU_BUTTON_CYAN,
+				"issue84: ENTER", failures, true)
+			_check_start_menu_press_feedback(cancel_button, "issue84: CANCEL", failures)
+			_check_start_menu_press_feedback(enter_button, "issue84: ENTER", failures)
 		# Cancelling dismisses the modal (and does not start the run).
 		dealer._on_start_cancelled()
 		if modal.visible:
 			failures.append("issue84: CANCEL did not dismiss the start-confirm modal")
 
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
+	_check_dealer_shop_light_art(dealer, failures)
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
 	for rel in ["dealer_scene_LAB_BUTTON.png", "dealer_scene_machine_BUTTON.png"]:
@@ -1015,6 +1116,63 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 			failures.append("issue55: dealer message is not just above the dealer: %s" % message.position)
 	if dealer.get_node_or_null("OfferSlot6") != null:
 		failures.append("issue55: the 1-Lucidity placeholder offer slot should be gone")
+
+func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
+	var expected_sizes: Dictionary = {
+		"dealer_shop/dealer_shop_bg_x8.png": Vector2i(1280, 2560),
+		"dealer_shop/dealer_shop_counter_base_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_LAB_BUTTON_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_machine_BUTTON_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/dealer_shop_reroll_BUTTON_x8.png": Vector2i(2560, 2560),
+	}
+	for rel in expected_sizes:
+		var path := "res://assets/images/" + String(rel)
+		if not ResourceLoader.exists(path):
+			failures.append("dealer shop: missing scaled art %s" % rel)
+			continue
+		var texture := load(path) as Texture2D
+		var expected: Vector2i = expected_sizes[rel]
+		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
+			failures.append("dealer shop: %s is not an NN 8x sheet at %s" % [rel, expected])
+	var counter_base := load("res://assets/images/dealer_shop/dealer_shop_counter_base.png") as Texture2D
+	var counter_image := counter_base.get_image() if counter_base != null else null
+	if counter_image == null:
+		failures.append("dealer shop: counter-only base art is missing")
+	else:
+		for button_filename in [
+			"dealer_shop_LAB_BUTTON.png",
+			"dealer_shop_machine_BUTTON.png",
+			"dealer_shop_reroll_BUTTON.png",
+		]:
+			var button_texture := load("res://assets/images/dealer_shop/" + button_filename) as Texture2D
+			var button_image := button_texture.get_image() if button_texture != null else null
+			var overlaps := false
+			if button_image != null:
+				for y in counter_image.get_height():
+					for x in counter_image.get_width():
+						if counter_image.get_pixel(x, y).a > 0.0 \
+								and button_image.get_pixel(x, y).a > 0.0:
+							overlaps = true
+							break
+					if overlaps:
+						break
+			if overlaps:
+				failures.append("dealer shop: counter base still contains %s" % button_filename)
+
+	var background := dealer.get_node_or_null("Background") as Sprite2D
+	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("dealer shop: background is not nearest-neighbor filtered")
+	var counter := dealer.get_node_or_null("Counter") as Sprite2D
+	if counter == null:
+		failures.append("dealer shop: counter node is missing")
+	elif counter.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+			or counter.hframes != 2 or counter.scale != Vector2(0.125, 0.125):
+		failures.append("dealer shop: counter is not a nearest-neighbor 2-frame 8x sheet")
+	for art_name in ["LabButtonArt", "MachineButtonArt", "RerollButtonArt"]:
+		var art := dealer.get_node_or_null(art_name) as Sprite2D
+		if art == null or art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+				or art.hframes != 2 or art.scale != Vector2(0.125, 0.125):
+			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame 8x sheet" % art_name)
 
 # Issue #117 (repriced): the dealer-scene painting rerolls the current offer for
 # an escalating Lucidity price (5, 10, 15, …) in BOTH dealer phases. Covers the
@@ -1874,6 +2032,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 			failures.append("issue130: DONE button is oversized for the modal")
 		if done_button.pivot_offset != done_button.size * 0.5:
 			failures.append("issue130: DONE button press animation needs a centered pivot")
+		_check_start_menu_button_style(done_button, Assets.START_MENU_BUTTON_CYAN,
+			"issue130: DONE", failures, true)
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D
 	if brain_symbol_button == null or brain_icon == null:
@@ -3045,6 +3205,9 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
+	_check_start_menu_button_style(machine._score_button, Assets.START_MENU_BUTTON_CYAN,
+		"issue51: TABLES", failures, true)
+	_check_start_menu_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)
 	for stat in ["BEST", "RUNS", "CREDITS"]:
 		if texts.has(stat):
@@ -3142,6 +3305,8 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	if close == null:
 		failures.append("issue119: table has no CLOSE button")
 	else:
+		_check_start_menu_button_style(close, Assets.START_MENU_BUTTON_YELLOW,
+			"issue119: BACK", failures, true)
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
 		# The chain now interleaves each row's symbol pct-peek button before its
@@ -3436,8 +3601,11 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
 	if not buy_stele.visible:
 		failures.append("upgrades: buy stele should be visible even before a terminal is open")
+	_check_start_menu_button_style(context_buy, Assets.START_MENU_BUTTON_CYAN,
+		"upgrades: BUY", failures, true)
+	_check_start_menu_press_feedback(context_buy, "upgrades: BUY", failures)
 	if context_buy.size != Vector2(22.0, 10.0):
-		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size")
+		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size (got %s)" % str(context_buy.size))
 	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
 	if context_buy_disabled_style != null:
 		if context_buy_disabled_style.content_margin_left != 0.0 or context_buy_disabled_style.content_margin_right != 0.0:
@@ -3447,9 +3615,15 @@ func _check_upgrades_scene(failures: Array) -> void:
 	if context_price_coin.texture == null:
 		failures.append("upgrades: contextual price is missing lucidity coin icon")
 	var back_button := scene.get_node("CanvasLayer/UI_Container/BackButton") as Button
-	var back_style := back_button.get_theme_stylebox("normal") as StyleBoxTexture
-	if back_style == null or back_style.texture == null or back_style.texture.resource_path.get_file() != "red_button.png":
-		failures.append("upgrades: back button is not using the red button skin")
+	_check_start_menu_button_style(back_button, Assets.START_MENU_BUTTON_PINK,
+		"upgrades: RETURN TO BAR", failures)
+	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
+	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
+		failures.append("upgrades: power name box is missing its cyan neon contour")
+	var description_style := description.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if description_style == null or not description_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
+		failures.append("upgrades: description bubble is missing its pink neon contour")
 	if back_button.z_index <= description.z_index:
 		failures.append("upgrades: back button should render above description bubble")
 	scene._activate_memory()

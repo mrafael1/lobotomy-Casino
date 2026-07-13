@@ -54,13 +54,14 @@ const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 # Centre of the selector bar — the pivot the suit bounces around when it changes.
 const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
+const ART_SYMBOL_OFFSET := Vector2(0.0, -4.0)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
 const ART_HINT_RECT := Rect2(5.0, 118.0, 150.0, 22.0)
 # The pixel font's line box leaves its slack above the glyphs, so the rect sits
 # a few px above the selector-to-SCORES gap to land the text inside it.
-const ART_DESC_RECT := Rect2(5.0, 207.0, 150.0, 10.0)
+const ART_DESC_RECT := Rect2(5.0, 208.0, 150.0, 10.0)
 # Run-state modal (opened by CONTINUE while a run is held): the neuron meter
 # lives here now, not on the menu, next to the resume/abandon choice.
 const CONTINUE_MODAL_PANEL_RECT := Rect2(20.0, 84.0, 120.0, 152.0)
@@ -206,6 +207,7 @@ func _build_art_menu() -> void:
 	_symbols_sprite = _frame_sprite(MENU_SYMBOLS_ASSET, 6)
 	if _symbols_sprite != null:
 		_symbols_sprite.name = "AugmentedSymbols"
+		_symbols_sprite.position = ART_SYMBOL_OFFSET
 		_symbols_sprite.visible = false
 
 	# The scene's buttons move out of the VBox onto their standalone plates.
@@ -513,7 +515,7 @@ func _set_symbols_pop(f: float) -> void:
 		return
 	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
 	_symbols_sprite.scale = base * f
-	_symbols_sprite.position = ART_SELECTOR_PIVOT * (1.0 - f)
+	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SELECTOR_PIVOT * (1.0 - f)
 
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
@@ -687,11 +689,7 @@ func _show_continue_modal() -> void:
 
 	var panel := Panel.new()
 	panel.name = "Panel"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.04, 0.09, 0.97)
-	style.border_color = ART_CYAN
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(3)
+	var style := Assets.neon_panel_style(ART_CYAN)
 	panel.add_theme_stylebox_override("panel", style)
 	panel.position = CONTINUE_MODAL_PANEL_RECT.position
 	panel.size = CONTINUE_MODAL_PANEL_RECT.size
@@ -738,22 +736,7 @@ func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
 	var b := Button.new()
 	b.name = button_name
 	b.text = text
-	b.add_theme_font_size_override("font_size", 6)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	b.add_theme_color_override("font_color", color)
-	b.add_theme_color_override("font_hover_color", Color.WHITE)
-	b.add_theme_color_override("font_pressed_color", Color.WHITE)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.09, 0.07, 0.14)
-	style.border_color = color
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(2)
-	# Flat margins: the default content margins inflate the minimum size past
-	# the authored rect, which is why size is set AFTER the overrides.
-	style.set_content_margin_all(1)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		b.add_theme_stylebox_override(String(state), style)
+	Assets.start_menu_button_style(b, color, 6)
 	b.custom_minimum_size = Vector2.ZERO
 	b.position = rect.position
 	b.size = rect.size

@@ -1,23 +1,39 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scenes/options_overlay.gd" id="1_options"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_contour"]
+bg_color = Color(0.03, 0.01, 0.05, 0.45)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.5, 0.7, 0.65)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(1, 0.3, 0.65, 0.35)
+shadow_size = 2
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 content_margin_left = 8.0
 content_margin_top = 8.0
 content_margin_right = 8.0
 content_margin_bottom = 8.0
-bg_color = Color(0.055, 0.03, 0.11, 0.96)
+bg_color = Color(0.05, 0.04, 0.09, 0.97)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.92, 0.86, 0.56, 0.82)
+border_color = Color(0.42, 1, 0.95, 0.9)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
+shadow_color = Color(1, 0.5, 0.7, 0.42)
+shadow_size = 3
 
 [node name="OptionsOverlay" type="Control"]
 z_index = 200
@@ -35,6 +51,15 @@ offset_bottom = 320.0
 mouse_filter = 2
 color = Color(0, 0, 0, 0.68)
 
+[node name="Contour" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 76.0
+offset_right = 142.0
+offset_bottom = 228.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_contour")
+
 [node name="Panel" type="PanelContainer" parent="."]
 layout_mode = 0
 offset_left = 20.0
@@ -50,7 +75,7 @@ alignment = 1
 
 [node name="Title" type="Label" parent="Panel/Menu"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.92, 0.86, 0.56, 1)
+theme_override_colors/font_color = Color(0.42, 1, 0.95, 1)
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 10
 text = "OPTIONS"
@@ -86,10 +111,10 @@ text = "RETURN TO MENU"
 
 [node name="CloseButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 112.0
-offset_top = 231.0
-offset_right = 140.0
-offset_bottom = 245.0
+offset_left = 124.0
+offset_top = 81.0
+offset_right = 136.0
+offset_bottom = 93.0
 theme_override_fonts/font = ExtResource("2_font")
-theme_override_font_sizes/font_size = 6
-text = "CLOSE"
+theme_override_font_sizes/font_size = 7
+text = "X"

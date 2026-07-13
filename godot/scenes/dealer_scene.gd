@@ -60,20 +60,22 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 ## Authored name colour restored for non-corrupted items.
 @export var name_color: Color = Color(0.0, 0.9, 1.0)
 
-# New UI assets (issue #25). The settings sheet is 2 frames (normal, pressed).
-const SETTINGS_ASSET := "ui/settings.png"
+# New UI assets (issue #25). The settings control uses one authored icon.
+const SETTINGS_ASSET := "ui/setting_icon.png"
 const COIN_ASSET := "ui/coin.png"
 # Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
 # they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
-const MACHINE_BUTTON_ASSET := "dealer_scene_machine_BUTTON.png"
-const LAB_BUTTON_ASSET := "dealer_scene_LAB_BUTTON.png"
+const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
+const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_base_x8.png"
+const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON_x8.png"
+const LAB_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_LAB_BUTTON_x8.png"
 # Opaque bounds of each button's art (source px, measured with pngjs) — the
 # invisible hit buttons cover exactly these rects.
 const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
 const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
-const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
+const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_reroll_BUTTON_x8.png"
 const PAINTING_BUTTON_RECT := Rect2(2.0, 78.0, 29.0, 25.0)
 const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
@@ -93,6 +95,8 @@ const AUGMENT_RARITY_COLORS := {
 const AUGMENT_BOUGHT_MESSAGE := "THE CHIP SLOTS INTO PLACE"
 const AUGMENT_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const NEON_CYAN := Color(0.42, 1.0, 0.95)
+const NEON_PINK := Color(1.0, 0.5, 0.7)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
@@ -102,6 +106,10 @@ const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 const LAB_GLOW_DIM := Color(0.82, 0.82, 0.82)
 const LAB_GLOW_BRIGHT := Color(1.55, 1.5, 1.15)
 const LAB_GLOW_PERIOD := 0.85
+const LAB_SIGN_GLOW_DIM := Color(1.0, 1.0, 1.0, 0.0)
+const LAB_SIGN_GLOW_BRIGHT := Color(1.55, 1.5, 1.15, 0.55)
+const LAB_NORMAL_SIGN_RECT := Rect2(59.0, 0.0, 43.0, 40.0)
+const LAB_PRESSED_SIGN_RECT := Rect2(62.0, 12.0, 37.0, 25.0)
 
 # Issue #84: confirm before the machine button starts the run (misclick guard).
 const CANVAS_W := 160.0
@@ -137,6 +145,8 @@ var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _lab_button: Button = null
 var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
+var _lab_glow_sprite: Sprite2D = null        # sign-only pulse overlay
+var _lab_glow_frames: Array[AtlasTexture] = []
 var _lab_glow_tween: Tween = null            # issue #84: looping lab-button glow
 var _start_button: Button = null
 var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
@@ -242,7 +252,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, rel: String, hframes := 1, fra
 		spr.centered = false
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return spr
 
 func _full_canvas_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
@@ -257,23 +267,23 @@ func _full_canvas_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_full_canvas_sprite(_background_sprite, "dealer_shop_bg.png")
+		_configure_full_canvas_sprite(_background_sprite, DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 		_portrait_sprite = _configure_full_canvas_sprite(_portrait_sprite, "dealer_portrait.png", 2, 0)
-		_configure_full_canvas_sprite(_counter_sprite, "dealer_shop_counter.png")
+		_configure_full_canvas_sprite(_counter_sprite, DEALER_COUNTER_ASSET, 2, 0)
 		return
 	var bg := ColorRect.new() # wall colour behind any gap
 	bg.color = Color(0.055, 0.03, 0.11)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	_full_canvas_sprite("dealer_shop_bg.png")
+	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
 	_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
-	_full_canvas_sprite("dealer_shop_counter.png")
+	_full_canvas_sprite(DEALER_COUNTER_ASSET, 2, 0)
 
 # Brief dealer reaction: swap the 2-frame portrait.
 func _dealer_react() -> void:
@@ -551,7 +561,7 @@ func _build_hud() -> void:
 	_build_campaign_label()
 	if _options_button != null or _start_button != null or _credits_row != null:
 		if _options_button != null:
-			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 2)
+			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 			var options_cb := Callable(self, "_toggle_options_overlay")
 			if not _options_button.pressed.is_connected(options_cb):
 				_options_button.pressed.connect(options_cb)
@@ -569,7 +579,7 @@ func _build_hud() -> void:
 	back.custom_minimum_size = Vector2(20.0, 18.0)
 	back.size = Vector2(20.0, 18.0)
 	back.position = Vector2(9.0, 15.0)
-	Assets.skin_icon_button(back, SETTINGS_ASSET, 2)
+	Assets.skin_icon_button(back, SETTINGS_ASSET, 1)
 	back.pressed.connect(_toggle_options_overlay)
 	add_child(back)
 	_options_button = back
@@ -643,22 +653,52 @@ func _configure_lab_button() -> void:
 	_lab_button.size = LAB_BUTTON_RECT.size
 	if _lab_button_sprite == null:
 		_lab_button_sprite = _build_button_art(LAB_BUTTON_ASSET, "LabButtonArt")
+	if _lab_glow_sprite == null:
+		_lab_glow_sprite = _build_lab_glow_art()
 	_wire_art_button(_lab_button, _lab_button_sprite, Callable(self, "_open_lab"))
 	_start_lab_glow()
 
 ## Issue #84: give the LAB button a looping glow so it reads as a pressable button.
-## The pulse rides self_modulate, independent of the press-frame swap on the sheet.
+## Only the sign is pulsed; the pressed frame's label above it stays unlit.
 func _start_lab_glow() -> void:
-	if _lab_button_sprite == null or Engine.is_editor_hint():
+	if _lab_button_sprite == null or _lab_glow_sprite == null or Engine.is_editor_hint():
 		return
 	if _lab_glow_tween != null and _lab_glow_tween.is_valid():
 		return
-	_lab_button_sprite.self_modulate = LAB_GLOW_DIM
+	_lab_button_sprite.self_modulate = Color.WHITE
+	_lab_glow_sprite.self_modulate = LAB_SIGN_GLOW_DIM
 	_lab_glow_tween = create_tween().set_loops()
-	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
+	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_lab_glow_tween.tween_property(_lab_button_sprite, "self_modulate", LAB_GLOW_DIM, LAB_GLOW_PERIOD) \
+	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_DIM, LAB_GLOW_PERIOD) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _build_lab_glow_art() -> Sprite2D:
+	var texture := Assets.texture(LAB_BUTTON_ASSET, true)
+	if texture == null:
+		return null
+	var frame_width := float(texture.get_width()) / 2.0
+	var source_scale := frame_width / CANVAS_W
+	_lab_glow_frames.clear()
+	for frame in 2:
+		var sign_rect := LAB_NORMAL_SIGN_RECT if frame == 0 else LAB_PRESSED_SIGN_RECT
+		var atlas := AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(
+			Vector2(float(frame) * frame_width, 0.0) + sign_rect.position * source_scale,
+			sign_rect.size * source_scale
+		)
+		_lab_glow_frames.append(atlas)
+	var glow := Sprite2D.new()
+	glow.name = "LabButtonGlowArt"
+	glow.texture = _lab_glow_frames[0]
+	glow.centered = false
+	glow.position = LAB_NORMAL_SIGN_RECT.position
+	glow.scale = Vector2.ONE / source_scale
+	glow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	glow.self_modulate = LAB_SIGN_GLOW_DIM
+	add_child(glow)
+	return glow
 
 func _configure_machine_button() -> void:
 	if _start_button == null:
@@ -916,11 +956,11 @@ func _open_pair_triple_picker(id: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
-	row.add_child(_confirm_button("PairButton", "PAIR", "ui/green_button.png",
+	row.add_child(_confirm_button("PairButton", "PAIR", NEON_CYAN,
 		Callable(self, "_commit_augment_purchase").bind(id, "pair")))
-	row.add_child(_confirm_button("TripleButton", "TRIPLE", "ui/green_button.png",
+	row.add_child(_confirm_button("TripleButton", "TRIPLE", NEON_CYAN,
 		Callable(self, "_commit_augment_purchase").bind(id, "triple")))
-	row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png",
+	row.add_child(_confirm_button("CancelButton", "CANCEL", NEON_PINK,
 		Callable(self, "_close_augment_picker")))
 
 # Full-canvas dim root shared by both selectors (modal: swallows input behind it).
@@ -971,6 +1011,16 @@ func _wire_art_button(button: Button, spr: Sprite2D, cb: Callable) -> void:
 func _set_button_art_frame(spr: Sprite2D, frame: int) -> void:
 	if spr != null and is_instance_valid(spr):
 		spr.frame = frame
+		if spr == _lab_button_sprite:
+			_set_lab_glow_frame(frame)
+
+func _set_lab_glow_frame(frame: int) -> void:
+	if _lab_glow_sprite == null or _lab_glow_frames.is_empty():
+		return
+	var clamped_frame := clampi(frame, 0, _lab_glow_frames.size() - 1)
+	_lab_glow_sprite.texture = _lab_glow_frames[clamped_frame]
+	_lab_glow_sprite.position = LAB_NORMAL_SIGN_RECT.position \
+			if clamped_frame == 0 else LAB_PRESSED_SIGN_RECT.position
 
 func _toggle_options_overlay() -> void:
 	if _options_overlay == null:
@@ -1038,8 +1088,8 @@ func _build_start_confirm_modal() -> Control:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", 8)
 		panel.add_child(row)
-		row.add_child(_confirm_button("CancelButton", "CANCEL", "ui/red_button.png", Callable(self, "_on_start_cancelled")))
-		row.add_child(_confirm_button("EnterButton", "ENTER", "ui/green_button.png", Callable(self, "_on_start_confirmed")))
+		row.add_child(_confirm_button("CancelButton", "CANCEL", NEON_PINK, Callable(self, "_on_start_cancelled")))
+		row.add_child(_confirm_button("EnterButton", "ENTER", NEON_CYAN, Callable(self, "_on_start_confirmed")))
 	panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_theme_constant_override("separation", 6)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1061,17 +1111,13 @@ func _confirm_label(node_name: String, text: String, size: int, color: Color) ->
 		l.add_theme_font_override("font", _font)
 	return l
 
-func _confirm_button(node_name: String, text: String, asset: String, cb: Callable) -> Button:
+func _confirm_button(node_name: String, text: String, border_color: Color, cb: Callable) -> Button:
 	var b := Button.new()
 	b.name = node_name
 	b.text = text
 	b.custom_minimum_size = Vector2(44.0, 18.0)
-	b.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	# Issue #84: CANCEL rides the red sheet, ENTER the green sheet (4-frame skins).
-	Assets.skin_sheet_button(b, asset, 4)
-	_apply_button_text_margin(b)
+	Assets.small_neon_button_style(b, border_color, 7)
+	Assets.start_menu_button_press_feedback(b)
 	b.pressed.connect(cb)
 	return b
 
