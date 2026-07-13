@@ -12,6 +12,13 @@ signal state_changed
 
 const M32 := 0xFFFFFFFF
 
+## Run persistence (issue #111 follow-up): a live run and a resumable flatline
+## dealer visit survive app restarts so the menu can offer CONTINUE. The whole
+## run state is snapshotted on every commit (var_to_str keeps ints/bools exact,
+## unlike JSON) and removed only when no resumable session remains.
+const RUN_SAVE_PATH := "user://lobotomy-run.save"
+const RUN_SAVE_SCHEMA_VERSION := 1
+
 ## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
 ## reroll adds the base again (5, 10, 15, …).
 const DEALER_REROLL_BASE_COST := 5
@@ -53,6 +60,20 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 @export var odds_token_costs: Dictionary = { "brain": 4, "eye": 3, "pill": 3, "syringe": 2, "vial": 2, "flatline": 1 }
 @export var odds_default_token_cost: int = 2
 @export var probability_increase_per_upgrade: int = 1
+
+# ── Augmented Run (issue #111) ─────────────────────────────────────────────────────
+# Post-wealth difficulty mode picked on the start menu: one suit selects a single
+# modifier; the joker activates all four at once.
+#   heart   (1): jackpot pays 100 instead of 200 and grants no free spin
+#   spade   (2): end-of-run lucidity kept is halved (10% -> 5%)
+#   diamond (3): only two powers may be used per spin
+#   club    (4): dealer visits and spin rewards are halved
+const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
+# Selector cycle in the authored frame order of start_menu_augmented symbols.png
+# (frame index = position here): no augment, heart, diamond, spade, club, joker.
+const AUGMENTED_TIER_CYCLE: Array[String] = ["", "heart", "diamond", "spade", "club", "joker"]
+var augmentedTier := ""       # "" (classic) | heart | spade | diamond | club | joker
+var powersUsedThisSpin := 0   # diamond modifier: hard cap of 2 power uses per spin
 ## Permanent odds upgrades cap out at this many levels per symbol (issue #50: 8 bars).
 @export var odds_max_level: int = 8
 @export_range(0.0, 2.0, 0.01) var odds_max_level_reward_bonus: float = 0.25
@@ -165,9 +186,10 @@ var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until fi
 var oddsPhaseCompleted := false           # closed screens stay closed until the next run
 
 # RunStore extras
-var runPhase := "idle" # idle | running | over
+var runPhase := "idle" # idle | pre_run | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
+var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
 
 func _forced_eye_reveal_symbols() -> Variant:
@@ -187,10 +209,92 @@ func _can_act() -> bool:
 	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
 
 func _can_use_ability() -> bool:
-	return _can_act() and lastResult != null and blockPowersSpins <= 0
+	return _can_act() and lastResult != null and blockPowersSpins <= 0 \
+		and not _augmented_powers_blocked()
+
+## Whether a numbered Augmented modifier applies to this run (joker = all four).
+func augmented_modifier_active(modifier: int) -> bool:
+	if augmentedTier == "joker":
+		return true
+	return int(AUGMENTED_TIER_MODIFIERS.get(augmentedTier, 0)) == modifier
+
+## Diamond modifier: the third power use of a spin is locked by the game.
+func _augmented_powers_blocked() -> bool:
+	return augmented_modifier_active(3) and powersUsedThisSpin >= 2
+
+## Heart modifier: how much of a jackpot's evaluated score is cut (200 -> 100 at
+## base; halving the whole score keeps reward bonuses/scales proportional).
+func _augmented_jackpot_cut(score: int, win_type: String) -> int:
+	if not augmented_modifier_active(1) or win_type != "jackpot":
+		return 0
+	return score - roundi(float(score) * 0.5)
+
+## Applies Heart to the complete post-evaluate score, including any Flatline or
+## specialist bonuses that were added after the base evaluation.
+func _apply_augmented_jackpot(score: int, win_type: String) -> Dictionary:
+	var cut := _augmented_jackpot_cut(score, win_type)
+	return {
+		"score": maxi(0, score - cut),
+		"cut": cut,
+	}
+
+func _ready() -> void:
+	load_run_state()
 
 func _commit() -> void:
 	state_changed.emit()
+	_save_run_state()
+
+# ── run persistence ──────────────────────────────────────────────────────────────
+
+## Every non-exported script variable of the store IS the run state; exports are
+## balance tunables and stay out of the save.
+func _run_state_properties() -> Array[String]:
+	var names: Array[String] = []
+	for p in get_property_list():
+		if (int(p["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 \
+				and (int(p["usage"]) & PROPERTY_USAGE_EDITOR) == 0:
+			names.append(String(p["name"]))
+	return names
+
+func _save_run_state() -> void:
+	if Engine.is_editor_hint():
+		return
+	if not has_resume_state():
+		# No live or resumable post-run session: a stale file must not offer CONTINUE.
+		if FileAccess.file_exists(RUN_SAVE_PATH):
+			DirAccess.remove_absolute(RUN_SAVE_PATH)
+		return
+	var out := { "schemaVersion": RUN_SAVE_SCHEMA_VERSION }
+	for prop in _run_state_properties():
+		out[prop] = get(prop)
+	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(var_to_str(out))
+
+## Restores a live run snapshot, if one exists. Unknown keys (removed fields)
+## are skipped; missing keys (new fields) keep their reset defaults.
+func load_run_state() -> void:
+	if Engine.is_editor_hint() or not FileAccess.file_exists(RUN_SAVE_PATH):
+		return
+	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var data: Variant = str_to_var(f.get_as_text())
+	if not (data is Dictionary):
+		return
+	var saved := data as Dictionary
+	var saved_phase := String(saved.get("runPhase", ""))
+	var saved_flatline := saved_phase == "over" \
+		and str(saved.get("lastEnding", "")) == "flatline" \
+		and int(MetaStateStore.campaignNeuronsLeft) > 0
+	if saved_phase != "running" and saved_phase != "pre_run" and not saved_flatline:
+		DirAccess.remove_absolute(RUN_SAVE_PATH)
+		return
+	for prop in _run_state_properties():
+		if saved.has(prop):
+			set(prop, saved[prop])
+	_commit()
 
 # ── spin ──────────────────────────────────────────────────────────────────────────
 
@@ -326,12 +430,20 @@ func spin(compulsive := false) -> Variant:
 	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), pairTripleAugmentChoice)
+	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
+	# 200 and no longer grants its free spin. Apply it after the other score boosts
+	# so the whole jackpot payout remains proportional.
+	var complete_score := base_score + flatline_boost + specialist_bonus
+	var augmented_jackpot: Dictionary = _apply_augmented_jackpot(
+		complete_score, String(result["winType"]))
+	var final_score := int(augmented_jackpot["score"])
+	var augmented_jackpot_cut := int(augmented_jackpot["cut"])
 	var final_result: Dictionary = result
 	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
-			or specialist_bonus > 0 or hidden_reel_count > 0:
+			or specialist_bonus > 0 or hidden_reel_count > 0 or augmented_jackpot_cut > 0:
 		final_result = result.duplicate(true)
-		final_result["scoreEarned"] = base_score + flatline_boost + specialist_bonus
-		final_result["coinsEarned"] = base_score + flatline_boost + specialist_bonus
+		final_result["scoreEarned"] = final_score
+		final_result["coinsEarned"] = final_score
 		if hidden_reel_count > 0:
 			final_result["hiddenReelCount"] = hidden_reel_count
 		if cocktail_bonus > 0:
@@ -344,6 +456,13 @@ func spin(compulsive := false) -> Variant:
 			final_result["flatlineBoostBonus"] = flatline_boost
 		if specialist_bonus > 0:
 			final_result["specialistBonus"] = specialist_bonus
+		if augmented_jackpot_cut > 0:
+			# Evaluate only adds freeSpinsGranted on non-free spins; undo exactly that.
+			if not bool(final_result["isFreeSpin"]):
+				final_result["freeSpinsAfter"] = maxi(0,
+					int(final_result["freeSpinsAfter"]) - int(final_result["freeSpinsGranted"]))
+			final_result["freeSpinsGranted"] = 0
+			final_result["augmentedJackpotCut"] = augmented_jackpot_cut
 
 	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
 
@@ -382,6 +501,7 @@ func spin(compulsive := false) -> Variant:
 	lastPotionEffect = potion_pick
 	lastEffectiveBet = clampi(eff_bet, 1, 3)
 	spinCount += 1
+	powersUsedThisSpin = 0 # diamond modifier counts power uses per spin
 	nextSpinLucidityMultiplier = 1.0
 	if stasis:
 		decaySkips -= 1
@@ -511,14 +631,37 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	campaignNeuronPending = false
+	augmentedTier = ""
+	powersUsedThisSpin = 0
 	_commit()
+
+## Marks the pre-run dealer shop as a resumable session without spending a
+## campaign neuron. The dealer spends that neuron only when START is confirmed.
+func begin_pre_run() -> void:
+	if runPhase == "running":
+		return
+	runPhase = "pre_run"
+	lastEnding = null
+	campaignNeuronPending = false
+	_commit()
+
+func has_resume_state() -> bool:
+	if runPhase == "pre_run" or runPhase == "running":
+		return true
+	# A flatline remains a resumable post-run dealer visit until the player
+	# starts a fresh run or gives up. Wealth exits go straight to the menu.
+	return runPhase == "over" and str(lastEnding) == "flatline" \
+		and int(MetaStateStore.campaignNeuronsLeft) > 0
 
 func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
 	if runPhase == "running":
 		return true
-	if consume_campaign_neuron and not MetaStateStore.consume_campaign_neuron_for_run():
-		_commit()
-		return false
+	if consume_campaign_neuron:
+		if not MetaStateStore.reserve_campaign_neuron_for_run():
+			_commit()
+			return false
+	campaignNeuronPending = consume_campaign_neuron
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	scoreEarned = 0
@@ -533,6 +676,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	lockedReelSpins = [0, 0, 0]
 	runConsumables = pending_consumables.duplicate(true)
 	abilitiesUsed = []
+	# augmentedTier survives: the menu sets it before the pre-run dealer shop, and
+	# it applies to the run this call starts (issue #111).
+	powersUsedThisSpin = 0
 	ownedUpgrades = owned_permanents.duplicate()
 	# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power —
 	# grant it every run regardless of meta-shop purchases, consistently across
@@ -605,6 +751,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 func end_run(ending: String) -> void:
 	runPhase = "over"
 	lastEnding = ending
+	if campaignNeuronPending:
+		MetaStateStore.finalize_campaign_neuron_for_run()
+		campaignNeuronPending = false
 	_commit()
 
 func continue_run() -> void:
@@ -720,7 +869,11 @@ func _active_hidden_reel_count(pair_boost_active: bool) -> int:
 	return clampi(hidden, 0, 2)
 
 func _active_reward_scale() -> float:
-	return Economy.compute_hallucination_reward_scale(ownedUpgrades)
+	var scale := Economy.compute_hallucination_reward_scale(ownedUpgrades)
+	# Augmented club modifier (issue #111): all spin rewards/gains are halved.
+	if augmented_modifier_active(4):
+		scale *= 0.5
+	return scale
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed, coins_per_power_restore)
@@ -793,6 +946,7 @@ func reroll_reel(reel_index: int) -> bool:
 		symbolRewardBonuses)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("reroll")
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, marked, seed)
 	_commit()
 	return true
@@ -815,6 +969,7 @@ func move_reel(reel_index: int, direction: int) -> bool:
 	var seed := _seed(spinCount * 0x27d4eb2f + reel_index)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("shift")
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, marked, seed)
 	_commit()
 	return true
@@ -837,10 +992,13 @@ func lock_reel(reel_index: int) -> void:
 		eyeRevealSymbol = ""
 	abilitiesUsed = abilitiesUsed.duplicate()
 	abilitiesUsed.append("memory")
+	powersUsedThisSpin += 1
 	_commit()
 
 func copy_reel(source_reel: int, target_reel: int) -> bool:
 	if not _can_act() or lastResult == null:
+		return false
+	if _augmented_powers_blocked():
 		return false
 	var book_w := Economy.compute_book_weight(ownedUpgrades)
 	var pair_boost_active := pairBoostSpins > 0
@@ -852,6 +1010,7 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 		symbolRewardBonuses)
 
 	var seed := _seed(spinCount * 0x165667b1)
+	powersUsedThisSpin += 1
 	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed)
 	_commit()
 	return true
@@ -1056,7 +1215,10 @@ func _symbol_reward_bonuses_from_meta(owned: Array) -> Dictionary:
 func _dealer_effective_proc() -> float:
 	var bet := clampi(betMultiplier, 1, 3)
 	var spins_over := maxi(0, spinCount - dealerLastSpinCount - dealer_min_spin_gap)
-	return clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
+	var proc := clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
+	# Augmented club modifier (issue #111): the dealer shows up half as often (the
+	# pinned 65%/35% HP safety triggers are untouched, like the ramp itself).
+	return proc * 0.5 if augmented_modifier_active(4) else proc
 
 func check_dealer_trigger() -> void:
 	if runPhase != "running" or dealerPending or dealerIncoming:

@@ -23,6 +23,9 @@ var campaignNeuronsLeft: int = EconomyConst.CAMPAIGN_STARTING_NEURONS
 var campaignActive: bool = true
 var campaignFailed: bool = false
 var wealthEndingReached: bool = false
+# Augmented Run (issue #111): unlocked permanently the first time the Wealth
+# ending is reached; unlike wealthEndingReached it survives new campaigns.
+var augmentedRunUnlocked: bool = false
 var is_first_launch: bool = true
 # Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
 # phase, applied to every run, and only reset with a fresh campaign.
@@ -64,6 +67,7 @@ func _as_dict() -> Dictionary:
 		"campaignActive": campaignActive,
 		"campaignFailed": campaignFailed,
 		"wealthEndingReached": wealthEndingReached,
+		"augmentedRunUnlocked": augmentedRunUnlocked,
 		"is_first_launch": is_first_launch,
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
 		"oddsTokensBanked": oddsTokensBanked,
@@ -87,6 +91,9 @@ func _apply(meta: Dictionary) -> void:
 	campaignActive = bool(meta.get("campaignActive", true))
 	campaignFailed = bool(meta.get("campaignFailed", false))
 	wealthEndingReached = bool(meta.get("wealthEndingReached", endingsReached.has("wealth")))
+	# Older saves lack the flag: anyone who ever reached wealth gets the unlock.
+	augmentedRunUnlocked = bool(meta.get("augmentedRunUnlocked",
+		wealthEndingReached or endingsReached.has("wealth")))
 	is_first_launch = bool(meta.get("is_first_launch", true))
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
@@ -97,9 +104,21 @@ func _apply(meta: Dictionary) -> void:
 
 func bank_run(run: Dictionary, ending: String) -> void:
 	var next := Endings.bank_run_to_meta(run, _as_dict(), ending, _now_ms())
+	# Augmented spade modifier (issue #111): the end-of-run gain kept is halved
+	# (10% -> 5%, or 20% -> 10% with Smart Saving). Adjusted here so the
+	# parity-locked banking math in Endings stays untouched. The run store is
+	# looked up at runtime: save_checks compiles this script outside the
+	# autoload context, where the RunStateStore identifier doesn't resolve.
+	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	if run_store != null and run_store.augmented_modifier_active(2):
+		var frac := Endings.lucidity_kept_fraction(_as_dict())
+		var kept_full := floori(float(run["lucidityCoins"]) * frac)
+		var kept_capped := floori(float(run["lucidityCoins"]) * frac * 0.5)
+		next["lucidityWallet"] = int(next["lucidityWallet"]) - (kept_full - kept_capped)
 	_apply(next)
 	if ending == "wealth":
 		wealthEndingReached = true
+		augmentedRunUnlocked = true
 		campaignActive = false
 		campaignFailed = false
 	pendingConsumables = {} # cleared on bank, cleared on bank
@@ -233,6 +252,20 @@ func campaign_status_text() -> String:
 
 func can_start_campaign_run() -> bool:
 	return campaignActive and not campaignFailed and not wealthEndingReached and campaignNeuronsLeft > 0
+
+## Validates a new run without spending its campaign neuron. The run store
+## finalizes the cost when the machine run reaches an ending.
+func reserve_campaign_neuron_for_run() -> bool:
+	if not campaignActive and not wealthEndingReached:
+		start_new_campaign(false)
+	if not can_start_campaign_run():
+		if campaignNeuronsLeft <= 0 and not wealthEndingReached:
+			mark_campaign_failed()
+		return false
+	return true
+
+func finalize_campaign_neuron_for_run(save_immediately := true) -> bool:
+	return consume_campaign_neuron_for_run(save_immediately)
 
 func consume_campaign_neuron_for_run(save_immediately := true) -> bool:
 	if not campaignActive and not wealthEndingReached:

@@ -78,6 +78,9 @@ func _run() -> void:
 	_check_free_spin_multiplier_cost(run_store, failures)
 	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
 	_check_starting_powers_and_random_118(run_store, failures)
+	_check_augmented_run_111(machine, run_store, meta_store, failures)
+	await _check_augmented_menu_111(run_store, meta_store, failures)
+	_check_run_persistence_111(run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -291,13 +294,16 @@ func _check_global_options_layout(failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)
 	run_store.runPhase = "running"
 	start_menu._refresh_start_button()
-	var start_button := start_menu.get_node("MenuColumn/StartButton") as Button
-	if start_button.text != "CONTINUE":
+	# Art mode reparents the button out of MenuColumn; reach it via the scene.
+	var start_button := start_menu._start_button as Button
+	if start_button == null:
+		failures.append("menu: start button is missing")
+	elif start_button.text != "CONTINUE":
 		failures.append("menu: active run should show CONTINUE")
 	run_store.runPhase = "idle"
 	start_menu._refresh_start_button()
-	if start_button.text != "START RUN":
-		failures.append("menu: idle state should show START RUN")
+	if start_button != null and start_button.text != "CLASSIC RUN":
+		failures.append("menu: idle state should show CLASSIC RUN")
 	run_store.runPhase = previous_phase
 	meta_store.campaignFailed = previous_campaign_failed
 	meta_store.wealthEndingReached = previous_wealth_reached
@@ -1540,50 +1546,124 @@ func _find_neuron_meter(node: Node) -> NeuronMeter:
 			return found
 	return null
 
-# Start menu keeps the meter, now with a numeric "left/max" count under the art.
+# The neuron meter left the menu: CONTINUE opens the run-state modal, which
+# carries it plus the resume/abandon choice (issue #111 follow-up).
 func _check_neuron_meter_on_menu(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.is_first_launch = false
 	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(start_menu)
+	await process_frame
+	if _find_neuron_meter(start_menu) != null:
+		failures.append("menu: the neuron meter should not render on the start menu")
+
+	var prev_phase := String(run_store.runPhase)
+	run_store.runPhase = "pre_run"
+	start_menu._refresh_start_button()
+	if start_menu._start_button == null or (start_menu._start_button as Button).text != "CONTINUE":
+		failures.append("menu: pre-run dealer return should show CONTINUE")
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.lucidityCoins = 200
+	run_store.scoreEarned = 40
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	meta_store.campaignNeuronsLeft = int(meta_store.campaignNeuronsMax)
+	start_menu._show_continue_modal()
+	await process_frame
 	var meter := _find_neuron_meter(start_menu)
 	if meter == null:
-		failures.append("menu: neuron meter is missing from the start menu")
-		start_menu.queue_free()
-		return
-	var sprite: Sprite2D = null
-	for child in meter.get_children():
-		if child is Sprite2D:
-			sprite = child
-			break
-	if sprite == null:
-		failures.append("menu: neuron meter built no sprite (sheet missing?)")
+		failures.append("menu: CONTINUE modal is missing the neuron meter")
 	else:
-		if sprite.hframes != meter.frame_count:
-			failures.append("menu: meter hframes do not match frame_count")
-		var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
-		if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
-			failures.append("menu: meter frame is not wired to neurons lost")
-	var count := meter.get_node_or_null("CountLabel") as Label
-	if count == null:
-		failures.append("menu: meter is missing the numeric neuron count")
+		var sprite: Sprite2D = null
+		for child in meter.get_children():
+			if child is Sprite2D:
+				sprite = child
+				break
+		if sprite == null:
+			failures.append("menu: modal meter built no sprite (sheet missing?)")
+		else:
+			if sprite.hframes != meter.frame_count:
+				failures.append("menu: meter hframes do not match frame_count")
+			var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
+			if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
+				failures.append("menu: meter frame is not wired to neurons lost")
+		var count := meter.get_node_or_null("CountLabel") as Label
+		if count == null:
+			failures.append("menu: modal meter is missing the numeric neuron count")
+		elif count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
+			failures.append("menu: modal neuron count reads '%s'" % count.text)
+	var stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if stats == null or stats.text != "CURRENT COINS : 200":
+		failures.append("menu: CONTINUE modal should show current coins only")
+	if stats != null and (stats.text.contains("SCORE") or stats.text.contains("LUCIDITY") \
+			or stats.text.contains("L-COIN")):
+		failures.append("menu: CONTINUE modal still shows the old score/coin label")
+	# A dealer/pre-run session shows the same banked wallet that the dealer spends.
+	var wallet_before_preview := int(meta_store.lucidityWallet)
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "pre_run"
+	run_store.lucidityCoins = 222
+	meta_store.lucidityWallet = 321
+	start_menu._show_continue_modal()
+	var pre_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if pre_run_stats == null or pre_run_stats.text != "CURRENT COINS : 321":
+		failures.append("menu: CONTINUE modal should show the dealer wallet")
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "running"
+	meta_store.lucidityWallet = wallet_before_preview
+	start_menu._show_continue_modal()
+	await process_frame
+	var panel := start_menu.get_node_or_null("ContinueModal/Panel") as Panel
+	var close := start_menu.get_node_or_null("ContinueModal/Panel/CloseButton") as Button
+	if close == null:
+		failures.append("menu: CONTINUE modal has no close button")
+	elif panel != null and (close.position.x + close.size.x > panel.size.x \
+			or close.position.y >= 16.0):
+		failures.append("menu: CONTINUE modal close button is not in the top-right corner")
+	var resume := start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if stats != null and stats.position.y < 86.0:
+		failures.append("menu: current-coins label is too high under the neuron number")
+	if stats != null and resume != null \
+			and stats.position.y + stats.size.y + 6.0 > resume.position.y:
+		failures.append("menu: current-coins label is too close to CONTINUE")
+	if close != null:
+		close.pressed.emit()
+		if start_menu._continue_modal != null or String(run_store.runPhase) != "running":
+			failures.append("menu: modal close did not dismiss without losing the run")
+	start_menu._show_continue_modal()
+	var give_up := start_menu.get_node_or_null("ContinueModal/Panel/GiveUpButton") as Button
+	resume = start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if resume == null:
+		failures.append("menu: CONTINUE modal has no resume button")
+	if give_up == null:
+		failures.append("menu: CONTINUE modal has no GIVE UP button")
 	else:
-		var expected := "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]
-		if count.text != expected:
-			failures.append("menu: neuron count reads '%s', expected '%s'" % [count.text, expected])
-		# Count updates when neurons change.
-		if int(meta_store.campaignNeuronsLeft) > 0:
-			meta_store.campaignNeuronsLeft -= 1
-			meta_store.meta_changed.emit()
-			if count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
-				failures.append("menu: neuron count did not update on meta change")
-			meta_store.campaignNeuronsLeft += 1
-			meta_store.meta_changed.emit()
-	# The whole menu column fits the 160x320 virtual canvas.
-	var col := start_menu.get_node_or_null("MenuColumn") as VBoxContainer
-	if col != null:
-		await process_frame
-		if col.position.y < 0.0 or col.position.y + col.size.y > 320.0:
-			failures.append("menu: menu column clips the 160x320 canvas: y %s h %s" % [col.position.y, col.size.y])
+		# Abandoning resets the run outright: nothing banks, the menu frees up.
+		give_up.pressed.emit()
+		if String(run_store.runPhase) == "running":
+			failures.append("menu: GIVE UP did not end the held run")
+		if int(run_store.scoreEarned) != 0 or int(run_store.lucidityCoins) != 0:
+			failures.append("menu: GIVE UP did not reset the run state")
+		if int(meta_store.campaignNeuronsLeft) != int(meta_store.campaignNeuronsMax):
+			failures.append("menu: GIVE UP did not restore the campaign neuron count")
+		if int(meta_store.lucidityWallet) != 0:
+			failures.append("menu: GIVE UP banked lucidity; abandoning should bank nothing")
+		# queue_free is deferred; the scene's reference clears immediately.
+		if start_menu._continue_modal != null:
+			failures.append("menu: GIVE UP left the run-state modal open")
+	run_store.runPhase = "over"
+	start_menu._refresh_start_button()
+	if start_menu._start_button != null and (start_menu._start_button as Button).text == "CONTINUE":
+		failures.append("menu: finished flatline state incorrectly shows CONTINUE")
+	run_store.reset_run_state()
+	run_store.runPhase = prev_phase
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 	start_menu.queue_free()
 
 # Issue #38: campaign rebalance — save reclamp, exact fatal text, goal threshold.
@@ -3895,3 +3975,321 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	run_store.runConsumables = prev_cons
 	run_store.lastUsedConsumableId = prev_lastused
 	run_store.runPhase = prev_phase
+
+# Augmented Run (issue #111): unlock persistence and the four suit modifiers.
+func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	var prev_tier := String(run_store.augmentedTier)
+	var prev_phase := String(run_store.runPhase)
+	var prev_powers := int(run_store.powersUsedThisSpin)
+
+	# Unlock: banking a wealth run sets the permanent flag, and it survives a
+	# fresh campaign (unlike wealthEndingReached) plus a save round-trip.
+	meta_store.augmentedRunUnlocked = false
+	meta_store.bank_run({ "lucidityCoins": 0, "scoreEarned": 0, "neurons": 1 }, "wealth")
+	if not bool(meta_store.augmentedRunUnlocked):
+		failures.append("issue111: wealth bank did not unlock Augmented Run")
+	meta_store.start_new_campaign(false)
+	if not bool(meta_store.augmentedRunUnlocked):
+		failures.append("issue111: a new campaign wiped the Augmented unlock")
+	var round_trip: Dictionary = meta_store._as_dict()
+	if not bool(round_trip.get("augmentedRunUnlocked", false)):
+		failures.append("issue111: unlock flag missing from the save payload")
+
+	# Tier mapping: each suit activates exactly its modifier; joker all four.
+	run_store.augmentedTier = "heart"
+	if not run_store.augmented_modifier_active(1) or run_store.augmented_modifier_active(2):
+		failures.append("issue111: heart should map to modifier 1 only")
+	run_store.augmentedTier = "joker"
+	for m in [1, 2, 3, 4]:
+		if not run_store.augmented_modifier_active(m):
+			failures.append("issue111: joker should activate modifier %d" % m)
+			break
+	run_store.augmentedTier = ""
+	if run_store.augmented_modifier_active(1):
+		failures.append("issue111: classic runs must activate no modifier")
+
+	# Diamond: the third power use of a spin is refused.
+	run_store.augmentedTier = "diamond"
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.compulsiveSpinSkips = 0
+	run_store.blockPowersSpins = 0
+	run_store.powersUsedThisSpin = 2
+	if run_store._can_use_ability():
+		failures.append("issue111: diamond did not block the third power of a spin")
+	run_store.powersUsedThisSpin = 1
+	if run_store.lastResult != null and not run_store._can_use_ability():
+		failures.append("issue111: diamond blocked the second power of a spin")
+
+	# Club: dealer procs and spin rewards are halved.
+	run_store.augmentedTier = ""
+	var base_proc: float = run_store._dealer_effective_proc()
+	var base_scale: float = run_store._active_reward_scale()
+	run_store.augmentedTier = "club"
+	if not is_equal_approx(run_store._dealer_effective_proc(), base_proc * 0.5):
+		failures.append("issue111: club did not halve the dealer proc chance")
+	if not is_equal_approx(run_store._active_reward_scale(), base_scale * 0.5):
+		failures.append("issue111: club did not halve the spin reward scale")
+
+	# Spade: the banked end-of-run gain is halved (10% -> 5%).
+	run_store.augmentedTier = "spade"
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	meta_store.bank_run({ "lucidityCoins": 200, "scoreEarned": 0, "neurons": 1 }, "flatline")
+	if int(meta_store.lucidityWallet) != 10:
+		failures.append("issue111: spade banked %d of 200, expected 5%% = 10" % int(meta_store.lucidityWallet))
+	if not is_equal_approx(machine._end_run_lucidity_kept_fraction(), 0.05):
+		failures.append("issue111: machine kept-fraction display does not match the spade bank")
+
+	# Heart: the machine no longer tops up a brain-triple free spin.
+	run_store.augmentedTier = "heart"
+	var spins_before := int(run_store.freeSpinsRemaining)
+	machine._apply_symbol_triple("brain", 0, false)
+	if int(run_store.freeSpinsRemaining) != spins_before:
+		failures.append("issue111: heart brain triple still granted a free spin")
+	# Heart: the TABLES popup shows the halved jackpot value.
+	machine._close_score_table()
+	machine._show_score_table()
+	if machine._score_overlay == null:
+		failures.append("issue111: score table failed to open for the heart check")
+	else:
+		var table_texts := _overlay_label_texts(machine._score_overlay)
+		if not table_texts.has("+100"):
+			failures.append("issue111: score table does not show the heart jackpot (+100)")
+		if table_texts.has("+200"):
+			failures.append("issue111: score table still shows the classic jackpot (+200)")
+	machine._close_score_table()
+	# Heart: the jackpot's evaluated score is halved (200 -> 100), classic isn't.
+	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 100:
+		failures.append("issue111: heart did not cut the jackpot score to 100")
+	if int(run_store._augmented_jackpot_cut(200, "triple")) != 0:
+		failures.append("issue111: heart cut a non-jackpot win")
+	# Heart applies after the Flatline boost: a 200-point jackpot doubled to 400
+	# still pays 200, rather than subtracting only the original 100-point cut.
+	var jackpot_base_score := 200
+	var flatline_jackpot_boost := jackpot_base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
+	var adjusted_jackpot: Dictionary = run_store._apply_augmented_jackpot(
+		jackpot_base_score + flatline_jackpot_boost, "jackpot")
+	if int(adjusted_jackpot["score"]) != jackpot_base_score \
+			or int(adjusted_jackpot["cut"]) != jackpot_base_score:
+		failures.append("issue111: heart did not halve the boosted jackpot payout")
+	run_store.augmentedTier = ""
+	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 0:
+		failures.append("issue111: classic runs must not cut the jackpot")
+
+	# The tier survives start_new_run (menu -> pre-run shop -> run handoff).
+	run_store.runPhase = "idle"
+	run_store.augmentedTier = "heart"
+	var prev_neurons_left := int(meta_store.campaignNeuronsLeft)
+	meta_store.campaignNeuronsLeft = maxi(prev_neurons_left, 1)
+	if run_store.start_new_run([], {}, false):
+		if String(run_store.augmentedTier) != "heart":
+			failures.append("issue111: start_new_run dropped the augmented tier")
+	else:
+		failures.append("issue111: start_new_run refused a plain fresh run")
+	meta_store.campaignNeuronsLeft = prev_neurons_left
+
+	# A full run reset clears the tier; starting a new run keeps it.
+	run_store.augmentedTier = "club"
+	run_store.reset_run_state()
+	if String(run_store.augmentedTier) != "":
+		failures.append("issue111: reset_run_state kept the augmented tier")
+
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+	run_store.reset_run_state()
+	run_store.augmentedTier = prev_tier
+	run_store.runPhase = prev_phase
+	run_store.powersUsedThisSpin = prev_powers
+
+# Run persistence (issue #111 follow-up): a live run survives an app restart so
+# the menu can offer CONTINUE; ending the run deletes the snapshot.
+func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.wealthEndingReached = false
+	meta_store.campaignNeuronsLeft = int(meta_store.campaignNeuronsMax)
+	run_store.reset_run_state()
+	var campaign_neurons_before := int(meta_store.campaignNeuronsLeft)
+	if not run_store.start_new_run([], {}, true):
+		failures.append("persistence: a fresh run could not be prepared")
+	elif int(meta_store.campaignNeuronsLeft) != campaign_neurons_before \
+			or not bool(run_store.campaignNeuronPending):
+		failures.append("persistence: campaign neuron was consumed before machine end")
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != campaign_neurons_before - 1 \
+			or bool(run_store.campaignNeuronPending):
+		failures.append("persistence: campaign neuron was not consumed at machine end")
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 123
+	run_store.augmentedTier = "heart"
+	run_store.betMultiplier = 2
+	run_store._commit() # snapshots the live run to disk
+	if not FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("persistence: a live run did not write its snapshot")
+	# Simulate a fresh launch: wipe the in-memory state WITHOUT committing, then
+	# load the snapshot back like the autoload's _ready does.
+	run_store.runPhase = "idle"
+	run_store.scoreEarned = 0
+	run_store.augmentedTier = ""
+	run_store.betMultiplier = 1
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "running" or int(run_store.scoreEarned) != 123 \
+			or String(run_store.augmentedTier) != "heart" or int(run_store.betMultiplier) != 2:
+		failures.append("persistence: restart did not restore the live run")
+	# A dealer pre-run is also resumable, but it must return to the dealer rather
+	# than skipping straight to the machine.
+	run_store.reset_run_state()
+	run_store.begin_pre_run()
+	run_store.augmentedTier = "heart"
+	run_store._commit()
+	run_store.runPhase = "idle"
+	run_store.augmentedTier = ""
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "pre_run" or String(run_store.augmentedTier) != "heart":
+		failures.append("persistence: dealer pre-run was not restored")
+	# A post-flatline dealer visit remains resumable before and after its odds
+	# phase; a new run or GIVE UP owns the explicit reset.
+	run_store.reset_run_state()
+	run_store.runPhase = "over"
+	run_store.lastEnding = "flatline"
+	run_store.scoreEarned = 210
+	run_store.lucidityCoins = 210
+	run_store.oddsPhaseCompleted = false
+	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsLeft))
+	meta_store.lucidityWallet = 10
+	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	if not bool(dealer._post_run):
+		failures.append("persistence: dealer did not identify the finished-run visit")
+	dealer._on_options_return_to_menu()
+	if String(run_store.runPhase) != "over" or not run_store.has_resume_state():
+		failures.append("persistence: leaving pending odds dealer lost the resumable state")
+	if not FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("persistence: post-run dealer did not retain its restart snapshot")
+	dealer.queue_free()
+	# Simulate a fresh launch while the post-run dealer visit is still held.
+	run_store.runPhase = "idle"
+	run_store.lastEnding = null
+	run_store.scoreEarned = 0
+	run_store.lucidityCoins = 0
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "over" or String(run_store.lastEnding) != "flatline" \
+			or int(run_store.scoreEarned) != 210 or int(run_store.lucidityCoins) != 210:
+		failures.append("persistence: restart did not restore the post-run dealer session")
+	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(start_menu)
+	start_menu._refresh_start_button()
+	var start_button := start_menu._start_button as Button
+	if start_button == null or start_button.text != "CONTINUE":
+		failures.append("persistence: pending odds dealer should show CONTINUE on the menu")
+	start_menu._show_continue_modal()
+	var post_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if post_run_stats == null or post_run_stats.text != "CURRENT COINS : 10":
+		failures.append("persistence: post-run CONTINUE modal lost the dealer wallet")
+	run_store.oddsPhaseCompleted = true
+	var finalized_dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(finalized_dealer)
+	finalized_dealer._on_options_return_to_menu()
+	if String(run_store.runPhase) != "over" or not run_store.has_resume_state():
+		failures.append("persistence: finalized odds dealer lost the CONTINUE state")
+	start_menu._refresh_start_button()
+	if start_button == null or start_button.text != "CONTINUE":
+		failures.append("persistence: returning after odds completion should still show CONTINUE")
+	finalized_dealer.queue_free()
+	start_menu.queue_free()
+	# Ending the run removes the snapshot so a stale CONTINUE can't appear.
+	run_store.reset_run_state()
+	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("persistence: reset left a stale run snapshot behind")
+
+# Augmented Run menu (issue #111): the selector is hidden before the unlock and
+# appears under START RUN afterwards, communicating the tier before the start.
+func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.is_first_launch = false
+
+	meta_store.augmentedRunUnlocked = false
+	var menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(menu)
+	await process_frame
+	var selector := menu.get_node_or_null("AugmentedSelector") as Control
+	var bar := menu.get_node_or_null("AugmentedBar") as Sprite2D
+	if selector == null:
+		failures.append("issue111: menu has no augmented selector node")
+	elif selector.visible:
+		failures.append("issue111: selector visible before the wealth unlock")
+	if menu.get_node_or_null("MenuArt") == null:
+		failures.append("issue111: menu is not built on the start_menu art")
+	if bar == null:
+		failures.append("issue111: menu has no selector bar overlay")
+	elif bar.visible:
+		failures.append("issue111: selector bar visible before the wealth unlock")
+	menu.queue_free()
+
+	meta_store.augmentedRunUnlocked = true
+	menu = (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(menu)
+	await process_frame
+	selector = menu.get_node_or_null("AugmentedSelector") as Control
+	bar = menu.get_node_or_null("AugmentedBar") as Sprite2D
+	var symbols := menu.get_node_or_null("AugmentedSymbols") as Sprite2D
+	var desc := menu.get_node_or_null("AugmentedDescription") as Label
+	var start := menu._start_button as Button
+	if selector == null or not selector.visible:
+		failures.append("issue111: selector hidden after the wealth unlock")
+	elif desc == null or start == null or symbols == null or bar == null:
+		failures.append("issue111: unlocked menu is missing selector/bar/symbols nodes")
+	else:
+		if not bar.visible:
+			failures.append("issue111: unlocked menu should show the selector bar overlay")
+		if not symbols.visible or symbols.frame != 0:
+			failures.append("issue111: empty selection should show symbols frame 0 (no augment)")
+		if desc.text != "NO AUGMENT":
+			failures.append("issue111: empty selection should read NO AUGMENT")
+		menu._cycle_augmented_tier(1) # "" -> heart (art frame order)
+		if String(menu._selected_augmented_tier) != "heart":
+			failures.append("issue111: cycling right did not select heart")
+		if symbols.frame != 1:
+			failures.append("issue111: heart selection should show symbols frame 1")
+		if desc.text != "JACKPOT 100, NO FREE SPIN":
+			failures.append("issue111: heart description not communicated before start")
+		if start.text != "AUGMENTED RUN":
+			failures.append("issue111: start button did not switch to AUGMENTED RUN")
+		menu._cycle_augmented_tier(-1) # heart -> ""
+		if start.text == "AUGMENTED RUN":
+			failures.append("issue111: clearing the selection kept AUGMENTED RUN")
+		if start.pivot_offset != start.size * 0.5:
+			failures.append("issue111: plate buttons need a centered pivot for the press squash")
+		# Modifiers can't change mid-run: a held run keeps the selector visible
+		# but LOCKED — arrows disabled, showing the active run's suit.
+		var prev_phase := String(run_store.runPhase)
+		run_store.runPhase = "running"
+		run_store.augmentedTier = "club"
+		menu._refresh_augmented_selector()
+		if not selector.visible:
+			failures.append("issue111: locked selector should stay visible during a held run")
+		var left_arrow := selector.get_node_or_null("CycleLeft") as Button
+		if left_arrow == null or not left_arrow.disabled:
+			failures.append("issue111: selector arrows should lock during a held run")
+		if symbols.frame != 4:
+			failures.append("issue111: locked selector should show the run's suit (club = frame 4)")
+		var pre_cycle := String(menu._selected_augmented_tier)
+		menu._cycle_augmented_tier(1)
+		if String(menu._selected_augmented_tier) != pre_cycle:
+			failures.append("issue111: cycling changed the selection during a held run")
+		run_store.augmentedTier = ""
+		run_store.runPhase = prev_phase
+	menu.queue_free()
+	run_store.augmentedTier = ""
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+

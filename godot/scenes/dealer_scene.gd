@@ -171,6 +171,9 @@ func _ready() -> void:
 	_post_run = (not Engine.is_editor_hint()) and _pre_run and RunStateStore.runPhase == "over"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bind_scene_nodes()
+	if _options_overlay != null \
+			and not _options_overlay.return_to_menu_requested.is_connected(_on_options_return_to_menu):
+		_options_overlay.return_to_menu_requested.connect(_on_options_return_to_menu)
 	_build_art()
 	_build_tv()
 	_build_offers()
@@ -1393,3 +1396,8 @@ func _on_leave() -> void:
 		return
 	RunStateStore.decline_dealer_offer()
 	await _react_then_return()
+
+func _on_options_return_to_menu() -> void:
+	# Keep a post-run session resumable on the menu; a new run or GIVE UP owns
+	# the explicit reset so returning here never loses the held coin balance.
+	pass

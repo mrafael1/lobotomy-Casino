@@ -150,6 +150,10 @@ const SCORE_TABLE_SYMBOL_HIT := Vector2(34.0, 35.0)
 # Per-symbol bubble colors — keep in sync with OddsTableOverlay.SYMBOL_PERCENT_COLORS
 # (can't reference the class here: pulling odds_table_overlay.gd into this
 # script's compile chain breaks headless -s runs, which compile before autoloads).
+# Augmented Run badge (issue #111): active-suit indicator, hold to peek at the
+# run's restrictions.
+const AUGMENTED_BADGE_POS := Vector2(27.0, 6.0) # top strip, right of the options gear
+const AUGMENTED_BADGE_SIZE := 14.0
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
 	"eye": Color("#ce3dde"),
@@ -402,6 +406,7 @@ var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
 var _score_symbol_buttons: Array[Button] = []
+var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -523,8 +528,10 @@ var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive s
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
 	_apply_balance_exports()
-	# Draw order (back -> front): reel background -> symbols -> cabinet (with
-	# transparent holes that mask symbol overflow) -> HUD -> spin button.
+	# Draw order (back -> front): casino backdrop -> reel background -> symbols
+	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
+	# spin button.
+	_build_neon_background()
 	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
 	_build_reel_animation_art()
 	_build_reel_covers()
@@ -542,6 +549,7 @@ func _ready() -> void:
 	_build_burst_layer()
 	_build_coin_layer()
 	_build_options_controls()
+	_build_augmented_badge()
 	_restore_options_overlay_if_requested()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
@@ -668,6 +676,48 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+# Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
+# hall reads as out-of-focus scenery so the cabinet pops in front of it.
+const NEON_BG_BLUR_SHADER := "
+shader_type canvas_item;
+uniform float blur_size : hint_range(0.0, 16.0) = 6.0;
+void fragment() {
+	vec2 px = TEXTURE_PIXEL_SIZE * blur_size;
+	vec4 sum = vec4(0.0);
+	float wsum = 0.0;
+	for (int x = -2; x <= 2; x++) {
+		for (int y = -2; y <= 2; y++) {
+			float w = exp(-float(x * x + y * y) / 4.0);
+			sum += texture(TEXTURE, UV + vec2(float(x), float(y)) * px) * w;
+			wsum += w;
+		}
+	}
+	COLOR = sum / wsum;
+}"
+
+## The shared neon casino backdrop fills the canvas behind the cabinet (blurred,
+## so the machine sits in focus inside the same hall as the start menu).
+func _build_neon_background() -> void:
+	var tex := _load_texture("start_menu/neon_casino_background.png", true)
+	if tex == null:
+		return
+	var spr := Sprite2D.new()
+	spr.name = "NeonBackground"
+	spr.texture = tex
+	spr.centered = false
+	spr.position = Vector2.ZERO
+	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var shader := Shader.new()
+	shader.code = NEON_BG_BLUR_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	spr.material = mat
+	add_child(spr)
+	# The cabinet sprites are authored scene children, so a code-added node lands
+	# after (= above) them; force the backdrop to the very back of the tree.
+	move_child(spr, 0)
 
 func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
@@ -2955,6 +3005,9 @@ func _show_score_table() -> void:
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
 		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
+		# Augmented heart modifier (issue #111): the table shows the halved jackpot.
+		if symbol_id == "brain" and RunStateStore.augmented_modifier_active(1):
+			triple_base = Payouts.JACKPOT_SCORE / 2
 		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
 		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
@@ -3316,6 +3369,9 @@ func _reward_bonus_text(bonus: float) -> String:
 func _triple_effect_text(symbol_id: String) -> String:
 	match symbol_id:
 		"brain":
+			# Augmented heart modifier (issue #111): no free spin, jackpot halved.
+			if RunStateStore.augmented_modifier_active(1):
+				return "JACKPOT %d, NO SPIN" % (Payouts.JACKPOT_SCORE / 2)
 			return "JACKPOT +%d SPIN" % triple_brain_free_spins
 		"eye":
 			return "REVEALS A REEL"
@@ -4042,12 +4098,17 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 		"brain":
 			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
 			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
-			if free_spins_granted <= 0:
-				RunStateStore.grant_free_spins(triple_brain_free_spins)
-				_play_spin_gain_fx(_current_display_spins_left() - spins_before,
-					_reel_window_center())
-			color = triple_brain_color
-			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
+			# Augmented heart modifier (issue #111): the jackpot grants no free spin.
+			if RunStateStore.augmented_modifier_active(1):
+				color = triple_brain_color
+				label = "JACKPOT"
+			else:
+				if free_spins_granted <= 0:
+					RunStateStore.grant_free_spins(triple_brain_free_spins)
+					_play_spin_gain_fx(_current_display_spins_left() - spins_before,
+						_reel_window_center())
+				color = triple_brain_color
+				label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
 		"eye":
 			# The player picks the reel to reveal (issue follow-up): the reel-selection
 			# UI arms and the chosen reel's NEXT spin result pops up when it lands.
@@ -4565,9 +4626,116 @@ func _set_stash_tray_visible(v: bool) -> void:
 	_set_stash_visible(v)
 
 func _end_run_lucidity_kept_fraction() -> float:
-	return EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
+	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
 		if MetaStateStore.ownedPermanents.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
 		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
+	# Augmented spade modifier (issue #111): end-of-run gain kept is halved.
+	# Mirrors MetaStateStore.bank_run so the "% kept" countdown matches the bank.
+	return frac * 0.5 if RunStateStore.augmented_modifier_active(2) else frac
+
+# ── Augmented Run badge (issue #111) ─────────────────────────────────────────────────
+# The active suit stays visible during the run; holding it peeks at the list of
+# active restrictions in the shared bubble style.
+
+func _build_augmented_badge() -> void:
+	if RunStateStore.augmentedTier == "":
+		return
+	var icon_tex := Assets.augmented_suit_icon(RunStateStore.augmentedTier)
+	if icon_tex == null:
+		return
+	var b := Button.new()
+	b.name = "AugmentedBadge"
+	b.position = AUGMENTED_BADGE_POS
+	b.size = Vector2.ONE * AUGMENTED_BADGE_SIZE
+	b.z_index = 40
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.02, 0.05, 0.85)
+	style.border_color = Color(0.86, 0.84, 0.24)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(state, style)
+	var icon := TextureRect.new()
+	icon.texture = icon_tex
+	# expand_mode BEFORE size: with the default EXPAND_KEEP_SIZE the texture's
+	# native size becomes the minimum and the size assignment gets clamped up.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.position = Vector2.ONE * 2.0
+	icon.size = Vector2.ONE * (AUGMENTED_BADGE_SIZE - 4.0)
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(icon)
+	b.button_down.connect(_show_augmented_popup.bind(b))
+	b.button_up.connect(_hide_augmented_popup)
+	add_child(b)
+
+func _augmented_restrictions_text() -> String:
+	var lines: Array[String] = []
+	if RunStateStore.augmented_modifier_active(1):
+		lines.append("JACKPOT %d, NO FREE SPIN" % (Payouts.JACKPOT_SCORE / 2))
+	if RunStateStore.augmented_modifier_active(2):
+		lines.append("END-OF-RUN GAIN HALVED")
+	if RunStateStore.augmented_modifier_active(3):
+		lines.append("MAX 2 POWERS PER SPIN")
+	if RunStateStore.augmented_modifier_active(4):
+		lines.append("DEALER + REWARDS HALVED")
+	return "\n".join(lines)
+
+func _show_augmented_popup(button: Button) -> void:
+	_hide_augmented_popup()
+	var text := _augmented_restrictions_text()
+	if text == "":
+		return
+	_augmented_popup = Control.new()
+	_augmented_popup.name = "AugmentedPopup"
+	_augmented_popup.z_index = 41
+	_augmented_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var lines := text.split("\n")
+	var text_w := 0.0
+	for line in lines:
+		text_w = maxf(text_w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
+	var popup_size := Vector2(text_w + 8.0, float(lines.size()) * 8.0 + 6.0)
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
+	bg_style.border_color = Color(0.86, 0.84, 0.24)
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.add_theme_stylebox_override("panel", bg_style)
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_augmented_popup.add_child(bg)
+	var label := Label.new()
+	label.text = text
+	label.size = popup_size
+	label.custom_minimum_size = Vector2.ZERO
+	label.clip_text = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.7))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	label.set_deferred("size", popup_size)
+	var pos := button.position + Vector2(button.size.x + 3.0,
+		button.size.y * 0.5 - popup_size.y * 0.5)
+	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+	_augmented_popup.position = pos.round()
+	add_child(_augmented_popup)
+
+func _hide_augmented_popup() -> void:
+	if _augmented_popup != null:
+		_augmented_popup.queue_free()
+		_augmented_popup = null
 
 ## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
 ## neurons (or banked free spins) remain (issue #62). There is no spin cap — the run
