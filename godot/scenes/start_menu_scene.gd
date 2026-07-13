@@ -665,7 +665,7 @@ func _start_run() -> void:
 
 # ── run-state modal (held run) ───────────────────────────────────────────────────────
 # CONTINUE opens this instead of switching scenes: the neuron meter (moved off
-# the menu), the run's score/L-coin bank, and the resume-or-abandon choice.
+# the menu), the run's current coin balance, and the resume-or-abandon choice.
 
 func _show_continue_modal() -> void:
 	_hide_continue_modal()
@@ -695,13 +695,12 @@ func _show_continue_modal() -> void:
 	_continue_modal.add_child(panel)
 
 	var w := CONTINUE_MODAL_PANEL_RECT.size.x
-	var title := _overlay_label("Title", Rect2(0.0, 4.0, w, 10.0), 7, ART_CYAN, panel)
+	var title := _overlay_label("Title", Rect2(0.0, 7.0, w, 10.0), 7, ART_CYAN, panel)
 	title.text = "RUN IN PROGRESS"
-	NeuronMeter.attach(panel, Vector2(w * 0.5, 48.0))
-	var stats := _overlay_label("Stats", Rect2(0.0, 82.0, w, 10.0), 5,
+	NeuronMeter.attach(panel, Vector2(w * 0.5, 46.0))
+	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "SCORE %d   L-COIN : %d" % [int(RunStateStore.scoreEarned),
-		int(RunStateStore.lucidityCoins)]
+	stats.text = "CURRENT COINS : %d" % int(RunStateStore.lucidityCoins)
 	var close := _modal_close_button(w)
 	panel.add_child(close)
 
