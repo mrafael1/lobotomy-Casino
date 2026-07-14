@@ -11,11 +11,20 @@ const DEEP_PURPLE := Color("#16091c")
 const HOT_MAGENTA := Color("#ff2f87")
 const NEON_CYAN := Color("#3ff5eb")
 const SOFT_PINK := Color("#ffc2df")
-const COIN_COUNT := 128
+const COIN_COUNT := 400
 const COIN_SIZE := Vector2(8.0, 8.0)
 const COIN_FLOOD_HEIGHT := 90.0
 const COIN_FLOOD_SEED := 0x5745414C5448
 const DEFAULT_CASH_TRAY_POS := Vector2(80.0, 298.0)
+const COIN_PILE_COLUMNS := 20
+const COIN_PILE_ROW_SPACING := 4.25
+const COIN_RELEASE_START_DELAY := 0.12
+const COIN_RELEASE_STAGGER := 0.0025
+const COIN_TRAY_POP_TIME := 0.12
+const COIN_TRAY_HOLD_TIME := 0.02
+const COIN_PILE_FLIGHT_TIME := 0.24
+const COIN_TRAY_POP_RISE := 3.0
+const COIN_PILE_FLIGHT_RISE := 18.0
 const JOKER_OPACITY := 0.16
 
 @onready var title_label: Label = %TitleLabel
@@ -33,6 +42,7 @@ var _coin_rng := RandomNumberGenerator.new()
 var _cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS
 var _presentation_started := false
 var _coins: Array[TextureRect] = []
+var _coin_tray_piles: Array[Vector2] = []
 var _coin_targets: Array[Vector2] = []
 var _coin_rotations: Array[float] = []
 var _coin_delays: Array[float] = []
@@ -189,12 +199,14 @@ func _prepare_coin_flood() -> void:
 	coin_flood_clip.size = Vector2(CANVAS_SIZE.x, COIN_FLOOD_HEIGHT)
 	coin_field.size = coin_flood_clip.size
 	_coins.clear()
+	_coin_tray_piles.clear()
 	_coin_targets.clear()
 	_coin_rotations.clear()
 	_coin_delays.clear()
 	_coin_alphas.clear()
 	for child: Node in coin_field.get_children():
 		child.queue_free()
+	var source_local := _cash_tray_pos - coin_flood_clip.position
 	for index in COIN_COUNT:
 		var coin := TextureRect.new()
 		coin.name = "Coin%02d" % index
@@ -205,10 +217,16 @@ func _prepare_coin_flood() -> void:
 		coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		coin.size = COIN_SIZE
 		coin.pivot_offset = COIN_SIZE * 0.5
-		var x := _coin_rng.randf_range(-3.0, 155.0)
-		var target_y := _coin_rng.randf_range(8.0, COIN_FLOOD_HEIGHT - 8.0)
-		var target := Vector2(x, target_y)
-		var source_local := _cash_tray_pos - coin_flood_clip.position
+		var pile_pos := source_local + Vector2(
+			_coin_rng.randf_range(-4.0, 4.0), _coin_rng.randf_range(-2.0, 2.0))
+		var column := index % COIN_PILE_COLUMNS
+		var row := index / COIN_PILE_COLUMNS
+		var column_width := CANVAS_SIZE.x / float(COIN_PILE_COLUMNS)
+		var target_x := float(column) * column_width + column_width * 0.5 - COIN_SIZE.x * 0.5 \
+			+ _coin_rng.randf_range(-2.0, 2.0)
+		var target_y := COIN_FLOOD_HEIGHT - COIN_SIZE.y \
+			- float(row) * COIN_PILE_ROW_SPACING + _coin_rng.randf_range(-1.1, 1.1)
+		var target := Vector2(target_x, target_y)
 		var start := source_local + Vector2(
 			_coin_rng.randf_range(-4.0, 4.0), _coin_rng.randf_range(-2.0, 2.0))
 		coin.position = start
@@ -216,9 +234,10 @@ func _prepare_coin_flood() -> void:
 		coin.modulate = Color(1.0, 1.0, 1.0, 0.0)
 		coin_field.add_child(coin)
 		_coins.append(coin)
+		_coin_tray_piles.append(pile_pos)
 		_coin_targets.append(target)
 		_coin_rotations.append(_coin_rng.randf_range(-0.18, 0.18))
-		_coin_delays.append(0.82 + float(index % 13) * 0.035 + float(index / 13) * 0.07)
+		_coin_delays.append(COIN_RELEASE_START_DELAY + float(index) * COIN_RELEASE_STAGGER)
 		_coin_alphas.append(_coin_rng.randf_range(0.78, 1.0))
 
 
@@ -226,11 +245,36 @@ func _play_coin_flood() -> void:
 	for index in _coins.size():
 		var coin := _coins[index]
 		var tween := create_tween()
-		tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tween.tween_interval(_coin_delays[index])
-		tween.tween_property(coin, "position", _coin_targets[index], 0.42)
-		tween.parallel().tween_property(coin, "rotation", _coin_rotations[index], 0.42)
-		tween.parallel().tween_property(coin, "modulate:a", _coin_alphas[index], 0.16)
+		tween.tween_method(_drive_coin_tray_pop.bind(
+			coin, coin.position, _coin_tray_piles[index]), 0.0, 1.0, COIN_TRAY_POP_TIME)
+		tween.tween_interval(COIN_TRAY_HOLD_TIME)
+		tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_method(_drive_coin_to_pile.bind(
+			coin, _coin_tray_piles[index], _coin_targets[index], _coin_rotations[index],
+			_coin_alphas[index]), 0.0, 1.0, COIN_PILE_FLIGHT_TIME)
+
+
+func _drive_coin_tray_pop(t: float, coin: TextureRect, from_pos: Vector2,
+		pile_pos: Vector2) -> void:
+	if not is_instance_valid(coin):
+		return
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	var pop := sin(t * PI) * COIN_TRAY_POP_RISE
+	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
+	coin.modulate.a = minf(t / 0.06, 1.0)
+
+
+func _drive_coin_to_pile(t: float, coin: TextureRect, from_pos: Vector2,
+		to_pos: Vector2, target_rotation: float, target_alpha: float) -> void:
+	if not is_instance_valid(coin):
+		return
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	var arc := sin(t * PI) * COIN_PILE_FLIGHT_RISE
+	coin.position = from_pos.lerp(to_pos, eased) + Vector2(0.0, -arc)
+	coin.rotation = lerpf(0.0, target_rotation, eased)
+	coin.modulate.a = lerpf(0.0, target_alpha, minf(t / 0.08, 1.0))
 
 
 func _on_start_again_pressed() -> void:

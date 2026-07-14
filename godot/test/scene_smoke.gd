@@ -2295,7 +2295,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: Start again button is missing, disabled, or too small")
 	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
 		if wealth_screen != null else null
-	if coin_field == null or coin_field.get_child_count() < 100:
+	if coin_field == null or coin_field.get_child_count() < 300:
 		failures.append("wealth: coin flood did not prepare enough coins")
 	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
 		if wealth_screen != null else null
