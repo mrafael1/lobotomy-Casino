@@ -2093,9 +2093,8 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
-# Flatline overlay polish: retained-percent copy only, no FINAL CREDITS line, the
-# neuron meter above the continue button, and fatal copy ONLY when the campaign
-# is actually out of neurons.
+# Issue #140 flatline treatment: a focused message, retained-credit drain,
+# animated trace, broken-neon continuation button, and existing continuation flow.
 func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
@@ -2106,11 +2105,16 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	meta_store.ownedPermanents = [] # base retention => "10% kept"
 	run_store.runPhase = "running"
 	machine._show_ending("flatline", run)
-	var texts := _overlay_label_texts(machine._overlay)
+	var flatline_screen := machine._overlay.get_node_or_null("FlatlineEndingOverlay") as Control
+	var texts := _overlay_label_texts(flatline_screen)
 	if texts.has("this time, it's fatal. No coming back"):
 		failures.append("flatline: fatal copy shown with campaign neurons remaining")
-	if not texts.has("FLATLINE"):
-		failures.append("flatline: non-fatal overlay is missing the FLATLINE title")
+	for required_copy in [
+		"FLATLINE.",
+		"fortune isn't far",
+	]:
+		if not texts.has(required_copy):
+			failures.append("flatline: issue #140 copy missing: %s" % required_copy)
 	for t in texts:
 		if String(t).begins_with("FINAL CREDITS"):
 			failures.append("flatline: FINAL CREDITS line should be gone")
@@ -2118,13 +2122,39 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 			failures.append("flatline: 'lucidity' should not appear on the overlay")
 	if not texts.has("10% kept"):
 		failures.append("flatline: retained percent line missing ('10% kept')")
-	if not texts.has("-1 NEURON"):
-		failures.append("flatline: -1 NEURON popup missing from the neuron-loss screen")
-	var flat_meter := _find_neuron_meter(machine._overlay)
-	if flat_meter == null:
-		failures.append("flatline: overlay is missing the neuron meter")
-	elif flat_meter.position.y + flat_meter.size.y > 238.0:
-		failures.append("flatline: neuron meter is not above the continue button")
+	if _overlay_label_texts(machine._overlay).has("-1 NEURON"):
+		failures.append("flatline: extra neuron-loss popup should not appear")
+	var action := machine._overlay.get_node_or_null(
+		"FlatlineEndingOverlay/ButtonHost/ActionButton") as Button
+	if action == null or action.text != "CONTINUE":
+		failures.append("flatline: continuation button is missing")
+	elif action.size.x < 120.0 or action.size.y < 34.0:
+		failures.append("flatline: continuation button is not prominent enough")
+	var broken_frame := flatline_screen.get_node_or_null("ButtonHost/BrokenFrame") \
+		if flatline_screen != null else null
+	if broken_frame == null or not broken_frame is BrokenNeonFrame:
+		failures.append("flatline: broken-neon button frame is missing")
+	var trace := flatline_screen.get_node_or_null("TraceRoot/TraceLine") as Line2D \
+		if flatline_screen != null else null
+	if trace == null or trace.points.size() < 2 \
+			or trace.points[-1].x - trace.points[0].x < 128.0:
+		failures.append("flatline: the enlarged flatline trace is missing or too short")
+	if _find_neuron_meter(machine._overlay) != null:
+		failures.append("flatline: extra neuron meter should not appear")
+	if flatline_screen != null:
+		flatline_screen.play_continue_animation()
+		if action != null and not action.disabled:
+			failures.append("flatline: CONTINUE remains enabled during its transition")
+		if trace == null or trace.points.size() < 10:
+			failures.append("flatline: CONTINUE does not reveal returning heartbeats")
+	# The presentation changes, but the existing drain still lands on the exact
+	# amount banked by the 10% end-of-run retention rule.
+	machine._flatline_countdown_elapsed = machine.FLATLINE_HOLD_TIME + machine.FLATLINE_DRAIN_TIME
+	machine._step_flatline_countdown(0.0)
+	if machine._flatline_score_label == null or machine._flatline_score_label.text != "10":
+		failures.append("flatline: score drain did not settle on the 10 credits kept")
+	if machine._flatline_lost_label == null or machine._flatline_lost_label.text != "-90 lost":
+		failures.append("flatline: score drain did not preserve the lost-credit feedback")
 	var tray := machine.get_node_or_null("stash") as Control
 	if tray != null and tray.visible:
 		failures.append("flatline: stash tray still renders over the overlay")
@@ -2136,7 +2166,8 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	meta_store.campaignNeuronsLeft = 0
 	run_store.runPhase = "running"
 	machine._show_ending("flatline", run)
-	if not _overlay_label_texts(machine._overlay).has("this time, it's fatal. No coming back"):
+	flatline_screen = machine._overlay.get_node_or_null("FlatlineEndingOverlay") as Control
+	if not _overlay_label_texts(flatline_screen).has("this time, it's fatal. No coming back"):
 		failures.append("flatline: fatal copy missing when neurons are exhausted")
 	machine._overlay.queue_free()
 	machine._overlay = null
@@ -2170,19 +2201,18 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var wallet_before := int(meta_store.lucidityWallet)
 	var continue_button: Button = null
 	var exit_button: Button = null
-	for child in machine._overlay.get_children():
-		if child is Button:
-			var b := child as Button
-			if b.text == "CONTINUE":
-				continue_button = b
-			elif b.text == "EXIT CASINO":
-				exit_button = b
-			elif b.text == "BANK & LAB":
-				failures.append("wealth: bank/lab button still on the wealth screen")
+	for node: Node in machine._overlay.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button.text == "IS IT ENOUGH ?":
+			continue_button = button
+		elif button.text == "EXIT CASINO":
+			exit_button = button
+		elif button.text == "BANK & LAB":
+			failures.append("wealth: bank/lab button still on the wealth screen")
 	if continue_button == null:
-		failures.append("wealth: CONTINUE button missing from the wealth screen")
+		failures.append("wealth: IS IT ENOUGH ? button missing from the wealth screen")
 	elif continue_button.disabled:
-		failures.append("wealth: CONTINUE disabled although another spin is possible")
+		failures.append("wealth: IS IT ENOUGH ? disabled although another spin is possible")
 	if exit_button == null:
 		failures.append("wealth: EXIT CASINO button missing from the wealth screen")
 	if int(meta_store.lucidityWallet) != wallet_before:
@@ -2245,19 +2275,18 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	var cont: Button = null
 	var exit_button: Button = null
 	if machine._overlay != null:
-		for child in machine._overlay.get_children():
-			if child is Button:
-				var b := child as Button
-				if b.text == "CONTINUE":
-					cont = b
-				elif b.text == "EXIT CASINO":
-					exit_button = b
+		for node: Node in machine._overlay.find_children("*", "Button", true, false):
+			var button := node as Button
+			if button.text == "IS IT ENOUGH ?":
+				cont = button
+			elif button.text == "EXIT CASINO":
+				exit_button = button
 	if exit_button == null or exit_button.disabled:
 		failures.append("issue62: EXIT CASINO missing/disabled on the 0-spin wealth screen")
 	if cont == null:
-		failures.append("issue62: CONTINUE missing from the 0-spin wealth screen")
+		failures.append("issue62: IS IT ENOUGH ? missing from the 0-spin wealth screen")
 	elif not cont.disabled:
-		failures.append("issue62: CONTINUE should be disabled when no spin can follow")
+		failures.append("issue62: IS IT ENOUGH ? should be disabled when no spin can follow")
 	# Even a forced continue must not strand a dead machine: it falls through to
 	# the flatline flow (which always offers an action).
 	machine._continue_from_wealth()
@@ -4131,8 +4160,8 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 		failures.append("issue35: instant death did not show the flatline ending overlay")
 	else:
 		var fatal_found := false
-		for child in machine._overlay.get_children():
-			if child is Label and (child as Label).text == "this time, it's fatal. No coming back":
+		for child: Node in machine._overlay.find_children("*", "Label", true, false):
+			if (child as Label).text == "this time, it's fatal. No coming back":
 				fatal_found = true
 		if not fatal_found:
 			failures.append("issue38: flatline ending is missing the byte-exact fatal title")

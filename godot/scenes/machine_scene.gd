@@ -85,6 +85,8 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
+const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
+const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
@@ -492,6 +494,7 @@ var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
 var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
+var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 # Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
@@ -4414,6 +4417,12 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the dimmed overlay.
 	_set_stash_tray_visible(false)
+	if ending == "wealth":
+		_build_wealth_screen(run)
+		return
+	if ending == "flatline":
+		_build_flatline_screen(run)
+		return
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -4444,9 +4453,6 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	if ending == "flatline":
 		_build_flatline_countdown(run)
-	elif ending == "wealth":
-		_build_wealth_screen(run)
-		return
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(20, 145)
@@ -4468,38 +4474,26 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
+## Dedicated issue #140 flatline presentation. The visual layer owns the focused
+## message, animated trace, and action; MachineScene retains countdown state,
+## banking, and the existing dealer/menu transition.
+func _build_flatline_screen(run: Dictionary) -> void:
+	var flatline_screen := FLATLINE_ENDING_SCENE.instantiate() as FlatlineEndingOverlay
+	_overlay.add_child(flatline_screen)
+	var fatal_copy := fatal_flatline_text if not _has_campaign_neurons_remaining() else ""
+	flatline_screen.present(_flatline_action_text(), fatal_copy)
+	flatline_screen.action_pressed.connect(_on_flatline_action_pressed)
+	_build_flatline_countdown(run, flatline_screen)
+
 ## Dedicated wealth-ending screen: CONTINUE keeps playing under the existing
 ## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
 ## continue can still bank the full total later) and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
-	_score_label(_overlay, "YOU MADE IT OUT RICH", Vector2(20.0, 148.0), 8,
-		Color(0.9, 0.95, 0.85), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "SCORE %d" % int(run["scoreEarned"]), Vector2(20.0, 162.0), 8,
-		Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-
-	var cont := Button.new()
-	cont.text = "CONTINUE"
-	cont.position = Vector2(30.0, 192.0)
-	cont.size = Vector2(100.0, 20.0)
-	cont.add_theme_font_size_override("font_size", 9)
-	if _font != null:
-		cont.add_theme_font_override("font", _font)
-	# Continuing with no possible next spin (0 neurons/free spins, or the hard
-	# spin cap already hit) would strand a dead machine (issue #62).
-	cont.disabled = not _can_resume_after_wealth()
-	cont.pressed.connect(_continue_from_wealth)
-	_overlay.add_child(cont)
-
-	var exit := Button.new()
-	exit.text = "EXIT CASINO"
-	exit.position = Vector2(30.0, 218.0)
-	exit.size = Vector2(100.0, 20.0)
-	exit.add_theme_font_size_override("font_size", 9)
-	if _font != null:
-		exit.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(exit)
-	exit.pressed.connect(_exit_casino.bind(run))
-	_overlay.add_child(exit)
+	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
+	_overlay.add_child(wealth_screen)
+	wealth_screen.present(int(run["scoreEarned"]), _can_resume_after_wealth())
+	wealth_screen.enough_pressed.connect(_continue_from_wealth)
+	wealth_screen.exit_casino_pressed.connect(_exit_casino.bind(run))
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
@@ -4545,6 +4539,22 @@ func _flatline_action_text() -> String:
 	return "CONTINUE" if _has_campaign_neurons_remaining() else "MENU"
 
 func _on_flatline_action_pressed() -> void:
+	if _flatline_transition_active:
+		return
+	_flatline_transition_active = true
+	var flatline_screen := _overlay.get_node_or_null(
+		"FlatlineEndingOverlay") as FlatlineEndingOverlay
+	if flatline_screen != null:
+		flatline_screen.play_continue_animation()
+		await flatline_screen.continue_animation_finished
+	if _overlay == null or not is_instance_valid(_overlay):
+		return
+	var meter_center := FlatlineEndingOverlay.TRACE_CENTER \
+		if flatline_screen != null else Vector2(80.0, 286.0)
+	_flatline_meter = NeuronMeter.attach(_overlay, meter_center)
+	_flatline_meter.play_loss_animation()
+	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 270.0))
+	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
 		_to_dealer()
 	else:
@@ -4553,7 +4563,8 @@ func _on_flatline_action_pressed() -> void:
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
 
-func _build_flatline_countdown(run: Dictionary) -> void:
+func _build_flatline_countdown(run: Dictionary,
+		flatline_screen: FlatlineEndingOverlay = null) -> void:
 	_flatline_total = int(run["lucidityCoins"])
 	_flatline_kept = floori(float(_flatline_total) * _end_run_lucidity_kept_fraction())
 	_flatline_display = _flatline_total
@@ -4563,17 +4574,26 @@ func _build_flatline_countdown(run: Dictionary) -> void:
 	# Retained-percent line only ("10% kept", or "20% kept" with Smart Saving);
 	# the draining number below it is the whole story.
 	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
-	_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	if flatline_screen != null:
+		flatline_screen.set_kept_percentage(kept_pct)
+		_flatline_score_label = flatline_screen.score_label
+		_flatline_lost_label = flatline_screen.lost_label
+	else:
+		_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8,
+			Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_flatline_score_label = _score_label(_overlay, str(_flatline_display),
+			Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0,
+			HORIZONTAL_ALIGNMENT_CENTER)
+		_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10,
+			Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	_update_flatline_countdown_labels()
 
-	# Neuron meter above the continue button, playing the losing pop: the frame
-	# switches to reflect the neuron this run just cost. The "-1 NEURON" popup
-	# rides the same beat, rising off the meter.
-	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
-	_flatline_meter.play_loss_animation()
-	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
+	# Keep the neuron-loss treatment only for the legacy fallback. The dedicated
+	# flatline screen intentionally stays focused on the money drain and trace.
+	if flatline_screen == null:
+		_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
+		_flatline_meter.play_loss_animation()
+		_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
 
 func _step_flatline_countdown(delta: float) -> void:
 	_flatline_countdown_elapsed += delta
@@ -4603,6 +4623,7 @@ func _stop_flatline_countdown() -> void:
 	_flatline_score_label = null
 	_flatline_lost_label = null
 	_flatline_meter = null
+	_flatline_transition_active = false
 
 # The stash tray (z 50) would draw over full-screen ending overlays; hide it while
 # one is up and restore it when the run visuals resync.
