@@ -94,8 +94,8 @@ func _alive_trace_points() -> PackedVector2Array:
 		Vector2(43.0, -4.0), Vector2(47.0, 12.0), Vector2(51.0, 3.0),
 		Vector2(67.0, 3.0),
 		Vector2(71.0, -3.0), Vector2(75.0, 11.0), Vector2(79.0, 3.0),
-		Vector2(87.0, 3.0),
-		Vector2(91.0, -3.0), Vector2(95.0, 11.0), Vector2(99.0, 3.0),
+		Vector2(95.0, 3.0),
+		Vector2(99.0, -3.0), Vector2(103.0, 11.0), Vector2(107.0, 3.0),
 		Vector2(128.0, 3.0),
 	])
 
