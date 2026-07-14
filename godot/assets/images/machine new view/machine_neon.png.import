@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba16ryki2rjv6"
-path="res://.godot/imported/neon_machine.png-78c5aee16f650411f452d1e2407ae4af.ctex"
+uid="uid://brrjth68rbdf2"
+path="res://.godot/imported/machine_neon.png-54782f45991b046d05f46ed0886e4cc6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/machine new view/neon_machine.png"
-dest_files=["res://.godot/imported/neon_machine.png-78c5aee16f650411f452d1e2407ae4af.ctex"]
+source_file="res://assets/images/machine new view/machine_neon.png"
+dest_files=["res://.godot/imported/machine_neon.png-54782f45991b046d05f46ed0886e4cc6.ctex"]
 
 [params]
 

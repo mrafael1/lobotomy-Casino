@@ -546,7 +546,7 @@ func _ready() -> void:
 	_build_reel_animation_art()
 	_build_reel_covers()
 	_build_reels()
-	_build_full_canvas_sprite("machine new view/neon_machine.png")
+	_build_full_canvas_sprite("machine new view/machine_neon.png")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -632,7 +632,8 @@ func _authored_control(name: String) -> Control:
 func _full_canvas_name(rel: String) -> String:
 	if rel.ends_with("reel_final_machine.png"):
 		return "ReelBacking"
-	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png"):
+	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
+			or rel.ends_with("machine_neon.png"):
 		return "Cabinet"
 	return ""
 
@@ -733,7 +734,8 @@ func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		# Only the cabinet gets a visible fallback so the scene isn't blank.
-		if rel.ends_with("/final_machine.png") or rel.ends_with("/neon_machine.png"):
+		if rel.ends_with("/final_machine.png") or rel.ends_with("/neon_machine.png") \
+				or rel.ends_with("/machine_neon.png"):
 			var fallback := ColorRect.new()
 			fallback.color = Color(0.06, 0.05, 0.08)
 			fallback.size = Vector2(SRC_W, SRC_H)

@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://bty2dglqk8hul" path="res://scenes/machine_scene.gd" id="1_machine"]
 [ext_resource type="Texture2D" uid="uid://cle4mx7cn42t" path="res://assets/images/machine new view/reel_final_machine.png" id="2_reel"]
 [ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
-[ext_resource type="Texture2D" path="res://assets/images/machine new view/neon_machine.png" id="4_cabinet"]
+[ext_resource type="Texture2D" path="res://assets/images/machine new view/machine_neon.png" id="4_cabinet"]
 [ext_resource type="Texture2D" uid="uid://drqwbn2hk65kl" path="res://assets/images/machine new view/wealth_track_final_machine.png" id="5_wealth_track"]
 [ext_resource type="Texture2D" uid="uid://cnl5y066ief4d" path="res://assets/images/machine new view/wealth_fill_final_machine.png" id="6_wealth_fill"]
 [ext_resource type="Texture2D" uid="uid://ojxjeqmf2wnp" path="res://assets/images/machine new view/health_track_final_machine.png" id="7_health_track"]

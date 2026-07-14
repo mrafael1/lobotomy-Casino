@@ -127,7 +127,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# The new neon cabinet/control sheets are native 160x320 art. The surrounding
 	# reel/HUD sheets remain legacy 8x art, so both scale conventions must coexist.
 	for rel in [
-		"machine new view/neon_machine.png",
+		"machine new view/machine_neon.png",
 		"machine new view/neon_machine_lever.png",
 		"machine new view/neon_machine_jackpot.png",
 		"machine new view/neon_machine_power_bar.png",
