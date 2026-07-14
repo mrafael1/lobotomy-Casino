@@ -5,12 +5,9 @@ extends Control
 signal start_again_pressed
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
-const GOLD := Color("#ffd75a")
-const PALE_GOLD := Color("#fff0a3")
-const DEEP_PURPLE := Color("#16091c")
-const HOT_MAGENTA := Color("#ff2f87")
-const NEON_CYAN := Color("#3ff5eb")
-const SOFT_PINK := Color("#ffc2df")
+const NEON_CYAN := Color(0.42, 1.0, 0.95)
+const NEON_PINK := Color(1.0, 0.5, 0.7)
+const NEON_YELLOW := Color(1.0, 0.86, 0.36)
 const COIN_COUNT := 400
 const COIN_SIZE := Vector2(8.0, 8.0)
 const COIN_FLOOD_HEIGHT := 90.0
@@ -91,47 +88,23 @@ func _style_labels() -> void:
 	for label: Label in [title_label, subtitle_label, score_caption_label, score_label]:
 		if _font != null:
 			label.add_theme_font_override(&"font", _font)
-		label.add_theme_color_override(&"font_outline_color", DEEP_PURPLE)
-		label.add_theme_constant_override(&"outline_size", 2)
-	title_label.add_theme_color_override(&"font_color", GOLD)
-	title_label.add_theme_color_override(&"font_shadow_color", HOT_MAGENTA)
+		label.add_theme_color_override(&"font_outline_color", Color.BLACK)
+		label.add_theme_constant_override(&"outline_size", 1)
+	title_label.add_theme_color_override(&"font_color", NEON_CYAN)
+	title_label.add_theme_color_override(&"font_shadow_color", NEON_PINK)
 	title_label.add_theme_constant_override(&"shadow_offset_x", 1)
 	title_label.add_theme_constant_override(&"shadow_offset_y", 1)
-	subtitle_label.add_theme_color_override(&"font_color", SOFT_PINK)
-	score_caption_label.add_theme_color_override(&"font_color", GOLD)
-	score_label.add_theme_color_override(&"font_color", PALE_GOLD)
-	score_label.add_theme_color_override(&"font_shadow_color", HOT_MAGENTA)
+	subtitle_label.add_theme_color_override(&"font_color", NEON_PINK)
+	score_caption_label.add_theme_color_override(&"font_color", NEON_PINK)
+	score_label.add_theme_color_override(&"font_color", NEON_YELLOW)
+	score_label.add_theme_color_override(&"font_shadow_color", NEON_CYAN)
 	score_label.add_theme_constant_override(&"shadow_offset_x", 1)
 	score_label.add_theme_constant_override(&"shadow_offset_y", 1)
 
 
 func _style_button() -> void:
-	if _font != null:
-		start_again_button.add_theme_font_override(&"font", _font)
-	start_again_button.add_theme_color_override(&"font_color", PALE_GOLD)
-	start_again_button.add_theme_color_override(&"font_hover_color", Color.WHITE)
-	start_again_button.add_theme_color_override(&"font_pressed_color", DEEP_PURPLE)
-	start_again_button.add_theme_color_override(&"font_focus_color", PALE_GOLD)
-	start_again_button.add_theme_stylebox_override(&"normal",
-		_button_style(DEEP_PURPLE, GOLD, HOT_MAGENTA))
-	start_again_button.add_theme_stylebox_override(&"hover",
-		_button_style(Color("#32113c"), PALE_GOLD, NEON_CYAN))
-	start_again_button.add_theme_stylebox_override(&"pressed",
-		_button_style(GOLD, PALE_GOLD, HOT_MAGENTA))
-	start_again_button.add_theme_stylebox_override(&"focus", StyleBoxEmpty.new())
-
-
-func _button_style(fill: Color, border: Color, shadow: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = border
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(2)
-	style.shadow_color = Color(shadow, 0.75)
-	style.shadow_size = 2
-	style.set_content_margin(SIDE_LEFT, 3.0)
-	style.set_content_margin(SIDE_RIGHT, 3.0)
-	return style
+	Assets.start_menu_button_style(start_again_button, Assets.START_MENU_BUTTON_CYAN, 10)
+	Assets.start_menu_button_press_feedback(start_again_button, 0.9)
 
 
 func _setup_joker() -> void:
