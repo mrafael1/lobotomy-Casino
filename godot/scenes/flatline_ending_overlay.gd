@@ -9,7 +9,7 @@ const RED := Color("#ff334d")
 const PALE_RED := Color("#ff9aa8")
 const SOFT_WHITE := Color("#f4f2f0")
 const TRACE_REVEAL_TIME := 1.65
-const REVIVAL_REVEAL_TIME := 1.15
+const REVIVAL_REVEAL_TIME := 2.3
 const TRACE_CENTER := Vector2(80.0, 201.0)
 
 @onready var fatal_label: Label = %FatalLabel
@@ -52,7 +52,7 @@ func set_kept_percentage(kept_percentage: int) -> void:
 	kept_label.text = "%d%% kept" % kept_percentage
 
 
-## Replaces the dead line with three returning beats, then clears the trace and
+## Replaces the dead line with four returning beats, then clears the trace and
 ## action button so the neuron meter can occupy the final beat of the sequence.
 func play_continue_animation() -> void:
 	if _continue_animation_started:
@@ -94,6 +94,8 @@ func _alive_trace_points() -> PackedVector2Array:
 		Vector2(43.0, -4.0), Vector2(47.0, 12.0), Vector2(51.0, 3.0),
 		Vector2(67.0, 3.0),
 		Vector2(71.0, -3.0), Vector2(75.0, 11.0), Vector2(79.0, 3.0),
+		Vector2(87.0, 3.0),
+		Vector2(91.0, -3.0), Vector2(95.0, 11.0), Vector2(99.0, 3.0),
 		Vector2(128.0, 3.0),
 	])
 
@@ -110,7 +112,7 @@ func _prepare_revival_trace(points: PackedVector2Array) -> void:
 	_next_revival_beat = 0
 	if is_zero_approx(_revival_trace_total_length):
 		return
-	for point_index: int in [2, 6, 10]:
+	for point_index: int in [2, 6, 10, 14]:
 		if point_index < _revival_trace_lengths.size():
 			_revival_beat_progresses.append(
 				_revival_trace_lengths[point_index] / _revival_trace_total_length)
