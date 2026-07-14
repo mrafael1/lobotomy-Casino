@@ -4545,20 +4545,33 @@ func _on_flatline_action_pressed() -> void:
 	var flatline_screen := _overlay.get_node_or_null(
 		"FlatlineEndingOverlay") as FlatlineEndingOverlay
 	if flatline_screen != null:
+		if not flatline_screen.first_revival_beep.is_connected(
+			_on_flatline_first_revival_beep):
+			flatline_screen.first_revival_beep.connect(_on_flatline_first_revival_beep)
 		flatline_screen.play_continue_animation()
 		await flatline_screen.continue_animation_finished
 	if _overlay == null or not is_instance_valid(_overlay):
 		return
-	var meter_center := FlatlineEndingOverlay.TRACE_CENTER \
-		if flatline_screen != null else Vector2(80.0, 286.0)
-	_flatline_meter = NeuronMeter.attach(_overlay, meter_center)
-	_flatline_meter.play_loss_animation()
-	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 270.0))
+	if flatline_screen == null:
+		_attach_flatline_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
 		_to_dealer()
 	else:
 		_to_menu()
+
+func _on_flatline_first_revival_beep() -> void:
+	_attach_flatline_meter(FlatlineEndingOverlay.REVIVAL_METER_CENTER,
+		FlatlineEndingOverlay.REVIVAL_METER_CENTER + Vector2(0.0, 27.0))
+
+func _attach_flatline_meter(center: Vector2, feedback_center: Vector2) -> void:
+	if _overlay == null or not is_instance_valid(_overlay):
+		return
+	if _flatline_meter != null and is_instance_valid(_flatline_meter):
+		return
+	_flatline_meter = NeuronMeter.attach(_overlay, center)
+	_flatline_meter.play_loss_animation()
+	_show_neuron_spend_feedback(_overlay, feedback_center)
 
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0

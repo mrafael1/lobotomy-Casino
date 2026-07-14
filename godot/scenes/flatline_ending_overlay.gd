@@ -4,6 +4,7 @@ extends Control
 
 signal action_pressed
 signal continue_animation_finished
+signal first_revival_beep
 
 const RED := Color("#ff334d")
 const PALE_RED := Color("#ff9aa8")
@@ -11,6 +12,7 @@ const SOFT_WHITE := Color("#f4f2f0")
 const TRACE_REVEAL_TIME := 1.65
 const REVIVAL_REVEAL_TIME := 2.3
 const TRACE_CENTER := Vector2(80.0, 201.0)
+const REVIVAL_METER_CENTER := Vector2(80.0, 243.0)
 
 @onready var fatal_label: Label = %FatalLabel
 @onready var score_label: Label = %ScoreLabel
@@ -52,8 +54,8 @@ func set_kept_percentage(kept_percentage: int) -> void:
 	kept_label.text = "%d%% kept" % kept_percentage
 
 
-## Replaces the dead line with four returning beats, then clears the trace and
-## action button so the neuron meter can occupy the final beat of the sequence.
+## Replaces the dead line with three returning beats. The first beat swaps the
+## action button for the neuron meter; the trace clears at the end of the sweep.
 func play_continue_animation() -> void:
 	if _continue_animation_started:
 		return
@@ -90,12 +92,10 @@ func _alive_trace_points() -> PackedVector2Array:
 	return PackedVector2Array([
 		Vector2(0.0, 3.0), Vector2(12.0, 3.0),
 		Vector2(16.0, -3.0), Vector2(20.0, 11.0), Vector2(24.0, 3.0),
-		Vector2(39.0, 3.0),
-		Vector2(43.0, -4.0), Vector2(47.0, 12.0), Vector2(51.0, 3.0),
-		Vector2(67.0, 3.0),
-		Vector2(71.0, -3.0), Vector2(75.0, 11.0), Vector2(79.0, 3.0),
-		Vector2(95.0, 3.0),
-		Vector2(99.0, -3.0), Vector2(103.0, 11.0), Vector2(107.0, 3.0),
+		Vector2(56.0, 3.0),
+		Vector2(60.0, -4.0), Vector2(64.0, 12.0), Vector2(68.0, 3.0),
+		Vector2(100.0, 3.0),
+		Vector2(104.0, -3.0), Vector2(108.0, 11.0), Vector2(112.0, 3.0),
 		Vector2(128.0, 3.0),
 	])
 
@@ -112,7 +112,7 @@ func _prepare_revival_trace(points: PackedVector2Array) -> void:
 	_next_revival_beat = 0
 	if is_zero_approx(_revival_trace_total_length):
 		return
-	for point_index: int in [2, 6, 10, 14]:
+	for point_index: int in [2, 6, 10]:
 		if point_index < _revival_trace_lengths.size():
 			_revival_beat_progresses.append(
 				_revival_trace_lengths[point_index] / _revival_trace_total_length)
@@ -128,6 +128,10 @@ func _set_revival_trace_progress(progress: float) -> void:
 	while _next_revival_beat < _revival_beat_progresses.size() \
 			and clamped_progress >= _revival_beat_progresses[_next_revival_beat]:
 		_pulse_trace_glow()
+		if _next_revival_beat == 0:
+			button_host.visible = false
+			button_host.modulate.a = 0.0
+			first_revival_beep.emit()
 		_next_revival_beat += 1
 
 
