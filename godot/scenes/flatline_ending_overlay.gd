@@ -9,7 +9,7 @@ const RED := Color("#ff334d")
 const PALE_RED := Color("#ff9aa8")
 const SOFT_WHITE := Color("#f4f2f0")
 const TRACE_REVEAL_TIME := 1.65
-const REVIVAL_REVEAL_TIME := 0.9
+const REVIVAL_REVEAL_TIME := 1.15
 const TRACE_CENTER := Vector2(80.0, 201.0)
 
 @onready var fatal_label: Label = %FatalLabel
