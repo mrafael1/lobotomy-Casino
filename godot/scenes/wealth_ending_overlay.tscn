@@ -1,8 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scenes/wealth_ending_overlay.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/images/wealth_ending/coin_flood.png" id="2_coins"]
-[ext_resource type="FontFile" path="res://assets/font/DTM-Sans.otf" id="3_font"]
+[ext_resource type="FontFile" path="res://assets/font/DTM-Sans.otf" id="2_font"]
 
 [node name="WealthEndingOverlay" type="Control"]
 layout_mode = 3
@@ -12,6 +11,14 @@ offset_bottom = 320.0
 mouse_filter = 0
 script = ExtResource("1_script")
 
+[node name="Dim" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+color = Color(0.012, 0.004, 0.02, 0.86)
+
 [node name="LightLayer" type="Control" parent="."]
 unique_name_in_owner = true
 layout_mode = 0
@@ -19,53 +26,67 @@ offset_right = 160.0
 offset_bottom = 320.0
 mouse_filter = 2
 
+[node name="TitleGlow" type="ColorRect" parent="LightLayer"]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 20.0
+offset_right = 142.0
+offset_bottom = 22.0
+mouse_filter = 2
+color = Color(1, 0.843137, 0.352941, 0.3)
+
 [node name="TVLeftGlow" type="ColorRect" parent="LightLayer"]
 layout_mode = 0
 offset_left = 27.0
-offset_top = 46.0
+offset_top = 75.0
 offset_right = 29.0
-offset_bottom = 104.0
+offset_bottom = 116.0
 mouse_filter = 2
-color = Color(1, 0.843137, 0.352941, 0.85)
+color = Color(1, 0.843137, 0.352941, 0.65)
 
 [node name="TVRightGlow" type="ColorRect" parent="LightLayer"]
 layout_mode = 0
 offset_left = 131.0
-offset_top = 46.0
+offset_top = 75.0
 offset_right = 133.0
-offset_bottom = 104.0
+offset_bottom = 116.0
 mouse_filter = 2
-color = Color(1, 0.843137, 0.352941, 0.85)
+color = Color(1, 0.843137, 0.352941, 0.65)
 
-[node name="LowerLampLeftGlow" type="ColorRect" parent="LightLayer"]
+[node name="CoinGlow" type="ColorRect" parent="LightLayer"]
 layout_mode = 0
-offset_left = 37.0
-offset_top = 122.0
-offset_right = 74.0
-offset_bottom = 126.0
+offset_left = 12.0
+offset_top = 231.0
+offset_right = 148.0
+offset_bottom = 233.0
 mouse_filter = 2
-color = Color(1, 0.941176, 0.552941, 0.72)
-
-[node name="LowerLampRightGlow" type="ColorRect" parent="LightLayer"]
-layout_mode = 0
-offset_left = 82.0
-offset_top = 122.0
-offset_right = 123.0
-offset_bottom = 126.0
-mouse_filter = 2
-color = Color(1, 0.941176, 0.552941, 0.72)
+color = Color(1, 0.843137, 0.352941, 0.28)
 
 [node name="TitleLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 0
-offset_left = 14.0
-offset_top = 25.0
-offset_right = 146.0
-offset_bottom = 43.0
+offset_left = 6.0
+offset_top = 24.0
+offset_right = 154.0
+offset_bottom = 50.0
 mouse_filter = 2
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 10
-text = "WEALTH ACHIEVED"
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+text = "You've become rich"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 16.0
+offset_top = 51.0
+offset_right = 144.0
+offset_bottom = 65.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "is it enough ?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -73,79 +94,95 @@ vertical_alignment = 1
 unique_name_in_owner = true
 layout_mode = 0
 offset_left = 25.0
-offset_top = 43.0
+offset_top = 72.0
 offset_right = 135.0
-offset_bottom = 107.0
+offset_bottom = 119.0
 mouse_filter = 2
 
-[node name="ScoreTitleLabel" type="Label" parent="TVPanel"]
+[node name="JokerIcon" type="TextureRect" parent="."]
 unique_name_in_owner = true
 layout_mode = 0
-offset_left = 3.0
-offset_top = 5.0
-offset_right = 107.0
-offset_bottom = 24.0
+offset_left = 65.0
+offset_top = 83.0
+offset_right = 95.0
+offset_bottom = 108.0
 mouse_filter = 2
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 9
-text = "FINAL SCORE :"
+texture_filter = 1
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ScoreCaptionLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 20.0
+offset_top = 130.0
+offset_right = 140.0
+offset_bottom = 143.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 6
+text = "FINAL SCORE"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ScoreLabel" type="Label" parent="TVPanel"]
+[node name="ScoreLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 0
-offset_left = 3.0
-offset_top = 23.0
-offset_right = 107.0
-offset_bottom = 57.0
+offset_left = 4.0
+offset_top = 143.0
+offset_right = 156.0
+offset_bottom = 195.0
 mouse_filter = 2
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 16
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 28
 text = "999,999"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="EnoughButton" type="Button" parent="."]
-unique_name_in_owner = true
-layout_mode = 0
-offset_left = 24.0
-offset_top = 211.0
-offset_right = 136.0
-offset_bottom = 241.0
-focus_neighbor_bottom = NodePath("../ExitButton")
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 9
-text = "IS IT ENOUGH ?"
-
-[node name="ExitButton" type="Button" parent="."]
-unique_name_in_owner = true
-layout_mode = 0
-offset_left = 47.0
-offset_top = 243.0
-offset_right = 113.0
-offset_bottom = 253.0
-focus_neighbor_top = NodePath("../EnoughButton")
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 5
-text = "EXIT CASINO"
-
 [node name="CoinFloodClip" type="Control" parent="."]
+unique_name_in_owner = true
 clip_contents = true
 layout_mode = 0
-offset_top = 254.0
+offset_top = 231.0
 offset_right = 160.0
 offset_bottom = 320.0
 mouse_filter = 2
 
-[node name="CoinPile" type="TextureRect" parent="CoinFloodClip"]
+[node name="FloodSurface" type="ColorRect" parent="CoinFloodClip"]
 unique_name_in_owner = true
-texture_filter = 1
 layout_mode = 0
-offset_top = 11.0
+offset_top = 78.0
 offset_right = 160.0
-offset_bottom = 66.0
+offset_bottom = 90.0
 mouse_filter = 2
-texture = ExtResource("2_coins")
-expand_mode = 1
-stretch_mode = 0
+color = Color(0.44, 0.18, 0.05, 0.85)
+
+[node name="FloodEdge" type="ColorRect" parent="CoinFloodClip"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 76.0
+offset_right = 160.0
+offset_bottom = 78.0
+mouse_filter = 2
+color = Color(1, 0.843137, 0.352941, 0.9)
+
+[node name="CoinField" type="Control" parent="CoinFloodClip"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 160.0
+offset_bottom = 90.0
+mouse_filter = 2
+
+[node name="StartAgainButton" type="Button" parent="."]
+unique_name_in_owner = true
+z_index = 5
+layout_mode = 0
+offset_left = 17.0
+offset_top = 216.0
+offset_right = 143.0
+offset_bottom = 251.0
+focus_mode = 0
+mouse_default_cursor_shape = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 10
+text = "Start again ?"

@@ -4415,8 +4415,8 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_stop_flatline_countdown()
 	RunStateStore.end_run(ending)
 	MetaStateStore.mark_ending_reached(ending)
-	# Wealth banking is deferred until the player chooses to leave (so Continue can
-	# resume and bank the full total at the real flatline end — no double-bank).
+	# Wealth banking is deferred until the player chooses Start Again so the ending
+	# animation can show the full run total before the wallet is updated.
 	if ending != "wealth":
 		MetaStateStore.bank_run(run, ending)
 
@@ -4494,15 +4494,13 @@ func _build_flatline_screen(run: Dictionary) -> void:
 	flatline_screen.action_pressed.connect(_on_flatline_action_pressed)
 	_build_flatline_countdown(run, flatline_screen)
 
-## Dedicated wealth-ending screen: CONTINUE keeps playing under the existing
-## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
-## continue can still bank the full total later) and returns to the menu hub.
+## Dedicated wealth-ending screen: the final score is presented, then Start Again
+## banks the run and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
 	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
 	_overlay.add_child(wealth_screen)
-	wealth_screen.present(int(run["scoreEarned"]), _can_resume_after_wealth())
-	wealth_screen.enough_pressed.connect(_continue_from_wealth)
-	wealth_screen.exit_casino_pressed.connect(_exit_casino.bind(run))
+	wealth_screen.present(int(run["scoreEarned"]))
+	wealth_screen.start_again_pressed.connect(_start_again_from_wealth.bind(run))
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
@@ -4790,9 +4788,8 @@ func _continue_from_wealth() -> void:
 		"lucidityCoins": RunStateStore.lucidityCoins,
 	})
 
-## Wealth screen EXIT CASINO: bank the run (wealth banking is deferred until the
-## player leaves) and return to the menu hub.
-func _exit_casino(run: Dictionary) -> void:
+## Wealth screen Start Again: bank the run and return to the menu hub.
+func _start_again_from_wealth(run: Dictionary) -> void:
 	MetaStateStore.bank_run(run, "wealth")
 	_to_menu()
 
