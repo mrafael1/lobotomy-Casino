@@ -39,6 +39,7 @@ func _run() -> void:
 	get_root().add_child(machine)
 	if not machine.has_method("_spawn_jackpot_burst"):
 		failures.append("machine missing _spawn_jackpot_burst")
+	_check_machine_art_mix(machine, failures)
 	_check_base_scene_parity(failures)
 	_check_first_launch_tutorial(meta_store, failures)
 	_check_scene_nav(failures)
@@ -121,6 +122,71 @@ func _run() -> void:
 		for f in failures:
 			printerr("✗ ", f)
 		quit(1)
+
+func _check_machine_art_mix(machine: Node, failures: Array) -> void:
+	# The new neon cabinet/control sheets are native 160x320 art. The surrounding
+	# reel/HUD sheets remain legacy 8x art, so both scale conventions must coexist.
+	for rel in [
+		"machine new view/machine_neon.png",
+		"machine new view/neon_machine_lever.png",
+		"machine new view/neon_machine_jackpot.png",
+		"machine new view/neon_machine_power_bar.png",
+	]:
+		if not ResourceLoader.exists("res://assets/images/" + rel):
+			failures.append("machine art: missing native asset %s" % rel)
+
+	var cabinet := machine.get_node_or_null("Cabinet") as Sprite2D
+	if cabinet == null:
+		failures.append("machine art: native cabinet node is missing")
+	elif cabinet.texture == null \
+			or Vector2i(cabinet.texture.get_width(), cabinet.texture.get_height()) != Vector2i(160, 320) \
+			or cabinet.scale != Vector2.ONE \
+			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: cabinet is not a 160x320 native sprite")
+
+	var lever := machine.get_node_or_null("Lever") as Sprite2D
+	if lever == null:
+		failures.append("machine art: native lever node is missing")
+	elif lever.texture == null \
+			or Vector2i(lever.texture.get_width(), lever.texture.get_height()) != Vector2i(960, 320) \
+			or lever.hframes != 6 \
+			or lever.scale != Vector2.ONE \
+			or lever.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: lever is not a 6-frame native sprite")
+
+	var jackpot := machine.get_node_or_null("Jackpot") as Sprite2D
+	if jackpot == null:
+		failures.append("machine art: native jackpot node is missing")
+	elif jackpot.texture == null \
+			or Vector2i(jackpot.texture.get_width(), jackpot.texture.get_height()) != Vector2i(480, 320) \
+			or jackpot.hframes != 3 \
+			or jackpot.scale != Vector2.ONE \
+			or jackpot.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: jackpot is not a 3-frame native sprite")
+
+	var power_bar := machine.get_node_or_null("PowerBar") as Sprite2D
+	if power_bar == null:
+		failures.append("machine art: native power bar node is missing")
+	elif power_bar.texture == null \
+			or Vector2i(power_bar.texture.get_width(), power_bar.texture.get_height()) != Vector2i(960, 320) \
+			or power_bar.hframes != 6 \
+			or power_bar.vframes != 1 \
+			or power_bar.scale != Vector2.ONE \
+			or power_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: power bar is not a 6-frame native sprite")
+
+	for node_name in [
+		"ReelBacking", "WealthTrack", "WealthFill", "HealthTrack", "HealthFill",
+		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
+		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
+		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",
+		"Reel2Center",
+	]:
+		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
+		if machine_art == null or machine_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+			failures.append("machine art: %s is not nearest-neighbor filtered" % node_name)
+	if float(machine.POWER_BAR_CENTER.x) < 80.0:
+		failures.append("machine art: power bar coin target is still on the left")
 
 func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
 	var triple_book := Evaluate.score_reels(["book", "book", "book"], 1.0, true,

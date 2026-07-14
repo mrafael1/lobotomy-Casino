@@ -11,7 +11,8 @@ extends Node2D
 
 const SRC_W := 160.0
 const SRC_H := 320.0
-const ASSET_SCALE := 8.0 # machine PNGs are 8x the 160x320 source (1280x2560)
+const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -58,7 +59,10 @@ const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
 const LOCK_POWER_FRAME_COUNT := 3
-const JACKPOT_FRAME_COUNT := 2
+const JACKPOT_FRAME_COUNT := 3
+const JACKPOT_FRAME_OFF := 0
+const JACKPOT_FRAME_LIT := 1
+const JACKPOT_FRAME_ALT := 2
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
@@ -205,17 +209,18 @@ const COIN_TRAY_PILE_DEPTH := 8.0
 const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
 
-# Power restore gauge (issue #76). power_bar.png is a full-canvas overlay sheet, 3 cols x
-# 2 rows = 6 frames, gauge empty (0) -> full (5), filling bottom-up. A power coin flies to
-# the bar every POWER_COIN_STEP lucidity and advances one frame; at the full frame it
-# spawns a coin from the bar top that flies to the random restorable power. The 6 frames
-# span one restore threshold (coins_per_power_restore), so 5 steps = 50 coins = 10/step.
-const POWER_BAR_SHEET := "machine new view/power_bar.png"
-const POWER_BAR_HFRAMES := 3
-const POWER_BAR_VFRAMES := 2
+# Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
+# six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
+# flies to the bar every POWER_COIN_STEP lucidity and advances one frame; at the full
+# frame it spawns a coin from the bar top that flies to the random restorable power.
+# The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
+# coins = 10/step.
+const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
+const POWER_BAR_HFRAMES := 6
+const POWER_BAR_VFRAMES := 1
 const POWER_BAR_FRAMES := 6
-const POWER_BAR_CENTER := Vector2(13.0, 84.0) # coin-to-bar landing point (gauge middle)
-const POWER_BAR_TOP := Vector2(13.0, 62.0)     # where the restore coin spawns when full
+const POWER_BAR_CENTER := Vector2(137.0, 84.0) # coin-to-bar landing point (gauge middle)
+const POWER_BAR_TOP := Vector2(137.0, 62.0)     # where the restore coin spawns when full
 const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
 # With no restorable power the gauge stops one frame short of full so it never fake-fills.
 const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
@@ -541,7 +546,7 @@ func _ready() -> void:
 	_build_reel_animation_art()
 	_build_reel_covers()
 	_build_reels()
-	_build_full_canvas_sprite("machine new view/final_machine.png")
+	_build_full_canvas_sprite("machine new view/machine_neon.png")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -627,7 +632,8 @@ func _authored_control(name: String) -> Control:
 func _full_canvas_name(rel: String) -> String:
 	if rel.ends_with("reel_final_machine.png"):
 		return "ReelBacking"
-	if rel.ends_with("final_machine.png"):
+	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
+			or rel.ends_with("machine_neon.png"):
 		return "Cabinet"
 	return ""
 
@@ -638,9 +644,9 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "HealthTrack"
 	if rel.ends_with("multiplier_final_machine.png"):
 		return "Multiplier"
-	if rel.ends_with("lever_final_machine.png"):
+	if rel.ends_with("lever_final_machine.png") or rel.ends_with("neon_machine_lever.png"):
 		return "Lever"
-	if rel.ends_with("jackpot_final_machine.png"):
+	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
 		return "LockPower%d" % frame
@@ -669,7 +675,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -680,7 +686,7 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 # Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
 # hall reads as out-of-focus scenery so the cabinet pops in front of it.
@@ -728,7 +734,8 @@ func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		# Only the cabinet gets a visible fallback so the scene isn't blank.
-		if rel.ends_with("/final_machine.png"):
+		if rel.ends_with("/final_machine.png") or rel.ends_with("/neon_machine.png") \
+				or rel.ends_with("/machine_neon.png"):
 			var fallback := ColorRect.new()
 			fallback.color = Color(0.06, 0.05, 0.08)
 			fallback.size = Vector2(SRC_W, SRC_H)
@@ -773,7 +780,7 @@ func _build_full_canvas_grid_sheet(rel: String, hframes: int, vframes: int, fram
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	add_child(spr)
 	return spr
 
@@ -802,7 +809,7 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	)
 	if not authored:
 		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	return spr
 
 func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: int = 0) -> Sprite2D:
@@ -817,7 +824,7 @@ func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: 
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -835,7 +842,7 @@ func _build_control_grid_sheet_on(parent: Control, rel: String, hframes: int, vf
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -860,7 +867,7 @@ func _build_reel_animation_art() -> void:
 		if not authored:
 			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
 			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 		spr.visible = false
 		_spin_reel_sprites.append(spr)
 		_set_spin_reel_frame(i, 0)
@@ -897,7 +904,7 @@ func _build_tv_indicators() -> void:
 	_build_boost_indicators()
 	_build_power_bar()
 
-## The power-restore gauge (issue #76): a full-canvas overlay sheet (3x2 = 6 frames). It
+## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames). It
 ## snaps to the current lucidity progress on build so a resumed run shows the right fill.
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
@@ -918,7 +925,7 @@ func _build_power_bar() -> void:
 		var frame_h := float(tex.get_height()) / float(POWER_BAR_VFRAMES)
 		_power_bar_sprite.position = Vector2.ZERO
 		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	_power_bar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_power_bar_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	# Start empty; the gauge fills only from score gained after this point (a resumed run
 	# doesn't re-bank its existing lucidity).
 	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
@@ -1084,9 +1091,9 @@ func _clear_boost_zero_linger() -> void:
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
-	_lever_sprite = _build_full_canvas_sheet("machine new view/lever_final_machine.png", LEVER_FRAME_COUNT)
-	_jackpot_sprite = _build_full_canvas_sheet("machine new view/jackpot_final_machine.png", JACKPOT_FRAME_COUNT)
-	_set_sheet_frame(_jackpot_sprite, 0)
+	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
+	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
 	for i in 3:
 		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
 		if lock != null:
@@ -1182,9 +1189,9 @@ func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_posit
 	if apply_position:
 		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
-	# Symbols are authored large and drawn at 12-16px, so downscale with
-	# linear+mipmaps (supersampled, crisp) rather than nearest (aliased).
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Symbols are authored large and drawn at 12-16px, so keep their downscale
+	# pixel-perfect with the rest of the machine art.
+	s.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
 	var s := _authored_sprite(name)
@@ -1969,7 +1976,7 @@ func _refresh_jackpot_lamp(use_result := true) -> void:
 	var lit := false
 	if use_result and RunStateStore.lastResult != null:
 		lit = bool(RunStateStore.lastResult.get("isJackpot", false))
-	_set_sheet_frame(_jackpot_sprite, 1 if lit else 0)
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_LIT if lit else JACKPOT_FRAME_OFF)
 
 func _flash_jackpot_lamp() -> void:
 	if _jackpot_sprite == null:
@@ -1988,7 +1995,9 @@ func _end_jackpot_flash() -> void:
 func _drive_jackpot_flash(t: float) -> void:
 	if _jackpot_sprite == null:
 		return
-	_set_sheet_frame(_jackpot_sprite, 1 if (int(t * 12.0) % 2 == 0) else 0)
+	_set_sheet_frame(
+		_jackpot_sprite,
+		JACKPOT_FRAME_LIT if (int(t * 12.0) % 2 == 0) else JACKPOT_FRAME_ALT)
 
 # Quick horizontal machine shake — feedback on a Lucidity gain / jackpot.
 func _nudge(strength: float) -> void:
