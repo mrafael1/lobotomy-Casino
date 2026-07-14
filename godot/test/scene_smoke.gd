@@ -2269,9 +2269,11 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var wallet_before := int(meta_store.lucidityWallet)
 	var wealth_screen := machine._overlay.get_node_or_null("WealthEndingOverlay") as Control
 	var texts := _overlay_label_texts(wealth_screen)
-	for required_copy in ["You've become rich", "is it enough ?", "FINAL SCORE", "2,000"]:
+	for required_copy in ["You've become rich", "is it enough ?", "2,000"]:
 		if not texts.has(required_copy):
 			failures.append("wealth: missing ending copy %s" % required_copy)
+	if texts.has("FINAL SCORE"):
+		failures.append("wealth: final score caption should be removed")
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
 	for node_name: String in [
