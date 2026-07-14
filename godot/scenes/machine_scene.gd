@@ -12,6 +12,7 @@ extends Node2D
 const SRC_W := 160.0
 const SRC_H := 320.0
 const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -673,7 +674,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -684,7 +685,7 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 # Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
 # hall reads as out-of-focus scenery so the cabinet pops in front of it.
@@ -777,7 +778,7 @@ func _build_full_canvas_grid_sheet(rel: String, hframes: int, vframes: int, fram
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	add_child(spr)
 	return spr
 
@@ -806,7 +807,7 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	)
 	if not authored:
 		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	return spr
 
 func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: int = 0) -> Sprite2D:
@@ -821,7 +822,7 @@ func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: 
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -839,7 +840,7 @@ func _build_control_grid_sheet_on(parent: Control, rel: String, hframes: int, vf
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -864,7 +865,7 @@ func _build_reel_animation_art() -> void:
 		if not authored:
 			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
 			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 		spr.visible = false
 		_spin_reel_sprites.append(spr)
 		_set_spin_reel_frame(i, 0)
@@ -922,7 +923,7 @@ func _build_power_bar() -> void:
 		var frame_h := float(tex.get_height()) / float(POWER_BAR_VFRAMES)
 		_power_bar_sprite.position = Vector2.ZERO
 		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	_power_bar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_power_bar_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	# Start empty; the gauge fills only from score gained after this point (a resumed run
 	# doesn't re-bank its existing lucidity).
 	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
@@ -1186,9 +1187,9 @@ func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_posit
 	if apply_position:
 		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
-	# Symbols are authored large and drawn at 12-16px, so downscale with
-	# linear+mipmaps (supersampled, crisp) rather than nearest (aliased).
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Symbols are authored large and drawn at 12-16px, so keep their downscale
+	# pixel-perfect with the rest of the machine art.
+	s.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
 	var s := _authored_sprite(name)
