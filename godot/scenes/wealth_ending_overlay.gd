@@ -15,23 +15,23 @@ const COIN_COUNT := 52
 const COIN_SIZE := Vector2(8.0, 8.0)
 const COIN_FLOOD_HEIGHT := 90.0
 const COIN_FLOOD_SEED := 0x5745414C5448
+const DEFAULT_CASH_TRAY_POS := Vector2(80.0, 298.0)
 const JOKER_OPACITY := 0.16
 
 @onready var title_label: Label = %TitleLabel
 @onready var subtitle_label: Label = %SubtitleLabel
-@onready var tv_panel: Panel = %TVPanel
 @onready var joker_icon: TextureRect = %JokerIcon
 @onready var score_caption_label: Label = %ScoreCaptionLabel
 @onready var score_label: Label = %ScoreLabel
 @onready var coin_flood_clip: Control = %CoinFloodClip
 @onready var coin_field: Control = %CoinField
-@onready var flood_surface: ColorRect = %FloodSurface
-@onready var flood_edge: ColorRect = %FloodEdge
 @onready var start_again_button: Button = %StartAgainButton
 
 var _font: FontFile = null
 var _coin_texture: Texture2D = null
 var _coin_rng := RandomNumberGenerator.new()
+var _cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS
+var _presentation_started := false
 var _coins: Array[TextureRect] = []
 var _coin_targets: Array[Vector2] = []
 var _coin_rotations: Array[float] = []
@@ -43,7 +43,6 @@ func _ready() -> void:
 	set_deferred("size", CANVAS_SIZE)
 	_font = Assets.font()
 	_style_labels()
-	_style_panel()
 	_style_button()
 	_setup_joker()
 	if not start_again_button.pressed.is_connected(_on_start_again_pressed):
@@ -51,12 +50,16 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		set_final_score(999999)
 		return
+
+
+func present(total_score: int, cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS) -> void:
+	set_final_score(total_score)
+	_cash_tray_pos = cash_tray_pos
+	if _presentation_started:
+		return
+	_presentation_started = true
 	_prepare_coin_flood()
 	_play_reveal()
-
-
-func present(total_score: int, _can_continue: bool = true) -> void:
-	set_final_score(total_score)
 
 
 func set_final_score(total_score: int) -> void:
@@ -90,17 +93,6 @@ func _style_labels() -> void:
 	score_label.add_theme_color_override(&"font_shadow_color", HOT_MAGENTA)
 	score_label.add_theme_constant_override(&"shadow_offset_x", 1)
 	score_label.add_theme_constant_override(&"shadow_offset_y", 1)
-
-
-func _style_panel() -> void:
-	var tv_style := StyleBoxFlat.new()
-	tv_style.bg_color = Color(0.025, 0.02, 0.035, 0.98)
-	tv_style.border_color = GOLD
-	tv_style.set_border_width_all(1)
-	tv_style.set_corner_radius_all(2)
-	tv_style.shadow_color = Color(HOT_MAGENTA, 0.55)
-	tv_style.shadow_size = 2
-	tv_panel.add_theme_stylebox_override(&"panel", tv_style)
 
 
 func _style_button() -> void:
@@ -149,7 +141,6 @@ func _setup_joker() -> void:
 func _play_reveal() -> void:
 	title_label.modulate.a = 0.0
 	subtitle_label.modulate.a = 0.0
-	tv_panel.modulate.a = 0.0
 	score_caption_label.modulate.a = 0.0
 	score_label.modulate.a = 0.0
 	start_again_button.modulate.a = 0.0
@@ -159,10 +150,6 @@ func _play_reveal() -> void:
 	title_label.scale = Vector2(0.86, 0.86)
 	score_label.scale = Vector2(0.45, 0.45)
 	start_again_button.scale = Vector2(0.9, 0.9)
-	flood_surface.position.y = COIN_FLOOD_HEIGHT - 12.0
-	flood_edge.position.y = COIN_FLOOD_HEIGHT - 14.0
-	flood_surface.modulate.a = 0.0
-	flood_edge.modulate.a = 0.0
 
 	var title_tween := create_tween()
 	title_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -171,7 +158,6 @@ func _play_reveal() -> void:
 	title_tween.parallel().tween_property(title_label, "scale", Vector2.ONE, 0.34)
 	title_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	title_tween.tween_property(subtitle_label, "modulate:a", 1.0, 0.18)
-	title_tween.tween_property(tv_panel, "modulate:a", 1.0, 0.22)
 
 	var joker_tween := create_tween()
 	joker_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -196,7 +182,7 @@ func _play_reveal() -> void:
 
 
 func _prepare_coin_flood() -> void:
-	_coin_texture = Assets.texture("ui/coin.png", true)
+	_coin_texture = Assets.texture("ui/coin_cumulable.png", true)
 	if _coin_texture == null:
 		return
 	_coin_rng.seed = COIN_FLOOD_SEED
@@ -221,9 +207,10 @@ func _prepare_coin_flood() -> void:
 		coin.pivot_offset = COIN_SIZE * 0.5
 		var x := _coin_rng.randf_range(-3.0, 155.0)
 		var target_y := _coin_rng.randf_range(8.0, COIN_FLOOD_HEIGHT - 8.0)
-		var start_y := COIN_FLOOD_HEIGHT + _coin_rng.randf_range(6.0, 34.0)
 		var target := Vector2(x, target_y)
-		var start := Vector2(x, start_y)
+		var source_local := _cash_tray_pos - coin_flood_clip.position
+		var start := source_local + Vector2(
+			_coin_rng.randf_range(-4.0, 4.0), _coin_rng.randf_range(-2.0, 2.0))
 		coin.position = start
 		coin.rotation = _coin_rng.randf_range(-0.25, 0.25)
 		coin.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -236,14 +223,6 @@ func _prepare_coin_flood() -> void:
 
 
 func _play_coin_flood() -> void:
-	var surface_tween := create_tween()
-	surface_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	surface_tween.tween_interval(0.82)
-	surface_tween.tween_property(flood_surface, "modulate:a", 0.9, 0.32)
-	surface_tween.parallel().tween_property(flood_surface, "position:y", 28.0, 1.45)
-	surface_tween.parallel().tween_property(flood_edge, "modulate:a", 0.92, 0.28)
-	surface_tween.parallel().tween_property(flood_edge, "position:y", 26.0, 1.45)
-
 	for index in _coins.size():
 		var coin := _coins[index]
 		var tween := create_tween()

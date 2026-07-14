@@ -4499,7 +4499,7 @@ func _build_flatline_screen(run: Dictionary) -> void:
 func _build_wealth_screen(run: Dictionary) -> void:
 	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
 	_overlay.add_child(wealth_screen)
-	wealth_screen.present(int(run["scoreEarned"]))
+	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos())
 	wealth_screen.start_again_pressed.connect(_start_again_from_wealth.bind(run))
 
 func _show_campaign_failed() -> void:

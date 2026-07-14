@@ -2272,6 +2272,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	for required_copy in ["You've become rich", "is it enough ?", "FINAL SCORE", "2,000"]:
 		if not texts.has(required_copy):
 			failures.append("wealth: missing ending copy %s" % required_copy)
+	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
+		failures.append("wealth: overlay created a replacement TV panel")
 	var start_again_button: Button = null
 	for node: Node in machine._overlay.find_children("*", "Button", true, false):
 		var button := node as Button
@@ -2290,12 +2292,40 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		if wealth_screen != null else null
 	if coin_field == null or coin_field.get_child_count() < 40:
 		failures.append("wealth: coin flood did not prepare enough coins")
+	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
+		if wealth_screen != null else null
+	var first_coin := coin_field.get_child(0) as TextureRect \
+		if coin_field != null and coin_field.get_child_count() > 0 else null
+	if first_coin == null or first_coin.texture == null \
+			or not String(first_coin.texture.resource_path).ends_with("coin_cumulable.png"):
+		failures.append("wealth: coin flood is not using coin_cumulable.png")
+	if wealth_screen != null and wealth_screen.get("_cash_tray_pos") != machine._cash_tray_pos():
+		failures.append("wealth: coin flood did not receive the machine cash-tray position")
+	if first_coin != null and coin_clip != null:
+		var tray_start: Vector2 = machine._cash_tray_pos() - coin_clip.position
+		if first_coin.position.distance_to(tray_start) > 6.0:
+			failures.append("wealth: first coin does not start at the machine cash tray")
+	if wealth_screen != null \
+			and wealth_screen.get_node_or_null("CoinFloodClip/FloodSurface") != null:
+		failures.append("wealth: created flood surface is still present")
 	var joker := wealth_screen.get_node_or_null("JokerIcon") as TextureRect \
 		if wealth_screen != null else null
 	if joker == null or joker.texture == null:
 		failures.append("wealth: joker icon is missing from the TV")
 	elif joker.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("wealth: joker icon is not nearest-neighbor filtered")
+	else:
+		var tv_rect: Dictionary = machine.TV_SCREEN
+		var joker_rect := Rect2(joker.position, joker.size)
+		var tv_bounds := Rect2(float(tv_rect["left"]), float(tv_rect["top"]),
+			float(tv_rect["width"]), float(tv_rect["height"]))
+		if not tv_bounds.encloses(joker_rect):
+			failures.append("wealth: joker icon is not inside the machine TV")
+	var subtitle := wealth_screen.get_node_or_null("SubtitleLabel") as Label \
+		if wealth_screen != null else null
+	if subtitle == null or subtitle.position.y < float(machine.TV_SCREEN["top"]) \
+			+ float(machine.TV_SCREEN["height"]):
+		failures.append("wealth: subtitle is not below the machine TV")
 	var score := wealth_screen.get_node_or_null("ScoreLabel") as Label \
 		if wealth_screen != null else null
 	if score == null or score.text != "2,000":
