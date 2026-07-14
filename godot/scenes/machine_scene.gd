@@ -1439,6 +1439,7 @@ func _sync_visuals() -> void:
 		_overlay.queue_free()
 		_overlay = null
 	_set_stash_tray_visible(true)
+	_set_tv_progress_bars_visible(true)
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
@@ -4497,6 +4498,7 @@ func _build_flatline_screen(run: Dictionary) -> void:
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again
 ## banks the run and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
+	_set_tv_progress_bars_visible(false)
 	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
 	_overlay.add_child(wealth_screen)
 	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos())
@@ -4652,6 +4654,13 @@ func _set_stash_tray_visible(v: bool) -> void:
 	if tray != null:
 		tray.visible = v
 	_set_stash_visible(v)
+
+func _set_tv_progress_bars_visible(visible: bool) -> void:
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
+		if node != null:
+			node.visible = visible
 
 func _end_run_lucidity_kept_fraction() -> float:
 	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \

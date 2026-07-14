@@ -2274,6 +2274,11 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 			failures.append("wealth: missing ending copy %s" % required_copy)
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
+		if tv_bar == null or tv_bar.visible:
+			failures.append("wealth: %s is still visible over the ending screen" % node_name)
 	var start_again_button: Button = null
 	for node: Node in machine._overlay.find_children("*", "Button", true, false):
 		var button := node as Button
@@ -2290,7 +2295,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: Start again button is missing, disabled, or too small")
 	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
 		if wealth_screen != null else null
-	if coin_field == null or coin_field.get_child_count() < 40:
+	if coin_field == null or coin_field.get_child_count() < 100:
 		failures.append("wealth: coin flood did not prepare enough coins")
 	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
 		if wealth_screen != null else null
