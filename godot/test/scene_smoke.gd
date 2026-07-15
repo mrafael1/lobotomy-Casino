@@ -4670,6 +4670,7 @@ func _check_save_resume_151(machine: Node, run_store: Node, failures: Array) -> 
 	meta_store.campaignFailed = false
 	meta_store.wealthEndingReached = false
 	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsMax))
+	# campaignNeuronsLeft >= 1 and campaignNeuronPending == false keep this as flatline.
 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
@@ -4679,7 +4680,7 @@ func _check_save_resume_151(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.scoreEarned = 123
 	run_store.lastResult = {
 		"reels": ["brain", "eye", "vial"],
-		"winType": "loss",
+		"winType": "miss",
 		"freeSpinsGranted": 0,
 	}
 	run_store._commit()
