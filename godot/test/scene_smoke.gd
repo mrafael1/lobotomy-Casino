@@ -2311,10 +2311,12 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: wealth action does not use the shared classic neon button style")
 	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
 		if wealth_screen != null else null
-	if coin_field == null or coin_field.get_child_count() < 300:
-		failures.append("wealth: coin flood did not prepare enough coins")
+	if coin_field == null or coin_field.get_child_count() < 2000:
+		failures.append("wealth: full-screen coin flood did not prepare enough coins")
 	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
 		if wealth_screen != null else null
+	if coin_clip == null or coin_clip.position.y != 0.0 or coin_clip.size.y < 320.0:
+		failures.append("wealth: coin flood does not cover the full screen")
 	var first_coin := coin_field.get_child(0) as TextureRect \
 		if coin_field != null and coin_field.get_child_count() > 0 else null
 	if first_coin == null or first_coin.texture == null \

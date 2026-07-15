@@ -8,15 +8,15 @@ const CANVAS_SIZE := Vector2(160.0, 320.0)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const NEON_YELLOW := Color(1.0, 0.86, 0.36)
 const NEON_YELLOW_GLOW := Color(1.0, 0.86, 0.36, 0.72)
-const COIN_COUNT := 400
+const COIN_COUNT := 2000
 const COIN_SIZE := Vector2(8.0, 8.0)
-const COIN_FLOOD_HEIGHT := 90.0
+const COIN_FLOOD_HEIGHT := 320.0
 const COIN_FLOOD_SEED := 0x5745414C5448
 const DEFAULT_CASH_TRAY_POS := Vector2(80.0, 298.0)
 const COIN_PILE_COLUMNS := 20
 const COIN_PILE_ROW_SPACING := 3.35
 const COIN_RELEASE_START_DELAY := 0.12
-const COIN_RELEASE_STAGGER := 0.004
+const COIN_RELEASE_STAGGER := 0.001
 const COIN_FALL_TIME := 0.36
 const COIN_BOTTOM_HOLD_TIME := 0.14
 const COIN_PILE_SETTLE_TIME := 0.24
@@ -183,6 +183,7 @@ func _prepare_coin_flood() -> void:
 		child.queue_free()
 	var source_local := _cash_tray_pos - coin_flood_clip.position
 	var surface_offsets: Array[float] = []
+	var row_count := maxi(1, int(ceili(float(COIN_COUNT) / float(COIN_PILE_COLUMNS))))
 	for column in COIN_PILE_COLUMNS:
 		surface_offsets.append(_coin_rng.randf_range(-3.5, 3.5))
 	for index in COIN_COUNT:
@@ -202,7 +203,7 @@ func _prepare_coin_flood() -> void:
 		var target_x := float(column) * column_width + row_offset \
 			- COIN_SIZE.x * 0.5 + _coin_rng.randf_range(-1.2, 1.2)
 		target_x = clampf(target_x, -1.0, CANVAS_SIZE.x - COIN_SIZE.x + 1.0)
-		var row_depth := clampf(float(row) / 19.0, 0.0, 1.0)
+		var row_depth := clampf(float(row) / float(maxi(1, row_count - 1)), 0.0, 1.0)
 		var target_y := COIN_FLOOD_HEIGHT - COIN_SIZE.y \
 			- float(row) * COIN_PILE_ROW_SPACING \
 			+ surface_offsets[column] * row_depth + _coin_rng.randf_range(-0.7, 0.7)
