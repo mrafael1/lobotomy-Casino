@@ -31,6 +31,7 @@ const JOKER_OPACITY := 0.16
 @onready var score_label: Label = %ScoreLabel
 @onready var coin_flood_clip: Control = %CoinFloodClip
 @onready var coin_field: Control = %CoinField
+@onready var button_host: Control = %ButtonHost
 @onready var start_again_button: Button = %StartAgainButton
 
 var _font: FontFile = null
@@ -54,6 +55,11 @@ func _ready() -> void:
 	_setup_joker()
 	if not start_again_button.pressed.is_connected(_on_start_again_pressed):
 		start_again_button.pressed.connect(_on_start_again_pressed)
+	if not start_again_button.button_down.is_connected(_on_button_down):
+		start_again_button.button_down.connect(_on_button_down)
+	if not start_again_button.button_up.is_connected(_on_button_up):
+		start_again_button.button_up.connect(_on_button_up)
+	button_host.pivot_offset = button_host.size * 0.5
 	if Engine.is_editor_hint():
 		set_final_score(999999)
 		return
@@ -103,8 +109,22 @@ func _style_labels() -> void:
 
 
 func _style_button() -> void:
-	Assets.start_menu_button_style(start_again_button, Assets.START_MENU_BUTTON_CYAN, 10)
-	Assets.start_menu_button_press_feedback(start_again_button, 0.9)
+	var font := Assets.font()
+	if font != null:
+		start_again_button.add_theme_font_override(&"font", font)
+	start_again_button.add_theme_color_override(&"font_color", NEON_YELLOW)
+	start_again_button.add_theme_color_override(&"font_hover_color", Color.WHITE)
+	start_again_button.add_theme_color_override(&"font_pressed_color", Color.WHITE)
+	start_again_button.add_theme_color_override(&"font_focus_color", NEON_YELLOW)
+	start_again_button.add_theme_color_override(&"font_outline_color", Color.BLACK)
+	start_again_button.add_theme_constant_override(&"outline_size", 1)
+	start_again_button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	start_again_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#211604") if state != &"hover" else Color("#382607")
+		style.set_content_margin_all(2.0)
+		start_again_button.add_theme_stylebox_override(state, style)
 
 
 func _setup_joker() -> void:
@@ -126,13 +146,13 @@ func _play_reveal() -> void:
 	subtitle_label.modulate.a = 0.0
 	score_caption_label.modulate.a = 0.0
 	score_label.modulate.a = 0.0
-	start_again_button.modulate.a = 0.0
+	button_host.modulate.a = 0.0
 	title_label.pivot_offset = title_label.size * 0.5
 	score_label.pivot_offset = score_label.size * 0.5
-	start_again_button.pivot_offset = start_again_button.size * 0.5
+	button_host.pivot_offset = button_host.size * 0.5
 	title_label.scale = Vector2(0.86, 0.86)
 	score_label.scale = Vector2(0.45, 0.45)
-	start_again_button.scale = Vector2(0.9, 0.9)
+	button_host.scale = Vector2(0.9, 0.9)
 
 	var title_tween := create_tween()
 	title_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -158,8 +178,8 @@ func _play_reveal() -> void:
 	var button_tween := create_tween()
 	button_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	button_tween.tween_interval(1.24)
-	button_tween.tween_property(start_again_button, "modulate:a", 1.0, 0.22)
-	button_tween.parallel().tween_property(start_again_button, "scale", Vector2.ONE, 0.34)
+	button_tween.tween_property(button_host, "modulate:a", 1.0, 0.22)
+	button_tween.parallel().tween_property(button_host, "scale", Vector2.ONE, 0.34)
 
 	_play_coin_flood()
 
@@ -180,6 +200,9 @@ func _prepare_coin_flood() -> void:
 	for child: Node in coin_field.get_children():
 		child.queue_free()
 	var source_local := _cash_tray_pos - coin_flood_clip.position
+	var surface_offsets: Array[float] = []
+	for column in COIN_PILE_COLUMNS:
+		surface_offsets.append(_coin_rng.randf_range(-4.5, 4.5))
 	for index in COIN_COUNT:
 		var coin := TextureRect.new()
 		coin.name = "Coin%02d" % index
@@ -195,10 +218,14 @@ func _prepare_coin_flood() -> void:
 		var column := index % COIN_PILE_COLUMNS
 		var row := index / COIN_PILE_COLUMNS
 		var column_width := CANVAS_SIZE.x / float(COIN_PILE_COLUMNS)
-		var target_x := float(column) * column_width + column_width * 0.5 - COIN_SIZE.x * 0.5 \
-			+ _coin_rng.randf_range(-2.0, 2.0)
+		var row_offset := column_width * 0.5 if row % 2 == 1 else 0.0
+		var target_x := float(column) * column_width + row_offset \
+			- COIN_SIZE.x * 0.5 + _coin_rng.randf_range(-2.6, 2.6)
+		target_x = clampf(target_x, -2.0, CANVAS_SIZE.x - COIN_SIZE.x + 2.0)
+		var row_depth := clampf(float(row) / 19.0, 0.0, 1.0)
 		var target_y := COIN_FLOOD_HEIGHT - COIN_SIZE.y \
-			- float(row) * COIN_PILE_ROW_SPACING + _coin_rng.randf_range(-1.1, 1.1)
+			- float(row) * COIN_PILE_ROW_SPACING \
+			+ surface_offsets[column] * row_depth + _coin_rng.randf_range(-1.6, 1.6)
 		var target := Vector2(target_x, target_y)
 		var start := source_local + Vector2(
 			_coin_rng.randf_range(-4.0, 4.0), _coin_rng.randf_range(-2.0, 2.0))
@@ -209,9 +236,9 @@ func _prepare_coin_flood() -> void:
 		_coins.append(coin)
 		_coin_tray_piles.append(pile_pos)
 		_coin_targets.append(target)
-		_coin_rotations.append(_coin_rng.randf_range(-0.18, 0.18))
+		_coin_rotations.append(_coin_rng.randf_range(-0.26, 0.26))
 		_coin_delays.append(COIN_RELEASE_START_DELAY + float(index) * COIN_RELEASE_STAGGER)
-		_coin_alphas.append(_coin_rng.randf_range(0.78, 1.0))
+		_coin_alphas.append(_coin_rng.randf_range(0.85, 1.0))
 
 
 func _play_coin_flood() -> void:
@@ -252,3 +279,14 @@ func _drive_coin_to_pile(t: float, coin: TextureRect, from_pos: Vector2,
 
 func _on_start_again_pressed() -> void:
 	start_again_pressed.emit()
+
+
+func _on_button_down() -> void:
+	var tween := button_host.create_tween()
+	tween.tween_property(button_host, "scale", Vector2.ONE * 0.94, 0.06)
+
+
+func _on_button_up() -> void:
+	var tween := button_host.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(button_host, "scale", Vector2.ONE, 0.13)

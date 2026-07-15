@@ -2295,6 +2295,12 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	elif start_again_button.disabled or start_again_button.size.x < 120.0 \
 			or start_again_button.size.y < 34.0:
 		failures.append("wealth: Start again button is missing, disabled, or too small")
+	var wealth_button_host := wealth_screen.get_node_or_null("ButtonHost") as Control \
+		if wealth_screen != null else null
+	var wealth_button_frame := wealth_screen.get_node_or_null("ButtonHost/BrokenFrame") \
+		if wealth_screen != null else null
+	if wealth_button_host == null or wealth_button_frame == null:
+		failures.append("wealth: wealth action does not use the flatline-style button frame")
 	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
 		if wealth_screen != null else null
 	if coin_field == null or coin_field.get_child_count() < 300:
