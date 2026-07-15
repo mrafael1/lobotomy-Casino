@@ -1955,7 +1955,7 @@ func _set_display_lucidity(value: int) -> void:
 ## wealthContinued, restoring the normal x/goal progression.
 func _goal_label_text() -> String:
 	if RunStateStore.wealthContinued:
-		return "???"
+		return "%d/???" % _display_lucidity
 	return "%d/%d" % [_display_lucidity, campaign_goal_score]
 
 func _goal_bar_ratio() -> float:
@@ -4539,7 +4539,8 @@ func _build_wealth_screen(run: Dictionary) -> void:
 	_clear_wealth_presentation_fx()
 	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
 	_overlay.add_child(wealth_screen)
-	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos())
+	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos(), _can_resume_after_wealth())
+	wealth_screen.continue_pressed.connect(_continue_from_wealth)
 	wealth_screen.start_again_pressed.connect(_start_again_from_wealth.bind(run))
 
 ## Ending overlays must be the only presentation layer left alive. State commits can
