@@ -2267,6 +2267,12 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 		elif game_over_score.position.y <= title.position.y \
 				or game_over_score.position.y - title.position.y > 34.0:
 			failures.append("game over: score is not directly below the title")
+		elif game_over_score.text != "100":
+			failures.append("game over: credit drain did not start at the run total")
+		if game_over_screen.has_method("_set_displayed_credits"):
+			game_over_screen.call("_set_displayed_credits", 0.0)
+			if game_over_score != null and game_over_score.text != "0":
+				failures.append("game over: credit drain did not settle at zero")
 		if game_over_screen.get_node_or_null("Dim") != null \
 				or game_over_screen.get_node_or_null("TVPanel") != null:
 			failures.append("game over: opaque background/TV overlay should be absent")

@@ -8,12 +8,16 @@ const CANVAS_SIZE := Vector2(160.0, 320.0)
 const RED := Color("#ff334d")
 const PALE_RED := Color("#ff9aa8")
 const SOFT_WHITE := Color("#f4f2f0")
+const CREDIT_DRAIN_HOLD_TIME := 0.7
+const CREDIT_DRAIN_TIME := 1.6
 
 @onready var title_label: Label = %TitleLabel
 @onready var fatal_label: Label = %FatalLabel
 @onready var money_label: Label = %MoneyLabel
 @onready var action_button: Button = %ActionButton
 @onready var button_host: Control = %ButtonHost
+
+var _credit_drain_tween: Tween = null
 
 
 func _ready() -> void:
@@ -27,10 +31,27 @@ func _ready() -> void:
 	action_button.call_deferred(&"grab_focus")
 
 
-func present() -> void:
-	# Game over is a hard loss: the visible balance and the committed state are
-	# both zero. Keeping this explicit makes the scene safe to preview in isolation.
-	money_label.text = "0"
+func present(starting_credits: int = 0) -> void:
+	# Game over is a hard loss: show the run's final credits, then drain the
+	# presentation all the way to zero while the committed state stays zero.
+	_start_credit_drain(starting_credits)
+
+
+func _start_credit_drain(starting_credits: int) -> void:
+	if _credit_drain_tween != null and _credit_drain_tween.is_valid():
+		_credit_drain_tween.kill()
+	var total_credits := maxi(0, starting_credits)
+	_set_displayed_credits(float(total_credits))
+	if total_credits == 0 or Engine.is_editor_hint():
+		return
+	_credit_drain_tween = create_tween()
+	_credit_drain_tween.tween_interval(CREDIT_DRAIN_HOLD_TIME)
+	_credit_drain_tween.tween_method(
+		_set_displayed_credits, float(total_credits), 0.0, CREDIT_DRAIN_TIME)
+
+
+func _set_displayed_credits(value: float) -> void:
+	money_label.text = str(maxi(0, roundi(value)))
 
 
 func _style_text() -> void:

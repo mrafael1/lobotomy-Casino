@@ -4455,7 +4455,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_build_wealth_screen(run)
 		return
 	if resolved_ending == "game_over":
-		_build_game_over_screen()
+		_build_game_over_screen(run)
 		return
 	if resolved_ending == "flatline":
 		_build_flatline_screen(run)
@@ -4524,13 +4524,13 @@ func _build_flatline_screen(run: Dictionary) -> void:
 
 
 ## Terminal campaign ending: the machine remains visible, damaged, and un-dimmed.
-## The dedicated scene owns the game-over machine art, red title, zero-credit
+## The dedicated scene owns the game-over machine art, red title, draining credit
 ## readout, and broken-neon retry action; the machine keeps the state transition here.
-func _build_game_over_screen() -> void:
+func _build_game_over_screen(run: Dictionary = {}) -> void:
 	_clear_wealth_presentation_fx()
 	var game_over_screen := GAME_OVER_ENDING_SCENE.instantiate() as GameOverEndingOverlay
 	_overlay.add_child(game_over_screen)
-	game_over_screen.present()
+	game_over_screen.present(int(run.get("lucidityCoins", 0)))
 	game_over_screen.try_again_pressed.connect(_on_game_over_try_again_pressed)
 
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again
