@@ -92,6 +92,7 @@ const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
+const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
@@ -1835,6 +1836,7 @@ func _show_neuron_spend_feedback(feedback_parent: Control, center: Vector2) -> v
 	var label_position := center - Vector2(35.0, 6.0)
 	_neuron_spend_label = Label.new()
 	_neuron_spend_label.name = "NeuronSpendFeedback"
+	_neuron_spend_label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	_neuron_spend_label.text = "-1 NEURON"
 	_neuron_spend_label.position = label_position
 	_neuron_spend_label.size = Vector2(70.0, 12.0)
@@ -3590,6 +3592,7 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 130
+	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
 	var target := Vector2(43.0, 82.0) # spins counter fallback
@@ -3620,6 +3623,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> vo
 	gain.text = "+%d" % amount
 	gain.position = origin
 	gain.z_index = 130
+	gain.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	gain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	gain.add_theme_font_size_override("font_size", 8)
 	if _font != null:
@@ -4001,6 +4005,7 @@ func _show_potion_popup(text: String, color: Color) -> void:
 	if text.is_empty() or _fx_layer == null:
 		return
 	var label := Label.new()
+	label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	label.text = text
 	label.position = Vector2(30.0, 112.0) # between the TV and the multiplier strip
 	label.size = Vector2(100.0, 10.0)
@@ -4231,6 +4236,7 @@ func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 	var w := 32.0
 	var h := 32.0
 	var popup := Control.new()
+	popup.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	popup.z_index = 40
 	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var cx := float(REEL_CELL_CENTERS[reel_index])
@@ -4301,6 +4307,7 @@ func _check_flatline_instant_death() -> bool:
 
 func _show_flatline_result_reaction(count: int) -> void:
 	var host := Control.new()
+	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.z_index = 30
 	add_child(host)
@@ -4359,6 +4366,7 @@ func _clear_close_call_heartbeat() -> void:
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	var host := Control.new()
+	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.z_index = 30
 	add_child(host)
@@ -4506,11 +4514,130 @@ func _build_flatline_screen(run: Dictionary) -> void:
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again
 ## banks the run and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
-	_set_tv_progress_bars_visible(false)
+	_clear_wealth_presentation_fx()
 	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
 	_overlay.add_child(wealth_screen)
 	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos())
 	wealth_screen.start_again_pressed.connect(_start_again_from_wealth.bind(run))
+
+## Ending overlays must be the only presentation layer left alive. State commits can
+## arrive on the same frame as the wealth transition, so clear the pooled HUD effects
+## explicitly instead of relying on the normal refresh path (which is intentionally
+## blocked while the wealth screen is visible).
+func _clear_wealth_presentation_fx() -> void:
+	_set_tv_progress_bars_visible(false)
+	for entry: Dictionary in _boost_indicator_slots:
+		var slot := entry.get("slot") as Control
+		if slot != null:
+			slot.visible = false
+
+	_clear_targeting()
+	_close_score_table()
+	_hide_augmented_popup()
+	_close_serum_picker()
+	_close_book_choice_overlay()
+	if _dealer_overlay != null:
+		_close_dealer(false)
+	_hide_compulsive_overlay()
+	_compulsive_queued = false
+	_copy_source = -1
+	_pending_spin_gain = 0
+	_held_spin_grant = 0
+	_pending_dealer_offer = false
+	_power_coins_in_flight = 0
+	_power_batch_running = false
+
+	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
+		_energy_pulse_tween.kill()
+	_energy_pulse_tween = null
+	_energy_fx_active = false
+	if _energy_edges != null:
+		_energy_edges.visible = false
+	for cover: CanvasItem in _tobacco_covers:
+		cover.visible = false
+	for smoke_node: Node in _tobacco_smoke:
+		var smoke := smoke_node as CPUParticles2D
+		if smoke != null:
+			smoke.emitting = false
+			smoke.visible = false
+	for cover: CanvasItem in _hidden_covers:
+		cover.visible = false
+	for cover: CanvasItem in _blur_covers:
+		cover.visible = false
+	_hide_result_active = false
+	_blur_result_active = false
+	_adjacent_symbols_hidden_active = false
+
+	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
+		_cocktail_shake_tween.kill()
+	_cocktail_shake_tween = null
+	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
+		_potion_jump_tween.kill()
+	_potion_jump_tween = null
+	if _nudge_tween != null and _nudge_tween.is_valid():
+		_nudge_tween.kill()
+	_nudge_tween = null
+	_clear_close_call_heartbeat()
+	position = Vector2.ZERO
+
+	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
+		_white_powder_distortion_tween.kill()
+	_white_powder_distortion_tween = null
+	if _lucidity_count_tween != null and _lucidity_count_tween.is_valid():
+		_lucidity_count_tween.kill()
+	_lucidity_count_tween = null
+	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
+		_jackpot_flash_tween.kill()
+	_jackpot_flash_tween = null
+	_jackpot_flashing = false
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
+
+	if _burst_layer != null:
+		for child: Node in _burst_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _coin_layer != null:
+		for child: Node in _coin_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _hint_layer != null:
+		for child: Node in _hint_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _fx_layer != null:
+		var persistent_fx: Array[Node] = []
+		for node: Node in _tobacco_covers:
+			persistent_fx.append(node)
+		for node: Node in _tobacco_smoke:
+			persistent_fx.append(node)
+		if _energy_edges != null:
+			persistent_fx.append(_energy_edges)
+		for node: Node in _hidden_covers:
+			persistent_fx.append(node)
+		for node: Node in _blur_covers:
+			persistent_fx.append(node)
+		for child: Node in _fx_layer.get_children():
+			if not persistent_fx.has(child):
+				var item := child as CanvasItem
+				if item != null:
+					item.visible = false
+					item.modulate.a = 0.0
+	for node: Node in get_tree().get_nodes_in_group(WEALTH_TRANSIENT_FX_GROUP):
+		if is_instance_valid(node):
+			var item := node as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
+		_neuron_spend_label.visible = false
+		_neuron_spend_label.modulate.a = 0.0
+	_neuron_spend_label = null
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
@@ -4956,7 +5083,7 @@ func _dealer_leave() -> void:
 func _on_dealer_offer_finished() -> void:
 	_close_dealer()
 
-func _close_dealer() -> void:
+func _close_dealer(restore_sequence: bool = true) -> void:
 	if _dealer_overlay != null:
 		_dealer_overlay.queue_free()
 		_dealer_overlay = null
@@ -4968,6 +5095,8 @@ func _close_dealer() -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	if not restore_sequence:
+		return
 	_set_sequence_lock(false)
 	_update_hud()
 	# Issue #96 safety net: never leave the machine idle while a compulsion is

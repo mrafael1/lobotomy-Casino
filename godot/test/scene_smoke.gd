@@ -2281,6 +2281,14 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
+	for boost_entry: Dictionary in machine._boost_indicator_slots:
+		var boost_slot := boost_entry.get("slot") as Control
+		if boost_slot != null and boost_slot.visible:
+			failures.append("wealth: active boost icon was not cleared")
+	if machine._energy_edges != null and machine._energy_edges.visible:
+		failures.append("wealth: energy-drink edge animation is still visible")
+	if machine._compulsive_overlay != null and machine._compulsive_overlay.visible:
+		failures.append("wealth: compulsive power overlay is still visible")
 	# A deferred store commit can refresh the HUD after the ending is built. The
 	# wealth presentation must keep the machine bars hidden through that path too.
 	machine._update_hud()
@@ -2349,11 +2357,16 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 			float(tv_rect["width"]), float(tv_rect["height"]))
 		if not tv_bounds.encloses(joker_rect):
 			failures.append("wealth: joker icon is not inside the machine TV")
+		var tv_center := tv_bounds.position + tv_bounds.size * 0.5
+		if (joker.position + joker.size * 0.5).distance_to(tv_center) > 0.5:
+			failures.append("wealth: joker icon is not centered in the machine TV")
 	var subtitle := wealth_screen.get_node_or_null("SubtitleLabel") as Label \
 		if wealth_screen != null else null
-	if subtitle == null or subtitle.position.y < float(machine.TV_SCREEN["top"]) \
-			+ float(machine.TV_SCREEN["height"]):
-		failures.append("wealth: subtitle is not below the machine TV")
+	if subtitle == null:
+		failures.append("wealth: subtitle is missing")
+	elif joker != null and (subtitle.position.y <= joker.position.y + joker.size.y \
+			or subtitle.position.y >= float(machine.TV_SCREEN["top"]) + float(machine.TV_SCREEN["height"])):
+		failures.append("wealth: subtitle is not just below the joker inside the machine TV")
 	var score := wealth_screen.get_node_or_null("ScoreLabel") as Label \
 		if wealth_screen != null else null
 	if score == null or score.text != "2,000":

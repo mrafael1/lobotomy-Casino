@@ -22,7 +22,9 @@ const COIN_BOTTOM_HOLD_TIME := 0.14
 const COIN_PILE_SETTLE_TIME := 0.24
 const COIN_FALL_RISE := 4.0
 const COIN_PILE_SETTLE_RISE := 3.0
-const JOKER_OPACITY := 0.16
+const TV_SCREEN_CENTER := Vector2(80.0, 75.0)
+const JOKER_OPACITY := 0.26
+const SUBTITLE_OPACITY := 0.62
 
 @onready var title_label: Label = %TitleLabel
 @onready var subtitle_label: Label = %SubtitleLabel
@@ -118,6 +120,7 @@ func _setup_joker() -> void:
 	joker_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	joker_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	joker_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	joker_icon.position = TV_SCREEN_CENTER - joker_icon.size * 0.5
 	joker_icon.pivot_offset = joker_icon.size * 0.5
 	joker_icon.scale = Vector2(0.72, 0.72)
 	joker_icon.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -134,6 +137,8 @@ func _play_reveal() -> void:
 	button_host.pivot_offset = button_host.size * 0.5
 	title_label.scale = Vector2(0.86, 0.86)
 	score_label.scale = Vector2(0.45, 0.45)
+	var score_rest_position := score_label.position
+	score_label.position.y += 5.0
 	button_host.scale = Vector2(0.9, 0.9)
 
 	var title_tween := create_tween()
@@ -142,7 +147,7 @@ func _play_reveal() -> void:
 	title_tween.tween_property(title_label, "modulate:a", 1.0, 0.22)
 	title_tween.parallel().tween_property(title_label, "scale", Vector2.ONE, 0.34)
 	title_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	title_tween.tween_property(subtitle_label, "modulate:a", 1.0, 0.18)
+	title_tween.tween_property(subtitle_label, "modulate:a", SUBTITLE_OPACITY, 0.18)
 
 	var joker_tween := create_tween()
 	joker_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -151,11 +156,17 @@ func _play_reveal() -> void:
 	joker_tween.parallel().tween_property(joker_icon, "scale", Vector2.ONE, 0.34)
 
 	var score_tween := create_tween()
-	score_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	score_tween.tween_interval(0.62)
 	score_tween.tween_property(score_caption_label, "modulate:a", 1.0, 0.16)
+	score_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	score_tween.tween_property(score_label, "modulate:a", 1.0, 0.16)
-	score_tween.parallel().tween_property(score_label, "scale", Vector2.ONE, 0.42)
+	score_tween.parallel().tween_property(score_label, "position:y", score_rest_position.y - 2.0, 0.32)
+	score_tween.parallel().tween_property(score_label, "scale", Vector2(1.16, 1.16), 0.32)
+	score_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	score_tween.tween_property(score_label, "position:y", score_rest_position.y, 0.14)
+	score_tween.parallel().tween_property(score_label, "scale", Vector2(0.96, 0.96), 0.14)
+	score_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	score_tween.tween_property(score_label, "scale", Vector2.ONE, 0.18)
 
 	var button_tween := create_tween()
 	button_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
