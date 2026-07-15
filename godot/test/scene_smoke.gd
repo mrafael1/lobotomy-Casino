@@ -712,8 +712,10 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 		failures.append("machine ending flow: could not read machine_scene.gd")
 		return
 	var source := file.get_as_text()
-	if not source.contains("EXIT CASINO"):
-		failures.append("machine ending flow: wealth screen should offer EXIT CASINO")
+	if not source.contains("_start_again_from_wealth"):
+		failures.append("machine ending flow: wealth screen is missing Start Again handling")
+	if source.contains("EXIT CASINO"):
+		failures.append("machine ending flow: old EXIT CASINO wealth action still present")
 	if source.contains("BANK & LAB"):
 		failures.append("machine ending flow: old bank/lab wealth transition still present")
 
@@ -2243,8 +2245,8 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
-# Dedicated wealth-ending screen: CONTINUE + EXIT CASINO, no bank/lab button, and
-# the wealth bar targets the 2000 campaign goal.
+# Dedicated wealth-ending screen: title/subtitle copy, quiet joker reveal, score
+# pop, procedural coin flood, and a single Start Again action.
 func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
@@ -2265,22 +2267,110 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	run_store.spinCount = 10
 	machine._show_ending("wealth", run)
 	var wallet_before := int(meta_store.lucidityWallet)
-	var continue_button: Button = null
-	var exit_button: Button = null
+	var wealth_screen := machine._overlay.get_node_or_null("WealthEndingOverlay") as Control
+	var texts := _overlay_label_texts(wealth_screen)
+	for required_copy in ["You've become rich", "is it enough ?", "2,000"]:
+		if not texts.has(required_copy):
+			failures.append("wealth: missing ending copy %s" % required_copy)
+	if texts.has("FINAL SCORE"):
+		failures.append("wealth: final score caption should be removed")
+	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
+		failures.append("wealth: overlay created a replacement TV panel")
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
+		if tv_bar == null or tv_bar.visible:
+			failures.append("wealth: %s is still visible over the ending screen" % node_name)
+	for boost_entry: Dictionary in machine._boost_indicator_slots:
+		var boost_slot := boost_entry.get("slot") as Control
+		if boost_slot != null and boost_slot.visible:
+			failures.append("wealth: active boost icon was not cleared")
+	if machine._energy_edges != null and machine._energy_edges.visible:
+		failures.append("wealth: energy-drink edge animation is still visible")
+	if machine._compulsive_overlay != null and machine._compulsive_overlay.visible:
+		failures.append("wealth: compulsive power overlay is still visible")
+	# A deferred store commit can refresh the HUD after the ending is built. The
+	# wealth presentation must keep the machine bars hidden through that path too.
+	machine._update_hud()
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
+		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
+			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
+	var start_again_button: Button = null
 	for node: Node in machine._overlay.find_children("*", "Button", true, false):
 		var button := node as Button
-		if button.text == "IS IT ENOUGH ?":
-			continue_button = button
-		elif button.text == "EXIT CASINO":
-			exit_button = button
+		if button.text == "Start again ?":
+			start_again_button = button
 		elif button.text == "BANK & LAB":
 			failures.append("wealth: bank/lab button still on the wealth screen")
-	if continue_button == null:
-		failures.append("wealth: IS IT ENOUGH ? button missing from the wealth screen")
-	elif continue_button.disabled:
-		failures.append("wealth: IS IT ENOUGH ? disabled although another spin is possible")
-	if exit_button == null:
-		failures.append("wealth: EXIT CASINO button missing from the wealth screen")
+		elif button.text == "IS IT ENOUGH ?" or button.text == "EXIT CASINO":
+			failures.append("wealth: old wealth action button still present")
+	if start_again_button == null:
+		failures.append("wealth: Start again button missing from the wealth screen")
+	elif start_again_button.disabled or start_again_button.size.x < 120.0 \
+			or start_again_button.size.y < 34.0:
+		failures.append("wealth: Start again button is missing, disabled, or too small")
+	var wealth_button_host := wealth_screen.get_node_or_null("ButtonHost") as Control \
+		if wealth_screen != null else null
+	var wealth_button_asset := String(start_again_button.get_meta(&"_small_neon_button_asset", "")) \
+		if start_again_button != null else ""
+	if wealth_button_host == null or wealth_button_asset.is_empty():
+		failures.append("wealth: wealth action does not use the shared classic neon button style")
+	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
+		if wealth_screen != null else null
+	if coin_field == null or coin_field.get_child_count() < 2000:
+		failures.append("wealth: full-screen coin flood did not prepare enough coins")
+	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
+		if wealth_screen != null else null
+	if coin_clip == null or coin_clip.position.y != 0.0 or coin_clip.size.y < 320.0:
+		failures.append("wealth: coin flood does not cover the full screen")
+	var first_coin := coin_field.get_child(0) as TextureRect \
+		if coin_field != null and coin_field.get_child_count() > 0 else null
+	if first_coin == null or first_coin.texture == null \
+			or not String(first_coin.texture.resource_path).ends_with("coin_cumulable.png"):
+		failures.append("wealth: coin flood is not using coin_cumulable.png")
+	if wealth_screen != null and first_coin != null:
+		wealth_screen._drive_coin_to_pile(1.0, first_coin, first_coin.position,
+			first_coin.position, 0.0, 0.9)
+		if first_coin.modulate.a < 0.89:
+			failures.append("wealth: landed coin faded out instead of staying in the pile")
+	if wealth_screen != null and wealth_screen.get("_cash_tray_pos") != machine._cash_tray_pos():
+		failures.append("wealth: coin flood did not receive the machine cash-tray position")
+	if first_coin != null and coin_clip != null:
+		var tray_start: Vector2 = machine._cash_tray_pos() - coin_clip.position
+		if first_coin.position.distance_to(tray_start) > 6.0:
+			failures.append("wealth: first coin does not start at the machine cash tray")
+	if wealth_screen != null \
+			and wealth_screen.get_node_or_null("CoinFloodClip/FloodSurface") != null:
+		failures.append("wealth: created flood surface is still present")
+	var joker := wealth_screen.get_node_or_null("JokerIcon") as TextureRect \
+		if wealth_screen != null else null
+	if joker == null or joker.texture == null:
+		failures.append("wealth: joker icon is missing from the TV")
+	elif joker.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("wealth: joker icon is not nearest-neighbor filtered")
+	else:
+		var tv_rect: Dictionary = machine.TV_SCREEN
+		var joker_rect := Rect2(joker.position, joker.size)
+		var tv_bounds := Rect2(float(tv_rect["left"]), float(tv_rect["top"]),
+			float(tv_rect["width"]), float(tv_rect["height"]))
+		if not tv_bounds.encloses(joker_rect):
+			failures.append("wealth: joker icon is not inside the machine TV")
+		var tv_center := tv_bounds.position + tv_bounds.size * 0.5
+		if (joker.position + joker.size * 0.5).distance_to(tv_center) > 0.5:
+			failures.append("wealth: joker icon is not centered in the machine TV")
+	var subtitle := wealth_screen.get_node_or_null("SubtitleLabel") as Label \
+		if wealth_screen != null else null
+	if subtitle == null:
+		failures.append("wealth: subtitle is missing")
+	elif joker != null and (subtitle.position.y <= joker.position.y + joker.size.y \
+			or subtitle.position.y >= float(machine.TV_SCREEN["top"]) + float(machine.TV_SCREEN["height"])):
+		failures.append("wealth: subtitle is not just below the joker inside the machine TV")
+	var score := wealth_screen.get_node_or_null("ScoreLabel") as Label \
+		if wealth_screen != null else null
+	if score == null or score.text != "2,000":
+		failures.append("wealth: final score did not populate: %s" % (score.text if score != null else "missing"))
 	if int(meta_store.lucidityWallet) != wallet_before:
 		failures.append("wealth: run banked before the player chose to leave")
 	# CONTINUE resumes the run under the existing wealth-continue rules.
@@ -2321,8 +2411,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	meta_store.save_state()
 
 # Issue #62: reaching the wealth goal with no spins left must still open the
-# wealth flow with a usable exit, and a wealth-continued run that goes dry must
-# flatline instead of softlocking (check_ending short-circuits on the score).
+# wealth flow with a usable Start Again action, and the retained defensive
+# wealth-continue path must still flatline instead of softlocking.
 func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
@@ -2338,21 +2428,14 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 		failures.append("issue62: wealth goal with 0 spins left did not end the run")
 	elif str(run_store.lastEnding) != "wealth":
 		failures.append("issue62: 0-spin goal ended as %s, expected wealth" % str(run_store.lastEnding))
-	var cont: Button = null
-	var exit_button: Button = null
+	var start_again_button: Button = null
 	if machine._overlay != null:
 		for node: Node in machine._overlay.find_children("*", "Button", true, false):
 			var button := node as Button
-			if button.text == "IS IT ENOUGH ?":
-				cont = button
-			elif button.text == "EXIT CASINO":
-				exit_button = button
-	if exit_button == null or exit_button.disabled:
-		failures.append("issue62: EXIT CASINO missing/disabled on the 0-spin wealth screen")
-	if cont == null:
-		failures.append("issue62: IS IT ENOUGH ? missing from the 0-spin wealth screen")
-	elif not cont.disabled:
-		failures.append("issue62: IS IT ENOUGH ? should be disabled when no spin can follow")
+			if button.text == "Start again ?":
+				start_again_button = button
+	if start_again_button == null or start_again_button.disabled:
+		failures.append("issue62: Start Again missing/disabled on the 0-spin wealth screen")
 	# Even a forced continue must not strand a dead machine: it falls through to
 	# the flatline flow (which always offers an action).
 	machine._continue_from_wealth()
