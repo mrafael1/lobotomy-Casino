@@ -2259,6 +2259,14 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 		if title == null or not title.get_theme_color(&"font_color").is_equal_approx(
 			Color("#ff334d")):
 			failures.append("game over: title is not using the flatline red")
+		if title != null and (title.position.y < 120.0 or title.position.y > 136.0):
+			failures.append("game over: title is not centered in the middle group")
+		var game_over_score := game_over_screen.get_node_or_null("MoneyLabel") as Label
+		if game_over_score == null or title == null:
+			failures.append("game over: score label is missing")
+		elif game_over_score.position.y <= title.position.y \
+				or game_over_score.position.y - title.position.y > 34.0:
+			failures.append("game over: score is not directly below the title")
 		if game_over_screen.get_node_or_null("Dim") != null \
 				or game_over_screen.get_node_or_null("TVPanel") != null:
 			failures.append("game over: opaque background/TV overlay should be absent")
