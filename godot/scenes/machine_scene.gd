@@ -11,7 +11,8 @@ extends Node2D
 
 const SRC_W := 160.0
 const SRC_H := 320.0
-const ASSET_SCALE := 8.0 # machine PNGs are 8x the 160x320 source (1280x2560)
+const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -58,7 +59,10 @@ const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
 const LOCK_POWER_FRAME_COUNT := 3
-const JACKPOT_FRAME_COUNT := 2
+const JACKPOT_FRAME_COUNT := 3
+const JACKPOT_FRAME_OFF := 0
+const JACKPOT_FRAME_LIT := 1
+const JACKPOT_FRAME_ALT := 2
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
@@ -85,7 +89,10 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
+const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
+const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
+const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
 	&"lever": "lever.mp3",
@@ -203,17 +210,18 @@ const COIN_TRAY_PILE_DEPTH := 8.0
 const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
 
-# Power restore gauge (issue #76). power_bar.png is a full-canvas overlay sheet, 3 cols x
-# 2 rows = 6 frames, gauge empty (0) -> full (5), filling bottom-up. A power coin flies to
-# the bar every POWER_COIN_STEP lucidity and advances one frame; at the full frame it
-# spawns a coin from the bar top that flies to the random restorable power. The 6 frames
-# span one restore threshold (coins_per_power_restore), so 5 steps = 50 coins = 10/step.
-const POWER_BAR_SHEET := "machine new view/power_bar.png"
-const POWER_BAR_HFRAMES := 3
-const POWER_BAR_VFRAMES := 2
+# Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
+# six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
+# flies to the bar every POWER_COIN_STEP lucidity and advances one frame; at the full
+# frame it spawns a coin from the bar top that flies to the random restorable power.
+# The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
+# coins = 10/step.
+const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
+const POWER_BAR_HFRAMES := 6
+const POWER_BAR_VFRAMES := 1
 const POWER_BAR_FRAMES := 6
-const POWER_BAR_CENTER := Vector2(13.0, 84.0) # coin-to-bar landing point (gauge middle)
-const POWER_BAR_TOP := Vector2(13.0, 62.0)     # where the restore coin spawns when full
+const POWER_BAR_CENTER := Vector2(137.0, 84.0) # coin-to-bar landing point (gauge middle)
+const POWER_BAR_TOP := Vector2(137.0, 62.0)     # where the restore coin spawns when full
 const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
 # With no restorable power the gauge stops one frame short of full so it never fake-fills.
 const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
@@ -492,6 +500,7 @@ var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
 var _campaign_label: Label = null
 var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
+var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
 # Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
@@ -538,7 +547,7 @@ func _ready() -> void:
 	_build_reel_animation_art()
 	_build_reel_covers()
 	_build_reels()
-	_build_full_canvas_sprite("machine new view/final_machine.png")
+	_build_full_canvas_sprite("machine new view/machine_neon.png")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -624,7 +633,8 @@ func _authored_control(name: String) -> Control:
 func _full_canvas_name(rel: String) -> String:
 	if rel.ends_with("reel_final_machine.png"):
 		return "ReelBacking"
-	if rel.ends_with("final_machine.png"):
+	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
+			or rel.ends_with("machine_neon.png"):
 		return "Cabinet"
 	return ""
 
@@ -635,9 +645,9 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "HealthTrack"
 	if rel.ends_with("multiplier_final_machine.png"):
 		return "Multiplier"
-	if rel.ends_with("lever_final_machine.png"):
+	if rel.ends_with("lever_final_machine.png") or rel.ends_with("neon_machine_lever.png"):
 		return "Lever"
-	if rel.ends_with("jackpot_final_machine.png"):
+	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
 		return "LockPower%d" % frame
@@ -666,7 +676,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -677,7 +687,7 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 	if apply_transform:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 # Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
 # hall reads as out-of-focus scenery so the cabinet pops in front of it.
@@ -725,7 +735,8 @@ func _build_full_canvas_sprite(rel: String) -> void:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		# Only the cabinet gets a visible fallback so the scene isn't blank.
-		if rel.ends_with("/final_machine.png"):
+		if rel.ends_with("/final_machine.png") or rel.ends_with("/neon_machine.png") \
+				or rel.ends_with("/machine_neon.png"):
 			var fallback := ColorRect.new()
 			fallback.color = Color(0.06, 0.05, 0.08)
 			fallback.size = Vector2(SRC_W, SRC_H)
@@ -770,7 +781,7 @@ func _build_full_canvas_grid_sheet(rel: String, hframes: int, vframes: int, fram
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	add_child(spr)
 	return spr
 
@@ -799,7 +810,7 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	)
 	if not authored:
 		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	return spr
 
 func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: int = 0) -> Sprite2D:
@@ -814,7 +825,7 @@ func _build_control_sheet_on(parent: Control, rel: String, hframes: int, frame: 
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -832,7 +843,7 @@ func _build_control_grid_sheet_on(parent: Control, rel: String, hframes: int, vf
 	var frame_w := float(tex.get_width()) / float(hframes)
 	var frame_h := float(tex.get_height()) / float(vframes)
 	spr.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	parent.add_child(spr)
 	return spr
 
@@ -857,7 +868,7 @@ func _build_reel_animation_art() -> void:
 		if not authored:
 			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
 			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 		spr.visible = false
 		_spin_reel_sprites.append(spr)
 		_set_spin_reel_frame(i, 0)
@@ -894,7 +905,7 @@ func _build_tv_indicators() -> void:
 	_build_boost_indicators()
 	_build_power_bar()
 
-## The power-restore gauge (issue #76): a full-canvas overlay sheet (3x2 = 6 frames). It
+## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames). It
 ## snaps to the current lucidity progress on build so a resumed run shows the right fill.
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
@@ -915,7 +926,7 @@ func _build_power_bar() -> void:
 		var frame_h := float(tex.get_height()) / float(POWER_BAR_VFRAMES)
 		_power_bar_sprite.position = Vector2.ZERO
 		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
-	_power_bar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_power_bar_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	# Start empty; the gauge fills only from score gained after this point (a resumed run
 	# doesn't re-bank its existing lucidity).
 	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
@@ -1081,9 +1092,9 @@ func _clear_boost_zero_linger() -> void:
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
-	_lever_sprite = _build_full_canvas_sheet("machine new view/lever_final_machine.png", LEVER_FRAME_COUNT)
-	_jackpot_sprite = _build_full_canvas_sheet("machine new view/jackpot_final_machine.png", JACKPOT_FRAME_COUNT)
-	_set_sheet_frame(_jackpot_sprite, 0)
+	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
+	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
 	for i in 3:
 		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
 		if lock != null:
@@ -1179,9 +1190,9 @@ func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_posit
 	if apply_position:
 		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
-	# Symbols are authored large and drawn at 12-16px, so downscale with
-	# linear+mipmaps (supersampled, crisp) rather than nearest (aliased).
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Symbols are authored large and drawn at 12-16px, so keep their downscale
+	# pixel-perfect with the rest of the machine art.
+	s.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
 	var s := _authored_sprite(name)
@@ -1429,6 +1440,7 @@ func _sync_visuals() -> void:
 		_overlay.queue_free()
 		_overlay = null
 	_set_stash_tray_visible(true)
+	_set_tv_progress_bars_visible(true)
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
@@ -1781,10 +1793,18 @@ func _play_compulsive_shake() -> void:
 	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
 
 func _update_hud() -> void:
+	if _wealth_ending_is_visible():
+		# The wealth overlay owns the final presentation. Store commits can still emit
+		# state_changed while it is open, but those refreshes must not redraw the TV bars.
+		_set_tv_progress_bars_visible(false)
+		return
 	_refresh_tv_indicators()
 	_refresh_campaign_label()
 	_refresh_controls()
 	_refresh_consumable_fx()
+
+func _wealth_ending_is_visible() -> bool:
+	return _overlay != null and _overlay.get_node_or_null("WealthEndingOverlay") != null
 
 ## Lets the held HUD deltas (multiplier badge, bars, jackpot lamp) pop, once the
 ## score popup has had its beat on screen.
@@ -1816,6 +1836,7 @@ func _show_neuron_spend_feedback(feedback_parent: Control, center: Vector2) -> v
 	var label_position := center - Vector2(35.0, 6.0)
 	_neuron_spend_label = Label.new()
 	_neuron_spend_label.name = "NeuronSpendFeedback"
+	_neuron_spend_label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	_neuron_spend_label.text = "-1 NEURON"
 	_neuron_spend_label.position = label_position
 	_neuron_spend_label.size = Vector2(70.0, 12.0)
@@ -1966,7 +1987,7 @@ func _refresh_jackpot_lamp(use_result := true) -> void:
 	var lit := false
 	if use_result and RunStateStore.lastResult != null:
 		lit = bool(RunStateStore.lastResult.get("isJackpot", false))
-	_set_sheet_frame(_jackpot_sprite, 1 if lit else 0)
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_LIT if lit else JACKPOT_FRAME_OFF)
 
 func _flash_jackpot_lamp() -> void:
 	if _jackpot_sprite == null:
@@ -1985,7 +2006,9 @@ func _end_jackpot_flash() -> void:
 func _drive_jackpot_flash(t: float) -> void:
 	if _jackpot_sprite == null:
 		return
-	_set_sheet_frame(_jackpot_sprite, 1 if (int(t * 12.0) % 2 == 0) else 0)
+	_set_sheet_frame(
+		_jackpot_sprite,
+		JACKPOT_FRAME_LIT if (int(t * 12.0) % 2 == 0) else JACKPOT_FRAME_ALT)
 
 # Quick horizontal machine shake — feedback on a Lucidity gain / jackpot.
 func _nudge(strength: float) -> void:
@@ -3569,6 +3592,7 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 130
+	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
 	var target := Vector2(43.0, 82.0) # spins counter fallback
@@ -3599,6 +3623,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> vo
 	gain.text = "+%d" % amount
 	gain.position = origin
 	gain.z_index = 130
+	gain.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	gain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	gain.add_theme_font_size_override("font_size", 8)
 	if _font != null:
@@ -3980,6 +4005,7 @@ func _show_potion_popup(text: String, color: Color) -> void:
 	if text.is_empty() or _fx_layer == null:
 		return
 	var label := Label.new()
+	label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	label.text = text
 	label.position = Vector2(30.0, 112.0) # between the TV and the multiplier strip
 	label.size = Vector2(100.0, 10.0)
@@ -4210,6 +4236,7 @@ func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 	var w := 32.0
 	var h := 32.0
 	var popup := Control.new()
+	popup.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	popup.z_index = 40
 	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var cx := float(REEL_CELL_CENTERS[reel_index])
@@ -4280,6 +4307,7 @@ func _check_flatline_instant_death() -> bool:
 
 func _show_flatline_result_reaction(count: int) -> void:
 	var host := Control.new()
+	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.z_index = 30
 	add_child(host)
@@ -4338,6 +4366,7 @@ func _clear_close_call_heartbeat() -> void:
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	var host := Control.new()
+	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.z_index = 30
 	add_child(host)
@@ -4403,8 +4432,8 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_stop_flatline_countdown()
 	RunStateStore.end_run(ending)
 	MetaStateStore.mark_ending_reached(ending)
-	# Wealth banking is deferred until the player chooses to leave (so Continue can
-	# resume and bank the full total at the real flatline end — no double-bank).
+	# Wealth banking is deferred until the player chooses Start Again so the ending
+	# animation can show the full run total before the wallet is updated.
 	if ending != "wealth":
 		MetaStateStore.bank_run(run, ending)
 
@@ -4414,6 +4443,12 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the dimmed overlay.
 	_set_stash_tray_visible(false)
+	if ending == "wealth":
+		_build_wealth_screen(run)
+		return
+	if ending == "flatline":
+		_build_flatline_screen(run)
+		return
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.7)
@@ -4444,9 +4479,6 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	if ending == "flatline":
 		_build_flatline_countdown(run)
-	elif ending == "wealth":
-		_build_wealth_screen(run)
-		return
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(20, 145)
@@ -4468,38 +4500,144 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
-## Dedicated wealth-ending screen: CONTINUE keeps playing under the existing
-## wealth-continue rules; EXIT CASINO banks the run (deferred until leave so a
-## continue can still bank the full total later) and returns to the menu hub.
+## Dedicated issue #140 flatline presentation. The visual layer owns the focused
+## message, animated trace, and action; MachineScene retains countdown state,
+## banking, and the existing dealer/menu transition.
+func _build_flatline_screen(run: Dictionary) -> void:
+	var flatline_screen := FLATLINE_ENDING_SCENE.instantiate() as FlatlineEndingOverlay
+	_overlay.add_child(flatline_screen)
+	var fatal_copy := fatal_flatline_text if not _has_campaign_neurons_remaining() else ""
+	flatline_screen.present(_flatline_action_text(), fatal_copy)
+	flatline_screen.action_pressed.connect(_on_flatline_action_pressed)
+	_build_flatline_countdown(run, flatline_screen)
+
+## Dedicated wealth-ending screen: the final score is presented, then Start Again
+## banks the run and returns to the menu hub.
 func _build_wealth_screen(run: Dictionary) -> void:
-	_score_label(_overlay, "YOU MADE IT OUT RICH", Vector2(20.0, 148.0), 8,
-		Color(0.9, 0.95, 0.85), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_score_label(_overlay, "SCORE %d" % int(run["scoreEarned"]), Vector2(20.0, 162.0), 8,
-		Color(0.92, 0.86, 0.56), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_clear_wealth_presentation_fx()
+	var wealth_screen := WEALTH_ENDING_SCENE.instantiate() as WealthEndingOverlay
+	_overlay.add_child(wealth_screen)
+	wealth_screen.present(int(run["scoreEarned"]), _cash_tray_pos())
+	wealth_screen.start_again_pressed.connect(_start_again_from_wealth.bind(run))
 
-	var cont := Button.new()
-	cont.text = "CONTINUE"
-	cont.position = Vector2(30.0, 192.0)
-	cont.size = Vector2(100.0, 20.0)
-	cont.add_theme_font_size_override("font_size", 9)
-	if _font != null:
-		cont.add_theme_font_override("font", _font)
-	# Continuing with no possible next spin (0 neurons/free spins, or the hard
-	# spin cap already hit) would strand a dead machine (issue #62).
-	cont.disabled = not _can_resume_after_wealth()
-	cont.pressed.connect(_continue_from_wealth)
-	_overlay.add_child(cont)
+## Ending overlays must be the only presentation layer left alive. State commits can
+## arrive on the same frame as the wealth transition, so clear the pooled HUD effects
+## explicitly instead of relying on the normal refresh path (which is intentionally
+## blocked while the wealth screen is visible).
+func _clear_wealth_presentation_fx() -> void:
+	_set_tv_progress_bars_visible(false)
+	for entry: Dictionary in _boost_indicator_slots:
+		var slot := entry.get("slot") as Control
+		if slot != null:
+			slot.visible = false
 
-	var exit := Button.new()
-	exit.text = "EXIT CASINO"
-	exit.position = Vector2(30.0, 218.0)
-	exit.size = Vector2(100.0, 20.0)
-	exit.add_theme_font_size_override("font_size", 9)
-	if _font != null:
-		exit.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(exit)
-	exit.pressed.connect(_exit_casino.bind(run))
-	_overlay.add_child(exit)
+	_clear_targeting()
+	_close_score_table()
+	_hide_augmented_popup()
+	_close_serum_picker()
+	_close_book_choice_overlay()
+	if _dealer_overlay != null:
+		_close_dealer(false)
+	_hide_compulsive_overlay()
+	_compulsive_queued = false
+	_copy_source = -1
+	_pending_spin_gain = 0
+	_held_spin_grant = 0
+	_pending_dealer_offer = false
+	_power_coins_in_flight = 0
+	_power_batch_running = false
+
+	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
+		_energy_pulse_tween.kill()
+	_energy_pulse_tween = null
+	_energy_fx_active = false
+	if _energy_edges != null:
+		_energy_edges.visible = false
+	for cover: CanvasItem in _tobacco_covers:
+		cover.visible = false
+	for smoke_node: Node in _tobacco_smoke:
+		var smoke := smoke_node as CPUParticles2D
+		if smoke != null:
+			smoke.emitting = false
+			smoke.visible = false
+	for cover: CanvasItem in _hidden_covers:
+		cover.visible = false
+	for cover: CanvasItem in _blur_covers:
+		cover.visible = false
+	_hide_result_active = false
+	_blur_result_active = false
+	_adjacent_symbols_hidden_active = false
+
+	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
+		_cocktail_shake_tween.kill()
+	_cocktail_shake_tween = null
+	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
+		_potion_jump_tween.kill()
+	_potion_jump_tween = null
+	if _nudge_tween != null and _nudge_tween.is_valid():
+		_nudge_tween.kill()
+	_nudge_tween = null
+	_clear_close_call_heartbeat()
+	position = Vector2.ZERO
+
+	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
+		_white_powder_distortion_tween.kill()
+	_white_powder_distortion_tween = null
+	if _lucidity_count_tween != null and _lucidity_count_tween.is_valid():
+		_lucidity_count_tween.kill()
+	_lucidity_count_tween = null
+	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
+		_jackpot_flash_tween.kill()
+	_jackpot_flash_tween = null
+	_jackpot_flashing = false
+	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
+
+	if _burst_layer != null:
+		for child: Node in _burst_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _coin_layer != null:
+		for child: Node in _coin_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _hint_layer != null:
+		for child: Node in _hint_layer.get_children():
+			var item := child as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _fx_layer != null:
+		var persistent_fx: Array[Node] = []
+		for node: Node in _tobacco_covers:
+			persistent_fx.append(node)
+		for node: Node in _tobacco_smoke:
+			persistent_fx.append(node)
+		if _energy_edges != null:
+			persistent_fx.append(_energy_edges)
+		for node: Node in _hidden_covers:
+			persistent_fx.append(node)
+		for node: Node in _blur_covers:
+			persistent_fx.append(node)
+		for child: Node in _fx_layer.get_children():
+			if not persistent_fx.has(child):
+				var item := child as CanvasItem
+				if item != null:
+					item.visible = false
+					item.modulate.a = 0.0
+	for node: Node in get_tree().get_nodes_in_group(WEALTH_TRANSIENT_FX_GROUP):
+		if is_instance_valid(node):
+			var item := node as CanvasItem
+			if item != null:
+				item.visible = false
+				item.modulate.a = 0.0
+	if _neuron_spend_label != null and is_instance_valid(_neuron_spend_label):
+		_neuron_spend_label.visible = false
+		_neuron_spend_label.modulate.a = 0.0
+	_neuron_spend_label = null
 
 func _show_campaign_failed() -> void:
 	_stop_flatline_countdown()
@@ -4545,15 +4683,45 @@ func _flatline_action_text() -> String:
 	return "CONTINUE" if _has_campaign_neurons_remaining() else "MENU"
 
 func _on_flatline_action_pressed() -> void:
+	if _flatline_transition_active:
+		return
+	_flatline_transition_active = true
+	var flatline_screen := _overlay.get_node_or_null(
+		"FlatlineEndingOverlay") as FlatlineEndingOverlay
+	if flatline_screen != null:
+		if not flatline_screen.first_revival_beep.is_connected(
+			_on_flatline_first_revival_beep):
+			flatline_screen.first_revival_beep.connect(_on_flatline_first_revival_beep)
+		flatline_screen.play_continue_animation()
+		await flatline_screen.continue_animation_finished
+	if _overlay == null or not is_instance_valid(_overlay):
+		return
+	if flatline_screen == null:
+		_attach_flatline_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
+	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
 		_to_dealer()
 	else:
 		_to_menu()
 
+func _on_flatline_first_revival_beep() -> void:
+	_attach_flatline_meter(FlatlineEndingOverlay.REVIVAL_METER_CENTER,
+		FlatlineEndingOverlay.REVIVAL_METER_CENTER + Vector2(0.0, 27.0))
+
+func _attach_flatline_meter(center: Vector2, feedback_center: Vector2) -> void:
+	if _overlay == null or not is_instance_valid(_overlay):
+		return
+	if _flatline_meter != null and is_instance_valid(_flatline_meter):
+		return
+	_flatline_meter = NeuronMeter.attach(_overlay, center)
+	_flatline_meter.play_loss_animation()
+	_show_neuron_spend_feedback(_overlay, feedback_center)
+
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
 
-func _build_flatline_countdown(run: Dictionary) -> void:
+func _build_flatline_countdown(run: Dictionary,
+		flatline_screen: FlatlineEndingOverlay = null) -> void:
 	_flatline_total = int(run["lucidityCoins"])
 	_flatline_kept = floori(float(_flatline_total) * _end_run_lucidity_kept_fraction())
 	_flatline_display = _flatline_total
@@ -4563,17 +4731,26 @@ func _build_flatline_countdown(run: Dictionary) -> void:
 	# Retained-percent line only ("10% kept", or "20% kept" with Smart Saving);
 	# the draining number below it is the whole story.
 	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
-	_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8, Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_score_label = _score_label(_overlay, str(_flatline_display), Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10, Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	if flatline_screen != null:
+		flatline_screen.set_kept_percentage(kept_pct)
+		_flatline_score_label = flatline_screen.score_label
+		_flatline_lost_label = flatline_screen.lost_label
+	else:
+		_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8,
+			Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_flatline_score_label = _score_label(_overlay, str(_flatline_display),
+			Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0,
+			HORIZONTAL_ALIGNMENT_CENTER)
+		_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10,
+			Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	_update_flatline_countdown_labels()
 
-	# Neuron meter above the continue button, playing the losing pop: the frame
-	# switches to reflect the neuron this run just cost. The "-1 NEURON" popup
-	# rides the same beat, rising off the meter.
-	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
-	_flatline_meter.play_loss_animation()
-	_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
+	# Keep the neuron-loss treatment only for the legacy fallback. The dedicated
+	# flatline screen intentionally stays focused on the money drain and trace.
+	if flatline_screen == null:
+		_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
+		_flatline_meter.play_loss_animation()
+		_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
 
 func _step_flatline_countdown(delta: float) -> void:
 	_flatline_countdown_elapsed += delta
@@ -4603,6 +4780,7 @@ func _stop_flatline_countdown() -> void:
 	_flatline_score_label = null
 	_flatline_lost_label = null
 	_flatline_meter = null
+	_flatline_transition_active = false
 
 # The stash tray (z 50) would draw over full-screen ending overlays; hide it while
 # one is up and restore it when the run visuals resync.
@@ -4611,6 +4789,13 @@ func _set_stash_tray_visible(v: bool) -> void:
 	if tray != null:
 		tray.visible = v
 	_set_stash_visible(v)
+
+func _set_tv_progress_bars_visible(visible: bool) -> void:
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
+		if node != null:
+			node.visible = visible
 
 func _end_run_lucidity_kept_fraction() -> float:
 	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
@@ -4747,9 +4932,8 @@ func _continue_from_wealth() -> void:
 		"lucidityCoins": RunStateStore.lucidityCoins,
 	})
 
-## Wealth screen EXIT CASINO: bank the run (wealth banking is deferred until the
-## player leaves) and return to the menu hub.
-func _exit_casino(run: Dictionary) -> void:
+## Wealth screen Start Again: bank the run and return to the menu hub.
+func _start_again_from_wealth(run: Dictionary) -> void:
 	MetaStateStore.bank_run(run, "wealth")
 	_to_menu()
 
@@ -4899,7 +5083,7 @@ func _dealer_leave() -> void:
 func _on_dealer_offer_finished() -> void:
 	_close_dealer()
 
-func _close_dealer() -> void:
+func _close_dealer(restore_sequence: bool = true) -> void:
 	if _dealer_overlay != null:
 		_dealer_overlay.queue_free()
 		_dealer_overlay = null
@@ -4911,6 +5095,8 @@ func _close_dealer() -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	if not restore_sequence:
+		return
 	_set_sequence_lock(false)
 	_update_hud()
 	# Issue #96 safety net: never leave the machine idle while a compulsion is
