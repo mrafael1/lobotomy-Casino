@@ -1,5 +1,5 @@
 {
-  "description": "bankRunToMeta(run, meta, ending) with Date.now() frozen to `now`. Keeps floor(coins*0.10); sets *At only on first reach.",
+  "description": "bankRunToMeta(run, meta, ending) with Date.now() frozen to `now`. Keeps floor(coins*0.10) for ordinary endings; terminal game_over clears the wallet; sets *At only on first reach.",
   "lucidityKept": 0.1,
   "cases": [
     {
@@ -74,6 +74,43 @@
           "runsPlayed": 1,
           "bestScoreRun": 2000,
           "wealthEndingReachedAt": 1700000000000
+        }
+      }
+    },
+    {
+      "label": "game-over-clears-wallet",
+      "now": 1700000000000,
+      "ending": "game_over",
+      "run": {
+        "lucidityCoins": 999,
+        "scoreEarned": 200
+      },
+      "meta": {
+        "schemaVersion": 2,
+        "lucidityWallet": 37,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [],
+        "pendingConsumables": {},
+        "is_first_launch": false,
+        "history": {
+          "runsPlayed": 4,
+          "bestScoreRun": 300
+        }
+      },
+      "expect": {
+        "schemaVersion": 2,
+        "lucidityWallet": 0,
+        "ownedPermanents": [],
+        "corruptionEverUsed": false,
+        "endingsReached": [
+          "game_over"
+        ],
+        "pendingConsumables": {},
+        "is_first_launch": false,
+        "history": {
+          "runsPlayed": 5,
+          "bestScoreRun": 300
         }
       }
     },

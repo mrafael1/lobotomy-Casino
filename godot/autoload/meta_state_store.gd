@@ -218,6 +218,11 @@ func mark_ending_reached(ending: String) -> void:
 	elif ending == "exit" and not history.has("exitEndingReachedAt"):
 		history = history.duplicate(true)
 		history["exitEndingReachedAt"] = _now_ms()
+	elif ending == "game_over":
+		campaignActive = false
+		campaignFailed = true
+		campaignNeuronsLeft = 0
+		lucidityWallet = 0
 	meta_changed.emit()
 	save_state()
 

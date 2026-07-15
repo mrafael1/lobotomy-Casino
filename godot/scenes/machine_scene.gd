@@ -91,6 +91,7 @@ const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tsc
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
+const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -4430,23 +4431,33 @@ func _check_ending() -> bool:
 
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_stop_flatline_countdown()
-	RunStateStore.end_run(ending)
-	MetaStateStore.mark_ending_reached(ending)
+	# A running campaign reserves its neuron until end_run(). Account for that
+	# pending spend while resolving the terminal presentation, then commit the
+	# resolved ending once so lastEnding and the persisted balance agree.
+	var neurons_after_run := int(MetaStateStore.campaignNeuronsLeft) \
+		- (1 if RunStateStore.campaignNeuronPending else 0)
+	var resolved_ending := "game_over" if ending == "flatline" \
+		and neurons_after_run <= 0 else ending
+	RunStateStore.end_run(resolved_ending)
+	MetaStateStore.mark_ending_reached(resolved_ending)
 	# Wealth banking is deferred until the player chooses Start Again so the ending
 	# animation can show the full run total before the wallet is updated.
-	if ending != "wealth":
-		MetaStateStore.bank_run(run, ending)
+	if resolved_ending != "wealth":
+		MetaStateStore.bank_run(run, resolved_ending)
 
 	_overlay = Control.new()
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
-	# The stash tray draws at z 50 and would float over the dimmed overlay.
+	# The stash tray draws at z 50 and would float over the ending presentation.
 	_set_stash_tray_visible(false)
-	if ending == "wealth":
+	if resolved_ending == "wealth":
 		_build_wealth_screen(run)
 		return
-	if ending == "flatline":
+	if resolved_ending == "game_over":
+		_build_game_over_screen(run)
+		return
+	if resolved_ending == "flatline":
 		_build_flatline_screen(run)
 		return
 
@@ -4456,7 +4467,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.add_child(dim)
 
 	var title := Label.new()
-	if ending == "flatline":
+	if resolved_ending == "flatline":
 		# The fatal copy only applies when the campaign is truly over — a routine
 		# flatline with neurons left just reads FLATLINE.
 		var fatal := not _has_campaign_neurons_remaining()
@@ -4467,17 +4478,17 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
 	else:
-		title.text = ending.to_upper()
+		title.text = resolved_ending.to_upper()
 		title.position = Vector2(20, 120)
 		title.size = Vector2(120, 20)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
 		title.add_theme_font_override("font", _font)
-	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if ending == "flatline" else Color(0.5, 1, 0.6))
+	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if resolved_ending == "flatline" else Color(0.5, 1, 0.6))
 	_overlay.add_child(title)
 
-	if ending == "flatline":
+	if resolved_ending == "flatline":
 		_build_flatline_countdown(run)
 	else:
 		var wallet := Label.new()
@@ -4491,7 +4502,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	var to_menu := Button.new()
 	to_menu.text = _flatline_action_text()
-	to_menu.position = Vector2(30, 238 if ending == "flatline" else 175)
+	to_menu.position = Vector2(30, 238 if resolved_ending == "flatline" else 175)
 	to_menu.size = Vector2(100, 20)
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
@@ -4510,6 +4521,17 @@ func _build_flatline_screen(run: Dictionary) -> void:
 	flatline_screen.present(_flatline_action_text(), fatal_copy)
 	flatline_screen.action_pressed.connect(_on_flatline_action_pressed)
 	_build_flatline_countdown(run, flatline_screen)
+
+
+## Terminal campaign ending: the machine remains visible, damaged, and un-dimmed.
+## The dedicated scene owns the game-over machine art, red title, draining credit
+## readout, and broken-neon retry action; the machine keeps the state transition here.
+func _build_game_over_screen(run: Dictionary = {}) -> void:
+	_clear_wealth_presentation_fx()
+	var game_over_screen := GAME_OVER_ENDING_SCENE.instantiate() as GameOverEndingOverlay
+	_overlay.add_child(game_over_screen)
+	game_over_screen.present(int(run.get("lucidityCoins", 0)))
+	game_over_screen.try_again_pressed.connect(_on_game_over_try_again_pressed)
 
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again
 ## banks the run and returns to the menu hub.
@@ -4648,31 +4670,7 @@ func _show_campaign_failed() -> void:
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	add_child(_overlay)
 	_set_stash_tray_visible(false)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.82)
-	dim.size = Vector2(SRC_W, SRC_H)
-	_overlay.add_child(dim)
-
-	_score_label(_overlay, "FLATLINE", Vector2(20.0, 58.0), 16, Color(1.0, 0.35, 0.45), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	# Issue #38: exact GDD fatal copy, kept byte-for-byte in one label (autowrapped).
-	var fatal := _score_label(_overlay, fatal_flatline_text, Vector2(20.0, 84.0), 9, Color(0.86, 0.9, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	fatal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fatal.size = Vector2(120.0, 40.0)
-
-	# The campaign-failed screen keeps the neuron meter (fully desaturated mind).
-	_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 162.0))
-
-	var fresh := Button.new()
-	fresh.text = "START FRESH AGAIN"
-	fresh.position = Vector2(20.0, 208.0)
-	fresh.size = Vector2(120.0, 22.0)
-	fresh.add_theme_font_size_override("font_size", 8)
-	if _font != null:
-		fresh.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(fresh)
-	fresh.pressed.connect(_start_fresh_again)
-	_overlay.add_child(fresh)
+	_build_game_over_screen()
 
 func _start_fresh_again() -> void:
 	MetaStateStore.start_new_campaign()
@@ -4680,7 +4678,14 @@ func _start_fresh_again() -> void:
 	_to_menu()
 
 func _flatline_action_text() -> String:
-	return "CONTINUE" if _has_campaign_neurons_remaining() else "MENU"
+	return "CONTINUE" if _has_campaign_neurons_remaining() else "TRY AGAIN"
+
+
+func _on_game_over_try_again_pressed() -> void:
+	if _flatline_transition_active:
+		return
+	_flatline_transition_active = true
+	_start_fresh_again()
 
 func _on_flatline_action_pressed() -> void:
 	if _flatline_transition_active:

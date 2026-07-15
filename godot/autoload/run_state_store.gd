@@ -751,6 +751,10 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 func end_run(ending: String) -> void:
 	runPhase = "over"
 	lastEnding = ending
+	if ending == "game_over":
+		# A terminal campaign loss removes the run's remaining credits instead of
+		# carrying the normal flatline retention into the next campaign.
+		lucidityCoins = 0
 	if campaignNeuronPending:
 		MetaStateStore.finalize_campaign_neuron_for_run()
 		campaignNeuronPending = false
