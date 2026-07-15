@@ -31,7 +31,8 @@ static func bank_run_to_meta(run: Dictionary, meta: Dictionary, ending: String, 
 	if not endings.has(ending):
 		endings.append(ending)
 
-	var kept := floori(float(run["lucidityCoins"]) * lucidity_kept_fraction(meta))
+	var kept := 0 if ending == "game_over" \
+		else floori(float(run["lucidityCoins"]) * lucidity_kept_fraction(meta))
 
 	var mh: Dictionary = meta["history"]
 	var hist := {
@@ -50,7 +51,8 @@ static func bank_run_to_meta(run: Dictionary, meta: Dictionary, ending: String, 
 		hist["exitEndingReachedAt"] = x
 
 	var out := meta.duplicate(true)
-	out["lucidityWallet"] = int(meta["lucidityWallet"]) + kept
+	out["lucidityWallet"] = 0 if ending == "game_over" \
+		else int(meta["lucidityWallet"]) + kept
 	out["endingsReached"] = endings
 	out["history"] = hist
 	return out

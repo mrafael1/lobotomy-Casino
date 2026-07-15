@@ -25,6 +25,7 @@ func _run() -> void:
 		"res://scenes/collection_scene.tscn",
 		"res://scenes/options_overlay.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
+		"res://scenes/game_over_ending_overlay.tscn",
 	]:
 		var ps := load(path) as PackedScene
 		if ps == null:
@@ -714,6 +715,8 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 	var source := file.get_as_text()
 	if not source.contains("_start_again_from_wealth"):
 		failures.append("machine ending flow: wealth screen is missing Start Again handling")
+	if not source.contains("GAME_OVER_ENDING_SCENE"):
+		failures.append("machine ending flow: dedicated game-over scene is missing")
 	if source.contains("EXIT CASINO"):
 		failures.append("machine ending flow: old EXIT CASINO wealth action still present")
 	if source.contains("BANK & LAB"):
@@ -725,8 +728,8 @@ func _check_flatline_action_text(machine: Node, meta_store: Node, failures: Arra
 	if machine._flatline_action_text() != "CONTINUE":
 		failures.append("flatline action: campaign neurons > 0 should show CONTINUE")
 	meta_store.campaignNeuronsLeft = 0
-	if machine._flatline_action_text() != "MENU":
-		failures.append("flatline action: campaign neurons <= 0 should show MENU")
+	if machine._flatline_action_text() != "TRY AGAIN":
+		failures.append("flatline action: campaign neurons <= 0 should show TRY AGAIN")
 	meta_store.campaignNeuronsLeft = previous_neurons
 
 func _check_issue27_overlay_layout(failures: Array) -> void:
@@ -1911,17 +1914,19 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 		failures.append("issue38: sub-goal score triggered an ending")
 	if Endings.check_ending({ "scoreEarned": 2500, "neurons": 5 }, {}, 3000) != null:
 		failures.append("issue38: raised campaign_goal_score was ignored")
-	# Exact GDD fatal copy on the campaign-failed overlay, byte-for-byte.
+	# Exact GDD fatal copy remains on the transparent game-over overlay.
 	machine._show_campaign_failed()
 	var overlay: Control = machine._overlay
 	var found_fatal := false
 	if overlay != null:
-		for child in overlay.get_children():
-			if child is Label and (child as Label).text == "this time, it's fatal. No coming back":
-				found_fatal = true
-				break
+		var game_over := overlay.get_node_or_null("GameOverEndingOverlay") as Control
+		if game_over != null:
+			for child in game_over.get_children():
+				if child is Label and (child as Label).text == "this time, it's fatal. No coming back":
+					found_fatal = true
+					break
 	if not found_fatal:
-		failures.append("issue38: campaign-failed overlay is missing the exact fatal text")
+		failures.append("issue38: game-over overlay is missing the exact fatal text")
 	if overlay != null:
 		overlay.queue_free()
 		machine._overlay = null
@@ -2230,13 +2235,55 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	machine._overlay = null
 	machine._stop_flatline_countdown()
 
-	# Fatal copy shows when the campaign is actually exhausted.
-	meta_store.campaignNeuronsLeft = 0
+	# Campaign exhaustion uses the transparent dedicated game-over treatment.
+	# Exercise the last reserved neuron too: end_run() spends it while resolving
+	# the terminal ending, so the game-over route must account for that pending cost.
+	meta_store.campaignNeuronsLeft = 1
+	run_store.campaignNeuronPending = true
 	run_store.runPhase = "running"
 	machine._show_ending("flatline", run)
-	flatline_screen = machine._overlay.get_node_or_null("FlatlineEndingOverlay") as Control
-	if not _overlay_label_texts(flatline_screen).has("this time, it's fatal. No coming back"):
-		failures.append("flatline: fatal copy missing when neurons are exhausted")
+	var game_over_screen := machine._overlay.get_node_or_null("GameOverEndingOverlay") as Control
+	if game_over_screen == null:
+		failures.append("game over: dedicated screen missing when neurons are exhausted")
+	else:
+		var game_over_texts := _overlay_label_texts(game_over_screen)
+		if not game_over_texts.has("GAME OVER"):
+			failures.append("game over: red GAME OVER title is missing")
+		if not game_over_texts.has("this time, it's fatal. No coming back"):
+			failures.append("game over: fatal copy missing when neurons are exhausted")
+		var game_over_action := game_over_screen.get_node_or_null(
+			"ButtonHost/ActionButton") as Button
+		if game_over_action == null or game_over_action.text != "TRY AGAIN":
+			failures.append("game over: action button is not TRY AGAIN")
+		var title := game_over_screen.get_node_or_null("TitleLabel") as Label
+		if title == null or not title.get_theme_color(&"font_color").is_equal_approx(
+			Color("#ff334d")):
+			failures.append("game over: title is not using the flatline red")
+		if game_over_screen.get_node_or_null("Dim") != null \
+				or game_over_screen.get_node_or_null("TVPanel") != null:
+			failures.append("game over: opaque background/TV overlay should be absent")
+		if not game_over_screen.has_method("_draw"):
+			failures.append("game over: broken machine damage effect is missing")
+		var joker := game_over_screen.get_node_or_null("JokerIcon") as TextureRect
+		if joker == null or joker.texture == null:
+			failures.append("game over: joker icon is missing from the TV")
+		else:
+			var tv_rect: Dictionary = machine.TV_SCREEN
+			var tv_bounds := Rect2(float(tv_rect["left"]), float(tv_rect["top"]),
+				float(tv_rect["width"]), float(tv_rect["height"]))
+			if not tv_bounds.encloses(Rect2(joker.position, joker.size)) \
+					or (joker.position + joker.size * 0.5).distance_to(tv_bounds.get_center()) > 0.5:
+				failures.append("game over: joker icon is not centered in the machine TV")
+			if not is_equal_approx(joker.modulate.a, 0.8):
+				failures.append("game over: joker icon opacity is not 0.8")
+	if int(run_store.lucidityCoins) != 0:
+		failures.append("game over: run credits did not reach zero")
+	if int(meta_store.lucidityWallet) != 0:
+		failures.append("game over: wallet did not reach zero")
+	if str(run_store.lastEnding) != "game_over":
+		failures.append("game over: run ending is %s, expected game_over" % str(run_store.lastEnding))
+	if not bool(meta_store.campaignFailed):
+		failures.append("game over: campaign was not marked failed")
 	machine._overlay.queue_free()
 	machine._overlay = null
 	machine._stop_flatline_countdown()
@@ -2416,6 +2463,9 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
+	# Wealth continuation still exercises the normal flatline presentation while
+	# campaign neurons remain; campaign exhaustion belongs to issue #140 coverage.
+	meta_store.campaignNeuronsLeft = 5
 
 	# Goal reached on the very spin that exhausts neurons: the wealth ending wins
 	# over the no-spins dead-end.
@@ -2487,6 +2537,9 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
+	# This check is about free-spin gating, so leave enough campaign neurons for a
+	# non-terminal flatline once the free-spin pool is empty.
+	meta_store.campaignNeuronsLeft = 5
 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
@@ -4074,6 +4127,10 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
+	# Keep this legacy re-entry assertion on a resumable campaign. Terminal campaign
+	# exhaustion is covered by the dedicated game-over assertions above.
+	meta_store.campaignNeuronsLeft = 5
+	var prev_campaign_pending := bool(run_store.campaignNeuronPending)
 	var prev_phase := String(run_store.runPhase)
 	var prev_spinning := bool(run_store.isSpinning)
 	var prev_compulsive := int(run_store.compulsiveSpinSkips)
@@ -4159,6 +4216,7 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 
 	machine._set_stash_tray_visible(true)
 	run_store.runPhase = prev_phase
+	run_store.campaignNeuronPending = prev_campaign_pending
 	run_store.isSpinning = prev_spinning
 	run_store.compulsiveSpinSkips = prev_compulsive
 	run_store.freeSpinsRemaining = prev_free
