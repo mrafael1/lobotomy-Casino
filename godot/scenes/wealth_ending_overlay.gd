@@ -3,6 +3,7 @@ class_name WealthEndingOverlay
 extends Control
 
 signal start_again_pressed
+signal continue_pressed
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
@@ -36,6 +37,7 @@ const SUBTITLE_OPACITY := 0.62
 @onready var coin_flood_clip: Control = %CoinFloodClip
 @onready var coin_field: Control = %CoinField
 @onready var button_host: Control = %ButtonHost
+@onready var continue_button: Button = %ContinueButton
 @onready var start_again_button: Button = %StartAgainButton
 
 var _font: FontFile = null
@@ -57,8 +59,11 @@ func _ready() -> void:
 	_style_labels()
 	_style_button()
 	_setup_joker()
+	if not continue_button.pressed.is_connected(_on_continue_pressed):
+		continue_button.pressed.connect(_on_continue_pressed)
 	if not start_again_button.pressed.is_connected(_on_start_again_pressed):
 		start_again_button.pressed.connect(_on_start_again_pressed)
+	Assets.start_menu_button_press_feedback(continue_button)
 	Assets.start_menu_button_press_feedback(start_again_button)
 	button_host.pivot_offset = button_host.size * 0.5
 	if Engine.is_editor_hint():
@@ -66,9 +71,11 @@ func _ready() -> void:
 		return
 
 
-func present(total_score: int, cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS) -> void:
+func present(total_score: int, cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS,
+		can_continue: bool = true) -> void:
 	set_final_score(total_score)
 	_cash_tray_pos = cash_tray_pos
+	continue_button.disabled = not can_continue
 	if _presentation_started:
 		return
 	_presentation_started = true
@@ -110,7 +117,8 @@ func _style_labels() -> void:
 
 
 func _style_button() -> void:
-	Assets.small_neon_button_style(start_again_button, NEON_YELLOW, 8, 2.0)
+	Assets.small_neon_button_style(continue_button, NEON_PINK, 7, 1.0)
+	Assets.small_neon_button_style(start_again_button, NEON_YELLOW, 7, 1.0)
 
 
 func _setup_joker() -> void:
@@ -281,3 +289,7 @@ func _drive_coin_to_pile(t: float, coin: TextureRect, from_pos: Vector2,
 
 func _on_start_again_pressed() -> void:
 	start_again_pressed.emit()
+
+
+func _on_continue_pressed() -> void:
+	continue_pressed.emit()

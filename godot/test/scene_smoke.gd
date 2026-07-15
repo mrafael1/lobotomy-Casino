@@ -715,6 +715,10 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 	var source := file.get_as_text()
 	if not source.contains("_start_again_from_wealth"):
 		failures.append("machine ending flow: wealth screen is missing Start Again handling")
+	if not source.contains("continue_pressed.connect(_continue_from_wealth)"):
+		failures.append("machine ending flow: wealth screen is missing CONTINUE handling")
+	if not source.contains("_can_resume_after_wealth()"):
+		failures.append("machine ending flow: wealth screen is missing continuation gating")
 	if not source.contains("GAME_OVER_ENDING_SCENE"):
 		failures.append("machine ending flow: dedicated game-over scene is missing")
 	if source.contains("EXIT CASINO"):
@@ -2327,6 +2331,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	run_store.neurons = 5
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 10
+	run_store.lucidityCoins = 300
 	machine._show_ending("wealth", run)
 	var wallet_before := int(meta_store.lucidityWallet)
 	var wealth_screen := machine._overlay.get_node_or_null("WealthEndingOverlay") as Control
@@ -2359,20 +2364,27 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
 			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
+	var continue_button: Button = null
 	var start_again_button: Button = null
 	for node: Node in machine._overlay.find_children("*", "Button", true, false):
 		var button := node as Button
-		if button.text == "Start again ?":
+		if button.text == "Keep playing":
+			continue_button = button
+		elif button.text == "Start again ?":
 			start_again_button = button
 		elif button.text == "BANK & LAB":
 			failures.append("wealth: bank/lab button still on the wealth screen")
 		elif button.text == "IS IT ENOUGH ?" or button.text == "EXIT CASINO":
 			failures.append("wealth: old wealth action button still present")
+	if continue_button == null or continue_button.disabled:
+		failures.append("wealth: Keep playing button missing or disabled on a continuable run")
 	if start_again_button == null:
 		failures.append("wealth: Start again button missing from the wealth screen")
-	elif start_again_button.disabled or start_again_button.size.x < 120.0 \
+	elif start_again_button.disabled or start_again_button.size.x < 70.0 \
 			or start_again_button.size.y < 34.0:
 		failures.append("wealth: Start again button is missing, disabled, or too small")
+	if continue_button != null and (continue_button.size.x < 70.0 or continue_button.size.y < 34.0):
+		failures.append("wealth: Keep playing button is too small")
 	var wealth_button_host := wealth_screen.get_node_or_null("ButtonHost") as Control \
 		if wealth_screen != null else null
 	var wealth_button_asset := String(start_again_button.get_meta(&"_small_neon_button_asset", "")) \
@@ -2439,19 +2451,26 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	machine._continue_from_wealth()
 	if String(run_store.runPhase) != "running" or not bool(run_store.wealthContinued):
 		failures.append("wealth: CONTINUE did not resume the run (wealth-continue rules)")
+	# Re-entering the machine after CONTINUE must not recreate the wealth ending or
+	# end the still-playable run (issue #131).
+	machine._enter_run()
+	if String(run_store.runPhase) != "running" or machine._overlay != null:
+		failures.append("issue131: re-entering the machine ended or overlaid the continued run")
+	if machine._check_ending() or machine._overlay != null:
+		failures.append("issue131: continued run still re-triggered the wealth ending")
 	# Issue #110: after choosing to continue, the completed goal disappears from the
-	# objective readout — the label shows "???" and the bar pins full, and it stays
+	# objective target — the label shows the score plus "???" and the bar pins full, and it stays
 	# that way through every HUD refresh path for the rest of the continued run.
 	machine._refresh_tv_indicators()
 	if machine._bar_labels.has("goal"):
-		if String((machine._bar_labels["goal"] as Label).text) != "???":
-			failures.append("issue110: continued run goal label reads '%s', expected ???"
+		if String((machine._bar_labels["goal"] as Label).text) != "300/???":
+			failures.append("issue131: continued run goal label reads '%s', expected 300/???"
 				% String((machine._bar_labels["goal"] as Label).text))
 		# _set_display_lucidity is the rebuild/count-up path (scene re-entry after a
 		# save load repopulates the HUD through it) — it must also keep the mask.
 		machine._set_display_lucidity(450)
-		if String((machine._bar_labels["goal"] as Label).text) != "???":
-			failures.append("issue110: goal label lost the ??? mask on a lucidity update")
+		if String((machine._bar_labels["goal"] as Label).text) != "450/???":
+			failures.append("issue131: goal label lost the score while preserving the ??? target")
 		if machine._goal_fill_sprite != null \
 				and machine._goal_fill_sprite.region_rect.size.x \
 					< float(machine.WEALTH_BAR["width"]) * machine.ASSET_SCALE:
@@ -2473,8 +2492,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	meta_store.save_state()
 
 # Issue #62: reaching the wealth goal with no spins left must still open the
-# wealth flow with a usable Start Again action, and the retained defensive
-# wealth-continue path must still flatline instead of softlocking.
+# wealth flow with a usable Start Again action and a disabled Keep playing action;
+# the retained defensive wealth-continue path must still flatline instead of softlocking.
 func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
@@ -2494,13 +2513,18 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	elif str(run_store.lastEnding) != "wealth":
 		failures.append("issue62: 0-spin goal ended as %s, expected wealth" % str(run_store.lastEnding))
 	var start_again_button: Button = null
+	var continue_button: Button = null
 	if machine._overlay != null:
 		for node: Node in machine._overlay.find_children("*", "Button", true, false):
 			var button := node as Button
-			if button.text == "Start again ?":
+			if button.text == "Keep playing":
+				continue_button = button
+			elif button.text == "Start again ?":
 				start_again_button = button
 	if start_again_button == null or start_again_button.disabled:
 		failures.append("issue62: Start Again missing/disabled on the 0-spin wealth screen")
+	if continue_button == null or not continue_button.disabled:
+		failures.append("issue62: Keep playing should be disabled with no possible spin")
 	# Even a forced continue must not strand a dead machine: it falls through to
 	# the flatline flow (which always offers an action).
 	machine._continue_from_wealth()
