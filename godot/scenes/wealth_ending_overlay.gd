@@ -17,13 +17,11 @@ const COIN_PILE_COLUMNS := 20
 const COIN_PILE_ROW_SPACING := 3.35
 const COIN_RELEASE_START_DELAY := 0.12
 const COIN_RELEASE_STAGGER := 0.004
-const COIN_TRAY_POP_TIME := 0.26
-const COIN_TRAY_HOLD_TIME := 0.12
-const COIN_PILE_FLIGHT_TIME := 0.42
-const COIN_TRAY_POP_RISE := 3.0
-const COIN_BURST_FRAC := 0.4
-const COIN_BURST_RISE := 24.0
-const COIN_BURST_SCATTER := 26.0
+const COIN_FALL_TIME := 0.36
+const COIN_BOTTOM_HOLD_TIME := 0.14
+const COIN_PILE_SETTLE_TIME := 0.24
+const COIN_FALL_RISE := 4.0
+const COIN_PILE_SETTLE_RISE := 3.0
 const JOKER_OPACITY := 0.16
 
 @onready var title_label: Label = %TitleLabel
@@ -42,8 +40,7 @@ var _coin_rng := RandomNumberGenerator.new()
 var _cash_tray_pos: Vector2 = DEFAULT_CASH_TRAY_POS
 var _presentation_started := false
 var _coins: Array[TextureRect] = []
-var _coin_tray_piles: Array[Vector2] = []
-var _coin_burst_positions: Array[Vector2] = []
+var _coin_bottom_positions: Array[Vector2] = []
 var _coin_targets: Array[Vector2] = []
 var _coin_rotations: Array[float] = []
 var _coin_delays: Array[float] = []
@@ -177,8 +174,7 @@ func _prepare_coin_flood() -> void:
 	coin_flood_clip.size = Vector2(CANVAS_SIZE.x, COIN_FLOOD_HEIGHT)
 	coin_field.size = coin_flood_clip.size
 	_coins.clear()
-	_coin_tray_piles.clear()
-	_coin_burst_positions.clear()
+	_coin_bottom_positions.clear()
 	_coin_targets.clear()
 	_coin_rotations.clear()
 	_coin_delays.clear()
@@ -199,11 +195,6 @@ func _prepare_coin_flood() -> void:
 		coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		coin.size = COIN_SIZE
 		coin.pivot_offset = COIN_SIZE * 0.5
-		var pile_pos := source_local + Vector2(
-			_coin_rng.randf_range(-11.0, 11.0), -_coin_rng.randf_range(0.0, 6.0))
-		var burst_pos := source_local + Vector2(
-			_coin_rng.randf_range(-COIN_BURST_SCATTER * 0.5, COIN_BURST_SCATTER * 0.5),
-			-COIN_BURST_RISE - _coin_rng.randf_range(0.0, 4.0))
 		var column := index % COIN_PILE_COLUMNS
 		var row := index / COIN_PILE_COLUMNS
 		var column_width := CANVAS_SIZE.x / float(COIN_PILE_COLUMNS)
@@ -216,14 +207,16 @@ func _prepare_coin_flood() -> void:
 			- float(row) * COIN_PILE_ROW_SPACING \
 			+ surface_offsets[column] * row_depth + _coin_rng.randf_range(-0.7, 0.7)
 		var target := Vector2(target_x, target_y)
+		var bottom_pos := Vector2(
+			target_x + _coin_rng.randf_range(-2.0, 2.0),
+			COIN_FLOOD_HEIGHT - COIN_SIZE.y - _coin_rng.randf_range(0.0, 2.0))
 		var start := source_local
 		coin.position = start
 		coin.rotation = 0.0
 		coin.modulate = Color(1.0, 1.0, 1.0, 0.0)
 		coin_field.add_child(coin)
 		_coins.append(coin)
-		_coin_tray_piles.append(pile_pos)
-		_coin_burst_positions.append(burst_pos)
+		_coin_bottom_positions.append(bottom_pos)
 		_coin_targets.append(target)
 		_coin_rotations.append(_coin_rng.randf_range(-0.26, 0.26))
 		_coin_delays.append(COIN_RELEASE_START_DELAY + float(index) * COIN_RELEASE_STAGGER)
@@ -231,44 +224,39 @@ func _prepare_coin_flood() -> void:
 
 
 func _play_coin_flood() -> void:
-	var fall_phase_time := float(_coins.size() - 1) * COIN_RELEASE_STAGGER \
-		+ COIN_TRAY_POP_TIME
-	var travel_start_time := fall_phase_time + COIN_TRAY_HOLD_TIME
 	for index in _coins.size():
 		var coin := _coins[index]
 		var tween := create_tween()
 		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tween.tween_interval(_coin_delays[index])
-		tween.tween_method(_drive_coin_tray_pop.bind(
-			coin, coin.position, _coin_tray_piles[index]), 0.0, 1.0, COIN_TRAY_POP_TIME)
-		tween.tween_interval(maxf(0.0, travel_start_time - _coin_delays[index] \
-			- COIN_TRAY_POP_TIME))
-		tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_method(_drive_coin_to_bottom.bind(
+			coin, coin.position, _coin_bottom_positions[index], _coin_rotations[index]),
+			0.0, 1.0, COIN_FALL_TIME)
+		tween.tween_interval(COIN_BOTTOM_HOLD_TIME)
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tween.tween_method(_drive_coin_to_pile.bind(
-			coin, _coin_tray_piles[index], _coin_burst_positions[index], _coin_targets[index],
-			_coin_rotations[index], _coin_alphas[index]), 0.0, 1.0, COIN_PILE_FLIGHT_TIME)
+			coin, _coin_bottom_positions[index], _coin_targets[index], _coin_rotations[index],
+			_coin_alphas[index]), 0.0, 1.0, COIN_PILE_SETTLE_TIME)
 
 
-func _drive_coin_tray_pop(t: float, coin: TextureRect, from_pos: Vector2,
-		pile_pos: Vector2) -> void:
+func _drive_coin_to_bottom(t: float, coin: TextureRect, from_pos: Vector2,
+		to_pos: Vector2, target_rotation: float) -> void:
 	if not is_instance_valid(coin):
 		return
 	var eased := 1.0 - (1.0 - t) * (1.0 - t)
-	var pop := sin(t * PI) * COIN_TRAY_POP_RISE
-	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
+	var lift := sin(t * PI) * COIN_FALL_RISE
+	coin.position = from_pos.lerp(to_pos, eased) + Vector2(0.0, -lift)
+	coin.rotation = lerpf(0.0, target_rotation, t)
 	coin.modulate.a = minf(t / 0.06, 1.0)
 
 
 func _drive_coin_to_pile(t: float, coin: TextureRect, from_pos: Vector2,
-		burst_pos: Vector2, to_pos: Vector2, target_rotation: float, target_alpha: float) -> void:
+		to_pos: Vector2, target_rotation: float, target_alpha: float) -> void:
 	if not is_instance_valid(coin):
 		return
-	var p: Vector2
-	if t < COIN_BURST_FRAC:
-		p = from_pos.lerp(burst_pos, t / COIN_BURST_FRAC)
-	else:
-		p = burst_pos.lerp(to_pos, (t - COIN_BURST_FRAC) / (1.0 - COIN_BURST_FRAC))
-	coin.position = p
+	var eased := 1.0 - (1.0 - t) * (1.0 - t)
+	var settle_lift := sin(t * PI) * COIN_PILE_SETTLE_RISE
+	coin.position = from_pos.lerp(to_pos, eased) + Vector2(0.0, -settle_lift)
 	coin.rotation = lerpf(0.0, target_rotation, t)
 	if t < 0.1:
 		coin.modulate.a = t / 0.1

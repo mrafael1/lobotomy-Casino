@@ -2322,7 +2322,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: coin flood is not using coin_cumulable.png")
 	if wealth_screen != null and first_coin != null:
 		wealth_screen._drive_coin_to_pile(1.0, first_coin, first_coin.position,
-			first_coin.position, first_coin.position, 0.0, 0.9)
+			first_coin.position, 0.0, 0.9)
 		if first_coin.modulate.a < 0.89:
 			failures.append("wealth: landed coin faded out instead of staying in the pile")
 	if wealth_screen != null and wealth_screen.get("_cash_tray_pos") != machine._cash_tray_pos():
