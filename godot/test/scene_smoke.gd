@@ -83,6 +83,7 @@ func _run() -> void:
 	_check_augmented_run_111(machine, run_store, meta_store, failures)
 	await _check_augmented_menu_111(run_store, meta_store, failures)
 	_check_run_persistence_111(run_store, failures)
+	_check_save_resume_151(machine, run_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -4659,6 +4660,55 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):
 		failures.append("persistence: reset left a stale run snapshot behind")
+
+# Issue #151: a save written after the final neuron drain but before the post-spin
+# ending check must resolve to an ending when the machine scene is rebuilt.
+func _check_save_resume_151(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.wealthEndingReached = false
+	meta_store.campaignNeuronsLeft = maxi(1, int(meta_store.campaignNeuronsMax))
+	# campaignNeuronsLeft >= 1 and campaignNeuronPending == false keep this as flatline.
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	run_store.isSpinning = false
+	run_store.scoreEarned = 123
+	run_store.lastResult = {
+		"reels": ["brain", "eye", "vial"],
+		"winType": "miss",
+		"freeSpinsGranted": 0,
+	}
+	run_store._commit()
+	if not FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("issue151: exhausted running save was not written")
+
+	# Re-enter through the same autoload load path used after an app restart.
+	run_store.runPhase = "idle"
+	run_store.neurons = 10
+	run_store.lastResult = null
+	run_store.load_run_state()
+	machine._sync_visuals()
+
+	if String(run_store.runPhase) == "running":
+		failures.append("issue151: exhausted save left a running zero-spin machine")
+	if String(run_store.lastEnding) != "flatline":
+		failures.append("issue151: exhausted save ended as %s, expected flatline"
+			% str(run_store.lastEnding))
+	if machine._overlay == null:
+		failures.append("issue151: exhausted save showed no ending overlay")
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._stop_flatline_countdown()
+
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 # Augmented Run menu (issue #111): the selector is hidden before the unlock and
 # appears under START RUN afterwards, communicating the tier before the start.

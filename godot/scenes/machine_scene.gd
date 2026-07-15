@@ -1474,6 +1474,20 @@ func _sync_visuals() -> void:
 	_refresh_jackpot_lamp(false)
 	if resume_interrupted_spin:
 		_resolve_interrupted_spin()
+	else:
+		_resolve_exhausted_resume()
+
+## A save can land after the final neuron cost is committed but before the normal
+## post-reveal ending check runs. Reconcile that state when the machine is rebuilt so
+## an exhausted running save cannot leave a zero-spin machine with no action.
+func _resolve_exhausted_resume() -> void:
+	if RunStateStore.runPhase != "running":
+		return
+	if int(RunStateStore.neurons) > 0 or int(RunStateStore.freeSpinsRemaining) > 0:
+		return
+	if _check_flatline_instant_death():
+		return
+	_check_ending()
 
 ## Finalizes a spin whose committed result never got resolved because its scene was
 ## freed before _run_post_reveal_sequence ran (issue #77). Runs the same non-visual
@@ -1486,6 +1500,7 @@ func _resolve_interrupted_spin() -> void:
 	_refresh_lock_art()
 	if RunStateStore.lastResult == null:
 		_update_hud() # defensive: nothing to resolve, just re-enable controls
+		_resolve_exhausted_resume()
 		return
 	RunStateStore.check_dealer_trigger()
 	var dealer_pending := RunStateStore.dealerIncoming
