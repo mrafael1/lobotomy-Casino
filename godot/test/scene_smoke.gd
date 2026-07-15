@@ -2262,20 +2262,21 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 		if game_over_screen.get_node_or_null("Dim") != null \
 				or game_over_screen.get_node_or_null("TVPanel") != null:
 			failures.append("game over: opaque background/TV overlay should be absent")
-		if not game_over_screen.has_method("_draw"):
-			failures.append("game over: broken machine damage effect is missing")
-		var joker := game_over_screen.get_node_or_null("JokerIcon") as TextureRect
-		if joker == null or joker.texture == null:
-			failures.append("game over: joker icon is missing from the TV")
+		if game_over_screen.get_node_or_null("JokerIcon") != null:
+			failures.append("game over: joker icon should be removed")
+		var machine_game_over := game_over_screen.get_node_or_null(
+			"MachineGameOver") as TextureRect
+		if machine_game_over == null or machine_game_over.texture == null:
+			failures.append("game over: machine_game_over asset is missing")
 		else:
-			var tv_rect: Dictionary = machine.TV_SCREEN
-			var tv_bounds := Rect2(float(tv_rect["left"]), float(tv_rect["top"]),
-				float(tv_rect["width"]), float(tv_rect["height"]))
-			if not tv_bounds.encloses(Rect2(joker.position, joker.size)) \
-					or (joker.position + joker.size * 0.5).distance_to(tv_bounds.get_center()) > 0.5:
-				failures.append("game over: joker icon is not centered in the machine TV")
-			if not is_equal_approx(joker.modulate.a, 0.8):
-				failures.append("game over: joker icon opacity is not 0.8")
+			if not String(machine_game_over.texture.resource_path).ends_with(
+					"machine_game_over.png"):
+				failures.append("game over: wrong machine_game_over texture is mounted")
+			if machine_game_over.size != Vector2(160.0, 320.0):
+				failures.append("game over: machine_game_over asset is not full-canvas")
+		if FileAccess.get_file_as_string("res://scenes/game_over_ending_overlay.gd").contains(
+				"func _draw"):
+			failures.append("game over: procedural glitch/damage filter should be removed")
 	if int(run_store.lucidityCoins) != 0:
 		failures.append("game over: run credits did not reach zero")
 	if int(meta_store.lucidityWallet) != 0:

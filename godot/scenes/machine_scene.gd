@@ -4524,8 +4524,8 @@ func _build_flatline_screen(run: Dictionary) -> void:
 
 
 ## Terminal campaign ending: the machine remains visible, damaged, and un-dimmed.
-## The dedicated scene owns the red title, zero-credit readout, TV joker, and
-## broken-neon retry action; the machine keeps the state transition here.
+## The dedicated scene owns the game-over machine art, red title, zero-credit
+## readout, and broken-neon retry action; the machine keeps the state transition here.
 func _build_game_over_screen() -> void:
 	_clear_wealth_presentation_fx()
 	var game_over_screen := GAME_OVER_ENDING_SCENE.instantiate() as GameOverEndingOverlay
