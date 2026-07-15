@@ -272,10 +272,9 @@ func _drive_coin_to_pile(t: float, coin: TextureRect, from_pos: Vector2,
 	coin.rotation = lerpf(0.0, target_rotation, t)
 	if t < 0.1:
 		coin.modulate.a = t / 0.1
-	elif t < 0.85:
-		coin.modulate.a = target_alpha
 	else:
-		coin.modulate.a = target_alpha * (1.0 - ((t - 0.85) / 0.15))
+		# Unlike normal reward coins, these are the permanent wealth-ending pile.
+		coin.modulate.a = target_alpha
 
 
 func _on_start_again_pressed() -> void:

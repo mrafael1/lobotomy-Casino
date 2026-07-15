@@ -2281,6 +2281,14 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
+	# A deferred store commit can refresh the HUD after the ending is built. The
+	# wealth presentation must keep the machine bars hidden through that path too.
+	machine._update_hud()
+	for node_name: String in [
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
+		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
+			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
 	var start_again_button: Button = null
 	for node: Node in machine._overlay.find_children("*", "Button", true, false):
 		var button := node as Button
@@ -2312,6 +2320,11 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if first_coin == null or first_coin.texture == null \
 			or not String(first_coin.texture.resource_path).ends_with("coin_cumulable.png"):
 		failures.append("wealth: coin flood is not using coin_cumulable.png")
+	if wealth_screen != null and first_coin != null:
+		wealth_screen._drive_coin_to_pile(1.0, first_coin, first_coin.position,
+			first_coin.position, first_coin.position, 0.0, 0.9)
+		if first_coin.modulate.a < 0.89:
+			failures.append("wealth: landed coin faded out instead of staying in the pile")
 	if wealth_screen != null and wealth_screen.get("_cash_tray_pos") != machine._cash_tray_pos():
 		failures.append("wealth: coin flood did not receive the machine cash-tray position")
 	if first_coin != null and coin_clip != null:

@@ -1792,10 +1792,18 @@ func _play_compulsive_shake() -> void:
 	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
 
 func _update_hud() -> void:
+	if _wealth_ending_is_visible():
+		# The wealth overlay owns the final presentation. Store commits can still emit
+		# state_changed while it is open, but those refreshes must not redraw the TV bars.
+		_set_tv_progress_bars_visible(false)
+		return
 	_refresh_tv_indicators()
 	_refresh_campaign_label()
 	_refresh_controls()
 	_refresh_consumable_fx()
+
+func _wealth_ending_is_visible() -> bool:
+	return _overlay != null and _overlay.get_node_or_null("WealthEndingOverlay") != null
 
 ## Lets the held HUD deltas (multiplier badge, bars, jackpot lamp) pop, once the
 ## score popup has had its beat on screen.
