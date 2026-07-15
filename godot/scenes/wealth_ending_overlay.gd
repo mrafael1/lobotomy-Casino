@@ -16,7 +16,9 @@ const DEFAULT_CASH_TRAY_POS := Vector2(80.0, 298.0)
 const COIN_PILE_COLUMNS := 20
 const COIN_PILE_ROW_SPACING := 3.35
 const COIN_RELEASE_START_DELAY := 0.12
-const COIN_RELEASE_STAGGER := 0.001
+# Spread the release so the wealth pile builds over several seconds instead of
+# arriving as one short burst; the fall itself keeps the classic slot cadence.
+const COIN_RELEASE_STAGGER := 0.006
 const COIN_FALL_TIME := 0.36
 const COIN_BOTTOM_HOLD_TIME := 0.14
 const COIN_PILE_SETTLE_TIME := 0.24
