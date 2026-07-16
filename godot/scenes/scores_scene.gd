@@ -27,6 +27,7 @@ const SYMBOL_PIVOT := Vector2(76.5, 156.0)
 # each side squashes independently on press like the start-menu selector.
 const ARROW_LEFT_CROP := Rect2(50.0, 144.0, 27.0, 24.0)
 const ARROW_RIGHT_CROP := Rect2(77.0, 144.0, 27.0, 24.0)
+const CLOSE_BUTTON_RECT := Rect2(52.0, 290.0, 56.0, 14.0)
 
 const STAT_COLOR := Color(0.94, 0.96, 0.86)
 const WEALTH_COLOR := Color(1.0, 0.72, 0.4)
@@ -92,8 +93,9 @@ func _build() -> void:
 	_value(Vector2(48.0, 223.0), 7, SECRET_COLOR,
 		"date  %s" % _fmt_date(h.get("exitEndingReachedAt", null)))
 
-	# The cabinet button bar's X plate is the back action.
-	_hit_button("BackButton", Rect2(97.0, 252.0, 30.0, 30.0), _go_back)
+	# The cabinet button bar's X plate is decorative; the explicit neon button
+	# below the cabinet is the only close action.
+	_build_close_button()
 
 func _label(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -168,6 +170,18 @@ func _hit_button(node_name: String, rect: Rect2, cb: Callable) -> Button:
 	b.pressed.connect(cb)
 	add_child(b)
 	return b
+
+func _build_close_button() -> void:
+	var close := Button.new()
+	close.name = "CloseButton"
+	close.text = "CLOSE"
+	close.position = CLOSE_BUTTON_RECT.position
+	close.size = CLOSE_BUTTON_RECT.size
+	close.focus_mode = Control.FOCUS_NONE
+	Assets.small_neon_button_style(close, Assets.START_MENU_BUTTON_PINK, 6, 2.0)
+	Assets.start_menu_button_press_feedback(close)
+	close.pressed.connect(_go_back)
+	add_child(close)
 
 # Arrow hit area: pressing squashes the arrow art, release springs it back as
 # the tier cycles — same feel as the start-menu selector arrows.
