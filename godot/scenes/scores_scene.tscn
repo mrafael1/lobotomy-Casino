@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://c5rncr65vpkeg"]
+[gd_scene format=3 uid="uid://c5rncr65vpkeg"]
 
 [ext_resource type="Script" uid="uid://dsunvi411gnvg" path="res://scenes/scores_scene.gd" id="1_scores"]
 
-[node name="ScoresScene" type="Control"]
+[node name="ScoresScene" type="Control" unique_id=1886259943]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
