@@ -210,8 +210,12 @@ func _seed(mix: int) -> int:
 	return (_now_ms() ^ mix) & M32
 
 func _can_act() -> bool:
-	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0 \
-		and not comboDefeatPending
+	return _can_use_consumable() and not comboDefeatPending
+
+## Consumables stay usable while a combo defeat is pending: the losing state is a
+## rescue window, and a corrective item is a legitimate way out of it.
+func _can_use_consumable() -> bool:
+	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
 
 func _can_use_ability() -> bool:
 	return runPhase == "running" and not isSpinning and lastResult != null \
@@ -1101,7 +1105,7 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 ## ignored by every other consumable. Falls back to the first non-excluded cycle
 ## symbol when empty or not in the pickable pool.
 func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
-	if not _can_act():
+	if not _can_use_consumable():
 		return false
 	if dealerIncoming or dealerPending:
 		return false

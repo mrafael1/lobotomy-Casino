@@ -70,7 +70,7 @@ func _run() -> void:
 	_check_deferred_negative_76(machine, failures)
 	_check_dealer_pacing_76(run_store, failures)
 	_check_frenzy_gauge_155(run_store, failures)
-	_check_pending_combo_and_free_spin_ui(machine, run_store, failures)
+	await _check_pending_combo_and_free_spin_ui(machine, run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
 	_check_power_bar_76(machine, run_store, failures)
@@ -3031,6 +3031,51 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
 		failures.append("combo pending: failed power was not settled by spin confirmation")
+
+	# Simplified losing state: consumables stay usable while the warning beeps, no
+	# text bubble may appear while it is active, and a corrective power/consumable
+	# cancels the warning immediately — beep stopped and loss art removed before
+	# the reward presentation, without waiting for the confirming spin.
+	run_store.abilitiesUsed = []
+	run_store.lastComboMultiplier = 2
+	run_store.betMultiplier = 2
+	run_store.pendingComboMultiplier = 2
+	run_store.comboDefeatPending = true
+	run_store.lastResult = { "reels": ["eye", "vial", "eye"], "isJackpot": false,
+		"winType": "miss", "scoreEarned": 0, "coinsEarned": 0,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isFreeSpin": false,
+		"scoreMultiplier": 1.0 }
+	machine._show_pending_combo_defeat()
+	run_store.runConsumables = { "item_water": 1 }
+	machine._refresh_controls()
+	if machine._stash_icons.size() > 0 \
+			and machine._stash_icons[0].modulate != Color.WHITE:
+		failures.append("combo pending: stash icons read disabled during the losing state")
+	if machine._spawn_hint("item_water", false, false) != null:
+		failures.append("combo pending: consumable text bubble appeared during the losing state")
+	if not run_store.use_consumable("item_water"):
+		failures.append("combo pending: consumables were blocked during the losing state")
+	elif not bool(run_store.comboDefeatPending):
+		failures.append("combo pending: a non-corrective consumable settled the losing state")
+	run_store.pendingPowerRestores = []
+	# Sync the burst tracker so the water's +40 lucidity doesn't add a long coin
+	# flight to the copy's reward presentation.
+	machine._coin_prev_lucidity = int(run_store.lucidityCoins)
+	machine._copy_source = 0
+	machine._on_copy_pick(1) # copy the eye onto the vial reel -> a rescuing triple
+	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 3:
+		failures.append("combo pending: copy-made win did not rescue the combo (got x%d)" % int(run_store.betMultiplier))
+	if machine._pending_combo_overlay != null or machine._combo_loss_beep_tween != null:
+		failures.append("combo pending: rescue did not cancel the warning immediately")
+	var loss_2_rescued := machine.get_node_or_null("ComboLoss2") as Sprite2D
+	var loss_3_rescued := machine.get_node_or_null("ComboLoss3") as Sprite2D
+	if (loss_2_rescued != null and loss_2_rescued.visible) \
+			or (loss_3_rescued != null and loss_3_rescued.visible):
+		failures.append("combo pending: loss art stayed visible after the rescue")
+	# Let the copy's in-flight reward presentation settle before the next blocks
+	# re-open the pending window, so its tail cannot race their assertions.
+	await machine.get_tree().create_timer(1.6).timeout
+	run_store.runConsumables = {}
 
 	# No available rescue power still waits for the next spin to confirm the loss.
 	run_store.lastResult = { "reels": ["eye", "vial", "pill"], "isJackpot": false,

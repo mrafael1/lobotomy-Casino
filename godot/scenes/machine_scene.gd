@@ -1922,6 +1922,12 @@ func _close_pending_combo_defeat() -> void:
 		_pending_combo_overlay = null
 	_refresh_controls()
 
+## A rescue cancels the warning the moment the store clears the pending flag — the
+## beep and the losing-state art must not linger through the reward presentation.
+func _maybe_cancel_combo_defeat_warning(was_pending: bool) -> void:
+	if was_pending and not RunStateStore.comboDefeatPending:
+		_close_pending_combo_defeat()
+
 func _set_combo_loss_display(multiplier: int) -> void:
 	if _combo_loss_2_sprite != null:
 		_combo_loss_2_sprite.visible = multiplier == 2
@@ -2980,7 +2986,10 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	if _dealer_offer_popup != null:
 		_begin_dealer_drag(node, String(slots[slot_index]), "stash")
 		return
-	if _sequence_lock_active or _spin_launch_pending or not RunStateStore._can_act() or _reroll_anim_active:
+	# The pending-defeat rescue window keeps consumables live (issue #155 follow-up):
+	# a corrective item can still cancel the losing state before the confirming spin.
+	if (_sequence_lock_active and not RunStateStore.comboDefeatPending) \
+			or _spin_launch_pending or not RunStateStore._can_use_consumable() or _reroll_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -3039,8 +3048,8 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active \
-			and not _sequence_lock_active and not _free_spin_overlay_active) \
+	var usable := (RunStateStore._can_use_consumable() and not _spin_launch_pending and not _reroll_anim_active \
+			and (not _sequence_lock_active or combo_pending) and not _free_spin_overlay_active) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -3160,6 +3169,7 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 		_hud_delta_hold = true # deltas pop with the reroll's score popup (issue #54)
 		if RunStateStore.reroll_reel(reel_index):
 			_pending_combo_power_flow = combo_pending
+			_maybe_cancel_combo_defeat_warning(combo_pending)
 			_clear_targeting()
 			_start_reroll_animation(reel_index)
 			_update_hud()
@@ -3247,6 +3257,7 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 			_refresh_controls()
 		return
 	_pending_combo_power_flow = combo_pending
+	_maybe_cancel_combo_defeat_warning(combo_pending)
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
@@ -3841,6 +3852,10 @@ func _pill_guaranteed_spin_pending() -> bool:
 ## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
 ## just the upside. Otherwise both lines show (the classic on-use hint).
 func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLabel:
+	# The losing state is represented by the loss art and its beep alone — no text
+	# bubble may appear while it is active, including on-use consumable hints.
+	if RunStateStore.comboDefeatPending:
+		return null
 	var hint: Dictionary = use_hints.get(id, {})
 	if hint.is_empty():
 		return null
@@ -3877,9 +3892,10 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 const SERUM_PICKER_RECT := Rect2(12.0, 132.0, 136.0, 58.0)
 
 func _begin_serum() -> void:
-	if _free_spin_overlay_active or _sequence_lock_active or _serum_picker != null:
+	if _free_spin_overlay_active or _serum_picker != null \
+			or (_sequence_lock_active and not RunStateStore.comboDefeatPending):
 		return
-	if not RunStateStore._can_act():
+	if not RunStateStore._can_use_consumable():
 		return
 	_build_serum_picker()
 
@@ -4000,9 +4016,10 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
 func _begin_white_powder() -> void:
-	if _free_spin_overlay_active or _sequence_lock_active:
+	if _free_spin_overlay_active \
+			or (_sequence_lock_active and not RunStateStore.comboDefeatPending):
 		return
-	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
+	if not RunStateStore._can_use_consumable() or RunStateStore.lastResult == null:
 		return
 	if not RunStateStore.use_consumable("cons_white_powder"):
 		return
@@ -4013,7 +4030,8 @@ func _begin_white_powder() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
 func _on_copy_pick(reel_index: int) -> void:
-	if _free_spin_overlay_active or _sequence_lock_active:
+	if _free_spin_overlay_active \
+			or (_sequence_lock_active and not RunStateStore.comboDefeatPending):
 		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
@@ -4021,8 +4039,11 @@ func _on_copy_pick(reel_index: int) -> void:
 	else:
 		var src := _copy_source
 		_copy_source = -1
+		var combo_pending := RunStateStore.comboDefeatPending
 		_hud_delta_hold = true # deltas pop with the copy's score popup (issue #54)
-		RunStateStore.copy_reel(src, reel_index)
+		if RunStateStore.copy_reel(src, reel_index):
+			_pending_combo_power_flow = combo_pending
+			_maybe_cancel_combo_defeat_warning(combo_pending)
 		_play_white_powder_distortion()
 		_clear_targeting()
 		_refresh_reels_from_state()
