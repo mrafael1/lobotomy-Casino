@@ -33,20 +33,15 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
 
 @export_group("Dealer Interruptions")
-# Issue #76: no hard 3-per-run cap anymore — the dealer is a pressure system that keeps
-# showing up on long safe runs. Kept as a high sentinel so the pinned guard still has a
-# ceiling, but in practice the min gap + run length pace it, not this.
+# Issue #76: no hard 3-per-run cap anymore — the dealer is a pressure system. Kept as a
+# high sentinel so the guard still has a ceiling; the countdown paces visits, not this.
 @export var dealer_max_count: int = 99
-@export var dealer_min_spin_gap: int = Dealer.MIN_SPIN_GAP
-@export_range(0.0, 1.0, 0.01) var dealer_high_threshold: float = Dealer.THRESHOLD_HIGH
-@export_range(0.0, 1.0, 0.01) var dealer_low_threshold: float = Dealer.THRESHOLD_LOW
-# Base per-spin proc right after a visit; it ramps up the longer the dealer stays away
-# (dealer_proc_ramp per eligible spin, scaled by 1/bet so safer x1 runs build pressure
-# fastest and x3 slowest), capped at dealer_proc_max. Keeps x1 from long dealer droughts
-# while x3's short run naturally yields fewer visits (issue #76).
-@export_range(0.0, 1.0, 0.01) var dealer_proc_chance: float = Dealer.PROC_CHANCE
-@export_range(0.0, 0.5, 0.005) var dealer_proc_ramp: float = 0.05
-@export_range(0.0, 1.0, 0.01) var dealer_proc_max: float = 0.6
+# Issue #155: dealer randomness is gone. The dealer runs on a fixed, visible countdown:
+# it starts at dealer_countdown_start, every completed spin ticks it down by the
+# multiplier used at spin start (x1/x2/x3 → -1/-2/-3), 0 triggers the visit, and the
+# countdown resets once the offer resolves. No overflow carry (an x3 spin at 1 just
+# lands the dealer). The augmented club modifier halves visits by doubling the reset.
+@export var dealer_countdown_start: int = 8
 
 # Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
@@ -84,6 +79,9 @@ var startingNeurons := 0
 var scoreEarned := 0
 var lucidityCoins := 0
 var freeSpinsRemaining := 0
+## Presentation event counter: unlike the banked count, this still changes when a
+## free-spin grant replaces a free spin that was consumed in the same result.
+var freeSpinGrantSerial := 0
 var maxFreeSpins := EconomyConst.BASE_MAX_FREE_SPINS
 var lucidityMultiplier := EconomyConst.BASE_LUCIDITY_MULTIPLIER
 var nextSpinLucidityMultiplier := 1.0
@@ -100,12 +98,18 @@ var ownedUpgrades: Array = []
 var lastPowerFailureReason := ""
 var spinCount := 0
 var isFreeSpin := false
+## Issue #155: no longer a player toggle — a frenzy gauge the run drives itself.
+## Each paying win steps it x1 → x2 → x3. A losing spin opens a short rescue window;
+## declining or failing to rescue it decreases the gauge by one level. Powers that
+## turn the outcome into a win after the reveal rescue the combo.
 var betMultiplier := 1
+var lastComboMultiplier := 1 # gauge value the last spin ran at (power-rescue base)
+var comboDefeatPending := false # loss awaiting a power-rescue decision
+var pendingComboMultiplier := 1 # gauge value held while the rescue window is open
 var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
 var dealerCount := 0
 var dealerLastSpinCount := 0
-var dealer65SafetyFired := false
-var dealer35SafetyFired := false
+var dealerCountdown := 8 # issue #155: spins until the dealer (start value re-applied per run)
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null
@@ -206,11 +210,41 @@ func _seed(mix: int) -> int:
 	return (_now_ms() ^ mix) & M32
 
 func _can_act() -> bool:
-	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
+	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0 \
+		and not comboDefeatPending
 
 func _can_use_ability() -> bool:
-	return _can_act() and lastResult != null and blockPowersSpins <= 0 \
+	return runPhase == "running" and not isSpinning and lastResult != null \
+		and compulsiveSpinSkips <= 0 and blockPowersSpins <= 0 \
 		and not _augmented_powers_blocked()
+
+## Powers that can alter the already-revealed reels are the only valid combo-rescue
+## choices. Memory affects a future spin and therefore is intentionally not offered
+## while the current defeat is pending.
+func pending_combo_power_ids() -> Array[String]:
+	var ids: Array[String] = []
+	if not comboDefeatPending or not _can_use_ability():
+		return ids
+	if not abilitiesUsed.has("reroll") \
+			and not pendingPowerRestores.has("reroll"):
+		ids.append("reroll")
+	if ownedUpgrades.has("perm_shift") and not abilitiesUsed.has("shift") \
+			and not pendingPowerRestores.has("shift"):
+		ids.append("shift")
+	return ids
+
+## Resolves a pending defeat without touching the scored result. A successful power
+## action normally resolves the flag through _apply_outcome(); this method handles
+## an explicit decline, timeout, unavailable power, or failed power attempt.
+func resolve_pending_combo_defeat(rescued: bool = false) -> bool:
+	if not comboDefeatPending:
+		return false
+	var base := clampi(pendingComboMultiplier, 1, 3)
+	betMultiplier = mini(3, base + 1) if rescued else maxi(1, base - 1)
+	comboDefeatPending = false
+	pendingComboMultiplier = 1
+	_commit()
+	return true
 
 ## Whether a numbered Augmented modifier applies to this run (joker = all four).
 func augmented_modifier_active(modifier: int) -> bool:
@@ -301,6 +335,11 @@ func load_run_state() -> void:
 func spin(compulsive := false) -> Variant:
 	if runPhase != "running" or isSpinning:
 		return null
+	# The gameplay scene normally resolves this through the pending UI. A direct
+	# caller that requests another spin has implicitly declined the rescue instead
+	# of leaving the store permanently locked.
+	if comboDefeatPending:
+		resolve_pending_combo_defeat(false)
 	var is_compulsive: bool = compulsive and compulsiveSpinSkips > 0
 	if not is_compulsive and compulsiveSpinSkips > 0:
 		return null
@@ -314,19 +353,18 @@ func spin(compulsive := false) -> Variant:
 	var stasis: bool = (not is_compulsive) and (not is_free) and decaySkips > 0
 	var sedative: bool = (not is_compulsive) and (not is_free) and Economy.has_sedative(ownedUpgrades) and (spinCount + 1) % 3 == 0
 
-	var eff_bet := betMultiplier
+	# Issue #155: the gauge value this spin runs at. The multiplier no longer costs
+	# extra neurons or free spins — its downside is the dealer countdown ticking
+	# faster (x2/x3 pull the dealer in 2x/3x as fast).
+	var combo_before := clampi(betMultiplier, 1, 3)
+	var eff_bet := combo_before
 	if is_compulsive:
 		eff_bet = 1
 	elif forcedRandomBetSpins > 0 and eff_bet == 3:
-		eff_bet = 2
-	if is_free:
-		eff_bet = mini(eff_bet, maxi(1, freeSpinsRemaining))
-	elif (not stasis) and (not sedative):
-		var budget := maxi(1, ceili(float(neurons) / EconomyConst.NEURON_DECAY_PER_SPIN))
-		eff_bet = mini(eff_bet, budget)
+		eff_bet = 2 # Energy Drink dulls the frenzy: x3 runs as x2 for its duration
 
 	var base_decay := Economy.compute_neuron_decay(ownedUpgrades)
-	var decay_amt := 0 if (stasis or sedative or is_free) else mini(eff_bet * base_decay, neurons)
+	var decay_amt := 0 if (stasis or sedative or is_free) else mini(base_decay, neurons)
 
 	var brain_bonus := Economy.compute_brain_weight_bonus(ownedUpgrades)
 	if brainBoostSpins > 0:
@@ -380,7 +418,7 @@ func spin(compulsive := false) -> Variant:
 		"maxFreeSpins": maxFreeSpins,
 		"lucidityMultiplier": eff_mult,
 		"isFreeSpin": is_free,
-		"freeSpinCost": (eff_bet if is_free else 1),
+		"freeSpinCost": 1, # issue #155: the auto gauge never drains banked free spins faster
 		"lockedReels": lockedReels,
 		"previousReels": (lastResult["reels"] if lastResult != null else null),
 		"rng": rng,
@@ -498,8 +536,26 @@ func spin(compulsive := false) -> Variant:
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
+	if int(final_result.get("freeSpinsGranted", 0)) > 0:
+		freeSpinGrantSerial += 1
 	lastPotionEffect = potion_pick
 	lastEffectiveBet = clampi(eff_bet, 1, 3)
+	# Issue #155 frenzy gauge: a paying win steps the multiplier up. A defeat keeps
+	# the pre-spin value visible until the machine's pending rescue state resolves;
+	# compulsive spins are machine-forced and leave the gauge alone.
+	lastComboMultiplier = combo_before
+	if not is_compulsive:
+		if _is_winning_result(final_result):
+			betMultiplier = _combo_after(combo_before, final_result)
+			comboDefeatPending = false
+			pendingComboMultiplier = 1
+		else:
+			comboDefeatPending = true
+			pendingComboMultiplier = combo_before
+			betMultiplier = combo_before
+	# Issue #155 dealer countdown: every completed spin ticks it by the multiplier
+	# actually used this spin. No overflow carry — it just floors at 0.
+	dealerCountdown = maxi(0, dealerCountdown - clampi(eff_bet, 1, 3))
 	spinCount += 1
 	powersUsedThisSpin = 0 # diamond modifier counts power uses per spin
 	nextSpinLucidityMultiplier = 1.0
@@ -550,13 +606,15 @@ func set_spinning(v: bool) -> void:
 		isSpinning = false
 	_commit()
 
-func set_bet_multiplier(m: int) -> void:
-	if not _can_act():
-		return
-	if m == 3 and forcedRandomBetSpins > 0:
-		return
-	betMultiplier = m
-	_commit()
+## Issue #155: a result is a combo-sustaining win only when it actually pays —
+## flatline pairs/triples come back as winType "pair"/"triple" with 0 score and
+## must break the frenzy like any miss.
+func _is_winning_result(result: Dictionary) -> bool:
+	return String(result["winType"]) in ["pair", "triple", "jackpot"] \
+		and int(result["scoreEarned"]) > 0
+
+func _combo_after(prev: int, result: Dictionary) -> int:
+	return mini(3, prev + 1) if _is_winning_result(result) else maxi(1, prev - 1)
 
 # ── run lifecycle ──────────────────────────────────────────────────────────────────
 
@@ -580,11 +638,13 @@ func reset_run_state() -> void:
 	spinCount = 0
 	isFreeSpin = false
 	betMultiplier = 1
+	lastComboMultiplier = 1
+	comboDefeatPending = false
+	pendingComboMultiplier = 1
 	lastEffectiveBet = 1
 	dealerCount = 0
 	dealerLastSpinCount = 0
-	dealer65SafetyFired = false
-	dealer35SafetyFired = false
+	dealerCountdown = dealer_countdown_start
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
@@ -691,10 +751,12 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	spinCount = 0
 	isFreeSpin = false
 	betMultiplier = 1
+	lastComboMultiplier = 1
+	comboDefeatPending = false
+	pendingComboMultiplier = 1
 	dealerCount = 0
 	dealerLastSpinCount = 0
-	dealer65SafetyFired = false
-	dealer35SafetyFired = false
+	dealerCountdown = dealer_countdown_reset_value() # augmentedTier already set (issue #111)
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
@@ -787,6 +849,7 @@ func grant_free_spins(count: int) -> void:
 	if count <= 0:
 		return
 	freeSpinsRemaining += count
+	freeSpinGrantSerial += 1
 	_commit()
 
 ## Restores normal spins-left budget by replenishing neurons.
@@ -915,7 +978,16 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	lr["freeSpinsGranted"] = int(lastResult["freeSpinsGranted"]) + (free_after - freeSpinsRemaining)
 	lr["freeSpinsAfter"] = free_after
 	freeSpinsRemaining = free_after
+	if int(outcome.get("freeSpinsGranted", 0)) > 0:
+		freeSpinGrantSerial += 1
 	lastResult = lr
+	# Issue #155: powers protect the frenzy — the gauge re-derives from the
+	# power-modified outcome, stepping from the value the spin actually ran at,
+	# so turning a miss into a paying win rescues the combo (and vice versa).
+	var combo_base := pendingComboMultiplier if comboDefeatPending else lastComboMultiplier
+	betMultiplier = _combo_after(combo_base, lr)
+	comboDefeatPending = false
+	pendingComboMultiplier = 1
 
 func reroll_reel(reel_index: int) -> bool:
 	if not _can_use_ability() or lastResult == null:
@@ -1000,7 +1072,7 @@ func lock_reel(reel_index: int) -> void:
 	_commit()
 
 func copy_reel(source_reel: int, target_reel: int) -> bool:
-	if not _can_act() or lastResult == null:
+	if not _can_use_ability() or lastResult == null:
 		return false
 	if _augmented_powers_blocked():
 		return false
@@ -1211,19 +1283,14 @@ func _symbol_reward_bonuses_from_meta(owned: Array) -> Dictionary:
 			out[symbol_id] = float(out.get(symbol_id, 0.0)) + odds_max_level_reward_bonus
 	return out
 
-## The per-spin dealer proc, ramped by how long the dealer's been away (issue #76). It
-## starts at dealer_proc_chance right after a visit and climbs by dealer_proc_ramp for
-## each eligible spin since, scaled by 1/bet so a safe x1 run builds pressure fastest and
-## a risky x3 run slowest — capped at dealer_proc_max. The pinned safety triggers (65%/35%
-## HP) are unchanged; this only shapes the random appearances between them.
-func _dealer_effective_proc() -> float:
-	var bet := clampi(betMultiplier, 1, 3)
-	var spins_over := maxi(0, spinCount - dealerLastSpinCount - dealer_min_spin_gap)
-	var proc := clampf(dealer_proc_chance + (dealer_proc_ramp / float(bet)) * spins_over, 0.0, dealer_proc_max)
-	# Augmented club modifier (issue #111): the dealer shows up half as often (the
-	# pinned 65%/35% HP safety triggers are untouched, like the ramp itself).
-	return proc * 0.5 if augmented_modifier_active(4) else proc
+## Issue #155: what the countdown resets to once an offer resolves. The augmented
+## club modifier keeps its "dealer visits halved" intent by doubling the wait.
+func dealer_countdown_reset_value() -> int:
+	return dealer_countdown_start * (2 if augmented_modifier_active(4) else 1)
 
+## Issue #155: the dealer runs on the fixed countdown — no randomness. The pure
+## Dealer trigger module (65%/35% safeties, proc rolls) stays parity-pinned but is
+## no longer consulted; the offer picks are still the vector-pinned Dealer rolls.
 func check_dealer_trigger() -> void:
 	if runPhase != "running" or dealerPending or dealerIncoming:
 		return
@@ -1231,34 +1298,20 @@ func check_dealer_trigger() -> void:
 		return
 	if dealerCount >= dealer_max_count:
 		return
-	if spinCount - dealerLastSpinCount < dealer_min_spin_gap:
+	if dealerCountdown > 0:
 		return
-	var decision := Dealer.evaluate_dealer_trigger({
-		"neurons": neurons, "startingNeurons": startingNeurons, "spinCount": spinCount,
-		"dealerCount": dealerCount, "dealerLastSpinCount": dealerLastSpinCount,
-		"dealer65SafetyFired": dealer65SafetyFired, "dealer35SafetyFired": dealer35SafetyFired,
-		"procSeed": _seed(spinCount * 0x9e3779b9 + 0xdeadbeef),
-		"maxCount": dealer_max_count,
-		"minSpinGap": dealer_min_spin_gap,
-		"highThreshold": dealer_high_threshold,
-		"lowThreshold": dealer_low_threshold,
-		"procChance": _dealer_effective_proc(),
-	})
-	dealer65SafetyFired = decision["dealer65SafetyFired"]
-	dealer35SafetyFired = decision["dealer35SafetyFired"]
-	if decision["shouldTrigger"]:
-		var offers: Variant = Dealer.pick_pool_offer(
-			InRunItems.ids(), _seed(spinCount * 0x6b43c7f), dealer_offer_count())
-		if offers == null:
-			_commit()
-			return
-		dealerCount += 1
-		dealerLastSpinCount = spinCount
-		dealerIncoming = true
-		dealerOfferIds = offers
-		# One dedicated Chip Augment offer per visit, rolled separately from the
-		# item offer (and never touched by the painting reroll).
-		dealerAugmentOfferId = _roll_augment_offer(_seed(spinCount * 0x51c4a9 + 0xa06))
+	var offers: Variant = Dealer.pick_pool_offer(
+		InRunItems.ids(), _seed(spinCount * 0x6b43c7f), dealer_offer_count())
+	if offers == null:
+		_commit()
+		return
+	dealerCount += 1
+	dealerLastSpinCount = spinCount
+	dealerIncoming = true
+	dealerOfferIds = offers
+	# One dedicated Chip Augment offer per visit, rolled separately from the
+	# item offer (and never touched by the painting reroll).
+	dealerAugmentOfferId = _roll_augment_offer(_seed(spinCount * 0x51c4a9 + 0xa06))
 	_commit()
 
 func reveal_dealer() -> void:
@@ -1273,6 +1326,7 @@ func decline_dealer_visit() -> void:
 	dealerPending = false
 	dealerOfferIds = null
 	dealerAugmentOfferId = "" # the visit's augment offer closes with the visit
+	dealerCountdown = dealer_countdown_reset_value() # issue #155: visit resolved
 	_commit()
 
 func accept_dealer_offer(item_id: String) -> void:
@@ -1284,23 +1338,13 @@ func accept_dealer_offer_with_limit(item_id: String, slot_limit: int) -> void:
 	if not (dealerOfferIds as Array).has(item_id):
 		return
 	var imap := InRunItems.map()
-	if not imap.has(item_id):
-		dealerPending = false
-		dealerOfferIds = null
-		dealerAugmentOfferId = ""
-		_commit()
-		return
-	if Consumables.total_copies(runConsumables) >= maxi(1, slot_limit):
-		dealerPending = false
-		dealerOfferIds = null
-		dealerAugmentOfferId = ""
-		_commit()
-		return
-	runConsumables = runConsumables.duplicate(true)
-	runConsumables[item_id] = int(runConsumables.get(item_id, 0)) + 1
+	if imap.has(item_id) and Consumables.total_copies(runConsumables) < maxi(1, slot_limit):
+		runConsumables = runConsumables.duplicate(true)
+		runConsumables[item_id] = int(runConsumables.get(item_id, 0)) + 1
 	dealerPending = false
 	dealerOfferIds = null
 	dealerAugmentOfferId = ""
+	dealerCountdown = dealer_countdown_reset_value() # issue #155: visit resolved
 	_commit()
 
 # Current price of the next offer reroll — shared by the pre-run shop and the

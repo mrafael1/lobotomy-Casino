@@ -58,6 +58,28 @@ const REEL_STOP_SFX_LEAD_TIME := 0.1
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
+# Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
+# blinking FREE SPINS TV overlay.
+const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
+const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
+const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
+const FREE_SPIN_SHEET := "machine new view/FREE_SPIN.png"
+const MULT_FX_2_FRAMES := 7
+const MULT_FX_3_FRAMES := 9
+const MULT_FX_FRAME_TIME := 0.09
+const FREE_SPIN_OVERLAY_TIME := 1.35
+const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
+const COMBO_PENDING_TIMEOUT := 4.0
+# Issue #155: TV dealer countdown (top-left of the screen). Lower = dealer closer;
+# 8-5 calm, 4-2 warning purple, 1 red.
+const DEALER_COUNTDOWN_TITLE_POS := Vector2(38.0, 44.0)
+const DEALER_COUNTDOWN_NUMBER_POS := Vector2(38.0, 50.0)
+const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
+const DEALER_ICON_POS := Vector2(27.0, 44.0)
+const DEALER_ICON_SIZE := Vector2(9.0, 9.0)
+const DEALER_COUNTDOWN_CALM_COLOR := Color(0.75, 0.92, 1.0)
+const DEALER_COUNTDOWN_WARN_COLOR := Color(0.78, 0.6, 0.95)
+const DEALER_COUNTDOWN_DANGER_COLOR := Color(1.0, 0.3, 0.35)
 const LOCK_POWER_FRAME_COUNT := 3
 const JACKPOT_FRAME_COUNT := 3
 const JACKPOT_FRAME_OFF := 0
@@ -138,6 +160,9 @@ const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
+const COMBO_PENDING_RECT := Rect2(29.0, 111.0, 102.0, 49.0)
+const COMBO_PENDING_COLOR := Color(0.05, 0.02, 0.11, 0.96)
+const COMBO_PENDING_ACCENT := Color(1.0, 0.32, 0.52)
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
 # vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
@@ -153,10 +178,9 @@ const SCORE_TABLE_INFO_ROW_Y := [58.3, 101.7, 145.1, 188.6, 232.0, 276.6]
 # Vertical centers of the art's row bands (dark grid lines sit at canvas y 23.4,
 # 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
 const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
-# Baked symbol column (the icon boxes on the left): hold one to peek at the
-# symbol's live draw chance, same mechanic as the dealer odds table.
-const SCORE_TABLE_SYMBOL_CX := 30.0
-const SCORE_TABLE_SYMBOL_HIT := Vector2(34.0, 35.0)
+# Issue #153: the draw-chance peek lives on an "i" button under the LVL value
+# (it used to sit on the baked symbol box), on the same baseline as the row's
+# triple-effect "i" (SCORE_TABLE_INFO_ROW_Y).
 # Per-symbol bubble colors — keep in sync with OddsTableOverlay.SYMBOL_PERCENT_COLORS
 # (can't reference the class here: pulling odds_table_overlay.gd into this
 # script's compile chain breaks headless -s runs, which compile before autoloads).
@@ -416,15 +440,30 @@ var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
-var _score_symbol_buttons: Array[Button] = []
+var _score_pct_buttons: Array[Button] = []
 var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
 var _spin_button: Button = null
-var _multiplier_buttons: Array[Button] = []
 var _multiplier_sprite: Sprite2D = null
+# Issue #155: authored frenzy-gauge effect sheets (x1 full-canvas strips) looping
+# over the badge strip while the gauge holds x2/x3, plus the blinking FREE SPINS
+# TV overlay that replaces the health bar while free spins are banked.
+var _mult_fx_2: Sprite2D = null
+var _mult_fx_3: Sprite2D = null
+var _mult_fx_fire: Sprite2D = null
+var _mult_fx_time := 0.0
+var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
+var _free_spin_sprite: Sprite2D = null
+var _free_spin_blink_time := 0.0
+var _free_spin_overlay_active := false
+var _free_spin_overlay_elapsed := 0.0
+var _queued_free_spin_overlays := 0
+var _observed_free_spins := 0
+var _observed_free_spin_grant_serial := 0
+var _free_spin_observation_initialized := false
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
@@ -473,6 +512,9 @@ var _font: FontFile = null
 var _tex_cache := {}
 var _sequence_lock_active := false
 var _post_spin_sequence_active := false
+var _pending_combo_overlay: Control = null
+var _pending_combo_power_flow := false
+var _pending_combo_timeout_token := 0
 var _sfx_players: Dictionary = {}
 var _spin_launch_pending := false
 
@@ -553,7 +595,6 @@ func _ready() -> void:
 	_build_machine_control_art()
 	_build_hud()
 	_build_spin_button()
-	_build_multiplier_buttons()
 	_build_power_buttons()
 	_build_stash()
 	_build_sfx_players()
@@ -658,6 +699,8 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
+	if rel.ends_with("FREE_SPIN.png"):
+		return "FreeSpinOverlay"
 	return ""
 
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
@@ -1093,6 +1136,15 @@ func _clear_boost_zero_linger() -> void:
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
+	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
+	# the frenzy reaches their state.
+	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
+	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
+	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
+	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite]:
+		if fx != null:
+			(fx as Sprite2D).visible = false
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
 	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
@@ -1263,6 +1315,58 @@ func _build_hud() -> void:
 	_build_hint_layer()
 	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
+	_build_dealer_countdown_labels()
+
+## Issue #155: "DEALER" + the countdown number on the TV's free top-left strip.
+## The number is the message: lower = dealer closer, higher multiplier = faster.
+func _build_dealer_countdown_labels() -> void:
+	var icon := TextureRect.new()
+	icon.name = "DealerIcon"
+	icon.position = DEALER_ICON_POS
+	icon.size = DEALER_ICON_SIZE
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = _load_texture(DEALER_ICON_ASSET, true)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.z_index = 12
+	add_child(icon)
+	_bar_labels["dealer_icon"] = icon
+	var title := Label.new()
+	title.name = "DealerCountdownTitle"
+	title.position = DEALER_COUNTDOWN_TITLE_POS
+	title.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		title.add_theme_font_override("font", _font)
+	title.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
+	title.text = "DEALER"
+	add_child(title)
+	_bar_labels["dealer_title"] = title
+	var number := Label.new()
+	number.name = "DealerCountdownNumber"
+	number.position = DEALER_COUNTDOWN_NUMBER_POS
+	number.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		number.add_theme_font_override("font", _font)
+	number.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
+	number.text = ""
+	add_child(number)
+	_bar_labels["dealer_count"] = number
+
+func _refresh_dealer_countdown() -> void:
+	if not _bar_labels.has("dealer_count"):
+		return
+	var n := maxi(0, int(RunStateStore.dealerCountdown))
+	var color := DEALER_COUNTDOWN_CALM_COLOR
+	if n <= 1:
+		color = DEALER_COUNTDOWN_DANGER_COLOR
+	elif n <= 4:
+		color = DEALER_COUNTDOWN_WARN_COLOR
+	var number := _bar_labels["dealer_count"] as Label
+	number.text = str(n)
+	number.add_theme_color_override("font_color", color)
+	if _bar_labels.has("dealer_title"):
+		(_bar_labels["dealer_title"] as Label).add_theme_color_override("font_color", color)
 
 func _build_score_button() -> void:
 	_score_button = _authored_button("ScoreButton")
@@ -1442,6 +1546,8 @@ func _sync_visuals() -> void:
 		_overlay = null
 	_set_stash_tray_visible(true)
 	_set_tv_progress_bars_visible(true)
+	_close_pending_combo_defeat()
+	_pending_combo_power_flow = false
 	_stop_flatline_countdown()
 	_close_score_table()
 	_clear_targeting()
@@ -1474,6 +1580,9 @@ func _sync_visuals() -> void:
 	_refresh_jackpot_lamp(false)
 	if resume_interrupted_spin:
 		_resolve_interrupted_spin()
+	elif RunStateStore.comboDefeatPending:
+		_post_spin_sequence_active = true
+		_show_pending_combo_defeat()
 	else:
 		_resolve_exhausted_resume()
 
@@ -1509,13 +1618,17 @@ func _resolve_interrupted_spin() -> void:
 	_apply_machine_reactions(false) # flatline-result / triple reactions the player earned
 	if _check_flatline_instant_death():
 		return
+	if RunStateStore.comboDefeatPending:
+		_post_spin_sequence_active = true
+		_show_pending_combo_defeat()
+		return
 	if _check_ending():
 		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
 	# _run_post_reveal_sequence) — the dealer stays queued and presents afterward.
 	if RunStateStore.compulsiveSpinSkips > 0:
 		_queue_compulsive_spin()
-	elif dealer_pending:
+	elif RunStateStore.dealerIncoming:
 		_present_dealer_or_defer()
 	_update_hud()
 
@@ -1526,7 +1639,10 @@ func _to_dealer() -> void:
 	get_tree().change_scene_to_file(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
-	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active \
+			or _sequence_lock_active or _free_spin_overlay_active:
+		return
+	if RunStateStore.comboDefeatPending:
 		return
 	if _dealer_offer_popup != null:
 		return
@@ -1616,6 +1732,8 @@ func _process(delta: float) -> void:
 		_step_reroll(delta)
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
+	_step_multiplier_fx(delta)
+	_step_free_spin_blink(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
 		return
@@ -1702,7 +1820,6 @@ func _run_post_reveal_sequence() -> void:
 	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
-	var dealer_pending := RunStateStore.dealerIncoming
 	# Aftereffects (multiplier/bar deltas, jackpot lamp, machine reactions, potion
 	# fx) only pop once the score popup has been on screen for a beat (issue #54).
 	var pop_lead := minf(AFTEREFFECT_POP_DELAY, reward_time)
@@ -1718,6 +1835,14 @@ func _run_post_reveal_sequence() -> void:
 	if _check_flatline_instant_death():
 		_post_spin_sequence_active = false
 		return
+	if RunStateStore.comboDefeatPending:
+		# Keep the pre-loss combo visible while the player decides whether to spend a
+		# current-reveal power. The ending/dealer checks wait until that decision lands.
+		_show_pending_combo_defeat()
+		return
+	_finish_post_spin_sequence()
+
+func _finish_post_spin_sequence() -> void:
 	if _check_ending():
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
@@ -1732,7 +1857,7 @@ func _run_post_reveal_sequence() -> void:
 		# Energy Drink: once the no-decay rush ends the machine takes the compulsive
 		# spin by itself — heavy vibration + red overlay, no player input needed.
 		_queue_compulsive_spin()
-	elif dealer_pending:
+	elif RunStateStore.dealerIncoming:
 		# The dealer waits behind any active/pending power-coin sequence; the power flow
 		# runs even under the sequence lock while a dealer is queued (req 2). Keeping the
 		# lock on holds the player until the dealer actually appears.
@@ -1742,6 +1867,110 @@ func _run_post_reveal_sequence() -> void:
 	_post_spin_sequence_active = false
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
+
+## A non-paying reveal pauses the normal tail of the spin sequence. Reroll/Shift
+## remain usable through their existing buttons while this lightweight prompt gives
+## the player an explicit way to accept the one-level loss.
+func _show_pending_combo_defeat() -> void:
+	if not RunStateStore.comboDefeatPending or _pending_combo_overlay != null:
+		return
+	_set_sequence_lock(true)
+	_clear_targeting()
+	_pending_combo_overlay = Control.new()
+	_pending_combo_overlay.name = "PendingComboDefeat"
+	_pending_combo_overlay.size = Vector2(SRC_W, SRC_H)
+	_pending_combo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pending_combo_overlay.z_index = 96
+	add_child(_pending_combo_overlay)
+
+	var panel := ColorRect.new()
+	panel.name = "Panel"
+	panel.position = COMBO_PENDING_RECT.position
+	panel.size = COMBO_PENDING_RECT.size
+	panel.color = COMBO_PENDING_COLOR
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pending_combo_overlay.add_child(panel)
+
+	var power_ids: Array[String] = RunStateStore.pending_combo_power_ids()
+	var power_text := ""
+	for i in power_ids.size():
+		if i > 0:
+			power_text += " / "
+		power_text += String(power_ids[i]).to_upper()
+	var title := _reaction_label(_pending_combo_overlay, "COMBO AT RISK",
+		Vector2(COMBO_PENDING_RECT.position.x, COMBO_PENDING_RECT.position.y + 3.0),
+		7, COMBO_PENDING_ACCENT)
+	title.name = "Title"
+	title.size = Vector2(COMBO_PENDING_RECT.size.x, 9.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var prompt_text := "USE %s OR LOSE 1" % power_text if not power_text.is_empty() \
+		else "NO POWER — LOSE 1"
+	var prompt := _reaction_label(_pending_combo_overlay, prompt_text,
+		Vector2(COMBO_PENDING_RECT.position.x, COMBO_PENDING_RECT.position.y + 14.0),
+		5, Color(0.82, 0.9, 1.0))
+	prompt.name = "Prompt"
+	prompt.size = Vector2(COMBO_PENDING_RECT.size.x, 10.0)
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var decline := Button.new()
+	decline.name = "DeclineButton"
+	decline.text = "LOSE 1"
+	decline.position = Vector2(COMBO_PENDING_RECT.position.x + 33.0,
+		COMBO_PENDING_RECT.position.y + 31.0)
+	decline.size = Vector2(36.0, 12.0)
+	decline.focus_mode = Control.FOCUS_NONE
+	decline.mouse_filter = Control.MOUSE_FILTER_STOP
+	decline.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		decline.add_theme_font_override("font", _font)
+	Assets.small_neon_button_style(decline, COMBO_PENDING_ACCENT, 5, 1.0)
+	Assets.start_menu_button_press_feedback(decline)
+	decline.pressed.connect(_on_pending_combo_declined)
+	_pending_combo_overlay.add_child(decline)
+
+	_refresh_controls()
+	if power_ids.is_empty():
+		call_deferred("_resolve_pending_combo_without_power")
+	else:
+		_start_pending_combo_timeout()
+
+func _resolve_pending_combo_without_power() -> void:
+	if RunStateStore.comboDefeatPending:
+		_on_pending_combo_declined()
+
+func _start_pending_combo_timeout() -> void:
+	_pending_combo_timeout_token += 1
+	var token: int = _pending_combo_timeout_token
+	await get_tree().create_timer(COMBO_PENDING_TIMEOUT).timeout
+	if token != _pending_combo_timeout_token or not is_inside_tree() \
+			or _pending_combo_overlay == null or not RunStateStore.comboDefeatPending:
+		return
+	_on_pending_combo_timeout()
+
+func _on_pending_combo_timeout() -> void:
+	if RunStateStore.comboDefeatPending:
+		_on_pending_combo_declined()
+
+func _on_pending_combo_declined() -> void:
+	if not RunStateStore.comboDefeatPending:
+		return
+	RunStateStore.resolve_pending_combo_defeat(false)
+	_close_pending_combo_defeat()
+	_finish_post_spin_sequence()
+
+func _set_pending_combo_prompt(text: String) -> void:
+	if _pending_combo_overlay == null:
+		return
+	var prompt := _pending_combo_overlay.get_node_or_null("Prompt") as Label
+	if prompt != null:
+		prompt.text = text
+
+func _close_pending_combo_defeat() -> void:
+	_pending_combo_timeout_token += 1
+	if _pending_combo_overlay != null:
+		_pending_combo_overlay.queue_free()
+		_pending_combo_overlay = null
+	_refresh_controls()
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -1901,9 +2130,39 @@ func _refresh_tv_indicators() -> void:
 	# (issue #66 / #80) until the score popup releases it.
 	var spins_left := _display_spins_left()
 	var spins_ratio := clampf(float(spins_left) / float(_max_spins_display()), 0.0, 1.0)
+	var current_free_spins := int(RunStateStore.freeSpinsRemaining)
+	var current_free_spin_grant_serial := int(RunStateStore.freeSpinGrantSerial)
+	if not _free_spin_observation_initialized:
+		_free_spin_observation_initialized = true
+		_observed_free_spins = current_free_spins
+		_observed_free_spin_grant_serial = current_free_spin_grant_serial
+	else:
+		var new_grant := current_free_spin_grant_serial != _observed_free_spin_grant_serial
+		var bank_increased := current_free_spins > _observed_free_spins
+		if (new_grant or bank_increased) and RunStateStore.runPhase == "running":
+			# A state commit can happen while the HUD delta hold is active; queueing here
+			# lets the release path start the overlay after the reward popup lands.
+			_queue_free_spin_overlay()
+	_observed_free_spins = current_free_spins
+	_observed_free_spin_grant_serial = current_free_spin_grant_serial
+	# The entrance animation temporarily replaces the health bar and its text. Once
+	# the final queued animation finishes, the normal spins-left bar returns even if
+	# free-spin credits remain banked.
+	var free_spins_active := _free_spin_overlay_active \
+			and RunStateStore.runPhase == "running"
+	_set_free_spin_display(free_spins_active)
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
+	if _life_fill_sprite != null:
+		_life_fill_sprite.visible = not free_spins_active and spins_ratio > 0.0
+	var health_track := get_node_or_null("HealthTrack") as CanvasItem
+	if health_track != null:
+		health_track.visible = not free_spins_active
 	if _bar_labels.has("life"):
+		_bar_labels["life"].visible = not free_spins_active
 		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
+	# Issue #155: the dealer countdown ticks with the spin cost (not the reward
+	# hold), so the number drops the moment the lever is pulled.
+	_refresh_dealer_countdown()
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
 	_refresh_boost_indicators()
@@ -2566,75 +2825,97 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
 
-# ── bet / powers / stash controls ─────────────────────────────────────────────────
+# ── frenzy gauge / powers / stash controls ────────────────────────────────────────
 
-func _build_multiplier_buttons() -> void:
-	for m in [1, 2, 3]:
-		var cx := float(MULT_BADGE_CENTERS[m - 1])
-		var b := _make_or_bind_hit_button("MultiplierButton%d" % m, {
-			"left": cx - 8.0,
-			"top": MULT_STRIP["top"],
-			"width": 16.0,
-			"height": MULT_STRIP["height"],
-		}, _select_bet_multiplier.bind(m))
-		_multiplier_buttons.append(b)
-
-func _select_bet_multiplier(m: int) -> void:
-	if _sequence_lock_active or _spin_launch_pending:
-		return
-	if not RunStateStore._can_act():
-		return
-	if _is_multiplier_locked(m):
-		return
-	if RunStateStore.betMultiplier == m:
-		return
-	RunStateStore.set_bet_multiplier(m)
-	_play_sfx(&"multiplier_change")
-
-func _highest_affordable_multiplier() -> int:
-	var highest := 3
-	if RunStateStore.forcedRandomBetSpins > 0:
-		highest = 2
-	if RunStateStore.freeSpinsRemaining > 0:
-		return mini(highest, maxi(1, int(RunStateStore.freeSpinsRemaining)))
-	var sedative_next := Economy.has_sedative(RunStateStore.ownedUpgrades) \
-		and RunStateStore.freeSpinsRemaining <= 0 and (RunStateStore.spinCount + 1) % 3 == 0
-	var no_neuron_cost := RunStateStore.decaySkips > 0 or sedative_next
-	if no_neuron_cost:
-		return highest
-	var base_decay := Economy.compute_neuron_decay(RunStateStore.ownedUpgrades)
-	if base_decay <= 0:
-		return highest
-	return mini(highest, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
-
-func _is_multiplier_locked(m: int) -> bool:
-	return m > _highest_affordable_multiplier()
-
+## Issue #155: the multiplier strip is a read-only frenzy gauge — wins drive it
+## x1 → x2 → x3, a losing spin breaks it, the player never taps it. The badge
+## sheet keeps its authored frames: 0/1/2 = x1/x2/x3 lit, 3/5 = the Energy-Drink
+## "x2 cap" pair, 4 = the machine-forced x1 of a compulsive phase.
 func _refresh_multiplier_controls() -> void:
-	var can_act := RunStateStore._can_act() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and not _sequence_lock_active
-	for i in _multiplier_buttons.size():
-		var m := i + 1
-		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
-	# Compulsion (issue #76): while the machine owns the spins it forces x1, ignoring the
-	# player's chosen multiplier. Show the locked-x1 frame for the whole compulsive phase
-	# (even through the HUD hold) so the override reads immediately — the machine, not the
-	# player, is driving. The buttons are already disabled since _can_act() is false here.
+	# Compulsion (issue #76): while the machine owns the spins it forces x1. Show the
+	# locked-x1 frame for the whole compulsive phase (even through the HUD hold) so
+	# the override reads immediately — the machine, not the player, is driving.
 	if RunStateStore.compulsiveSpinSkips > 0:
 		_set_sheet_frame(_multiplier_sprite, 4)
+		_refresh_multiplier_fx(1)
 		return
 	if _hud_delta_hold:
 		return # badge keeps its pre-commit frame until the score popup lands
-	var affordable := _highest_affordable_multiplier()
-	var effective := mini(RunStateStore.betMultiplier, affordable)
-	var frame := 0
-	if affordable <= 1:
-		frame = 4
-	elif affordable == 2:
+	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
+	var effective := clampi(RunStateStore.betMultiplier, 1, cap)
+	var frame := effective - 1
+	if cap == 2:
 		frame = 5 if effective == 2 else 3
-	else:
-		frame = effective - 1
 	_set_sheet_frame(_multiplier_sprite, frame)
+	_refresh_multiplier_fx(effective)
+
+## Toggles the authored gauge effects: sparks while x2 holds, the glitching "3"
+## plus its fire while x3 holds. A rise dings the old multiplier-change sfx.
+func _refresh_multiplier_fx(effective: int) -> void:
+	if _gauge_shown != 0 and effective > _gauge_shown:
+		_play_sfx(&"multiplier_change")
+	_gauge_shown = effective
+	if _mult_fx_2 != null:
+		_mult_fx_2.visible = effective == 2
+	if _mult_fx_3 != null:
+		_mult_fx_3.visible = effective == 3
+	if _mult_fx_fire != null:
+		_mult_fx_fire.visible = effective == 3
+
+func _step_multiplier_fx(delta: float) -> void:
+	if (_mult_fx_2 == null or not _mult_fx_2.visible) \
+			and (_mult_fx_3 == null or not _mult_fx_3.visible):
+		return
+	_mult_fx_time += delta
+	if _mult_fx_time < MULT_FX_FRAME_TIME:
+		return
+	_mult_fx_time = fmod(_mult_fx_time, MULT_FX_FRAME_TIME)
+	if _mult_fx_2 != null and _mult_fx_2.visible:
+		_mult_fx_2.frame = (_mult_fx_2.frame + 1) % MULT_FX_2_FRAMES
+	if _mult_fx_3 != null and _mult_fx_3.visible:
+		_mult_fx_3.frame = (_mult_fx_3.frame + 1) % MULT_FX_3_FRAMES
+	if _mult_fx_fire != null and _mult_fx_fire.visible:
+		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
+
+## FREE SPINS TV overlay: each newly granted batch gets a queued entrance animation
+## so repeated triggers are not swallowed or collapsed into one visual event.
+func _step_free_spin_blink(delta: float) -> void:
+	if _free_spin_sprite == null or not _free_spin_overlay_active:
+		return
+	_free_spin_overlay_elapsed += delta
+	_free_spin_blink_time = fmod(
+		_free_spin_blink_time + delta, FREE_SPIN_OVERLAY_BLINK_PERIOD)
+	_free_spin_sprite.visible = _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
+	if _free_spin_overlay_elapsed < FREE_SPIN_OVERLAY_TIME:
+		return
+	_free_spin_overlay_active = false
+	_free_spin_overlay_elapsed = 0.0
+	if _queued_free_spin_overlays > 0:
+		_queued_free_spin_overlays -= 1
+		_start_free_spin_overlay()
+	else:
+		_set_free_spin_display(false)
+		_update_hud()
+
+func _queue_free_spin_overlay() -> void:
+	if _free_spin_sprite == null or not is_inside_tree():
+		return
+	if _free_spin_overlay_active:
+		_queued_free_spin_overlays += 1
+		return
+	_start_free_spin_overlay()
+
+func _start_free_spin_overlay() -> void:
+	_clear_targeting()
+	_free_spin_overlay_active = true
+	_free_spin_overlay_elapsed = 0.0
+	_free_spin_blink_time = 0.0
+	_free_spin_sprite.visible = true
+
+func _set_free_spin_display(active: bool) -> void:
+	_free_spin_blink_time = 0.0
+	if _free_spin_sprite != null and not _free_spin_overlay_active:
+		_free_spin_sprite.visible = active
 
 func _build_power_buttons() -> void:
 	for id in ["reroll", "shift", "memory"]:
@@ -2713,6 +2994,8 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	var mb := event as InputEventMouseButton
 	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
 		return
+	if _free_spin_overlay_active:
+		return
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return
@@ -2743,11 +3026,14 @@ func _stash_slots() -> Array:
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
+	var combo_pending := RunStateStore.comboDefeatPending
+	var sequence_allows_power := not _sequence_lock_active or combo_pending
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and not _sequence_lock_active
+		and _dealer_offer_popup == null and sequence_allows_power and not _free_spin_overlay_active
 	if _spin_button != null:
 		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
-			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _sequence_lock_active
+			or _spinning_anim or _spin_launch_pending or _reroll_anim_active \
+			or _sequence_lock_active or _free_spin_overlay_active
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -2761,7 +3047,9 @@ func _refresh_controls() -> void:
 			b.visible = visible
 			b.disabled = not visible
 			if visible:
-				b.disabled = not (can_use and not used.has(id) and not pending.has(id))
+				var valid_pending_power: bool = not combo_pending or id in ["reroll", "shift"]
+				b.disabled = not (can_use and valid_pending_power and not used.has(id) \
+					and not pending.has(id))
 			var frame := POWER_FRAME_DISABLED if b.disabled else POWER_FRAME_AVAILABLE
 			if id == _targeting_power_id and not b.disabled:
 				frame = POWER_FRAME_SELECTED
@@ -2771,7 +3059,8 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active and not _sequence_lock_active) \
+	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active \
+			and not _sequence_lock_active and not _free_spin_overlay_active) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -2818,7 +3107,11 @@ func _boost_icon_for(boost: Dictionary) -> Texture2D:
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
-	if _sequence_lock_active or _spin_launch_pending:
+	var combo_pending := RunStateStore.comboDefeatPending
+	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
+			or _spin_launch_pending:
+		return
+	if combo_pending and id not in ["reroll", "shift"]:
 		return
 	if not RunStateStore._can_use_ability():
 		return
@@ -2826,6 +3119,8 @@ func _on_power_pressed(id: String) -> void:
 		_clear_targeting()
 		_refresh_controls()
 		return
+	if combo_pending:
+		_set_pending_combo_prompt("SELECT A REEL")
 	if id == "shift":
 		_arm_shift_targets()
 	else:
@@ -2840,6 +3135,7 @@ func _arm_reel_picker(cb: Callable) -> void:
 	_targeting_layer = Control.new()
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	var selection := _build_control_grid_sheet_on(_targeting_layer, "machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	var cy := REEL_WINDOW["top"]
@@ -2860,6 +3156,7 @@ func _arm_shift_targets() -> void:
 	_targeting_layer = Control.new()
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
+	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	var arrows := _build_control_grid_sheet_on(_targeting_layer, "machine new view/shift_power.png", SHIFT_POWER_COLUMNS, SHIFT_POWER_ROWS)
 	for i in 3:
@@ -2873,18 +3170,37 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
-	if _sequence_lock_active or _spin_launch_pending:
+	var combo_pending := RunStateStore.comboDefeatPending
+	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
+			or _spin_launch_pending:
+		return
+	if combo_pending and power_id not in ["reroll", "shift"]:
+		return
+	if not RunStateStore._can_use_ability():
 		return
 	if power_id == "reroll":
 		_hud_delta_hold = true # deltas pop with the reroll's score popup (issue #54)
 		if RunStateStore.reroll_reel(reel_index):
+			_pending_combo_power_flow = combo_pending
 			_clear_targeting()
+			_close_pending_combo_defeat()
 			_start_reroll_animation(reel_index)
 			_update_hud()
 			return
 		_hud_delta_hold = false
+		_clear_targeting()
+		if combo_pending:
+			RunStateStore.resolve_pending_combo_defeat(false)
+			_close_pending_combo_defeat()
+			_finish_post_spin_sequence()
 	elif power_id == "memory":
 		RunStateStore.lock_reel(reel_index)
+		if combo_pending:
+			RunStateStore.resolve_pending_combo_defeat(false)
+			_close_pending_combo_defeat()
+			_clear_targeting()
+			_finish_post_spin_sequence()
+			return
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
@@ -2937,11 +3253,25 @@ func _step_reroll(delta: float) -> void:
 		_play_reward_sequence(rerolled, true) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
-	if _sequence_lock_active or _spin_launch_pending:
+	var combo_pending := RunStateStore.comboDefeatPending
+	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
+			or _spin_launch_pending:
+		return
+	if not RunStateStore._can_use_ability():
 		return
 	_hud_delta_hold = true # deltas pop with the shift's score popup (issue #54)
-	RunStateStore.move_reel(reel_index, direction)
+	var applied := RunStateStore.move_reel(reel_index, direction)
+	if not applied:
+		_hud_delta_hold = false
+		_clear_targeting()
+		if combo_pending:
+			RunStateStore.resolve_pending_combo_defeat(false)
+			_close_pending_combo_defeat()
+			_finish_post_spin_sequence()
+		return
+	_pending_combo_power_flow = combo_pending
 	_clear_targeting()
+	_close_pending_combo_defeat()
 	_refresh_reels_from_state()
 	_update_hud()
 	# Reactions + instant-death run inside the reward sequence, after the score
@@ -2953,6 +3283,7 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 ## normal spin path so a power-made triple never flashes before its own burst.
 func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> void:
 	_set_sequence_lock(true)
+	var pending_defeat_power_flow := _pending_combo_power_flow
 	var reward_time := _emit_score_burst(source_reel)
 	# Same beat as the spin path: held HUD deltas pop after the score popup.
 	var pop_lead := minf(AFTEREFFECT_POP_DELAY, reward_time)
@@ -2967,6 +3298,12 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 	# Instant death from stacked flatline results takes precedence, and only the
 	# power paths can add one here — the copy path never reacts.
 	if apply_power_reaction and _check_flatline_instant_death():
+		_pending_combo_power_flow = false
+		_post_spin_sequence_active = false
+		return
+	if pending_defeat_power_flow:
+		_pending_combo_power_flow = false
+		_finish_post_spin_sequence()
 		return
 	_set_sequence_lock(false)
 
@@ -3001,7 +3338,7 @@ func _show_score_table() -> void:
 		return
 	_clear_targeting()
 	_score_info_buttons.clear()
-	_score_symbol_buttons.clear()
+	_score_pct_buttons.clear()
 	_score_overlay = Control.new()
 	_score_overlay.size = Vector2(SRC_W, SRC_H)
 	_score_overlay.z_index = 130 # above HUD extras, below the options overlay (140)
@@ -3066,9 +3403,9 @@ func _show_score_table() -> void:
 		# shows while the button is held (button_down/button_up also fire from
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
-		# Hold-to-peek draw chance on the baked symbol box, same mechanic as the
-		# dealer odds table's symbol buttons.
-		_score_symbol_buttons.append(_build_score_symbol_button(symbol_id, row_cy))
+		# Hold-to-peek draw chance on the "i" under the LVL value (issue #153),
+		# sharing the triple info button's row baseline.
+		_score_pct_buttons.append(_build_score_pct_button(symbol_id, btn_y))
 
 	# BACK close button: a wide rounded rectangle centered in the bottom
 	# red band with the text in its middle. The text lives on a child
@@ -3107,10 +3444,10 @@ func _show_score_table() -> void:
 	# Vertical focus chain (close -> rows -> close, wrapping) so keyboard and
 	# controller navigation can reach every interactive element (issue #119).
 	var chain: Array[Button] = [close]
-	# Interleave per row: symbol pct peek, then the row's info button.
+	# Interleave per row: the LVL column's pct peek, then the row's info button.
 	for i in _score_info_buttons.size():
-		if i < _score_symbol_buttons.size():
-			chain.append(_score_symbol_buttons[i])
+		if i < _score_pct_buttons.size():
+			chain.append(_score_pct_buttons[i])
 		chain.append(_score_info_buttons[i])
 	for c in chain.size():
 		var node := chain[c]
@@ -3167,12 +3504,13 @@ func _spawn_score_bulb_glows() -> void:
 	_score_bulb_tween.chain().tween_property(phases[0], "modulate:a", 1.0, 0.55)
 	_score_bulb_tween.parallel().tween_property(phases[1], "modulate:a", 0.25, 0.55)
 
-## The cropped "i" button from the information sheet (issue #119), placed at its
-## authored canvas rect with a slightly larger invisible hit/focus box around it.
-func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
+## The cropped "i" button from the information sheet (issue #119): the authored
+## icon with a slightly larger invisible hit/focus box around it. Shared by the
+## effect-info peek (row right edge) and the draw-chance peek (LVL column, #153).
+func _make_score_i_button(node_name: String, icon_top_left: Vector2) -> Button:
 	var b := Button.new()
-	b.name = "InfoButton_%s" % symbol_id
-	b.position = Vector2(SCORE_TABLE_INFO_X - 3.0, art_y - 3.0)
+	b.name = node_name
+	b.position = icon_top_left - Vector2(3.0, 3.0)
 	b.size = Vector2(SCORE_TABLE_INFO_W + 6.0, SCORE_TABLE_INFO_H + 6.0)
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -3200,35 +3538,38 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 	icon.pivot_offset = icon.size * 0.5
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(icon)
+	_score_overlay.add_child(b)
+	return b
 
+func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
+	var b := _make_score_i_button("InfoButton_%s" % symbol_id,
+		Vector2(SCORE_TABLE_INFO_X, art_y))
+	var icon := b.get_node("InfoIcon") as TextureRect
 	b.button_down.connect(_on_score_info_down.bind(symbol_id, b, icon))
 	b.button_up.connect(_on_score_info_up.bind(icon))
-	_score_overlay.add_child(b)
 	return b
 
-## Invisible hold area over a row's baked symbol box: while held, a bubble shows
-## the symbol's live draw chance — the same peek the dealer odds table offers.
-func _build_score_symbol_button(symbol_id: String, row_cy: float) -> Button:
-	var b := Button.new()
-	b.name = "SymbolPctButton_%s" % symbol_id
-	b.position = Vector2(SCORE_TABLE_SYMBOL_CX, row_cy) - SCORE_TABLE_SYMBOL_HIT * 0.5
-	b.size = SCORE_TABLE_SYMBOL_HIT
-	b.focus_mode = Control.FOCUS_ALL
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	var focus := StyleBoxFlat.new()
-	focus.draw_center = false
-	focus.border_color = Color(0.0, 0.9, 1.0)
-	focus.set_border_width_all(1)
-	b.add_theme_stylebox_override("focus", focus)
-	b.button_down.connect(_show_score_pct_popup.bind(symbol_id, b))
-	b.button_up.connect(_hide_score_info_popup)
-	_score_overlay.add_child(b)
+## "i" under a row's LVL value (issue #153): while held, a bubble shows the
+## symbol's live draw chance — the peek that used to sit on the baked symbol
+## box, now matching the dealer odds table's under-the-meter info buttons.
+## Sits on the same y as the row's triple-effect "i" so the pair reads aligned.
+func _build_score_pct_button(symbol_id: String, art_y: float) -> Button:
+	var b := _make_score_i_button("PctButton_%s" % symbol_id,
+		Vector2(SCORE_TABLE_LVL_CX - SCORE_TABLE_INFO_W * 0.5, art_y))
+	var icon := b.get_node("InfoIcon") as TextureRect
+	b.button_down.connect(_on_score_pct_down.bind(symbol_id, b, icon))
+	b.button_up.connect(_on_score_info_up.bind(icon))
 	return b
+
+func _on_score_pct_down(symbol_id: String, button: Button, icon: TextureRect) -> void:
+	icon.scale = Vector2(0.7, 0.7)
+	var tw := create_tween()
+	tw.tween_property(icon, "scale", Vector2(0.82, 0.82), 0.08) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_show_score_pct_popup(symbol_id, button)
 
 ## Draw-chance bubble for a score-table symbol row: percent text and contour in
-## the symbol's row color, anchored right of the held symbol box.
+## the symbol's row color, anchored right of the held "i" button.
 func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	_hide_score_info_popup()
 	if _score_overlay == null:
@@ -3432,7 +3773,7 @@ func _info_line_segments(symbol_id: String, line: String) -> Array:
 func _close_score_table() -> void:
 	_hide_score_info_popup()
 	_score_info_buttons.clear()
-	_score_symbol_buttons.clear()
+	_score_pct_buttons.clear()
 	if _score_bulb_tween != null:
 		_score_bulb_tween.kill()
 		_score_bulb_tween = null
@@ -3441,6 +3782,8 @@ func _close_score_table() -> void:
 		_score_overlay = null
 
 func _on_stash_pressed(slot_index: int) -> void:
+	if _free_spin_overlay_active:
+		return
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return
@@ -3549,7 +3892,7 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 const SERUM_PICKER_RECT := Rect2(12.0, 132.0, 136.0, 58.0)
 
 func _begin_serum() -> void:
-	if _sequence_lock_active or _serum_picker != null:
+	if _free_spin_overlay_active or _sequence_lock_active or _serum_picker != null:
 		return
 	if not RunStateStore._can_act():
 		return
@@ -3577,6 +3920,8 @@ func _on_serum_picker_input(event: InputEvent) -> void:
 		_close_serum_picker()
 
 func _on_serum_pick(symbol_id: String) -> void:
+	if _free_spin_overlay_active:
+		return
 	_close_serum_picker()
 	var lucidity_before := int(RunStateStore.lucidityCoins)
 	if not RunStateStore.use_consumable("cons_focus", symbol_id):
@@ -3670,7 +4015,7 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
 func _begin_white_powder() -> void:
-	if _sequence_lock_active:
+	if _free_spin_overlay_active or _sequence_lock_active:
 		return
 	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
 		return
@@ -3683,7 +4028,7 @@ func _begin_white_powder() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
 func _on_copy_pick(reel_index: int) -> void:
-	if _sequence_lock_active:
+	if _free_spin_overlay_active or _sequence_lock_active:
 		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
@@ -4211,6 +4556,8 @@ func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) ->
 			b.add_child(icon)
 
 func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_triggered: bool) -> void:
+	if _free_spin_overlay_active:
+		return
 	_close_book_choice_overlay()
 	_set_sequence_lock(false)
 	if symbol_id == "flatline":
@@ -4240,6 +4587,8 @@ func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
 
 func _on_eye_reveal_pick(reel_index: int) -> void:
+	if _free_spin_overlay_active:
+		return
 	_clear_targeting()
 	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
 	if symbol == "":
@@ -4420,6 +4769,8 @@ func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int
 	return label
 
 func _check_ending() -> bool:
+	if RunStateStore.comboDefeatPending:
+		return false
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -4813,10 +5164,17 @@ func _set_stash_tray_visible(v: bool) -> void:
 
 func _set_tv_progress_bars_visible(visible: bool) -> void:
 	for node_name: String in [
-		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel",
+		"DealerCountdownTitle", "DealerCountdownNumber", "DealerIcon"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:
 			node.visible = visible
+	# The FREE SPINS overlay only re-arms through its blink when the TV is back.
+	if not visible:
+		_free_spin_overlay_active = false
+		_free_spin_overlay_elapsed = 0.0
+		_queued_free_spin_overlays = 0
+		_set_free_spin_display(false)
 
 func _end_run_lucidity_kept_fraction() -> float:
 	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
