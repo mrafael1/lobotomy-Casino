@@ -58,6 +58,24 @@ const REEL_STOP_SFX_LEAD_TIME := 0.1
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
+# Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
+# blinking FREE SPINS TV overlay.
+const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
+const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
+const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
+const FREE_SPIN_SHEET := "machine new view/FREE_SPIN.png"
+const MULT_FX_2_FRAMES := 7
+const MULT_FX_3_FRAMES := 9
+const MULT_FX_FRAME_TIME := 0.09
+const FREE_SPIN_BLINK_PERIOD := 0.9
+const FREE_SPIN_BLINK_ON_TIME := 0.55
+# Issue #155: TV dealer countdown (top-left of the screen). Lower = dealer closer;
+# 8-5 calm, 4-2 warning purple, 1 red.
+const DEALER_COUNTDOWN_TITLE_POS := Vector2(27.0, 44.0)
+const DEALER_COUNTDOWN_NUMBER_POS := Vector2(27.0, 50.0)
+const DEALER_COUNTDOWN_CALM_COLOR := Color(0.75, 0.92, 1.0)
+const DEALER_COUNTDOWN_WARN_COLOR := Color(0.78, 0.6, 0.95)
+const DEALER_COUNTDOWN_DANGER_COLOR := Color(1.0, 0.3, 0.35)
 const LOCK_POWER_FRAME_COUNT := 3
 const JACKPOT_FRAME_COUNT := 3
 const JACKPOT_FRAME_OFF := 0
@@ -422,8 +440,18 @@ var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
 var _spin_button: Button = null
-var _multiplier_buttons: Array[Button] = []
 var _multiplier_sprite: Sprite2D = null
+# Issue #155: authored frenzy-gauge effect sheets (x1 full-canvas strips) looping
+# over the badge strip while the gauge holds x2/x3, plus the blinking FREE SPINS
+# TV overlay that replaces the health bar while free spins are banked.
+var _mult_fx_2: Sprite2D = null
+var _mult_fx_3: Sprite2D = null
+var _mult_fx_fire: Sprite2D = null
+var _mult_fx_time := 0.0
+var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
+var _free_spin_sprite: Sprite2D = null
+var _free_spin_blink_time := 0.0
+var _free_spin_display_active := false
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
@@ -552,7 +580,6 @@ func _ready() -> void:
 	_build_machine_control_art()
 	_build_hud()
 	_build_spin_button()
-	_build_multiplier_buttons()
 	_build_power_buttons()
 	_build_stash()
 	_build_sfx_players()
@@ -1092,6 +1119,15 @@ func _clear_boost_zero_linger() -> void:
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
+	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
+	# the frenzy reaches their state.
+	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
+	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
+	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
+	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite]:
+		if fx != null:
+			(fx as Sprite2D).visible = false
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
 	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
@@ -1262,6 +1298,46 @@ func _build_hud() -> void:
 	_build_hint_layer()
 	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
+	_build_dealer_countdown_labels()
+
+## Issue #155: "DEALER" + the countdown number on the TV's free top-left strip.
+## The number is the message: lower = dealer closer, higher multiplier = faster.
+func _build_dealer_countdown_labels() -> void:
+	var title := Label.new()
+	title.name = "DealerCountdownTitle"
+	title.position = DEALER_COUNTDOWN_TITLE_POS
+	title.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		title.add_theme_font_override("font", _font)
+	title.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
+	title.text = "DEALER"
+	add_child(title)
+	_bar_labels["dealer_title"] = title
+	var number := Label.new()
+	number.name = "DealerCountdownNumber"
+	number.position = DEALER_COUNTDOWN_NUMBER_POS
+	number.add_theme_font_size_override("font_size", 8)
+	if _font != null:
+		number.add_theme_font_override("font", _font)
+	number.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
+	number.text = ""
+	add_child(number)
+	_bar_labels["dealer_count"] = number
+
+func _refresh_dealer_countdown() -> void:
+	if not _bar_labels.has("dealer_count"):
+		return
+	var n := maxi(0, int(RunStateStore.dealerCountdown))
+	var color := DEALER_COUNTDOWN_CALM_COLOR
+	if n <= 1:
+		color = DEALER_COUNTDOWN_DANGER_COLOR
+	elif n <= 4:
+		color = DEALER_COUNTDOWN_WARN_COLOR
+	var number := _bar_labels["dealer_count"] as Label
+	number.text = str(n)
+	number.add_theme_color_override("font_color", color)
+	if _bar_labels.has("dealer_title"):
+		(_bar_labels["dealer_title"] as Label).add_theme_color_override("font_color", color)
 
 func _build_score_button() -> void:
 	_score_button = _authored_button("ScoreButton")
@@ -1615,6 +1691,8 @@ func _process(delta: float) -> void:
 		_step_reroll(delta)
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
+	_step_multiplier_fx(delta)
+	_step_free_spin_blink(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
 		return
@@ -1900,9 +1978,20 @@ func _refresh_tv_indicators() -> void:
 	# (issue #66 / #80) until the score popup releases it.
 	var spins_left := _display_spins_left()
 	var spins_ratio := clampf(float(spins_left) / float(_max_spins_display()), 0.0, 1.0)
+	# Issue #155: while free spins are banked, the blinking FREE SPINS overlay
+	# replaces the health bar and its text.
+	var free_spins_active := RunStateStore.freeSpinsRemaining > 0 \
+		and RunStateStore.runPhase == "running"
+	_set_free_spin_display(free_spins_active)
+	if _life_fill_sprite != null:
+		_life_fill_sprite.visible = not free_spins_active
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _bar_labels.has("life"):
+		_bar_labels["life"].visible = not free_spins_active
 		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
+	# Issue #155: the dealer countdown ticks with the spin cost (not the reward
+	# hold), so the number drops the moment the lever is pulled.
+	_refresh_dealer_countdown()
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
 	_refresh_boost_indicators()
@@ -2565,75 +2654,74 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
 
-# ── bet / powers / stash controls ─────────────────────────────────────────────────
+# ── frenzy gauge / powers / stash controls ────────────────────────────────────────
 
-func _build_multiplier_buttons() -> void:
-	for m in [1, 2, 3]:
-		var cx := float(MULT_BADGE_CENTERS[m - 1])
-		var b := _make_or_bind_hit_button("MultiplierButton%d" % m, {
-			"left": cx - 8.0,
-			"top": MULT_STRIP["top"],
-			"width": 16.0,
-			"height": MULT_STRIP["height"],
-		}, _select_bet_multiplier.bind(m))
-		_multiplier_buttons.append(b)
-
-func _select_bet_multiplier(m: int) -> void:
-	if _sequence_lock_active or _spin_launch_pending:
-		return
-	if not RunStateStore._can_act():
-		return
-	if _is_multiplier_locked(m):
-		return
-	if RunStateStore.betMultiplier == m:
-		return
-	RunStateStore.set_bet_multiplier(m)
-	_play_sfx(&"multiplier_change")
-
-func _highest_affordable_multiplier() -> int:
-	var highest := 3
-	if RunStateStore.forcedRandomBetSpins > 0:
-		highest = 2
-	if RunStateStore.freeSpinsRemaining > 0:
-		return mini(highest, maxi(1, int(RunStateStore.freeSpinsRemaining)))
-	var sedative_next := Economy.has_sedative(RunStateStore.ownedUpgrades) \
-		and RunStateStore.freeSpinsRemaining <= 0 and (RunStateStore.spinCount + 1) % 3 == 0
-	var no_neuron_cost := RunStateStore.decaySkips > 0 or sedative_next
-	if no_neuron_cost:
-		return highest
-	var base_decay := Economy.compute_neuron_decay(RunStateStore.ownedUpgrades)
-	if base_decay <= 0:
-		return highest
-	return mini(highest, maxi(1, int(ceili(float(RunStateStore.neurons) / float(base_decay)))))
-
-func _is_multiplier_locked(m: int) -> bool:
-	return m > _highest_affordable_multiplier()
-
+## Issue #155: the multiplier strip is a read-only frenzy gauge — wins drive it
+## x1 → x2 → x3, a losing spin breaks it, the player never taps it. The badge
+## sheet keeps its authored frames: 0/1/2 = x1/x2/x3 lit, 3/5 = the Energy-Drink
+## "x2 cap" pair, 4 = the machine-forced x1 of a compulsive phase.
 func _refresh_multiplier_controls() -> void:
-	var can_act := RunStateStore._can_act() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and not _sequence_lock_active
-	for i in _multiplier_buttons.size():
-		var m := i + 1
-		_multiplier_buttons[i].disabled = not can_act or _is_multiplier_locked(m)
-	# Compulsion (issue #76): while the machine owns the spins it forces x1, ignoring the
-	# player's chosen multiplier. Show the locked-x1 frame for the whole compulsive phase
-	# (even through the HUD hold) so the override reads immediately — the machine, not the
-	# player, is driving. The buttons are already disabled since _can_act() is false here.
+	# Compulsion (issue #76): while the machine owns the spins it forces x1. Show the
+	# locked-x1 frame for the whole compulsive phase (even through the HUD hold) so
+	# the override reads immediately — the machine, not the player, is driving.
 	if RunStateStore.compulsiveSpinSkips > 0:
 		_set_sheet_frame(_multiplier_sprite, 4)
+		_refresh_multiplier_fx(1)
 		return
 	if _hud_delta_hold:
 		return # badge keeps its pre-commit frame until the score popup lands
-	var affordable := _highest_affordable_multiplier()
-	var effective := mini(RunStateStore.betMultiplier, affordable)
-	var frame := 0
-	if affordable <= 1:
-		frame = 4
-	elif affordable == 2:
+	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
+	var effective := clampi(RunStateStore.betMultiplier, 1, cap)
+	var frame := effective - 1
+	if cap == 2:
 		frame = 5 if effective == 2 else 3
-	else:
-		frame = effective - 1
 	_set_sheet_frame(_multiplier_sprite, frame)
+	_refresh_multiplier_fx(effective)
+
+## Toggles the authored gauge effects: sparks while x2 holds, the glitching "3"
+## plus its fire while x3 holds. A rise dings the old multiplier-change sfx.
+func _refresh_multiplier_fx(effective: int) -> void:
+	if _gauge_shown != 0 and effective > _gauge_shown:
+		_play_sfx(&"multiplier_change")
+	_gauge_shown = effective
+	if _mult_fx_2 != null:
+		_mult_fx_2.visible = effective == 2
+	if _mult_fx_3 != null:
+		_mult_fx_3.visible = effective == 3
+	if _mult_fx_fire != null:
+		_mult_fx_fire.visible = effective == 3
+
+func _step_multiplier_fx(delta: float) -> void:
+	if (_mult_fx_2 == null or not _mult_fx_2.visible) \
+			and (_mult_fx_3 == null or not _mult_fx_3.visible):
+		return
+	_mult_fx_time += delta
+	if _mult_fx_time < MULT_FX_FRAME_TIME:
+		return
+	_mult_fx_time = fmod(_mult_fx_time, MULT_FX_FRAME_TIME)
+	if _mult_fx_2 != null and _mult_fx_2.visible:
+		_mult_fx_2.frame = (_mult_fx_2.frame + 1) % MULT_FX_2_FRAMES
+	if _mult_fx_3 != null and _mult_fx_3.visible:
+		_mult_fx_3.frame = (_mult_fx_3.frame + 1) % MULT_FX_3_FRAMES
+	if _mult_fx_fire != null and _mult_fx_fire.visible:
+		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
+
+## FREE SPINS TV overlay: while free spins are banked the authored FREE_SPIN
+## sheet blinks ("beeps") in the health bar's slot; the bar fill and its SPINS
+## LEFT text stay hidden for the duration.
+func _step_free_spin_blink(delta: float) -> void:
+	if _free_spin_sprite == null or not _free_spin_display_active:
+		return
+	_free_spin_blink_time = fmod(_free_spin_blink_time + delta, FREE_SPIN_BLINK_PERIOD)
+	_free_spin_sprite.visible = _free_spin_blink_time < FREE_SPIN_BLINK_ON_TIME
+
+func _set_free_spin_display(active: bool) -> void:
+	if _free_spin_display_active == active:
+		return
+	_free_spin_display_active = active
+	_free_spin_blink_time = 0.0
+	if _free_spin_sprite != null:
+		_free_spin_sprite.visible = active
 
 func _build_power_buttons() -> void:
 	for id in ["reroll", "shift", "memory"]:
@@ -4816,10 +4904,14 @@ func _set_stash_tray_visible(v: bool) -> void:
 
 func _set_tv_progress_bars_visible(visible: bool) -> void:
 	for node_name: String in [
-		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel",
+		"DealerCountdownTitle", "DealerCountdownNumber"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:
 			node.visible = visible
+	# The FREE SPINS overlay only re-arms through its blink when the TV is back.
+	if not visible:
+		_set_free_spin_display(false)
 
 func _end_run_lucidity_kept_fraction() -> float:
 	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \

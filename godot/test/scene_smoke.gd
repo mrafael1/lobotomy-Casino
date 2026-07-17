@@ -69,6 +69,7 @@ func _run() -> void:
 	_check_flatline_win_boost_76(run_store, failures)
 	_check_deferred_negative_76(machine, failures)
 	_check_dealer_pacing_76(run_store, failures)
+	_check_frenzy_gauge_155(run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
 	_check_power_bar_76(machine, run_store, failures)
@@ -974,15 +975,12 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		failures.append("consumables: Energy Drink compulsion did not unlock after no-decay spins")
 	var queued_spin_count := int(run_store.spinCount)
 	var queued_neurons := int(run_store.neurons)
-	var queued_bet := int(run_store.betMultiplier)
 	run_store.runConsumables = { "item_water": 1 }
 	if run_store.spin() != null:
 		failures.append("issue61: manual spin was allowed while compulsion was queued")
 	if int(run_store.spinCount) != queued_spin_count or int(run_store.neurons) != queued_neurons or bool(run_store.isSpinning):
 		failures.append("issue61: blocked manual spin changed run state")
-	run_store.set_bet_multiplier(1)
-	if int(run_store.betMultiplier) != queued_bet:
-		failures.append("issue61: multiplier changed while compulsion was queued")
+	# Issue #155: the multiplier is no longer a player toggle — nothing to poke here.
 	if run_store.reroll_reel(0):
 		failures.append("issue61: power was usable while compulsion was queued")
 	if run_store.use_consumable("item_water") or int(run_store.runConsumables.get("item_water", 0)) != 1:
@@ -2810,9 +2808,9 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		flavor.queue_free()
 	machine._pending_deferred_neg.clear()
 
-# Issue #76: dealer pacing. No hard 3-per-run cap, and the between-safety proc ramps the
-# longer the dealer stays away, faster on safer (low-bet) runs. Deterministic: the ramp
-# is a pure function of spin counters + bet, so no RNG is involved here.
+# Issue #155: dealer pacing is a fixed visible countdown — no randomness. It starts at
+# dealer_countdown_start, every spin ticks it by the multiplier used at spin start,
+# 0 triggers the visit, and resolving the offer resets it.
 func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
@@ -2821,31 +2819,89 @@ func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	if run_store.dealer_max_count <= Dealer.MAX_COUNT:
 		failures.append("issue76: dealer still capped at the old per-run limit (%d)" % run_store.dealer_max_count)
 
-	# Right after a visit (within the min gap) the proc is just the base chance.
+	# A fresh run starts the countdown at 8.
+	if int(run_store.dealerCountdown) != 8 or int(run_store.dealer_countdown_start) != 8:
+		failures.append("issue155: fresh run countdown should start at 8, got %d" % int(run_store.dealerCountdown))
+
+	# x1 spin ticks -1; a frenzy spin ticks by the multiplier used at spin start.
+	# Locked reels keep the outcome deterministic (an eye pair pays every spin).
+	run_store.neurons = 100
 	run_store.betMultiplier = 1
-	run_store.dealerLastSpinCount = 10
-	run_store.spinCount = 10 + run_store.dealer_min_spin_gap
-	var base_proc: float = run_store._dealer_effective_proc()
-	if not is_equal_approx(base_proc, run_store.dealer_proc_chance):
-		failures.append("issue76: proc at the min gap should equal the base, got %f" % base_proc)
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [3, 3, 3]
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.dealerCountdown) != 7:
+		failures.append("issue155: x1 spin should tick the countdown to 7, got %d" % int(run_store.dealerCountdown))
+	if int(run_store.betMultiplier) != 2:
+		failures.append("issue155: a paying win should step the gauge to x2, got %d" % int(run_store.betMultiplier))
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.dealerCountdown) != 5:
+		failures.append("issue155: x2 spin should tick the countdown by 2, got %d" % int(run_store.dealerCountdown))
 
-	# Pressure builds the longer the dealer's away.
-	run_store.spinCount = 10 + run_store.dealer_min_spin_gap + 4
-	var ramped_x1: float = run_store._dealer_effective_proc()
-	if ramped_x1 <= base_proc:
-		failures.append("issue76: dealer proc did not ramp up over time")
+	# 0 triggers the visit deterministically; resolving the offer resets to 8.
+	run_store.dealerCountdown = 0
+	run_store.dealerIncoming = false
+	run_store.dealerPending = false
+	var count_before := int(run_store.dealerCount)
+	run_store.check_dealer_trigger()
+	if not bool(run_store.dealerIncoming) or int(run_store.dealerCount) != count_before + 1:
+		failures.append("issue155: countdown 0 did not trigger the dealer")
+	run_store.reveal_dealer()
+	run_store.decline_dealer_visit()
+	if int(run_store.dealerCountdown) != 8:
+		failures.append("issue155: resolving the visit should reset the countdown to 8, got %d" % int(run_store.dealerCountdown))
 
-	# Same drought, higher bet => slower ramp (x1 builds pressure faster than x3).
-	run_store.betMultiplier = 3
-	var ramped_x3: float = run_store._dealer_effective_proc()
-	if not (ramped_x3 < ramped_x1):
-		failures.append("issue76: x3 should ramp slower than x1 (x1=%f x3=%f)" % [ramped_x1, ramped_x3])
+	# Above 0 the dealer never procs — no randomness left in the flow.
+	run_store.dealerCountdown = 1
+	run_store.check_dealer_trigger()
+	if bool(run_store.dealerIncoming):
+		failures.append("issue155: dealer triggered with a positive countdown")
 
-	# A long drought clamps at the ceiling, never a guaranteed instant re-trigger.
-	run_store.betMultiplier = 1
-	run_store.spinCount = 10 + 1000
-	if not is_equal_approx(run_store._dealer_effective_proc(), run_store.dealer_proc_max):
-		failures.append("issue76: long-drought proc should clamp at dealer_proc_max")
+	run_store.reset_run_state()
+
+# Issue #155: the frenzy gauge — consecutive paying wins climb x1 → x2 → x3, a losing
+# spin breaks the combo back to x1, and a 0-score flatline "win" breaks it too.
+func _check_frenzy_gauge_155(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.neurons = 100
+
+	# Three paying wins (locked eye pair) climb to the x3 cap and stay there.
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [4, 4, 4]
+	for expected in [2, 3, 3]:
+		run_store.spin()
+		run_store.set_spinning(false)
+		if int(run_store.betMultiplier) != expected:
+			failures.append("issue155: gauge expected x%d after a win, got x%d" % [expected, int(run_store.betMultiplier)])
+	# The decay no longer scales with the gauge: 3 spins = 3 neurons.
+	if int(run_store.neurons) != 97:
+		failures.append("issue155: frenzy spins should decay 1 neuron each, got %d left" % int(run_store.neurons))
+
+	# A forced flatline spin (a 0-score "triple") breaks the combo back to x1.
+	run_store.lockedReels = [false, false, false]
+	run_store.lockedReelSpins = [0, 0, 0]
+	run_store.forceFlatlineSpins = 1
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.betMultiplier) != 1:
+		failures.append("issue155: a losing spin should break the gauge to x1, got x%d" % int(run_store.betMultiplier))
+
+	# Powers protect the frenzy: a post-reveal outcome that pays re-derives the
+	# gauge from the value the spin ran at.
+	run_store.lastComboMultiplier = 2
+	run_store.lastResult = { "reels": ["eye", "vial", "eye"], "isJackpot": false, "winType": "miss",
+		"scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0, "freeSpinsAfter": 0,
+		"isFreeSpin": false, "scoreMultiplier": 1.0 }
+	run_store.isSpinning = false
+	if not run_store.copy_reel(0, 1):
+		failures.append("issue155: copy_reel rescue setup failed")
+	elif int(run_store.betMultiplier) != 3:
+		failures.append("issue155: a power-made win should rescue the combo (expected x3, got x%d)" % int(run_store.betMultiplier))
 
 	run_store.reset_run_state()
 
@@ -2861,11 +2917,18 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	machine._hud_delta_hold = false
 	machine._set_sequence_lock(false)
 
-	# Baseline: no compulsion, x3 affordable → the badge shows the player's x3 (frame 2).
+	# Baseline: no compulsion, x3 frenzy → the badge shows the gauge's x3 (frame 2).
 	run_store.compulsiveSpinSkips = 0
 	machine._refresh_multiplier_controls()
 	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame == 4:
 		failures.append("issue76: multiplier showed forced-x1 without compulsion")
+
+	# Issue #155: the TV's DEALER countdown label tracks the store's number.
+	run_store.dealerCountdown = 5
+	machine._refresh_dealer_countdown()
+	var countdown_label := machine._bar_labels.get("dealer_count") as Label
+	if countdown_label == null or countdown_label.text != "5":
+		failures.append("issue155: TV dealer countdown label does not track the store")
 
 	# Compulsion takes control → forced-x1 frame regardless of the chosen x3.
 	run_store.compulsiveSpinSkips = 2
@@ -3352,8 +3415,10 @@ func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:
 		failures.append("free-spin multiplier: spin was not marked free")
 	if int(result["scoreMultiplier"]) != 3:
 		failures.append("free-spin multiplier: x3 did not score as x3")
-	if int(run_store.freeSpinsRemaining) != 0:
-		failures.append("free-spin multiplier: x3 did not consume 3 free spins")
+	# Issue #155: the auto frenzy gauge never drains banked free spins faster —
+	# an x3 free spin still costs exactly one free spin.
+	if int(run_store.freeSpinsRemaining) != 2:
+		failures.append("free-spin multiplier: an x3 free spin should cost 1 free spin, left %d" % int(run_store.freeSpinsRemaining))
 	if int(run_store.neurons) != neurons_before:
 		failures.append("free-spin multiplier: free spin consumed neurons")
 	run_store.reset_run_state()
@@ -4158,10 +4223,8 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 		failures.append("issue28: spin button stayed enabled during sequence lock")
 	if machine._score_button == null or not machine._score_button.disabled:
 		failures.append("issue28: score button stayed enabled during sequence lock")
-	for button in machine._multiplier_buttons:
-		if not button.disabled:
-			failures.append("issue28: multiplier stayed enabled during sequence lock")
-			break
+	# Issue #155: the multiplier is a read-only frenzy gauge — there are no
+	# multiplier buttons to lock anymore.
 	var spin_count_before := int(run_store.spinCount)
 	machine._do_spin()
 	if int(run_store.spinCount) != spin_count_before or run_store.isSpinning:
@@ -4492,13 +4555,14 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 	if run_store.lastResult != null and not run_store._can_use_ability():
 		failures.append("issue111: diamond blocked the second power of a spin")
 
-	# Club: dealer procs and spin rewards are halved.
+	# Club: dealer visits and spin rewards are halved. With the issue #155 fixed
+	# countdown, "half the visits" means the reset value doubles (8 -> 16).
 	run_store.augmentedTier = ""
-	var base_proc: float = run_store._dealer_effective_proc()
+	var base_reset: int = run_store.dealer_countdown_reset_value()
 	var base_scale: float = run_store._active_reward_scale()
 	run_store.augmentedTier = "club"
-	if not is_equal_approx(run_store._dealer_effective_proc(), base_proc * 0.5):
-		failures.append("issue111: club did not halve the dealer proc chance")
+	if int(run_store.dealer_countdown_reset_value()) != base_reset * 2:
+		failures.append("issue111: club did not double the dealer countdown reset")
 	if not is_equal_approx(run_store._active_reward_scale(), base_scale * 0.5):
 		failures.append("issue111: club did not halve the spin reward scale")
 

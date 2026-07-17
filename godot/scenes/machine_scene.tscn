@@ -286,24 +286,6 @@ offset_top = 160.0
 offset_right = 153.0
 offset_bottom = 200.0
 
-[node name="MultiplierButton1" type="Button" parent="." unique_id=578749928]
-offset_left = 39.0
-offset_top = 119.0
-offset_right = 55.0
-offset_bottom = 135.0
-
-[node name="MultiplierButton2" type="Button" parent="." unique_id=926392601]
-offset_left = 68.0
-offset_top = 119.0
-offset_right = 84.0
-offset_bottom = 135.0
-
-[node name="MultiplierButton3" type="Button" parent="." unique_id=1719380875]
-offset_left = 97.0
-offset_top = 119.0
-offset_right = 113.0
-offset_bottom = 135.0
-
 [node name="PowerButtonReroll" type="Button" parent="." unique_id=245745428]
 offset_left = 21.0
 offset_top = 224.0
