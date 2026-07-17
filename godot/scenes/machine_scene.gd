@@ -154,9 +154,8 @@ const SCORE_TABLE_INFO_ROW_Y := [58.3, 101.7, 145.1, 188.6, 232.0, 276.6]
 # 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
 const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 # Issue #153: the draw-chance peek lives on an "i" button under the LVL value
-# (it used to sit on the baked symbol box). Icon top offset from the row's
-# vertical center — below the maxed rows' "(+x%)" sub-label, above the grid line.
-const SCORE_TABLE_PCT_BUTTON_DY := 14.0
+# (it used to sit on the baked symbol box), on the same baseline as the row's
+# triple-effect "i" (SCORE_TABLE_INFO_ROW_Y).
 # Per-symbol bubble colors — keep in sync with OddsTableOverlay.SYMBOL_PERCENT_COLORS
 # (can't reference the class here: pulling odds_table_overlay.gd into this
 # script's compile chain breaks headless -s runs, which compile before autoloads).
@@ -3067,8 +3066,8 @@ func _show_score_table() -> void:
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
 		# Hold-to-peek draw chance on the "i" under the LVL value (issue #153),
-		# same placement as the dealer odds table's info buttons.
-		_score_pct_buttons.append(_build_score_pct_button(symbol_id, row_cy))
+		# sharing the triple info button's row baseline.
+		_score_pct_buttons.append(_build_score_pct_button(symbol_id, btn_y))
 
 	# BACK close button: a wide rounded rectangle centered in the bottom
 	# red band with the text in its middle. The text lives on a child
@@ -3215,9 +3214,10 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 ## "i" under a row's LVL value (issue #153): while held, a bubble shows the
 ## symbol's live draw chance — the peek that used to sit on the baked symbol
 ## box, now matching the dealer odds table's under-the-meter info buttons.
-func _build_score_pct_button(symbol_id: String, row_cy: float) -> Button:
+## Sits on the same y as the row's triple-effect "i" so the pair reads aligned.
+func _build_score_pct_button(symbol_id: String, art_y: float) -> Button:
 	var b := _make_score_i_button("PctButton_%s" % symbol_id,
-		Vector2(SCORE_TABLE_LVL_CX - SCORE_TABLE_INFO_W * 0.5, row_cy + SCORE_TABLE_PCT_BUTTON_DY))
+		Vector2(SCORE_TABLE_LVL_CX - SCORE_TABLE_INFO_W * 0.5, art_y))
 	var icon := b.get_node("InfoIcon") as TextureRect
 	b.button_down.connect(_on_score_pct_down.bind(symbol_id, b, icon))
 	b.button_up.connect(_on_score_info_up.bind(icon))
