@@ -64,6 +64,8 @@ const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
 const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
 const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
 const FREE_SPIN_SHEET := "machine new view/FREE_SPIN.png"
+const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
+const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
@@ -163,6 +165,7 @@ const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const COMBO_PENDING_RECT := Rect2(29.0, 111.0, 102.0, 49.0)
 const COMBO_PENDING_COLOR := Color(0.05, 0.02, 0.11, 0.96)
 const COMBO_PENDING_ACCENT := Color(1.0, 0.32, 0.52)
+const COMBO_LOSS_OVERLAY_Z_INDEX := 97
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
 # vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
@@ -455,6 +458,8 @@ var _mult_fx_2: Sprite2D = null
 var _mult_fx_3: Sprite2D = null
 var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
+var _combo_loss_2_sprite: Sprite2D = null
+var _combo_loss_3_sprite: Sprite2D = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
@@ -701,6 +706,10 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "MemoryPower"
 	if rel.ends_with("FREE_SPIN.png"):
 		return "FreeSpinOverlay"
+	if rel.ends_with("2_losing_animation.png"):
+		return "ComboLoss2"
+	if rel.ends_with("3_losing_animation.png"):
+		return "ComboLoss3"
 	return ""
 
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
@@ -1142,9 +1151,15 @@ func _build_machine_control_art() -> void:
 	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
-	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite]:
+	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
+	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, 1)
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
+			_combo_loss_2_sprite, _combo_loss_3_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
+	for loss_sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
+		if loss_sprite != null:
+			(loss_sprite as Sprite2D).z_index = COMBO_LOSS_OVERLAY_Z_INDEX
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
 	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
@@ -1868,9 +1883,9 @@ func _finish_post_spin_sequence() -> void:
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
 
-## A non-paying reveal pauses the normal tail of the spin sequence. Reroll/Shift
-## remain usable through their existing buttons while this lightweight prompt gives
-## the player an explicit way to accept the one-level loss.
+## A non-paying reveal pauses the normal tail of the spin sequence. The authored
+## x2/x3 loss overlay replaces the old text headline while Reroll/Shift remain
+## usable through their existing buttons.
 func _show_pending_combo_defeat() -> void:
 	if not RunStateStore.comboDefeatPending or _pending_combo_overlay != null:
 		return
@@ -1890,6 +1905,7 @@ func _show_pending_combo_defeat() -> void:
 	panel.color = COMBO_PENDING_COLOR
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pending_combo_overlay.add_child(panel)
+	_set_combo_loss_display(int(RunStateStore.pendingComboMultiplier))
 
 	var power_ids: Array[String] = RunStateStore.pending_combo_power_ids()
 	var power_text := ""
@@ -1897,12 +1913,6 @@ func _show_pending_combo_defeat() -> void:
 		if i > 0:
 			power_text += " / "
 		power_text += String(power_ids[i]).to_upper()
-	var title := _reaction_label(_pending_combo_overlay, "COMBO AT RISK",
-		Vector2(COMBO_PENDING_RECT.position.x, COMBO_PENDING_RECT.position.y + 3.0),
-		7, COMBO_PENDING_ACCENT)
-	title.name = "Title"
-	title.size = Vector2(COMBO_PENDING_RECT.size.x, 9.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var prompt_text := "USE %s OR LOSE 1" % power_text if not power_text.is_empty() \
 		else "NO POWER — LOSE 1"
 	var prompt := _reaction_label(_pending_combo_overlay, prompt_text,
@@ -1967,10 +1977,17 @@ func _set_pending_combo_prompt(text: String) -> void:
 
 func _close_pending_combo_defeat() -> void:
 	_pending_combo_timeout_token += 1
+	_set_combo_loss_display(0)
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
 	_refresh_controls()
+
+func _set_combo_loss_display(multiplier: int) -> void:
+	if _combo_loss_2_sprite != null:
+		_combo_loss_2_sprite.visible = multiplier == 2
+	if _combo_loss_3_sprite != null:
+		_combo_loss_3_sprite.visible = multiplier == 3
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":

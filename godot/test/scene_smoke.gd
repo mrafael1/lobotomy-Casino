@@ -2964,6 +2964,14 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		var prompt := machine._pending_combo_overlay.get_node_or_null("Prompt") as Label
 		if prompt == null or not prompt.text.contains("LOSE 1"):
 			failures.append("combo pending: prompt did not expose the loss choice")
+		var loss_2_sprite := machine.get_node_or_null("ComboLoss2") as Sprite2D
+		var loss_3_sprite := machine.get_node_or_null("ComboLoss3") as Sprite2D
+		if loss_2_sprite == null or not loss_2_sprite.visible:
+			failures.append("combo pending: x2 losing animation was not shown")
+		if loss_3_sprite != null and loss_3_sprite.visible:
+			failures.append("combo pending: x3 losing animation was shown for x2")
+		if machine._pending_combo_overlay.get_node_or_null("Title") != null:
+			failures.append("combo pending: old COMBO AT RISK headline was not removed")
 		var reroll_button := machine._power_buttons.get("reroll") as Button
 		if reroll_button == null or reroll_button.disabled:
 			failures.append("combo pending: reroll was not enabled as a rescue power")
@@ -2974,6 +2982,23 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
 		failures.append("combo pending: declining x2 did not settle at x1")
+
+	# The x3 authored loss overlay is selected independently and a declined x3
+	# result drops exactly one level to x2.
+	run_store.abilitiesUsed = []
+	run_store.betMultiplier = 3
+	run_store.pendingComboMultiplier = 3
+	run_store.comboDefeatPending = true
+	machine._show_pending_combo_defeat()
+	var loss_2_after_x3 := machine.get_node_or_null("ComboLoss2") as Sprite2D
+	var loss_3_after_x3 := machine.get_node_or_null("ComboLoss3") as Sprite2D
+	if loss_3_after_x3 == null or not loss_3_after_x3.visible:
+		failures.append("combo pending: x3 losing animation was not shown")
+	if loss_2_after_x3 != null and loss_2_after_x3.visible:
+		failures.append("combo pending: x2 losing animation remained visible for x3")
+	machine._on_pending_combo_declined()
+	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2:
+		failures.append("combo pending: declining x3 did not settle at x2")
 
 	# A pending decision with an available power also commits the one-level loss
 	# when its event-driven timeout fires.
