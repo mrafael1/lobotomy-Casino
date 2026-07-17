@@ -153,10 +153,9 @@ const SCORE_TABLE_INFO_ROW_Y := [58.3, 101.7, 145.1, 188.6, 232.0, 276.6]
 # Vertical centers of the art's row bands (dark grid lines sit at canvas y 23.4,
 # 68.0, 111.4, 154.9, 198.3, 241.7, 286.3), so the values center inside their cells.
 const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
-# Baked symbol column (the icon boxes on the left): hold one to peek at the
-# symbol's live draw chance, same mechanic as the dealer odds table.
-const SCORE_TABLE_SYMBOL_CX := 30.0
-const SCORE_TABLE_SYMBOL_HIT := Vector2(34.0, 35.0)
+# Issue #153: the draw-chance peek lives on an "i" button under the LVL value
+# (it used to sit on the baked symbol box), on the same baseline as the row's
+# triple-effect "i" (SCORE_TABLE_INFO_ROW_Y).
 # Per-symbol bubble colors — keep in sync with OddsTableOverlay.SYMBOL_PERCENT_COLORS
 # (can't reference the class here: pulling odds_table_overlay.gd into this
 # script's compile chain breaks headless -s runs, which compile before autoloads).
@@ -416,7 +415,7 @@ var _dealer_portrait_sprite: Sprite2D = null
 var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
-var _score_symbol_buttons: Array[Button] = []
+var _score_pct_buttons: Array[Button] = []
 var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
@@ -3001,7 +3000,7 @@ func _show_score_table() -> void:
 		return
 	_clear_targeting()
 	_score_info_buttons.clear()
-	_score_symbol_buttons.clear()
+	_score_pct_buttons.clear()
 	_score_overlay = Control.new()
 	_score_overlay.size = Vector2(SRC_W, SRC_H)
 	_score_overlay.z_index = 130 # above HUD extras, below the options overlay (140)
@@ -3066,9 +3065,9 @@ func _show_score_table() -> void:
 		# shows while the button is held (button_down/button_up also fire from
 		# ui_accept, so keyboard/controller holds work the same as pointer holds).
 		_score_info_buttons.append(_build_score_info_button(symbol_id, btn_y))
-		# Hold-to-peek draw chance on the baked symbol box, same mechanic as the
-		# dealer odds table's symbol buttons.
-		_score_symbol_buttons.append(_build_score_symbol_button(symbol_id, row_cy))
+		# Hold-to-peek draw chance on the "i" under the LVL value (issue #153),
+		# sharing the triple info button's row baseline.
+		_score_pct_buttons.append(_build_score_pct_button(symbol_id, btn_y))
 
 	# BACK close button: a wide rounded rectangle centered in the bottom
 	# red band with the text in its middle. The text lives on a child
@@ -3107,10 +3106,10 @@ func _show_score_table() -> void:
 	# Vertical focus chain (close -> rows -> close, wrapping) so keyboard and
 	# controller navigation can reach every interactive element (issue #119).
 	var chain: Array[Button] = [close]
-	# Interleave per row: symbol pct peek, then the row's info button.
+	# Interleave per row: the LVL column's pct peek, then the row's info button.
 	for i in _score_info_buttons.size():
-		if i < _score_symbol_buttons.size():
-			chain.append(_score_symbol_buttons[i])
+		if i < _score_pct_buttons.size():
+			chain.append(_score_pct_buttons[i])
 		chain.append(_score_info_buttons[i])
 	for c in chain.size():
 		var node := chain[c]
@@ -3167,12 +3166,13 @@ func _spawn_score_bulb_glows() -> void:
 	_score_bulb_tween.chain().tween_property(phases[0], "modulate:a", 1.0, 0.55)
 	_score_bulb_tween.parallel().tween_property(phases[1], "modulate:a", 0.25, 0.55)
 
-## The cropped "i" button from the information sheet (issue #119), placed at its
-## authored canvas rect with a slightly larger invisible hit/focus box around it.
-func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
+## The cropped "i" button from the information sheet (issue #119): the authored
+## icon with a slightly larger invisible hit/focus box around it. Shared by the
+## effect-info peek (row right edge) and the draw-chance peek (LVL column, #153).
+func _make_score_i_button(node_name: String, icon_top_left: Vector2) -> Button:
 	var b := Button.new()
-	b.name = "InfoButton_%s" % symbol_id
-	b.position = Vector2(SCORE_TABLE_INFO_X - 3.0, art_y - 3.0)
+	b.name = node_name
+	b.position = icon_top_left - Vector2(3.0, 3.0)
 	b.size = Vector2(SCORE_TABLE_INFO_W + 6.0, SCORE_TABLE_INFO_H + 6.0)
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -3200,35 +3200,38 @@ func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
 	icon.pivot_offset = icon.size * 0.5
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(icon)
+	_score_overlay.add_child(b)
+	return b
 
+func _build_score_info_button(symbol_id: String, art_y: float) -> Button:
+	var b := _make_score_i_button("InfoButton_%s" % symbol_id,
+		Vector2(SCORE_TABLE_INFO_X, art_y))
+	var icon := b.get_node("InfoIcon") as TextureRect
 	b.button_down.connect(_on_score_info_down.bind(symbol_id, b, icon))
 	b.button_up.connect(_on_score_info_up.bind(icon))
-	_score_overlay.add_child(b)
 	return b
 
-## Invisible hold area over a row's baked symbol box: while held, a bubble shows
-## the symbol's live draw chance — the same peek the dealer odds table offers.
-func _build_score_symbol_button(symbol_id: String, row_cy: float) -> Button:
-	var b := Button.new()
-	b.name = "SymbolPctButton_%s" % symbol_id
-	b.position = Vector2(SCORE_TABLE_SYMBOL_CX, row_cy) - SCORE_TABLE_SYMBOL_HIT * 0.5
-	b.size = SCORE_TABLE_SYMBOL_HIT
-	b.focus_mode = Control.FOCUS_ALL
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	var focus := StyleBoxFlat.new()
-	focus.draw_center = false
-	focus.border_color = Color(0.0, 0.9, 1.0)
-	focus.set_border_width_all(1)
-	b.add_theme_stylebox_override("focus", focus)
-	b.button_down.connect(_show_score_pct_popup.bind(symbol_id, b))
-	b.button_up.connect(_hide_score_info_popup)
-	_score_overlay.add_child(b)
+## "i" under a row's LVL value (issue #153): while held, a bubble shows the
+## symbol's live draw chance — the peek that used to sit on the baked symbol
+## box, now matching the dealer odds table's under-the-meter info buttons.
+## Sits on the same y as the row's triple-effect "i" so the pair reads aligned.
+func _build_score_pct_button(symbol_id: String, art_y: float) -> Button:
+	var b := _make_score_i_button("PctButton_%s" % symbol_id,
+		Vector2(SCORE_TABLE_LVL_CX - SCORE_TABLE_INFO_W * 0.5, art_y))
+	var icon := b.get_node("InfoIcon") as TextureRect
+	b.button_down.connect(_on_score_pct_down.bind(symbol_id, b, icon))
+	b.button_up.connect(_on_score_info_up.bind(icon))
 	return b
+
+func _on_score_pct_down(symbol_id: String, button: Button, icon: TextureRect) -> void:
+	icon.scale = Vector2(0.7, 0.7)
+	var tw := create_tween()
+	tw.tween_property(icon, "scale", Vector2(0.82, 0.82), 0.08) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_show_score_pct_popup(symbol_id, button)
 
 ## Draw-chance bubble for a score-table symbol row: percent text and contour in
-## the symbol's row color, anchored right of the held symbol box.
+## the symbol's row color, anchored right of the held "i" button.
 func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	_hide_score_info_popup()
 	if _score_overlay == null:
@@ -3432,7 +3435,7 @@ func _info_line_segments(symbol_id: String, line: String) -> Array:
 func _close_score_table() -> void:
 	_hide_score_info_popup()
 	_score_info_buttons.clear()
-	_score_symbol_buttons.clear()
+	_score_pct_buttons.clear()
 	if _score_bulb_tween != null:
 		_score_bulb_tween.kill()
 		_score_bulb_tween = null

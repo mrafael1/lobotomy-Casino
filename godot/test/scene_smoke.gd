@@ -2120,21 +2120,33 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		var icon_rest_scale := brain_icon.scale
 		brain_symbol_button.button_down.emit()
 		await process_frame
-		if overlay._pct_popup == null:
-			failures.append("issue50: pressing a symbol did not open its percentage popup")
-		else:
-			var popup_label := overlay._pct_popup.get_node_or_null("PctBubble/PctLabel") as Label
-			if popup_label == null or not popup_label.text.ends_with("%"):
-				failures.append("issue50: percentage popup is missing its current chance")
-			else:
-				var popup_bubble := overlay._pct_popup.get_node("PctBubble") as Panel
-				if not popup_bubble.get_global_rect().encloses(popup_label.get_global_rect()):
-					failures.append("issue50: percentage text extends outside its popup bubble")
 		if brain_icon.scale == icon_rest_scale:
 			failures.append("issue50: symbol press did not start the pressed animation")
 		brain_symbol_button.button_up.emit()
+	# Issue #153: the draw-chance peek moved from the symbol box to a per-row
+	# "i" button under the level meter.
+	var info_buttons: Dictionary = overlay._info_buttons
+	if info_buttons.size() != 6:
+		failures.append("issue153: every row needs an info button under its level meter")
+	var brain_info_button := info_buttons.get("brain") as Button
+	if brain_info_button == null:
+		failures.append("issue153: brain row is missing its info button")
+	else:
+		brain_info_button.button_down.emit()
+		await process_frame
+		if overlay._pct_popup == null:
+			failures.append("issue153: pressing the info button did not open the percentage popup")
+		else:
+			var popup_label := overlay._pct_popup.get_node_or_null("PctBubble/PctLabel") as Label
+			if popup_label == null or not popup_label.text.ends_with("%"):
+				failures.append("issue153: percentage popup is missing its current chance")
+			else:
+				var popup_bubble := overlay._pct_popup.get_node("PctBubble") as Panel
+				if not popup_bubble.get_global_rect().encloses(popup_label.get_global_rect()):
+					failures.append("issue153: percentage text extends outside its popup bubble")
+		brain_info_button.button_up.emit()
 		if overlay._pct_popup != null:
-			failures.append("issue50: releasing a symbol did not hide its percentage popup")
+			failures.append("issue153: releasing the info button did not hide the popup")
 	# Every row's symbol sits inside the baked box, scaled down to fit (issue #130).
 	var box_icons := 0
 	for child in overlay.get_children():
@@ -2150,6 +2162,14 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	overlay._on_plus_pressed("brain")
 	if run_store.odds_upgrade_level("brain") != 1:
 		failures.append("issue36: overlay + did not reach the store")
+	# Issue #153: a staged + pops a transient "+x.x%" bubble above the row.
+	if overlay._delta_popup == null:
+		failures.append("issue153: + press did not show a percentage-delta bubble")
+	else:
+		var delta_label := overlay._delta_popup.get_node_or_null("PctBubble/PctLabel") as Label
+		if delta_label == null or not delta_label.text.begins_with("+") \
+				or not delta_label.text.ends_with("%"):
+			failures.append("issue153: + delta bubble should read as +x.x%")
 	# The bought level advances the row's meter to the next sheet frame.
 	if (level_sprites["brain"] as Sprite2D).region_rect.position.x \
 			!= brain_level_x0 + float(overlay.ART_FRAME_W):
@@ -3580,25 +3600,25 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 			"issue119: BACK", failures, true)
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
-		# The chain now interleaves each row's symbol pct-peek button before its
-		# info button, so CLOSE links down into the first symbol button.
-		var first_symbol := machine._score_symbol_buttons[0] as Button
-		if close.get_node_or_null(close.focus_neighbor_bottom) != first_symbol:
-			failures.append("issue119: CLOSE does not link down to the first symbol row")
-		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_top) != close:
-			failures.append("issue119: first symbol row does not link back up to CLOSE")
-		if first_symbol.get_node_or_null(first_symbol.focus_neighbor_bottom) != info_buttons[0]:
-			failures.append("issue119: first symbol row does not link down to its info button")
-	# Holding a symbol box peeks at the symbol's live draw chance (odds-table
-	# mechanic shared onto the score table).
-	if machine._score_symbol_buttons.size() != 6:
-		failures.append("score-pct: every row should have a symbol pct-peek button")
+		# The chain interleaves each row's LVL pct-peek "i" before its effect
+		# info button, so CLOSE links down into the first pct button (#153).
+		var first_pct := machine._score_pct_buttons[0] as Button
+		if close.get_node_or_null(close.focus_neighbor_bottom) != first_pct:
+			failures.append("issue119: CLOSE does not link down to the first pct button")
+		if first_pct.get_node_or_null(first_pct.focus_neighbor_top) != close:
+			failures.append("issue119: first pct button does not link back up to CLOSE")
+		if first_pct.get_node_or_null(first_pct.focus_neighbor_bottom) != info_buttons[0]:
+			failures.append("issue119: first pct button does not link down to its info button")
+	# Issue #153: holding the "i" under a row's LVL value peeks at the symbol's
+	# live draw chance (moved off the baked symbol box, matching the odds table).
+	if machine._score_pct_buttons.size() != 6:
+		failures.append("score-pct: every row should have a pct-peek button under LVL")
 	else:
-		var pct_button := machine._score_symbol_buttons[1] as Button
+		var pct_button := machine._score_pct_buttons[1] as Button
 		pct_button.button_down.emit()
 		var pct_popup: Control = machine._score_info_popup
 		if pct_popup == null or pct_popup.name != "PctPopup":
-			failures.append("score-pct: holding a symbol box did not show the pct bubble")
+			failures.append("score-pct: holding the LVL info button did not show the pct bubble")
 		else:
 			var panel := pct_popup.get_child(0) as Panel
 			var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
@@ -3607,7 +3627,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 				failures.append("score-pct: bubble contour is not the symbol row color")
 		pct_button.button_up.emit()
 		if machine._score_info_popup != null:
-			failures.append("score-pct: releasing the symbol box did not hide the pct bubble")
+			failures.append("score-pct: releasing the LVL info button did not hide the pct bubble")
 
 func _overlay_label_texts(overlay: Control) -> Array:
 	var out: Array = []
