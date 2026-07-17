@@ -2962,26 +2962,29 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		failures.append("combo pending: defeat prompt was not created")
 	else:
 		var prompt := machine._pending_combo_overlay.get_node_or_null("Prompt") as Label
-		if prompt == null or not prompt.text.contains("LOSE 1"):
-			failures.append("combo pending: prompt did not expose the loss choice")
+		if prompt != null:
+			failures.append("combo pending: text bubble was not removed")
+		if machine._pending_combo_overlay.get_node_or_null("Panel") != null:
+			failures.append("combo pending: text panel was not removed")
 		var loss_2_sprite := machine.get_node_or_null("ComboLoss2") as Sprite2D
 		var loss_3_sprite := machine.get_node_or_null("ComboLoss3") as Sprite2D
 		if loss_2_sprite == null or not loss_2_sprite.visible:
 			failures.append("combo pending: x2 losing animation was not shown")
 		if loss_3_sprite != null and loss_3_sprite.visible:
 			failures.append("combo pending: x3 losing animation was shown for x2")
+		if machine._combo_loss_beep_tween == null:
+			failures.append("combo pending: x2 losing animation did not start beeping")
 		if machine._pending_combo_overlay.get_node_or_null("Title") != null:
 			failures.append("combo pending: old COMBO AT RISK headline was not removed")
 		var reroll_button := machine._power_buttons.get("reroll") as Button
 		if reroll_button == null or reroll_button.disabled:
 			failures.append("combo pending: reroll was not enabled as a rescue power")
-		var spin_count_before := int(run_store.spinCount)
-		machine._do_spin()
-		if int(run_store.spinCount) != spin_count_before:
-			failures.append("combo pending: spin input was accepted before resolution")
+		var spin_button := machine._spin_button as Button
+		if spin_button == null or spin_button.disabled:
+			failures.append("combo pending: spin was not enabled to confirm the loss")
 	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
-		failures.append("combo pending: declining x2 did not settle at x1")
+		failures.append("combo pending: confirming x2 did not settle at x1")
 
 	# The x3 authored loss overlay is selected independently and a declined x3
 	# result drops exactly one level to x2.
@@ -3000,29 +3003,36 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2:
 		failures.append("combo pending: declining x3 did not settle at x2")
 
-	# A pending decision with an available power also commits the one-level loss
-	# when its event-driven timeout fires.
+	# A pending decision remains visible until the player confirms it; there is no
+	# timeout or automatic loss while an available rescue power still exists.
 	run_store.abilitiesUsed = []
 	run_store.betMultiplier = 2
 	run_store.pendingComboMultiplier = 2
 	run_store.comboDefeatPending = true
 	machine._show_pending_combo_defeat()
-	machine._on_pending_combo_timeout()
+	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2 \
+			or machine._pending_combo_overlay == null:
+		failures.append("combo pending: rescue window settled before spin confirmation")
+	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
-		failures.append("combo pending: timeout did not commit the one-level loss")
+		failures.append("combo pending: spin confirmation did not settle the one-level loss")
 
-	# A failed already-spent power attempt also commits the same one-level loss and
-	# must not create a second reward or leave the state half-pending.
+	# A failed already-spent power attempt leaves the rescue window active and must
+	# not create a second reward or settle the loss before the next spin.
 	run_store.abilitiesUsed = ["reroll"]
 	run_store.betMultiplier = 2
 	run_store.pendingComboMultiplier = 2
 	run_store.comboDefeatPending = true
 	machine._show_pending_combo_defeat()
 	machine._apply_reel_power("reroll", 0)
+	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2 \
+			or machine._pending_combo_overlay == null:
+		failures.append("combo pending: failed power attempt settled the loss too early")
+	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
-		failures.append("combo pending: failed power attempt did not commit the one-level loss")
+		failures.append("combo pending: failed power was not settled by spin confirmation")
 
-	# No available rescue power resolves the pending state as a one-level loss.
+	# No available rescue power still waits for the next spin to confirm the loss.
 	run_store.lastResult = { "reels": ["eye", "vial", "pill"], "isJackpot": false,
 		"winType": "miss", "scoreEarned": 0, "coinsEarned": 0,
 		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isFreeSpin": false,
@@ -3032,9 +3042,11 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.pendingComboMultiplier = 2
 	run_store.comboDefeatPending = true
 	machine._show_pending_combo_defeat()
-	machine._resolve_pending_combo_without_power()
+	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2:
+		failures.append("combo pending: unavailable powers settled before spin confirmation")
+	machine._on_pending_combo_declined()
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
-		failures.append("combo pending: unavailable powers did not commit the one-level loss")
+		failures.append("combo pending: unavailable powers were not settled by spin confirmation")
 
 	# A newly granted free-spin batch starts the named overlay, queues repeated
 	# triggers, and hides the complete health bar rather than only its fill.

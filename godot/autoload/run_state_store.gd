@@ -99,7 +99,7 @@ var lastPowerFailureReason := ""
 var spinCount := 0
 var isFreeSpin := false
 ## Issue #155: no longer a player toggle — a frenzy gauge the run drives itself.
-## Each paying win steps it x1 → x2 → x3. A losing spin opens a short rescue window;
+## Each paying win steps it x1 → x2 → x3. A losing spin opens a rescue window;
 ## declining or failing to rescue it decreases the gauge by one level. Powers that
 ## turn the outcome into a win after the reveal rescue the combo.
 var betMultiplier := 1
@@ -235,7 +235,7 @@ func pending_combo_power_ids() -> Array[String]:
 
 ## Resolves a pending defeat without touching the scored result. A successful power
 ## action normally resolves the flag through _apply_outcome(); this method handles
-## an explicit decline, timeout, unavailable power, or failed power attempt.
+## the player's explicit spin confirmation.
 func resolve_pending_combo_defeat(rescued: bool = false) -> bool:
 	if not comboDefeatPending:
 		return false
@@ -981,13 +981,17 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	if int(outcome.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastResult = lr
-	# Issue #155: powers protect the frenzy — the gauge re-derives from the
-	# power-modified outcome, stepping from the value the spin actually ran at,
-	# so turning a miss into a paying win rescues the combo (and vice versa).
+	# Issue #155: powers can rescue the frenzy by turning the pending reveal into a
+	# paying pair/triple. A non-paying power result keeps the rescue window open so
+	# the next spin, rather than the failed power, confirms the one-level loss.
 	var combo_base := pendingComboMultiplier if comboDefeatPending else lastComboMultiplier
-	betMultiplier = _combo_after(combo_base, lr)
-	comboDefeatPending = false
-	pendingComboMultiplier = 1
+	if comboDefeatPending and not _is_winning_result(lr):
+		betMultiplier = combo_base
+		pendingComboMultiplier = combo_base
+	else:
+		betMultiplier = _combo_after(combo_base, lr)
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
 
 func reroll_reel(reel_index: int) -> bool:
 	if not _can_use_ability() or lastResult == null:

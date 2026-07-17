@@ -71,7 +71,8 @@ const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
 const FREE_SPIN_OVERLAY_TIME := 1.35
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
-const COMBO_PENDING_TIMEOUT := 4.0
+const COMBO_LOSS_BEEP_FADE_TIME := 0.1
+const COMBO_LOSS_BEEP_PAUSE := 0.42
 # Issue #155: TV dealer countdown (top-left of the screen). Lower = dealer closer;
 # 8-5 calm, 4-2 warning purple, 1 red.
 const DEALER_COUNTDOWN_TITLE_POS := Vector2(38.0, 44.0)
@@ -162,9 +163,6 @@ const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
-const COMBO_PENDING_RECT := Rect2(29.0, 111.0, 102.0, 49.0)
-const COMBO_PENDING_COLOR := Color(0.05, 0.02, 0.11, 0.96)
-const COMBO_PENDING_ACCENT := Color(1.0, 0.32, 0.52)
 const COMBO_LOSS_OVERLAY_Z_INDEX := 97
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
@@ -519,7 +517,7 @@ var _sequence_lock_active := false
 var _post_spin_sequence_active := false
 var _pending_combo_overlay: Control = null
 var _pending_combo_power_flow := false
-var _pending_combo_timeout_token := 0
+var _combo_loss_beep_tween: Tween = null
 var _sfx_players: Dictionary = {}
 var _spin_launch_pending := false
 
@@ -1655,10 +1653,19 @@ func _to_dealer() -> void:
 
 func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active \
-			or _sequence_lock_active or _free_spin_overlay_active:
+			or _free_spin_overlay_active:
+		return
+	# A pending loss is confirmed by the next manual spin. Powers still have the
+	# current reveal's rescue window, but pulling the lever means the pair/triple
+	# was not rescued and the gauge loses one level before the new spin starts.
+	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
 	if RunStateStore.comboDefeatPending:
-		return
+		_on_pending_combo_declined()
+		if _sequence_lock_active or _post_spin_sequence_active \
+				or RunStateStore.runPhase != "running" \
+				or RunStateStore.dealerIncoming or RunStateStore.compulsiveSpinSkips > 0:
+			return
 	if _dealer_offer_popup != null:
 		return
 	if not compulsive and not RunStateStore._can_act():
@@ -1897,69 +1904,9 @@ func _show_pending_combo_defeat() -> void:
 	_pending_combo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pending_combo_overlay.z_index = 96
 	add_child(_pending_combo_overlay)
-
-	var panel := ColorRect.new()
-	panel.name = "Panel"
-	panel.position = COMBO_PENDING_RECT.position
-	panel.size = COMBO_PENDING_RECT.size
-	panel.color = COMBO_PENDING_COLOR
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pending_combo_overlay.add_child(panel)
 	_set_combo_loss_display(int(RunStateStore.pendingComboMultiplier))
-
-	var power_ids: Array[String] = RunStateStore.pending_combo_power_ids()
-	var power_text := ""
-	for i in power_ids.size():
-		if i > 0:
-			power_text += " / "
-		power_text += String(power_ids[i]).to_upper()
-	var prompt_text := "USE %s OR LOSE 1" % power_text if not power_text.is_empty() \
-		else "NO POWER — LOSE 1"
-	var prompt := _reaction_label(_pending_combo_overlay, prompt_text,
-		Vector2(COMBO_PENDING_RECT.position.x, COMBO_PENDING_RECT.position.y + 14.0),
-		5, Color(0.82, 0.9, 1.0))
-	prompt.name = "Prompt"
-	prompt.size = Vector2(COMBO_PENDING_RECT.size.x, 10.0)
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	var decline := Button.new()
-	decline.name = "DeclineButton"
-	decline.text = "LOSE 1"
-	decline.position = Vector2(COMBO_PENDING_RECT.position.x + 33.0,
-		COMBO_PENDING_RECT.position.y + 31.0)
-	decline.size = Vector2(36.0, 12.0)
-	decline.focus_mode = Control.FOCUS_NONE
-	decline.mouse_filter = Control.MOUSE_FILTER_STOP
-	decline.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		decline.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(decline, COMBO_PENDING_ACCENT, 5, 1.0)
-	Assets.start_menu_button_press_feedback(decline)
-	decline.pressed.connect(_on_pending_combo_declined)
-	_pending_combo_overlay.add_child(decline)
-
+	_start_combo_loss_beep()
 	_refresh_controls()
-	if power_ids.is_empty():
-		call_deferred("_resolve_pending_combo_without_power")
-	else:
-		_start_pending_combo_timeout()
-
-func _resolve_pending_combo_without_power() -> void:
-	if RunStateStore.comboDefeatPending:
-		_on_pending_combo_declined()
-
-func _start_pending_combo_timeout() -> void:
-	_pending_combo_timeout_token += 1
-	var token: int = _pending_combo_timeout_token
-	await get_tree().create_timer(COMBO_PENDING_TIMEOUT).timeout
-	if token != _pending_combo_timeout_token or not is_inside_tree() \
-			or _pending_combo_overlay == null or not RunStateStore.comboDefeatPending:
-		return
-	_on_pending_combo_timeout()
-
-func _on_pending_combo_timeout() -> void:
-	if RunStateStore.comboDefeatPending:
-		_on_pending_combo_declined()
 
 func _on_pending_combo_declined() -> void:
 	if not RunStateStore.comboDefeatPending:
@@ -1967,16 +1914,8 @@ func _on_pending_combo_declined() -> void:
 	RunStateStore.resolve_pending_combo_defeat(false)
 	_close_pending_combo_defeat()
 	_finish_post_spin_sequence()
-
-func _set_pending_combo_prompt(text: String) -> void:
-	if _pending_combo_overlay == null:
-		return
-	var prompt := _pending_combo_overlay.get_node_or_null("Prompt") as Label
-	if prompt != null:
-		prompt.text = text
-
 func _close_pending_combo_defeat() -> void:
-	_pending_combo_timeout_token += 1
+	_stop_combo_loss_beep()
 	_set_combo_loss_display(0)
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
@@ -1988,6 +1927,28 @@ func _set_combo_loss_display(multiplier: int) -> void:
 		_combo_loss_2_sprite.visible = multiplier == 2
 	if _combo_loss_3_sprite != null:
 		_combo_loss_3_sprite.visible = multiplier == 3
+
+func _start_combo_loss_beep() -> void:
+	_stop_combo_loss_beep()
+	var sprite: Sprite2D = _combo_loss_2_sprite if int(RunStateStore.pendingComboMultiplier) == 2 \
+		else _combo_loss_3_sprite if int(RunStateStore.pendingComboMultiplier) == 3 else null
+	if sprite == null:
+		return
+	sprite.modulate = Color.WHITE
+	_combo_loss_beep_tween = create_tween().set_loops()
+	_combo_loss_beep_tween.tween_property(sprite, "modulate:a", 0.18,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_loss_beep_tween.tween_property(sprite, "modulate:a", 1.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_loss_beep_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+
+func _stop_combo_loss_beep() -> void:
+	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():
+		_combo_loss_beep_tween.kill()
+	_combo_loss_beep_tween = null
+	for sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
+		if sprite != null:
+			(sprite as Sprite2D).modulate = Color.WHITE
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -3044,13 +3005,15 @@ func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
 	var combo_pending := RunStateStore.comboDefeatPending
+	var can_confirm_combo_loss := combo_pending and RunStateStore.runPhase == "running" \
+		and not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips <= 0
 	var sequence_allows_power := not _sequence_lock_active or combo_pending
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and _dealer_offer_popup == null and sequence_allows_power and not _free_spin_overlay_active
 	if _spin_button != null:
-		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
+		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
 			or _spinning_anim or _spin_launch_pending or _reroll_anim_active \
-			or _sequence_lock_active or _free_spin_overlay_active
+			or (_sequence_lock_active and not combo_pending) or _free_spin_overlay_active
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -3136,8 +3099,6 @@ func _on_power_pressed(id: String) -> void:
 		_clear_targeting()
 		_refresh_controls()
 		return
-	if combo_pending:
-		_set_pending_combo_prompt("SELECT A REEL")
 	if id == "shift":
 		_arm_shift_targets()
 	else:
@@ -3200,16 +3161,15 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 		if RunStateStore.reroll_reel(reel_index):
 			_pending_combo_power_flow = combo_pending
 			_clear_targeting()
-			_close_pending_combo_defeat()
 			_start_reroll_animation(reel_index)
 			_update_hud()
 			return
 		_hud_delta_hold = false
 		_clear_targeting()
 		if combo_pending:
-			RunStateStore.resolve_pending_combo_defeat(false)
-			_close_pending_combo_defeat()
-			_finish_post_spin_sequence()
+			# A failed rescue does not settle the loss. The numbered warning stays
+			# active until the player confirms it with the next spin.
+			_refresh_controls()
 	elif power_id == "memory":
 		RunStateStore.lock_reel(reel_index)
 		if combo_pending:
@@ -3282,13 +3242,12 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 		_hud_delta_hold = false
 		_clear_targeting()
 		if combo_pending:
-			RunStateStore.resolve_pending_combo_defeat(false)
-			_close_pending_combo_defeat()
-			_finish_post_spin_sequence()
+			# A failed rescue does not settle the loss. The numbered warning stays
+			# active until the player confirms it with the next spin.
+			_refresh_controls()
 		return
 	_pending_combo_power_flow = combo_pending
 	_clear_targeting()
-	_close_pending_combo_defeat()
 	_refresh_reels_from_state()
 	_update_hud()
 	# Reactions + instant-death run inside the reward sequence, after the score
@@ -3315,12 +3274,21 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 	# Instant death from stacked flatline results takes precedence, and only the
 	# power paths can add one here — the copy path never reacts.
 	if apply_power_reaction and _check_flatline_instant_death():
+		if pending_defeat_power_flow:
+			_close_pending_combo_defeat()
 		_pending_combo_power_flow = false
 		_post_spin_sequence_active = false
 		return
 	if pending_defeat_power_flow:
 		_pending_combo_power_flow = false
-		_finish_post_spin_sequence()
+		if RunStateStore.comboDefeatPending:
+			# The power changed the reveal but did not make a paying pair/triple.
+			# Re-open the beeping warning so another available power can be tried or
+			# the next spin can confirm the loss.
+			_show_pending_combo_defeat()
+		else:
+			_close_pending_combo_defeat()
+			_finish_post_spin_sequence()
 		return
 	_set_sequence_lock(false)
 
