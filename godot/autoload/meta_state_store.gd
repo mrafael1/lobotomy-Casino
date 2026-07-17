@@ -45,10 +45,21 @@ var rewardAmpSymbol: String = ""
 
 var _campaign_neuron_spend_feedback_pending := false
 
+# Score-table tiers (issue #142): classic plus the augmented suits, in the
+# order the authored SCORES symbol sheet frames use.
+const SCORE_TIERS: Array[String] = ["classic", "heart", "diamond", "spade", "club", "joker"]
+
+# Playtime tracking (issue #142): sub-millisecond remainder accumulated per
+# frame; folded into history["playtimeMs"] whenever state is saved or read.
+var _playtime_accum_ms := 0.0
+
 signal meta_changed
 
 func _ready() -> void:
 	load_state()
+
+func _process(delta: float) -> void:
+	_playtime_accum_ms += delta * 1000.0
 
 static func _now_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0)
@@ -103,6 +114,8 @@ func _apply(meta: Dictionary) -> void:
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
 
 func bank_run(run: Dictionary, ending: String) -> void:
+	_flush_playtime()
+	var prev_history: Dictionary = history.duplicate(true)
 	var next := Endings.bank_run_to_meta(run, _as_dict(), ending, _now_ms())
 	# Augmented spade modifier (issue #111): the end-of-run gain kept is halved
 	# (10% -> 5%, or 20% -> 10% with Smart Saving). Adjusted here so the
@@ -115,6 +128,28 @@ func bank_run(run: Dictionary, ending: String) -> void:
 		var kept_full := floori(float(run["lucidityCoins"]) * frac)
 		var kept_capped := floori(float(run["lucidityCoins"]) * frac * 0.5)
 		next["lucidityWallet"] = int(next["lucidityWallet"]) - (kept_full - kept_capped)
+	# Score-table history (issue #142): the parity-locked banking math rebuilds
+	# the history dict from only the keys it owns, so the tracking-only fields
+	# (playtime, per-tier counters, ending playtimes) are re-merged here.
+	var next_history: Dictionary = (next["history"] as Dictionary).duplicate(true)
+	for key in prev_history:
+		if not next_history.has(key):
+			next_history[key] = prev_history[key]
+	var tier := "classic"
+	if run_store != null and String(run_store.augmentedTier) != "":
+		tier = String(run_store.augmentedTier)
+	var runs_by_tier: Dictionary = (next_history.get("runsByTier", {}) as Dictionary).duplicate(true)
+	runs_by_tier[tier] = int(runs_by_tier.get(tier, 0)) + 1
+	next_history["runsByTier"] = runs_by_tier
+	if ending == "wealth":
+		var wins_by_tier: Dictionary = (next_history.get("winsByTier", {}) as Dictionary).duplicate(true)
+		wins_by_tier[tier] = int(wins_by_tier.get(tier, 0)) + 1
+		next_history["winsByTier"] = wins_by_tier
+		if not next_history.has("wealthEndingPlaytimeMs"):
+			next_history["wealthEndingPlaytimeMs"] = int(next_history.get("playtimeMs", 0))
+	elif ending == "exit" and not next_history.has("exitEndingPlaytimeMs"):
+		next_history["exitEndingPlaytimeMs"] = int(next_history.get("playtimeMs", 0))
+	next["history"] = next_history
 	_apply(next)
 	if ending == "wealth":
 		wealthEndingReached = true
@@ -215,9 +250,20 @@ func mark_ending_reached(ending: String) -> void:
 		if not history.has("wealthEndingReachedAt"):
 			history = history.duplicate(true)
 			history["wealthEndingReachedAt"] = _now_ms()
-	elif ending == "exit" and not history.has("exitEndingReachedAt"):
-		history = history.duplicate(true)
-		history["exitEndingReachedAt"] = _now_ms()
+		if not history.has("wealthEndingPlaytimeMs"):
+			# total_playtime_ms() flushes and swaps the history dict; read it
+			# into a local before writing the ending field.
+			var wealth_playtime := total_playtime_ms()
+			history = history.duplicate(true)
+			history["wealthEndingPlaytimeMs"] = wealth_playtime
+	elif ending == "exit":
+		if not history.has("exitEndingReachedAt"):
+			history = history.duplicate(true)
+			history["exitEndingReachedAt"] = _now_ms()
+		if not history.has("exitEndingPlaytimeMs"):
+			var exit_playtime := total_playtime_ms()
+			history = history.duplicate(true)
+			history["exitEndingPlaytimeMs"] = exit_playtime
 	elif ending == "game_over":
 		campaignActive = false
 		campaignFailed = true
@@ -228,6 +274,34 @@ func mark_ending_reached(ending: String) -> void:
 
 func get_pending_consumables() -> Dictionary:
 	return pendingConsumables.duplicate(true)
+
+# ── score-table history (issue #142) ──────────────────────────────────────────────
+
+## Folds the per-frame playtime accumulator into the persisted counter. Called
+## before every save and before any read of the playtime fields.
+func _flush_playtime() -> void:
+	var whole := int(_playtime_accum_ms)
+	if whole <= 0:
+		return
+	_playtime_accum_ms -= float(whole)
+	history = history.duplicate(true)
+	history["playtimeMs"] = int(history.get("playtimeMs", 0)) + whole
+
+func total_playtime_ms() -> int:
+	_flush_playtime()
+	return int(history.get("playtimeMs", 0))
+
+func tier_wins(tier: String) -> int:
+	return int((history.get("winsByTier", {}) as Dictionary).get(tier, 0))
+
+func tier_runs(tier: String) -> int:
+	return int((history.get("runsByTier", {}) as Dictionary).get(tier, 0))
+
+func total_wins() -> int:
+	var total := 0
+	for count in (history.get("winsByTier", {}) as Dictionary).values():
+		total += int(count)
+	return total
 
 # ── permanent dealer-odds upgrades ─────────────────────────────────────────────────
 
@@ -331,6 +405,7 @@ func mark_tutorial_seen(save_immediately := true) -> void:
 # ── persistence (Step 4) ──────────────────────────────────────────────────────────
 
 func save_state() -> void:
+	_flush_playtime()
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		push_error("Could not open save for write: " + SAVE_PATH)
