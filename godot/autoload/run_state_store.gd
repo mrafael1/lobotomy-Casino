@@ -565,6 +565,13 @@ func spin(compulsive := false) -> Variant:
 			betMultiplier = 2 # the drink still owns the gauge — no x3 until it ends
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
+	elif decaySkips > 0:
+		# Energy Drink protected spin (decaySkips not yet consumed here): the drink
+		# owns the x2, so a miss never opens a losing state — the forced spin that
+		# follows the rush is the next result that can set one.
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
+		betMultiplier = combo_before
 	else:
 		comboDefeatPending = true
 		pendingComboMultiplier = combo_before

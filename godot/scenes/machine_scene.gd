@@ -1895,7 +1895,14 @@ func _finish_post_spin_sequence() -> void:
 ## combo-loss state. resolve(false) keeps the drink-owned x2
 ## (energy_drink_owns_multiplier), so discarding never lowers the multiplier.
 func _discard_moot_combo_defeat() -> bool:
-	if not RunStateStore.comboDefeatPending or RunStateStore.compulsiveSpinSkips <= 0:
+	if not RunStateStore.comboDefeatPending:
+		return false
+	# Out of spins: the confirming spin can never come, so the rescue window is
+	# dead — resolve the loss now and let the ending check proc the flatline
+	# without the player having to touch the lever.
+	var out_of_spins: bool = int(RunStateStore.neurons) < 1 \
+		and int(RunStateStore.freeSpinsRemaining) <= 0
+	if RunStateStore.compulsiveSpinSkips <= 0 and not out_of_spins:
 		return false
 	RunStateStore.resolve_pending_combo_defeat(false)
 	_close_pending_combo_defeat()
@@ -1949,8 +1956,11 @@ func _set_combo_loss_display(multiplier: int) -> void:
 
 func _start_combo_loss_beep() -> void:
 	_stop_combo_loss_beep()
-	var sprite: Sprite2D = _combo_loss_2_sprite if int(RunStateStore.pendingComboMultiplier) == 2 \
-		else _combo_loss_3_sprite if int(RunStateStore.pendingComboMultiplier) == 3 else null
+	# Only the x2 losing state beeps; the x3 diminished-fire sheet plays its own
+	# steady frame animation and must not pulse on top of it.
+	if int(RunStateStore.pendingComboMultiplier) != 2:
+		return
+	var sprite: Sprite2D = _combo_loss_2_sprite
 	if sprite == null:
 		return
 	sprite.modulate = Color.WHITE

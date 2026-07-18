@@ -5362,6 +5362,28 @@ func _check_energy_drink_x2_161(run_store: Node, failures: Array) -> void:
 	if int(run_store.decaySkips) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 1:
 		failures.append("pr161: energy drink counters wrong (decaySkips=%d pending=%d)" \
 			% [int(run_store.decaySkips), int(run_store.pendingCompulsiveSpinSkips)])
+	# A protected-spin miss opens no losing state and keeps the drink-owned x2.
+	# Locked reels pin a deterministic non-paying result.
+	run_store.neurons = 100
+	run_store.freeSpinsRemaining = 0
+	run_store.guaranteedWinSpins = 0
+	run_store.potionSpins = 0
+	run_store.forceFlatlineSpins = 0
+	run_store.guaranteedTripleSpins = 0
+	run_store.guaranteeSymbolSpins = 0
+	run_store.banBrainSpins = 0
+	run_store.pairBoostSpins = 0
+	run_store.brainBoostSpins = 0
+	run_store.lastResult = { "reels": ["eye", "vial", "brain"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	run_store.spin()
+	run_store.set_spinning(false)
+	if bool(run_store.comboDefeatPending):
+		failures.append("pr161: protected Energy Drink miss opened a losing state")
+	if int(run_store.betMultiplier) != 2:
+		failures.append("pr161: protected Energy Drink miss dropped the x2 (got %d)" \
+			% int(run_store.betMultiplier))
 	# A confirmed loss during the drink keeps the forced x2.
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
@@ -5447,12 +5469,26 @@ func _check_energy_drink_discard_161(machine: Node, run_store: Node, failures: A
 		failures.append("pr161: discarding the moot loss lowered the drink-owned x2")
 	if machine._pending_combo_overlay != null:
 		failures.append("pr161: discarding the moot loss left the warning overlay up")
-	# Without a queued compulsory spin the warning is NOT moot — nothing is discarded.
+	# Without a queued compulsory spin (and with spins left) the warning is NOT
+	# moot — nothing is discarded.
+	var prev_neurons := int(run_store.neurons)
+	var prev_free := int(run_store.freeSpinsRemaining)
+	run_store.neurons = 100
 	run_store.compulsiveSpinSkips = 0
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
 	if machine._discard_moot_combo_defeat():
 		failures.append("pr161: loss warning discarded with no compulsory spin queued")
+	# Out of spins: the confirming spin can never come — the dead rescue window
+	# resolves itself so the flatline procs without touching the lever.
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	if not machine._discard_moot_combo_defeat():
+		failures.append("pr161: out-of-spins loss warning must resolve itself")
+	if bool(run_store.comboDefeatPending):
+		failures.append("pr161: out-of-spins discard left the loss pending")
+	run_store.neurons = prev_neurons
+	run_store.freeSpinsRemaining = prev_free
 	run_store.comboDefeatPending = false
 	run_store.pendingComboMultiplier = 1
 	run_store.compulsiveSpinSkips = prev_skips
@@ -5495,6 +5531,17 @@ func _check_loss_visuals_161(machine: Node, run_store: Node, failures: Array) ->
 	machine._set_combo_loss_display(0)
 	if machine._mult_fx_3 != null and not machine._mult_fx_3.visible:
 		failures.append("pr161: closing the x3 loss must restore the glitch effect")
+	# Only the x2 losing state beeps — x3 plays its sheet steady.
+	run_store.pendingComboMultiplier = 3
+	machine._start_combo_loss_beep()
+	if machine._combo_loss_beep_tween != null:
+		failures.append("pr161: x3 losing state must not beep")
+	run_store.pendingComboMultiplier = 2
+	machine._start_combo_loss_beep()
+	if machine._combo_loss_beep_tween == null:
+		failures.append("pr161: x2 losing state should beep")
+	machine._stop_combo_loss_beep()
+	run_store.pendingComboMultiplier = 1
 	machine._refresh_multiplier_fx(1)
 	machine._set_combo_loss_display(0)
 
