@@ -41,7 +41,7 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 # multiplier used at spin start (x1/x2/x3 → -1/-2/-3), 0 triggers the visit, and the
 # countdown resets once the offer resolves. No overflow carry (an x3 spin at 1 just
 # lands the dealer). The augmented club modifier halves visits by doubling the reset.
-@export var dealer_countdown_start: int = 8
+@export var dealer_countdown_start: int = 15
 
 # Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
@@ -109,7 +109,7 @@ var pendingComboMultiplier := 1 # gauge value held while the rescue window is op
 var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
 var dealerCount := 0
 var dealerLastSpinCount := 0
-var dealerCountdown := 8 # issue #155: spins until the dealer (start value re-applied per run)
+var dealerCountdown := 15 # issue #155: spins until the dealer (start value re-applied per run)
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null

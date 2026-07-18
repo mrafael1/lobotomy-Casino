@@ -99,7 +99,7 @@ const AUGMENTED_DESCRIPTIONS := {
 - Boost your overall gains.
 
 [color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 35 spins with x1, x2, or x3 bets.
+- You have 20 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the "Reroll" power.
 - 1 random power restores every 50 coins obtained."""
