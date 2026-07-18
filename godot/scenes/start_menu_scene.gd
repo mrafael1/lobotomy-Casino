@@ -666,7 +666,7 @@ func _start_run() -> void:
 		RunStateStore.begin_pre_run()
 	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
 	# pre-run shop mode and starts the run once the player leaves the counter.
-	get_tree().change_scene_to_file(DEALER_SCENE)
+	SceneNav.change_to(DEALER_SCENE)
 
 # ── run-state modal (held run) ───────────────────────────────────────────────────────
 # CONTINUE opens this instead of switching scenes: the neuron meter (moved off
@@ -767,7 +767,7 @@ func _resume_run() -> void:
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
 		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline")
 	var resume_scene := DEALER_SCENE if resume_dealer else MACHINE_SCENE
-	get_tree().change_scene_to_file(resume_scene)
+	SceneNav.change_to(resume_scene)
 
 ## Abandoning starts a fresh campaign: nothing is banked, the held run is
 ## cleared, and the campaign neuron meter returns to its full starting count.
@@ -781,4 +781,4 @@ func _open_scores() -> void:
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null:
 		scene_nav.call("push_current_scene")
-	get_tree().change_scene_to_file(SCORES_SCENE)
+	SceneNav.change_to(SCORES_SCENE)

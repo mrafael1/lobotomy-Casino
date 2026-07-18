@@ -1040,7 +1040,7 @@ func _open_lab() -> void:
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null:
 		scene_nav.call("push_current_scene")
-	get_tree().change_scene_to_file(UPGRADES_SCENE)
+	SceneNav.change_to(UPGRADES_SCENE)
 
 # ── machine-button confirmation (issue #84) ────────────────────────────────────────
 # The machine button leaves the lab and starts the run — an accidental tap would skip
@@ -1423,22 +1423,22 @@ func _flash_full_pockets() -> void:
 func _react_then_return() -> void:
 	_dealer_react()
 	await get_tree().create_timer(0.15).timeout
-	get_tree().change_scene_to_file(MACHINE_SCENE)
+	SceneNav.change_to(MACHINE_SCENE)
 
 func _start_run() -> void:
 	if Engine.is_editor_hint():
 		return
 	# Carry the purchased consumables into the run and hand off to the machine.
 	if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables()):
-		get_tree().change_scene_to_file(MENU_SCENE)
+		SceneNav.change_to(MENU_SCENE)
 		return
-	get_tree().change_scene_to_file(MACHINE_SCENE)
+	SceneNav.change_to(MACHINE_SCENE)
 
 func _on_leave() -> void:
 	if Engine.is_editor_hint():
 		return
 	if _pre_run:
-		get_tree().change_scene_to_file(MENU_SCENE) # back to the menu hub
+		SceneNav.change_to(MENU_SCENE) # back to the menu hub
 		return
 	RunStateStore.decline_dealer_offer()
 	await _react_then_return()
