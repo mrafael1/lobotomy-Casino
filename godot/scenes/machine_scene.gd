@@ -69,6 +69,9 @@ const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
+# The x3 losing state is an authored 9-frame diminished-fire sheet (1440x320)
+# stepped at the same cadence as the regular multiplier effects.
+const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
 const COMBO_LOSS_BEEP_FADE_TIME := 0.1
 const COMBO_LOSS_BEEP_PAUSE := 0.42
@@ -163,7 +166,13 @@ const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
+# Presentation stack: machine art → loss overlays (97) → dealer offer (100) →
+# dealer-interactive stash (110, only while his offer is up; 50 otherwise) →
+# HUD/options (BottomHudLayer 120).
 const COMBO_LOSS_OVERLAY_Z_INDEX := 97
+const DEALER_OVERLAY_Z_INDEX := 100
+const STASH_TRAY_Z_INDEX := 50
+const DEALER_STASH_Z_INDEX := 110
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
 # vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
@@ -1141,7 +1150,7 @@ func _build_machine_control_art() -> void:
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
-	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, 1)
+	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
 			_combo_loss_2_sprite, _combo_loss_3_sprite]:
 		if fx != null:
@@ -1623,11 +1632,12 @@ func _resolve_interrupted_spin() -> void:
 	if _check_flatline_instant_death():
 		return
 	if RunStateStore.comboDefeatPending:
-		_post_spin_sequence_active = true
-		_show_pending_combo_defeat()
-		if RunStateStore.dealerIncoming:
-			_present_dealer_or_defer()
-		return
+		if not _discard_moot_combo_defeat():
+			_post_spin_sequence_active = true
+			_show_pending_combo_defeat()
+			if RunStateStore.dealerIncoming:
+				_present_dealer_or_defer()
+			return
 	if _check_ending():
 		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
@@ -1839,14 +1849,15 @@ func _run_post_reveal_sequence() -> void:
 		_post_spin_sequence_active = false
 		return
 	if RunStateStore.comboDefeatPending:
-		# Keep the pre-loss combo visible while the player decides whether to spend a
-		# current-reveal power. The ending check waits until that decision lands, but
-		# the dealer does NOT wait for the confirming spin — he walks in over the
-		# beeping warning and the rescue window resumes when his offer closes.
-		_show_pending_combo_defeat()
-		if RunStateStore.dealerIncoming:
-			_present_dealer_or_defer()
-		return
+		if not _discard_moot_combo_defeat():
+			# Keep the pre-loss combo visible while the player decides whether to spend
+			# a current-reveal power. The ending check waits until that decision lands,
+			# but the dealer does NOT wait for the confirming spin — he walks in over
+			# the beeping warning and the rescue window resumes when his offer closes.
+			_show_pending_combo_defeat()
+			if RunStateStore.dealerIncoming:
+				_present_dealer_or_defer()
+			return
 	_finish_post_spin_sequence()
 
 func _finish_post_spin_sequence() -> void:
@@ -1878,6 +1889,18 @@ func _finish_post_spin_sequence() -> void:
 ## A non-paying reveal pauses the normal tail of the spin sequence. The authored
 ## x2/x3 loss overlay replaces the old text headline while Reroll/Shift remain
 ## usable through their existing buttons.
+## Energy Drink's compulsory spin outranks a loss warning: while the forced spin
+## is queued, a protected result's pending defeat is moot — the machine spins next
+## no matter what, and that forced result becomes the sole authority for the next
+## combo-loss state. resolve(false) keeps the drink-owned x2
+## (energy_drink_owns_multiplier), so discarding never lowers the multiplier.
+func _discard_moot_combo_defeat() -> bool:
+	if not RunStateStore.comboDefeatPending or RunStateStore.compulsiveSpinSkips <= 0:
+		return false
+	RunStateStore.resolve_pending_combo_defeat(false)
+	_close_pending_combo_defeat()
+	return true
+
 func _show_pending_combo_defeat() -> void:
 	if not RunStateStore.comboDefeatPending or _pending_combo_overlay != null:
 		return
@@ -1918,6 +1941,11 @@ func _set_combo_loss_display(multiplier: int) -> void:
 		_combo_loss_2_sprite.visible = multiplier == 2
 	if _combo_loss_3_sprite != null:
 		_combo_loss_3_sprite.visible = multiplier == 3
+		if multiplier == 3:
+			_combo_loss_3_sprite.frame = 0
+	# The loss overlay replaces the regular gauge effects; closing it (0) brings
+	# the sparks / glitch + fire straight back for the surviving multiplier.
+	_apply_multiplier_fx_visibility()
 
 func _start_combo_loss_beep() -> void:
 	_stop_combo_loss_beep()
@@ -1951,8 +1979,7 @@ func _queue_compulsive_spin() -> void:
 ## The compulsion is persistent pending state: being blocked defers it, never drops it.
 func _compulsive_spin_blocked() -> bool:
 	return _spinning_anim or _spin_launch_pending or _reroll_anim_active \
-		or _post_spin_sequence_active or _dealer_offer_popup != null \
-		or RunStateStore.comboDefeatPending
+		or _post_spin_sequence_active or _dealer_offer_popup != null
 
 func _play_compulsive_takeover() -> void:
 	await get_tree().create_timer(0.55).timeout
@@ -1980,6 +2007,11 @@ func _play_compulsive_takeover() -> void:
 	if not is_inside_tree() or RunStateStore.runPhase != "running":
 		_hide_compulsive_overlay()
 		return
+	# A loss warning left over from the last protected spin cannot gate the machine's
+	# own spin — discard it now so _do_spin(true) doesn't refuse and requeue forever
+	# (the old circular wait).
+	if _discard_moot_combo_defeat():
+		_set_sequence_lock(false)
 	_do_spin(true)
 	if not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips > 0 \
 			and RunStateStore.runPhase == "running":
@@ -2812,16 +2844,26 @@ func _refresh_multiplier_fx(effective: int) -> void:
 	if _gauge_shown != 0 and effective > _gauge_shown:
 		_play_sfx(&"multiplier_change")
 	_gauge_shown = effective
+	_apply_multiplier_fx_visibility()
+
+## The losing state owns the gauge presentation while it is up: only its authored
+## overlay shows — the normal x2 sparks and the x3 glitch + fire sheets stay
+## hidden and come back the moment the loss display closes.
+func _apply_multiplier_fx_visibility() -> void:
+	var loss_active := (_combo_loss_2_sprite != null and _combo_loss_2_sprite.visible) \
+		or (_combo_loss_3_sprite != null and _combo_loss_3_sprite.visible)
 	if _mult_fx_2 != null:
-		_mult_fx_2.visible = effective == 2
+		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active
 	if _mult_fx_3 != null:
-		_mult_fx_3.visible = effective == 3
+		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active
 	if _mult_fx_fire != null:
-		_mult_fx_fire.visible = effective == 3
+		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active
 
 func _step_multiplier_fx(delta: float) -> void:
+	var loss_3_active := _combo_loss_3_sprite != null and _combo_loss_3_sprite.visible
 	if (_mult_fx_2 == null or not _mult_fx_2.visible) \
-			and (_mult_fx_3 == null or not _mult_fx_3.visible):
+			and (_mult_fx_3 == null or not _mult_fx_3.visible) \
+			and not loss_3_active:
 		return
 	_mult_fx_time += delta
 	if _mult_fx_time < MULT_FX_FRAME_TIME:
@@ -2833,6 +2875,8 @@ func _step_multiplier_fx(delta: float) -> void:
 		_mult_fx_3.frame = (_mult_fx_3.frame + 1) % MULT_FX_3_FRAMES
 	if _mult_fx_fire != null and _mult_fx_fire.visible:
 		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
+	if loss_3_active:
+		_combo_loss_3_sprite.frame = (_combo_loss_3_sprite.frame + 1) % COMBO_LOSS_3_FRAMES
 
 ## FREE SPINS TV banner: blinks for as long as the NEXT spin is free (banked
 ## free spins or an Energy Drink no-decay rush) and holds until the lever is
@@ -4755,7 +4799,27 @@ func _check_ending() -> bool:
 	_show_ending(String(ending), run)
 	return true
 
+## Every ending path (flatline, game over, wealth) funnels through _show_ending;
+## tear the live-run presentation down synchronously first so no dealer UI, loss
+## warning, gauge effect, or transient sequence overlay survives into the
+## terminal screens.
+func _cleanup_transient_presentation() -> void:
+	if _dealer_overlay != null or _dealer_offer_popup != null:
+		_close_dealer(false)
+	_stop_combo_loss_beep()
+	_set_combo_loss_display(0)
+	if _pending_combo_overlay != null:
+		_pending_combo_overlay.queue_free()
+		_pending_combo_overlay = null
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
+		if fx != null:
+			(fx as Sprite2D).visible = false
+	_hide_compulsive_overlay()
+	_clear_targeting()
+	_set_stash_elevated(false)
+
 func _show_ending(ending: String, run: Dictionary) -> void:
+	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
 	# A running campaign reserves its neuron until end_run(). Account for that
 	# pending spend while resolving the terminal presentation, then commit the
@@ -4988,6 +5052,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_neuron_spend_label = null
 
 func _show_campaign_failed() -> void:
+	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
 	if _overlay != null:
 		_overlay.queue_free()
@@ -5120,6 +5185,13 @@ func _set_stash_tray_visible(v: bool) -> void:
 	if tray != null:
 		tray.visible = v
 	_set_stash_visible(v)
+
+# While the dealer offer is open the stash must draw (and receive drags) above his
+# overlay; every close path drops it back to its normal slot under the HUD.
+func _set_stash_elevated(elevated: bool) -> void:
+	var tray := get_node_or_null("stash") as Control
+	if tray != null:
+		tray.z_index = DEALER_STASH_Z_INDEX if elevated else STASH_TRAY_Z_INDEX
 
 func _set_tv_progress_bars_visible(visible: bool) -> void:
 	for node_name: String in [
@@ -5277,9 +5349,10 @@ func _start_again_from_wealth(run: Dictionary) -> void:
 ## Queue the dealer offer behind the power-coin sequence (req 2): if power coins are
 ## flying or still owed, defer; the sequence presents it when it finishes. Never cancels.
 ## Single authority on whether the dealer may take the scene right now. The visit
-## stays queued (dealerIncoming + _pending_dealer_offer) until every gameplay,
-## visual, and audio sequence has fully resolved — reels, rerolls, power coins,
-## the combo-loss warning, and the Energy-Drink forced spin all outrank him.
+## stays queued (dealerIncoming + _pending_dealer_offer) until reels, rerolls,
+## power coins, and the Energy-Drink forced spin have fully resolved. A pending
+## combo-loss decision does NOT block him — he opens above the beeping warning
+## and closing his offer returns to the still-pending decision.
 func _can_open_dealer_now() -> bool:
 	return not _spinning_anim \
 		and not _spin_launch_pending \
@@ -5287,7 +5360,6 @@ func _can_open_dealer_now() -> bool:
 		and not _compulsive_queued \
 		and not _power_sequence_active() \
 		and not _power_has_pending_work() \
-		and not RunStateStore.comboDefeatPending \
 		and RunStateStore.compulsiveSpinSkips <= 0
 
 func _present_dealer_or_defer() -> void:
@@ -5324,7 +5396,11 @@ func _show_dealer_offers() -> void:
 		_dealer_overlay.queue_free()
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
 	_dealer_overlay = _dealer_offer_popup
+	# The dealer draws above the loss overlays (97) but under the HUD (120); the
+	# machine stash rides above him while his offer is up so it stays draggable.
+	_dealer_offer_popup.z_index = DEALER_OVERLAY_Z_INDEX
 	add_child(_dealer_offer_popup)
+	_set_stash_elevated(true)
 	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
@@ -5447,6 +5523,7 @@ func _close_dealer(restore_sequence: bool = true) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	_set_stash_elevated(false)
 	if not restore_sequence:
 		return
 	# The dealer can appear over a live losing state: closing him returns to the
