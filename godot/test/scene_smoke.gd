@@ -3505,7 +3505,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 
 	run_store.reset_run_state()
 
-# Issue #76: the power gauge banks Lucidity (10 coins = 1 coin/frame, 50 = 5). Sub-10
+# Issue #76: the power gauge banks power points (10 points = 1 coin/frame, 50 = 5). Sub-10
 # gains bank without a coin (no infinite loop), the gauge caps at 4/5 when no restore is
 # available (discarding the excess, no fake-fill), and a fill commits one pending restore.
 func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> void:
@@ -3549,6 +3549,19 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	run_store.lucidityCoins = 10
 	if (machine._compute_power_plan()["steps"] as Array).size() != 1:
 		failures.append("issue76: 10 score should be exactly 1 power coin")
+
+	# Cocktail rarity points are part of the wealth score and must feed the same 10-point
+	# threshold even if the Lucidity marker has not caught up yet.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	run_store.pendingPowerRestores = []
+	run_store.scoreEarned = 17
+	run_store.lucidityCoins = 0
+	var cocktail_points: Dictionary = machine._compute_power_plan()
+	if (cocktail_points["steps"] as Array).size() != 1 \
+			or int(cocktail_points["score"]) != 17 \
+			or int(cocktail_points["seen"]) != 17:
+		failures.append("issue76: Cocktail score points did not advance the 10-point power threshold")
 
 	# No restorable power (no pending, no spent ability) + big gain: caps at 4/5 (score 40),
 	# no restore step, no cycling.

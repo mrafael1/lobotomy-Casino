@@ -107,9 +107,10 @@ Resources and currencies:
 - **Shift** (Lab: `perm_shift`) — steps one revealed reel along the symbol cycle.
 - **Memory** (Lab: `perm_memory`) — locks a reel through upcoming spins.
 - Using a power spends it; the power gauge restores one random spent power per 50
-  run-Lucidity coins. Each 10-coin gauge step launches the four-frame `power coin
-  animation` from the wealth odometer, then sends the real power coin to the power bar.
-  The diamond modifier caps power use at two per spin.
+  run-Lucidity coins. Score payouts—including Cocktail rarity points—also advance the
+  wealth-linked 10-point bank. Each 10-point gauge step launches the four-frame `power
+  coin animation` from the wealth odometer, then sends the real power coin to the power
+  bar. The diamond modifier caps power use at two per spin.
 
 ### Consumables and run items
 
