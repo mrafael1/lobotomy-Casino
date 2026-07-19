@@ -147,7 +147,9 @@ Resources and currencies:
   diminished-fire sheet (never both, and the normal gauge effects are suppressed
   while one is up). A power that turns the reveal into a paying pair/triple
   rescues the gauge (one step up); pressing SPIN confirms the loss (one step
-  down). Consumables stay usable during the rescue window. A warning left with no
+  down). Consumables stay usable during the rescue window. Cocktail points awarded
+  on a miss still launch any pending wealth-bank power-coin sequence while the
+  loss warning is open. A warning left with no
   spins remaining resolves itself so the flatline procs without input.
 - Energy Drink: two protected spins (no decay, gauge pinned to x2, no losing
   state can open), then one machine-controlled compulsory spin at x2. The

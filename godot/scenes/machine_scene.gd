@@ -2485,12 +2485,13 @@ func _cash_tray_pos() -> Vector2:
 	return COIN_TRAY + CASH_COIN_TRAY_OFFSET # same origin as normal lucidity coins
 
 ## Polled every frame. Power coins are held behind the sequence lock (so they don't
-## overlap the score burst) EXCEPT while a dealer offer is queued behind them — then they
-## run to completion first (issue #76 follow-up).
+## overlap the score burst) EXCEPT while a dealer offer or an already-shown combo-loss
+## warning is queued behind them — the score has landed, so the threshold sequence still
+## runs to completion (issue #76 follow-up).
 func _try_start_power_coin_flow() -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
 		return
-	if _sequence_lock_active and not _pending_dealer_offer:
+	if _sequence_lock_active and not _pending_dealer_offer and _pending_combo_overlay == null:
 		return
 	_advance_power_bar()
 

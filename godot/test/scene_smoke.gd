@@ -83,7 +83,7 @@ func _run() -> void:
 	await _check_pending_combo_and_free_spin_ui(machine, run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
-	_check_power_bar_76(machine, run_store, failures)
+	await _check_power_bar_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -3563,6 +3563,48 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			or int(cocktail_points["seen"]) != 17:
 		failures.append("issue76: Cocktail score points did not advance the 10-point power threshold")
 
+	# Cocktail can award points on a miss, which opens the combo-loss warning. The warning
+	# must not swallow the already-landed threshold coin sequence.
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	machine._set_power_bar_frame(0)
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
+	run_store.runPhase = "running"
+	run_store.neurons = 100
+	run_store.scoreEarned = 12
+	run_store.lucidityCoins = 12
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = []
+	run_store.spinCount = 1
+	run_store.lastResult = {
+		"scoreEarned": 12,
+		"coinsEarned": 12,
+		"winType": "miss",
+		"reels": ["eye", "vial", "pill"],
+		"scoreMultiplier": 1.0,
+		"cocktailApplied": true,
+		"cocktailBonus": 12,
+	}
+	machine._burst_prev_spin = -1
+	machine._burst_prev_score = 0
+	machine._set_display_lucidity(0, false)
+	machine._emit_score_burst(null)
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	machine._show_pending_combo_defeat()
+	machine._try_start_power_coin_flow()
+	if not machine._power_sequence_active():
+		failures.append("issue76: Cocktail threshold coin was blocked by the combo-loss warning")
+	await create_timer(0.95).timeout
+	if int(machine._power_bar_frame) != 1:
+		failures.append("issue76: Cocktail threshold coin did not reach power bar frame 1")
+	machine._close_pending_combo_defeat()
+	run_store.comboDefeatPending = false
+	run_store.pendingComboMultiplier = 1
+	machine._set_sequence_lock(false)
+	machine._power_coins_in_flight = 0
+	machine._power_batch_running = false
 	# No restorable power (no pending, no spent ability) + big gain: caps at 4/5 (score 40),
 	# no restore step, no cycling.
 	machine._power_bar_score = 0
