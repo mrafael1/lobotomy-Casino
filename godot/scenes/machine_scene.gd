@@ -129,8 +129,6 @@ const SFX_FILES := {
 	&"pair_win": "pair-bonus.mp3",
 	&"triple_win": "triple-bonus.mp3",
 	&"jackpot_win": "jackpot-bonus.mp3",
-	&"coin_fall": "coin-falling.mp3",
-	&"coin_fall_end": "coin-falling-end.mp3",
 }
 const SFX_POLYPHONY := {
 	&"reel_stop": 3,
@@ -227,26 +225,19 @@ const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
-const COIN_TARGET := Vector2(99.0, 264.0)
-const COIN_SIZE := 6.0
+# The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
+const WEALTH_COIN_ORIGIN := Vector2(74.0, 252.0)
 const POWER_COIN_SIZE := 8.0
-const COIN_FLIGHT_TIME := 0.72
-const COIN_STAGGER_TIME := 0.09
-const COIN_BURST_FRAC := 0.4
-const COIN_BURST_RISE := 24.0
-const COIN_BURST_SCATTER := 26.0
-const COIN_TRAY_POP_TIME := 0.26
-const COIN_FALL_STAGGER_TIME := 0.035
-const COIN_TRAY_HOLD_TIME := 0.12
-const COIN_TRAY_PILE_SCATTER := 22.0
-const COIN_TRAY_PILE_DEPTH := 8.0
-const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
+const POWER_COIN_POP_SHEET := "machine new view/power coin animation.png"
+const POWER_COIN_POP_FRAMES := 4
+const POWER_COIN_POP_FRAME_TIME := 0.06
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
 # six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
-# flies to the bar every POWER_COIN_STEP lucidity and advances one frame; at the full
-# frame it spawns a coin from the bar top that flies to the random restorable power.
+# flies from the wealth odometer to the bar every POWER_COIN_STEP lucidity and advances
+# one frame; at the full frame it spawns a coin from the bar top that flies to the random
+# restorable power. Each bank coin first plays the authored four-frame pop sheet.
 # The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
 # coins = 10/step.
 const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
@@ -493,19 +484,19 @@ var _dealer_drag_home := Vector2.ZERO
 var _dealer_drag_moved := false
 var _dealer_drag_press := Vector2.ZERO
 var _burst_layer: Control = null     # score bursts spawn here (drawn on top)
-var _coin_layer: Control = null      # lucidity / power coin flights spawn here
+var _coin_layer: Control = null      # power-coin flights and wealth pop FX spawn here
 var _burst_prev_score := 0           # last announced result score (for power gain)
 # Freezes HUD delta visuals (multiplier badge, TV bars, jackpot lamp) between a
 # spin/power commit and its score popup, so aftereffects never pop before the
 # score does (issue #54 scope).
 var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
-var _coin_prev_lucidity := 0
+var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
 var _power_bar_sprite: Sprite2D = null
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
 var _power_seen_lucidity := 0    # lucidity total the gauge has already accounted for
-var _display_lucidity := 0
+var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
@@ -950,8 +941,8 @@ func _build_tv_indicators() -> void:
 	_build_boost_indicators()
 	_build_power_bar()
 
-## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames). It
-## snaps to the current lucidity progress on build so a resumed run shows the right fill.
+## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
+## It snaps to the current Lucidity progress on build so a resumed run shows the right fill.
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
 	if tex == null:
@@ -2165,12 +2156,12 @@ func _refresh_tv_indicators() -> void:
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
 	_refresh_boost_indicators()
-	# The wealth odometer is a reward delta — hold it (with the multiplier badge
-	# and jackpot lamp) until the score popup lands (issue #54).
+	# The wealth odometer is a score total. Hold it (with the multiplier badge and
+	# jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
 		return
-	if RunStateStore.lucidityCoins < _display_lucidity:
-		_set_display_lucidity(RunStateStore.lucidityCoins)
+	if RunStateStore.scoreEarned < _display_lucidity:
+		_set_display_lucidity(RunStateStore.scoreEarned)
 
 ## The number of spins the neuron pool affords: ceil(neurons / decay) — the SAME
 ## budget spin() uses. Banked free spins deliberately do NOT inflate the counter:
@@ -2209,6 +2200,8 @@ func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
 	)
 
 func _set_display_lucidity(value: int, animated := true) -> void:
+	# The legacy method name is kept because scene smoke hooks call it; its value is
+	# now the cumulative score shown by the wealth odometer.
 	_display_lucidity = maxi(0, value)
 	if _wealth_odometer != null:
 		_wealth_odometer.set_value(_display_lucidity, animated)
@@ -2284,7 +2277,7 @@ func _init_burst_tracking() -> void:
 		_burst_prev_spin = -1
 		_burst_prev_score = 0
 	_coin_prev_lucidity = RunStateStore.lucidityCoins
-	_set_display_lucidity(RunStateStore.lucidityCoins, false)
+	_set_display_lucidity(RunStateStore.scoreEarned, false)
 
 # Normal-spin source reel: a pair on the first two reels pops on reel 2 (index 1);
 # every other win reads from reel 3 (index 2).
@@ -2328,10 +2321,12 @@ func _emit_score_burst(source_reel) -> float:
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
 	var color: Color = MULT_COLORS[clampi(int(RunStateStore.lastEffectiveBet), 1, 3)]
-	var lucidity_gain := maxi(0, int(RunStateStore.lucidityCoins) - _coin_prev_lucidity)
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
-	if lucidity_gain > 0:
-		reward_time = maxf(reward_time, _spawn_lucidity_coins(lucidity_gain, int(RunStateStore.lucidityCoins)))
+	# Score is the wealth bar's source of truth. The number reels begin their roll with
+	# the score popup; no individual Lucidity coins leave the cash tray for this HUD.
+	var wealth_score := int(RunStateStore.scoreEarned)
+	if wealth_score > _display_lucidity:
+		_set_display_lucidity(wealth_score)
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
@@ -2459,101 +2454,14 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 		o = 1.0 - (t - 0.7) / 0.3
 	burst.modulate.a = clampf(o, 0.0, 1.0)
 
-func _spawn_lucidity_coins(gain: int, target_lucidity: int) -> float:
-	if _coin_layer == null:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var tex := _load_texture("ui/coin.png", true)
-	if tex == null:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var count := mini(MAX_VISIBLE_COINS, gain)
-	if count <= 0:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var stagger_time := _coin_fall_stagger_time_for_count(count)
-	var fall_phase_time := float(count - 1) * stagger_time + COIN_TRAY_POP_TIME
-	var travel_start_time := fall_phase_time + COIN_TRAY_HOLD_TIME
-	var flight_time := _coin_flight_time_for_count(count)
-	var total_time := travel_start_time + flight_time
-	var cash_tray := COIN_TRAY + CASH_COIN_TRAY_OFFSET
-	_play_sfx(&"coin_fall")
-	var fall_sfx_tw := create_tween()
-	fall_sfx_tw.tween_interval(fall_phase_time)
-	fall_sfx_tw.tween_callback(_play_sfx.bind(&"coin_fall_end"))
-	for i in count:
-		var coin := Sprite2D.new()
-		coin.texture = tex
-		coin.centered = true
-		var start_pos := cash_tray
-		var pile_pos := cash_tray + Vector2(
-			(randf() - 0.5) * COIN_TRAY_PILE_SCATTER,
-			-randf() * COIN_TRAY_PILE_DEPTH
-		)
-		var burst_pos := Vector2(
-			cash_tray.x + (randf() - 0.5) * COIN_BURST_SCATTER,
-			cash_tray.y - COIN_BURST_RISE
-		)
-		coin.position = start_pos
-		var coin_scale := COIN_SIZE / float(maxi(1, tex.get_width()))
-		coin.scale = Vector2(coin_scale, coin_scale)
-		coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		coin.modulate.a = 0.0
-		_coin_layer.add_child(coin)
-		var fall_delay := float(i) * stagger_time
-		var tw := create_tween()
-		tw.tween_interval(fall_delay)
-		tw.tween_method(_drive_lucidity_coin_tray_pop.bind(coin, start_pos, pile_pos), 0.0, 1.0, COIN_TRAY_POP_TIME)
-		tw.tween_interval(maxf(0.0, travel_start_time - fall_delay - COIN_TRAY_POP_TIME))
-		tw.tween_method(_drive_lucidity_coin.bind(coin, pile_pos, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
-		tw.tween_callback(coin.queue_free)
-	var value_tw := create_tween()
-	value_tw.tween_interval(total_time)
-	value_tw.tween_callback(_set_display_lucidity.bind(target_lucidity))
-	return total_time
+## Kept as a compatibility hook for consumable callers and older smoke scripts.
+## Lucidity no longer animates cash-tray coins into the wealth display; the odometer
+## is driven directly by score in _emit_score_burst().
+func _spawn_lucidity_coins(_gain: int, _target_lucidity: int) -> float:
+	return 0.0
 
-func _coin_flight_time_for_count(count: int) -> float:
-	var pressure := clampf(float(maxi(0, count - 8)) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_FLIGHT_TIME, 0.48, pressure)
-
-func _coin_stagger_time_for_count(count: int) -> float:
-	if count <= 8:
-		return COIN_STAGGER_TIME
-	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_STAGGER_TIME, 0.018, pressure)
-
-func _coin_fall_stagger_time_for_count(count: int) -> float:
-	if count <= 8:
-		return COIN_FALL_STAGGER_TIME
-	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_FALL_STAGGER_TIME, 0.012, pressure)
-
-func _drive_lucidity_coin_tray_pop(t: float, coin: Sprite2D, from_pos: Vector2, pile_pos: Vector2) -> void:
-	if not is_instance_valid(coin):
-		return
-	var eased := 1.0 - (1.0 - t) * (1.0 - t)
-	var pop := sin(t * PI) * 6.0
-	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
-	coin.modulate.a = minf(t / 0.12, 1.0)
-
-func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos: Vector2, to_pos: Vector2) -> void:
-	if not is_instance_valid(coin):
-		return
-	var p: Vector2
-	if t < COIN_BURST_FRAC:
-		p = from_pos.lerp(burst_pos, t / COIN_BURST_FRAC)
-	else:
-		p = burst_pos.lerp(to_pos, (t - COIN_BURST_FRAC) / (1.0 - COIN_BURST_FRAC))
-	coin.position = p
-	if t < 0.1:
-		coin.modulate.a = t / 0.1
-	elif t < 0.85:
-		coin.modulate.a = 1.0
-	else:
-		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
-
-# Score per gauge frame: one coin banks this much score (10 for a 6-frame / 50-threshold
-# gauge). Power coins are tied to SCORE GAINED — 10 score => 1 coin, 50 => 5.
+# Lucidity per gauge frame: one power coin banks this much Lucidity (10 for a 6-frame / 50-threshold
+# gauge). Power coins are tied to Lucidity thresholds: 10 Lucidity => 1 coin, 50 => 5.
 func _power_bar_step() -> int:
 	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
 
@@ -2582,8 +2490,8 @@ func _try_start_power_coin_flow() -> void:
 		return
 	_advance_power_bar()
 
-## Pure: plan the coins for the score gained since the gauge last caught up. Each coin banks
-## one step of score; a full gauge is only completed when a restore is available (else it
+## Pure: plan the coins for Lucidity gained since the gauge last caught up. Each coin banks
+## one step; a full gauge is only completed when a restore is available (else it
 ## caps at 4/5 and the rest of the gain is discarded — never fake-fills or loops). Returns
 ## { steps: [{frame, restore}], score: <final banked score>, seen: <lucidity now> }.
 func _compute_power_plan() -> Dictionary:
@@ -2670,22 +2578,48 @@ func _launch_power_coin_batch(steps: Array) -> void:
 	for i in steps.size():
 		_launch_power_bank_coin(steps[i], float(i) * POWER_COIN_STAGGER)
 	if _power_coins_in_flight == 0: # no coin layer/texture — apply instantly
-		for stepd in steps:
-			_apply_power_bank_step(stepd)
 		_power_batch_running = false
 		_advance_power_bar()
 
-## One bank coin: from the cash tray to the gauge, launched after `delay` so a batch flies
-## in quick succession (each coin independent, not waiting for the previous to arrive).
-func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> void:
-	var coin := _make_power_coin(_cash_tray_pos())
-	if coin == null:
-		return
+## One bank coin: the authored pop sheet plays at the wealth odometer, then the real
+## power coin flies from that same point to the gauge. A batch staggers the pop starts so
+## several threshold hits read as a quick succession rather than one blended burst.
+func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> bool:
+	var pop := _make_power_coin_pop()
+	var power_tex := _load_texture("ui/power_coin.png", true)
+	if pop == null and power_tex == null:
+		_apply_power_bank_step(stepd)
+		return false
 	_power_coins_in_flight += 1
+	if pop == null:
+		_start_power_bank_coin_flight(stepd, delay)
+		return true
 	var tw := create_tween()
 	if delay > 0.0:
-		tw.tween_interval(delay) # coin stays invisible (alpha 0) until its flight begins
-	tw.tween_method(_drive_power_coin.bind(coin, _cash_tray_pos(), POWER_BAR_CENTER), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+		tw.tween_interval(delay)
+	tw.tween_method(
+			_drive_power_coin_pop.bind(pop), 0.0, 1.0,
+			float(POWER_COIN_POP_FRAMES) * POWER_COIN_POP_FRAME_TIME)
+	tw.tween_callback(_on_power_coin_pop_finished.bind(pop, stepd))
+	return true
+
+func _on_power_coin_pop_finished(pop: Sprite2D, stepd: Dictionary) -> void:
+	if is_instance_valid(pop):
+		pop.queue_free()
+	_start_power_bank_coin_flight(stepd, 0.0)
+
+func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
+	var coin := _make_power_coin(WEALTH_COIN_ORIGIN)
+	if coin == null:
+		_apply_power_bank_step(stepd)
+		_on_power_coin_landed()
+		return
+	var tw := create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay)
+	tw.tween_method(
+			_drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
+			0.0, 1.0, POWER_COIN_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
 
 func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
@@ -2733,6 +2667,37 @@ func _on_power_coin_landed() -> void:
 	if _power_coins_in_flight == 0:
 		_power_batch_running = false
 		_advance_power_bar() # more lucidity? else presents any queued dealer offer
+
+func _make_power_coin_pop() -> Sprite2D:
+	if _coin_layer == null:
+		return null
+	var tex := _load_texture(POWER_COIN_POP_SHEET, true)
+	if tex == null:
+		return null
+	var pop := Sprite2D.new()
+	pop.texture = tex
+	pop.hframes = POWER_COIN_POP_FRAMES
+	pop.vframes = 1
+	pop.frame = 0
+	pop.centered = false
+	pop.position = Vector2.ZERO
+	pop.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	pop.modulate.a = 0.0
+	_coin_layer.add_child(pop)
+	return pop
+
+func _drive_power_coin_pop(t: float, pop: Sprite2D) -> void:
+	if not is_instance_valid(pop):
+		return
+	var progress := clampf(t, 0.0, 1.0)
+	pop.frame = mini(POWER_COIN_POP_FRAMES - 1,
+		floori(progress * float(POWER_COIN_POP_FRAMES)))
+	if progress < 0.1:
+		pop.modulate.a = progress / 0.1
+	elif progress < 0.82:
+		pop.modulate.a = 1.0
+	else:
+		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
 
 ## Resolve the gauge without animation and clear pending restores (visual only). Used on
 ## the flatline/run-over transition — the gauge itself just holds its current frame.
@@ -3849,11 +3814,8 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	if lucidity_gain <= 0:
 		return
 	_coin_prev_lucidity = target_lucidity
-	_set_sequence_lock(true)
-	var reward_time := _spawn_lucidity_coins(lucidity_gain, target_lucidity)
-	if reward_time > 0.0:
-		await get_tree().create_timer(reward_time).timeout
-	_set_sequence_lock(false)
+	# Consumable Lucidity is an economy value, not wealth. It updates immediately and
+	# never spawns the removed cash-tray-to-wealth coin sequence.
 
 # ── serum symbol picker (issue #53) ──────────────────────────────────────────────
 # Using Serum opens a small overlay listing every reel symbol except brain; the

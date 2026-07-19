@@ -1,7 +1,7 @@
 class_name WealthOdometer
 extends Control
 
-## Four mechanically linked number reels for the machine's run-Lucidity readout.
+## Four mechanically linked number reels for the machine's run-wealth readout.
 ## Each authored reel sheet contains full-canvas frames so its glyph keeps the
 ## exact placement and pixel treatment from the source art.
 
@@ -23,7 +23,7 @@ const VALUE_MODULUS := 10_000
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 const BAR_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine new view/wealtth_bar.png")
+	"res://assets/images/machine new view/wealth_bar.png")
 const REEL_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/images/machine new view/wealth_1st_reel.png"),
 	preload("res://assets/images/machine new view/wealth_2nd_reel.png"),

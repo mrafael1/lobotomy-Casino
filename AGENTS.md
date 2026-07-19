@@ -53,13 +53,14 @@ Resources and currencies:
   spin decays 1 neuron unless protected. Restores cap at 35 (105 after a Wealth
   continuation).
 - **Score** — the run's win total. Reaching **2,000 score** triggers the Wealth
-  ending; that is the objective of every run.
+  ending; that is the objective of every run. The machine's four-reel wealth odometer
+  advances directly with score payouts when their score pop appears; it does not collect
+  the separate Lucidity coins from the cash tray. Changed digits roll and carry like
+  physical number drums.
 - **Run Lucidity (coins)** — earned alongside score during the run. Every 50 coins
   restores one random spent power; coins also pay for mid-run dealer offer
-  rerolls. The machine shows the current total on a four-reel mechanical odometer;
-  changed digits roll and carry like physical number drums. On a non-Wealth ending,
-  10% is kept (20% with Smart Save, halved by the spade modifier) and banked into
-  the wallet.
+  rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save, halved by the
+  spade modifier) and banked into the wallet.
 - **Wallet Lucidity (credits)** — the persistent meta currency. Buys Lab upgrades
   and pre-run consumables between runs.
 
@@ -106,7 +107,9 @@ Resources and currencies:
 - **Shift** (Lab: `perm_shift`) — steps one revealed reel along the symbol cycle.
 - **Memory** (Lab: `perm_memory`) — locks a reel through upcoming spins.
 - Using a power spends it; the power gauge restores one random spent power per 50
-  run-Lucidity coins. The diamond modifier caps power use at two per spin.
+  run-Lucidity coins. Each 10-coin gauge step launches the four-frame `power coin
+  animation` from the wealth odometer, then sends the real power coin to the power bar.
+  The diamond modifier caps power use at two per spin.
 
 ### Consumables and run items
 

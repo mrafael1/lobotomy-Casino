@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ce5bcswnaluh7"
-path="res://.godot/imported/wealtth_bar.png-5aeabe5bb48816f21835ad539a82876c.ctex"
+uid="uid://bhrx2f7tkkfud"
+path="res://.godot/imported/power coin animation.png-7fccfb156dd193c9f32a713e34a281d1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/machine new view/wealtth_bar.png"
-dest_files=["res://.godot/imported/wealtth_bar.png-5aeabe5bb48816f21835ad539a82876c.ctex"]
+source_file="res://assets/images/machine new view/power coin animation.png"
+dest_files=["res://.godot/imported/power coin animation.png-7fccfb156dd193c9f32a713e34a281d1.ctex"]
 
 [params]
 

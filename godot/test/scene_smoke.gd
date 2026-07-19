@@ -73,6 +73,7 @@ func _run() -> void:
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
+	_check_wealth_score_feed(machine, run_store, failures)
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
 	_check_flatline_win_boost_76(run_store, failures)
@@ -199,6 +200,8 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 					!= Vector2i(160, 320) \
 				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: wealth odometer bar is not native 160x320 art")
+		elif not String(wealth_art.texture.resource_path).ends_with("wealth_bar.png"):
+			failures.append("machine art: wealth odometer still uses the misspelled bar asset")
 		for reel_index in 4:
 			var reel := wealth_odometer.get_node_or_null("Reel%d" % reel_index) as Control
 			var current := reel.get_node_or_null("Current") as Sprite2D if reel != null else null
@@ -605,6 +608,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	var previous_abilities: Array = run_store.abilitiesUsed.duplicate()
 	var previous_restores: Array = run_store.pendingPowerRestores.duplicate()
 	var previous_spin_count := int(run_store.spinCount)
+	var previous_score := int(run_store.scoreEarned)
 	var previous_display := int(machine._display_lucidity)
 	var previous_coin_prev := int(machine._coin_prev_lucidity)
 
@@ -617,6 +621,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
+	run_store.scoreEarned = 20
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(20)
 	machine._coin_prev_lucidity = 20
@@ -626,9 +631,9 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 		failures.append("machine water: should grant lucidity immediately on consume")
 	if int(machine._coin_prev_lucidity) != 60:
 		failures.append("machine water: immediate consume gain will replay on next spin")
-	await create_timer(2.0).timeout
-	if int(machine._display_lucidity) != 60:
-		failures.append("machine water: HUD did not count to Water lucidity before next spin")
+	await create_timer(0.1).timeout
+	if int(machine._display_lucidity) != 20:
+		failures.append("machine water: Lucidity gain incorrectly changed the wealth odometer")
 
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(previous_display)
@@ -642,6 +647,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.abilitiesUsed = previous_abilities
 	run_store.pendingPowerRestores = previous_restores
 	run_store.spinCount = previous_spin_count
+	run_store.scoreEarned = previous_score
 
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
@@ -698,11 +704,11 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 		failures.append("machine consumable feedback: Tea did not restore the used ability")
 	if not machine._power_sequence_active() and not run_store.pendingPowerRestores.is_empty():
 		failures.append("machine consumable feedback: Tea queued a restore but no coin flew")
-	await create_timer(1.0).timeout
+	await create_timer(0.75).timeout
 	if spawned == null or not is_instance_valid(spawned):
-		failures.append("machine consumable feedback: hint disappeared before the 1.5s hold")
+		failures.append("machine consumable feedback: hint disappeared during its growth phase")
 	elif (spawned as HintLabel).modulate.a < 0.95:
-		failures.append("machine consumable feedback: hint faded before the 1.5s hold")
+		failures.append("machine consumable feedback: hint faded during its growth phase")
 	if spawned != null and is_instance_valid(spawned):
 		spawned.queue_free()
 	await create_timer(float(machine.tea_petal_time) + 0.3).timeout
@@ -2413,6 +2419,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	run_store.neurons = 5
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 10
+	run_store.scoreEarned = 300
 	run_store.lucidityCoins = 300
 	machine._show_ending("wealth", run)
 	var wallet_before := int(meta_store.lucidityWallet)
@@ -2571,6 +2578,43 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	machine._set_stash_tray_visible(true)
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -> void:
+	var previous_result: Variant = run_store.lastResult
+	var previous_phase := String(run_store.runPhase)
+	var previous_score := int(run_store.scoreEarned)
+	var previous_lucidity := int(run_store.lucidityCoins)
+	var previous_spin := int(run_store.spinCount)
+	var previous_bet := int(run_store.lastEffectiveBet)
+	var previous_burst_spin := int(machine._burst_prev_spin)
+	var previous_burst_score := int(machine._burst_prev_score)
+	var previous_display := int(machine._display_lucidity)
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 42
+	run_store.lucidityCoins = 0
+	run_store.spinCount = 1
+	run_store.lastEffectiveBet = 1
+	run_store.lastResult = {
+		"scoreEarned": 42,
+		"winType": "pair",
+		"reels": ["eye", "eye", "vial"],
+		"scoreMultiplier": 1.0,
+	}
+	machine._burst_prev_spin = -1
+	machine._burst_prev_score = 0
+	machine._set_display_lucidity(0, false)
+	machine._emit_score_burst(null)
+	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 42:
+		failures.append("wealth: score popup did not advance the odometer without Lucidity coins")
+	run_store.lastResult = previous_result
+	run_store.runPhase = previous_phase
+	run_store.scoreEarned = previous_score
+	run_store.lucidityCoins = previous_lucidity
+	run_store.spinCount = previous_spin
+	run_store.lastEffectiveBet = previous_bet
+	machine._burst_prev_spin = previous_burst_spin
+	machine._burst_prev_score = previous_burst_score
+	machine._set_display_lucidity(previous_display, false)
 
 # Issue #62: reaching the wealth goal with no spins left must still open the
 # wealth flow with a usable Start Again action and a disabled Keep playing action;
@@ -3461,7 +3505,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 
 	run_store.reset_run_state()
 
-# Issue #76: the power gauge banks SCORE GAINED (10 score = 1 coin/frame, 50 = 5). Sub-10
+# Issue #76: the power gauge banks Lucidity (10 coins = 1 coin/frame, 50 = 5). Sub-10
 # gains bank without a coin (no infinite loop), the gauge caps at 4/5 when no restore is
 # available (discarding the excess, no fake-fill), and a fill commits one pending restore.
 func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> void:
@@ -3470,6 +3514,17 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 
 	if machine._power_bar_step() != 10:
 		failures.append("issue76: power-bar step should be 10, got %d" % machine._power_bar_step())
+	var pop: Sprite2D = machine._make_power_coin_pop() as Sprite2D
+	if pop == null:
+		failures.append("issue76: wealth power-coin pop animation asset is missing")
+	else:
+		if pop.hframes != 4 or pop.vframes != 1:
+			failures.append("issue76: power-coin pop animation should expose four horizontal frames")
+		if not String(pop.texture.resource_path).ends_with("power coin animation.png"):
+			failures.append("issue76: wrong power-coin pop animation texture")
+		pop.queue_free()
+	if machine.WEALTH_COIN_ORIGIN == machine._cash_tray_pos():
+		failures.append("issue76: wealth power coins still start in the cash tray")
 
 	# Frame for a banked-score value.
 	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
@@ -4573,13 +4628,10 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 
 	machine._set_display_lucidity(0)
 	var coin_duration: float = machine._spawn_lucidity_coins(3, 3)
-	if coin_duration <= 0.0:
-		failures.append("issue28: coin sequence did not report an animation duration")
+	if coin_duration != 0.0:
+		failures.append("issue28: removed cash-tray wealth coin flow still reports a duration")
 	if machine._display_lucidity != 0:
-		failures.append("issue28: wealth display updated before coins reached the bar")
-	await create_timer(coin_duration + 0.05).timeout
-	if machine._display_lucidity != 3:
-		failures.append("issue28: wealth display did not update after coin contact")
+		failures.append("issue28: removed Lucidity feedback changed the wealth display")
 
 # Issue #77: opening options and leaving the scene (Settings/Scores/Collection)
 # mid-spin frees the animation that would call set_spinning(false), so the store's
