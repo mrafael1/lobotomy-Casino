@@ -235,9 +235,9 @@ const POWER_COIN_POP_FRAME_TIME := 0.06
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
 # six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
-# flies from the wealth odometer to the bar every POWER_COIN_STEP lucidity and advances
-# one frame; at the full frame it spawns a coin from the bar top that flies to the random
-# restorable power. Each bank coin first plays the authored four-frame pop sheet.
+# flies from the wealth odometer to the bar every 10 power points and advances one frame;
+# at the full frame it spawns a coin from the bar top that flies to the random restorable
+# power. Each bank coin first plays the authored four-frame pop sheet.
 # The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
 # coins = 10/step.
 const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
