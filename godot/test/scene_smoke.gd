@@ -189,8 +189,32 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or power_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: power bar is not a 6-frame native sprite")
 
+	var wealth_odometer := machine.get_node_or_null("WealthOdometer") as WealthOdometer
+	if wealth_odometer == null:
+		failures.append("machine art: wealth odometer is missing")
+	else:
+		var wealth_art := wealth_odometer.get_node_or_null("WealthBarArt") as Sprite2D
+		if wealth_art == null or wealth_art.texture == null \
+				or Vector2i(wealth_art.texture.get_width(), wealth_art.texture.get_height()) \
+					!= Vector2i(160, 320) \
+				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+			failures.append("machine art: wealth odometer bar is not native 160x320 art")
+		for reel_index in 4:
+			var reel := wealth_odometer.get_node_or_null("Reel%d" % reel_index) as Control
+			var current := reel.get_node_or_null("Current") as Sprite2D if reel != null else null
+			var next := reel.get_node_or_null("Next") as Sprite2D if reel != null else null
+			if reel == null or not reel.clip_contents:
+				failures.append("machine art: wealth odometer reel %d is not clipped" % reel_index)
+			elif current == null or next == null or current.texture == null \
+					or Vector2i(current.texture.get_width(), current.texture.get_height()) \
+						!= Vector2i(1760, 320) \
+					or current.hframes != 11 or next.hframes != 11 \
+					or current.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
+
 	for node_name in [
-		"ReelBacking", "WealthTrack", "WealthFill", "HealthTrack", "HealthFill",
+		"ReelBacking", "HealthTrack", "HealthFill",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
 		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
 		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",
@@ -2378,12 +2402,10 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var meta_before: Dictionary = meta_store._as_dict()
 	var run := { "neurons": 5, "scoreEarned": 2000, "lucidityCoins": 300 }
 
-	# Wealth bar readout targets the campaign goal, not the old 1000 objective.
-	machine._set_display_lucidity(300)
-	if machine._bar_labels.has("goal"):
-		var goal_text := String((machine._bar_labels["goal"] as Label).text)
-		if not goal_text.ends_with("/2000"):
-			failures.append("wealth: goal bar reads '%s', expected x/2000" % goal_text)
+	# The authored four-reel odometer replaces the old progress bar and x/goal label.
+	machine._set_display_lucidity(300, false)
+	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+		failures.append("wealth: odometer did not initialize to 0300")
 
 	run_store.runPhase = "running"
 	# The store must mirror a continuable run (issue #62): CONTINUE is disabled
@@ -2404,7 +2426,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
 	for node_name: String in [
-		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		"WealthOdometer", "HealthTrack", "HealthFill", "HealthLabel"]:
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
@@ -2420,7 +2442,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	# wealth presentation must keep the machine bars hidden through that path too.
 	machine._update_hud()
 	for node_name: String in [
-		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel"]:
+		"WealthOdometer", "HealthTrack", "HealthFill", "HealthLabel"]:
 		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
 			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
@@ -2518,32 +2540,31 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("issue131: re-entering the machine ended or overlaid the continued run")
 	if machine._check_ending() or machine._overlay != null:
 		failures.append("issue131: continued run still re-triggered the wealth ending")
-	# Issue #110: after choosing to continue, the completed goal disappears from the
-	# objective target — the label shows the score plus "???" and the bar pins full, and it stays
-	# that way through every HUD refresh path for the rest of the continued run.
+	# The odometer has no goal suffix to mask after a Wealth continuation; it keeps
+	# rolling the current total through the normal HUD refresh and scene-reentry paths.
 	machine._refresh_tv_indicators()
-	if machine._bar_labels.has("goal"):
-		if String((machine._bar_labels["goal"] as Label).text) != "300/???":
-			failures.append("issue131: continued run goal label reads '%s', expected 300/???"
-				% String((machine._bar_labels["goal"] as Label).text))
-		# _set_display_lucidity is the rebuild/count-up path (scene re-entry after a
-		# save load repopulates the HUD through it) — it must also keep the mask.
-		machine._set_display_lucidity(450)
-		if String((machine._bar_labels["goal"] as Label).text) != "450/???":
-			failures.append("issue131: goal label lost the score while preserving the ??? target")
-		if machine._goal_fill_sprite != null \
-				and machine._goal_fill_sprite.region_rect.size.x \
-					< float(machine.WEALTH_BAR["width"]) * machine.ASSET_SCALE:
-			failures.append("issue110: continued-run wealth bar is not pinned full")
+	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+		failures.append("issue131: continued-run odometer did not preserve 0300")
 	else:
-		failures.append("issue110: goal bar label missing from the HUD")
-	# A fresh standard run restores the normal x/goal progression.
+		machine._wealth_odometer._drive_roll(0.5, 1999, 2000)
+		var from_digits: Array[int] = [1, 9, 9, 9]
+		var to_digits: Array[int] = [2, 0, 0, 0]
+		for reel_index in 4:
+			var reel := machine._wealth_odometer.get_node("Reel%d" % reel_index) as Control
+			var current := reel.get_node("Current") as Sprite2D
+			var next := reel.get_node("Next") as Sprite2D
+			if current.frame != machine._wealth_odometer.FRAME_FOR_DIGIT[from_digits[reel_index]] \
+					or next.frame != machine._wealth_odometer.FRAME_FOR_DIGIT[to_digits[reel_index]] \
+					or not next.visible or is_equal_approx(current.position.y, next.position.y):
+				failures.append("wealth: 1999 -> 2000 carry did not roll reel %d" % reel_index)
+		machine._set_display_lucidity(450, false)
+		if machine._wealth_odometer.get_value() != 450:
+			failures.append("issue131: continued-run odometer did not update to 0450")
+	# A fresh standard run restores a zero-padded mechanical readout.
 	run_store.reset_run_state()
-	machine._set_display_lucidity(300)
-	if machine._bar_labels.has("goal") \
-			and String((machine._bar_labels["goal"] as Label).text) != "300/%d" % int(machine.campaign_goal_score):
-		failures.append("issue110: new run goal label reads '%s', expected 300/%d"
-			% [String((machine._bar_labels["goal"] as Label).text), int(machine.campaign_goal_score)])
+	machine._set_display_lucidity(300, false)
+	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+		failures.append("wealth: fresh-run odometer did not restore 0300")
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
@@ -2975,11 +2996,11 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	if dealer_icon == null or dealer_icon.texture == null:
 		failures.append("dealer icon: mini dealer portrait is missing from the TV")
 	else:
-		# Anchored under the right end of the wealth bar (bar spans x 43-109, bottom y 77),
-		# with the countdown badge in its bottom-right corner instead of a DEALER label.
+		# Anchored to the TV status column, with the countdown badge in its
+		# bottom-right corner instead of a DEALER label.
 		if dealer_icon.position.x < 43.0 or dealer_icon.position.y < 77.0 \
 				or dealer_icon.size.x > 10.0 or dealer_icon.size.y > 10.0:
-			failures.append("dealer icon: portrait is not anchored under the wealth bar's end")
+			failures.append("dealer icon: portrait is not anchored to the TV status column")
 		if machine.get_node_or_null("DealerCountdownTitle") != null:
 			failures.append("dealer icon: old DEALER title label was not removed")
 		if dealer_icon.get_node_or_null("DealerCountdownNumber") == null:

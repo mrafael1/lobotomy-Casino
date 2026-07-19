@@ -56,8 +56,10 @@ Resources and currencies:
   ending; that is the objective of every run.
 - **Run Lucidity (coins)** — earned alongside score during the run. Every 50 coins
   restores one random spent power; coins also pay for mid-run dealer offer
-  rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save, halved by the
-  spade modifier) and banked into the wallet.
+  rerolls. The machine shows the current total on a four-reel mechanical odometer;
+  changed digits roll and carry like physical number drums. On a non-Wealth ending,
+  10% is kept (20% with Smart Save, halved by the spade modifier) and banked into
+  the wallet.
 - **Wallet Lucidity (credits)** — the persistent meta currency. Buys Lab upgrades
   and pre-run consumables between runs.
 
