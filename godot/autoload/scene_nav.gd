@@ -6,6 +6,25 @@ const DEFAULT_MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 
 var _back_stack: Array[Dictionary] = []
 var _restore_options_scene := ""
+# Process-wide PackedScene cache: repeat transitions (menu ↔ machine ↔ lab) skip
+# the synchronous disk load, so subsequent opens are noticeably faster on device.
+var _scene_cache: Dictionary = {}
+
+func cached_scene(scene_path: String) -> PackedScene:
+	var ps: PackedScene = _scene_cache.get(scene_path, null)
+	if ps == null:
+		ps = load(scene_path) as PackedScene
+		if ps != null:
+			_scene_cache[scene_path] = ps
+	return ps
+
+## Cached replacement for get_tree().change_scene_to_file().
+func change_to(scene_path: String) -> void:
+	var ps := cached_scene(scene_path)
+	if ps != null:
+		get_tree().change_scene_to_packed(ps)
+	else:
+		get_tree().change_scene_to_file(scene_path)
 
 func push_current_scene(restore_options: bool = false) -> void:
 	var current_scene: Node = get_tree().current_scene
@@ -34,12 +53,12 @@ func go_back(fallback_scene: String = DEFAULT_MENU_SCENE) -> void:
 			restore_options = bool(entry.get("restore_options", false))
 			break
 	_restore_options_scene = target_scene if restore_options else ""
-	get_tree().change_scene_to_file(target_scene)
+	change_to(target_scene)
 
 func go_to_menu(menu_scene: String = DEFAULT_MENU_SCENE) -> void:
 	_back_stack.clear()
 	_restore_options_scene = ""
-	get_tree().change_scene_to_file(menu_scene)
+	change_to(menu_scene)
 
 func clear() -> void:
 	_back_stack.clear()
