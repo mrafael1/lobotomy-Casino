@@ -69,16 +69,20 @@ const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
-const FREE_SPIN_OVERLAY_TIME := 1.35
+# The x3 losing state is an authored 9-frame diminished-fire sheet (1440x320)
+# stepped at the same cadence as the regular multiplier effects.
+const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
-const COMBO_PENDING_TIMEOUT := 4.0
-# Issue #155: TV dealer countdown (top-left of the screen). Lower = dealer closer;
-# 8-5 calm, 4-2 warning purple, 1 red.
-const DEALER_COUNTDOWN_TITLE_POS := Vector2(38.0, 44.0)
-const DEALER_COUNTDOWN_NUMBER_POS := Vector2(38.0, 50.0)
+const COMBO_LOSS_BEEP_FADE_TIME := 0.1
+const COMBO_LOSS_BEEP_PAUSE := 0.42
+# Issue #155: TV dealer countdown — the portrait with a spins-left badge in its
+# bottom-right corner (same badge style as the boost icons), sitting under the
+# right end of the wealth bar. Lower = dealer closer; 8-5 calm, 4-2 warning
+# purple, 1 red.
 const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
-const DEALER_ICON_POS := Vector2(27.0, 44.0)
 const DEALER_ICON_SIZE := Vector2(9.0, 9.0)
+# Right edge of WEALTH_BAR minus the icon width, one px below the bar.
+const DEALER_ICON_POS := Vector2(100.0, 78.0)
 const DEALER_COUNTDOWN_CALM_COLOR := Color(0.75, 0.92, 1.0)
 const DEALER_COUNTDOWN_WARN_COLOR := Color(0.78, 0.6, 0.95)
 const DEALER_COUNTDOWN_DANGER_COLOR := Color(1.0, 0.3, 0.35)
@@ -162,10 +166,13 @@ const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
-const COMBO_PENDING_RECT := Rect2(29.0, 111.0, 102.0, 49.0)
-const COMBO_PENDING_COLOR := Color(0.05, 0.02, 0.11, 0.96)
-const COMBO_PENDING_ACCENT := Color(1.0, 0.32, 0.52)
+# Presentation stack: machine art → loss overlays (97) → dealer offer (100) →
+# dealer-interactive stash (110, only while his offer is up; 50 otherwise) →
+# HUD/options (BottomHudLayer 120).
 const COMBO_LOSS_OVERLAY_Z_INDEX := 97
+const DEALER_OVERLAY_Z_INDEX := 100
+const STASH_TRAY_Z_INDEX := 50
+const DEALER_STASH_Z_INDEX := 110
 # Issue #119: authored points-table art. Both 1280x2240 sheets cover the full
 # 160x320 canvas, but the authored scale is NOT square: x8 horizontally and x7
 # vertically (1280/160 vs 2240/320). Canvas-space rects are source px / 8 on x
@@ -464,11 +471,6 @@ var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the
 var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
-var _free_spin_overlay_elapsed := 0.0
-var _queued_free_spin_overlays := 0
-var _observed_free_spins := 0
-var _observed_free_spin_grant_serial := 0
-var _free_spin_observation_initialized := false
 var _goal_fill_sprite: Sprite2D = null
 var _life_fill_sprite: Sprite2D = null
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
@@ -519,7 +521,7 @@ var _sequence_lock_active := false
 var _post_spin_sequence_active := false
 var _pending_combo_overlay: Control = null
 var _pending_combo_power_flow := false
-var _pending_combo_timeout_token := 0
+var _combo_loss_beep_tween: Tween = null
 var _sfx_players: Dictionary = {}
 var _spin_launch_pending := false
 
@@ -559,10 +561,6 @@ var _reveal_reel_next_spin := -1
 # Spin-gain fly-ins in flight (issue #66): the spins-left counter is held back by
 # this amount until each "+N" popup lands, so the number ticks up in sync.
 var _pending_spin_gain := 0
-# Free spins granted by the in-progress spin (issue #80): the SPINS LEFT counter
-# drops with the neuron cost the instant the lever is pulled, but a grant from the
-# same spin is a reward held (inside _pending_spin_gain) until the score popup lands.
-var _held_spin_grant := 0
 # Consumable visuals (issue #34).
 var _fx_layer: Control = null              # host for all consumable effect nodes
 var _tobacco_covers: Array = []            # per-reel dark cover while smoked out
@@ -1152,7 +1150,7 @@ func _build_machine_control_art() -> void:
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
-	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, 1)
+	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
 			_combo_loss_2_sprite, _combo_loss_3_sprite]:
 		if fx != null:
@@ -1332,8 +1330,8 @@ func _build_hud() -> void:
 	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
 	_build_dealer_countdown_labels()
 
-## Issue #155: "DEALER" + the countdown number on the TV's free top-left strip.
-## The number is the message: lower = dealer closer, higher multiplier = faster.
+## Issue #155: the dealer portrait with the countdown as a bottom-right corner badge
+## (same look as the consumable boost badges). Lower = dealer closer.
 func _build_dealer_countdown_labels() -> void:
 	var icon := TextureRect.new()
 	icon.name = "DealerIcon"
@@ -1347,25 +1345,24 @@ func _build_dealer_countdown_labels() -> void:
 	icon.z_index = 12
 	add_child(icon)
 	_bar_labels["dealer_icon"] = icon
-	var title := Label.new()
-	title.name = "DealerCountdownTitle"
-	title.position = DEALER_COUNTDOWN_TITLE_POS
-	title.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		title.add_theme_font_override("font", _font)
-	title.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
-	title.text = "DEALER"
-	add_child(title)
-	_bar_labels["dealer_title"] = title
 	var number := Label.new()
 	number.name = "DealerCountdownNumber"
-	number.position = DEALER_COUNTDOWN_NUMBER_POS
-	number.add_theme_font_size_override("font_size", 8)
+	number.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	number.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	number.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		number.add_theme_font_override("font", _font)
 	number.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
+	number.add_theme_color_override("font_outline_color", Color.BLACK)
+	number.add_theme_constant_override("outline_size", 1)
+	number.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	number.text = ""
-	add_child(number)
+	# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
+	# real (font-driven) min height, same trick as the boost badges (issue #76 review).
+	icon.add_child(number)
+	var mh := number.get_minimum_size().y
+	number.size = Vector2(DEALER_ICON_SIZE.x, mh)
+	number.position = Vector2(0.0, DEALER_ICON_SIZE.y - mh)
 	_bar_labels["dealer_count"] = number
 
 func _refresh_dealer_countdown() -> void:
@@ -1380,8 +1377,6 @@ func _refresh_dealer_countdown() -> void:
 	var number := _bar_labels["dealer_count"] as Label
 	number.text = str(n)
 	number.add_theme_color_override("font_color", color)
-	if _bar_labels.has("dealer_title"):
-		(_bar_labels["dealer_title"] as Label).add_theme_color_override("font_color", color)
 
 func _build_score_button() -> void:
 	_score_button = _authored_button("ScoreButton")
@@ -1447,7 +1442,11 @@ func _set_sequence_lock(locked: bool) -> void:
 	_refresh_controls()
 
 func _refresh_score_button_lock() -> void:
-	_set_score_button_locked(_sequence_lock_active or _dealer_offer_popup != null)
+	# The pending-defeat rescue window keeps TABLES readable: the sequence lock is
+	# holding the player, but checking the odds is part of deciding on a rescue.
+	var locked := (_sequence_lock_active and not RunStateStore.comboDefeatPending) \
+		or _dealer_offer_popup != null
+	_set_score_button_locked(locked)
 
 func _build_campaign_label() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
@@ -1577,7 +1576,6 @@ func _sync_visuals() -> void:
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
 	_pending_spin_gain = 0
-	_held_spin_grant = 0
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1634,9 +1632,12 @@ func _resolve_interrupted_spin() -> void:
 	if _check_flatline_instant_death():
 		return
 	if RunStateStore.comboDefeatPending:
-		_post_spin_sequence_active = true
-		_show_pending_combo_defeat()
-		return
+		if not _discard_moot_combo_defeat():
+			_post_spin_sequence_active = true
+			_show_pending_combo_defeat()
+			if RunStateStore.dealerIncoming:
+				_present_dealer_or_defer()
+			return
 	if _check_ending():
 		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
@@ -1648,17 +1649,25 @@ func _resolve_interrupted_spin() -> void:
 	_update_hud()
 
 func _to_menu() -> void:
-	get_tree().change_scene_to_file(MENU_SCENE)
+	SceneNav.change_to(MENU_SCENE)
 
 func _to_dealer() -> void:
-	get_tree().change_scene_to_file(DEALER_SCENE)
+	SceneNav.change_to(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
-	if _spinning_anim or _spin_launch_pending or _reroll_anim_active \
-			or _sequence_lock_active or _free_spin_overlay_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
+		return
+	# A pending loss is confirmed by the next manual spin. Powers still have the
+	# current reveal's rescue window, but pulling the lever means the pair/triple
+	# was not rescued and the gauge loses one level before the new spin starts.
+	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
 	if RunStateStore.comboDefeatPending:
-		return
+		_on_pending_combo_declined()
+		if _sequence_lock_active or _post_spin_sequence_active \
+				or RunStateStore.runPhase != "running" \
+				or RunStateStore.dealerIncoming or RunStateStore.compulsiveSpinSkips > 0:
+			return
 	if _dealer_offer_popup != null:
 		return
 	if not compulsive and not RunStateStore._can_act():
@@ -1683,22 +1692,16 @@ func _do_spin(compulsive := false) -> void:
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
 	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
-	# exception — it must drop with the neuron cost right now (issue #80).
-	var free_before := int(RunStateStore.freeSpinsRemaining)
+	# exception — it must drop with the neuron cost right now (issue #80). Free
+	# spins never show in the counter (the FREE SPIN banner carries them), so a
+	# grant made by this spin needs no counter hold.
 	_hud_delta_hold = true
 	var result: Variant = RunStateStore.spin(compulsive)
 	if result == null:
 		_hud_delta_hold = false
 		return
 	_apply_expiring_boost_linger(expiring_boost_counters)
-	# A free spin GRANTED by this spin (jackpot) is a reward, not a cost, so hold it
-	# out of the now-live SPINS LEFT counter until the score lands (issue #80); the
-	# hold is released in _release_hud_delta_hold with the other reward deltas.
-	var granted_free := maxi(0, int(RunStateStore.freeSpinsRemaining) - free_before)
-	if granted_free > 0:
-		_pending_spin_gain += granted_free
-		_held_spin_grant += granted_free
-	_update_hud() # SPINS LEFT drops with the spent neuron immediately (grant stays held)
+	_update_hud() # SPINS LEFT drops with the spent neuron immediately
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
 	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and blur_this_spin)
 	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
@@ -1727,12 +1730,7 @@ func _do_spin(compulsive := false) -> void:
 	_refresh_controls()
 	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
-		# Aborted launch: don't leave the HUD frozen, and release the held grant so
-		# the committed free spin is not stranded out of the counter (issue #80).
-		if _held_spin_grant > 0:
-			_pending_spin_gain = maxi(0, _pending_spin_gain - _held_spin_grant)
-			_held_spin_grant = 0
-		_hud_delta_hold = false
+		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
 		return
 	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
@@ -1851,10 +1849,15 @@ func _run_post_reveal_sequence() -> void:
 		_post_spin_sequence_active = false
 		return
 	if RunStateStore.comboDefeatPending:
-		# Keep the pre-loss combo visible while the player decides whether to spend a
-		# current-reveal power. The ending/dealer checks wait until that decision lands.
-		_show_pending_combo_defeat()
-		return
+		if not _discard_moot_combo_defeat():
+			# Keep the pre-loss combo visible while the player decides whether to spend
+			# a current-reveal power. The ending check waits until that decision lands,
+			# but the dealer does NOT wait for the confirming spin — he walks in over
+			# the beeping warning and the rescue window resumes when his offer closes.
+			_show_pending_combo_defeat()
+			if RunStateStore.dealerIncoming:
+				_present_dealer_or_defer()
+			return
 	_finish_post_spin_sequence()
 
 func _finish_post_spin_sequence() -> void:
@@ -1886,6 +1889,25 @@ func _finish_post_spin_sequence() -> void:
 ## A non-paying reveal pauses the normal tail of the spin sequence. The authored
 ## x2/x3 loss overlay replaces the old text headline while Reroll/Shift remain
 ## usable through their existing buttons.
+## Energy Drink's compulsory spin outranks a loss warning: while the forced spin
+## is queued, a protected result's pending defeat is moot — the machine spins next
+## no matter what, and that forced result becomes the sole authority for the next
+## combo-loss state. resolve(false) keeps the drink-owned x2
+## (energy_drink_owns_multiplier), so discarding never lowers the multiplier.
+func _discard_moot_combo_defeat() -> bool:
+	if not RunStateStore.comboDefeatPending:
+		return false
+	# Out of spins: the confirming spin can never come, so the rescue window is
+	# dead — resolve the loss now and let the ending check proc the flatline
+	# without the player having to touch the lever.
+	var out_of_spins: bool = int(RunStateStore.neurons) < 1 \
+		and int(RunStateStore.freeSpinsRemaining) <= 0
+	if RunStateStore.compulsiveSpinSkips <= 0 and not out_of_spins:
+		return false
+	RunStateStore.resolve_pending_combo_defeat(false)
+	_close_pending_combo_defeat()
+	return true
+
 func _show_pending_combo_defeat() -> void:
 	if not RunStateStore.comboDefeatPending or _pending_combo_overlay != null:
 		return
@@ -1897,69 +1919,9 @@ func _show_pending_combo_defeat() -> void:
 	_pending_combo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pending_combo_overlay.z_index = 96
 	add_child(_pending_combo_overlay)
-
-	var panel := ColorRect.new()
-	panel.name = "Panel"
-	panel.position = COMBO_PENDING_RECT.position
-	panel.size = COMBO_PENDING_RECT.size
-	panel.color = COMBO_PENDING_COLOR
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pending_combo_overlay.add_child(panel)
 	_set_combo_loss_display(int(RunStateStore.pendingComboMultiplier))
-
-	var power_ids: Array[String] = RunStateStore.pending_combo_power_ids()
-	var power_text := ""
-	for i in power_ids.size():
-		if i > 0:
-			power_text += " / "
-		power_text += String(power_ids[i]).to_upper()
-	var prompt_text := "USE %s OR LOSE 1" % power_text if not power_text.is_empty() \
-		else "NO POWER — LOSE 1"
-	var prompt := _reaction_label(_pending_combo_overlay, prompt_text,
-		Vector2(COMBO_PENDING_RECT.position.x, COMBO_PENDING_RECT.position.y + 14.0),
-		5, Color(0.82, 0.9, 1.0))
-	prompt.name = "Prompt"
-	prompt.size = Vector2(COMBO_PENDING_RECT.size.x, 10.0)
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	var decline := Button.new()
-	decline.name = "DeclineButton"
-	decline.text = "LOSE 1"
-	decline.position = Vector2(COMBO_PENDING_RECT.position.x + 33.0,
-		COMBO_PENDING_RECT.position.y + 31.0)
-	decline.size = Vector2(36.0, 12.0)
-	decline.focus_mode = Control.FOCUS_NONE
-	decline.mouse_filter = Control.MOUSE_FILTER_STOP
-	decline.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		decline.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(decline, COMBO_PENDING_ACCENT, 5, 1.0)
-	Assets.start_menu_button_press_feedback(decline)
-	decline.pressed.connect(_on_pending_combo_declined)
-	_pending_combo_overlay.add_child(decline)
-
+	_start_combo_loss_beep()
 	_refresh_controls()
-	if power_ids.is_empty():
-		call_deferred("_resolve_pending_combo_without_power")
-	else:
-		_start_pending_combo_timeout()
-
-func _resolve_pending_combo_without_power() -> void:
-	if RunStateStore.comboDefeatPending:
-		_on_pending_combo_declined()
-
-func _start_pending_combo_timeout() -> void:
-	_pending_combo_timeout_token += 1
-	var token: int = _pending_combo_timeout_token
-	await get_tree().create_timer(COMBO_PENDING_TIMEOUT).timeout
-	if token != _pending_combo_timeout_token or not is_inside_tree() \
-			or _pending_combo_overlay == null or not RunStateStore.comboDefeatPending:
-		return
-	_on_pending_combo_timeout()
-
-func _on_pending_combo_timeout() -> void:
-	if RunStateStore.comboDefeatPending:
-		_on_pending_combo_declined()
 
 func _on_pending_combo_declined() -> void:
 	if not RunStateStore.comboDefeatPending:
@@ -1967,27 +1929,55 @@ func _on_pending_combo_declined() -> void:
 	RunStateStore.resolve_pending_combo_defeat(false)
 	_close_pending_combo_defeat()
 	_finish_post_spin_sequence()
-
-func _set_pending_combo_prompt(text: String) -> void:
-	if _pending_combo_overlay == null:
-		return
-	var prompt := _pending_combo_overlay.get_node_or_null("Prompt") as Label
-	if prompt != null:
-		prompt.text = text
-
 func _close_pending_combo_defeat() -> void:
-	_pending_combo_timeout_token += 1
+	_stop_combo_loss_beep()
 	_set_combo_loss_display(0)
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
 	_refresh_controls()
 
+## A rescue cancels the warning the moment the store clears the pending flag — the
+## beep and the losing-state art must not linger through the reward presentation.
+func _maybe_cancel_combo_defeat_warning(was_pending: bool) -> void:
+	if was_pending and not RunStateStore.comboDefeatPending:
+		_close_pending_combo_defeat()
+
 func _set_combo_loss_display(multiplier: int) -> void:
 	if _combo_loss_2_sprite != null:
 		_combo_loss_2_sprite.visible = multiplier == 2
 	if _combo_loss_3_sprite != null:
 		_combo_loss_3_sprite.visible = multiplier == 3
+		if multiplier == 3:
+			_combo_loss_3_sprite.frame = 0
+	# The loss overlay replaces the regular gauge effects; closing it (0) brings
+	# the sparks / glitch + fire straight back for the surviving multiplier.
+	_apply_multiplier_fx_visibility()
+
+func _start_combo_loss_beep() -> void:
+	_stop_combo_loss_beep()
+	# Only the x2 losing state beeps; the x3 diminished-fire sheet plays its own
+	# steady frame animation and must not pulse on top of it.
+	if int(RunStateStore.pendingComboMultiplier) != 2:
+		return
+	var sprite: Sprite2D = _combo_loss_2_sprite
+	if sprite == null:
+		return
+	sprite.modulate = Color.WHITE
+	_combo_loss_beep_tween = create_tween().set_loops()
+	_combo_loss_beep_tween.tween_property(sprite, "modulate:a", 0.18,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_loss_beep_tween.tween_property(sprite, "modulate:a", 1.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_loss_beep_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+
+func _stop_combo_loss_beep() -> void:
+	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():
+		_combo_loss_beep_tween.kill()
+	_combo_loss_beep_tween = null
+	for sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
+		if sprite != null:
+			(sprite as Sprite2D).modulate = Color.WHITE
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -1995,10 +1985,23 @@ func _queue_compulsive_spin() -> void:
 	_compulsive_queued = true
 	_play_compulsive_takeover()
 
+## True while another sequence must finish before the machine can seize the spin.
+## The compulsion is persistent pending state: being blocked defers it, never drops it.
+func _compulsive_spin_blocked() -> bool:
+	return _spinning_anim or _spin_launch_pending or _reroll_anim_active \
+		or _post_spin_sequence_active or _dealer_offer_popup != null
+
 func _play_compulsive_takeover() -> void:
 	await get_tree().create_timer(0.55).timeout
+	# The forced spin must survive temporary locks (Energy-Drink softlock): while a
+	# spin animation, post-spin sequence, dealer popup, or combo warning is live,
+	# keep the request queued and retry — compulsiveSpinSkips>0 locks the player
+	# out, so dropping the request here would strand the run.
+	while is_inside_tree() and RunStateStore.runPhase == "running" \
+			and RunStateStore.compulsiveSpinSkips > 0 and _compulsive_spin_blocked():
+		await get_tree().create_timer(0.2).timeout
 	if not is_inside_tree() or RunStateStore.runPhase != "running" \
-			or RunStateStore.compulsiveSpinSkips <= 0 or _spinning_anim:
+			or RunStateStore.compulsiveSpinSkips <= 0:
 		_compulsive_queued = false
 		_hide_compulsive_overlay()
 		return
@@ -2014,7 +2017,18 @@ func _play_compulsive_takeover() -> void:
 	if not is_inside_tree() or RunStateStore.runPhase != "running":
 		_hide_compulsive_overlay()
 		return
+	# A loss warning left over from the last protected spin cannot gate the machine's
+	# own spin — discard it now so _do_spin(true) doesn't refuse and requeue forever
+	# (the old circular wait).
+	if _discard_moot_combo_defeat():
+		_set_sequence_lock(false)
 	_do_spin(true)
+	if not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips > 0 \
+			and RunStateStore.runPhase == "running":
+		# _do_spin refused (a lock or overlay raced in) — the pending forced spin
+		# is not consumed; requeue it instead of leaving the machine idle.
+		_queue_compulsive_spin()
+		return
 	if _compulsive_overlay != null:
 		var tw := create_tween()
 		tw.tween_interval(1.4) # reels settle, then the red haze lifts
@@ -2074,11 +2088,6 @@ func _release_hud_delta_hold() -> void:
 	if not _hud_delta_hold:
 		return
 	_hud_delta_hold = false
-	# Release the free spin this spin granted so it pops into SPINS LEFT alongside the
-	# other reward deltas, now that the score popup has landed (issue #80).
-	if _held_spin_grant > 0:
-		_pending_spin_gain = maxi(0, _pending_spin_gain - _held_spin_grant)
-		_held_spin_grant = 0
 	_update_hud()
 	_refresh_jackpot_lamp()
 
@@ -2142,32 +2151,13 @@ func _refresh_lock_art() -> void:
 
 func _refresh_tv_indicators() -> void:
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
-	# so it always updates — it is NOT held with the reward deltas (issue #80). Any
-	# free spin granted by the in-progress spin stays hidden via _pending_spin_gain
-	# (issue #66 / #80) until the score popup releases it.
+	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
 	var spins_ratio := clampf(float(spins_left) / float(_max_spins_display()), 0.0, 1.0)
-	var current_free_spins := int(RunStateStore.freeSpinsRemaining)
-	var current_free_spin_grant_serial := int(RunStateStore.freeSpinGrantSerial)
-	if not _free_spin_observation_initialized:
-		_free_spin_observation_initialized = true
-		_observed_free_spins = current_free_spins
-		_observed_free_spin_grant_serial = current_free_spin_grant_serial
-	else:
-		var new_grant := current_free_spin_grant_serial != _observed_free_spin_grant_serial
-		var bank_increased := current_free_spins > _observed_free_spins
-		if (new_grant or bank_increased) and RunStateStore.runPhase == "running":
-			# A state commit can happen while the HUD delta hold is active; queueing here
-			# lets the release path start the overlay after the reward popup lands.
-			_queue_free_spin_overlay()
-	_observed_free_spins = current_free_spins
-	_observed_free_spin_grant_serial = current_free_spin_grant_serial
-	# The entrance animation temporarily replaces the health bar and its text. Once
-	# the final queued animation finishes, the normal spins-left bar returns even if
-	# free-spin credits remain banked.
-	var free_spins_active := _free_spin_overlay_active \
-			and RunStateStore.runPhase == "running"
-	_set_free_spin_display(free_spins_active)
+	# The FREE SPIN banner replaces the health bar and its text for as long as the
+	# next spin is free (banked free spins or an Energy Drink rush).
+	_refresh_free_spin_banner()
+	var free_spins_active := _free_spin_overlay_active
 	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
 	if _life_fill_sprite != null:
 		_life_fill_sprite.visible = not free_spins_active and spins_ratio > 0.0
@@ -2195,13 +2185,11 @@ func _refresh_tv_indicators() -> void:
 	if _bar_labels.has("goal"):
 		_bar_labels["goal"].text = _goal_label_text()
 
-## The real number of spins the player can still take: what the neuron pool affords
-## (ceil(neurons / decay) — the SAME budget spin() uses) plus banked free spins.
-## Free-spin grants in flight are held back by _pending_spin_gain so the counter
-## ticks up when the "+N" popup lands (issue #66). The earlier rescale to a fixed
-## 35-spin display budget drifted from the economy (a +3 restore read +4, a single
-## spin dropped the counter by 2); the counter now reads straight off the neuron
-## budget with no spin cap, so vials genuinely raise it (issue #75).
+## The number of spins the neuron pool affords: ceil(neurons / decay) — the SAME
+## budget spin() uses. Banked free spins deliberately do NOT inflate the counter:
+## a free spin means the NEXT spin costs nothing (the FREE SPIN banner says so),
+## not that the meter gained a spin. Spin restores in flight are held back by
+## _pending_spin_gain so the counter ticks up when the "+N" popup lands (issue #66).
 func _spin_decay() -> int:
 	return maxi(1, Economy.compute_neuron_decay(RunStateStore.ownedUpgrades))
 
@@ -2216,8 +2204,7 @@ func _max_spins_display() -> int:
 	return maxi(1, int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay()))))
 
 func _display_spins_left() -> int:
-	var affordable := _neuron_spins_left() + int(RunStateStore.freeSpinsRemaining)
-	return maxi(0, affordable - _pending_spin_gain)
+	return maxi(0, _neuron_spins_left() - _pending_spin_gain)
 
 func _current_display_spins_left() -> int:
 	return _display_spins_left()
@@ -2847,15 +2834,10 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 ## Issue #155: the multiplier strip is a read-only frenzy gauge — wins drive it
 ## x1 → x2 → x3, a losing spin breaks it, the player never taps it. The badge
 ## sheet keeps its authored frames: 0/1/2 = x1/x2/x3 lit, 3/5 = the Energy-Drink
-## "x2 cap" pair, 4 = the machine-forced x1 of a compulsive phase.
+## "x2 cap" pair (frame 4, the old machine-forced compulsive x1, is unused now).
 func _refresh_multiplier_controls() -> void:
-	# Compulsion (issue #76): while the machine owns the spins it forces x1. Show the
-	# locked-x1 frame for the whole compulsive phase (even through the HUD hold) so
-	# the override reads immediately — the machine, not the player, is driving.
-	if RunStateStore.compulsiveSpinSkips > 0:
-		_set_sheet_frame(_multiplier_sprite, 4)
-		_refresh_multiplier_fx(1)
-		return
+	# The Energy-Drink forced spin no longer forces x1 — the machine takes the spin
+	# at the current combo, so the badge keeps showing the real gauge value.
 	if _hud_delta_hold:
 		return # badge keeps its pre-commit frame until the score popup lands
 	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
@@ -2872,16 +2854,26 @@ func _refresh_multiplier_fx(effective: int) -> void:
 	if _gauge_shown != 0 and effective > _gauge_shown:
 		_play_sfx(&"multiplier_change")
 	_gauge_shown = effective
+	_apply_multiplier_fx_visibility()
+
+## The losing state owns the gauge presentation while it is up: only its authored
+## overlay shows — the normal x2 sparks and the x3 glitch + fire sheets stay
+## hidden and come back the moment the loss display closes.
+func _apply_multiplier_fx_visibility() -> void:
+	var loss_active := (_combo_loss_2_sprite != null and _combo_loss_2_sprite.visible) \
+		or (_combo_loss_3_sprite != null and _combo_loss_3_sprite.visible)
 	if _mult_fx_2 != null:
-		_mult_fx_2.visible = effective == 2
+		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active
 	if _mult_fx_3 != null:
-		_mult_fx_3.visible = effective == 3
+		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active
 	if _mult_fx_fire != null:
-		_mult_fx_fire.visible = effective == 3
+		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active
 
 func _step_multiplier_fx(delta: float) -> void:
+	var loss_3_active := _combo_loss_3_sprite != null and _combo_loss_3_sprite.visible
 	if (_mult_fx_2 == null or not _mult_fx_2.visible) \
-			and (_mult_fx_3 == null or not _mult_fx_3.visible):
+			and (_mult_fx_3 == null or not _mult_fx_3.visible) \
+			and not loss_3_active:
 		return
 	_mult_fx_time += delta
 	if _mult_fx_time < MULT_FX_FRAME_TIME:
@@ -2893,45 +2885,37 @@ func _step_multiplier_fx(delta: float) -> void:
 		_mult_fx_3.frame = (_mult_fx_3.frame + 1) % MULT_FX_3_FRAMES
 	if _mult_fx_fire != null and _mult_fx_fire.visible:
 		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
+	if loss_3_active:
+		_combo_loss_3_sprite.frame = (_combo_loss_3_sprite.frame + 1) % COMBO_LOSS_3_FRAMES
 
-## FREE SPINS TV overlay: each newly granted batch gets a queued entrance animation
-## so repeated triggers are not swallowed or collapsed into one visual event.
+## FREE SPINS TV banner: blinks for as long as the NEXT spin is free (banked
+## free spins or an Energy Drink no-decay rush) and holds until the lever is
+## pulled — the spin's own state commit consumes the credit and clears it. It is
+## a passive indicator: it never blocks input.
 func _step_free_spin_blink(delta: float) -> void:
 	if _free_spin_sprite == null or not _free_spin_overlay_active:
 		return
-	_free_spin_overlay_elapsed += delta
 	_free_spin_blink_time = fmod(
 		_free_spin_blink_time + delta, FREE_SPIN_OVERLAY_BLINK_PERIOD)
 	_free_spin_sprite.visible = _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
-	if _free_spin_overlay_elapsed < FREE_SPIN_OVERLAY_TIME:
-		return
-	_free_spin_overlay_active = false
-	_free_spin_overlay_elapsed = 0.0
-	if _queued_free_spin_overlays > 0:
-		_queued_free_spin_overlays -= 1
-		_start_free_spin_overlay()
-	else:
-		_set_free_spin_display(false)
-		_update_hud()
 
-func _queue_free_spin_overlay() -> void:
-	if _free_spin_sprite == null or not is_inside_tree():
-		return
-	if _free_spin_overlay_active:
-		_queued_free_spin_overlays += 1
-		return
-	_start_free_spin_overlay()
-
-func _start_free_spin_overlay() -> void:
-	_clear_targeting()
-	_free_spin_overlay_active = true
-	_free_spin_overlay_elapsed = 0.0
-	_free_spin_blink_time = 0.0
-	_free_spin_sprite.visible = true
+func _refresh_free_spin_banner() -> void:
+	var active := RunStateStore.runPhase == "running" \
+		and (int(RunStateStore.freeSpinsRemaining) > 0 or int(RunStateStore.decaySkips) > 0)
+	# Never turn the banner ON while a spin is in flight or its reward is still
+	# held — a grant made by the spin being revealed must not spoil the result.
+	# Turning it OFF mid-spin is fine (pressing spin consumed the last credit).
+	if active and not _free_spin_overlay_active \
+			and (_spinning_anim or _spin_launch_pending or _hud_delta_hold):
+		active = false
+	_set_free_spin_display(active)
 
 func _set_free_spin_display(active: bool) -> void:
+	if active == _free_spin_overlay_active:
+		return
+	_free_spin_overlay_active = active
 	_free_spin_blink_time = 0.0
-	if _free_spin_sprite != null and not _free_spin_overlay_active:
+	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = active
 
 func _build_power_buttons() -> void:
@@ -3011,15 +2995,16 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	var mb := event as InputEventMouseButton
 	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
 		return
-	if _free_spin_overlay_active:
-		return
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return
 	if _dealer_offer_popup != null:
 		_begin_dealer_drag(node, String(slots[slot_index]), "stash")
 		return
-	if _sequence_lock_active or _spin_launch_pending or not RunStateStore._can_act() or _reroll_anim_active:
+	# The pending-defeat rescue window keeps consumables live (issue #155 follow-up):
+	# a corrective item can still cancel the losing state before the confirming spin.
+	if (_sequence_lock_active and not RunStateStore.comboDefeatPending) \
+			or _spin_launch_pending or not RunStateStore._can_use_consumable() or _reroll_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -3044,13 +3029,15 @@ func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 
 	var combo_pending := RunStateStore.comboDefeatPending
+	var can_confirm_combo_loss := combo_pending and RunStateStore.runPhase == "running" \
+		and not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips <= 0
 	var sequence_allows_power := not _sequence_lock_active or combo_pending
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and sequence_allows_power and not _free_spin_overlay_active
+		and _dealer_offer_popup == null and sequence_allows_power
 	if _spin_button != null:
-		_spin_button.disabled = _dealer_offer_popup != null or not RunStateStore._can_act() \
+		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
 			or _spinning_anim or _spin_launch_pending or _reroll_anim_active \
-			or _sequence_lock_active or _free_spin_overlay_active
+			or (_sequence_lock_active and not combo_pending)
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.ownedUpgrades
@@ -3076,8 +3063,8 @@ func _refresh_controls() -> void:
 			_set_sheet_frame(sprite, frame)
 
 	var slots := _stash_slots()
-	var usable := (RunStateStore._can_act() and not _spin_launch_pending and not _reroll_anim_active \
-			and not _sequence_lock_active and not _free_spin_overlay_active) \
+	var usable := (RunStateStore._can_use_consumable() and not _spin_launch_pending and not _reroll_anim_active \
+			and (not _sequence_lock_active or combo_pending)) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -3125,8 +3112,7 @@ func _boost_icon_for(boost: Dictionary) -> Texture2D:
 
 func _on_power_pressed(id: String) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
-	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
-			or _spin_launch_pending:
+	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
 	if combo_pending and id not in ["reroll", "shift"]:
 		return
@@ -3136,8 +3122,6 @@ func _on_power_pressed(id: String) -> void:
 		_clear_targeting()
 		_refresh_controls()
 		return
-	if combo_pending:
-		_set_pending_combo_prompt("SELECT A REEL")
 	if id == "shift":
 		_arm_shift_targets()
 	else:
@@ -3188,8 +3172,7 @@ func _arm_shift_targets() -> void:
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
-	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
-			or _spin_launch_pending:
+	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
 	if combo_pending and power_id not in ["reroll", "shift"]:
 		return
@@ -3199,17 +3182,17 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 		_hud_delta_hold = true # deltas pop with the reroll's score popup (issue #54)
 		if RunStateStore.reroll_reel(reel_index):
 			_pending_combo_power_flow = combo_pending
+			_maybe_cancel_combo_defeat_warning(combo_pending)
 			_clear_targeting()
-			_close_pending_combo_defeat()
 			_start_reroll_animation(reel_index)
 			_update_hud()
 			return
 		_hud_delta_hold = false
 		_clear_targeting()
 		if combo_pending:
-			RunStateStore.resolve_pending_combo_defeat(false)
-			_close_pending_combo_defeat()
-			_finish_post_spin_sequence()
+			# A failed rescue does not settle the loss. The numbered warning stays
+			# active until the player confirms it with the next spin.
+			_refresh_controls()
 	elif power_id == "memory":
 		RunStateStore.lock_reel(reel_index)
 		if combo_pending:
@@ -3271,8 +3254,7 @@ func _step_reroll(delta: float) -> void:
 
 func _apply_shift(reel_index: int, direction: int) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
-	if _free_spin_overlay_active or (_sequence_lock_active and not combo_pending) \
-			or _spin_launch_pending:
+	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
 	if not RunStateStore._can_use_ability():
 		return
@@ -3282,13 +3264,13 @@ func _apply_shift(reel_index: int, direction: int) -> void:
 		_hud_delta_hold = false
 		_clear_targeting()
 		if combo_pending:
-			RunStateStore.resolve_pending_combo_defeat(false)
-			_close_pending_combo_defeat()
-			_finish_post_spin_sequence()
+			# A failed rescue does not settle the loss. The numbered warning stays
+			# active until the player confirms it with the next spin.
+			_refresh_controls()
 		return
 	_pending_combo_power_flow = combo_pending
+	_maybe_cancel_combo_defeat_warning(combo_pending)
 	_clear_targeting()
-	_close_pending_combo_defeat()
 	_refresh_reels_from_state()
 	_update_hud()
 	# Reactions + instant-death run inside the reward sequence, after the score
@@ -3315,12 +3297,21 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 	# Instant death from stacked flatline results takes precedence, and only the
 	# power paths can add one here — the copy path never reacts.
 	if apply_power_reaction and _check_flatline_instant_death():
+		if pending_defeat_power_flow:
+			_close_pending_combo_defeat()
 		_pending_combo_power_flow = false
 		_post_spin_sequence_active = false
 		return
 	if pending_defeat_power_flow:
 		_pending_combo_power_flow = false
-		_finish_post_spin_sequence()
+		if RunStateStore.comboDefeatPending:
+			# The power changed the reveal but did not make a paying pair/triple.
+			# Re-open the beeping warning so another available power can be tried or
+			# the next spin can confirm the loss.
+			_show_pending_combo_defeat()
+		else:
+			_close_pending_combo_defeat()
+			_finish_post_spin_sequence()
 		return
 	_set_sequence_lock(false)
 
@@ -3346,7 +3337,7 @@ func _score_label(parent: Control, text: String, pos: Vector2, size: int, color:
 	return l
 
 func _show_score_table() -> void:
-	if _sequence_lock_active or _spin_launch_pending:
+	if (_sequence_lock_active and not RunStateStore.comboDefeatPending) or _spin_launch_pending:
 		return
 	if _dealer_offer_popup != null:
 		return
@@ -3799,8 +3790,6 @@ func _close_score_table() -> void:
 		_score_overlay = null
 
 func _on_stash_pressed(slot_index: int) -> void:
-	if _free_spin_overlay_active:
-		return
 	var slots := _stash_slots()
 	if slot_index >= slots.size():
 		return
@@ -3813,8 +3802,14 @@ func _on_stash_pressed(slot_index: int) -> void:
 		return
 	var lucidity_before := int(RunStateStore.lucidityCoins)
 	var spins_before := _current_display_spins_left()
+	var defeat_was_pending := RunStateStore.comboDefeatPending
 	if not RunStateStore.use_consumable(id):
 		return
+	# Energy Drink taken during an x3 defeat clears it in the store — drop the
+	# beeping loss overlay and let the normal post-spin tail resume.
+	if defeat_was_pending and not RunStateStore.comboDefeatPending:
+		_close_pending_combo_defeat()
+		_finish_post_spin_sequence()
 	_refresh_reels_from_state()
 	_update_hud()
 	_show_consumable_feedback(id)
@@ -3873,6 +3868,10 @@ func _pill_guaranteed_spin_pending() -> bool:
 ## Builds one HintLabel. `negative_only` shows just the downside; `positive_only` shows
 ## just the upside. Otherwise both lines show (the classic on-use hint).
 func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLabel:
+	# The losing state is represented by the loss art and its beep alone — no text
+	# bubble may appear while it is active, including on-use consumable hints.
+	if RunStateStore.comboDefeatPending:
+		return null
 	var hint: Dictionary = use_hints.get(id, {})
 	if hint.is_empty():
 		return null
@@ -3909,9 +3908,10 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 const SERUM_PICKER_RECT := Rect2(12.0, 132.0, 136.0, 58.0)
 
 func _begin_serum() -> void:
-	if _free_spin_overlay_active or _sequence_lock_active or _serum_picker != null:
+	if _serum_picker != null \
+			or (_sequence_lock_active and not RunStateStore.comboDefeatPending):
 		return
-	if not RunStateStore._can_act():
+	if not RunStateStore._can_use_consumable():
 		return
 	_build_serum_picker()
 
@@ -3937,8 +3937,6 @@ func _on_serum_picker_input(event: InputEvent) -> void:
 		_close_serum_picker()
 
 func _on_serum_pick(symbol_id: String) -> void:
-	if _free_spin_overlay_active:
-		return
 	_close_serum_picker()
 	var lucidity_before := int(RunStateStore.lucidityCoins)
 	if not RunStateStore.use_consumable("cons_focus", symbol_id):
@@ -4032,9 +4030,9 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
 func _begin_white_powder() -> void:
-	if _free_spin_overlay_active or _sequence_lock_active:
+	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
-	if not RunStateStore._can_act() or RunStateStore.lastResult == null:
+	if not RunStateStore._can_use_consumable() or RunStateStore.lastResult == null:
 		return
 	if not RunStateStore.use_consumable("cons_white_powder"):
 		return
@@ -4045,7 +4043,7 @@ func _begin_white_powder() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_copy_pick(reel_index))
 
 func _on_copy_pick(reel_index: int) -> void:
-	if _free_spin_overlay_active or _sequence_lock_active:
+	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
@@ -4053,8 +4051,11 @@ func _on_copy_pick(reel_index: int) -> void:
 	else:
 		var src := _copy_source
 		_copy_source = -1
+		var combo_pending := RunStateStore.comboDefeatPending
 		_hud_delta_hold = true # deltas pop with the copy's score popup (issue #54)
-		RunStateStore.copy_reel(src, reel_index)
+		if RunStateStore.copy_reel(src, reel_index):
+			_pending_combo_power_flow = combo_pending
+			_maybe_cancel_combo_defeat_warning(combo_pending)
 		_play_white_powder_distortion()
 		_clear_targeting()
 		_refresh_reels_from_state()
@@ -4573,8 +4574,6 @@ func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) ->
 			b.add_child(icon)
 
 func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_triggered: bool) -> void:
-	if _free_spin_overlay_active:
-		return
 	_close_book_choice_overlay()
 	_set_sequence_lock(false)
 	if symbol_id == "flatline":
@@ -4604,8 +4603,6 @@ func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
 
 func _on_eye_reveal_pick(reel_index: int) -> void:
-	if _free_spin_overlay_active:
-		return
 	_clear_targeting()
 	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
 	if symbol == "":
@@ -4812,7 +4809,27 @@ func _check_ending() -> bool:
 	_show_ending(String(ending), run)
 	return true
 
+## Every ending path (flatline, game over, wealth) funnels through _show_ending;
+## tear the live-run presentation down synchronously first so no dealer UI, loss
+## warning, gauge effect, or transient sequence overlay survives into the
+## terminal screens.
+func _cleanup_transient_presentation() -> void:
+	if _dealer_overlay != null or _dealer_offer_popup != null:
+		_close_dealer(false)
+	_stop_combo_loss_beep()
+	_set_combo_loss_display(0)
+	if _pending_combo_overlay != null:
+		_pending_combo_overlay.queue_free()
+		_pending_combo_overlay = null
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
+		if fx != null:
+			(fx as Sprite2D).visible = false
+	_hide_compulsive_overlay()
+	_clear_targeting()
+	_set_stash_elevated(false)
+
 func _show_ending(ending: String, run: Dictionary) -> void:
+	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
 	# A running campaign reserves its neuron until end_run(). Account for that
 	# pending spend while resolving the terminal presentation, then commit the
@@ -4948,7 +4965,6 @@ func _clear_wealth_presentation_fx() -> void:
 	_compulsive_queued = false
 	_copy_source = -1
 	_pending_spin_gain = 0
-	_held_spin_grant = 0
 	_pending_dealer_offer = false
 	_power_coins_in_flight = 0
 	_power_batch_running = false
@@ -5046,6 +5062,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_neuron_spend_label = null
 
 func _show_campaign_failed() -> void:
+	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
 	if _overlay != null:
 		_overlay.queue_free()
@@ -5179,18 +5196,22 @@ func _set_stash_tray_visible(v: bool) -> void:
 		tray.visible = v
 	_set_stash_visible(v)
 
+# While the dealer offer is open the stash must draw (and receive drags) above his
+# overlay; every close path drops it back to its normal slot under the HUD.
+func _set_stash_elevated(elevated: bool) -> void:
+	var tray := get_node_or_null("stash") as Control
+	if tray != null:
+		tray.z_index = DEALER_STASH_Z_INDEX if elevated else STASH_TRAY_Z_INDEX
+
 func _set_tv_progress_bars_visible(visible: bool) -> void:
 	for node_name: String in [
 		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel",
-		"DealerCountdownTitle", "DealerCountdownNumber", "DealerIcon"]:
+		"DealerIcon"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:
 			node.visible = visible
-	# The FREE SPINS overlay only re-arms through its blink when the TV is back.
+	# The FREE SPINS banner re-derives from state on the next HUD refresh.
 	if not visible:
-		_free_spin_overlay_active = false
-		_free_spin_overlay_elapsed = 0.0
-		_queued_free_spin_overlays = 0
 		_set_free_spin_display(false)
 
 func _end_run_lucidity_kept_fraction() -> float:
@@ -5337,14 +5358,31 @@ func _start_again_from_wealth(run: Dictionary) -> void:
 
 ## Queue the dealer offer behind the power-coin sequence (req 2): if power coins are
 ## flying or still owed, defer; the sequence presents it when it finishes. Never cancels.
+## Single authority on whether the dealer may take the scene right now. The visit
+## stays queued (dealerIncoming + _pending_dealer_offer) until reels, rerolls,
+## power coins, and the Energy-Drink forced spin have fully resolved. A pending
+## combo-loss decision does NOT block him — he opens above the beeping warning
+## and closing his offer returns to the still-pending decision.
+func _can_open_dealer_now() -> bool:
+	return not _spinning_anim \
+		and not _spin_launch_pending \
+		and not _reroll_anim_active \
+		and not _compulsive_queued \
+		and not _power_sequence_active() \
+		and not _power_has_pending_work() \
+		and RunStateStore.compulsiveSpinSkips <= 0
+
 func _present_dealer_or_defer() -> void:
-	if _power_sequence_active() or _power_has_pending_work():
+	if not RunStateStore.dealerIncoming:
+		return
+	if not _can_open_dealer_now():
 		_pending_dealer_offer = true
-	else:
-		_show_dealer_incoming()
+		return
+	_pending_dealer_offer = false
+	_show_dealer_incoming()
 
 func _maybe_present_pending_dealer() -> void:
-	if _pending_dealer_offer and not _power_sequence_active():
+	if _pending_dealer_offer and RunStateStore.dealerIncoming and _can_open_dealer_now():
 		_pending_dealer_offer = false
 		_show_dealer_incoming()
 
@@ -5368,7 +5406,11 @@ func _show_dealer_offers() -> void:
 		_dealer_overlay.queue_free()
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
 	_dealer_overlay = _dealer_offer_popup
+	# The dealer draws above the loss overlays (97) but under the HUD (120); the
+	# machine stash rides above him while his offer is up so it stays draggable.
+	_dealer_offer_popup.z_index = DEALER_OVERLAY_Z_INDEX
 	add_child(_dealer_offer_popup)
+	_set_stash_elevated(true)
 	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
@@ -5491,9 +5533,12 @@ func _close_dealer(restore_sequence: bool = true) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	_set_stash_elevated(false)
 	if not restore_sequence:
 		return
-	_set_sequence_lock(false)
+	# The dealer can appear over a live losing state: closing him returns to the
+	# pending rescue decision instead of unlocking the whole sequence.
+	_set_sequence_lock(RunStateStore.comboDefeatPending)
 	_update_hud()
 	# Issue #96 safety net: never leave the machine idle while a compulsion is
 	# pending — the player can't act (compulsiveSpinSkips>0), so the machine must

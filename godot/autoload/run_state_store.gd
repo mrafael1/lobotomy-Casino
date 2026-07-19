@@ -41,7 +41,7 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 # multiplier used at spin start (x1/x2/x3 → -1/-2/-3), 0 triggers the visit, and the
 # countdown resets once the offer resolves. No overflow carry (an x3 spin at 1 just
 # lands the dealer). The augmented club modifier halves visits by doubling the reset.
-@export var dealer_countdown_start: int = 8
+@export var dealer_countdown_start: int = 15
 
 # Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
@@ -99,7 +99,7 @@ var lastPowerFailureReason := ""
 var spinCount := 0
 var isFreeSpin := false
 ## Issue #155: no longer a player toggle — a frenzy gauge the run drives itself.
-## Each paying win steps it x1 → x2 → x3. A losing spin opens a short rescue window;
+## Each paying win steps it x1 → x2 → x3. A losing spin opens a rescue window;
 ## declining or failing to rescue it decreases the gauge by one level. Powers that
 ## turn the outcome into a win after the reveal rescue the combo.
 var betMultiplier := 1
@@ -109,7 +109,7 @@ var pendingComboMultiplier := 1 # gauge value held while the rescue window is op
 var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
 var dealerCount := 0
 var dealerLastSpinCount := 0
-var dealerCountdown := 8 # issue #155: spins until the dealer (start value re-applied per run)
+var dealerCountdown := 15 # issue #155: spins until the dealer (start value re-applied per run)
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null
@@ -210,8 +210,12 @@ func _seed(mix: int) -> int:
 	return (_now_ms() ^ mix) & M32
 
 func _can_act() -> bool:
-	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0 \
-		and not comboDefeatPending
+	return _can_use_consumable() and not comboDefeatPending
+
+## Consumables stay usable while a combo defeat is pending: the losing state is a
+## rescue window, and a corrective item is a legitimate way out of it.
+func _can_use_consumable() -> bool:
+	return runPhase == "running" and not isSpinning and compulsiveSpinSkips <= 0
 
 func _can_use_ability() -> bool:
 	return runPhase == "running" and not isSpinning and lastResult != null \
@@ -233,14 +237,24 @@ func pending_combo_power_ids() -> Array[String]:
 		ids.append("shift")
 	return ids
 
+## True while the Energy Drink owns the gauge: the protected spins, then the
+## queued/active forced spin. The drink pins the multiplier to its forced x2 for
+## that whole window — combo losses can't drop it below x2 and wins can't push
+## it to x3 until the forced spin has fully resolved.
+func energy_drink_owns_multiplier() -> bool:
+	return decaySkips > 0 or forcedRandomBetSpins > 0 \
+		or pendingCompulsiveSpinSkips > 0 or compulsiveSpinSkips > 0
+
 ## Resolves a pending defeat without touching the scored result. A successful power
 ## action normally resolves the flag through _apply_outcome(); this method handles
-## an explicit decline, timeout, unavailable power, or failed power attempt.
+## the player's explicit spin confirmation.
 func resolve_pending_combo_defeat(rescued: bool = false) -> bool:
 	if not comboDefeatPending:
 		return false
 	var base := clampi(pendingComboMultiplier, 1, 3)
 	betMultiplier = mini(3, base + 1) if rescued else maxi(1, base - 1)
+	if energy_drink_owns_multiplier():
+		betMultiplier = 2
 	comboDefeatPending = false
 	pendingComboMultiplier = 1
 	_commit()
@@ -357,10 +371,10 @@ func spin(compulsive := false) -> Variant:
 	# extra neurons or free spins — its downside is the dealer countdown ticking
 	# faster (x2/x3 pull the dealer in 2x/3x as fast).
 	var combo_before := clampi(betMultiplier, 1, 3)
+	# The Energy-Drink forced spin is NOT dropped to x1 — it runs the drink's
+	# forced x2 like the protected spins before it.
 	var eff_bet := combo_before
-	if is_compulsive:
-		eff_bet = 1
-	elif forcedRandomBetSpins > 0 and eff_bet == 3:
+	if (forcedRandomBetSpins > 0 or is_compulsive) and eff_bet == 3:
 		eff_bet = 2 # Energy Drink dulls the frenzy: x3 runs as x2 for its duration
 
 	var base_decay := Economy.compute_neuron_decay(ownedUpgrades)
@@ -541,18 +555,27 @@ func spin(compulsive := false) -> Variant:
 	lastPotionEffect = potion_pick
 	lastEffectiveBet = clampi(eff_bet, 1, 3)
 	# Issue #155 frenzy gauge: a paying win steps the multiplier up. A defeat keeps
-	# the pre-spin value visible until the machine's pending rescue state resolves;
-	# compulsive spins are machine-forced and leave the gauge alone.
+	# the pre-spin value visible until the machine's pending rescue state resolves.
+	# The Energy-Drink forced spin drives the gauge like any normal spin — it keeps
+	# the current combo and can lose it (no machine-forced x1).
 	lastComboMultiplier = combo_before
-	if not is_compulsive:
-		if _is_winning_result(final_result):
-			betMultiplier = _combo_after(combo_before, final_result)
-			comboDefeatPending = false
-			pendingComboMultiplier = 1
-		else:
-			comboDefeatPending = true
-			pendingComboMultiplier = combo_before
-			betMultiplier = combo_before
+	if _is_winning_result(final_result):
+		betMultiplier = _combo_after(combo_before, final_result)
+		if energy_drink_owns_multiplier():
+			betMultiplier = 2 # the drink still owns the gauge — no x3 until it ends
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
+	elif decaySkips > 0:
+		# Energy Drink protected spin (decaySkips not yet consumed here): the drink
+		# owns the x2, so a miss never opens a losing state — the forced spin that
+		# follows the rush is the next result that can set one.
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
+		betMultiplier = combo_before
+	else:
+		comboDefeatPending = true
+		pendingComboMultiplier = combo_before
+		betMultiplier = combo_before
 	# Issue #155 dealer countdown: every completed spin ticks it by the multiplier
 	# actually used this spin. No overflow carry — it just floors at 0.
 	dealerCountdown = maxi(0, dealerCountdown - clampi(eff_bet, 1, 3))
@@ -981,13 +1004,19 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	if int(outcome.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastResult = lr
-	# Issue #155: powers protect the frenzy — the gauge re-derives from the
-	# power-modified outcome, stepping from the value the spin actually ran at,
-	# so turning a miss into a paying win rescues the combo (and vice versa).
+	# Issue #155: powers can rescue the frenzy by turning the pending reveal into a
+	# paying pair/triple. A non-paying power result keeps the rescue window open so
+	# the next spin, rather than the failed power, confirms the one-level loss.
 	var combo_base := pendingComboMultiplier if comboDefeatPending else lastComboMultiplier
-	betMultiplier = _combo_after(combo_base, lr)
-	comboDefeatPending = false
-	pendingComboMultiplier = 1
+	if comboDefeatPending and not _is_winning_result(lr):
+		betMultiplier = combo_base
+		pendingComboMultiplier = combo_base
+	else:
+		betMultiplier = _combo_after(combo_base, lr)
+		if energy_drink_owns_multiplier():
+			betMultiplier = 2 # the drink still owns the gauge — no x3 until it ends
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
 
 func reroll_reel(reel_index: int) -> bool:
 	if not _can_use_ability() or lastResult == null:
@@ -1097,7 +1126,7 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 ## ignored by every other consumable. Falls back to the first non-excluded cycle
 ## symbol when empty or not in the pickable pool.
 func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
-	if not _can_act():
+	if not _can_use_consumable():
 		return false
 	if dealerIncoming or dealerPending:
 		return false
@@ -1126,8 +1155,13 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				# (decaySkips) but NOT the compulsion — the negative debuff caps at
 				# a single forced spin no matter how many are used at once.
 				pendingCompulsiveSpinSkips = maxi(pendingCompulsiveSpinSkips, int(e["compulsiveSpins"]))
-				if betMultiplier == 3:
-					betMultiplier = 2
+				# The drink pins the gauge at x2 even while a combo defeat is pending;
+				# taken during an x3 defeat it also clears the defeat outright — the x3
+				# frenzy it would break is traded for the forced x2 rush.
+				if comboDefeatPending and clampi(pendingComboMultiplier, 1, 3) == 3:
+					comboDefeatPending = false
+					pendingComboMultiplier = 1
+				betMultiplier = 2
 			"addLucidity":
 				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed, _seed(spinCount * 0x2545f491), coins_per_power_restore)
 				lucidityCoins = int(plan["lucidityCoins"])
@@ -1539,6 +1573,7 @@ func decline_dealer_offer() -> void:
 	dealerPending = false
 	dealerOfferIds = null
 	dealerAugmentOfferId = "" # the visit's augment offer closes with the visit
+	dealerCountdown = dealer_countdown_reset_value() # issue #155: visit resolved
 	_commit()
 
 func discard_run_consumable(discard_id: String) -> void:

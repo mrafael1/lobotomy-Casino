@@ -381,15 +381,15 @@ func _start_run() -> void:
 	if Engine.is_editor_hint():
 		return
 	if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables()):
-		get_tree().change_scene_to_file(MENU_SCENE)
+		SceneNav.change_to(MENU_SCENE)
 		return
-	get_tree().change_scene_to_file(MACHINE_SCENE)
+	SceneNav.change_to(MACHINE_SCENE)
 
 func _go_scores() -> void:
 	if Engine.is_editor_hint():
 		return
 	SceneNav.push_current_scene()
-	get_tree().change_scene_to_file(SCORES_SCENE)
+	SceneNav.change_to(SCORES_SCENE)
 
 func _go_menu() -> void:
 	if Engine.is_editor_hint():

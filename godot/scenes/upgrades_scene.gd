@@ -892,7 +892,7 @@ func _go_back() -> void:
 	if scene_nav != null:
 		scene_nav.call("go_back", START_MENU_SCENE)
 	else:
-		get_tree().change_scene_to_file(START_MENU_SCENE)
+		SceneNav.change_to(START_MENU_SCENE)
 
 func _is_eye_open() -> bool:
 	return _eye_active or (Engine.is_editor_hint() and editor_preview_eye_active)

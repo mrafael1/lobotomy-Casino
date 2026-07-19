@@ -133,21 +133,21 @@ func _open_scores() -> void:
 	if Engine.is_editor_hint():
 		return
 	SceneNav.push_current_scene(true)
-	get_tree().change_scene_to_file(SCORES_SCENE)
+	SceneNav.change_to(SCORES_SCENE)
 
 func _open_settings() -> void:
 	settings_requested.emit()
 	if Engine.is_editor_hint():
 		return
 	SceneNav.push_current_scene(true)
-	get_tree().change_scene_to_file(SETTINGS_SCENE)
+	SceneNav.change_to(SETTINGS_SCENE)
 
 func _open_collection() -> void:
 	collection_requested.emit()
 	if Engine.is_editor_hint():
 		return
 	SceneNav.push_current_scene(true)
-	get_tree().change_scene_to_file(COLLECTION_SCENE)
+	SceneNav.change_to(COLLECTION_SCENE)
 
 func _return_to_menu() -> void:
 	return_to_menu_requested.emit()
