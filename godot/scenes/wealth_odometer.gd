@@ -24,6 +24,8 @@ const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 const BAR_TEXTURE: Texture2D = preload(
 	"res://assets/images/machine new view/wealth_bar.png")
+const CASES_TEXTURE: Texture2D = preload(
+	"res://assets/images/machine new view/wealth_cases.png")
 const REEL_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/images/machine new view/wealth_1st_reel.png"),
 	preload("res://assets/images/machine new view/wealth_2nd_reel.png"),
@@ -92,12 +94,23 @@ func _build_art() -> void:
 	if _built:
 		return
 
+	var cases := Sprite2D.new()
+	cases.name = "WealthCasesArt"
+	cases.texture = CASES_TEXTURE
+	cases.centered = false
+	cases.z_index = 0
+	cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	add_child(cases)
+
+	# The authored frame sits above the white cases and the rolling digits. Its
+	# transparent windows leave the number reels visible while its borders stay
+	# crisp on top of them.
 	var bar := Sprite2D.new()
 	bar.name = "WealthBarArt"
 	bar.texture = BAR_TEXTURE
 	bar.centered = false
+	bar.z_index = 2
 	bar.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	add_child(bar)
 
 	for i in DIGIT_COUNT:
 		var window_rect := REEL_WINDOWS[i]
@@ -106,6 +119,7 @@ func _build_art() -> void:
 		clip.position = window_rect.position
 		clip.size = window_rect.size
 		clip.clip_contents = true
+		clip.z_index = 1
 		clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(clip)
 
@@ -119,6 +133,7 @@ func _build_art() -> void:
 			"current": current,
 			"next": next,
 		})
+	add_child(bar)
 	_built = true
 
 
