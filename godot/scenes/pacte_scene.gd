@@ -248,12 +248,9 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			_press_position = button.get_global_mouse_position()
-			_drag_origin = button.position
-			_drag_offset = button.get_local_mouse_position()
-			_drag_id = card_id
-			_drag_index = index
-			_dragging = false
+			_begin_drag(card_id, index, button, (event as InputEventMouseButton).position)
+	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
+		_begin_drag(card_id, index, button, (event as InputEventScreenTouch).position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -261,10 +258,25 @@ func _input(event: InputEvent) -> void:
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:
-		_update_drag(get_global_mouse_position())
+		_update_drag((event as InputEventMouseMotion).position)
 	elif event is InputEventMouseButton \
 			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_finish_drag(get_global_mouse_position())
+		_finish_drag((event as InputEventMouseButton).position)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and event.index == 0:
+		_update_drag((event as InputEventScreenDrag).position)
+	elif event is InputEventScreenTouch and event.index == 0 and not event.pressed:
+		_finish_drag((event as InputEventScreenTouch).position)
+		get_viewport().set_input_as_handled()
+
+func _begin_drag(card_id: String, index: int, button: Button,
+		global_position: Vector2) -> void:
+	_press_position = global_position
+	_drag_origin = button.position
+	_drag_offset = button.get_global_transform_with_canvas().affine_inverse() * global_position
+	_drag_id = card_id
+	_drag_index = index
+	_dragging = false
 
 func _update_drag(global_position: Vector2) -> void:
 	var button := _card_buttons.get(_drag_id, null) as Button
@@ -292,7 +304,11 @@ func _finish_drag(global_position: Vector2) -> void:
 		_preview_card(card_id)
 		return
 	var drop_rect := AUGMENT_DROP_RECT if _pool_kind == "augment" else POWER_DROP_RECT
-	if drop_rect.has_point(local_position):
+	# Accept the drop when the dragged card overlaps the authored slot. The
+	# pointer is not necessarily at the card centre (especially after grabbing
+	# an icon edge), so testing only the pointer would make valid drops miss.
+	var dragged_rect := Rect2(local_position - _drag_offset, CARD_SIZE)
+	if drop_rect.grow(2.0).intersects(dragged_rect):
 		_accept_card(card_id)
 	else:
 		_preview_card(card_id)
