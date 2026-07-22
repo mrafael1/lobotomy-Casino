@@ -292,6 +292,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	var card_id := _drag_id
 	var button := _card_buttons.get(card_id, null) as Button
 	var local_position: Vector2 = _global_to_local(global_position)
+	var dragged_card_position := button.position if button != null else local_position - _drag_offset
 	var was_dragging := _dragging
 	_dragging = false
 	_drag_id = ""
@@ -307,8 +308,9 @@ func _finish_drag(global_position: Vector2) -> void:
 	# Accept the drop when the dragged card overlaps the authored slot. The
 	# pointer is not necessarily at the card centre (especially after grabbing
 	# an icon edge), so testing only the pointer would make valid drops miss.
-	var dragged_rect := Rect2(local_position - _drag_offset, CARD_SIZE)
-	if drop_rect.grow(2.0).intersects(dragged_rect):
+	var dragged_rect := Rect2(dragged_card_position, CARD_SIZE)
+	var drop_area := drop_rect.grow(4.0)
+	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
 		_accept_card(card_id)
 	else:
 		_preview_card(card_id)
@@ -391,6 +393,7 @@ func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 	return label
 
 func _set_drop_hint_visible(visible: bool) -> void:
+	_drop_label = _power_drop_label if _pool_kind == "power" else _augment_drop_label
 	if _augment_drop_label != null:
 		_augment_drop_label.visible = visible and _pool_kind == "augment"
 	if _power_drop_label != null:
