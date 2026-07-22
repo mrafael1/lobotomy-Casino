@@ -385,7 +385,7 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	else:
 		if not body.bbcode_enabled:
 			failures.append("tutorial: RichTextLabel BBCode is not enabled")
-		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "20 spins", "50 coins"]:
+		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "15 spins", "50 coins"]:
 			if not body.text.contains(phrase):
 				failures.append("tutorial: missing copy phrase '%s'" % phrase)
 				break
@@ -6084,11 +6084,28 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if power_drop == null or power_drop.position != Vector2(107.0, 256.0) \
 			or power_drop.size != Vector2(25.0, 36.0):
 		failures.append("pacte: power DROP HERE is not inside its emplacement")
+	if augment_drop != null and augment_drop.visible or power_drop != null and power_drop.visible:
+		failures.append("pacte: DROP HERE was not moved into the emplacement artwork")
+	if pacte._emplacement == null or pacte._emplacement.hframes != 2 \
+			or pacte._emplacement.frame != 0:
+		failures.append("pacte: emplacement did not start on its normal authored frame")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	pacte._preview_card(first_augment)
 	if not bool(pacte._description_bubble.visible) or not bool(pacte._selected_overlay.visible):
 		failures.append("pacte: card preview did not show overlay and description bubble")
+	if String(pacte._instruction.text) == "CHOOSE ONE CARD":
+		failures.append("pacte: choose-one prompt remained after card tap")
+	if pacte._description_bubble.size.x >= 152.0 or pacte._description_bubble.size.y >= 42.0:
+		failures.append("pacte: description bubble was not compacted")
+	if augment_offers.size() >= 2:
+		var alternate_augment := String(augment_offers[1])
+		pacte._set_face_up(alternate_augment)
+		pacte._preview_card(alternate_augment)
+		if String(pacte._preview_id) != alternate_augment \
+				or String(pacte._description_title.text) != String(PacteCards.card(alternate_augment).get("name", "")):
+			failures.append("pacte: tapping another card did not replace the preview")
+		pacte._preview_card(first_augment)
 	var first_button := pacte._card_buttons.get(first_augment, null) as Button
 	if first_button == null or first_button.scale.x <= 1.0:
 		failures.append("pacte: preview card did not scale up")
@@ -6096,14 +6113,21 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag target is missing DROP HERE")
 	var press_position := first_button.get_global_transform_with_canvas() * Vector2(15.0, 20.0)
 	pacte._begin_drag(first_augment, 0, first_button, press_position)
+	if not bool(pacte._description_bubble.visible):
+		failures.append("pacte: card explanation disappeared before drag movement")
 	pacte._update_drag(Vector2(40.0, 270.0))
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
+	if bool(pacte._description_bubble.visible) or String(pacte._instruction.text) != "" \
+			or pacte._emplacement.frame != 1:
+		failures.append("pacte: drag did not hide explanation and show authored DROP HERE frame")
 	pacte._finish_drag(Vector2(40.0, 270.0))
 	await process_frame
 	if String(run_store.pacteSelectedAugmentId) != first_augment \
 			or String(pacte._pool_kind) != "power":
 		failures.append("pacte: augment selection did not stage before power selection")
+	if bool(pacte._description_bubble.visible) or pacte._emplacement.frame != 0:
+		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
 			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
@@ -6129,15 +6153,24 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if String(run_store.runPhase) != "running" or run_store.selectedPowerCardIds.size() != 1:
 		failures.append("pacte: initial completion did not enter the machine with accumulated cards")
 
-	# The second Pacte visit is triggered by the run's spin budget crossing from
-	# above five to five, not by a campaign-neuron HUD value.
+	# A live machine spin must never interrupt into Pacte, even when its run-spin
+	# budget reaches five. The second visit is armed only by the later flatline
+	# handoff when the campaign count crosses from six to five.
 	run_store.neurons = 6
 	run_store.comboDefeatPending = false
-	var threshold_spin: Variant = run_store.spin()
+	var live_spin: Variant = run_store.spin()
 	run_store.set_spinning(false)
-	if threshold_spin == null or int(run_store.neurons) != 5 \
-			or not bool(run_store.pacteThresholdPending):
-		failures.append("pacte: threshold did not arm when run spins reached five")
+	if live_spin == null or bool(run_store.pacteThresholdPending) \
+			or String(run_store.runPhase) != "running":
+		failures.append("pacte: live machine spin incorrectly opened the threshold visit")
+	meta_store.campaignNeuronsLeft = 6
+	run_store.campaignNeuronPending = true
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 5 \
+			or not bool(run_store.pacteThresholdPending) \
+			or not bool(run_store.pacteAfterFlatlinePending) \
+			or String(run_store.runPhase) != "over":
+		failures.append("pacte: flatline did not arm the six-to-five campaign threshold")
 	if not run_store.open_threshold_pacte():
 		failures.append("pacte: threshold crossing did not open the second visit")
 	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
@@ -6200,6 +6233,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.start_new_run([], {}, false, 0x157, false)
 	run_store.ownedPowerIds = ["reroll", "heart", "cheat", "move"]
 	run_store.runPhase = "running"
+	for heart_symbol in ["heart_x1", "heart_x2", "heart_x3"]:
+		var heart_view := Sprite2D.new()
+		machine._apply_symbol(heart_view, heart_symbol, 24.0)
+		if heart_view.texture == null:
+			failures.append("pacte powers: missing %s machine asset" % heart_symbol)
+		heart_view.free()
 	run_store.neurons = 5
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	var heart_score_before := int(run_store.scoreEarned)
@@ -6207,19 +6246,31 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	var heart_spins_before := int(run_store.freeSpinsRemaining)
 	var heart_spin_count_before := int(run_store.spinCount)
 	if not run_store.heart_power(1) \
-			or int(run_store.neurons) != heart_neurons_before + 1 \
+			or int(run_store.neurons) != heart_neurons_before \
 			or int(run_store.scoreEarned) != heart_score_before \
-			or int(run_store.freeSpinsRemaining) != heart_spins_before + 1 \
-			or String((run_store.lastResult["reels"] as Array)[0]) != "heart":
+			or int(run_store.freeSpinsRemaining) != heart_spins_before \
+			or not bool(run_store.heartPowerArmed) \
+			or (run_store.abilitiesUsed as Array).count("heart") != 1:
 		failures.append("pacte powers: Heart preparation failed")
-	var heart_follow_up_neurons := int(run_store.neurons)
-	if run_store.spin() == null:
+	var heart_follow_up: Variant = run_store.spin()
+	if heart_follow_up == null:
 		failures.append("pacte powers: Heart did not arm a follow-up spin")
 	else:
 		run_store.set_spinning(false)
-		if int(run_store.neurons) != heart_follow_up_neurons \
-				or int(run_store.spinCount) != heart_spin_count_before + 1:
-			failures.append("pacte powers: Heart follow-up consumed a spin token")
+		var heart_reels := heart_follow_up["reels"] as Array
+		var heart_symbol := String(heart_reels[0]) if not heart_reels.is_empty() else ""
+		var heart_tier := int(heart_symbol.trim_prefix("heart_x"))
+		var valid_heart_symbols := ["heart_x1", "heart_x2", "heart_x3"]
+		var all_hearts_match := heart_reels.size() == 3
+		for symbol in heart_reels:
+			all_hearts_match = all_hearts_match and String(symbol) == heart_symbol
+		if not valid_heart_symbols.has(heart_symbol) or not all_hearts_match \
+				or int(run_store.neurons) != heart_neurons_before + heart_tier \
+				or int(run_store.scoreEarned) != heart_score_before + heart_tier * 10 \
+				or bool(heart_follow_up.get("isFreeSpin", false)) != true \
+				or int(run_store.spinCount) != heart_spin_count_before + 1 \
+				or bool(run_store.heartPowerArmed):
+			failures.append("pacte powers: Heart did not resolve a free matching triple")
 	# Move's UI is a drag gesture over every reel, including adjacent destinations.
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
@@ -6246,6 +6297,11 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		machine._clear_targeting()
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	machine._arm_cheat_targets()
+	if machine.get_node_or_null("PowerRubbleAnimation") == null:
+		failures.append("pacte powers: Cheat did not show the rubble overlay")
+	machine._clear_targeting()
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	if not run_store.cheat_symbol(1, "brain") \
 			or String((run_store.lastResult["reels"] as Array)[1]) != "brain":
 		failures.append("pacte powers: Cheat did not replace the selected reel")
@@ -6266,9 +6322,11 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
-	if not run_store.heart_power(1) or not bool(run_store.comboDefeatPending) \
+	run_store.betMultiplier = 2
+	if run_store.heart_power(1) or not bool(run_store.comboDefeatPending) \
+			or (run_store.pending_combo_power_ids() as Array).has("heart") \
 			or int(run_store.betMultiplier) != 2:
-		failures.append("pacte powers: scoreless Heart should leave the combo loss pending")
+		failures.append("pacte powers: Heart should wait until after a combo loss")
 	run_store.reset_run_state()
 
 func _pacte_power_result(reels: Array) -> Dictionary:

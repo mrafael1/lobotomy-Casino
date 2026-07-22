@@ -205,8 +205,11 @@ const DEBUG_GRANT := false
 
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
-const HEART_SYMBOL_ASSET := "machine new view/chip_power.png"
-const HEART_SYMBOL_RECT := Rect2(77.0, 223.0, 13.0, 15.0)
+const HEART_SYMBOL_ASSETS := {
+	"heart_x1": "symbols/heart x1.png",
+	"heart_x2": "symbols/heart x2.png",
+	"heart_x3": "symbols/heart x3.png",
+}
 
 # Score-burst (score-burst presentation). Visual only.
 const BURST_TIME := 1.05
@@ -597,7 +600,6 @@ var _power_seen_lucidity := 0    # legacy name: total power points the gauge has
 var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
-var _threshold_waiting_for_power_coins := false
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
 var _jackpot_flash_tween: Tween = null
@@ -1490,14 +1492,17 @@ func _reel_neighbours(sym: String) -> Dictionary:
 	return { "top": cyc[(i - 1 + n) % n], "bottom": cyc[(i + 1) % n] }
 
 func _apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
-	if symbol_id == "heart":
-		var heart_tex := _load_texture(HEART_SYMBOL_ASSET, true)
+	var heart_asset := String(HEART_SYMBOL_ASSETS.get(symbol_id, ""))
+	if symbol_id == "heart" and heart_asset == "":
+		heart_asset = String(HEART_SYMBOL_ASSETS["heart_x1"])
+	if heart_asset != "":
+		var heart_tex := _load_texture(heart_asset, true)
 		if heart_tex == null:
 			return
+		s.region_enabled = false
 		s.texture = heart_tex
-		s.region_enabled = true
-		s.region_rect = HEART_SYMBOL_RECT
-		s.scale = Vector2.ONE
+		var heart_scale := minf(1.0, target_h / float(heart_tex.get_height()))
+		s.scale = Vector2(heart_scale, heart_scale)
 		return
 	var tex := _load_texture("symbols/%s.png" % symbol_id, true) # mipmaps for crisp downscale
 	if tex == null:
@@ -1808,7 +1813,6 @@ func _sync_visuals() -> void:
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
 	_pending_spin_gain = 0
-	_threshold_waiting_for_power_coins = false
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1873,8 +1877,6 @@ func _resolve_interrupted_spin() -> void:
 				_present_dealer_or_defer()
 			return
 	if _check_ending():
-		return
-	if _defer_threshold_until_power_flow():
 		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
 	# _run_post_reveal_sequence) — the dealer stays queued and presents afterward.
@@ -2135,8 +2137,6 @@ func _finish_post_spin_sequence() -> void:
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
 		return
-	if _defer_threshold_until_power_flow():
-		return
 	# Issue #96: a pending compulsion must fully resolve BEFORE the dealer pops.
 	# The dealer stays queued in the store (dealerIncoming) and presents again on
 	# the compulsive spin's own post-reveal. If the dealer took the scene first,
@@ -2155,34 +2155,6 @@ func _finish_post_spin_sequence() -> void:
 	else:
 		_set_sequence_lock(false)
 	_post_spin_sequence_active = false
-
-func _open_threshold_pacte_if_ready() -> bool:
-	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
-		return false
-	if not RunStateStore.open_threshold_pacte():
-		return false
-	# A dealer due on the same spin is re-rolled after the threshold Pacte choice,
-	# so the threshold visit remains the next interruption rather than being lost.
-	RunStateStore.dealerIncoming = false
-	RunStateStore.dealerPending = false
-	RunStateStore.dealerOfferIds = null
-	RunStateStore._commit()
-	_clear_targeting()
-	_close_pending_combo_defeat()
-	_set_sequence_lock(false)
-	_post_spin_sequence_active = false
-	SceneNav.change_to(PACTE_SCENE)
-	return true
-
-func _defer_threshold_until_power_flow() -> bool:
-	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
-		return false
-	if _power_sequence_active() or _power_has_pending_work():
-		_threshold_waiting_for_power_coins = true
-		_set_sequence_lock(false)
-		_post_spin_sequence_active = false
-		return true
-	return _open_threshold_pacte_if_ready()
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
 
@@ -2768,7 +2740,8 @@ func _emit_score_burst(source_reel) -> float:
 			_flash_jackpot_lamp()
 			_nudge(2.2)
 			return maxf(reward_time, maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME))
-		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" else "BONUS")
+		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" \
+			else ("HEART" if win_type == "heart" else "BONUS"))
 		if win_type == "triple":
 			_play_sfx(&"triple_win")
 		elif win_type == "pair":
@@ -2979,17 +2952,9 @@ func _advance_power_bar() -> void:
 		# only partially fills the bar; the power must not pop before the bar is full).
 		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 		_maybe_present_pending_dealer()
-		_maybe_open_threshold_after_power_flow()
 		return
 	_power_batch_running = true
 	_launch_power_coin_batch(steps)
-
-func _maybe_open_threshold_after_power_flow() -> void:
-	if not _threshold_waiting_for_power_coins or _power_sequence_active() \
-			or _power_has_pending_work():
-		return
-	_threshold_waiting_for_power_coins = false
-	_open_threshold_pacte_if_ready()
 
 ## Tea restores an ability instantly (a consumable, not a score event): commit its queued
 ## restore now and fly a coin from the cash tray straight to the power. No-op if Tea
@@ -3313,7 +3278,8 @@ func _step_free_spin_blink(delta: float) -> void:
 
 func _refresh_free_spin_banner() -> void:
 	var active := RunStateStore.runPhase == "running" \
-		and (int(RunStateStore.freeSpinsRemaining) > 0 or int(RunStateStore.decaySkips) > 0)
+		and (int(RunStateStore.freeSpinsRemaining) > 0 \
+			or int(RunStateStore.decaySkips) > 0 or RunStateStore.heartPowerArmed)
 	# Never turn the banner ON while a spin is in flight or its reward is still
 	# held — a grant made by the spin being revealed must not spoil the result.
 	# Turning it OFF mid-spin is fine (pressing spin consumed the last credit).
@@ -3576,8 +3542,8 @@ func _use_heart_power() -> void:
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	# Heart is a preparation action: the symbols change immediately, but the free
-	# follow-up is only taken when the player pulls the lever.
+	# Heart is a preparation action: the next lever pull renders and resolves the
+	# guaranteed heart triple as a free spin.
 	if was_pending and RunStateStore.comboDefeatPending:
 		_show_pending_combo_defeat()
 	else:
@@ -3585,6 +3551,9 @@ func _use_heart_power() -> void:
 	_refresh_controls()
 
 func _arm_cheat_targets() -> void:
+	# Cheat uses the same rubble/reward-amplification presentation as the other
+	# symbol-manipulation powers before the player chooses a reel.
+	_flash_power_rubble()
 	_arm_reel_picker(func(reel_index: int) -> void: _on_cheat_reel_pick(reel_index))
 
 func _on_cheat_reel_pick(reel_index: int) -> void:
@@ -3681,13 +3650,9 @@ func _build_move_rubble_hint(reel_index: int) -> void:
 func _on_move_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			var local_position := (event as InputEventMouseButton).position
-			_begin_move_drag(reel_index, button,
-				button.get_global_transform_with_canvas() * local_position)
+			_begin_move_drag(reel_index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			var touch_position := (event as InputEventScreenTouch).position
-			_begin_move_drag(reel_index, button,
-				button.get_global_transform_with_canvas() * touch_position)
+			_begin_move_drag(reel_index, button, (event as InputEventScreenTouch).position)
 
 func _begin_move_drag(reel_index: int, button: Button, global_position: Vector2) -> void:
 	if _move_drag_active or _targeting_layer == null:
@@ -3984,8 +3949,6 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 		else:
 			_close_pending_combo_defeat()
 			_finish_post_spin_sequence()
-		return
-	if _defer_threshold_until_power_flow():
 		return
 	_set_sequence_lock(false)
 
@@ -5797,6 +5760,13 @@ func _on_flatline_action_pressed() -> void:
 		_attach_flatline_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
+		# The campaign-neuron threshold Pacte is a post-flatline handoff. It must
+		# never interrupt a live machine spin or a reward sequence.
+		if RunStateStore.pacteThresholdPending \
+				and RunStateStore.pacteAfterFlatlinePending \
+				and RunStateStore.open_threshold_pacte():
+			SceneNav.change_to(PACTE_SCENE)
+			return
 		_to_dealer()
 	else:
 		_to_menu()
@@ -6148,11 +6118,11 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if event is InputEventScreenDrag and event.index == 0:
-			_update_move_drag(get_global_mouse_position())
+			_update_move_drag((event as InputEventScreenDrag).position)
 			get_viewport().set_input_as_handled()
 			return
 		if event is InputEventScreenTouch and event.index == 0 and not event.pressed:
-			_finish_move_drag(get_global_mouse_position())
+			_finish_move_drag((event as InputEventScreenTouch).position)
 			get_viewport().set_input_as_handled()
 			return
 	if not _dealer_drag_active:

@@ -235,15 +235,30 @@ static func check_pacte_deck_and_powers(out: Array) -> void:
 	var excluded := PacteCards.draw("power", 0x157, power_unlocks, ["shift", "move"], 3)
 	if excluded.has("shift") or excluded.has("move"):
 		_fail(out, "Pacte accumulated selection exclusion", excluded, "without shift/move")
+	var authored_augment_rows := {
+		"augment_pattern_recognition": 144, "augment_book": 201,
+		"augment_hallucination": 262, "augment_smart_saving": 324,
+		"augment_reward_1": 386, "augment_reward_2": 447, "augment_reward_3": 508,
+	}
+	for card_id in authored_augment_rows:
+		var icon_rect := PacteCards.card(String(card_id)).get("icon_rect", Rect2()) as Rect2
+		if int(icon_rect.position.y) != int(authored_augment_rows[card_id]):
+			_fail(out, "Pacte augment sheet row %s" % card_id, icon_rect,
+				authored_augment_rows[card_id])
 	var one_heart := Abilities.resolve_hearts(1)
 	var three_hearts := Abilities.resolve_hearts(3)
 	if not deep_equal(one_heart, {
-			"heartCount": 1, "neuronsDelta": 1, "scoreDelta": 0,
-			"coinsDelta": 0, "winType": "heart"}):
+			"heartCount": 1, "neuronsDelta": 1, "scoreDelta": 10,
+			"coinsDelta": 10, "winType": "heart"}):
 		_fail(out, "Heart one-heart outcome", one_heart, "one heart payout")
-	if int(three_hearts["neuronsDelta"]) != 3 or int(three_hearts["scoreDelta"]) != 0 \
-			or int(three_hearts["coinsDelta"]) != 0:
-		_fail(out, "Heart three-heart outcome", three_hearts, "3 neurons / 0 score")
+	if int(three_hearts["neuronsDelta"]) != 3 or int(three_hearts["scoreDelta"]) != 30 \
+			or int(three_hearts["coinsDelta"]) != 30:
+		_fail(out, "Heart three-heart outcome", three_hearts, "3 neurons / 30 score")
+	var heart_spin := Abilities.resolve_heart_spin(2)
+	if not deep_equal(heart_spin["reels"], ["heart_x2", "heart_x2", "heart_x2"]) \
+			or int(heart_spin["scoreEarned"]) != 20 \
+			or int(heart_spin["neuronsDelta"]) != 2:
+		_fail(out, "Heart forced triple outcome", heart_spin, "three heart_x2 symbols")
 	var cheat := Abilities.apply_cheat(["brain", "eye", "pill"], 1, "brain", 1.0)
 	if not (cheat["reels"] as Array).has("brain") or String((cheat["reels"] as Array)[1]) != "brain":
 		_fail(out, "Cheat symbol replacement", cheat, "brain/brain/pill")

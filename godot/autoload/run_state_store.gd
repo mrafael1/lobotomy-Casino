@@ -23,13 +23,10 @@ const RUN_SAVE_SCHEMA_VERSION := 1
 ## reroll adds the base again (5, 10, 15, …).
 const DEALER_REROLL_BASE_COST := 5
 
-## Issue #118: every run starts with these permanent-upgrade-gated powers already
-## active, regardless of meta-shop purchases — Reroll ("Random") has always been
-## unconditional; Shift now joins it as baseline starting loadout.
-## Pacte owns the variable power loadout. Reroll is the permanent hero power and
-## never comes from the selectable deck. Legacy callers may skip the ritual for
-## compatibility; the player-facing start menu always passes open_pacte=true.
-const PACTE_THRESHOLD_SPINS := 5
+## Reroll ("Random") is the permanent hero power. Pacte owns the variable power
+## loadout; legacy callers that skip the ritual retain their compatibility Shift
+## path, while the player-facing start menu always passes open_pacte=true.
+const PACTE_CAMPAIGN_NEURON_THRESHOLD := 5
 const PACTE_INITIAL_DRAW_SEED := 0x50414354
 const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
 const HERO_POWER_IDS: Array[String] = ["reroll"]
@@ -215,6 +212,7 @@ var selectedPowerCardIds: Array = []
 var ownedPowerIds: Array = []
 var pacteThresholdPending := false
 var pacteThresholdOpened := false
+var pacteAfterFlatlinePending := false
 var pacteJokerUsed := false
 var glitchLuciditySpins := 0
 var glitchLucidityMultiplier := 1.0
@@ -224,6 +222,7 @@ var glitchLucidityMultiplier := 1.0
 # already earned by the player.
 var previousSpinSnapshot: Variant = null
 var rewindHistoryAvailable := false
+var heartPowerArmed := false
 
 func _forced_eye_reveal_symbols() -> Variant:
 	if eyeRevealReel < 0 or eyeRevealReel > 2 or eyeRevealSymbol == "":
@@ -286,7 +285,7 @@ func pending_combo_power_ids() -> Array[String]:
 	if has_power("shift") and not abilitiesUsed.has("shift") \
 			and not pendingPowerRestores.has("shift"):
 		ids.append("shift")
-	for id in ["rewind", "heart", "cheat", "move"]:
+	for id in ["rewind", "cheat", "move"]:
 		if has_power(id) and not abilitiesUsed.has(id) and not pendingPowerRestores.has(id):
 			ids.append(id)
 	return ids
@@ -425,6 +424,8 @@ func _capture_rewind_snapshot() -> Dictionary:
 		"eyeRevealReel": eyeRevealReel,
 		"eyeRevealSymbol": eyeRevealSymbol,
 		"pacteThresholdPending": pacteThresholdPending,
+		"pacteAfterFlatlinePending": pacteAfterFlatlinePending,
+		"heartPowerArmed": heartPowerArmed,
 		"powersUsedThisSpin": powersUsedThisSpin,
 		"pendingPowerRestores": pendingPowerRestores.duplicate(),
 	}
@@ -451,6 +452,8 @@ func _restore_rewind_snapshot(snapshot: Dictionary) -> void:
 	eyeRevealReel = int(snapshot.get("eyeRevealReel", eyeRevealReel))
 	eyeRevealSymbol = String(snapshot.get("eyeRevealSymbol", eyeRevealSymbol))
 	pacteThresholdPending = bool(snapshot.get("pacteThresholdPending", pacteThresholdPending))
+	pacteAfterFlatlinePending = bool(snapshot.get("pacteAfterFlatlinePending", pacteAfterFlatlinePending))
+	heartPowerArmed = bool(snapshot.get("heartPowerArmed", heartPowerArmed))
 	powersUsedThisSpin = int(snapshot.get("powersUsedThisSpin", 0))
 	pendingPowerRestores = (snapshot.get("pendingPowerRestores", pendingPowerRestores) as Array).duplicate()
 	isSpinning = false
@@ -502,11 +505,11 @@ func spin(compulsive := false) -> Variant:
 		resolve_pending_combo_defeat(false)
 	previousSpinSnapshot = _capture_rewind_snapshot()
 	rewindHistoryAvailable = true
-	var neurons_before_spin := neurons
 	var is_compulsive: bool = compulsive and compulsiveSpinSkips > 0
 	if not is_compulsive and compulsiveSpinSkips > 0:
 		return null
-	var is_free: bool = (not is_compulsive) and freeSpinsRemaining > 0
+	var heart_spin_armed := (not is_compulsive) and heartPowerArmed
+	var is_free: bool = (not is_compulsive) and (freeSpinsRemaining > 0 or heart_spin_armed)
 	if (not is_free) and neurons < 1:
 		return null
 
@@ -576,37 +579,52 @@ func spin(compulsive := false) -> Variant:
 	var hidden_reel_count := _active_hidden_reel_count(pair_boost_active)
 
 	var book_w := Economy.compute_book_weight(ownedUpgrades)
-	var result := Evaluate.evaluate({
-		"neurons": neurons,
-		"neuronDecayAmount": decay_amt,
-		"freeSpinsRemaining": freeSpinsRemaining,
-		"maxFreeSpins": maxFreeSpins,
-		"lucidityMultiplier": eff_mult,
-		"isFreeSpin": is_free,
-		"freeSpinCost": 1, # issue #155: the auto gauge never drains banked free spins faster
-		"lockedReels": lockedReels,
-		"previousReels": (lastResult["reels"] if lastResult != null else null),
-		"rng": rng,
-		"bookWeight": book_w,
-		"brainWeightBonus": brain_bonus,
-		"guaranteedWin": guaranteedWinSpins > 0,
-		"pattern23Triple": Economy.has_pattern23_triple(ownedUpgrades),
-		"learningActive": book_w > 0,
-		"forceAllSymbol": force_all,
-		"forceTripleFrom": force_triple,
-		"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
-		"banExcluded": banBrainSpins > 0,
-		"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
-		"forceReelSymbols": _forced_eye_reveal_symbols(),
-		"symbolToBrainCount": potion_symbol_to_brain,
-		"adjacentSymbolCount": potion_adjacent_symbols,
-		"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
-		"hiddenReelCount": hidden_reel_count,
-		"visiblePairAsTriple": hallucination_active,
-		"rewardScale": _active_reward_scale(),
-		"symbolRewardBonuses": symbolRewardBonuses,
-		"weightOverrides": oddsWeightOverrides,
-	})
+	var result: Dictionary
+	if heart_spin_armed:
+		# Heart's result is intentionally independent of the normal symbol weights:
+		# one seeded draw chooses x1/x2/x3, then every reel lands on that symbol.
+		var heart_rng := LobRNG.new((pacteSeed ^ (spinCount * 0x9e3779b9) \
+				^ 0x48454152) & M32)
+		var heart_tier := 1 + floori(heart_rng.next() * 3.0)
+		result = Abilities.resolve_heart_spin(heart_tier, eff_mult,
+			_active_reward_scale(), symbolRewardBonuses)
+		result["neuronsAfter"] = neurons + int(result["neuronsDelta"])
+		result["freeSpinsAfter"] = freeSpinsRemaining
+		result["isFreeSpin"] = true
+		result["scoreMultiplier"] = eff_mult
+		heartPowerArmed = false
+	else:
+		result = Evaluate.evaluate({
+			"neurons": neurons,
+			"neuronDecayAmount": decay_amt,
+			"freeSpinsRemaining": freeSpinsRemaining,
+			"maxFreeSpins": maxFreeSpins,
+			"lucidityMultiplier": eff_mult,
+			"isFreeSpin": is_free,
+			"freeSpinCost": 1, # issue #155: the auto gauge never drains banked free spins faster
+			"lockedReels": lockedReels,
+			"previousReels": (lastResult["reels"] if lastResult != null else null),
+			"rng": rng,
+			"bookWeight": book_w,
+			"brainWeightBonus": brain_bonus,
+			"guaranteedWin": guaranteedWinSpins > 0,
+			"pattern23Triple": Economy.has_pattern23_triple(ownedUpgrades),
+			"learningActive": book_w > 0,
+			"forceAllSymbol": force_all,
+			"forceTripleFrom": force_triple,
+			"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
+			"banExcluded": banBrainSpins > 0,
+			"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
+			"forceReelSymbols": _forced_eye_reveal_symbols(),
+			"symbolToBrainCount": potion_symbol_to_brain,
+			"adjacentSymbolCount": potion_adjacent_symbols,
+			"pairScoreMult": (float(pairBoostMult) if pair_boost_active else 1.0),
+			"hiddenReelCount": hidden_reel_count,
+			"visiblePairAsTriple": hallucination_active,
+			"rewardScale": _active_reward_scale(),
+			"symbolRewardBonuses": symbolRewardBonuses,
+			"weightOverrides": oddsWeightOverrides,
+		})
 
 	var cocktail_bonus := 0
 	var cocktail_penalty := 0
@@ -768,10 +786,6 @@ func spin(compulsive := false) -> Variant:
 	# Issue #76: the charge is spent only when a win actually consumed it above.
 	if flatline_boost_applied:
 		flatlineWinBoostArmed = false
-	if neurons_before_spin > PACTE_THRESHOLD_SPINS \
-			and neurons <= PACTE_THRESHOLD_SPINS and not pacteThresholdOpened:
-		pacteThresholdPending = true
-
 	_commit()
 	return final_result
 
@@ -883,11 +897,13 @@ func reset_run_state() -> void:
 	ownedPowerIds = []
 	pacteThresholdPending = false
 	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
 	pacteJokerUsed = false
 	glitchLuciditySpins = 0
 	glitchLucidityMultiplier = 1.0
 	previousSpinSnapshot = null
 	rewindHistoryAvailable = false
+	heartPowerArmed = false
 	_commit()
 
 ## Marks the pre-run dealer shop as a resumable session without spending a
@@ -1029,11 +1045,13 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	pacteSelectedPowerId = ""
 	pacteThresholdPending = false
 	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
 	pacteJokerUsed = false
 	glitchLuciditySpins = 0
 	glitchLucidityMultiplier = 1.0
 	previousSpinSnapshot = null
 	rewindHistoryAvailable = false
+	heartPowerArmed = false
 	# The campaign neuron is reserved before Pacte opens, so the save is valid even
 	# if the player closes the app halfway through the card ritual.
 	runPhase = "pacte_initial" if open_pacte else "running"
@@ -1125,6 +1143,8 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	pacteOfferPowerIds = null
 	if runPhase == "pacte_threshold":
 		pacteThresholdPending = false
+		pacteAfterFlatlinePending = false
+		lastEnding = null
 	runPhase = "running"
 	_refresh_pacte_derivatives()
 	_commit()
@@ -1149,7 +1169,10 @@ func cancel_pacte_selection() -> void:
 	_commit()
 
 func open_threshold_pacte() -> bool:
-	if runPhase != "running" or not pacteThresholdPending or pacteThresholdOpened:
+	var post_flatline_visit: bool = runPhase == "over" and lastEnding == "flatline" \
+		and pacteAfterFlatlinePending
+	if (runPhase != "running" and not post_flatline_visit) \
+			or not pacteThresholdPending or pacteThresholdOpened:
 		return false
 	var draw_seed := (pacteSeed ^ PACTE_THRESHOLD_DRAW_SEED ^ (spinCount * 0x9e3779b9)) & M32
 	pacteOfferAugmentIds = PacteCards.draw("augment", draw_seed,
@@ -1159,6 +1182,7 @@ func open_threshold_pacte() -> bool:
 	pacteSelectedAugmentId = ""
 	pacteSelectedPowerId = ""
 	pacteThresholdOpened = true
+	pacteAfterFlatlinePending = false
 	runPhase = "pacte_threshold"
 	_commit()
 	return true
@@ -1193,6 +1217,8 @@ func force_dealer_visit() -> bool:
 	return true
 
 func end_run(ending: String) -> void:
+	var campaign_neuron_before := int(MetaStateStore.campaignNeuronsLeft)
+	var consumed_campaign_neuron := campaignNeuronPending
 	runPhase = "over"
 	lastEnding = ending
 	if ending == "game_over":
@@ -1202,6 +1228,15 @@ func end_run(ending: String) -> void:
 	if campaignNeuronPending:
 		MetaStateStore.finalize_campaign_neuron_for_run()
 		campaignNeuronPending = false
+	# The second Pacte visit belongs to the campaign-neuron threshold, not to the
+	# machine's run-spin counter. Arm it only after the flatline has consumed the
+	# sixth campaign neuron and left the campaign at five.
+	if ending == "flatline" and consumed_campaign_neuron \
+			and campaign_neuron_before > PACTE_CAMPAIGN_NEURON_THRESHOLD \
+			and int(MetaStateStore.campaignNeuronsLeft) <= PACTE_CAMPAIGN_NEURON_THRESHOLD \
+			and int(MetaStateStore.campaignNeuronsLeft) > 0:
+		pacteThresholdPending = true
+		pacteAfterFlatlinePending = true
 	_commit()
 
 func continue_run() -> void:
@@ -1495,25 +1530,18 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 	_commit()
 	return true
 
-func heart_power(heart_count: int = -1) -> bool:
-	if not _can_use_ability() or lastResult == null or not has_power("heart") \
-			or abilitiesUsed.has("heart"):
+func heart_power(_heart_count: int = -1) -> bool:
+	if not _can_use_ability() or comboDefeatPending or lastResult == null \
+			or not has_power("heart") or abilitiesUsed.has("heart") \
+			or heartPowerArmed:
 		return false
-	var reels: Array = lastResult["reels"] as Array
-	var count := reels.size() if heart_count < 0 else heart_count
-	var outcome := Abilities.apply_heart(reels, count)
-	if not _apply_revealed_power_outcome(outcome, "heart",
-			_seed(spinCount * 0x6d2b79f5 + 0x0EA7), int(outcome.get("neuronsDelta", 0))):
-		return false
-	# Heart changes the visible symbols now. The player must pull the lever for the
-	# follow-up action, and that next spin is free instead of spending a neuron.
-	freeSpinsRemaining += 1
-	freeSpinGrantSerial += 1
-	if lastResult is Dictionary:
-		var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
-		updated_result["freeSpinsAfter"] = freeSpinsRemaining
-		updated_result["freeSpinsGranted"] = int(updated_result.get("freeSpinsGranted", 0)) + 1
-		lastResult = updated_result
+	# The power is a preparation action. The next lever pull selects one of the
+	# three heart symbols and resolves its matching +1/+2/+3 spin and score.
+	heartPowerArmed = true
+	abilitiesUsed = abilitiesUsed.duplicate()
+	abilitiesUsed.append("heart")
+	powersUsedThisSpin += 1
+	lastPowerFailureReason = ""
 	_commit()
 	return true
 

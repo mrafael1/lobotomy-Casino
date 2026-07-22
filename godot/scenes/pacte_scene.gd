@@ -14,6 +14,7 @@ const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const CHOSEN_CARD_MARGIN := 2.0
 const SELECTION_PREVIEW_TIME := 0.24
+const DESCRIPTION_BUBBLE_RECT := Rect2(17.0, 128.0, 126.0, 31.0)
 const BG_ASSET := "pacte_scene/pacte_scene.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
@@ -74,6 +75,7 @@ func _build_background() -> void:
 	_emplacement.name = "SelectedCardEmplacement"
 	_emplacement.visible = true
 	add_child(_emplacement)
+	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET)
 	_selected_overlay = _full_canvas_sprite(SELECTED_OVERLAY_ASSET, 0)
 	_selected_overlay.name = "SelectedCardOverlay"
 	_selected_overlay.hframes = 3
@@ -104,14 +106,14 @@ func _build_overlay_ui() -> void:
 
 	_description_bubble = Panel.new()
 	_description_bubble.name = "OddsTableDescriptionBubble"
-	_description_bubble.position = Rect2(4.0, 119.0, 152.0, 42.0).position
-	_description_bubble.size = Rect2(4.0, 119.0, 152.0, 42.0).size
+	_description_bubble.position = DESCRIPTION_BUBBLE_RECT.position
+	_description_bubble.size = DESCRIPTION_BUBBLE_RECT.size
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
-	_description_title = _label("CardTitle", Rect2(3.0, 3.0, 146.0, 9.0), 5, NEON_GOLD, _description_bubble)
+	_description_title = _label("CardTitle", Rect2(2.0, 2.0, 122.0, 7.0), 4, NEON_GOLD, _description_bubble)
 	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_description_text = _label("CardDescription", Rect2(5.0, 14.0, 142.0, 24.0), 4, TEXT_COLOR, _description_bubble)
+	_description_text = _label("CardDescription", Rect2(4.0, 10.0, 118.0, 18.0), 3, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -161,7 +163,24 @@ func _offer_array(value: Variant) -> Array[String]:
 func _set_emplacement(asset: String) -> void:
 	if _emplacement == null:
 		return
-	_emplacement.texture = Assets.texture(asset)
+	var texture := Assets.texture(asset)
+	_emplacement.texture = texture
+	_emplacement.centered = false
+	_emplacement.position = Vector2.ZERO
+	if texture == null:
+		_emplacement.hframes = 1
+		_emplacement.frame = 0
+		return
+	# The supplied emplacement textures contain the normal slot and the baked
+	# DROP HERE slot as two native-resolution frames side by side. Without hframes
+	# Godot draws both frames across the canvas at once.
+	var hframes := 2 if texture.get_width() >= int(CANVAS_SIZE.x * 2.0) else 1
+	_emplacement.hframes = hframes
+	_emplacement.vframes = 1
+	_emplacement.frame = 0
+	var frame_width := float(texture.get_width()) / float(hframes)
+	_emplacement.scale = Vector2(CANVAS_SIZE.x / frame_width,
+		CANVAS_SIZE.y / float(texture.get_height()))
 
 func _show_chosen_card(card_id: String, kind: String) -> void:
 	if _chosen_cards_layer == null or card_id == "":
@@ -218,6 +237,7 @@ func _show_pool(kind: String, ids: Array[String]) -> void:
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET if kind == "augment" else POWER_EMPLACEMENT_ASSET)
 	_drop_label = _augment_drop_label if kind == "augment" else _power_drop_label
 	_set_drop_hint_visible(false)
+	_description_bubble.visible = false
 	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	_cancel_button.visible = true
@@ -316,13 +336,9 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			var local_position := (event as InputEventMouseButton).position
-			_begin_drag(card_id, index, button,
-				button.get_global_transform_with_canvas() * local_position)
+			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			var touch_position := (event as InputEventScreenTouch).position
-			_begin_drag(card_id, index, button,
-				button.get_global_transform_with_canvas() * touch_position)
+			_begin_drag(card_id, index, button, (event as InputEventScreenTouch).position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -330,10 +346,10 @@ func _input(event: InputEvent) -> void:
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:
-		_update_drag((event as InputEventMouseMotion).position)
+		_update_drag(get_global_mouse_position())
 	elif event is InputEventMouseButton \
 			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_finish_drag((event as InputEventMouseButton).position)
+		_finish_drag(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == 0:
 		_update_drag((event as InputEventScreenDrag).position)
@@ -360,6 +376,10 @@ func _update_drag(global_position: Vector2) -> void:
 	if not _dragging and global_position.distance_to(_press_position) <= DRAG_SLOP:
 		return
 	_dragging = true
+	# Keep the odds explanation open while a card is only being inspected. It
+	# closes when the drag gesture actually leaves the card.
+	_description_bubble.visible = false
+	_instruction.text = ""
 	_set_drop_hint_visible(true)
 	button.position = _global_to_local(global_position) - _drag_offset
 
@@ -380,6 +400,9 @@ func _finish_drag(global_position: Vector2) -> void:
 	if not was_dragging:
 		_preview_card(card_id)
 		return
+	# A release is a completed drop attempt. Do not reopen the explanation bubble
+	# after a missed slot; the next explicit tap will inspect the card again.
+	_description_bubble.visible = false
 	var drop_rect := AUGMENT_DROP_RECT if _pool_kind == "augment" else POWER_DROP_RECT
 	# Accept the drop when the dragged card overlaps the authored slot. The
 	# pointer is not necessarily at the card centre (especially after grabbing
@@ -389,7 +412,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
 		_accept_card(card_id)
 	else:
-		_preview_card(card_id)
+		_instruction.text = "CHOOSE ONE CARD"
 
 func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform_with_canvas().affine_inverse() * global_position
@@ -402,7 +425,9 @@ func _preview_card(card_id: String) -> void:
 	_description_bubble.visible = true
 	_description_title.text = String(entry.get("name", card_id))
 	_description_text.text = String(entry.get("description", ""))
-	var button := _card_buttons.get(card_id, null) as Button
+	# Tapping a card replaces the generic prompt immediately, while the compact
+	# description remains visible until the player starts dragging it.
+	_instruction.text = "DRAG TO THE SLOT"
 	for id in _offer_ids:
 		var candidate := _card_buttons.get(id, null) as Button
 		if candidate != null:
@@ -487,6 +512,9 @@ func _clear_cards() -> void:
 func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 	var label := _label(label_name, rect, 3, DRAG_COLOR)
 	label.text = "DROP HERE"
+	# The wording is part of emplacement frame 1 now. Keep these nodes as hidden
+	# scene-tooling anchors so older smoke helpers can still inspect their rects.
+	label.visible = false
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -496,9 +524,11 @@ func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 func _set_drop_hint_visible(visible: bool) -> void:
 	_drop_label = _power_drop_label if _pool_kind == "power" else _augment_drop_label
 	if _augment_drop_label != null:
-		_augment_drop_label.visible = visible and _pool_kind == "augment"
+		_augment_drop_label.visible = false
 	if _power_drop_label != null:
-		_power_drop_label.visible = visible and _pool_kind == "power"
+		_power_drop_label.visible = false
+	if _emplacement != null:
+		_emplacement.frame = 1 if visible and _emplacement.hframes > 1 else 0
 
 func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		parent: Node = null) -> Label:

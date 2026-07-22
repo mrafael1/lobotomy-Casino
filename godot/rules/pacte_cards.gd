@@ -109,7 +109,7 @@ const POWERS: Array[Dictionary] = [
 		"icon_rect": Rect2(207.0, 0.0, 15.0, 61.0),
 	},
 	{
-		"id": "heart", "name": "HEART", "description": "HEARTS ADD +1/+2/+3 SPINS. THE NEXT SPIN IS FREE.",
+		"id": "heart", "name": "HEART", "description": "NEXT SPIN: HEART x1/x2/x3 TRIPLE; +1/+2/+3 SPINS, +10/+20/+30 SCORE.",
 		"pool": "power", "power_id": "heart",
 		"sheet": POWER_SHEET, "sheet_rect": POWER_FRONT_RECT,
 		"icon_rect": Rect2(242.0, 0.0, 23.0, 61.0),

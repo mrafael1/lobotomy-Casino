@@ -49,8 +49,9 @@ Resources and currencies:
 
 - **Campaign neurons (lives)** — a campaign grants 10; each run attempt spends
   one. Exhausting them ends the campaign fatally (Game Over).
-- **Run spins** — the serialized run field is still `neurons` for save/parity
-  compatibility, but the machine presents it as spins. A fresh run starts with 20;
+- **Run spins / chips** — the serialized run field is still `neurons` for
+  save/parity compatibility, but the machine presents it as the CHIPS/SPINS
+  counter. A fresh run starts with 15;
   each spin spends 1 run spin unless protected. Restores cap at 35 (105 after a Wealth
   continuation). The machine prints the current remaining-spin number under the
   neuron tube; it updates whenever spins are gained, spent, or protected and
@@ -78,17 +79,18 @@ Resources and currencies:
 2. Reserve the campaign neuron and enter **Pacte**. Reveal three augment cards
    and three power cards, then select and place one of each. Pacte selections are
    saved mid-visit; the initial completion enters the machine directly.
-3. Enter the machine with the base spins, Reroll hero power, and the selected
-   Pacte power. The run begins with no pre-run consumables.
+3. Enter the machine with 15 CHIPS/SPINS, the Reroll hero power, and the
+   selected Pacte power. The run begins with no pre-run consumables.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
    state instead of dropping instantly.
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
-6. When spins cross from above 5 to 5 or fewer, finish the current result and
-   resolve any loss warning, then open the one-time threshold Pacte visit. Its
-   second augment and power append to the first selection and completion opens
-   the dealer scene.
+6. When a flatline consumes the reserved campaign neuron and the campaign count
+   crosses from 6 to 5, finish the flatline presentation and then open the
+   one-time threshold Pacte visit. A live machine's CHIPS/SPINS counter reaching
+   5 never opens Pacte. Its second augment and power append to the first
+   selection and completion opens the dealer scene.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
    for x1/x2/x3 each spin, so lower gauges pull him in faster.
 8. End the run: reach Wealth, flatline and keep part of the run's Lucidity, or
@@ -126,11 +128,12 @@ Resources and currencies:
   dealer, and combo state while preserving earned score/Lucidity and recovering
   a deterministic 1–3 spent power chips. It is unavailable without spin history
   or while another sequence is active.
-- **Heart** — replaces one, two, or three revealed symbols with hearts for
-  +1/+2/+3 run spins, never awards bonus score, and arms one free follow-up
-  spin that the player must start with the lever.
-- **Cheat** — rubble-flashes the revealed symbols, then replaces one selected
-  reel with a symbol chosen from the existing symbol chooser.
+- **Heart** — arms the next spin. That spin is free and deterministically lands
+  a matching triple of `heart_x1`, `heart_x2`, or `heart_x3` with equal 1/3 odds;
+  it pays +1/+2/+3 run spins and +10/+20/+30 score.
+- **Cheat** — shows the same rubble/reward-amplification overlay as the other
+  symbol powers, then replaces one selected reel with a symbol chosen from the
+  existing symbol chooser.
 - **Move** — rubble-flashes the revealed symbols, then moves a selected symbol to
   any other reel, including an adjacent reel, before rescoring.
 - Selecting a power for targeting flashes its authored TV callout (with text
@@ -234,9 +237,10 @@ Resources and currencies:
   and the ending overlays (flatline, game over, wealth).
 - `scores_scene` / `settings_scene` / `collection_scene` / `options_overlay` —
   meta screens.
-- Run lifecycle: `idle` → `pacte_initial` → `running` → `pacte_threshold` →
-  `running` → `over` (with `lastEnding` set to wealth/flatline/game_over); a
-  Wealth continuation returns `over` → `running`.
+- Run lifecycle: `idle` → `pacte_initial` → `running` → `over` (with
+  `lastEnding` set to wealth/flatline/game_over). A flatline that crosses the
+  campaign count from 6 to 5 resumes as `pacte_threshold`, then returns through
+  `running` to the dealer; a Wealth continuation returns `over` → `running`.
 
 ## Living Game Documentation
 
