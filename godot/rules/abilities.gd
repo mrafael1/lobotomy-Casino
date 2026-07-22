@@ -79,3 +79,61 @@ static func apply_copy_reel(reels: Array, source_reel: int, target_reel: int, lu
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning, allow_free_spin_grant,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
 		symbol_reward_bonuses)
+
+## CHEAT replaces one revealed reel with a player-chosen symbol and then uses the
+## same scoring path as every other revealed-reel power.
+static func apply_cheat(reels: Array, reel_index: int, symbol: String,
+		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
+		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
+		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+	var next := reels.duplicate()
+	if reel_index < 0 or reel_index >= next.size():
+		return {}
+	next[reel_index] = symbol
+	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
+		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+
+## MOVE is a physical symbol move rather than Shift's adjacent strip step. Swapping
+## the source and destination preserves both revealed symbols while allowing every
+## destination, including the two adjacent reels.
+static func apply_move_symbol(reels: Array, source_reel: int, target_reel: int,
+		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
+		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
+		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+	var next := reels.duplicate()
+	if source_reel < 0 or target_reel < 0 or source_reel >= next.size() \
+			or target_reel >= next.size() or source_reel == target_reel:
+		return {}
+	var source_symbol: Variant = next[source_reel]
+	next[source_reel] = next[target_reel]
+	next[target_reel] = source_symbol
+	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
+		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+
+## HEART does not enter the normal symbol score table. Each visible heart is a
+## small deterministic resource payout, so this helper remains easy to parity-test.
+static func resolve_hearts(heart_count: int) -> Dictionary:
+	var count := clampi(heart_count, 0, 3)
+	return {
+		"heartCount": count,
+		"neuronsDelta": count,
+		"scoreDelta": count * 10,
+		"coinsDelta": count * 10,
+		"winType": "heart" if count > 0 else "miss",
+	}
+
+static func apply_heart(reels: Array, heart_count: int = -1) -> Dictionary:
+	var count := reels.size() if heart_count < 0 else heart_count
+	count = clampi(count, 0, mini(3, reels.size()))
+	var hearts := reels.duplicate()
+	for i in count:
+		hearts[i] = "heart"
+	var result := resolve_hearts(count)
+	result["reels"] = hearts
+	result["isJackpot"] = false
+	result["freeSpinsGranted"] = 0
+	return result

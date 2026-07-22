@@ -26,7 +26,13 @@ const DEALER_REROLL_BASE_COST := 5
 ## Issue #118: every run starts with these permanent-upgrade-gated powers already
 ## active, regardless of meta-shop purchases — Reroll ("Random") has always been
 ## unconditional; Shift now joins it as baseline starting loadout.
-const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
+## Pacte owns the variable power loadout. Reroll is the permanent hero power and
+## never comes from the selectable deck. Legacy callers may skip the ritual for
+## compatibility; the player-facing start menu always passes open_pacte=true.
+const PACTE_THRESHOLD_NEURONS := 5
+const PACTE_INITIAL_DRAW_SEED := 0x50414354
+const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
+const HERO_POWER_IDS: Array[String] = ["reroll"]
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -191,11 +197,33 @@ var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until fi
 var oddsPhaseCompleted := false           # closed screens stay closed until the next run
 
 # RunStore extras
-var runPhase := "idle" # idle | pre_run | running | over
+var runPhase := "idle" # idle | pre_run | pacte_initial | pacte_threshold | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
 var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
+
+# Pacte run snapshot. Offers and temporary selections are saved so leaving the
+# scene or restarting the game never silently discards a reserved run.
+var pacteSeed := 0
+var pacteOfferAugmentIds: Variant = null
+var pacteOfferPowerIds: Variant = null
+var pacteSelectedAugmentId := ""
+var pacteSelectedPowerId := ""
+var selectedAugmentCardIds: Array = []
+var selectedPowerCardIds: Array = []
+var ownedPowerIds: Array = []
+var pacteThresholdPending := false
+var pacteThresholdOpened := false
+var pacteJokerUsed := false
+var glitchLuciditySpins := 0
+var glitchLucidityMultiplier := 1.0
+
+# Rewind stores the pre-spin state, not rewards. That lets the power restore the
+# immediately previous board/currency state while preserving score and Lucidity
+# already earned by the player.
+var previousSpinSnapshot: Variant = null
+var rewindHistoryAvailable := false
 
 func _forced_eye_reveal_symbols() -> Variant:
 	if eyeRevealReel < 0 or eyeRevealReel > 2 or eyeRevealSymbol == "":
@@ -223,6 +251,28 @@ func _can_use_ability() -> bool:
 		and compulsiveSpinSkips <= 0 and blockPowersSpins <= 0 \
 		and not _augmented_powers_blocked()
 
+func has_power(power_id: String) -> bool:
+	var normalised := "memory" if power_id == "lock" else power_id
+	if normalised == "reroll":
+		return true
+	if not ownedPowerIds.is_empty():
+		return ownedPowerIds.has(normalised)
+	# Compatibility for a save made before Pacte: old permanent power flags still
+	# grant the equivalent run power until that run is replaced.
+	return (normalised == "shift" and ownedUpgrades.has("perm_shift")) \
+		or (normalised == "memory" and ownedUpgrades.has("perm_memory"))
+
+func power_loadout() -> Array[String]:
+	var result: Array[String] = []
+	for id in HERO_POWER_IDS:
+		if not result.has(id):
+			result.append(id)
+	for id in ownedPowerIds:
+		var normalised := "memory" if String(id) == "lock" else String(id)
+		if not result.has(normalised):
+			result.append(normalised)
+	return result
+
 ## Powers that can alter the already-revealed reels are the only valid combo-rescue
 ## choices. Memory affects a future spin and therefore is intentionally not offered
 ## while the current defeat is pending.
@@ -233,9 +283,12 @@ func pending_combo_power_ids() -> Array[String]:
 	if not abilitiesUsed.has("reroll") \
 			and not pendingPowerRestores.has("reroll"):
 		ids.append("reroll")
-	if ownedUpgrades.has("perm_shift") and not abilitiesUsed.has("shift") \
+	if has_power("shift") and not abilitiesUsed.has("shift") \
 			and not pendingPowerRestores.has("shift"):
 		ids.append("shift")
+	for id in ["rewind", "heart", "cheat", "move"]:
+		if has_power(id) and not abilitiesUsed.has(id) and not pendingPowerRestores.has(id):
+			ids.append(id)
 	return ids
 
 ## True while the Energy Drink owns the gauge: the protected spins, then the
@@ -337,7 +390,9 @@ func load_run_state() -> void:
 	var saved_flatline := saved_phase == "over" \
 		and str(saved.get("lastEnding", "")) == "flatline" \
 		and int(MetaStateStore.campaignNeuronsLeft) > 0
-	if saved_phase != "running" and saved_phase != "pre_run" and not saved_flatline:
+	if saved_phase != "running" and saved_phase != "pre_run" \
+			and saved_phase != "pacte_initial" and saved_phase != "pacte_threshold" \
+			and not saved_flatline:
 		DirAccess.remove_absolute(RUN_SAVE_PATH)
 		return
 	for prop in _run_state_properties():
@@ -347,6 +402,96 @@ func load_run_state() -> void:
 
 # ── spin ──────────────────────────────────────────────────────────────────────────
 
+func _capture_rewind_snapshot() -> Dictionary:
+	return {
+		"neurons": neurons,
+		"freeSpinsRemaining": freeSpinsRemaining,
+		"dealerCountdown": dealerCountdown,
+		"dealerLastSpinCount": dealerLastSpinCount,
+		"dealerIncoming": dealerIncoming,
+		"dealerPending": dealerPending,
+		"dealerOfferIds": dealerOfferIds.duplicate(true) if dealerOfferIds is Array else dealerOfferIds,
+		"dealerAugmentOfferId": dealerAugmentOfferId,
+		"comboDefeatPending": comboDefeatPending,
+		"pendingComboMultiplier": pendingComboMultiplier,
+		"betMultiplier": betMultiplier,
+		"lastComboMultiplier": lastComboMultiplier,
+		"lastEffectiveBet": lastEffectiveBet,
+		"spinCount": spinCount,
+		"isFreeSpin": isFreeSpin,
+		"lastResult": lastResult.duplicate(true) if lastResult is Dictionary else lastResult,
+		"lockedReels": lockedReels.duplicate(),
+		"lockedReelSpins": lockedReelSpins.duplicate(),
+		"eyeRevealReel": eyeRevealReel,
+		"eyeRevealSymbol": eyeRevealSymbol,
+		"pacteThresholdPending": pacteThresholdPending,
+		"powersUsedThisSpin": powersUsedThisSpin,
+		"pendingPowerRestores": pendingPowerRestores.duplicate(),
+	}
+
+func _restore_rewind_snapshot(snapshot: Dictionary) -> void:
+	neurons = int(snapshot.get("neurons", neurons))
+	freeSpinsRemaining = int(snapshot.get("freeSpinsRemaining", freeSpinsRemaining))
+	dealerCountdown = int(snapshot.get("dealerCountdown", dealerCountdown))
+	dealerLastSpinCount = int(snapshot.get("dealerLastSpinCount", dealerLastSpinCount))
+	dealerIncoming = bool(snapshot.get("dealerIncoming", dealerIncoming))
+	dealerPending = bool(snapshot.get("dealerPending", dealerPending))
+	dealerOfferIds = snapshot.get("dealerOfferIds", dealerOfferIds)
+	dealerAugmentOfferId = String(snapshot.get("dealerAugmentOfferId", dealerAugmentOfferId))
+	comboDefeatPending = bool(snapshot.get("comboDefeatPending", comboDefeatPending))
+	pendingComboMultiplier = int(snapshot.get("pendingComboMultiplier", pendingComboMultiplier))
+	betMultiplier = int(snapshot.get("betMultiplier", betMultiplier))
+	lastComboMultiplier = int(snapshot.get("lastComboMultiplier", lastComboMultiplier))
+	lastEffectiveBet = int(snapshot.get("lastEffectiveBet", lastEffectiveBet))
+	spinCount = int(snapshot.get("spinCount", spinCount))
+	isFreeSpin = bool(snapshot.get("isFreeSpin", isFreeSpin))
+	lastResult = snapshot.get("lastResult", lastResult)
+	lockedReels = (snapshot.get("lockedReels", lockedReels) as Array).duplicate()
+	lockedReelSpins = (snapshot.get("lockedReelSpins", lockedReelSpins) as Array).duplicate()
+	eyeRevealReel = int(snapshot.get("eyeRevealReel", eyeRevealReel))
+	eyeRevealSymbol = String(snapshot.get("eyeRevealSymbol", eyeRevealSymbol))
+	pacteThresholdPending = bool(snapshot.get("pacteThresholdPending", pacteThresholdPending))
+	powersUsedThisSpin = int(snapshot.get("powersUsedThisSpin", 0))
+	pendingPowerRestores = (snapshot.get("pendingPowerRestores", pendingPowerRestores) as Array).duplicate()
+	isSpinning = false
+
+func rewind() -> bool:
+	if not _can_use_ability() or not has_power("rewind") or not rewindHistoryAvailable \
+			or previousSpinSnapshot == null or abilitiesUsed.has("rewind"):
+		lastPowerFailureReason = "Rewind needs a completed previous spin."
+		_commit()
+		return false
+	var snapshot := previousSpinSnapshot as Dictionary
+	if snapshot.get("lastResult", null) == null or int(snapshot.get("spinCount", 0)) <= 0:
+		lastPowerFailureReason = "Rewind needs a completed previous spin."
+		_commit()
+		return false
+	var score_before := scoreEarned
+	var lucidity_before := lucidityCoins
+	var spent := abilitiesUsed.duplicate()
+	spent.erase("rewind")
+	_restore_rewind_snapshot(snapshot)
+	scoreEarned = score_before
+	lucidityCoins = lucidity_before
+	var recovery_rng := LobRNG.new((pacteSeed ^ int(snapshot.get("spinCount", 0)) ^ 0x52455749) & M32)
+	var recover_count := 1 + floori(recovery_rng.next() * 3.0)
+	for _i in recover_count:
+		if spent.is_empty():
+			break
+		var index := mini(spent.size() - 1, floori(recovery_rng.next() * spent.size()))
+		var restored_id := String(spent[index])
+		spent.remove_at(index)
+		var used_index := abilitiesUsed.find(restored_id)
+		if used_index >= 0:
+			abilitiesUsed.remove_at(used_index)
+	abilitiesUsed = abilitiesUsed.duplicate()
+	lastPowerFailureReason = ""
+	rewindHistoryAvailable = false
+	previousSpinSnapshot = null
+	powersUsedThisSpin += 1
+	_commit()
+	return true
+
 func spin(compulsive := false) -> Variant:
 	if runPhase != "running" or isSpinning:
 		return null
@@ -355,6 +500,9 @@ func spin(compulsive := false) -> Variant:
 	# of leaving the store permanently locked.
 	if comboDefeatPending:
 		resolve_pending_combo_defeat(false)
+	previousSpinSnapshot = _capture_rewind_snapshot()
+	rewindHistoryAvailable = true
+	var neurons_before_spin := neurons
 	var is_compulsive: bool = compulsive and compulsiveSpinSkips > 0
 	if not is_compulsive and compulsiveSpinSkips > 0:
 		return null
@@ -386,6 +534,8 @@ func spin(compulsive := false) -> Variant:
 		brain_bonus += int(Symbols.WEIGHT["brain"]) * 3
 
 	var base_mult := lucidityMultiplier * nextSpinLucidityMultiplier * eff_bet
+	if glitchLuciditySpins > 0:
+		base_mult *= glitchLucidityMultiplier
 	var eff_mult: float = base_mult * 0.5 if brainBoostSpins > 0 else base_mult
 
 	# Potion (issue #32): roll one equal-weight pool effect for this spin, with a
@@ -614,9 +764,13 @@ func spin(compulsive := false) -> Variant:
 	forceFlatlineSpins = maxi(0, forceFlatlineSpins - 1)
 	guaranteedTripleSpins = guaranteedTripleSpins if flatline_was_active else maxi(0, guaranteedTripleSpins - 1)
 	hideResultSpins = maxi(0, hideResultSpins - 1)
+	glitchLuciditySpins = maxi(0, glitchLuciditySpins - 1)
 	# Issue #76: the charge is spent only when a win actually consumed it above.
 	if flatline_boost_applied:
 		flatlineWinBoostArmed = false
+	if neurons_before_spin > PACTE_THRESHOLD_NEURONS \
+			and neurons <= PACTE_THRESHOLD_NEURONS and not pacteThresholdOpened:
+		pacteThresholdPending = true
 
 	_commit()
 	return final_result
@@ -635,7 +789,7 @@ func set_spinning(v: bool) -> void:
 ## flatline pairs/triples come back as winType "pair"/"triple" with 0 score and
 ## must break the frenzy like any miss.
 func _is_winning_result(result: Dictionary) -> bool:
-	return String(result["winType"]) in ["pair", "triple", "jackpot"] \
+	return String(result["winType"]) in ["pair", "triple", "jackpot", "heart"] \
 		and int(result["scoreEarned"]) > 0
 
 func _combo_after(prev: int, result: Dictionary) -> int:
@@ -719,6 +873,21 @@ func reset_run_state() -> void:
 	campaignNeuronPending = false
 	augmentedTier = ""
 	powersUsedThisSpin = 0
+	pacteSeed = 0
+	pacteOfferAugmentIds = null
+	pacteOfferPowerIds = null
+	pacteSelectedAugmentId = ""
+	pacteSelectedPowerId = ""
+	selectedAugmentCardIds = []
+	selectedPowerCardIds = []
+	ownedPowerIds = []
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteJokerUsed = false
+	glitchLuciditySpins = 0
+	glitchLucidityMultiplier = 1.0
+	previousSpinSnapshot = null
+	rewindHistoryAvailable = false
 	_commit()
 
 ## Marks the pre-run dealer shop as a resumable session without spending a
@@ -732,15 +901,18 @@ func begin_pre_run() -> void:
 	_commit()
 
 func has_resume_state() -> bool:
-	if runPhase == "pre_run" or runPhase == "running":
+	if runPhase == "pre_run" or runPhase == "pacte_initial" \
+			or runPhase == "pacte_threshold" or runPhase == "running":
 		return true
 	# A flatline remains a resumable post-run dealer visit until the player
 	# starts a fresh run or gives up. Wealth exits go straight to the menu.
 	return runPhase == "over" and str(lastEnding) == "flatline" \
 		and int(MetaStateStore.campaignNeuronsLeft) > 0
 
-func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, consume_campaign_neuron := true) -> bool:
-	if runPhase == "running":
+func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
+		consume_campaign_neuron := true, seed_override := -1,
+		open_pacte := false) -> bool:
+	if runPhase == "running" or runPhase == "pacte_initial" or runPhase == "pacte_threshold":
 		return true
 	if consume_campaign_neuron:
 		if not MetaStateStore.reserve_campaign_neuron_for_run():
@@ -759,19 +931,34 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	lastResult = null
 	lockedReels = [false, false, false]
 	lockedReelSpins = [0, 0, 0]
-	runConsumables = pending_consumables.duplicate(true)
+	# The Pacte flow replaces the pre-run shop. Legacy dealer callers still pass
+	# their purchased stash, while the player-facing Pacte path starts empty.
+	runConsumables = {} if open_pacte else pending_consumables.duplicate(true)
+	if open_pacte and not MetaStateStore.pendingConsumables.is_empty():
+		# Old saves may still contain a pre-run stash. Pacte starts clean and the
+		# stale wallet purchase must not survive into a future run.
+		MetaStateStore.pendingConsumables = {}
+		MetaStateStore.save_state()
 	abilitiesUsed = []
 	# augmentedTier survives: the menu sets it before the pre-run dealer shop, and
 	# it applies to the run this call starts (issue #111).
 	powersUsedThisSpin = 0
 	ownedUpgrades = owned_permanents.duplicate()
+	selectedAugmentCardIds = []
+	selectedPowerCardIds = []
 	# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power —
 	# grant it every run regardless of meta-shop purchases, consistently across
 	# fresh runs, restarts, and save/load (this is the single choke point all three
 	# paths route through).
-	for starting_id in STARTING_POWER_UPGRADE_IDS:
-		if not ownedUpgrades.has(starting_id):
-			ownedUpgrades.append(starting_id)
+	# Reroll is the only fixed hero power. The remaining loadout is filled by
+	# the Pacte selection when that scene is completed.
+	ownedPowerIds = HERO_POWER_IDS.duplicate()
+	if not open_pacte:
+		if not ownedUpgrades.has("perm_shift"):
+			ownedUpgrades.append("perm_shift")
+		ownedPowerIds.append("shift")
+		if ownedUpgrades.has("perm_memory"):
+			ownedPowerIds.append("memory")
 	lastPowerFailureReason = ""
 	spinCount = 0
 	isFreeSpin = false
@@ -827,11 +1014,181 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary, con
 	oddsPhaseCompleted = false
 	oddsWeightOverrides = _odds_overrides_from_meta()
 	symbolRewardBonuses = _symbol_reward_bonuses_from_meta(owned_permanents)
+	if open_pacte:
+		chipAugmentsPurchased = {}
+		symbolAugmentLevels = {}
+		pairTripleAugmentChoice = ""
 	_apply_chip_augment_run_overlay()
 	pendingPowerRestores = []
-	runPhase = "running"
+	pacteSeed = seed_override if seed_override >= 0 else _seed(PACTE_INITIAL_DRAW_SEED)
+	pacteOfferAugmentIds = PacteCards.draw("augment", pacteSeed,
+		MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
+	pacteOfferPowerIds = PacteCards.draw("power", pacteSeed ^ 0x9e3779b9,
+		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
+	pacteSelectedAugmentId = ""
+	pacteSelectedPowerId = ""
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteJokerUsed = false
+	glitchLuciditySpins = 0
+	glitchLucidityMultiplier = 1.0
+	previousSpinSnapshot = null
+	rewindHistoryAvailable = false
+	# The campaign neuron is reserved before Pacte opens, so the save is valid even
+	# if the player closes the app halfway through the card ritual.
+	runPhase = "pacte_initial" if open_pacte else "running"
 	lastEnding = null
 	wealthContinued = false
+	_commit()
+	return true
+
+func pacte_active() -> bool:
+	return runPhase == "pacte_initial" or runPhase == "pacte_threshold"
+
+func _pacte_offer_array(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	if value is Array:
+		for item in value as Array:
+			result.append(String(item))
+	return result
+
+func _refresh_pacte_derivatives() -> void:
+	maxFreeSpins = Economy.compute_max_free_spins(ownedUpgrades)
+	lucidityMultiplier = Economy.compute_lucidity_multiplier(ownedUpgrades)
+	symbolRewardBonuses = _symbol_reward_bonuses_from_meta(ownedUpgrades)
+
+func _apply_pacte_augment(card_id: String) -> bool:
+	var entry := PacteCards.card(card_id)
+	if entry.is_empty() or String(entry.get("pool", "")) != "augment":
+		return false
+	var effect := entry.get("effect", {}) as Dictionary
+	match String(effect.get("type", "")):
+		"owned_upgrade":
+			var upgrade_id := String(effect.get("upgrade_id", ""))
+			if upgrade_id != "" and not ownedUpgrades.has(upgrade_id):
+				ownedUpgrades.append(upgrade_id)
+		"joker":
+			var joker_rng := LobRNG.new((pacteSeed ^ selectedAugmentCardIds.size() \
+					* 0x45d9f3b) & M32)
+			if joker_rng.next() < 0.5:
+				neurons += 3 * maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+			else:
+				guaranteedWinSpins += 1
+			pacteJokerUsed = true
+		"win_boost":
+			flatlineWinBoostArmed = true
+		"glitch_lucidity":
+			glitchLuciditySpins = maxi(glitchLuciditySpins, int(effect.get("spins", 2)))
+			glitchLucidityMultiplier = maxf(glitchLucidityMultiplier, float(effect.get("multiplier", 2.0)))
+		_:
+			return false
+	_refresh_pacte_derivatives()
+	return true
+
+func select_pacte_augment(card_id: String) -> bool:
+	if not pacte_active() or pacteSelectedAugmentId != "":
+		return false
+	if not _pacte_offer_array(pacteOfferAugmentIds).has(card_id) \
+			or selectedAugmentCardIds.has(card_id):
+		return false
+	pacteSelectedAugmentId = card_id
+	_commit()
+	return true
+
+func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
+	if not pacte_active():
+		return false
+	var augment_card_id := augment_id if augment_id != "" else pacteSelectedAugmentId
+	var power_card_id := power_id if power_id != "" else pacteSelectedPowerId
+	if power_card_id == "lock":
+		power_card_id = "memory"
+	if augment_card_id == "" or power_card_id == "":
+		return false
+	if not _pacte_offer_array(pacteOfferAugmentIds).has(augment_card_id) \
+			or not _pacte_offer_array(pacteOfferPowerIds).has(power_card_id):
+		return false
+	if selectedAugmentCardIds.has(augment_card_id) or selectedPowerCardIds.has(power_card_id):
+		return false
+	if not _apply_pacte_augment(augment_card_id):
+		return false
+	var runtime_power_id := PacteCards.power_id(power_card_id)
+	selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
+	selectedAugmentCardIds.append(augment_card_id)
+	selectedPowerCardIds = selectedPowerCardIds.duplicate()
+	selectedPowerCardIds.append(power_card_id)
+	ownedPowerIds = ownedPowerIds.duplicate()
+	if not ownedPowerIds.has(runtime_power_id):
+		ownedPowerIds.append(runtime_power_id)
+	pacteSelectedAugmentId = ""
+	pacteSelectedPowerId = ""
+	pacteOfferAugmentIds = null
+	pacteOfferPowerIds = null
+	if runPhase == "pacte_threshold":
+		pacteThresholdPending = false
+	runPhase = "running"
+	_refresh_pacte_derivatives()
+	_commit()
+	return true
+
+func stage_pacte_power_selection(card_id: String) -> bool:
+	if not pacte_active() or pacteSelectedAugmentId == "":
+		return false
+	var normalised := "memory" if card_id == "lock" else card_id
+	if not _pacte_offer_array(pacteOfferPowerIds).has(normalised) \
+			or selectedPowerCardIds.has(normalised):
+		return false
+	pacteSelectedPowerId = normalised
+	_commit()
+	return complete_pacte_selection("", normalised)
+
+func cancel_pacte_selection() -> void:
+	if not pacte_active():
+		return
+	pacteSelectedAugmentId = ""
+	pacteSelectedPowerId = ""
+	_commit()
+
+func open_threshold_pacte() -> bool:
+	if runPhase != "running" or not pacteThresholdPending or pacteThresholdOpened:
+		return false
+	var draw_seed := (pacteSeed ^ PACTE_THRESHOLD_DRAW_SEED ^ (spinCount * 0x9e3779b9)) & M32
+	pacteOfferAugmentIds = PacteCards.draw("augment", draw_seed,
+		MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
+	pacteOfferPowerIds = PacteCards.draw("power", draw_seed ^ 0x9e3779b9,
+		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
+	pacteSelectedAugmentId = ""
+	pacteSelectedPowerId = ""
+	pacteThresholdOpened = true
+	runPhase = "pacte_threshold"
+	_commit()
+	return true
+
+## A deterministic fallback used by direct scene smoke setup and accessibility
+## automation. A real player always makes these choices in Pacte's card UI.
+func skip_pacte_with_defaults() -> bool:
+	if not pacte_active():
+		return false
+	var augment_offers := _pacte_offer_array(pacteOfferAugmentIds)
+	var power_offers := _pacte_offer_array(pacteOfferPowerIds)
+	if augment_offers.is_empty() or power_offers.is_empty():
+		return false
+	return complete_pacte_selection(augment_offers[0], power_offers[0])
+
+## Opens the full dealer scene after the threshold Pacte visit. This uses the same
+## deterministic offer paths as an automatic machine interruption.
+func force_dealer_visit() -> bool:
+	if runPhase != "running" or dealerPending or dealerIncoming:
+		return false
+	var offers: Variant = Dealer.pick_pool_offer(InRunItems.ids(),
+			_seed(spinCount * 0x6b43c7f + 0x168), dealer_offer_count())
+	if offers == null:
+		return false
+	dealerCount += 1
+	dealerLastSpinCount = spinCount
+	dealerOfferIds = offers
+	dealerAugmentOfferId = _roll_augment_offer(_seed(spinCount * 0x51c4a9 + 0xa06))
+	dealerPending = true
+	dealerCountdown = 0
 	_commit()
 	return true
 
@@ -1020,8 +1377,24 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
 
+func _apply_revealed_power_outcome(outcome: Dictionary, power_id: String,
+		seed: int, neuron_delta: int = 0) -> bool:
+	if outcome.is_empty() or lastResult == null:
+		return false
+	var marked := abilitiesUsed.duplicate()
+	marked.append(power_id)
+	powersUsedThisSpin += 1
+	_apply_outcome(outcome, marked, seed)
+	if neuron_delta != 0:
+		neurons += neuron_delta
+	lastPowerFailureReason = ""
+	_commit()
+	return true
+
 func reroll_reel(reel_index: int) -> bool:
 	if not _can_use_ability() or lastResult == null:
+		return false
+	if reel_index < 0 or reel_index >= (lastResult["reels"] as Array).size():
 		return false
 	if abilitiesUsed.has("reroll"):
 		return false
@@ -1061,7 +1434,7 @@ func reroll_reel(reel_index: int) -> bool:
 func move_reel(reel_index: int, direction: int) -> bool:
 	if not _can_use_ability() or lastResult == null:
 		return false
-	if not ownedUpgrades.has("perm_shift"):
+	if not has_power("shift"):
 		return false
 	if abilitiesUsed.has("shift"):
 		return false
@@ -1084,7 +1457,7 @@ func move_reel(reel_index: int, direction: int) -> bool:
 func lock_reel(reel_index: int) -> void:
 	if not _can_use_ability():
 		return
-	if not ownedUpgrades.has("perm_memory"):
+	if not has_power("memory"):
 		return
 	if abilitiesUsed.has("memory"):
 		return
@@ -1121,6 +1494,57 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed)
 	_commit()
 	return true
+
+func heart_power(heart_count: int = -1) -> bool:
+	if not _can_use_ability() or lastResult == null or not has_power("heart") \
+			or abilitiesUsed.has("heart"):
+		return false
+	var reels: Array = lastResult["reels"] as Array
+	var count := reels.size() if heart_count < 0 else heart_count
+	var outcome := Abilities.apply_heart(reels, count)
+	return _apply_revealed_power_outcome(outcome, "heart",
+			_seed(spinCount * 0x6d2b79f5 + 0x0EA7), int(outcome.get("neuronsDelta", 0)))
+
+func use_heart_power(heart_count: int = -1) -> bool:
+	return heart_power(heart_count)
+
+func cheat_symbol(reel_index: int, symbol: String) -> bool:
+	if not _can_use_ability() or lastResult == null or not has_power("cheat") \
+			or abilitiesUsed.has("cheat"):
+		return false
+	var valid_symbols: Array = Symbols.BASE_SYMBOL_CYCLE.duplicate()
+	if Economy.compute_book_weight(ownedUpgrades) > 0:
+		valid_symbols.append("book")
+	if not valid_symbols.has(symbol):
+		return false
+	var reels: Array = lastResult["reels"] as Array
+	var pair_boost_active := pairBoostSpins > 0
+	var hidden_reel_count := _active_hidden_reel_count(pair_boost_active)
+	var outcome := Abilities.apply_cheat(reels, reel_index, symbol,
+			float(lastResult["scoreMultiplier"]), Economy.has_pattern23_triple(ownedUpgrades),
+			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
+			(float(pairBoostMult) if pair_boost_active else 1.0), hidden_reel_count,
+			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses)
+	return _apply_revealed_power_outcome(outcome, "cheat",
+			_seed(spinCount * 0x165667b1 + reel_index), 0)
+
+func move_symbol(source_reel: int, target_reel: int) -> bool:
+	if not _can_use_ability() or lastResult == null or not has_power("move") \
+			or abilitiesUsed.has("move") or source_reel == target_reel:
+		return false
+	var reels: Array = lastResult["reels"] as Array
+	var pair_boost_active := pairBoostSpins > 0
+	var hidden_reel_count := _active_hidden_reel_count(pair_boost_active)
+	var outcome := Abilities.apply_move_symbol(reels, source_reel, target_reel,
+			float(lastResult["scoreMultiplier"]), Economy.has_pattern23_triple(ownedUpgrades),
+			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
+			(float(pairBoostMult) if pair_boost_active else 1.0), hidden_reel_count,
+			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses)
+	return _apply_revealed_power_outcome(outcome, "move",
+			_seed(spinCount * 0x27d4eb2f + source_reel * 7 + target_reel), 0)
+
+func cheat_reel(reel_index: int, symbol: String) -> bool:
+	return cheat_symbol(reel_index, symbol)
 
 # ── consumables / dealer ───────────────────────────────────────────────────────────
 

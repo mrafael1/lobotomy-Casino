@@ -222,6 +222,34 @@ static func check_endings(out: Array) -> void:
 		if got != bool(c["expect"]):
 			_fail(out, "checkExitEligibility " + str(c["input"]), got, bool(c["expect"]))
 
+static func check_pacte_deck_and_powers(out: Array) -> void:
+	var augment_unlocks: Array[String] = PacteCards.augment_ids()
+	var power_unlocks: Array[String] = PacteCards.power_draw_ids()
+	var first := PacteCards.draw("augment", 0x115, augment_unlocks, [], 3)
+	var second := PacteCards.draw("augment", 0x115, augment_unlocks, [], 3)
+	if not deep_equal(first, second) or first.size() != 3:
+		_fail(out, "Pacte augment draw determinism", first, second)
+	var restricted := PacteCards.draw("power", 0x156, ["shift", "move"], [], 3)
+	if restricted.size() != 2 or not restricted.has("shift") or not restricted.has("move"):
+		_fail(out, "Pacte unlock filtering", restricted, ["shift", "move"])
+	var excluded := PacteCards.draw("power", 0x157, power_unlocks, ["shift", "move"], 3)
+	if excluded.has("shift") or excluded.has("move"):
+		_fail(out, "Pacte accumulated selection exclusion", excluded, "without shift/move")
+	var one_heart := Abilities.resolve_hearts(1)
+	var three_hearts := Abilities.resolve_hearts(3)
+	if not deep_equal(one_heart, {
+			"heartCount": 1, "neuronsDelta": 1, "scoreDelta": 10,
+			"coinsDelta": 10, "winType": "heart"}):
+		_fail(out, "Heart one-heart outcome", one_heart, "one heart payout")
+	if int(three_hearts["neuronsDelta"]) != 3 or int(three_hearts["scoreDelta"]) != 30:
+		_fail(out, "Heart three-heart outcome", three_hearts, "3 neurons / 30 score")
+	var cheat := Abilities.apply_cheat(["brain", "eye", "pill"], 1, "brain", 1.0)
+	if not (cheat["reels"] as Array).has("brain") or String((cheat["reels"] as Array)[1]) != "brain":
+		_fail(out, "Cheat symbol replacement", cheat, "brain/brain/pill")
+	var adjacent_move := Abilities.apply_move_symbol(["brain", "eye", "pill"], 0, 1, 1.0)
+	if not deep_equal(adjacent_move["reels"], ["eye", "brain", "pill"]):
+		_fail(out, "Move adjacent reel swap", adjacent_move, ["eye", "brain", "pill"])
+
 static func run_all() -> Array:
 	var out: Array = []
 	check_rng(out)
@@ -235,4 +263,5 @@ static func run_all() -> Array:
 	check_bank(out)
 	check_lucidity(out)
 	check_endings(out)
+	check_pacte_deck_and_powers(out)
 	return out

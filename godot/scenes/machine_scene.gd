@@ -68,7 +68,12 @@ const POWER_HITS := {
 	"reroll": { "left": 21.0, "top": 223.0, "width": 15.0, "height": 15.0 },
 	"shift": { "left": 36.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 	"memory": { "left": 49.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"rewind": { "left": 63.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"heart": { "left": 77.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"cheat": { "left": 91.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"move": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 }
+const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "move"]
 const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
@@ -150,6 +155,10 @@ const POWER_SHEETS := {
 	"reroll": "machine new view/reroll_final_machine.png",
 	"shift": "machine new view/shift_final_machine.png",
 	"memory": "machine new view/lock_final_machine.png",
+	"rewind": "machine new view/rewind_power.png",
+	"heart": "machine new view/chip_power.png",
+	"cheat": "machine new view/cheat_power.png",
+	"move": "machine new view/move_power.png",
 }
 const REEL_SELECT_COLUMNS := 2
 const REEL_SELECT_ROWS := 2
@@ -167,6 +176,7 @@ const SHIFT_ARROW_HITS := [
 # dealer scene is only used for the pre-run shop, reached from the menu.
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
+const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
@@ -532,6 +542,7 @@ var _win_anim_tween: Tween = null
 var _win_payout_label: Label = null # "+ X" line under the PAIR/TRIPLE callout
 var _power_anim_sprite: Sprite2D = null
 var _power_anim_tween: Tween = null
+var _power_anim_label: Label = null
 var _tv_info_pop_sources: Dictionary = {}
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
@@ -552,6 +563,9 @@ var _spin_reel_sprites: Array[Sprite2D] = []
 var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
 var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
+var _cheat_reel := -1
+var _move_source := -1
+var _rubble_overlay: ColorRect = null
 var _dealer_drag_active := false
 var _dealer_drag_node: Control = null
 var _dealer_drag_id := ""
@@ -575,6 +589,7 @@ var _power_seen_lucidity := 0    # legacy name: total power points the gauge has
 var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
+var _threshold_waiting_for_power_coins := false
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
 var _jackpot_flash_tween: Tween = null
@@ -1349,7 +1364,7 @@ func _build_machine_control_art() -> void:
 		count.text = ""
 		count.visible = false
 		_lock_count_labels.append(count)
-	for id in ["reroll", "shift", "memory"]:
+	for id in POWER_IDS:
 		_power_sprites[id] = _build_full_canvas_sheet(String(POWER_SHEETS[id]), 3, POWER_FRAME_DISABLED)
 
 func _transparent_button_style() -> StyleBoxEmpty:
@@ -1720,6 +1735,11 @@ func _build_spin_button() -> void:
 # Entered from the shop (which already started the run) or standalone. If no run is
 # in progress, begin one from meta so the machine works on its own too.
 func _enter_run() -> void:
+	if RunStateStore.pacte_active():
+		# Direct scene smoke/tools can open the machine while a ritual is saved;
+		# complete that saved visit deterministically instead of reserving a second
+		# campaign neuron. The menu always routes real players to Pacte first.
+		RunStateStore.skip_pacte_with_defaults()
 	if RunStateStore.runPhase != "running":
 		if not _begin_fresh_run():
 			_show_campaign_failed()
@@ -1769,6 +1789,7 @@ func _sync_visuals() -> void:
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
 	_pending_spin_gain = 0
+	_threshold_waiting_for_power_coins = false
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1833,6 +1854,8 @@ func _resolve_interrupted_spin() -> void:
 				_present_dealer_or_defer()
 			return
 	if _check_ending():
+		return
+	if _defer_threshold_until_power_flow():
 		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
 	# _run_post_reveal_sequence) — the dealer stays queued and presents afterward.
@@ -2093,6 +2116,8 @@ func _finish_post_spin_sequence() -> void:
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
 		return
+	if _defer_threshold_until_power_flow():
+		return
 	# Issue #96: a pending compulsion must fully resolve BEFORE the dealer pops.
 	# The dealer stays queued in the store (dealerIncoming) and presents again on
 	# the compulsive spin's own post-reveal. If the dealer took the scene first,
@@ -2111,6 +2136,34 @@ func _finish_post_spin_sequence() -> void:
 	else:
 		_set_sequence_lock(false)
 	_post_spin_sequence_active = false
+
+func _open_threshold_pacte_if_ready() -> bool:
+	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
+		return false
+	if not RunStateStore.open_threshold_pacte():
+		return false
+	# A dealer due on the same spin is re-rolled after the threshold Pacte choice,
+	# so the threshold visit remains the next interruption rather than being lost.
+	RunStateStore.dealerIncoming = false
+	RunStateStore.dealerPending = false
+	RunStateStore.dealerOfferIds = null
+	RunStateStore._commit()
+	_clear_targeting()
+	_close_pending_combo_defeat()
+	_set_sequence_lock(false)
+	_post_spin_sequence_active = false
+	SceneNav.change_to(PACTE_SCENE)
+	return true
+
+func _defer_threshold_until_power_flow() -> bool:
+	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
+		return false
+	if _power_sequence_active() or _power_has_pending_work():
+		_threshold_waiting_for_power_coins = true
+		_set_sequence_lock(false)
+		_post_spin_sequence_active = false
+		return true
+	return _open_threshold_pacte_if_ready()
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
 
@@ -2276,11 +2329,31 @@ func _stop_win_animation() -> void:
 ## REROLL/SHIFT/LOCK TV callout: the selected power's power_animation frame beeps
 ## a few times and then holds while its targeting stays armed (_clear_targeting hides it).
 func _show_power_animation(id: String) -> void:
-	if _power_anim_sprite == null or not POWER_ANIM_FRAME.has(id):
+	if _power_anim_sprite == null:
 		return
 	_stop_power_animation()
 	_begin_tv_info_pop(&"power")
-	_set_sheet_frame(_power_anim_sprite, int(POWER_ANIM_FRAME[id]))
+	_set_sheet_frame(_power_anim_sprite, int(POWER_ANIM_FRAME.get(id, 0)))
+	if not POWER_ANIM_FRAME.has(id):
+		if _power_anim_label == null:
+			_power_anim_label = Label.new()
+			_power_anim_label.name = "PowerCalloutName"
+			_power_anim_label.position = Vector2(35.0, 43.0)
+			_power_anim_label.size = Vector2(90.0, 18.0)
+			_power_anim_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_power_anim_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			_power_anim_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_power_anim_label.add_theme_font_size_override("font_size", 8)
+			_power_anim_label.add_theme_color_override("font_color", NEON_CYAN)
+			_power_anim_label.add_theme_color_override("font_outline_color", Color.BLACK)
+			_power_anim_label.add_theme_constant_override("outline_size", 1)
+			if _font != null:
+				_power_anim_label.add_theme_font_override("font", _font)
+			_power_anim_sprite.add_child(_power_anim_label)
+		_power_anim_label.text = id.to_upper()
+		_power_anim_label.visible = true
+	elif _power_anim_label != null:
+		_power_anim_label.visible = false
 	_power_anim_sprite.modulate.a = 1.0
 	_power_anim_sprite.visible = true
 	_power_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
@@ -2297,6 +2370,8 @@ func _stop_power_animation() -> void:
 	if _power_anim_sprite != null:
 		_power_anim_sprite.visible = false
 		_power_anim_sprite.modulate.a = 1.0
+	if _power_anim_label != null:
+		_power_anim_label.visible = false
 	_end_tv_info_pop(&"power")
 
 func _stop_combo_loss_beep() -> void:
@@ -2885,9 +2960,17 @@ func _advance_power_bar() -> void:
 		# only partially fills the bar; the power must not pop before the bar is full).
 		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 		_maybe_present_pending_dealer()
+		_maybe_open_threshold_after_power_flow()
 		return
 	_power_batch_running = true
 	_launch_power_coin_batch(steps)
+
+func _maybe_open_threshold_after_power_flow() -> void:
+	if not _threshold_waiting_for_power_coins or _power_sequence_active() \
+			or _power_has_pending_work():
+		return
+	_threshold_waiting_for_power_coins = false
+	_open_threshold_pacte_if_ready()
 
 ## Tea restores an ability instantly (a consumable, not a score event): commit its queued
 ## restore now and fly a coin from the cash tray straight to the power. No-op if Tea
@@ -3233,7 +3316,7 @@ func _set_free_spin_display(active: bool) -> void:
 		_free_spin_sprite.visible = active
 
 func _build_power_buttons() -> void:
-	for id in ["reroll", "shift", "memory"]:
+	for id in POWER_IDS:
 		var hit: Dictionary = POWER_HITS[id]
 		var node_name := "PowerButton%s" % id.capitalize()
 		var b := _make_or_bind_hit_button(node_name, {
@@ -3354,18 +3437,19 @@ func _refresh_controls() -> void:
 			or (_sequence_lock_active and not combo_pending)
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
-		var owned: Array = RunStateStore.ownedUpgrades
+		var owned: Array = RunStateStore.power_loadout()
 		# A restored power stays in its unavailable state until the restore coin
 		# lands on the button (commit_power_restore fires the refresh), so the
 		# unlock animation always plays before the button reads as usable (issue #54).
 		var pending: Array = RunStateStore.pendingPowerRestores
-		for id in ["reroll", "shift", "memory"]:
+		var rescue_ids := RunStateStore.pending_combo_power_ids()
+		for id in POWER_IDS:
 			var visible := _power_owned(id, owned)
 			var b: Button = _power_buttons[id]
 			b.visible = visible
 			b.disabled = not visible
 			if visible:
-				var valid_pending_power: bool = not combo_pending or id in ["reroll", "shift"]
+				var valid_pending_power: bool = not combo_pending or rescue_ids.has(id)
 				b.disabled = not (can_use and valid_pending_power and not used.has(id) \
 					and not pending.has(id))
 			var frame := POWER_FRAME_DISABLED if b.disabled else POWER_FRAME_AVAILABLE
@@ -3390,13 +3474,8 @@ func _refresh_controls() -> void:
 			icon.modulate = Color.WHITE
 
 func _power_owned(id: String, owned: Array) -> bool:
-	if id == "reroll":
-		return default_run_power_ids.has("reroll")
-	if id == "shift":
-		return owned.has("perm_shift")
-	if id == "memory":
-		return owned.has("perm_memory")
-	return false
+	var normalised := "memory" if id == "lock" else id
+	return owned.has(normalised)
 
 func _short_name(consumable_id: String) -> String:
 	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
@@ -3428,7 +3507,7 @@ func _on_power_pressed(id: String) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
-	if combo_pending and id not in ["reroll", "shift"]:
+	if combo_pending and not RunStateStore.pending_combo_power_ids().has(id):
 		return
 	if not RunStateStore._can_use_ability():
 		return
@@ -3436,7 +3515,17 @@ func _on_power_pressed(id: String) -> void:
 		_clear_targeting()
 		_refresh_controls()
 		return
-	if id == "shift":
+	if id == "rewind":
+		_use_rewind_power()
+		return
+	if id == "heart":
+		_use_heart_power()
+		return
+	if id == "cheat":
+		_arm_cheat_targets()
+	elif id == "move":
+		_arm_move_source()
+	elif id == "shift":
 		_arm_shift_targets()
 	else:
 		# reroll / memory pick a single reel.
@@ -3444,6 +3533,136 @@ func _on_power_pressed(id: String) -> void:
 	_targeting_power_id = id
 	_show_power_animation(id)
 	_refresh_controls()
+
+func _use_rewind_power() -> void:
+	var was_pending := RunStateStore.comboDefeatPending
+	if not RunStateStore.rewind():
+		_refresh_controls()
+		return
+	_clear_targeting()
+	_maybe_cancel_combo_defeat_warning(was_pending)
+	_refresh_reels_from_state()
+	_update_hud()
+	_refresh_jackpot_lamp()
+	_refresh_controls()
+
+func _use_heart_power() -> void:
+	var was_pending := RunStateStore.comboDefeatPending
+	_flash_power_rubble()
+	if not RunStateStore.heart_power():
+		_refresh_controls()
+		return
+	_pending_combo_power_flow = was_pending
+	_maybe_cancel_combo_defeat_warning(was_pending)
+	_clear_targeting()
+	_refresh_reels_from_state()
+	_update_hud()
+	_play_reward_sequence(0, true)
+
+func _arm_cheat_targets() -> void:
+	_arm_reel_picker(func(reel_index: int) -> void: _on_cheat_reel_pick(reel_index))
+
+func _on_cheat_reel_pick(reel_index: int) -> void:
+	_cheat_reel = reel_index
+	_clear_targeting()
+	_targeting_power_id = "cheat"
+	_show_power_animation("cheat")
+	_targeting_layer = Control.new()
+	_targeting_layer.name = "CheatSymbolPicker"
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_targeting_layer.z_index = 97
+	_targeting_layer.gui_input.connect(_on_power_picker_input)
+	add_child(_targeting_layer)
+	var pool: Array[String] = []
+	for symbol in Symbols.BASE_SYMBOL_CYCLE:
+		pool.append(String(symbol))
+	if Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0:
+		pool.append("book")
+	Assets.build_symbol_picker_panel(_targeting_layer, pool, "CHEAT: PICK SYMBOL",
+		Rect2(8.0, 126.0, 144.0, 66.0), Callable(self, "_on_cheat_symbol_pick"),
+		Callable(self, "_cancel_power_picker"), false)
+
+func _on_cheat_symbol_pick(symbol_id: String) -> void:
+	var source := _cheat_reel
+	var was_pending := RunStateStore.comboDefeatPending
+	_clear_targeting()
+	if not RunStateStore.cheat_symbol(source, symbol_id):
+		_refresh_controls()
+		return
+	_pending_combo_power_flow = was_pending
+	_maybe_cancel_combo_defeat_warning(was_pending)
+	_refresh_reels_from_state()
+	_update_hud()
+	_play_reward_sequence(source, true)
+	_cheat_reel = -1
+
+func _arm_move_source() -> void:
+	_flash_power_rubble()
+	_arm_reel_picker(func(reel_index: int) -> void: _on_move_source_pick(reel_index))
+
+func _on_move_source_pick(reel_index: int) -> void:
+	_move_source = reel_index
+	_clear_targeting()
+	_targeting_power_id = "move"
+	_show_power_animation("move")
+	_targeting_layer = Control.new()
+	_targeting_layer.name = "MoveDestinationPicker"
+	_targeting_layer.size = Vector2(SRC_W, SRC_H)
+	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_targeting_layer.z_index = 97
+	add_child(_targeting_layer)
+	var selection := _build_control_grid_sheet_on(_targeting_layer,
+		"machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
+	for i in 3:
+		var destination := i
+		var b := _make_hit_button({
+			"left": REEL_CELL_CENTERS[destination] - 12.0,
+			"top": REEL_WINDOW["top"] - 8.0,
+			"width": 24.0, "height": REEL_WINDOW["height"] + 16.0,
+		}, func() -> void: _on_move_destination_pick(destination))
+		if selection != null:
+			b.button_down.connect(_set_sheet_frame.bind(selection, destination + 1))
+		_targeting_layer.add_child(b)
+
+func _on_move_destination_pick(destination: int) -> void:
+	var source := _move_source
+	var was_pending := RunStateStore.comboDefeatPending
+	_clear_targeting()
+	if not RunStateStore.move_symbol(source, destination):
+		_refresh_controls()
+		return
+	_pending_combo_power_flow = was_pending
+	_maybe_cancel_combo_defeat_warning(was_pending)
+	_refresh_reels_from_state()
+	_update_hud()
+	_play_reward_sequence(destination, true)
+	_move_source = -1
+
+func _on_power_picker_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_cancel_power_picker()
+
+func _cancel_power_picker() -> void:
+	_cheat_reel = -1
+	_move_source = -1
+	_clear_targeting()
+	_refresh_controls()
+
+func _flash_power_rubble() -> void:
+	if _rubble_overlay != null and is_instance_valid(_rubble_overlay):
+		_rubble_overlay.queue_free()
+	_rubble_overlay = ColorRect.new()
+	_rubble_overlay.name = "PowerRubbleAnimation"
+	_rubble_overlay.position = Vector2(31.0, 167.0)
+	_rubble_overlay.size = Vector2(88.0, 36.0)
+	_rubble_overlay.color = Color(0.42, 0.34, 0.24, 0.72)
+	_rubble_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rubble_overlay.z_index = 94
+	add_child(_rubble_overlay)
+	var tw := create_tween()
+	tw.tween_property(_rubble_overlay, "modulate:a", 0.0, 0.18)
+	tw.finished.connect(_rubble_overlay.queue_free)
 
 # Builds a per-reel picker overlay; each reel button calls cb(reel_index).
 func _arm_reel_picker(cb: Callable) -> void:
@@ -3628,6 +3847,8 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 		else:
 			_close_pending_combo_defeat()
 			_finish_post_spin_sequence()
+		return
+	if _defer_threshold_until_power_flow():
 		return
 	_set_sequence_lock(false)
 
@@ -5727,8 +5948,8 @@ func _show_dealer_incoming() -> void:
 
 func _dealer_visit() -> void:
 	RunStateStore.reveal_dealer()
-	# In-run dealer stays inline (issue #22): reveal the offers as a modal on the
-	# machine; the full dealer scene is reserved for the pre-run shop flow.
+	# Ordinary in-run dealer visits stay inline (issue #22); the full dealer scene
+	# is also used after the threshold Pacte completion and for post-Wealth odds.
 	_show_dealer_offers()
 
 func _show_dealer_offers() -> void:

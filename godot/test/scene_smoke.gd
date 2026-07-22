@@ -24,6 +24,7 @@ func _run() -> void:
 		"res://scenes/settings_scene.tscn",
 		"res://scenes/collection_scene.tscn",
 		"res://scenes/options_overlay.tscn",
+		"res://scenes/pacte_scene.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
 		"res://scenes/game_over_ending_overlay.tscn",
 	]:
@@ -41,6 +42,8 @@ func _run() -> void:
 	if not machine.has_method("_spawn_jackpot_burst"):
 		failures.append("machine missing _spawn_jackpot_burst")
 	_check_machine_art_mix(machine, failures)
+	await _check_pacte_flow(machine, run_store, meta_store, failures)
+	_check_pacte_power_rules(run_store, failures)
 	_check_base_scene_parity(failures)
 	_check_first_launch_tutorial(meta_store, failures)
 	_check_scene_nav(failures)
@@ -6046,3 +6049,178 @@ func _check_new_run_balance_161(run_store: Node, failures: Array) -> void:
 	if int(run_store.dealer_countdown_reset_value()) != 24:
 		failures.append("pr161: Club modifier should reset the dealer countdown to 24")
 	run_store.augmentedTier = prev_tier
+
+## Pacte card ritual smoke coverage: native art, staged/saveable selections, the
+## one-time neuron threshold visit, and the seven-button machine loadout.
+func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	run_store.reset_run_state()
+	if not run_store.start_new_run([], {}, false, 0x115156, true):
+		failures.append("pacte: initial run could not be reserved")
+		return
+	if String(run_store.runPhase) != "pacte_initial":
+		failures.append("pacte: fresh run did not enter pacte_initial")
+	var augment_offers := run_store.pacteOfferAugmentIds as Array
+	var power_offers := run_store.pacteOfferPowerIds as Array
+	if augment_offers.size() != 3 or power_offers.size() != 3:
+		failures.append("pacte: expected three augment and three power offers")
+	if PacteCards.power_ids().size() != 7 or PacteCards.power_draw_ids().has("reroll"):
+		failures.append("pacte: hero/pool power separation is incorrect")
+	if machine._power_buttons.size() != 7:
+		failures.append("pacte: machine power bar does not expose all seven controls")
+
+	var pacte := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(pacte)
+	await process_frame
+	for node_name in ["PacteBackground", "SelectedCardEmplacement", "SelectedCardOverlay",
+			"OddsTableDescriptionBubble", "DropHere"]:
+		if pacte.get_node_or_null(node_name) == null:
+			failures.append("pacte: missing %s" % node_name)
+	var augment_drop := pacte.get_node_or_null("DropHere") as Label
+	var power_drop := pacte.get_node_or_null("PowerDropHere") as Label
+	if augment_drop == null or augment_drop.position != Vector2(28.0, 256.0) \
+			or augment_drop.size != Vector2(25.0, 36.0):
+		failures.append("pacte: augment DROP HERE is not inside its emplacement")
+	if power_drop == null or power_drop.position != Vector2(107.0, 256.0) \
+			or power_drop.size != Vector2(25.0, 36.0):
+		failures.append("pacte: power DROP HERE is not inside its emplacement")
+	var first_augment := String(augment_offers[0])
+	pacte._set_face_up(first_augment)
+	pacte._preview_card(first_augment)
+	if not bool(pacte._description_bubble.visible) or not bool(pacte._selected_overlay.visible):
+		failures.append("pacte: card preview did not show overlay and description bubble")
+	var first_button := pacte._card_buttons.get(first_augment, null) as Button
+	if first_button == null or first_button.scale.x <= 1.0:
+		failures.append("pacte: preview card did not scale up")
+	if pacte._drop_label.text != "DROP HERE":
+		failures.append("pacte: drag target is missing DROP HERE")
+	pacte._accept_card(first_augment)
+	await process_frame
+	if String(run_store.pacteSelectedAugmentId) != first_augment \
+			or String(pacte._pool_kind) != "power":
+		failures.append("pacte: augment selection did not stage before power selection")
+	if pacte._drop_label != power_drop:
+		failures.append("pacte: power pool did not switch to the power emplacement hint")
+
+	# A saved partial selection must restore the same Pacte phase and offers.
+	var saved_power_offers := (run_store.pacteOfferPowerIds as Array).duplicate()
+	run_store._commit()
+	run_store.runPhase = "idle"
+	run_store.pacteSelectedAugmentId = ""
+	run_store.pacteOfferPowerIds = null
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "pacte_initial" \
+			or String(run_store.pacteSelectedAugmentId) != first_augment \
+			or str(run_store.pacteOfferPowerIds) != str(saved_power_offers):
+		failures.append("pacte: saved partial selection did not restore")
+	var selected_power := String((run_store.pacteOfferPowerIds as Array)[0])
+	if not run_store.stage_pacte_power_selection(selected_power):
+		failures.append("pacte: initial power selection was rejected")
+	if String(run_store.runPhase) != "running" or run_store.selectedPowerCardIds.size() != 1:
+		failures.append("pacte: initial completion did not enter the machine with accumulated cards")
+
+	run_store.pacteThresholdPending = true
+	if not run_store.open_threshold_pacte():
+		failures.append("pacte: threshold crossing did not open the second visit")
+	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(threshold_scene)
+	await process_frame
+	if String(run_store.runPhase) != "pacte_threshold" \
+			or String(threshold_scene._pool_kind) != "augment":
+		failures.append("pacte: threshold visit did not restore as augment draw")
+	var threshold_augments := run_store.pacteOfferAugmentIds as Array
+	var threshold_powers := run_store.pacteOfferPowerIds as Array
+	if threshold_augments.is_empty() or threshold_powers.is_empty() \
+			or threshold_augments.has(first_augment) or threshold_powers.has(selected_power):
+		failures.append("pacte: threshold draw did not accumulate exclusions")
+	if not run_store.complete_pacte_selection(String(threshold_augments[0]), String(threshold_powers[0])):
+		failures.append("pacte: threshold selection was rejected")
+	if not run_store.force_dealer_visit() or String(run_store.runPhase) != "running" \
+			or not bool(run_store.dealerPending):
+		failures.append("pacte: threshold completion did not queue dealer")
+
+	pacte.queue_free()
+	threshold_scene.queue_free()
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+func _check_pacte_power_rules(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x168, false)
+	run_store.ownedPowerIds = ["reroll", "rewind", "heart", "cheat", "move"]
+	run_store.pacteSeed = 0x115156
+	run_store.neurons = 50
+	var first_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if first_spin == null:
+		failures.append("pacte powers: rewind setup spin failed")
+		run_store.reset_run_state()
+		return
+	run_store.comboDefeatPending = false
+	var first_reels: Array = (run_store.lastResult["reels"] as Array).duplicate()
+	var neurons_before_second := int(run_store.neurons)
+	run_store.abilitiesUsed = ["reroll", "cheat", "move"]
+	var second_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if second_spin == null:
+		failures.append("pacte powers: second setup spin failed")
+	else:
+		run_store.scoreEarned = 777
+		run_store.lucidityCoins = 88
+		if not run_store.rewind():
+			failures.append("pacte powers: Rewind rejected valid history")
+		elif str(run_store.lastResult["reels"]) != str(first_reels) \
+				or int(run_store.neurons) != neurons_before_second \
+				or int(run_store.scoreEarned) != 777 or int(run_store.lucidityCoins) != 88 \
+				or bool(run_store.rewindHistoryAvailable):
+			failures.append("pacte powers: Rewind did not restore state while preserving rewards")
+		if run_store.rewind():
+			failures.append("pacte powers: Rewind remained available without history")
+
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x157, false)
+	run_store.ownedPowerIds = ["reroll", "heart", "cheat", "move"]
+	run_store.runPhase = "running"
+	run_store.neurons = 5
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	var heart_score_before := int(run_store.scoreEarned)
+	var heart_neurons_before := int(run_store.neurons)
+	if not run_store.heart_power(1) \
+			or int(run_store.neurons) != heart_neurons_before + 1 \
+			or int(run_store.scoreEarned) != heart_score_before + 10 \
+			or String((run_store.lastResult["reels"] as Array)[0]) != "heart":
+		failures.append("pacte powers: Heart one-heart payout failed")
+	run_store.abilitiesUsed = []
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	if not run_store.cheat_symbol(1, "brain") \
+			or String((run_store.lastResult["reels"] as Array)[1]) != "brain":
+		failures.append("pacte powers: Cheat did not replace the selected reel")
+	run_store.abilitiesUsed = []
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	if not run_store.move_symbol(0, 1) \
+			or str(run_store.lastResult["reels"]) != str(["eye", "brain", "pill"]):
+		failures.append("pacte powers: Move did not swap adjacent reels")
+	run_store.abilitiesUsed = []
+	run_store.powersUsedThisSpin = 2
+	run_store.augmentedTier = "diamond"
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	if run_store.move_symbol(0, 2):
+		failures.append("pacte powers: augmented power-use limit was ignored")
+	run_store.powersUsedThisSpin = 0
+	run_store.augmentedTier = ""
+	run_store.abilitiesUsed = []
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	if not run_store.heart_power(1) or bool(run_store.comboDefeatPending) \
+			or int(run_store.betMultiplier) != 3:
+		failures.append("pacte powers: Heart did not rescue a pending combo loss")
+	run_store.reset_run_state()
+
+func _pacte_power_result(reels: Array) -> Dictionary:
+	return {
+		"reels": reels, "scoreEarned": 0, "coinsEarned": 0,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
+		"winType": "miss", "isFreeSpin": false, "scoreMultiplier": 1.0,
+	}

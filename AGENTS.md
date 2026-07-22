@@ -66,7 +66,7 @@ Resources and currencies:
   rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save, halved by the
   spade modifier) and banked into the wallet.
 - **Wallet Lucidity (credits)** — the persistent meta currency. Buys Lab upgrades
-  and pre-run consumables between runs.
+  and persistent progression between runs.
 
 ## Typical Run
 
@@ -74,20 +74,25 @@ Resources and currencies:
    This is a pre-launch choice only: it locks when the run starts and cannot be
    selected or changed while a run is active, including when continuing a saved
    run (the selector shows the active run's suit, arrows disabled).
-2. Visit the pre-run dealer: buy up to two consumables, inspect the visit's Chip
-   Augment offer, reroll the offers, or head to the Lab.
-3. Enter the machine with 20 base spins and the owned powers (Reroll is always
-   available).
+2. Reserve the campaign neuron and enter **Pacte**. Reveal three augment cards
+   and three power cards, then select and place one of each. Pacte selections are
+   saved mid-visit; the initial completion enters the machine directly.
+3. Enter the machine with the base spins, Reroll hero power, and the selected
+   Pacte power. The run begins with no pre-run consumables.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
    state instead of dropping instantly.
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
-6. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
+6. When spins cross from above 5 to 5 or fewer, finish the current result and
+   resolve any loss warning, then open the one-time threshold Pacte visit. Its
+   second augment and power append to the first selection and completion opens
+   the dealer scene.
+7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
    for x1/x2/x3 each spin, so lower gauges pull him in faster.
-7. End the run: reach Wealth, flatline and keep part of the run's Lucidity, or
+8. End the run: reach Wealth, flatline and keep part of the run's Lucidity, or
    exhaust the campaign into Game Over.
-8. Between runs, spend odds-phase tokens and wallet credits on permanent
+9. Between runs, spend odds-phase tokens and wallet credits on permanent
    progression, then start the next attempt.
 
 ## Game Reference
@@ -114,9 +119,20 @@ Resources and currencies:
 ### Powers
 
 - **Reroll** (always owned) — rerolls one revealed reel.
-- **Shift** (Lab: `perm_shift`) — steps one revealed reel along the symbol cycle.
-- **Memory** (Lab: `perm_memory`) — locks a reel through upcoming spins.
-- Selecting a power for targeting flashes its REROLL/SHIFT/LOCK TV callout with
+- **Shift** — steps one revealed reel along the symbol cycle.
+- **Lock** — locks a reel through upcoming spins.
+- **Rewind** — restores the immediately previous spin's reels, neuron/free-spin,
+  dealer, and combo state while preserving earned score/Lucidity and recovering
+  a deterministic 1–3 spent power chips. It is unavailable without spin history
+  or while another sequence is active.
+- **Heart** — replaces one, two, or three revealed symbols with hearts for
+  +1/+2/+3 neurons and +10/+20/+30 score.
+- **Cheat** — rubble-flashes the revealed symbols, then replaces one selected
+  reel with a symbol chosen from the existing symbol chooser.
+- **Move** — rubble-flashes the revealed symbols, then moves a selected symbol to
+  any other reel, including an adjacent reel, before rescoring.
+- Selecting a power for targeting flashes its authored TV callout (with text
+  fallbacks for the four new powers) with
   a short beeping pulse; the callout stays up while targeting is armed and hides
   when the target is picked or the selection is cancelled.
 - Using a power spends it; the power gauge restores one random spent power per 50
@@ -127,9 +143,9 @@ Resources and currencies:
 
 ### Consumables and run items
 
-- Pre-run shop consumables: Tobacco, Serum, White Powder, Potion, Tea. Bought
-  with wallet credits before the run; stash limit is 2 total copies.
-- Dealer-only run items (offered mid-run, never in the shop): Energy Drink,
+- Run consumables held during the run: Tobacco, Serum, White Powder, Potion, Tea;
+  the initial Pacte handoff starts with no consumables and the stash limit is 2.
+- Dealer-only run items (offered mid-run): Energy Drink,
   Cocktail, Water, Red Pill.
 - Water grants +40 run Lucidity AND +40 score: drinking it rolls the wealth
   odometer up immediately and its points feed the power gauge like any score.
@@ -155,6 +171,8 @@ Resources and currencies:
 - Chip Augments: consumable/chip discounts, permanent symbol-level pushes, +3
   spins per copy, expanded offers, and the legendary pair/triple specialist
   (chosen win type pays x1.25).
+- The dealer scene is used for in-run visits and the post-Wealth odds phase; a
+  fresh run no longer opens a pre-run consumable shop.
 - Sequencing: the visit waits behind reel/reroll animation, the power-coin
   sequence, and Energy Drink's compulsory spin. It MAY open above a pending
   combo-loss decision (dealer at z100 over the z97 loss art, stash elevated to
@@ -189,11 +207,12 @@ Resources and currencies:
   (20% with Smart Save, spade halves it) into the wallet.
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
-- Progression persists in MetaStateStore: wallet, Lab permanents (Shift, Memory,
-  Hydration, Reward Amplification, Sedative Protocol, Pattern Fabrication,
-  Euphoria Spiral, Passive Cognition, Hallucination, Learning, Smart Save),
-  permanent odds upgrades (post-run token phase, max 8 tokens held per menu), and
-  ending history.
+- Progression persists in MetaStateStore: wallet, Lab permanents, unlock-aware
+  Pacte augment/power card IDs (all supplied cards start unlocked), selected card
+  history, permanent odds upgrades (post-run token phase, max 8 tokens held per
+  menu), and ending history. Lab permanents include Shift, Memory, Hydration,
+  Reward Amplification, Sedative Protocol, Pattern Fabrication, Euphoria Spiral,
+  Passive Cognition, Hallucination, Learning, and Smart Save.
 - **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu:
   heart (jackpot pays 100, no free spin), spade (end-of-run Lucidity kept is
   halved), diamond (two power uses per spin), club (dealer wait doubled, spin
@@ -203,16 +222,19 @@ Resources and currencies:
 
 - `start_menu_scene` — campaign hub: start/continue, Augmented Run selector,
   first-launch tutorial.
-- `shop_scene` — pre-run hub: wallet purchases and START RUN.
-- `dealer_scene` — dealer screen: pre-run consumable offers and the post-run odds
-  phase (gateway to the Lab).
+- `pacte_scene` — reusable initial/threshold card ritual: deterministic three-card
+  augment and power offers, previews, drag-to-emplacement selection, and resumable
+  partial choices.
+- `shop_scene` — wallet/meta progression hub.
+- `dealer_scene` — in-run dealer visits and the post-run odds phase (gateway to the Lab).
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
 - `scores_scene` / `settings_scene` / `collection_scene` / `options_overlay` —
   meta screens.
-- Run lifecycle: `idle` → `pre_run` → `running` → `over` (with `lastEnding` set
-  to wealth/flatline/game_over); a Wealth continuation returns `over` → `running`.
+- Run lifecycle: `idle` → `pacte_initial` → `running` → `pacte_threshold` →
+  `running` → `over` (with `lastEnding` set to wealth/flatline/game_over); a
+  Wealth continuation returns `over` → `running`.
 
 ## Living Game Documentation
 
