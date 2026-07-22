@@ -49,6 +49,7 @@ func _run() -> void:
 	_check_global_options_layout(failures)
 	_check_water_lucidity_gain(run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
+	_check_water_wealth_169(machine, run_store, meta_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
 	await _check_upgrades_scene(failures)
 	_check_smart_save_retention(failures)
@@ -633,8 +634,11 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	var previous_restores: Array = run_store.pendingPowerRestores.duplicate()
 	var previous_spin_count := int(run_store.spinCount)
 	var previous_score := int(run_store.scoreEarned)
+	var previous_result: Variant = run_store.lastResult
 	var previous_display := int(machine._display_lucidity)
 	var previous_coin_prev := int(machine._coin_prev_lucidity)
+	var previous_burst_spin := int(machine._burst_prev_spin)
+	var previous_burst_score := int(machine._burst_prev_score)
 
 	run_store.runPhase = "running"
 	run_store.isSpinning = false
@@ -646,6 +650,12 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
 	run_store.scoreEarned = 20
+	run_store.lastResult = {
+		"scoreEarned": 20, "coinsEarned": 20, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._burst_prev_spin = 0
+	machine._burst_prev_score = 20
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(20)
 	machine._coin_prev_lucidity = 20
@@ -657,6 +667,10 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 		failures.append("machine water: immediate consume gain will replay on next spin")
 	if int(run_store.scoreEarned) != 60:
 		failures.append("machine water: should add its 40 points to the run score")
+	if int((run_store.lastResult as Dictionary).get("scoreEarned", 0)) != 60:
+		failures.append("machine water: current result score was not advanced with the direct gain")
+	if int(machine._burst_prev_score) != 60:
+		failures.append("machine water: payout baseline did not advance past the direct score gain")
 	await create_timer(0.1).timeout
 	if int(machine._display_lucidity) != 60:
 		failures.append("machine water: score gain should roll the wealth odometer")
@@ -674,6 +688,38 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.pendingPowerRestores = previous_restores
 	run_store.spinCount = previous_spin_count
 	run_store.scoreEarned = previous_score
+	run_store.lastResult = previous_result
+	machine._burst_prev_spin = previous_burst_spin
+	machine._burst_prev_score = previous_burst_score
+
+func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignNeuronsLeft = 5
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 0
+	run_store.scoreEarned = 1960
+	run_store.lucidityCoins = 20
+	run_store.runConsumables = { "item_water": 1 }
+	run_store.lastResult = {
+		"scoreEarned": 1960, "coinsEarned": 1960, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._set_sequence_lock(false)
+	machine._set_display_lucidity(1960, false)
+	machine._on_stash_pressed(0)
+	if String(run_store.runPhase) != "over" or String(run_store.lastEnding) != "wealth":
+		failures.append("pr169: Water crossing 2000 did not open the Wealth ending")
+	if machine._overlay == null:
+		failures.append("pr169: Water Wealth resolution left no ending overlay")
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._set_stash_tray_visible(true)
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
@@ -3501,6 +3547,35 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
 		if dealer_bar == null or dealer_bar.frame != int(intermediate_frame):
 			failures.append("issue155: two-step dealer bar transition skipped frame %d" % int(intermediate_frame))
+	# PR #169: Club/Joker doubles the countdown, but the authored bar still spans
+	# all 13 frames across the complete 24-step cycle.
+	var previous_augmented_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = "club"
+	run_store.dealerCountdown = 24
+	machine._refresh_dealer_countdown()
+	if dealer_bar == null or dealer_bar.frame != 0:
+		failures.append("pr169: Club dealer bar did not reset to frame 0 at countdown 24")
+	run_store.dealerCountdown = 12
+	machine._refresh_dealer_countdown()
+	if int(machine._dealer_bar_target_frame) != 6:
+		failures.append("pr169: Club dealer bar midpoint was not frame 6")
+	for _step in 6:
+		machine._step_dealer_bar_progress(
+			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+	if dealer_bar == null or dealer_bar.frame != 6:
+		failures.append("pr169: Club dealer bar did not reach frame 6 at countdown 12")
+	run_store.dealerCountdown = 0
+	machine._refresh_dealer_countdown()
+	if int(machine._dealer_bar_target_frame) != 12:
+		failures.append("pr169: Club dealer bar did not target frame 12 at countdown 0")
+	for _step in 6:
+		machine._step_dealer_bar_progress(
+			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+	if dealer_bar == null or dealer_bar.frame != 12:
+		failures.append("pr169: Club dealer bar did not reach its final frame")
+	run_store.augmentedTier = previous_augmented_tier
+	run_store.dealerCountdown = 12
+	machine._refresh_dealer_countdown()
 	run_store.betMultiplier = 3
 	machine._refresh_dealer_countdown()
 	if machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible \

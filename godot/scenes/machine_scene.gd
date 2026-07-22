@@ -114,9 +114,10 @@ const CALLOUT_BEEP_COUNT := 4
 const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
 const WIN_PAYOUT_COLOR := Color("#20d6c7")
 # Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
-# is the empty bar at the start of a 12-step cycle; the last frame means the dealer
-# arrives after the current spin. The three small sheets are cumulative warning
-# lights: x3 shows overlay 1, x2 shows 1+2, and x1 shows 1+2+3.
+# is the empty bar at the start of the active cycle (12 steps normally, 24 for
+# Club/Joker); the last frame means the dealer arrives after the current spin. The
+# three small sheets are cumulative warning lights: x3 shows overlay 1, x2 shows
+# 1+2, and x1 shows 1+2+3.
 const DEALER_BAR_SHEET := "machine new view/dealer_bar.png"
 const DEALER_BAR_FRAME_COUNT := 13
 const DEALER_BAR_OVERLAY_1_SHEET := "machine new view/dealer_bar_overlay_1.png"
@@ -1513,8 +1514,10 @@ func _refresh_dealer_countdown() -> void:
 	if _dealer_bar_sprite == null:
 		return
 	var remaining := maxi(0, int(RunStateStore.dealerCountdown))
-	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_start))
-	var progress_frame := clampi(cycle_start - remaining, 0, DEALER_BAR_FRAME_COUNT - 1)
+	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_reset_value()))
+	var elapsed := clampi(cycle_start - remaining, 0, cycle_start)
+	var progress_frame := clampi(roundi(float(elapsed) * float(DEALER_BAR_FRAME_COUNT - 1)
+		/ float(cycle_start)), 0, DEALER_BAR_FRAME_COUNT - 1)
 	if not _dealer_bar_frame_initialized:
 		_dealer_bar_frame_initialized = true
 		_dealer_bar_display_frame = progress_frame
@@ -4115,10 +4118,19 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_begin_serum() # Serum (issue #53): pick the guaranteed symbol first
 		return
 	var lucidity_before := int(RunStateStore.lucidityCoins)
+	var score_before := int(RunStateStore.scoreEarned)
 	var spins_before := _current_display_spins_left()
 	var defeat_was_pending := RunStateStore.comboDefeatPending
 	if not RunStateStore.use_consumable(id):
 		return
+	var direct_score_gain: int = maxi(0, int(RunStateStore.scoreEarned) - score_before)
+	if direct_score_gain > 0:
+		# Direct score events advance the current result in RunStateStore, so keep the
+		# rescore baseline aligned before a power can announce a same-spin delta.
+		if RunStateStore.lastResult is Dictionary:
+			_burst_prev_score = int((RunStateStore.lastResult as Dictionary).get("scoreEarned", 0))
+		else:
+			_burst_prev_score = int(RunStateStore.scoreEarned)
 	# Energy Drink taken during an x3 defeat clears it in the store — drop the
 	# beeping loss overlay and let the normal post-spin tail resume.
 	if defeat_was_pending and not RunStateStore.comboDefeatPending:
@@ -4142,6 +4154,8 @@ func _on_stash_pressed(slot_index: int) -> void:
 			_play_tea_flight(slot_index)
 			_play_spin_gain_fx(spins_gained,
 				Assets.stash_slot_pos(slot_index, max_consumable_slots) - Vector2(0.0, 10.0))
+	if direct_score_gain > 0 and _check_ending():
+		return
 
 func _item_display_name(id: String) -> String:
 	var imap := InRunItems.map()
