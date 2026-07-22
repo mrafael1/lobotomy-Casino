@@ -37,11 +37,12 @@ const STARTING_POWER_UPGRADE_IDS := ["perm_shift"]
 # high sentinel so the guard still has a ceiling; the countdown paces visits, not this.
 @export var dealer_max_count: int = 99
 # Issue #155: dealer randomness is gone. The dealer runs on a fixed, visible countdown:
-# it starts at dealer_countdown_start, every completed spin ticks it down by the
-# multiplier used at spin start (x1/x2/x3 → -1/-2/-3), 0 triggers the visit, and the
-# countdown resets once the offer resolves. No overflow carry (an x3 spin at 1 just
-# lands the dealer). The augmented club modifier halves visits by doubling the reset.
-@export var dealer_countdown_start: int = 15
+# it starts at dealer_countdown_start, every completed spin advances it by the
+# inverse multiplier used at spin start (x1/x2/x3 → -3/-2/-1), 0 triggers the visit,
+# and the countdown resets once the offer resolves. No overflow carry (a spin that
+# reaches 0 lands the dealer). The augmented club modifier halves visits by doubling
+# the reset.
+@export var dealer_countdown_start: int = 12
 
 # Dealer odds table (issue #36) — the post-run "what's next?" odds-buying economy.
 # probability_increase_per_upgrade is @export by explicit GDD requirement.
@@ -109,7 +110,7 @@ var pendingComboMultiplier := 1 # gauge value held while the rescue window is op
 var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
 var dealerCount := 0
 var dealerLastSpinCount := 0
-var dealerCountdown := 15 # issue #155: spins until the dealer (start value re-applied per run)
+var dealerCountdown := 12 # issue #155: steps until the dealer (start value re-applied per run)
 var dealerIncoming := false
 var dealerPending := false
 var dealerOfferIds: Variant = null
@@ -368,8 +369,8 @@ func spin(compulsive := false) -> Variant:
 	var sedative: bool = (not is_compulsive) and (not is_free) and Economy.has_sedative(ownedUpgrades) and (spinCount + 1) % 3 == 0
 
 	# Issue #155: the gauge value this spin runs at. The multiplier no longer costs
-	# extra neurons or free spins — its downside is the dealer countdown ticking
-	# faster (x2/x3 pull the dealer in 2x/3x as fast).
+	# extra neurons or free spins — its downside is the dealer countdown advancing
+	# 3/2/1 steps at x1/x2/x3, so lower gauges pull the dealer in faster.
 	var combo_before := clampi(betMultiplier, 1, 3)
 	# The Energy-Drink forced spin is NOT dropped to x1 — it runs the drink's
 	# forced x2 like the protected spins before it.
@@ -576,9 +577,10 @@ func spin(compulsive := false) -> Variant:
 		comboDefeatPending = true
 		pendingComboMultiplier = combo_before
 		betMultiplier = combo_before
-	# Issue #155 dealer countdown: every completed spin ticks it by the multiplier
-	# actually used this spin. No overflow carry — it just floors at 0.
-	dealerCountdown = maxi(0, dealerCountdown - clampi(eff_bet, 1, 3))
+	# Issue #155 dealer countdown: every completed spin advances it by the inverse
+	# multiplier actually used this spin. No overflow carry — it just floors at 0.
+	var dealer_countdown_step: int = 4 - clampi(eff_bet, 1, 3)
+	dealerCountdown = maxi(0, dealerCountdown - dealer_countdown_step)
 	spinCount += 1
 	powersUsedThisSpin = 0 # diamond modifier counts power uses per spin
 	nextSpinLucidityMultiplier = 1.0
@@ -1167,6 +1169,10 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				lucidityCoins = int(plan["lucidityCoins"])
 				abilitiesUsed = plan["abilitiesUsed"]
 				pendingPowerRestores.append_array(plan["restores"])
+				# Water is a direct score event as well as a Lucidity refresh. Keep the
+				# current result's running score in sync so a same-spin power only pops
+				# its own gain after the drink has been used.
+				_apply_direct_score_gain(int(e["amount"]))
 			"cocktailBoost":
 				cocktailBoostSpins += int(e["spins"])
 				cocktailPairTriplePenalty = float(e.get("pairTriplePenalty", 0.0))
@@ -1224,6 +1230,20 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 # Purchases are staged (undoable) while the screen is open, then committed into
 # MetaStateStore.oddsUpgrades on finalize. Base weights stay parity-locked
 # (see Evaluate._build_weights).
+
+## Commit score earned outside the normal spin outcome pipeline. The current
+## result carries the running score used by machine_scene's rescore burst delta,
+## so direct score events must advance both values together.
+func _apply_direct_score_gain(score_gain: int) -> void:
+	var gain: int = maxi(0, score_gain)
+	if gain <= 0:
+		return
+	scoreEarned += gain
+	if not lastResult is Dictionary:
+		return
+	var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
+	updated_result["scoreEarned"] = maxi(0, int(updated_result.get("scoreEarned", 0)) + gain)
+	lastResult = updated_result
 
 ## Opens the odds phase between runs: grants the fresh token budget on top of any
 ## tokens banked unspent from previous menus (issue #50), and clears staged

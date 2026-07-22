@@ -24,9 +24,32 @@ const REEL_HOLES := [
 	{ "left": 97.0, "top": 170.0, "width": 21.0, "height": 30.0 },
 ]
 const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
-const BAR_FILL := { "left": 43.0, "width": 66.0 }
-const WEALTH_BAR := { "left": 43.0, "top": 73.0, "width": 66.0, "height": 4.0 }
-const HEALTH_BAR := { "left": 43.0, "top": 94.0, "width": 66.0, "height": 5.0 }
+# Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
+# N spins remaining — frame 0 = empty/no spins, frame 18 = 18+ spins.
+const HEALTH_BAR_FRAME_COUNT := 19
+# Remaining-spin readout, centered in the badge chip under the neuron tube
+# (badge pixels span x4..16, y107..119). The rect rides ~6px above the chip
+# centre and 1px right of it because DTM-Sans' line metrics drop the glyphs
+# below a centered box and its digits carry a lopsided side bearing (verified
+# against rendered pixels; same trick as the wealth goal rects).
+const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
+# White objective boxes baked into the updated wealth_bar art, below the odometer
+# reels (left box pixels x47..69, right box x74..100, both y275..280). "TARGET"
+# centres in the left box, the goal number in the right one; both rects ride ~8px
+# higher than the glyph row because DTM-Sans' line metrics drop the glyphs that
+# far below a centered box.
+const WEALTH_GOAL_WORD_RECT := Rect2(48.0, 267.0, 23.0, 8.0)
+const WEALTH_GOAL_NUMBER_RECT := Rect2(74.0, 267.0, 27.0, 8.0)
+# The goal digits render one per fixed-width cell (like the odometer reels) so
+# the spacing between them stays even regardless of the font's digit advances.
+const WEALTH_GOAL_DIGIT_PITCH := 3.0
+const WEALTH_GOAL_TEXT_COLOR := Color(0.13, 0.12, 0.1)
+const WEALTH_GOAL_NUMBER_COLOR := Color(0.72, 0.11, 0.11)
+# Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
+# the lever animation starts.
+const COIN_INSERT_FRAME_COUNT := 4
+const COIN_INSERT_FRAME_TIME := 0.055
+const TV_STATUS_RIGHT := 109.0
 const MULT_STRIP := { "top": 119.0, "height": 16.0 }
 const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
 const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
@@ -75,17 +98,46 @@ const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
 const COMBO_LOSS_BEEP_FADE_TIME := 0.1
 const COMBO_LOSS_BEEP_PAUSE := 0.42
-# Issue #155: TV dealer countdown — the portrait with a spins-left badge in its
-# bottom-right corner (same badge style as the boost icons), sitting under the
-# right end of the wealth bar. Lower = dealer closer; 8-5 calm, 4-2 warning
-# purple, 1 red.
+# Authored TV callout sheets (full-canvas x1 frames): the win sheet flashes
+# PAIR/TRIPLE after a win is identified; the power sheet flashes REROLL/SHIFT/LOCK
+# while that power's targeting is armed. Both beep with the combo-loss pulse cadence.
+const WIN_ANIM_SHEET := "machine new view/win_animation.png"
+const WIN_ANIM_FRAMES := 2
+const WIN_ANIM_FRAME := { "pair": 0, "triple": 1 }
+const POWER_ANIM_SHEET := "machine new view/power_animation.png"
+const POWER_ANIM_FRAMES := 3
+const POWER_ANIM_FRAME := { "reroll": 0, "shift": 1, "memory": 2 }
+const CALLOUT_BEEP_COUNT := 4
+# "+ X" payout line under the PAIR/TRIPLE callout (both words centre on x~76 and
+# end at y86 in the re-authored art; the TV screen bottom is y108). Child of the
+# callout sprite, so it inherits the beep pulse and hides with it.
+const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
+const WIN_PAYOUT_COLOR := Color("#20d6c7")
+# Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
+# is the empty bar at the start of the active cycle (12 steps normally, 24 for
+# Club/Joker); the last frame means the dealer arrives after the current spin. The
+# three small sheets are cumulative warning lights: x3 shows overlay 1, x2 shows
+# 1+2, and x1 shows 1+2+3.
+const DEALER_BAR_SHEET := "machine new view/dealer_bar.png"
+const DEALER_BAR_FRAME_COUNT := 13
+const DEALER_BAR_OVERLAY_1_SHEET := "machine new view/dealer_bar_overlay_1.png"
+const DEALER_BAR_OVERLAY_2_SHEET := "machine new view/dealer_bar_overlay_2.png"
+const DEALER_BAR_OVERLAY_3_SHEET := "machine new view/dealer_bar_overlay_3.png"
+const DEALER_BAR_OVERLAY_1_FRAMES := 12
+const DEALER_BAR_OVERLAY_2_FRAMES := 11
+const DEALER_BAR_OVERLAY_3_FRAMES := 10
+# The bar walks through each authored progress frame when one spin advances it
+# by multiple steps; the warning itself beeps through alpha so it does not
+# reveal a different countdown position before that spin's result is known.
+const DEALER_BAR_PROGRESS_FRAME_TIME := 0.10
+const DEALER_BAR_OVERLAY_BEEP_PERIOD := 0.56
+const DEALER_BAR_OVERLAY_BEEP_TIME := 0.16
+const DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA := 0.18
 const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
-const DEALER_ICON_SIZE := Vector2(9.0, 9.0)
-# Right edge of WEALTH_BAR minus the icon width, one px below the bar.
-const DEALER_ICON_POS := Vector2(100.0, 78.0)
-const DEALER_COUNTDOWN_CALM_COLOR := Color(0.75, 0.92, 1.0)
-const DEALER_COUNTDOWN_WARN_COLOR := Color(0.78, 0.6, 0.95)
-const DEALER_COUNTDOWN_DANGER_COLOR := Color(1.0, 0.3, 0.35)
+const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
+# The bar ends at x101; the compact portrait sits two source pixels beside it,
+# fully inside the pink TV border.
+const DEALER_ICON_POS := Vector2(100.0, 59.0)
 const LOCK_POWER_FRAME_COUNT := 3
 const JACKPOT_FRAME_COUNT := 3
 const JACKPOT_FRAME_OFF := 0
@@ -120,6 +172,7 @@ const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
+const ENDING_OVERLAY_Z_INDEX := 150
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -131,8 +184,6 @@ const SFX_FILES := {
 	&"pair_win": "pair-bonus.mp3",
 	&"triple_win": "triple-bonus.mp3",
 	&"jackpot_win": "jackpot-bonus.mp3",
-	&"coin_fall": "coin-falling.mp3",
-	&"coin_fall_end": "coin-falling-end.mp3",
 }
 const SFX_POLYPHONY := {
 	&"reel_stop": 3,
@@ -229,26 +280,19 @@ const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
-const COIN_TARGET := Vector2(76.0, 75.0)
-const COIN_SIZE := 6.0
+# The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
+const WEALTH_COIN_ORIGIN := Vector2(74.0, 252.0)
 const POWER_COIN_SIZE := 8.0
-const COIN_FLIGHT_TIME := 0.72
-const COIN_STAGGER_TIME := 0.09
-const COIN_BURST_FRAC := 0.4
-const COIN_BURST_RISE := 24.0
-const COIN_BURST_SCATTER := 26.0
-const COIN_TRAY_POP_TIME := 0.26
-const COIN_FALL_STAGGER_TIME := 0.035
-const COIN_TRAY_HOLD_TIME := 0.12
-const COIN_TRAY_PILE_SCATTER := 22.0
-const COIN_TRAY_PILE_DEPTH := 8.0
-const MAX_VISIBLE_COINS := 40
 const POWER_COIN_FLIGHT_TIME := 0.64
+const POWER_COIN_POP_SHEET := "machine new view/power coin animation.png"
+const POWER_COIN_POP_FRAMES := 4
+const POWER_COIN_POP_FRAME_TIME := 0.06
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
 # six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
-# flies to the bar every POWER_COIN_STEP lucidity and advances one frame; at the full
-# frame it spawns a coin from the bar top that flies to the random restorable power.
+# flies from the wealth odometer to the bar every 10 power points and advances one frame;
+# at the full frame it spawns a coin from the bar top that flies to the random restorable
+# power. Each bank coin first plays the authored four-frame pop sheet.
 # The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
 # coins = 10/step.
 const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
@@ -313,7 +357,7 @@ const DURATION_BOOSTS := [
 	"cons_focus": { "pos": "SYMBOL GUARANTEED", "neg": "ADJACENTS HIDDEN" },
 	"cons_potion": { "pos": "POWERS RESTORED", "neg": "" },
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
-	"item_water": { "pos": "+40 LUCIDITY", "neg": "" },
+	"item_water": { "pos": "+40 SCORE & LUCIDITY", "neg": "" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
 	"item_cocktail": { "pos": "RARITY BONUS", "neg": "15% PAIR/TRIPLE TAX" },
@@ -441,7 +485,6 @@ var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
 var _reel_covers: Array = []   # per-reel bg patch shown when a reel stops (masks its blur)
-var _bar_labels := {}
 var _overlay: Control = null
 var _dealer_overlay: Control = null
 var _dealer_offer_popup: Control = null
@@ -460,19 +503,41 @@ var _spin_button: Button = null
 var _multiplier_sprite: Sprite2D = null
 # Issue #155: authored frenzy-gauge effect sheets (x1 full-canvas strips) looping
 # over the badge strip while the gauge holds x2/x3, plus the blinking FREE SPINS
-# TV overlay that replaces the health bar while free spins are banked.
+# TV overlay shown while free spins are banked.
 var _mult_fx_2: Sprite2D = null
 var _mult_fx_3: Sprite2D = null
 var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
+var _dealer_bar_sprite: Sprite2D = null
+var _dealer_bar_overlay_1: Sprite2D = null
+var _dealer_bar_overlay_2: Sprite2D = null
+var _dealer_bar_overlay_3: Sprite2D = null
+var _dealer_bar_display_frame: int = 0
+var _dealer_bar_target_frame: int = 0
+var _dealer_bar_progress_time: float = 0.0
+var _dealer_bar_frame_initialized := false
+var _dealer_bar_overlay_beep_time := 0.0
+var _dealer_icon: TextureRect = null
 var _combo_loss_2_sprite: Sprite2D = null
 var _combo_loss_3_sprite: Sprite2D = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
-var _goal_fill_sprite: Sprite2D = null
-var _life_fill_sprite: Sprite2D = null
+var _wealth_odometer: WealthOdometer = null
+var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
+var _spins_left_label: Label = null # numeric spins-left readout under the tube
+var _win_anim_sprite: Sprite2D = null
+var _win_anim_tween: Tween = null
+var _win_payout_label: Label = null # "+ X" line under the PAIR/TRIPLE callout
+var _power_anim_sprite: Sprite2D = null
+var _power_anim_tween: Tween = null
+var _tv_info_pop_sources: Dictionary = {}
+var _tv_info_pop_restore_dealer_bar_visible := false
+var _tv_info_pop_restore_dealer_icon_visible := false
+var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
+var _coin_anim_active := false
+var _coin_anim_elapsed := 0.0
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
 var _boost_zero_linger: Dictionary = {} # counter -> snapshot while the just-spent final spin shows "0"
 var _jackpot_sprite: Sprite2D = null
@@ -495,20 +560,19 @@ var _dealer_drag_home := Vector2.ZERO
 var _dealer_drag_moved := false
 var _dealer_drag_press := Vector2.ZERO
 var _burst_layer: Control = null     # score bursts spawn here (drawn on top)
-var _coin_layer: Control = null      # lucidity / power coin flights spawn here
+var _coin_layer: Control = null      # power-coin flights and wealth pop FX spawn here
 var _burst_prev_score := 0           # last announced result score (for power gain)
 # Freezes HUD delta visuals (multiplier badge, TV bars, jackpot lamp) between a
 # spin/power commit and its score popup, so aftereffects never pop before the
 # score does (issue #54 scope).
 var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
-var _coin_prev_lucidity := 0
+var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
 var _power_bar_sprite: Sprite2D = null
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
-var _power_seen_lucidity := 0    # lucidity total the gauge has already accounted for
-var _display_lucidity := 0
-var _lucidity_count_tween: Tween = null
+var _power_seen_lucidity := 0    # legacy name: total power points the gauge has accounted for
+var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
@@ -684,10 +748,10 @@ func _full_canvas_name(rel: String) -> String:
 	return ""
 
 func _full_canvas_sheet_name(rel: String, frame: int) -> String:
-	if rel.ends_with("wealth_track_final_machine.png"):
-		return "WealthTrack"
-	if rel.ends_with("health_track_final_machine.png"):
-		return "HealthTrack"
+	if rel.ends_with("health_bar.png"):
+		return "HealthBar"
+	if rel.ends_with("health_animation.png"):
+		return "HealthCoin"
 	if rel.ends_with("multiplier_final_machine.png"):
 		return "Multiplier"
 	if rel.ends_with("lever_final_machine.png") or rel.ends_with("neon_machine_lever.png"):
@@ -704,17 +768,25 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "MemoryPower"
 	if rel.ends_with("FREE_SPIN.png"):
 		return "FreeSpinOverlay"
+	if rel.ends_with("win_animation.png"):
+		return "WinCallout"
+	if rel.ends_with("power_animation.png"):
+		return "PowerCallout"
 	if rel.ends_with("2_losing_animation.png"):
 		return "ComboLoss2"
 	if rel.ends_with("3_losing_animation.png"):
 		return "ComboLoss3"
+	if rel.ends_with("dealer_bar.png"):
+		return "DealerBar"
+	if rel.ends_with("dealer_bar_overlay_1.png"):
+		return "DealerBarOverlay1"
+	if rel.ends_with("dealer_bar_overlay_2.png"):
+		return "DealerBarOverlay2"
+	if rel.ends_with("dealer_bar_overlay_3.png"):
+		return "DealerBarOverlay3"
 	return ""
 
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
-	if rel.ends_with("wealth_fill_final_machine.png"):
-		return "WealthFill"
-	if rel.ends_with("health_fill_final_machine.png"):
-		return "HealthFill"
 	if rel.ends_with("reel_final_machine.png"):
 		for i in REEL_HOLES.size():
 			if float(rect["left"]) == float(REEL_HOLES[i]["left"]) and float(rect["top"]) == float(REEL_HOLES[i]["top"]):
@@ -949,15 +1021,76 @@ func _hide_spin_reels() -> void:
 		spr.visible = false
 
 func _build_tv_indicators() -> void:
-	_build_full_canvas_sheet("machine new view/wealth_track_final_machine.png", 1)
-	_goal_fill_sprite = _build_region_sprite("machine new view/wealth_fill_final_machine.png", WEALTH_BAR)
-	_build_full_canvas_sheet("machine new view/health_track_final_machine.png", 1)
-	_life_fill_sprite = _build_region_sprite("machine new view/health_fill_final_machine.png", HEALTH_BAR)
+	_wealth_odometer = WealthOdometer.new()
+	_wealth_odometer.name = "WealthOdometer"
+	add_child(_wealth_odometer)
+	_build_wealth_goal_label()
+	_health_bar_sprite = _build_full_canvas_sheet(
+		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
+	_build_spins_left_label()
+	_coin_insert_sprite = _build_full_canvas_sheet(
+		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
+	if _coin_insert_sprite != null:
+		_coin_insert_sprite.visible = false
 	_build_boost_indicators()
 	_build_power_bar()
 
-## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames). It
-## snaps to the current lucidity progress on build so a resumed run shows the right fill.
+## Objective readout inside the wealth bar's baked white boxes: the word
+## "TARGET" (dark) in the left box, the goal number (red, one digit per
+## fixed-pitch cell for even spacing) in the right one.
+func _build_wealth_goal_label() -> void:
+	if _wealth_odometer == null:
+		return
+	var word := _wealth_goal_text("WealthGoalWordLabel", WEALTH_GOAL_WORD_RECT, 5)
+	word.text = "TARGET"
+	var digits := str(campaign_goal_score)
+	var start_x := roundf(WEALTH_GOAL_NUMBER_RECT.position.x
+		+ (WEALTH_GOAL_NUMBER_RECT.size.x - WEALTH_GOAL_DIGIT_PITCH * digits.length()) * 0.5)
+	for i in digits.length():
+		var cell := Rect2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
+			WEALTH_GOAL_NUMBER_RECT.position.y,
+			WEALTH_GOAL_DIGIT_PITCH, WEALTH_GOAL_NUMBER_RECT.size.y)
+		var digit := _wealth_goal_text("WealthGoalDigit%d" % i, cell, 5)
+		digit.text = digits[i]
+		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
+
+func _wealth_goal_text(node_name: String, rect: Rect2, font_size: int) -> Label:
+	var l := Label.new()
+	l.name = node_name
+	l.position = rect.position
+	l.size = rect.size
+	l.z_index = 3 # keep the live TARGET labels readable above the authored bar
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", font_size)
+	if _font != null:
+		l.add_theme_font_override("font", _font)
+	l.add_theme_color_override("font_color", WEALTH_GOAL_TEXT_COLOR)
+	_wealth_odometer.add_child(l)
+	return l
+
+## Numeric spins-left readout under the neuron tube — tracks the same
+## _display_spins_left() budget the tube frames show, but past the tube's 17 cap.
+func _build_spins_left_label() -> void:
+	_spins_left_label = Label.new()
+	_spins_left_label.name = "SpinsLeftNumber"
+	_spins_left_label.position = SPINS_LEFT_LABEL_RECT.position
+	_spins_left_label.size = SPINS_LEFT_LABEL_RECT.size
+	_spins_left_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spins_left_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_spins_left_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_spins_left_label.add_theme_font_size_override("font_size", 7)
+	if _font != null:
+		_spins_left_label.add_theme_font_override("font", _font)
+	_spins_left_label.add_theme_color_override("font_color", NEON_CYAN)
+	_spins_left_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_spins_left_label.add_theme_constant_override("outline_size", 1)
+	_spins_left_label.text = ""
+	add_child(_spins_left_label)
+
+## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
+## It starts from the current power-point total so a resumed run does not replay old score.
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
 	if tex == null:
@@ -978,9 +1111,9 @@ func _build_power_bar() -> void:
 		_power_bar_sprite.position = Vector2.ZERO
 		_power_bar_sprite.scale = Vector2(SRC_W / frame_w, SRC_H / frame_h)
 	_power_bar_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	# Start empty; the gauge fills only from score gained after this point (a resumed run
-	# doesn't re-bank its existing lucidity).
-	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
+	# Start empty; the gauge fills only from power points gained after this point (a resumed
+	# run does not replay its existing score or Lucidity).
+	_power_seen_lucidity = _power_point_total()
 	_power_bar_score = 0
 	_set_power_bar_frame(0)
 	# Any restores earned before this scene existed resolve immediately (visual only —
@@ -991,8 +1124,8 @@ func _build_power_bar() -> void:
 ## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
 ## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
 ## corner says how many spins are left. Active boosts stack HORIZONTALLY, growing left
-## from the corner. Anchored to the wealth-bar geometry, which is known to sit inside the
-## screen, so the row clears the red bezel. Built once; refreshed each HUD update.
+## from the corner. Anchored to the TV status column so the row clears the red
+## bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
@@ -1070,9 +1203,8 @@ func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Colo
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	# Anchor to the wealth bar's right edge / the top strip above it — both inside the
-	# screen, clear of the bezel and of the bars below.
-	var row_right := float(WEALTH_BAR["left"]) + float(WEALTH_BAR["width"])
+	# Anchor to the TV status column, clear of the bezel and health bar below.
+	var row_right := TV_STATUS_RIGHT
 	var row_top := float(TV_SCREEN["top"]) + 13.0
 	var col := 0
 	for boost in DURATION_BOOSTS:
@@ -1148,13 +1280,47 @@ func _build_machine_control_art() -> void:
 	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
 	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
+	_dealer_bar_sprite = _build_full_canvas_sheet(DEALER_BAR_SHEET, DEALER_BAR_FRAME_COUNT)
+	_dealer_bar_overlay_1 = _build_full_canvas_sheet(
+		DEALER_BAR_OVERLAY_1_SHEET, DEALER_BAR_OVERLAY_1_FRAMES)
+	_dealer_bar_overlay_2 = _build_full_canvas_sheet(
+		DEALER_BAR_OVERLAY_2_SHEET, DEALER_BAR_OVERLAY_2_FRAMES)
+	_dealer_bar_overlay_3 = _build_full_canvas_sheet(
+		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
+	_win_anim_sprite = _build_full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
+	if _win_anim_sprite != null:
+		_win_payout_label = Label.new()
+		_win_payout_label.name = "WinPayout"
+		_win_payout_label.position = WIN_PAYOUT_RECT.position
+		_win_payout_label.size = WIN_PAYOUT_RECT.size
+		_win_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_win_payout_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_win_payout_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_win_payout_label.add_theme_font_size_override("font_size", 11)
+		if _font != null:
+			_win_payout_label.add_theme_font_override("font", _font)
+		_win_payout_label.add_theme_color_override("font_color", WIN_PAYOUT_COLOR)
+		_win_payout_label.text = ""
+		_win_anim_sprite.add_child(_win_payout_label)
+	_power_anim_sprite = _build_full_canvas_sheet(POWER_ANIM_SHEET, POWER_ANIM_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
-			_combo_loss_2_sprite, _combo_loss_3_sprite]:
+			_combo_loss_2_sprite, _combo_loss_3_sprite,
+			_win_anim_sprite, _power_anim_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
+	for dealer_art in [_dealer_bar_sprite, _dealer_bar_overlay_1,
+			_dealer_bar_overlay_2, _dealer_bar_overlay_3]:
+		if dealer_art != null:
+			(dealer_art as Sprite2D).z_index = 11
+	if _dealer_bar_sprite != null:
+		_dealer_bar_sprite.visible = true
+	for dealer_overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
+			_dealer_bar_overlay_3]:
+		if dealer_overlay != null:
+			(dealer_overlay as Sprite2D).visible = false
 	for loss_sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
 		if loss_sprite != null:
 			(loss_sprite as Sprite2D).z_index = COMBO_LOSS_OVERLAY_Z_INDEX
@@ -1326,13 +1492,11 @@ func _build_hud() -> void:
 	_build_score_button()
 	_build_campaign_label()
 	_build_hint_layer()
-	_build_bar_label("goal", Vector2(43.0, 64.0), Color(0.9, 0.85, 0.45))
-	_build_bar_label("life", Vector2(43.0, 85.0), Color(0.75, 1.0, 0.8))
-	_build_dealer_countdown_labels()
+	_build_dealer_icon()
 
-## Issue #155: the dealer portrait with the countdown as a bottom-right corner badge
-## (same look as the consumable boost badges). Lower = dealer closer.
-func _build_dealer_countdown_labels() -> void:
+## Issue #155: the compact dealer portrait sits beside the authored countdown bar.
+## The countdown is entirely visual now; no numeric badge is layered over the icon.
+func _build_dealer_icon() -> void:
 	var icon := TextureRect.new()
 	icon.name = "DealerIcon"
 	icon.position = DEALER_ICON_POS
@@ -1343,40 +1507,88 @@ func _build_dealer_countdown_labels() -> void:
 	icon.texture = _load_texture(DEALER_ICON_ASSET, true)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 12
+	_dealer_icon = icon
 	add_child(icon)
-	_bar_labels["dealer_icon"] = icon
-	var number := Label.new()
-	number.name = "DealerCountdownNumber"
-	number.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	number.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	number.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		number.add_theme_font_override("font", _font)
-	number.add_theme_color_override("font_color", DEALER_COUNTDOWN_CALM_COLOR)
-	number.add_theme_color_override("font_outline_color", Color.BLACK)
-	number.add_theme_constant_override("outline_size", 1)
-	number.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	number.text = ""
-	# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
-	# real (font-driven) min height, same trick as the boost badges (issue #76 review).
-	icon.add_child(number)
-	var mh := number.get_minimum_size().y
-	number.size = Vector2(DEALER_ICON_SIZE.x, mh)
-	number.position = Vector2(0.0, DEALER_ICON_SIZE.y - mh)
-	_bar_labels["dealer_count"] = number
 
 func _refresh_dealer_countdown() -> void:
-	if not _bar_labels.has("dealer_count"):
+	if _dealer_bar_sprite == null:
 		return
-	var n := maxi(0, int(RunStateStore.dealerCountdown))
-	var color := DEALER_COUNTDOWN_CALM_COLOR
-	if n <= 1:
-		color = DEALER_COUNTDOWN_DANGER_COLOR
-	elif n <= 4:
-		color = DEALER_COUNTDOWN_WARN_COLOR
-	var number := _bar_labels["dealer_count"] as Label
-	number.text = str(n)
-	number.add_theme_color_override("font_color", color)
+	var remaining := maxi(0, int(RunStateStore.dealerCountdown))
+	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_reset_value()))
+	var elapsed := clampi(cycle_start - remaining, 0, cycle_start)
+	var progress_frame := clampi(roundi(float(elapsed) * float(DEALER_BAR_FRAME_COUNT - 1)
+		/ float(cycle_start)), 0, DEALER_BAR_FRAME_COUNT - 1)
+	if not _dealer_bar_frame_initialized:
+		_dealer_bar_frame_initialized = true
+		_dealer_bar_display_frame = progress_frame
+		_dealer_bar_target_frame = progress_frame
+		_dealer_bar_progress_time = 0.0
+		_set_dealer_bar_progress_frame(progress_frame)
+	elif progress_frame < _dealer_bar_display_frame:
+		# A dealer visit/new run resets the bar. Snap the reset so the next cycle
+		# can visibly walk forward from frame 0 again.
+		_dealer_bar_display_frame = progress_frame
+		_dealer_bar_target_frame = progress_frame
+		_dealer_bar_progress_time = 0.0
+		_set_dealer_bar_progress_frame(progress_frame)
+	else:
+		_dealer_bar_target_frame = progress_frame
+		if _dealer_bar_display_frame == _dealer_bar_target_frame:
+			_dealer_bar_progress_time = 0.0
+	_set_dealer_overlay_progress_frame(_dealer_bar_display_frame)
+	# The warning sheets are cumulative: the x3 warning is overlay 1, x2 adds
+	# overlay 2, and x1 adds overlay 3. Each sheet follows the same countdown
+	# progress as the bar; its shorter tail clamps to its final authored frame.
+	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
+	var effective := clampi(int(RunStateStore.betMultiplier), 1, cap)
+	var show_overlay_1 := false
+	var show_overlay_2 := false
+	var show_overlay_3 := false
+	if RunStateStore.comboDefeatPending:
+		# A losing-state warning uses the dealer-warning state that follows a
+		# declined loss: pending x1 stays at x1, pending x2 falls to x1, and
+		# pending x3 falls to x2. Therefore x1/x2 keep all three lights and x3
+		# keeps lights 1+2.
+		var preceding_multiplier := maxi(1,
+			clampi(int(RunStateStore.pendingComboMultiplier) - 1, 1, 3))
+		show_overlay_1 = preceding_multiplier <= 3
+		show_overlay_2 = preceding_multiplier <= 2
+		show_overlay_3 = preceding_multiplier <= 1
+	else:
+		show_overlay_1 = effective <= 3
+		show_overlay_2 = effective <= 2
+		show_overlay_3 = effective <= 1
+	# Warning lights are committed after the reveal/score result. Showing them as
+	# soon as the lever is pulled would leak the next gauge state into the spin.
+	var overlay_ready := not _spinning_anim and not _spin_launch_pending \
+		and not RunStateStore.isSpinning and not _hud_delta_hold
+	var dealer_info_allowed := _tv_info_pop_sources.is_empty() \
+		or RunStateStore.comboDefeatPending
+	var overlay_states: Array = [
+		{ "sprite": _dealer_bar_overlay_1, "visible": show_overlay_1 },
+		{ "sprite": _dealer_bar_overlay_2, "visible": show_overlay_2 },
+		{ "sprite": _dealer_bar_overlay_3, "visible": show_overlay_3 },
+	]
+	for state: Dictionary in overlay_states:
+		var overlay := state["sprite"] as Sprite2D
+		if overlay == null:
+			continue
+		var should_show := bool(state["visible"])
+		var was_visible := overlay.visible
+		overlay.visible = should_show and overlay_ready and dealer_info_allowed
+		if overlay.visible and not was_visible:
+			overlay.modulate.a = 1.0
+		elif not overlay.visible:
+			overlay.modulate.a = 1.0
+	if not _tv_info_pop_sources.is_empty() and not RunStateStore.comboDefeatPending:
+		_hide_tv_info_layers()
+	elif RunStateStore.comboDefeatPending:
+		# The dealer warning remains readable over the losing-state art, even if
+		# the result's PAIR/TRIPLE callout is still fading out.
+		if _dealer_bar_sprite != null:
+			_dealer_bar_sprite.visible = true
+		if _dealer_icon != null:
+			_dealer_icon.visible = true
 
 func _build_score_button() -> void:
 	_score_button = _authored_button("ScoreButton")
@@ -1500,25 +1712,6 @@ func _build_hint_layer() -> void:
 		_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_hint_layer.z_index = 20
 
-func _build_bar_label(id: String, pos: Vector2, color: Color) -> void:
-	var node_name := "GoalLabel" if id == "goal" else "HealthLabel"
-	var l := get_node_or_null(node_name) as Label
-	var authored := l != null
-	if l == null:
-		l = Label.new()
-		l.name = node_name
-		add_child(l)
-	if not authored:
-		l.position = pos
-	if id == "life" and not authored:
-		l.size = Vector2(float(TV_SCREEN["left"]) + float(TV_SCREEN["width"]) - pos.x, 10.0)
-	l.add_theme_font_size_override("font_size", 6)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", color)
-	l.text = ""
-	_bar_labels[id] = l
-
 func _build_spin_button() -> void:
 	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
 
@@ -1588,6 +1781,7 @@ func _sync_visuals() -> void:
 	_hide_spin_reels()
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
+	_cancel_coin_insert()
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp(false)
@@ -1675,6 +1869,7 @@ func _do_spin(compulsive := false) -> void:
 	_clear_boost_zero_linger()
 	var expiring_boost_counters := _capture_expiring_boost_counters()
 	_clear_targeting()
+	_stop_win_animation() # last spin's PAIR/TRIPLE callout must not outlive its win
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
 	_refresh_jackpot_lamp(false)
@@ -1724,10 +1919,18 @@ func _do_spin(compulsive := false) -> void:
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
 		_reel_stop_times[_reveal_reel_next_spin] = 0.2
 	_reveal_reel_next_spin = -1
-	_start_lever_pull()
+	# Launch beat: the coin drops into the machine first, THEN the lever pulls,
+	# THEN the reels start.
+	_start_coin_insert()
 	_spin_launch_pending = true
 	_spin_button.disabled = true
 	_refresh_controls()
+	await get_tree().create_timer(
+		COIN_INSERT_FRAME_TIME * float(COIN_INSERT_FRAME_COUNT)).timeout
+	if not is_inside_tree() or not _spin_launch_pending:
+		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
+		return
+	_start_lever_pull()
 	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
 		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
@@ -1739,6 +1942,8 @@ func _do_spin(compulsive := false) -> void:
 	_blur_accum = 0.0
 
 func _process(delta: float) -> void:
+	if _coin_anim_active:
+		_step_coin_insert(delta)
 	if _lever_anim_active:
 		_step_lever(delta)
 	if _reroll_anim_active:
@@ -1746,6 +1951,8 @@ func _process(delta: float) -> void:
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
+	_step_dealer_bar_progress(delta)
+	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
@@ -1793,6 +2000,27 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_set_reel_cover(i, locked)
 		_set_spin_reel_frame(i, _spin_frame)
 		_set_spin_reel_visible(i, not locked)
+
+func _start_coin_insert() -> void:
+	if _coin_insert_sprite == null:
+		return
+	_coin_anim_active = true
+	_coin_anim_elapsed = 0.0
+	_coin_insert_sprite.visible = true
+	_set_sheet_frame(_coin_insert_sprite, 0)
+
+func _step_coin_insert(delta: float) -> void:
+	_coin_anim_elapsed += delta
+	var frame := int(_coin_anim_elapsed / COIN_INSERT_FRAME_TIME)
+	if frame >= COIN_INSERT_FRAME_COUNT:
+		_cancel_coin_insert()
+		return
+	_set_sheet_frame(_coin_insert_sprite, frame)
+
+func _cancel_coin_insert() -> void:
+	_coin_anim_active = false
+	if _coin_insert_sprite != null:
+		_coin_insert_sprite.visible = false
 
 func _start_lever_pull() -> void:
 	_play_sfx(&"lever")
@@ -1970,6 +2198,106 @@ func _start_combo_loss_beep() -> void:
 	_combo_loss_beep_tween.tween_property(sprite, "modulate:a", 1.0,
 		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_combo_loss_beep_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+
+## Full-screen TV callouts take visual priority over persistent TV information.
+## Multiple callouts can overlap (for example a power callout over a win callout),
+## so each owner holds a source until its own presentation has finished.
+func _begin_tv_info_pop(source: StringName) -> void:
+	var was_empty := _tv_info_pop_sources.is_empty()
+	_tv_info_pop_sources[source] = true
+	if not was_empty:
+		return
+	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar_sprite != null \
+		and _dealer_bar_sprite.visible
+	_tv_info_pop_restore_dealer_icon_visible = _dealer_icon != null \
+		and _dealer_icon.visible
+	_hide_tv_info_layers()
+
+func _end_tv_info_pop(source: StringName) -> void:
+	if not _tv_info_pop_sources.has(source):
+		return
+	_tv_info_pop_sources.erase(source)
+	if not _tv_info_pop_sources.is_empty():
+		return
+	_restore_tv_info_layers()
+
+func _hide_tv_info_layers() -> void:
+	if _free_spin_sprite != null:
+		_free_spin_sprite.visible = false
+	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
+			_dealer_bar_overlay_3, _dealer_icon]:
+		var info := node as CanvasItem
+		if info != null:
+			info.visible = false
+
+func _restore_tv_info_layers() -> void:
+	_refresh_free_spin_banner()
+	if _free_spin_sprite != null:
+		_free_spin_sprite.visible = _free_spin_overlay_active \
+			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
+	_refresh_dealer_countdown()
+	if _dealer_bar_sprite != null:
+		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
+			or RunStateStore.comboDefeatPending
+	if _dealer_icon != null:
+		_dealer_icon.visible = _tv_info_pop_restore_dealer_icon_visible \
+			or RunStateStore.comboDefeatPending
+
+## PAIR/TRIPLE TV callout: the matching win_animation frame beeps (alpha pulse,
+## combo-loss cadence) CALLOUT_BEEP_COUNT times after the win is identified, then
+## hides. The "+ score" payout line rides along as a child of the callout sprite.
+func _play_win_animation(win_type: String, score: int) -> void:
+	if _win_anim_sprite == null or not WIN_ANIM_FRAME.has(win_type):
+		return
+	_stop_win_animation()
+	_begin_tv_info_pop(&"win")
+	_set_sheet_frame(_win_anim_sprite, int(WIN_ANIM_FRAME[win_type]))
+	if _win_payout_label != null:
+		_win_payout_label.text = "+ %d" % score
+	_win_anim_sprite.modulate.a = 1.0
+	_win_anim_sprite.visible = true
+	_win_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
+	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 0.18,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 1.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_win_anim_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+	_win_anim_tween.finished.connect(_stop_win_animation)
+
+func _stop_win_animation() -> void:
+	if _win_anim_tween != null and _win_anim_tween.is_valid():
+		_win_anim_tween.kill()
+	_win_anim_tween = null
+	if _win_anim_sprite != null:
+		_win_anim_sprite.visible = false
+		_win_anim_sprite.modulate.a = 1.0
+	_end_tv_info_pop(&"win")
+
+## REROLL/SHIFT/LOCK TV callout: the selected power's power_animation frame beeps
+## a few times and then holds while its targeting stays armed (_clear_targeting hides it).
+func _show_power_animation(id: String) -> void:
+	if _power_anim_sprite == null or not POWER_ANIM_FRAME.has(id):
+		return
+	_stop_power_animation()
+	_begin_tv_info_pop(&"power")
+	_set_sheet_frame(_power_anim_sprite, int(POWER_ANIM_FRAME[id]))
+	_power_anim_sprite.modulate.a = 1.0
+	_power_anim_sprite.visible = true
+	_power_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
+	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 0.18,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 1.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_power_anim_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+
+func _stop_power_animation() -> void:
+	if _power_anim_tween != null and _power_anim_tween.is_valid():
+		_power_anim_tween.kill()
+	_power_anim_tween = null
+	if _power_anim_sprite != null:
+		_power_anim_sprite.visible = false
+		_power_anim_sprite.modulate.a = 1.0
+	_end_tv_info_pop(&"power")
 
 func _stop_combo_loss_beep() -> void:
 	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():
@@ -2153,37 +2481,32 @@ func _refresh_tv_indicators() -> void:
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
-	var spins_ratio := clampf(float(spins_left) / float(_max_spins_display()), 0.0, 1.0)
-	# The FREE SPIN banner replaces the health bar and its text for as long as the
-	# next spin is free (banked free spins or an Energy Drink rush).
+	# The FREE SPIN banner lights the TV while the next spin is free (banked free
+	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
 	_refresh_free_spin_banner()
-	var free_spins_active := _free_spin_overlay_active
-	_set_bar_fill(_life_fill_sprite, HEALTH_BAR, spins_ratio)
-	if _life_fill_sprite != null:
-		_life_fill_sprite.visible = not free_spins_active and spins_ratio > 0.0
-	var health_track := get_node_or_null("HealthTrack") as CanvasItem
-	if health_track != null:
-		health_track.visible = not free_spins_active
-	if _bar_labels.has("life"):
-		_bar_labels["life"].visible = not free_spins_active
-		_bar_labels["life"].text = "SPINS LEFT: %d" % spins_left
-	# Issue #155: the dealer countdown ticks with the spin cost (not the reward
-	# hold), so the number drops the moment the lever is pulled.
+	if _health_bar_sprite != null:
+		# A HUD refresh re-derives the tube from state (an ending that wants it
+		# hidden skips this refresh entirely, see _update_hud).
+		_health_bar_sprite.visible = true
+		_set_sheet_frame(_health_bar_sprite,
+			clampi(spins_left, 0, HEALTH_BAR_FRAME_COUNT - 1))
+	# The numeric readout under the tube follows the same budget (spends, gains,
+	# protections all land here via _update_hud), uncapped by the tube's 17 frames.
+	if _spins_left_label != null:
+		_spins_left_label.visible = true
+		_spins_left_label.text = str(spins_left)
+	# Issue #155: the dealer bar advances with the inverse multiplier step (not the
+	# reward hold), so its progress changes the moment the lever is pulled.
 	_refresh_dealer_countdown()
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
 	_refresh_boost_indicators()
-	# The wealth bar / lucidity readout is a reward delta — hold it (with the
-	# multiplier badge and jackpot lamp) until the score popup lands (issue #54).
+	# The wealth odometer is a score total. Hold it (with the multiplier badge and
+	# jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
 		return
-	if RunStateStore.lucidityCoins < _display_lucidity:
-		_set_display_lucidity(RunStateStore.lucidityCoins)
-	# The wealth bar targets the campaign wealth goal (2000) — the same threshold
-	# the wealth ending checks — not the old lucidity objective.
-	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, _goal_bar_ratio())
-	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = _goal_label_text()
+	if RunStateStore.scoreEarned < _display_lucidity:
+		_set_display_lucidity(RunStateStore.scoreEarned)
 
 ## The number of spins the neuron pool affords: ceil(neurons / decay) — the SAME
 ## budget spin() uses. Banked free spins deliberately do NOT inflate the counter:
@@ -2199,64 +2522,18 @@ func _neuron_spins_left() -> int:
 		return 0
 	return maxi(1, int(ceili(float(RunStateStore.neurons) / float(_spin_decay()))))
 
-## Full-bar reference: the neuron budget the run started with.
-func _max_spins_display() -> int:
-	return maxi(1, int(ceili(float(maxi(1, RunStateStore.startingNeurons)) / float(_spin_decay()))))
-
 func _display_spins_left() -> int:
 	return maxi(0, _neuron_spins_left() - _pending_spin_gain)
 
 func _current_display_spins_left() -> int:
 	return _display_spins_left()
 
-func _set_bar_fill(spr: Sprite2D, rect: Dictionary, ratio: float) -> void:
-	if spr == null:
-		return
-	var width := maxf(0.0, float(rect["width"]) * ratio)
-	spr.visible = width > 0.0
-	spr.region_rect = Rect2(
-		float(rect["left"]) * ASSET_SCALE,
-		float(rect["top"]) * ASSET_SCALE,
-		width * ASSET_SCALE,
-		float(rect["height"]) * ASSET_SCALE
-	)
-
-func _set_display_lucidity(value: int) -> void:
+func _set_display_lucidity(value: int, animated := true) -> void:
+	# The legacy method name is kept because scene smoke hooks call it; its value is
+	# now the cumulative score shown by the wealth odometer.
 	_display_lucidity = maxi(0, value)
-	if _bar_labels.has("goal"):
-		_bar_labels["goal"].text = _goal_label_text()
-	_set_bar_fill(_goal_fill_sprite, WEALTH_BAR, _goal_bar_ratio())
-
-## Once the player continues past the wealth ending the campaign goal is spent:
-## the readout hides the completed target behind "???" and the bar stays pinned
-## full for the rest of that continued run (issue #110). A new run resets
-## wealthContinued, restoring the normal x/goal progression.
-func _goal_label_text() -> String:
-	if RunStateStore.wealthContinued:
-		return "%d/???" % _display_lucidity
-	return "%d/%d" % [_display_lucidity, campaign_goal_score]
-
-func _goal_bar_ratio() -> float:
-	if RunStateStore.wealthContinued:
-		return 1.0
-	return clampf(float(_display_lucidity) / float(maxi(1, campaign_goal_score)), 0.0, 1.0)
-
-func _start_lucidity_countup(target: int, visible_coin_count: int, first_arrival_time: float) -> void:
-	if _lucidity_count_tween != null and _lucidity_count_tween.is_valid():
-		_lucidity_count_tween.kill()
-	var from_value := _display_lucidity
-	if target <= from_value:
-		_set_display_lucidity(target)
-		return
-	var count_time := clampf(0.22 + float(visible_coin_count) * 0.025, 0.35, 1.15)
-	_lucidity_count_tween = create_tween()
-	_lucidity_count_tween.tween_interval(first_arrival_time)
-	_lucidity_count_tween.tween_method(_drive_lucidity_count.bind(from_value, target), 0.0, 1.0, count_time)
-	_lucidity_count_tween.tween_callback(_set_display_lucidity.bind(target))
-
-func _drive_lucidity_count(t: float, from_value: int, to_value: int) -> void:
-	var eased := 1.0 - (1.0 - t) * (1.0 - t)
-	_set_display_lucidity(int(round(lerpf(float(from_value), float(to_value), eased))))
+	if _wealth_odometer != null:
+		_wealth_odometer.set_value(_display_lucidity, animated)
 
 func _refresh_jackpot_lamp(use_result := true) -> void:
 	if _jackpot_sprite == null or _jackpot_flashing:
@@ -2329,7 +2606,7 @@ func _init_burst_tracking() -> void:
 		_burst_prev_spin = -1
 		_burst_prev_score = 0
 	_coin_prev_lucidity = RunStateStore.lucidityCoins
-	_set_display_lucidity(RunStateStore.lucidityCoins)
+	_set_display_lucidity(RunStateStore.scoreEarned, false)
 
 # Normal-spin source reel: a pair on the first two reels pops on reel 2 (index 1);
 # every other win reads from reel 3 (index 2).
@@ -2373,10 +2650,12 @@ func _emit_score_burst(source_reel) -> float:
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
 	var color: Color = MULT_COLORS[clampi(int(RunStateStore.lastEffectiveBet), 1, 3)]
-	var lucidity_gain := maxi(0, int(RunStateStore.lucidityCoins) - _coin_prev_lucidity)
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
-	if lucidity_gain > 0:
-		reward_time = maxf(reward_time, _spawn_lucidity_coins(lucidity_gain, int(RunStateStore.lucidityCoins)))
+	# Score is the wealth bar's source of truth. The number reels begin their roll with
+	# the score popup; no individual Lucidity coins leave the cash tray for this HUD.
+	var wealth_score := int(RunStateStore.scoreEarned)
+	if wealth_score > _display_lucidity:
+		_set_display_lucidity(wealth_score)
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
@@ -2400,6 +2679,7 @@ func _emit_score_burst(source_reel) -> float:
 			_play_sfx(&"triple_win")
 		elif win_type == "pair":
 			_play_sfx(&"pair_win")
+		_play_win_animation(win_type, score)
 		# Issue #76: a flatline strike charged this win — call it out and tint it red so
 		# the doubled score reads as the flatline payoff, not a normal pair/triple.
 		if is_new_spin and bool(lr.get("flatlineBoostApplied", false)):
@@ -2504,103 +2784,20 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 		o = 1.0 - (t - 0.7) / 0.3
 	burst.modulate.a = clampf(o, 0.0, 1.0)
 
-func _spawn_lucidity_coins(gain: int, target_lucidity: int) -> float:
-	if _coin_layer == null:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var tex := _load_texture("ui/coin.png", true)
-	if tex == null:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var count := mini(MAX_VISIBLE_COINS, gain)
-	if count <= 0:
-		_set_display_lucidity(target_lucidity)
-		return 0.0
-	var stagger_time := _coin_fall_stagger_time_for_count(count)
-	var fall_phase_time := float(count - 1) * stagger_time + COIN_TRAY_POP_TIME
-	var travel_start_time := fall_phase_time + COIN_TRAY_HOLD_TIME
-	var flight_time := _coin_flight_time_for_count(count)
-	var total_time := travel_start_time + flight_time
-	var cash_tray := COIN_TRAY + CASH_COIN_TRAY_OFFSET
-	_play_sfx(&"coin_fall")
-	var fall_sfx_tw := create_tween()
-	fall_sfx_tw.tween_interval(fall_phase_time)
-	fall_sfx_tw.tween_callback(_play_sfx.bind(&"coin_fall_end"))
-	for i in count:
-		var coin := Sprite2D.new()
-		coin.texture = tex
-		coin.centered = true
-		var start_pos := cash_tray
-		var pile_pos := cash_tray + Vector2(
-			(randf() - 0.5) * COIN_TRAY_PILE_SCATTER,
-			-randf() * COIN_TRAY_PILE_DEPTH
-		)
-		var burst_pos := Vector2(
-			cash_tray.x + (randf() - 0.5) * COIN_BURST_SCATTER,
-			cash_tray.y - COIN_BURST_RISE
-		)
-		coin.position = start_pos
-		var coin_scale := COIN_SIZE / float(maxi(1, tex.get_width()))
-		coin.scale = Vector2(coin_scale, coin_scale)
-		coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		coin.modulate.a = 0.0
-		_coin_layer.add_child(coin)
-		var fall_delay := float(i) * stagger_time
-		var tw := create_tween()
-		tw.tween_interval(fall_delay)
-		tw.tween_method(_drive_lucidity_coin_tray_pop.bind(coin, start_pos, pile_pos), 0.0, 1.0, COIN_TRAY_POP_TIME)
-		tw.tween_interval(maxf(0.0, travel_start_time - fall_delay - COIN_TRAY_POP_TIME))
-		tw.tween_method(_drive_lucidity_coin.bind(coin, pile_pos, burst_pos, COIN_TARGET), 0.0, 1.0, flight_time)
-		tw.tween_callback(coin.queue_free)
-	var value_tw := create_tween()
-	value_tw.tween_interval(total_time)
-	value_tw.tween_callback(_set_display_lucidity.bind(target_lucidity))
-	return total_time
+## Kept as a compatibility hook for consumable callers and older smoke scripts.
+## Lucidity no longer animates cash-tray coins into the wealth display; the odometer
+## is driven directly by score in _emit_score_burst().
+func _spawn_lucidity_coins(_gain: int, _target_lucidity: int) -> float:
+	return 0.0
 
-func _coin_flight_time_for_count(count: int) -> float:
-	var pressure := clampf(float(maxi(0, count - 8)) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_FLIGHT_TIME, 0.48, pressure)
-
-func _coin_stagger_time_for_count(count: int) -> float:
-	if count <= 8:
-		return COIN_STAGGER_TIME
-	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_STAGGER_TIME, 0.018, pressure)
-
-func _coin_fall_stagger_time_for_count(count: int) -> float:
-	if count <= 8:
-		return COIN_FALL_STAGGER_TIME
-	var pressure := clampf(float(count - 8) / float(maxi(1, MAX_VISIBLE_COINS - 8)), 0.0, 1.0)
-	return lerpf(COIN_FALL_STAGGER_TIME, 0.012, pressure)
-
-func _drive_lucidity_coin_tray_pop(t: float, coin: Sprite2D, from_pos: Vector2, pile_pos: Vector2) -> void:
-	if not is_instance_valid(coin):
-		return
-	var eased := 1.0 - (1.0 - t) * (1.0 - t)
-	var pop := sin(t * PI) * 6.0
-	coin.position = from_pos.lerp(pile_pos, eased) + Vector2(0.0, -pop)
-	coin.modulate.a = minf(t / 0.12, 1.0)
-
-func _drive_lucidity_coin(t: float, coin: Sprite2D, from_pos: Vector2, burst_pos: Vector2, to_pos: Vector2) -> void:
-	if not is_instance_valid(coin):
-		return
-	var p: Vector2
-	if t < COIN_BURST_FRAC:
-		p = from_pos.lerp(burst_pos, t / COIN_BURST_FRAC)
-	else:
-		p = burst_pos.lerp(to_pos, (t - COIN_BURST_FRAC) / (1.0 - COIN_BURST_FRAC))
-	coin.position = p
-	if t < 0.1:
-		coin.modulate.a = t / 0.1
-	elif t < 0.85:
-		coin.modulate.a = 1.0
-	else:
-		coin.modulate.a = 1.0 - ((t - 0.85) / 0.15)
-
-# Score per gauge frame: one coin banks this much score (10 for a 6-frame / 50-threshold
-# gauge). Power coins are tied to SCORE GAINED — 10 score => 1 coin, 50 => 5.
+# Power points per gauge frame: one power coin banks this much wealth score (10 for a 6-frame /
+# 50-threshold gauge). Cocktail rarity points are part of that score. Lucidity-only bonuses still
+# keep the existing restore economy caught up, so the point source is the higher of the two totals.
 func _power_bar_step() -> int:
 	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
+
+func _power_point_total() -> int:
+	return maxi(0, maxi(int(RunStateStore.scoreEarned), int(RunStateStore.lucidityCoins)))
 
 func _set_power_bar_frame(f: int) -> void:
 	_power_bar_frame = clampi(f, 0, POWER_BAR_FRAMES - 1)
@@ -2618,22 +2815,23 @@ func _cash_tray_pos() -> Vector2:
 	return COIN_TRAY + CASH_COIN_TRAY_OFFSET # same origin as normal lucidity coins
 
 ## Polled every frame. Power coins are held behind the sequence lock (so they don't
-## overlap the score burst) EXCEPT while a dealer offer is queued behind them — then they
-## run to completion first (issue #76 follow-up).
+## overlap the score burst) EXCEPT while a dealer offer or an already-shown combo-loss
+## warning is queued behind them — the score has landed, so the threshold sequence still
+## runs to completion (issue #76 follow-up).
 func _try_start_power_coin_flow() -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
 		return
-	if _sequence_lock_active and not _pending_dealer_offer:
+	if _sequence_lock_active and not _pending_dealer_offer and _pending_combo_overlay == null:
 		return
 	_advance_power_bar()
 
-## Pure: plan the coins for the score gained since the gauge last caught up. Each coin banks
-## one step of score; a full gauge is only completed when a restore is available (else it
-## caps at 4/5 and the rest of the gain is discarded — never fake-fills or loops). Returns
-## { steps: [{frame, restore}], score: <final banked score>, seen: <lucidity now> }.
+## Pure: plan the coins for power points gained since the gauge last caught up. Each coin banks
+## one step; a full gauge is only completed when a restore is available (else it caps at 4/5 and
+## the rest of the gain is discarded — never fake-fills or loops). Returns { steps:
+## [{frame, restore}], score: <final banked score>, seen: <power points now> }.
 func _compute_power_plan() -> Dictionary:
-	var lucidity := int(RunStateStore.lucidityCoins)
-	var gain := lucidity - _power_seen_lucidity
+	var power_points := _power_point_total()
+	var gain := power_points - _power_seen_lucidity
 	var per := maxi(1, coins_per_power_restore)
 	var step := _power_bar_step()
 	# Restorable = plan_gain's queued restores plus any spent ability the gauge can bring
@@ -2661,7 +2859,7 @@ func _compute_power_plan() -> Dictionary:
 				break
 		else:
 			out.append({ "frame": score / step, "restore": false })
-	return { "steps": out, "score": score, "seen": lucidity }
+	return { "steps": out, "score": score, "seen": power_points }
 
 func _power_has_pending_work() -> bool:
 	return not (_compute_power_plan()["steps"] as Array).is_empty()
@@ -2715,22 +2913,48 @@ func _launch_power_coin_batch(steps: Array) -> void:
 	for i in steps.size():
 		_launch_power_bank_coin(steps[i], float(i) * POWER_COIN_STAGGER)
 	if _power_coins_in_flight == 0: # no coin layer/texture — apply instantly
-		for stepd in steps:
-			_apply_power_bank_step(stepd)
 		_power_batch_running = false
 		_advance_power_bar()
 
-## One bank coin: from the cash tray to the gauge, launched after `delay` so a batch flies
-## in quick succession (each coin independent, not waiting for the previous to arrive).
-func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> void:
-	var coin := _make_power_coin(_cash_tray_pos())
-	if coin == null:
-		return
+## One bank coin: the authored pop sheet plays at the wealth odometer, then the real
+## power coin flies from that same point to the gauge. A batch staggers the pop starts so
+## several threshold hits read as a quick succession rather than one blended burst.
+func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> bool:
+	var pop := _make_power_coin_pop()
+	var power_tex := _load_texture("ui/power_coin.png", true)
+	if pop == null and power_tex == null:
+		_apply_power_bank_step(stepd)
+		return false
 	_power_coins_in_flight += 1
+	if pop == null:
+		_start_power_bank_coin_flight(stepd, delay)
+		return true
 	var tw := create_tween()
 	if delay > 0.0:
-		tw.tween_interval(delay) # coin stays invisible (alpha 0) until its flight begins
-	tw.tween_method(_drive_power_coin.bind(coin, _cash_tray_pos(), POWER_BAR_CENTER), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+		tw.tween_interval(delay)
+	tw.tween_method(
+			_drive_power_coin_pop.bind(pop), 0.0, 1.0,
+			float(POWER_COIN_POP_FRAMES) * POWER_COIN_POP_FRAME_TIME)
+	tw.tween_callback(_on_power_coin_pop_finished.bind(pop, stepd))
+	return true
+
+func _on_power_coin_pop_finished(pop: Sprite2D, stepd: Dictionary) -> void:
+	if is_instance_valid(pop):
+		pop.queue_free()
+	_start_power_bank_coin_flight(stepd, 0.0)
+
+func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
+	var coin := _make_power_coin(WEALTH_COIN_ORIGIN)
+	if coin == null:
+		_apply_power_bank_step(stepd)
+		_on_power_coin_landed()
+		return
+	var tw := create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay)
+	tw.tween_method(
+			_drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
+			0.0, 1.0, POWER_COIN_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
 
 func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
@@ -2779,10 +3003,41 @@ func _on_power_coin_landed() -> void:
 		_power_batch_running = false
 		_advance_power_bar() # more lucidity? else presents any queued dealer offer
 
+func _make_power_coin_pop() -> Sprite2D:
+	if _coin_layer == null:
+		return null
+	var tex := _load_texture(POWER_COIN_POP_SHEET, true)
+	if tex == null:
+		return null
+	var pop := Sprite2D.new()
+	pop.texture = tex
+	pop.hframes = POWER_COIN_POP_FRAMES
+	pop.vframes = 1
+	pop.frame = 0
+	pop.centered = false
+	pop.position = Vector2.ZERO
+	pop.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	pop.modulate.a = 0.0
+	_coin_layer.add_child(pop)
+	return pop
+
+func _drive_power_coin_pop(t: float, pop: Sprite2D) -> void:
+	if not is_instance_valid(pop):
+		return
+	var progress := clampf(t, 0.0, 1.0)
+	pop.frame = mini(POWER_COIN_POP_FRAMES - 1,
+		floori(progress * float(POWER_COIN_POP_FRAMES)))
+	if progress < 0.1:
+		pop.modulate.a = progress / 0.1
+	elif progress < 0.82:
+		pop.modulate.a = 1.0
+	else:
+		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
+
 ## Resolve the gauge without animation and clear pending restores (visual only). Used on
 ## the flatline/run-over transition — the gauge itself just holds its current frame.
 func _snap_power_bar() -> void:
-	_power_seen_lucidity = int(RunStateStore.lucidityCoins)
+	_power_seen_lucidity = _power_point_total()
 	_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
@@ -2888,12 +3143,67 @@ func _step_multiplier_fx(delta: float) -> void:
 	if loss_3_active:
 		_combo_loss_3_sprite.frame = (_combo_loss_3_sprite.frame + 1) % COMBO_LOSS_3_FRAMES
 
+func _step_dealer_overlay_beep(delta: float) -> void:
+	var active := false
+	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
+			_dealer_bar_overlay_3]:
+		if overlay != null and (overlay as Sprite2D).visible:
+			active = true
+			break
+	if not active:
+		_dealer_bar_overlay_beep_time = 0.0
+		for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
+				_dealer_bar_overlay_3]:
+			if overlay != null:
+				(overlay as Sprite2D).modulate.a = 1.0
+		return
+	_dealer_bar_overlay_beep_time = fmod(
+		_dealer_bar_overlay_beep_time + delta, DEALER_BAR_OVERLAY_BEEP_PERIOD)
+	var alpha := 1.0
+	if _dealer_bar_overlay_beep_time < DEALER_BAR_OVERLAY_BEEP_TIME:
+		var pulse := sin(PI * _dealer_bar_overlay_beep_time \
+			/ DEALER_BAR_OVERLAY_BEEP_TIME)
+		alpha = lerpf(DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA, 1.0, pulse)
+	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
+			_dealer_bar_overlay_3]:
+		if overlay != null and (overlay as Sprite2D).visible:
+			(overlay as Sprite2D).modulate.a = alpha
+
+func _step_dealer_bar_progress(delta: float) -> void:
+	if not _dealer_bar_frame_initialized or _dealer_bar_sprite == null \
+			or _dealer_bar_display_frame == _dealer_bar_target_frame:
+		_dealer_bar_progress_time = 0.0
+		return
+	_dealer_bar_progress_time += maxf(0.0, delta)
+	if _dealer_bar_progress_time < DEALER_BAR_PROGRESS_FRAME_TIME:
+		return
+	_dealer_bar_progress_time -= DEALER_BAR_PROGRESS_FRAME_TIME
+	var direction := 1 if _dealer_bar_target_frame > _dealer_bar_display_frame else -1
+	_dealer_bar_display_frame += direction
+	_set_dealer_bar_progress_frame(_dealer_bar_display_frame)
+	if _dealer_bar_display_frame == _dealer_bar_target_frame:
+		_dealer_bar_progress_time = 0.0
+
+func _set_dealer_bar_progress_frame(progress_frame: int) -> void:
+	var frame := clampi(progress_frame, 0, DEALER_BAR_FRAME_COUNT - 1)
+	_set_sheet_frame(_dealer_bar_sprite, frame)
+	_set_dealer_overlay_progress_frame(frame)
+
+func _set_dealer_overlay_progress_frame(progress_frame: int) -> void:
+	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
+			_dealer_bar_overlay_3]:
+		if overlay != null:
+			(overlay as Sprite2D).frame = clampi(progress_frame, 0, overlay.hframes - 1)
+
 ## FREE SPINS TV banner: blinks for as long as the NEXT spin is free (banked
 ## free spins or an Energy Drink no-decay rush) and holds until the lever is
 ## pulled — the spin's own state commit consumes the credit and clears it. It is
 ## a passive indicator: it never blocks input.
 func _step_free_spin_blink(delta: float) -> void:
 	if _free_spin_sprite == null or not _free_spin_overlay_active:
+		return
+	if not _tv_info_pop_sources.is_empty():
+		_free_spin_sprite.visible = false
 		return
 	_free_spin_blink_time = fmod(
 		_free_spin_blink_time + delta, FREE_SPIN_OVERLAY_BLINK_PERIOD)
@@ -2908,6 +3218,10 @@ func _refresh_free_spin_banner() -> void:
 	if active and not _free_spin_overlay_active \
 			and (_spinning_anim or _spin_launch_pending or _hud_delta_hold):
 		active = false
+	if not _tv_info_pop_sources.is_empty():
+		if _free_spin_sprite != null:
+			_free_spin_sprite.visible = false
+		return
 	_set_free_spin_display(active)
 
 func _set_free_spin_display(active: bool) -> void:
@@ -3128,6 +3442,7 @@ func _on_power_pressed(id: String) -> void:
 		# reroll / memory pick a single reel.
 		_arm_reel_picker(func(reel_index: int) -> void: _apply_reel_power(id, reel_index))
 	_targeting_power_id = id
+	_show_power_animation(id)
 	_refresh_controls()
 
 # Builds a per-reel picker overlay; each reel button calls cb(reel_index).
@@ -3207,6 +3522,7 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	_refresh_jackpot_lamp()
 
 func _start_reroll_animation(reel_index: int) -> void:
+	_stop_win_animation() # the rerolled reveal supersedes the previous win callout
 	_reroll_anim_active = true
 	_reroll_reel_index = reel_index
 	_reroll_elapsed = 0.0
@@ -3320,6 +3636,7 @@ func _clear_targeting() -> void:
 		_targeting_layer.queue_free()
 		_targeting_layer = null
 	_targeting_power_id = ""
+	_stop_power_animation()
 
 func _score_label(parent: Control, text: String, pos: Vector2, size: int, color: Color,
 		width := 0.0, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
@@ -3801,10 +4118,19 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_begin_serum() # Serum (issue #53): pick the guaranteed symbol first
 		return
 	var lucidity_before := int(RunStateStore.lucidityCoins)
+	var score_before := int(RunStateStore.scoreEarned)
 	var spins_before := _current_display_spins_left()
 	var defeat_was_pending := RunStateStore.comboDefeatPending
 	if not RunStateStore.use_consumable(id):
 		return
+	var direct_score_gain: int = maxi(0, int(RunStateStore.scoreEarned) - score_before)
+	if direct_score_gain > 0:
+		# Direct score events advance the current result in RunStateStore, so keep the
+		# rescore baseline aligned before a power can announce a same-spin delta.
+		if RunStateStore.lastResult is Dictionary:
+			_burst_prev_score = int((RunStateStore.lastResult as Dictionary).get("scoreEarned", 0))
+		else:
+			_burst_prev_score = int(RunStateStore.scoreEarned)
 	# Energy Drink taken during an x3 defeat clears it in the store — drop the
 	# beeping loss overlay and let the normal post-spin tail resume.
 	if defeat_was_pending and not RunStateStore.comboDefeatPending:
@@ -3812,6 +4138,10 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_finish_post_spin_sequence()
 	_refresh_reels_from_state()
 	_update_hud()
+	# Water adds score directly (no score popup carries it), so the odometer
+	# rolls up right here instead of waiting for a reward sequence.
+	if int(RunStateStore.scoreEarned) > _display_lucidity:
+		_set_display_lucidity(int(RunStateStore.scoreEarned))
 	_show_consumable_feedback(id)
 	_play_use_fx(id)
 	_play_consumable_lucidity_feedback(lucidity_before)
@@ -3824,6 +4154,8 @@ func _on_stash_pressed(slot_index: int) -> void:
 			_play_tea_flight(slot_index)
 			_play_spin_gain_fx(spins_gained,
 				Assets.stash_slot_pos(slot_index, max_consumable_slots) - Vector2(0.0, 10.0))
+	if direct_score_gain > 0 and _check_ending():
+		return
 
 func _item_display_name(id: String) -> String:
 	var imap := InRunItems.map()
@@ -3894,11 +4226,8 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	if lucidity_gain <= 0:
 		return
 	_coin_prev_lucidity = target_lucidity
-	_set_sequence_lock(true)
-	var reward_time := _spawn_lucidity_coins(lucidity_gain, target_lucidity)
-	if reward_time > 0.0:
-		await get_tree().create_timer(reward_time).timeout
-	_set_sequence_lock(false)
+	# Consumable Lucidity is an economy value, not wealth. It updates immediately and
+	# never spawns the removed cash-tray-to-wealth coin sequence.
 
 # ── serum symbol picker (issue #53) ──────────────────────────────────────────────
 # Using Serum opens a small overlay listing every reel symbol except brain; the
@@ -3952,8 +4281,12 @@ func _close_serum_picker() -> void:
 		_serum_picker.queue_free()
 	_serum_picker = null
 
+# Centre of the spins tube on the canvas (the authored art spans x 3..18,
+# y 47..105 in its native full-canvas frame): spin-restore fly-ins land here.
+const HEALTH_TUBE_TARGET := Vector2(11.0, 76.0)
+
 ## Tea (issue #53): the restored free spins fly from the used stash slot to the
-## spins-left counter, which pulses as the tea lands.
+## spins tube, which pulses as the tea lands.
 func _play_tea_flight(slot_index: int) -> void:
 	if not consumable_fx_enabled:
 		return
@@ -3971,25 +4304,20 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
-	var target := Vector2(43.0, 82.0) # spins counter fallback
-	var spins_label := _bar_labels.get("life") as Label
-	if spins_label != null:
-		target = spins_label.position
 	var tw := create_tween()
-	tw.tween_property(icon, "position", target, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(icon, "position", HEALTH_TUBE_TARGET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(icon.queue_free)
 	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
 	# travels alongside this icon and lands on the same beat.
 
-## Issue #66: a "+N" popup pops in at `origin` and flies into the spins-left
-## counter. The counter's number is held back (_pending_spin_gain) while the popup
-## is in flight, then ticks up with a pulse exactly when it lands — reward visible,
+## Issue #66: a "+N" popup pops in at `origin` and flies into the spins tube.
+## The tube's fill is held back (_pending_spin_gain) while the popup is in
+## flight, then ticks up with a flash exactly when it lands — reward visible,
 ## value in sync, ~0.7s total so gameplay is not delayed.
 func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> void:
 	if amount <= 0:
 		return
-	var spins_label := _bar_labels.get("life") as Label
-	if not consumable_fx_enabled or spins_label == null or not is_inside_tree():
+	if not consumable_fx_enabled or _health_bar_sprite == null or not is_inside_tree():
 		_update_hud()
 		return
 	_pending_spin_gain += amount
@@ -4012,7 +4340,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> vo
 	gain.scale = Vector2(0.4, 0.4)
 	var tw := create_tween()
 	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(gain, "position", spins_label.position, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(gain, "position", HEALTH_TUBE_TARGET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(_land_spin_gain.bind(amount, gain))
 
 func _land_spin_gain(amount: int, gain: Label) -> void:
@@ -4020,12 +4348,11 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 		gain.queue_free()
 	_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 	_update_hud()
-	var spins_label := _bar_labels.get("life") as Label
-	if spins_label != null:
-		spins_label.pivot_offset = spins_label.size * 0.5
+	if _health_bar_sprite != null and is_instance_valid(_health_bar_sprite):
 		var pulse := create_tween()
-		pulse.tween_property(spins_label, "scale", Vector2(1.3, 1.3), 0.1)
-		pulse.tween_property(spins_label, "scale", Vector2.ONE, 0.14)
+		pulse.tween_property(_health_bar_sprite, "modulate",
+			Color(1.6, 1.6, 1.6), 0.1)
+		pulse.tween_property(_health_bar_sprite, "modulate", Color.WHITE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
@@ -4254,7 +4581,7 @@ func _refresh_energy_fx() -> void:
 
 func _spins_bar_nodes() -> Array:
 	var nodes: Array = []
-	for n in [get_node_or_null("HealthTrack"), _life_fill_sprite, _bar_labels.get("life")]:
+	for n in [_health_bar_sprite]:
 		if n != null and is_instance_valid(n):
 			nodes.append(n)
 	return nodes
@@ -4821,6 +5148,7 @@ func _cleanup_transient_presentation() -> void:
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
+	_stop_win_animation()
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
@@ -4848,6 +5176,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay = Control.new()
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
+	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
 	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the ending presentation.
 	_set_stash_tray_visible(false)
@@ -5005,9 +5334,8 @@ func _clear_wealth_presentation_fx() -> void:
 	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
 		_white_powder_distortion_tween.kill()
 	_white_powder_distortion_tween = null
-	if _lucidity_count_tween != null and _lucidity_count_tween.is_valid():
-		_lucidity_count_tween.kill()
-	_lucidity_count_tween = null
+	if _wealth_odometer != null:
+		_wealth_odometer.stop_roll()
 	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
 		_jackpot_flash_tween.kill()
 	_jackpot_flash_tween = null
@@ -5069,6 +5397,7 @@ func _show_campaign_failed() -> void:
 	_overlay = Control.new()
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
+	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
 	add_child(_overlay)
 	_set_stash_tray_visible(false)
 	_build_game_over_screen()
@@ -5204,15 +5533,22 @@ func _set_stash_elevated(elevated: bool) -> void:
 		tray.z_index = DEALER_STASH_Z_INDEX if elevated else STASH_TRAY_Z_INDEX
 
 func _set_tv_progress_bars_visible(visible: bool) -> void:
+	if not visible and not _tv_info_pop_sources.is_empty():
+		_tv_info_pop_restore_dealer_bar_visible = false
+		_tv_info_pop_restore_dealer_icon_visible = false
 	for node_name: String in [
-		"WealthTrack", "WealthFill", "HealthTrack", "HealthFill", "GoalLabel", "HealthLabel",
-		"DealerIcon"]:
+		"WealthOdometer", "HealthBar", "DealerBar", "DealerBarOverlay1",
+		"DealerBarOverlay2", "DealerBarOverlay3", "DealerIcon"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:
 			node.visible = visible
-	# The FREE SPINS banner re-derives from state on the next HUD refresh.
+	# The FREE SPINS banner re-derives from state on the next HUD refresh; a
+	# mid-flight coin drop never outlives the bars it belongs to.
 	if not visible:
+		_cancel_coin_insert()
 		_set_free_spin_display(false)
+	elif not _tv_info_pop_sources.is_empty():
+		_hide_tv_info_layers()
 
 func _end_run_lucidity_kept_fraction() -> float:
 	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
