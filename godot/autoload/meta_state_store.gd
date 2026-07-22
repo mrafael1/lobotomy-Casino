@@ -135,16 +135,14 @@ func bank_run(run: Dictionary, ending: String) -> void:
 	for key in prev_history:
 		if not next_history.has(key):
 			next_history[key] = prev_history[key]
-	var tier := "classic"
-	if run_store != null and String(run_store.augmentedTier) != "":
-		tier = String(run_store.augmentedTier)
+	var tier := _current_run_tier()
 	var runs_by_tier: Dictionary = (next_history.get("runsByTier", {}) as Dictionary).duplicate(true)
 	runs_by_tier[tier] = int(runs_by_tier.get(tier, 0)) + 1
 	next_history["runsByTier"] = runs_by_tier
+	# Tier wins are registered in mark_ending_reached (the moment the goal is
+	# hit), not here: the wealth bank is deferred to the Start Again button, and
+	# a wealth CONTINUE later banks as "flatline" — both would drop the win.
 	if ending == "wealth":
-		var wins_by_tier: Dictionary = (next_history.get("winsByTier", {}) as Dictionary).duplicate(true)
-		wins_by_tier[tier] = int(wins_by_tier.get(tier, 0)) + 1
-		next_history["winsByTier"] = wins_by_tier
 		if not next_history.has("wealthEndingPlaytimeMs"):
 			next_history["wealthEndingPlaytimeMs"] = int(next_history.get("playtimeMs", 0))
 	elif ending == "exit" and not next_history.has("exitEndingPlaytimeMs"):
@@ -247,6 +245,15 @@ func mark_ending_reached(ending: String) -> void:
 		wealthEndingReached = true
 		campaignActive = false
 		campaignFailed = false
+		# Win counter (issue #142): the win is counted for the active tier the
+		# moment the goal is reached. Banking can't own this — the wealth bank
+		# waits for Start Again (a quit there never banks), and a wealth
+		# CONTINUE that later dies banks as "flatline".
+		var tier := _current_run_tier()
+		var wins_by_tier: Dictionary = (history.get("winsByTier", {}) as Dictionary).duplicate(true)
+		wins_by_tier[tier] = int(wins_by_tier.get(tier, 0)) + 1
+		history = history.duplicate(true)
+		history["winsByTier"] = wins_by_tier
 		if not history.has("wealthEndingReachedAt"):
 			history = history.duplicate(true)
 			history["wealthEndingReachedAt"] = _now_ms()
@@ -290,6 +297,16 @@ func _flush_playtime() -> void:
 func total_playtime_ms() -> int:
 	_flush_playtime()
 	return int(history.get("playtimeMs", 0))
+
+# The tier the current run counts under: the augmented suit when one is armed,
+# "classic" otherwise. The run store is looked up at runtime: save_checks
+# compiles this script outside the autoload context, where the RunStateStore
+# identifier doesn't resolve.
+func _current_run_tier() -> String:
+	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	if run_store != null and String(run_store.augmentedTier) != "":
+		return String(run_store.augmentedTier)
+	return "classic"
 
 func tier_wins(tier: String) -> int:
 	return int((history.get("winsByTier", {}) as Dictionary).get(tier, 0))

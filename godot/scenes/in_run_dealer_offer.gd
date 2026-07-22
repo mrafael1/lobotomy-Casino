@@ -24,8 +24,13 @@ const HANDS_SCALE := 1.0
 # badges (issue #24 follow-up). Stash icons reuse the shared Assets.STASH_ICON_SIZE so
 # they match the machine scene stash.
 const ICON_SIZE := 16.0
-const TAP_WAIT := 0.25
-const TAP_FINAL_WAIT := 0.35
+# TAP TAP TAP warning timing: each tap must stay readable, but the whole warning
+# has to clear well under a second so it never stalls the dealer's entrance.
+const TAP_COUNT := 3
+const TAP_ENTRY_TIME := 0.04   # fade/scale in
+const TAP_EXIT_TIME := 0.08    # fade out
+const TAP_WAIT := 0.08         # gap between taps
+const TAP_FINAL_WAIT := 0.12   # beat before the dealer slides in
 const ENTRY_TRANS := Tween.TRANS_BACK
 const ENTRY_EASE := Tween.EASE_OUT
 const ENTRY_TIME := 0.32
@@ -629,7 +634,7 @@ func _position_item_stage_buttons() -> void:
 		_ignore_action_button.position = Vector2((SRC_W - _ignore_action_button.size.x) * 0.5, SRC_H - 44.0)
 
 func _play_tap_warning() -> void:
-	for i in 3:
+	for i in TAP_COUNT:
 		if _finishing or not is_inside_tree():
 			return
 		_tap_label.text = "tap"
@@ -637,11 +642,11 @@ func _play_tap_warning() -> void:
 		_tap_label.modulate = Color(1, 1, 1, 0)
 		_tap_label.scale = Vector2(0.7, 0.7)
 		var tw := create_tween()
-		tw.tween_property(_tap_label, "modulate:a", 1.0, 0.04)
-		tw.parallel().tween_property(_tap_label, "scale", Vector2(1.15, 1.15), 0.06)
-		tw.tween_property(_tap_label, "modulate:a", 0.0, 0.14)
+		tw.tween_property(_tap_label, "modulate:a", 1.0, TAP_ENTRY_TIME)
+		tw.parallel().tween_property(_tap_label, "scale", Vector2(1.15, 1.15), TAP_ENTRY_TIME)
+		tw.tween_property(_tap_label, "modulate:a", 0.0, TAP_EXIT_TIME)
 		await tw.finished
-		await get_tree().create_timer(TAP_FINAL_WAIT if i == 2 else TAP_WAIT).timeout
+		await get_tree().create_timer(TAP_FINAL_WAIT if i == TAP_COUNT - 1 else TAP_WAIT).timeout
 	_tap_label.visible = false
 
 func _setup_items(items: Array) -> void:

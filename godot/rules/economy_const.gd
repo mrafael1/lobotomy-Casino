@@ -7,7 +7,7 @@ extends RefCounted
 # One spin currency: 1 neuron = 1 spin (issue #85). STARTING_NEURONS is the
 # intended base run length, matching the run_spin_length hard cap, so the neuron
 # pool and the cap agree on "how long a run lasts."
-const STARTING_NEURONS := 35
+const STARTING_NEURONS := 15
 const NEURON_DECAY_PER_SPIN := 1
 const MIN_NEURONS_TO_SPIN := 1
 const MAX_NEURONS := 35
