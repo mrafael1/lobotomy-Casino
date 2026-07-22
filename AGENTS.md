@@ -140,7 +140,8 @@ Resources and currencies:
 
 - The in-run dealer runs on a fixed countdown starting/resetting at 12 (the club
   modifier doubles it to 24). Every spin advances it by 3/2/1 at x1/x2/x3; the
-  authored bar walks through each intermediate frame toward its final arrival
+  authored 13-frame bar normalizes either countdown across its full range and
+  walks through each intermediate frame toward its final arrival
   frame. Its warning lights use the matching countdown-progress frame, beep with
   an alpha pulse, and appear cumulatively only after the current spin's result
   (x3: overlay 1; x2: overlays 1+2; x1: overlays 1+2+3). They remain visible

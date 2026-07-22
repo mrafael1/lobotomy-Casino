@@ -1169,10 +1169,10 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				lucidityCoins = int(plan["lucidityCoins"])
 				abilitiesUsed = plan["abilitiesUsed"]
 				pendingPowerRestores.append_array(plan["restores"])
-				# Water's refresh also counts toward the run score, so the wealth
-				# odometer advances when it is drunk (the score-fed power gauge
-				# picks the gain up through its normal per-frame poll).
-				scoreEarned += int(e["amount"])
+				# Water is a direct score event as well as a Lucidity refresh. Keep the
+				# current result's running score in sync so a same-spin power only pops
+				# its own gain after the drink has been used.
+				_apply_direct_score_gain(int(e["amount"]))
 			"cocktailBoost":
 				cocktailBoostSpins += int(e["spins"])
 				cocktailPairTriplePenalty = float(e.get("pairTriplePenalty", 0.0))
@@ -1230,6 +1230,20 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 # Purchases are staged (undoable) while the screen is open, then committed into
 # MetaStateStore.oddsUpgrades on finalize. Base weights stay parity-locked
 # (see Evaluate._build_weights).
+
+## Commit score earned outside the normal spin outcome pipeline. The current
+## result carries the running score used by machine_scene's rescore burst delta,
+## so direct score events must advance both values together.
+func _apply_direct_score_gain(score_gain: int) -> void:
+	var gain: int = maxi(0, score_gain)
+	if gain <= 0:
+		return
+	scoreEarned += gain
+	if not lastResult is Dictionary:
+		return
+	var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
+	updated_result["scoreEarned"] = maxi(0, int(updated_result.get("scoreEarned", 0)) + gain)
+	lastResult = updated_result
 
 ## Opens the odds phase between runs: grants the fresh token budget on top of any
 ## tokens banked unspent from previous menus (issue #50), and clears staged
