@@ -29,7 +29,7 @@ const DEALER_REROLL_BASE_COST := 5
 ## Pacte owns the variable power loadout. Reroll is the permanent hero power and
 ## never comes from the selectable deck. Legacy callers may skip the ritual for
 ## compatibility; the player-facing start menu always passes open_pacte=true.
-const PACTE_THRESHOLD_NEURONS := 5
+const PACTE_THRESHOLD_SPINS := 5
 const PACTE_INITIAL_DRAW_SEED := 0x50414354
 const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
 const HERO_POWER_IDS: Array[String] = ["reroll"]
@@ -768,8 +768,8 @@ func spin(compulsive := false) -> Variant:
 	# Issue #76: the charge is spent only when a win actually consumed it above.
 	if flatline_boost_applied:
 		flatlineWinBoostArmed = false
-	if neurons_before_spin > PACTE_THRESHOLD_NEURONS \
-			and neurons <= PACTE_THRESHOLD_NEURONS and not pacteThresholdOpened:
+	if neurons_before_spin > PACTE_THRESHOLD_SPINS \
+			and neurons <= PACTE_THRESHOLD_SPINS and not pacteThresholdOpened:
 		pacteThresholdPending = true
 
 	_commit()
@@ -1502,8 +1502,20 @@ func heart_power(heart_count: int = -1) -> bool:
 	var reels: Array = lastResult["reels"] as Array
 	var count := reels.size() if heart_count < 0 else heart_count
 	var outcome := Abilities.apply_heart(reels, count)
-	return _apply_revealed_power_outcome(outcome, "heart",
-			_seed(spinCount * 0x6d2b79f5 + 0x0EA7), int(outcome.get("neuronsDelta", 0)))
+	if not _apply_revealed_power_outcome(outcome, "heart",
+			_seed(spinCount * 0x6d2b79f5 + 0x0EA7), int(outcome.get("neuronsDelta", 0))):
+		return false
+	# Heart changes the visible symbols now. The player must pull the lever for the
+	# follow-up action, and that next spin is free instead of spending a neuron.
+	freeSpinsRemaining += 1
+	freeSpinGrantSerial += 1
+	if lastResult is Dictionary:
+		var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
+		updated_result["freeSpinsAfter"] = freeSpinsRemaining
+		updated_result["freeSpinsGranted"] = int(updated_result.get("freeSpinsGranted", 0)) + 1
+		lastResult = updated_result
+	_commit()
+	return true
 
 func use_heart_power(heart_count: int = -1) -> bool:
 	return heart_power(heart_count)

@@ -205,6 +205,8 @@ const DEBUG_GRANT := false
 
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
+const HEART_SYMBOL_ASSET := "machine new view/chip_power.png"
+const HEART_SYMBOL_RECT := Rect2(77.0, 223.0, 13.0, 15.0)
 
 # Score-burst (score-burst presentation). Visual only.
 const BURST_TIME := 1.05
@@ -565,6 +567,12 @@ var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
 var _cheat_reel := -1
 var _move_source := -1
+var _move_drag_active := false
+var _move_dragging := false
+var _move_drag_button: Button = null
+var _move_drag_ghost: Sprite2D = null
+var _move_drag_press := Vector2.ZERO
+var _move_drag_hint_tween: Tween = null
 var _rubble_overlay: ColorRect = null
 var _dealer_drag_active := false
 var _dealer_drag_node: Control = null
@@ -627,7 +635,7 @@ var _flatline_kept := 0
 var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
-var _campaign_label: Label = null
+var _spin_label: Label = null
 var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
 var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
@@ -1482,9 +1490,19 @@ func _reel_neighbours(sym: String) -> Dictionary:
 	return { "top": cyc[(i - 1 + n) % n], "bottom": cyc[(i + 1) % n] }
 
 func _apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
+	if symbol_id == "heart":
+		var heart_tex := _load_texture(HEART_SYMBOL_ASSET, true)
+		if heart_tex == null:
+			return
+		s.texture = heart_tex
+		s.region_enabled = true
+		s.region_rect = HEART_SYMBOL_RECT
+		s.scale = Vector2.ONE
+		return
 	var tex := _load_texture("symbols/%s.png" % symbol_id, true) # mipmaps for crisp downscale
 	if tex == null:
 		return
+	s.region_enabled = false
 	s.texture = tex
 	var k := minf(1.0, target_h / float(tex.get_height()))
 	s.scale = Vector2(k, k)
@@ -1505,7 +1523,7 @@ func _apply_adjacent_symbol_visibility(index: int) -> void:
 
 func _build_hud() -> void:
 	_build_score_button()
-	_build_campaign_label()
+	_build_spin_label()
 	_build_hint_layer()
 	_build_dealer_icon()
 
@@ -1675,7 +1693,7 @@ func _refresh_score_button_lock() -> void:
 		or _dealer_offer_popup != null
 	_set_score_button_locked(locked)
 
-func _build_campaign_label() -> void:
+func _build_spin_label() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
 	if bottom_hud == null:
 		bottom_hud = Control.new()
@@ -1685,32 +1703,33 @@ func _build_campaign_label() -> void:
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
-	_campaign_label = bottom_hud.get_node_or_null("neuron_number") as Label
+	_spin_label = bottom_hud.get_node_or_null("spin_number") as Label
 	var legacy_label := get_node_or_null("neuron_number") as Label
-	if _campaign_label == null and legacy_label != null:
+	if _spin_label == null and legacy_label != null:
 		legacy_label.reparent(bottom_hud)
-		_campaign_label = legacy_label
-	if _campaign_label == null:
-		_campaign_label = Label.new()
-		_campaign_label.name = "neuron_number"
-		bottom_hud.add_child(_campaign_label)
-		_campaign_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		_campaign_label.offset_left = -46.5
-		_campaign_label.offset_top = -14.0
-		_campaign_label.offset_right = 46.5
-		_campaign_label.offset_bottom = -4.0
-	_campaign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_campaign_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_campaign_label.add_theme_font_size_override("font_size", 6)
+		legacy_label.name = "spin_number"
+		_spin_label = legacy_label
+	if _spin_label == null:
+		_spin_label = Label.new()
+		_spin_label.name = "spin_number"
+		bottom_hud.add_child(_spin_label)
+		_spin_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_spin_label.offset_left = -46.5
+		_spin_label.offset_top = -14.0
+		_spin_label.offset_right = 46.5
+		_spin_label.offset_bottom = -4.0
+	_spin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_spin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_spin_label.add_theme_font_size_override("font_size", 6)
 	if _font != null:
-		_campaign_label.add_theme_font_override("font", _font)
-	_campaign_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
-	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_campaign_label.add_theme_constant_override("outline_size", 1)
-	_campaign_label.text = ""
-	# The neuron meter no longer lives on the in-run HUD — it shows on the start
-	# menu and the flatline overlay only. The label stays as the feedback anchor.
+		_spin_label.add_theme_font_override("font", _font)
+	_spin_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
+	_spin_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_spin_label.add_theme_constant_override("outline_size", 1)
+	_spin_label.text = ""
+	# The campaign neuron meter belongs to the menu and flatline overlay. The
+	# machine HUD's empty anchor is explicitly named for the run's spin counter.
 
 func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
@@ -2478,7 +2497,7 @@ func _update_hud() -> void:
 		_set_tv_progress_bars_visible(false)
 		return
 	_refresh_tv_indicators()
-	_refresh_campaign_label()
+	_refresh_spin_label()
 	_refresh_controls()
 	_refresh_consumable_fx()
 
@@ -2494,11 +2513,11 @@ func _release_hud_delta_hold() -> void:
 	_update_hud()
 	_refresh_jackpot_lamp()
 
-# The authored neuron_number Label stays as an anchor/editor placeholder and
-# renders no text; the neuron meter lives on the start menu / flatline overlay.
-func _refresh_campaign_label() -> void:
-	if _campaign_label != null:
-		_campaign_label.text = ""
+# The authored spin_number Label stays as an anchor/editor placeholder and
+# renders no text; the live number is the SPINS LEFT readout under the tube.
+func _refresh_spin_label() -> void:
+	if _spin_label != null:
+		_spin_label.text = ""
 
 # "-1 NEURON" popup — flatline/neuron-loss overlay only. Spawns above the overlay's
 # neuron meter, timed with its losing pop.
@@ -3548,16 +3567,22 @@ func _use_rewind_power() -> void:
 
 func _use_heart_power() -> void:
 	var was_pending := RunStateStore.comboDefeatPending
-	_flash_power_rubble()
 	if not RunStateStore.heart_power():
 		_refresh_controls()
 		return
 	_pending_combo_power_flow = was_pending
 	_maybe_cancel_combo_defeat_warning(was_pending)
+	_pending_combo_power_flow = false
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	_play_reward_sequence(0, true)
+	# Heart is a preparation action: the symbols change immediately, but the free
+	# follow-up is only taken when the player pulls the lever.
+	if was_pending and RunStateStore.comboDefeatPending:
+		_show_pending_combo_defeat()
+	else:
+		_set_sequence_lock(false)
+	_refresh_controls()
 
 func _arm_cheat_targets() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_cheat_reel_pick(reel_index))
@@ -3598,35 +3623,147 @@ func _on_cheat_symbol_pick(symbol_id: String) -> void:
 	_cheat_reel = -1
 
 func _arm_move_source() -> void:
-	_flash_power_rubble()
-	_arm_reel_picker(func(reel_index: int) -> void: _on_move_source_pick(reel_index))
-
-func _on_move_source_pick(reel_index: int) -> void:
-	_move_source = reel_index
 	_clear_targeting()
 	_targeting_power_id = "move"
 	_show_power_animation("move")
 	_targeting_layer = Control.new()
-	_targeting_layer.name = "MoveDestinationPicker"
+	_targeting_layer.name = "MoveSymbolDragLayer"
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
-	var selection := _build_control_grid_sheet_on(_targeting_layer,
-		"machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	for i in 3:
-		var destination := i
-		var b := _make_hit_button({
-			"left": REEL_CELL_CENTERS[destination] - 12.0,
-			"top": REEL_WINDOW["top"] - 8.0,
-			"width": 24.0, "height": REEL_WINDOW["height"] + 16.0,
-		}, func() -> void: _on_move_destination_pick(destination))
-		if selection != null:
-			b.button_down.connect(_set_sheet_frame.bind(selection, destination + 1))
-		_targeting_layer.add_child(b)
+		_build_move_rubble_hint(i)
+		var hole: Dictionary = REEL_HOLES[i]
+		var button := Button.new()
+		button.name = "MoveSymbol%d" % i
+		button.position = Vector2(float(hole["left"]) - 2.0, float(hole["top"]) - 2.0)
+		button.size = Vector2(float(hole["width"]) + 4.0, float(hole["height"]) + 4.0)
+		button.flat = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.mouse_default_cursor_shape = Control.CURSOR_DRAG
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		button.gui_input.connect(_on_move_symbol_gui_input.bind(i, button))
+		_targeting_layer.add_child(button)
+	_move_drag_hint_tween = create_tween().set_loops()
+	_move_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 0.58, 0.34)
+	_move_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 1.0, 0.34)
 
-func _on_move_destination_pick(destination: int) -> void:
+func _build_move_rubble_hint(reel_index: int) -> void:
+	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
+		return
+	var hole: Dictionary = REEL_HOLES[reel_index]
+	var origin := Vector2(float(hole["left"]), float(hole["top"]))
+	var base := ColorRect.new()
+	base.name = "MoveRubbleHint%d" % reel_index
+	base.position = origin
+	base.size = Vector2(float(hole["width"]), float(hole["height"]))
+	base.color = Color(0.73, 0.5, 0.22, 0.14)
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	base.z_index = -1
+	_targeting_layer.add_child(base)
+	var shards: Array[Dictionary] = [
+		{"position": Vector2(2.0, 4.0), "size": Vector2(5.0, 2.0)},
+		{"position": Vector2(13.0, 8.0), "size": Vector2(4.0, 2.0)},
+		{"position": Vector2(7.0, 23.0), "size": Vector2(6.0, 2.0)},
+	]
+	for shard_data: Dictionary in shards:
+		var shard := ColorRect.new()
+		shard.position = origin + shard_data["position"]
+		shard.size = shard_data["size"]
+		shard.color = Color(1.0, 0.78, 0.36, 0.3)
+		shard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shard.z_index = -1
+		_targeting_layer.add_child(shard)
+
+func _on_move_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			var local_position := (event as InputEventMouseButton).position
+			_begin_move_drag(reel_index, button,
+				button.get_global_transform_with_canvas() * local_position)
+	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
+			var touch_position := (event as InputEventScreenTouch).position
+			_begin_move_drag(reel_index, button,
+				button.get_global_transform_with_canvas() * touch_position)
+
+func _begin_move_drag(reel_index: int, button: Button, global_position: Vector2) -> void:
+	if _move_drag_active or _targeting_layer == null:
+		return
+	var result: Variant = RunStateStore.lastResult
+	if not result is Dictionary:
+		return
+	var reels: Array = result["reels"] as Array
+	if reel_index < 0 or reel_index >= reels.size():
+		return
+	_move_drag_active = true
+	_move_dragging = false
+	_move_source = reel_index
+	_move_drag_button = button
+	_move_drag_press = global_position
+	_move_drag_ghost = Sprite2D.new()
+	_move_drag_ghost.name = "MoveDraggedSymbol"
+	_move_drag_ghost.centered = true
+	_move_drag_ghost.z_index = 5
+	_move_drag_ghost.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	_move_drag_ghost.position = _targeting_local_position(global_position)
+	_apply_symbol(_move_drag_ghost, String(reels[reel_index]), STRIP_CENTER_H)
+	_move_drag_ghost.visible = false
+	_targeting_layer.add_child(_move_drag_ghost)
+
+func _update_move_drag(global_position: Vector2) -> void:
+	if not _move_drag_active or _move_drag_button == null:
+		return
+	if not _move_dragging and global_position.distance_to(_move_drag_press) <= 4.0:
+		return
+	_move_dragging = true
+	_move_drag_button.modulate.a = 0.35
+	if _move_drag_ghost != null:
+		_move_drag_ghost.visible = true
+		var local_grab := _move_drag_button.get_global_transform_with_canvas().affine_inverse() * global_position
+		var grab_delta := local_grab - _move_drag_button.size * 0.5
+		_move_drag_ghost.position = _targeting_local_position(global_position) - grab_delta
+
+func _finish_move_drag(global_position: Vector2) -> void:
 	var source := _move_source
+	var was_dragging := _move_dragging
+	var target := _move_target_at(global_position)
+	_cancel_move_drag_gesture()
+	if not was_dragging or target < 0 or target == source:
+		return
+	_on_move_destination_pick(target, source)
+
+func _cancel_move_drag_gesture() -> void:
+	_move_drag_active = false
+	_move_dragging = false
+	if _move_drag_button != null:
+		_move_drag_button.modulate = Color.WHITE
+	_move_drag_button = null
+	if _move_drag_ghost != null and is_instance_valid(_move_drag_ghost):
+		_move_drag_ghost.queue_free()
+	_move_drag_ghost = null
+	_move_drag_press = Vector2.ZERO
+	_move_source = -1
+
+func _targeting_local_position(global_position: Vector2) -> Vector2:
+	if _targeting_layer == null:
+		return to_local(global_position)
+	return _targeting_layer.get_global_transform_with_canvas().affine_inverse() * global_position
+
+func _move_target_at(global_position: Vector2) -> int:
+	var local_position := to_local(global_position)
+	for i in REEL_HOLES.size():
+		var hole: Dictionary = REEL_HOLES[i]
+		var rect := Rect2(float(hole["left"]), float(hole["top"]),
+			float(hole["width"]), float(hole["height"])).grow(4.0)
+		if rect.has_point(local_position):
+			return i
+	return -1
+
+func _on_move_destination_pick(destination: int, source_override: int = -1) -> void:
+	var source := _move_source if source_override < 0 else source_override
 	var was_pending := RunStateStore.comboDefeatPending
 	_clear_targeting()
 	if not RunStateStore.move_symbol(source, destination):
@@ -3853,6 +3990,10 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
+	if _move_drag_hint_tween != null and _move_drag_hint_tween.is_valid():
+		_move_drag_hint_tween.kill()
+	_move_drag_hint_tween = null
+	_cancel_move_drag_gesture()
 	if _targeting_layer != null:
 		_targeting_layer.queue_free()
 		_targeting_layer = null
@@ -5996,6 +6137,24 @@ func _input(event: InputEvent) -> void:
 		_close_score_table()
 		get_viewport().set_input_as_handled()
 		return
+	if _move_drag_active:
+		if event is InputEventMouseMotion:
+			_update_move_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
+				and not event.pressed:
+			_finish_move_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventScreenDrag and event.index == 0:
+			_update_move_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventScreenTouch and event.index == 0 and not event.pressed:
+			_finish_move_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
 	if not _dealer_drag_active:
 		return
 	if event is InputEventMouseMotion:

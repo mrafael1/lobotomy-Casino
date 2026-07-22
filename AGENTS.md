@@ -49,8 +49,9 @@ Resources and currencies:
 
 - **Campaign neurons (lives)** — a campaign grants 10; each run attempt spends
   one. Exhausting them ends the campaign fatally (Game Over).
-- **Run neurons (spins)** — a fresh run starts with 20; 1 neuron = 1 spin and each
-  spin decays 1 neuron unless protected. Restores cap at 35 (105 after a Wealth
+- **Run spins** — the serialized run field is still `neurons` for save/parity
+  compatibility, but the machine presents it as spins. A fresh run starts with 20;
+  each spin spends 1 run spin unless protected. Restores cap at 35 (105 after a Wealth
   continuation). The machine prints the current remaining-spin number under the
   neuron tube; it updates whenever spins are gained, spent, or protected and
   keeps counting past the tube art's 17-notch cap.
@@ -126,7 +127,8 @@ Resources and currencies:
   a deterministic 1–3 spent power chips. It is unavailable without spin history
   or while another sequence is active.
 - **Heart** — replaces one, two, or three revealed symbols with hearts for
-  +1/+2/+3 neurons and +10/+20/+30 score.
+  +1/+2/+3 run spins, never awards bonus score, and arms one free follow-up
+  spin that the player must start with the lever.
 - **Cheat** — rubble-flashes the revealed symbols, then replaces one selected
   reel with a symbol chosen from the existing symbol chooser.
 - **Move** — rubble-flashes the revealed symbols, then moves a selected symbol to
@@ -180,7 +182,7 @@ Resources and currencies:
 
 ### Free spins, losses, and compulsions
 
-- Free spins never cost neurons. The bank caps at 1 (3 when upgraded); a jackpot
+- Free spins never cost run spins. The bank caps at 1 (3 when upgraded); a jackpot
   grants 1. The FREE SPIN banner covers banked credits and Energy Drink's
   protected spins.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
@@ -203,7 +205,7 @@ Resources and currencies:
 - **Wealth** — 2,000 score. Wealth banking waits for the player's choice; the run
   can be continued once past Wealth (higher neuron cap, ends only by flatline).
   All three ending presentations draw above the machine HUD art.
-- **Flatline** — 0 neurons with no banked free spins. Keeps 10% of run Lucidity
+- **Flatline** — 0 run spins with no banked free spins. Keeps 10% of run Lucidity
   (20% with Smart Save, spade halves it) into the wallet.
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.

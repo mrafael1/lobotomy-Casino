@@ -238,11 +238,12 @@ static func check_pacte_deck_and_powers(out: Array) -> void:
 	var one_heart := Abilities.resolve_hearts(1)
 	var three_hearts := Abilities.resolve_hearts(3)
 	if not deep_equal(one_heart, {
-			"heartCount": 1, "neuronsDelta": 1, "scoreDelta": 10,
-			"coinsDelta": 10, "winType": "heart"}):
+			"heartCount": 1, "neuronsDelta": 1, "scoreDelta": 0,
+			"coinsDelta": 0, "winType": "heart"}):
 		_fail(out, "Heart one-heart outcome", one_heart, "one heart payout")
-	if int(three_hearts["neuronsDelta"]) != 3 or int(three_hearts["scoreDelta"]) != 30:
-		_fail(out, "Heart three-heart outcome", three_hearts, "3 neurons / 30 score")
+	if int(three_hearts["neuronsDelta"]) != 3 or int(three_hearts["scoreDelta"]) != 0 \
+			or int(three_hearts["coinsDelta"]) != 0:
+		_fail(out, "Heart three-heart outcome", three_hearts, "3 neurons / 0 score")
 	var cheat := Abilities.apply_cheat(["brain", "eye", "pill"], 1, "brain", 1.0)
 	if not (cheat["reels"] as Array).has("brain") or String((cheat["reels"] as Array)[1]) != "brain":
 		_fail(out, "Cheat symbol replacement", cheat, "brain/brain/pill")

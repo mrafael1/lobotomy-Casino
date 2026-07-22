@@ -11,6 +11,9 @@ const CARD_POSITIONS: Array[Vector2] = [
 ]
 const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
 const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
+const CHOSEN_CARD_MARGIN := 2.0
+const SELECTION_PREVIEW_TIME := 0.24
 const BG_ASSET := "pacte_scene/pacte_scene.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
@@ -26,6 +29,7 @@ const DRAG_SLOP := 4.0
 var _background: Sprite2D = null
 var _emplacement: Sprite2D = null
 var _selected_overlay: Sprite2D = null
+var _chosen_cards_layer: Control = null
 var _description_bubble: Panel = null
 var _description_title: Label = null
 var _description_text: Label = null
@@ -39,6 +43,7 @@ var _exit_button: Button = null
 
 var _card_buttons: Dictionary = {}
 var _card_views: Dictionary = {}
+var _chosen_card_views: Dictionary = {}
 var _revealed: Dictionary = {}
 var _offer_ids: Array[String] = []
 var _pool_kind := "augment"
@@ -50,6 +55,8 @@ var _drag_index := -1
 var _drag_origin := Vector2.ZERO
 var _press_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
+var _drag_origin_z := 0
+var _selection_locked := false
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -72,6 +79,13 @@ func _build_background() -> void:
 	_selected_overlay.hframes = 3
 	_selected_overlay.visible = false
 	add_child(_selected_overlay)
+	_chosen_cards_layer = Control.new()
+	_chosen_cards_layer.name = "ChosenCardsLayer"
+	_chosen_cards_layer.position = Vector2.ZERO
+	_chosen_cards_layer.size = CANVAS_SIZE
+	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chosen_cards_layer.z_index = 4
+	add_child(_chosen_cards_layer)
 
 func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	var sprite := Sprite2D.new()
@@ -123,9 +137,14 @@ func _restore_saved_selection() -> void:
 		_cancel_button.visible = false
 		_exit_button.visible = false
 		return
+	if not RunStateStore.selectedAugmentCardIds.is_empty():
+		_show_chosen_card(String(RunStateStore.selectedAugmentCardIds.back()), "augment")
+	if not RunStateStore.selectedPowerCardIds.is_empty():
+		_show_chosen_card(String(RunStateStore.selectedPowerCardIds.back()), "power")
 	var saved_augment := String(RunStateStore.pacteSelectedAugmentId)
 	if saved_augment != "":
 		_chosen_augment_id = saved_augment
+		_show_chosen_card(saved_augment, "augment")
 		_pool_kind = "power"
 		_set_emplacement(POWER_EMPLACEMENT_ASSET)
 		_show_pool(_pool_kind, _offer_array(RunStateStore.pacteOfferPowerIds))
@@ -143,6 +162,54 @@ func _set_emplacement(asset: String) -> void:
 	if _emplacement == null:
 		return
 	_emplacement.texture = Assets.texture(asset)
+
+func _show_chosen_card(card_id: String, kind: String) -> void:
+	if _chosen_cards_layer == null or card_id == "":
+		return
+	var existing := _chosen_card_views.get(kind, null) as Control
+	if existing != null and is_instance_valid(existing):
+		existing.queue_free()
+	var card := _make_minimized_card_view(card_id, kind)
+	if card == null:
+		return
+	card.name = "Chosen%sCard" % kind.capitalize()
+	var drop_rect := AUGMENT_DROP_RECT if kind == "augment" else POWER_DROP_RECT
+	card.position = drop_rect.position + (drop_rect.size - CHOSEN_CARD_SIZE) * 0.5
+	_chosen_cards_layer.add_child(card)
+	_chosen_card_views[kind] = card
+
+func _make_minimized_card_view(card_id: String, kind: String) -> Control:
+	var entry := PacteCards.card(card_id)
+	if entry.is_empty():
+		return null
+	var card := Control.new()
+	card.size = CHOSEN_CARD_SIZE
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var front := TextureRect.new()
+	front.name = "Front"
+	front.texture = _atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
+		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
+	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	front.stretch_mode = TextureRect.STRETCH_SCALE
+	front.position = Vector2.ZERO
+	front.size = CHOSEN_CARD_SIZE
+	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(front)
+	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon := TextureRect.new()
+	icon.name = "Icon"
+	icon.texture = _atlas(String(entry.get("sheet", "")), icon_rect)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_SCALE
+	var available := CHOSEN_CARD_SIZE - Vector2(CHOSEN_CARD_MARGIN * 2.0, CHOSEN_CARD_MARGIN * 2.0)
+	var icon_scale := minf(available.x / maxf(1.0, icon_rect.size.x),
+		available.y / maxf(1.0, icon_rect.size.y))
+	var icon_size := icon_rect.size * icon_scale
+	icon.size = icon_size
+	icon.position = (CHOSEN_CARD_SIZE - icon_size) * 0.5
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(icon)
+	return card
 
 func _show_pool(kind: String, ids: Array[String]) -> void:
 	_pool_kind = kind
@@ -167,6 +234,7 @@ func _build_card(card_id: String, index: int) -> void:
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.z_index = 10
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	button.gui_input.connect(_on_card_gui_input.bind(card_id, index, button))
@@ -248,9 +316,13 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			_begin_drag(card_id, index, button, (event as InputEventMouseButton).position)
+			var local_position := (event as InputEventMouseButton).position
+			_begin_drag(card_id, index, button,
+				button.get_global_transform_with_canvas() * local_position)
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-		_begin_drag(card_id, index, button, (event as InputEventScreenTouch).position)
+			var touch_position := (event as InputEventScreenTouch).position
+			_begin_drag(card_id, index, button,
+				button.get_global_transform_with_canvas() * touch_position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -273,6 +345,9 @@ func _begin_drag(card_id: String, index: int, button: Button,
 		global_position: Vector2) -> void:
 	_press_position = global_position
 	_drag_origin = button.position
+	_drag_origin_z = button.z_index
+	button.z_index = 30
+	button.move_to_front()
 	_drag_offset = button.get_global_transform_with_canvas().affine_inverse() * global_position
 	_drag_id = card_id
 	_drag_index = index
@@ -301,6 +376,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	if button == null:
 		return
 	button.position = _drag_origin
+	button.z_index = _drag_origin_z
 	if not was_dragging:
 		_preview_card(card_id)
 		return
@@ -337,14 +413,29 @@ func _preview_card(card_id: String) -> void:
 		_selected_overlay.frame = _offer_ids.find(card_id)
 
 func _accept_card(card_id: String) -> void:
+	if _selection_locked:
+		return
+	_selection_locked = true
 	if _pool_kind == "augment":
 		if not RunStateStore.select_pacte_augment(card_id):
+			_selection_locked = false
 			return
 		_chosen_augment_id = card_id
+		_show_chosen_card(card_id, "augment")
 		_show_pool("power", _offer_array(RunStateStore.pacteOfferPowerIds))
+		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
+		var chosen_power := _chosen_card_views.get("power", null) as Control
+		if chosen_power != null:
+			chosen_power.queue_free()
+		_chosen_card_views.erase("power")
+		_selection_locked = false
+		return
+	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
+	if not is_inside_tree():
 		return
 	if threshold_visit:
 		RunStateStore.force_dealer_visit()
@@ -353,6 +444,8 @@ func _accept_card(card_id: String) -> void:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
 
 func _cancel_selection() -> void:
+	if _selection_locked:
+		return
 	var return_to_augments := _pool_kind == "power" and RunStateStore.pacteSelectedAugmentId != ""
 	_preview_id = ""
 	if _selected_overlay != null:
@@ -363,8 +456,16 @@ func _cancel_selection() -> void:
 			button.scale = Vector2.ONE
 	RunStateStore.cancel_pacte_selection()
 	_description_bubble.visible = false
+	var chosen_power := _chosen_card_views.get("power", null) as Control
+	if chosen_power != null:
+		chosen_power.queue_free()
+	_chosen_card_views.erase("power")
 	if return_to_augments:
 		_chosen_augment_id = ""
+		var chosen_augment := _chosen_card_views.get("augment", null) as Control
+		if chosen_augment != null:
+			chosen_augment.queue_free()
+		_chosen_card_views.erase("augment")
 		_show_pool("augment", _offer_array(RunStateStore.pacteOfferAugmentIds))
 
 func _exit_pacte() -> void:

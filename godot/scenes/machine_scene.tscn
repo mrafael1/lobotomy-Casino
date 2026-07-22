@@ -319,7 +319,7 @@ offset_right = 160.0
 offset_bottom = 320.0
 mouse_filter = 2
 
-[node name="neuron_number" type="Label" parent="BottomHudLayer" unique_id=1776525199]
+[node name="spin_number" type="Label" parent="BottomHudLayer" unique_id=1776525199]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5

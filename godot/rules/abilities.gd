@@ -114,15 +114,15 @@ static func apply_move_symbol(reels: Array, source_reel: int, target_reel: int,
 		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
 		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
 
-## HEART does not enter the normal symbol score table. Each visible heart is a
-## small deterministic resource payout, so this helper remains easy to parity-test.
+## HEART does not enter the normal symbol score table. Each visible heart adds a
+## run spin and arms one free follow-up spin; it never adds score points.
 static func resolve_hearts(heart_count: int) -> Dictionary:
 	var count := clampi(heart_count, 0, 3)
 	return {
 		"heartCount": count,
 		"neuronsDelta": count,
-		"scoreDelta": count * 10,
-		"coinsDelta": count * 10,
+		"scoreDelta": 0,
+		"coinsDelta": 0,
 		"winType": "heart" if count > 0 else "miss",
 	}
 

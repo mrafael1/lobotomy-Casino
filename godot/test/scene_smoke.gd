@@ -43,7 +43,7 @@ func _run() -> void:
 		failures.append("machine missing _spawn_jackpot_burst")
 	_check_machine_art_mix(machine, failures)
 	await _check_pacte_flow(machine, run_store, meta_store, failures)
-	_check_pacte_power_rules(run_store, failures)
+	_check_pacte_power_rules(machine, run_store, failures)
 	_check_base_scene_parity(failures)
 	_check_first_launch_tutorial(meta_store, failures)
 	_check_scene_nav(failures)
@@ -504,7 +504,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	if machine.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
-	var neuron_number := machine.get_node_or_null("BottomHudLayer/neuron_number") as Label
+	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
 	var health_bar := machine.get_node_or_null("HealthBar") as Sprite2D
 	var health_coin := machine.get_node_or_null("HealthCoin") as Sprite2D
 	if bottom_hud == null:
@@ -514,19 +514,19 @@ func _check_global_options_layout(failures: Array) -> void:
 			failures.append("machine: BottomHudLayer is not full-canvas")
 		if bottom_hud.z_index <= 50 or bottom_hud.z_index >= 200:
 			failures.append("machine: BottomHudLayer is not layered between cabinet art and options overlay")
-	if neuron_number == null:
-		failures.append("machine: neuron_number label is missing")
+	if spin_number == null:
+		failures.append("machine: spin_number label is missing")
 	else:
-		if neuron_number.anchor_left != 0.5 or neuron_number.anchor_right != 0.5 \
-				or neuron_number.anchor_top != 1.0 or neuron_number.anchor_bottom != 1.0:
-			failures.append("machine: neuron_number is not anchored Center Bottom")
-		if neuron_number.offset_top != -14.0 or neuron_number.offset_bottom != -4.0:
-			failures.append("machine: neuron_number is not positioned at the bottom edge")
-		if neuron_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
-			failures.append("machine: neuron_number is not centered inside its label box")
+		if spin_number.anchor_left != 0.5 or spin_number.anchor_right != 0.5 \
+				or spin_number.anchor_top != 1.0 or spin_number.anchor_bottom != 1.0:
+			failures.append("machine: spin_number is not anchored Center Bottom")
+		if spin_number.offset_top != -14.0 or spin_number.offset_bottom != -4.0:
+			failures.append("machine: spin_number is not positioned at the bottom edge")
+		if spin_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
+			failures.append("machine: spin_number is not centered inside its label box")
 		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
-		if neuron_number.text != "":
-			failures.append("machine: neuron_number should render no text (meter replaces it)")
+		if spin_number.text != "":
+			failures.append("machine: spin_number should render no text (tube readout replaces it)")
 		_check_neuron_meter_absent("machine", bottom_hud, failures)
 		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
 		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
@@ -6094,11 +6094,21 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: preview card did not scale up")
 	if pacte._drop_label.text != "DROP HERE":
 		failures.append("pacte: drag target is missing DROP HERE")
-	pacte._accept_card(first_augment)
+	var press_position := first_button.get_global_transform_with_canvas() * Vector2(15.0, 20.0)
+	pacte._begin_drag(first_augment, 0, first_button, press_position)
+	pacte._update_drag(Vector2(40.0, 270.0))
+	if not first_button.visible:
+		failures.append("pacte: dragged card disappeared before drop")
+	pacte._finish_drag(Vector2(40.0, 270.0))
 	await process_frame
 	if String(run_store.pacteSelectedAugmentId) != first_augment \
 			or String(pacte._pool_kind) != "power":
 		failures.append("pacte: augment selection did not stage before power selection")
+	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
+	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
+			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
+				Rect2(chosen_augment.position, chosen_augment.size)):
+		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:
 		failures.append("pacte: power pool did not switch to the power emplacement hint")
 
@@ -6119,7 +6129,15 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if String(run_store.runPhase) != "running" or run_store.selectedPowerCardIds.size() != 1:
 		failures.append("pacte: initial completion did not enter the machine with accumulated cards")
 
-	run_store.pacteThresholdPending = true
+	# The second Pacte visit is triggered by the run's spin budget crossing from
+	# above five to five, not by a campaign-neuron HUD value.
+	run_store.neurons = 6
+	run_store.comboDefeatPending = false
+	var threshold_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if threshold_spin == null or int(run_store.neurons) != 5 \
+			or not bool(run_store.pacteThresholdPending):
+		failures.append("pacte: threshold did not arm when run spins reached five")
 	if not run_store.open_threshold_pacte():
 		failures.append("pacte: threshold crossing did not open the second visit")
 	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
@@ -6145,7 +6163,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
-func _check_pacte_power_rules(run_store: Node, failures: Array) -> void:
+func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false, 0x168, false)
 	run_store.ownedPowerIds = ["reroll", "rewind", "heart", "cheat", "move"]
@@ -6186,11 +6204,46 @@ func _check_pacte_power_rules(run_store: Node, failures: Array) -> void:
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	var heart_score_before := int(run_store.scoreEarned)
 	var heart_neurons_before := int(run_store.neurons)
+	var heart_spins_before := int(run_store.freeSpinsRemaining)
+	var heart_spin_count_before := int(run_store.spinCount)
 	if not run_store.heart_power(1) \
 			or int(run_store.neurons) != heart_neurons_before + 1 \
-			or int(run_store.scoreEarned) != heart_score_before + 10 \
+			or int(run_store.scoreEarned) != heart_score_before \
+			or int(run_store.freeSpinsRemaining) != heart_spins_before + 1 \
 			or String((run_store.lastResult["reels"] as Array)[0]) != "heart":
-		failures.append("pacte powers: Heart one-heart payout failed")
+		failures.append("pacte powers: Heart preparation failed")
+	var heart_follow_up_neurons := int(run_store.neurons)
+	if run_store.spin() == null:
+		failures.append("pacte powers: Heart did not arm a follow-up spin")
+	else:
+		run_store.set_spinning(false)
+		if int(run_store.neurons) != heart_follow_up_neurons \
+				or int(run_store.spinCount) != heart_spin_count_before + 1:
+			failures.append("pacte powers: Heart follow-up consumed a spin token")
+	# Move's UI is a drag gesture over every reel, including adjacent destinations.
+	run_store.abilitiesUsed = []
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	machine._arm_move_source()
+	if machine._targeting_layer == null \
+			or machine._targeting_layer.name != "MoveSymbolDragLayer":
+		failures.append("pacte powers: Move did not arm its drag layer")
+	if machine._targeting_layer != null:
+		for reel_index in 3:
+			if machine._targeting_layer.get_node_or_null("MoveRubbleHint%d" % reel_index) == null \
+					or machine._targeting_layer.get_node_or_null("MoveSymbol%d" % reel_index) == null:
+				failures.append("pacte powers: Move missing reel %d drag hint" % reel_index)
+		if int(machine._move_target_at(Vector2(75.5, 185.0))) != 1:
+			failures.append("pacte powers: Move rejected an adjacent reel destination")
+		var source_button := machine._targeting_layer.get_node_or_null("MoveSymbol0") as Button
+		if source_button == null:
+			failures.append("pacte powers: Move source button is missing")
+		else:
+			var move_press := source_button.get_global_transform_with_canvas() * Vector2(12.0, 15.0)
+			machine._begin_move_drag(0, source_button, move_press)
+			machine._update_move_drag(Vector2(75.5, 185.0))
+			if machine._move_drag_ghost == null or not bool(machine._move_drag_ghost.visible):
+				failures.append("pacte powers: Move did not expose a draggable symbol ghost")
+		machine._clear_targeting()
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	if not run_store.cheat_symbol(1, "brain") \
@@ -6213,9 +6266,9 @@ func _check_pacte_power_rules(run_store: Node, failures: Array) -> void:
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
-	if not run_store.heart_power(1) or bool(run_store.comboDefeatPending) \
-			or int(run_store.betMultiplier) != 3:
-		failures.append("pacte powers: Heart did not rescue a pending combo loss")
+	if not run_store.heart_power(1) or not bool(run_store.comboDefeatPending) \
+			or int(run_store.betMultiplier) != 2:
+		failures.append("pacte powers: scoreless Heart should leave the combo loss pending")
 	run_store.reset_run_state()
 
 func _pacte_power_result(reels: Array) -> Dictionary:
