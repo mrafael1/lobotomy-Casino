@@ -49,6 +49,7 @@ func _run() -> void:
 	_check_global_options_layout(failures)
 	_check_water_lucidity_gain(run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
+	_check_water_wealth_169(machine, run_store, meta_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
 	await _check_upgrades_scene(failures)
 	_check_smart_save_retention(failures)
@@ -82,6 +83,7 @@ func _run() -> void:
 	_check_frenzy_gauge_155(run_store, failures)
 	await _check_pending_combo_and_free_spin_ui(machine, run_store, failures)
 	_check_compulsion_multiplier_76(machine, run_store, failures)
+	_check_tv_information_priority(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
 	await _check_power_bar_76(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
@@ -202,6 +204,19 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			failures.append("machine art: wealth odometer bar is not native 160x320 art")
 		elif not String(wealth_art.texture.resource_path).ends_with("wealth_bar.png"):
 			failures.append("machine art: wealth odometer still uses the misspelled bar asset")
+		var wealth_cases := wealth_odometer.get_node_or_null("WealthCasesArt") as Sprite2D
+		if wealth_cases == null or wealth_cases.texture == null \
+				or Vector2i(wealth_cases.texture.get_width(), wealth_cases.texture.get_height()) \
+					!= Vector2i(160, 320) \
+				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+			failures.append("machine art: wealth odometer cases are missing or not native art")
+		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases.png"):
+			failures.append("machine art: wealth odometer cases use the wrong asset")
+		var wealth_numbers := wealth_odometer.get_node_or_null("Reel0") as Control
+		if wealth_art != null and wealth_cases != null and wealth_numbers != null \
+				and not (wealth_cases.z_index < wealth_numbers.z_index \
+					and wealth_numbers.z_index < wealth_art.z_index):
+			failures.append("machine art: wealth layers must be cases < numbers < wealth bar")
 		for reel_index in 4:
 			var reel := wealth_odometer.get_node_or_null("Reel%d" % reel_index) as Control
 			var current := reel.get_node_or_null("Current") as Sprite2D if reel != null else null
@@ -217,7 +232,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
 
 	for node_name in [
-		"ReelBacking", "HealthTrack", "HealthFill",
+		"ReelBacking", "HealthBar", "HealthCoin",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
 		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
 		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",
@@ -487,7 +502,8 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
 	var neuron_number := machine.get_node_or_null("BottomHudLayer/neuron_number") as Label
-	var health_label := machine.get_node_or_null("HealthLabel") as Label
+	var health_bar := machine.get_node_or_null("HealthBar") as Sprite2D
+	var health_coin := machine.get_node_or_null("HealthCoin") as Sprite2D
 	if bottom_hud == null:
 		failures.append("machine: BottomHudLayer is missing")
 	else:
@@ -512,11 +528,15 @@ func _check_global_options_layout(failures: Array) -> void:
 		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
 		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
 			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
-	if health_label == null:
-		failures.append("machine: HealthLabel spins counter is missing")
-	else:
-		if health_label.position != Vector2(43.0, 85.0):
-			failures.append("machine: spins counter is not above the red bar")
+	# The spins readout left the TV: it is now the native 19-frame tube sheet
+	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
+	# plays while a spin launches.
+	if machine.get_node_or_null("HealthLabel") != null:
+		failures.append("machine: HealthLabel spins counter should be removed from the TV")
+	if health_bar == null or health_bar.hframes != 19:
+		failures.append("machine: HealthBar spins tube is not a 19-frame sheet")
+	if health_coin == null or health_coin.hframes != 4 or health_coin.visible:
+		failures.append("machine: HealthCoin drop sheet is missing or visible at rest")
 	machine.queue_free()
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
@@ -572,6 +592,7 @@ func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	var previous_abilities: Array = run_store.abilitiesUsed.duplicate()
 	var previous_restores: Array = run_store.pendingPowerRestores.duplicate()
 	var previous_spin_count := int(run_store.spinCount)
+	var previous_score := int(run_store.scoreEarned)
 
 	run_store.runPhase = "running"
 	run_store.isSpinning = false
@@ -582,12 +603,16 @@ func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
+	run_store.scoreEarned = 20
 
 	if not run_store.use_consumable("item_water"):
 		failures.append("water: use_consumable returned false")
 	elif int(run_store.lucidityCoins) != 60:
 		failures.append("water: should grant 40 lucidity coins (20 -> 60), got %d" % int(run_store.lucidityCoins))
+	elif int(run_store.scoreEarned) != 60:
+		failures.append("water: should add its 40 points to the run score (20 -> 60), got %d" % int(run_store.scoreEarned))
 
+	run_store.scoreEarned = previous_score
 	run_store.runPhase = previous_phase
 	run_store.isSpinning = previous_spinning
 	run_store.dealerIncoming = previous_dealer_incoming
@@ -609,8 +634,11 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	var previous_restores: Array = run_store.pendingPowerRestores.duplicate()
 	var previous_spin_count := int(run_store.spinCount)
 	var previous_score := int(run_store.scoreEarned)
+	var previous_result: Variant = run_store.lastResult
 	var previous_display := int(machine._display_lucidity)
 	var previous_coin_prev := int(machine._coin_prev_lucidity)
+	var previous_burst_spin := int(machine._burst_prev_spin)
+	var previous_burst_score := int(machine._burst_prev_score)
 
 	run_store.runPhase = "running"
 	run_store.isSpinning = false
@@ -622,6 +650,12 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.pendingPowerRestores = []
 	run_store.spinCount = 0
 	run_store.scoreEarned = 20
+	run_store.lastResult = {
+		"scoreEarned": 20, "coinsEarned": 20, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._burst_prev_spin = 0
+	machine._burst_prev_score = 20
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(20)
 	machine._coin_prev_lucidity = 20
@@ -631,9 +665,15 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 		failures.append("machine water: should grant lucidity immediately on consume")
 	if int(machine._coin_prev_lucidity) != 60:
 		failures.append("machine water: immediate consume gain will replay on next spin")
+	if int(run_store.scoreEarned) != 60:
+		failures.append("machine water: should add its 40 points to the run score")
+	if int((run_store.lastResult as Dictionary).get("scoreEarned", 0)) != 60:
+		failures.append("machine water: current result score was not advanced with the direct gain")
+	if int(machine._burst_prev_score) != 60:
+		failures.append("machine water: payout baseline did not advance past the direct score gain")
 	await create_timer(0.1).timeout
-	if int(machine._display_lucidity) != 20:
-		failures.append("machine water: Lucidity gain incorrectly changed the wealth odometer")
+	if int(machine._display_lucidity) != 60:
+		failures.append("machine water: score gain should roll the wealth odometer")
 
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(previous_display)
@@ -648,6 +688,38 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.pendingPowerRestores = previous_restores
 	run_store.spinCount = previous_spin_count
 	run_store.scoreEarned = previous_score
+	run_store.lastResult = previous_result
+	machine._burst_prev_spin = previous_burst_spin
+	machine._burst_prev_score = previous_burst_score
+
+func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignNeuronsLeft = 5
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 0
+	run_store.scoreEarned = 1960
+	run_store.lucidityCoins = 20
+	run_store.runConsumables = { "item_water": 1 }
+	run_store.lastResult = {
+		"scoreEarned": 1960, "coinsEarned": 1960, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._set_sequence_lock(false)
+	machine._set_display_lucidity(1960, false)
+	machine._on_stash_pressed(0)
+	if String(run_store.runPhase) != "over" or String(run_store.lastEnding) != "wealth":
+		failures.append("pr169: Water crossing 2000 did not open the Wealth ending")
+	if machine._overlay == null:
+		failures.append("pr169: Water Wealth resolution left no ending overlay")
+	if machine._overlay != null:
+		machine._overlay.queue_free()
+		machine._overlay = null
+	machine._set_stash_tray_visible(true)
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
@@ -1991,6 +2063,8 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 	# Exact GDD fatal copy remains on the transparent game-over overlay.
 	machine._show_campaign_failed()
 	var overlay: Control = machine._overlay
+	if overlay == null or int(overlay.z_index) != int(machine.ENDING_OVERLAY_Z_INDEX):
+		failures.append("issue38: campaign-failed overlay does not draw above the machine HUD art")
 	var found_fatal := false
 	if overlay != null:
 		var game_over := overlay.get_node_or_null("GameOverEndingOverlay") as Control
@@ -2272,6 +2346,9 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	meta_store.ownedPermanents = [] # base retention => "10% kept"
 	run_store.runPhase = "running"
 	machine._show_ending("flatline", run)
+	if machine._overlay == null \
+			or int(machine._overlay.z_index) != int(machine.ENDING_OVERLAY_Z_INDEX):
+		failures.append("flatline: ending overlay does not draw above the machine HUD art")
 	var flatline_screen := machine._overlay.get_node_or_null("FlatlineEndingOverlay") as Control
 	var texts := _overlay_label_texts(flatline_screen)
 	if texts.has("this time, it's fatal. No coming back"):
@@ -2336,6 +2413,9 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	run_store.campaignNeuronPending = true
 	run_store.runPhase = "running"
 	machine._show_ending("flatline", run)
+	if machine._overlay == null \
+			or int(machine._overlay.z_index) != int(machine.ENDING_OVERLAY_Z_INDEX):
+		failures.append("game over: ending overlay does not draw above the machine HUD art")
 	var game_over_screen := machine._overlay.get_node_or_null("GameOverEndingOverlay") as Control
 	if game_over_screen == null:
 		failures.append("game over: dedicated screen missing when neurons are exhausted")
@@ -2422,6 +2502,9 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	run_store.scoreEarned = 300
 	run_store.lucidityCoins = 300
 	machine._show_ending("wealth", run)
+	if machine._overlay == null \
+			or int(machine._overlay.z_index) != int(machine.ENDING_OVERLAY_Z_INDEX):
+		failures.append("wealth: ending overlay does not draw above the machine HUD art")
 	var wallet_before := int(meta_store.lucidityWallet)
 	var wealth_screen := machine._overlay.get_node_or_null("WealthEndingOverlay") as Control
 	var texts := _overlay_label_texts(wealth_screen)
@@ -2433,7 +2516,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
 	for node_name: String in [
-		"WealthOdometer", "HealthTrack", "HealthFill", "HealthLabel"]:
+		"WealthOdometer", "HealthBar"]:
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
@@ -2449,7 +2532,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	# wealth presentation must keep the machine bars hidden through that path too.
 	machine._update_hud()
 	for node_name: String in [
-		"WealthOdometer", "HealthTrack", "HealthFill", "HealthLabel"]:
+		"WealthOdometer", "HealthBar"]:
 		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
 			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
@@ -2911,13 +2994,13 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 	if flavor != null:
 		if not flavor._pos_label.visible or flavor._neg_label.visible:
 			failures.append("issue76: flavor item showed a negative line")
-		if flavor._pos_label.text != "+ +40 LUCIDITY":
+		if flavor._pos_label.text != "+ +40 SCORE & LUCIDITY":
 			failures.append("issue76: water upside copy wrong: '%s'" % flavor._pos_label.text)
 		flavor.queue_free()
 	machine._pending_deferred_neg.clear()
 
 # Issue #155: dealer pacing is a fixed visible countdown — no randomness. It starts at
-# dealer_countdown_start, every spin ticks it by the multiplier used at spin start,
+# dealer_countdown_start, every spin advances it by the inverse multiplier step,
 # 0 triggers the visit, and resolving the offer resets it.
 func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
@@ -2927,11 +3010,11 @@ func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	if run_store.dealer_max_count <= Dealer.MAX_COUNT:
 		failures.append("issue76: dealer still capped at the old per-run limit (%d)" % run_store.dealer_max_count)
 
-	# A fresh run starts the countdown at 15.
-	if int(run_store.dealerCountdown) != 15 or int(run_store.dealer_countdown_start) != 15:
-		failures.append("issue155: fresh run countdown should start at 15, got %d" % int(run_store.dealerCountdown))
+	# A fresh run starts the countdown at 12.
+	if int(run_store.dealerCountdown) != 12 or int(run_store.dealer_countdown_start) != 12:
+		failures.append("issue155: fresh run countdown should start at 12, got %d" % int(run_store.dealerCountdown))
 
-	# x1 spin ticks -1; a frenzy spin ticks by the multiplier used at spin start.
+	# x1 advances 3 steps, x2 advances 2, and x3 advances 1.
 	# Locked reels keep the outcome deterministic (an eye pair pays every spin).
 	run_store.neurons = 100
 	run_store.betMultiplier = 1
@@ -2940,16 +3023,20 @@ func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 	run_store.lockedReelSpins = [3, 3, 3]
 	run_store.spin()
 	run_store.set_spinning(false)
-	if int(run_store.dealerCountdown) != 14:
-		failures.append("issue155: x1 spin should tick the countdown to 14, got %d" % int(run_store.dealerCountdown))
+	if int(run_store.dealerCountdown) != 9:
+		failures.append("issue155: x1 spin should advance the countdown to 9, got %d" % int(run_store.dealerCountdown))
 	if int(run_store.betMultiplier) != 2:
 		failures.append("issue155: a paying win should step the gauge to x2, got %d" % int(run_store.betMultiplier))
 	run_store.spin()
 	run_store.set_spinning(false)
-	if int(run_store.dealerCountdown) != 12:
-		failures.append("issue155: x2 spin should tick the countdown by 2, got %d" % int(run_store.dealerCountdown))
+	if int(run_store.dealerCountdown) != 7:
+		failures.append("issue155: x2 spin should advance the countdown to 7, got %d" % int(run_store.dealerCountdown))
+	run_store.spin()
+	run_store.set_spinning(false)
+	if int(run_store.dealerCountdown) != 6:
+		failures.append("issue155: x3 spin should advance the countdown to 6, got %d" % int(run_store.dealerCountdown))
 
-	# 0 triggers the visit deterministically; resolving the offer resets to 15.
+	# 0 triggers the visit deterministically; resolving the offer resets to 12.
 	run_store.dealerCountdown = 0
 	run_store.dealerIncoming = false
 	run_store.dealerPending = false
@@ -2959,8 +3046,8 @@ func _check_dealer_pacing_76(run_store: Node, failures: Array) -> void:
 		failures.append("issue155: countdown 0 did not trigger the dealer")
 	run_store.reveal_dealer()
 	run_store.decline_dealer_visit()
-	if int(run_store.dealerCountdown) != 15:
-		failures.append("issue155: resolving the visit should reset the countdown to 15, got %d" % int(run_store.dealerCountdown))
+	if int(run_store.dealerCountdown) != 12:
+		failures.append("issue155: resolving the visit should reset the countdown to 12, got %d" % int(run_store.dealerCountdown))
 
 	# Above 0 the dealer never procs — no randomness left in the flow.
 	run_store.dealerCountdown = 1
@@ -3035,20 +3122,44 @@ func _check_frenzy_gauge_155(run_store: Node, failures: Array) -> void:
 func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failures: Array) -> void:
 	# Earlier smoke cases may have left a presentation-only free-spin entrance
 	# running; isolate the pending-defeat assertions from that modal animation.
+	machine._close_pending_combo_defeat()
+	machine._stop_win_animation()
+	machine._stop_power_animation()
 	machine._set_free_spin_display(false)
 	var dealer_icon := machine.get_node_or_null("DealerIcon") as TextureRect
 	if dealer_icon == null or dealer_icon.texture == null:
-		failures.append("dealer icon: mini dealer portrait is missing from the TV")
+		failures.append("dealer icon: dealer portrait is missing from the TV")
 	else:
-		# Anchored to the TV status column, with the countdown badge in its
-		# bottom-right corner instead of a DEALER label.
-		if dealer_icon.position.x < 43.0 or dealer_icon.position.y < 77.0 \
-				or dealer_icon.size.x > 10.0 or dealer_icon.size.y > 10.0:
-			failures.append("dealer icon: portrait is not anchored to the TV status column")
+		# The compact portrait sits immediately beside the bar and stays inside the
+		# authored pink TV border.
+		var tv_bounds := Rect2(float(machine.TV_SCREEN["left"]),
+			float(machine.TV_SCREEN["top"]), float(machine.TV_SCREEN["width"]),
+			float(machine.TV_SCREEN["height"]))
+		var icon_rect := Rect2(dealer_icon.position, dealer_icon.size)
+		if dealer_icon.position != machine.DEALER_ICON_POS \
+				or dealer_icon.size != machine.DEALER_ICON_SIZE \
+				or not tv_bounds.encloses(icon_rect) \
+				or dealer_icon.position.x - 101.0 > 5.0:
+			failures.append("dealer icon: compact portrait is not beside the bar inside the TV border")
 		if machine.get_node_or_null("DealerCountdownTitle") != null:
 			failures.append("dealer icon: old DEALER title label was not removed")
-		if dealer_icon.get_node_or_null("DealerCountdownNumber") == null:
-			failures.append("dealer icon: countdown badge is not a corner child of the icon")
+		if machine.get_node_or_null("DealerCountdownNumber") != null \
+				or dealer_icon.get_node_or_null("DealerCountdownNumber") != null:
+			failures.append("dealer icon: numeric countdown badge was not removed")
+	var dealer_bar := machine.get_node_or_null("DealerBar") as Sprite2D
+	if dealer_bar == null or dealer_bar.texture == null \
+				or dealer_bar.hframes != int(machine.DEALER_BAR_FRAME_COUNT) \
+				or dealer_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("dealer bar: 13-frame countdown sheet is missing")
+	for expected in [
+		["DealerBarOverlay1", machine.DEALER_BAR_OVERLAY_1_FRAMES],
+		["DealerBarOverlay2", machine.DEALER_BAR_OVERLAY_2_FRAMES],
+		["DealerBarOverlay3", machine.DEALER_BAR_OVERLAY_3_FRAMES],
+	]:
+		var overlay := machine.get_node_or_null(String(expected[0])) as Sprite2D
+		if overlay == null or overlay.texture == null or overlay.hframes != int(expected[1]) \
+				or overlay.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+			failures.append("dealer bar: %s animation sheet is missing or has the wrong frame count" % String(expected[0]))
 
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
@@ -3078,6 +3189,16 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 			failures.append("combo pending: x2 losing animation was not shown")
 		if loss_3_sprite != null and loss_3_sprite.visible:
 			failures.append("combo pending: x3 losing animation was shown for x2")
+		machine._refresh_dealer_countdown()
+		var dealer_bar_during_loss := machine._dealer_bar_sprite as Sprite2D
+		if dealer_bar_during_loss == null or not dealer_bar_during_loss.visible \
+				or machine._dealer_bar_overlay_1 == null \
+				or not machine._dealer_bar_overlay_1.visible \
+				or machine._dealer_bar_overlay_2 == null \
+				or not machine._dealer_bar_overlay_2.visible \
+				or machine._dealer_bar_overlay_3 == null \
+				or not machine._dealer_bar_overlay_3.visible:
+			failures.append("combo pending: pending x2 loss did not show all dealer warning overlays")
 		if machine._combo_loss_beep_tween == null:
 			failures.append("combo pending: x2 losing animation did not start beeping")
 		if machine._pending_combo_overlay.get_node_or_null("Title") != null:
@@ -3230,11 +3351,16 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.runConsumables = {}
 	run_store.betMultiplier = 1
+	machine._close_pending_combo_defeat()
+	machine._stop_win_animation()
+	machine._stop_power_animation()
+	machine._set_tv_progress_bars_visible(true)
 
 	# The FREE SPIN banner is state-driven: it shows while the next spin is free
-	# (banked credit or Energy Drink rush), replaces the health bar, holds until the
-	# credit is spent, and never blocks input. A grant that lands mid-spin stays
-	# hidden until the reels stop so the reveal is not spoiled.
+	# (banked credit or Energy Drink rush), holds until the credit is spent, and
+	# never blocks input. The off-TV spins tube stays visible alongside it. A grant
+	# that lands mid-spin stays hidden until the reels stop so the reveal is not
+	# spoiled.
 	run_store.abilitiesUsed = []
 	run_store.freeSpinsRemaining = 0
 	run_store.decaySkips = 0
@@ -3251,12 +3377,9 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		failures.append("free spin banner: banked free spin did not show the banner")
 	if int(machine._display_spins_left()) != spins_before_credit:
 		failures.append("free spin banner: free credit changed the SPINS LEFT counter")
-	var health_track := machine.get_node_or_null("HealthTrack") as CanvasItem
-	var health_fill := machine._life_fill_sprite as CanvasItem
-	var health_label := machine._bar_labels.get("life") as CanvasItem
-	if health_track == null or health_track.visible or health_fill == null or health_fill.visible \
-			or health_label == null or health_label.visible:
-		failures.append("free spin banner: health bar was not hidden while the banner is up")
+	var spins_tube := machine._health_bar_sprite as CanvasItem
+	if spins_tube == null or not spins_tube.visible:
+		failures.append("free spin banner: spins tube should stay visible beside the banner")
 	# The banner is not a modal: spin stays available while it blinks.
 	machine._refresh_controls()
 	if machine._spin_button != null and machine._spin_button.disabled:
@@ -3289,9 +3412,80 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.freeSpinsRemaining = 0
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
-	if health_track != null and not health_track.visible:
-		failures.append("free spin banner: health track did not restore")
+	if spins_tube != null and not spins_tube.visible:
+		failures.append("free spin banner: spins tube did not restore")
+	machine._close_pending_combo_defeat()
+	machine._stop_win_animation()
+	machine._stop_power_animation()
 	run_store.reset_run_state()
+	machine._set_tv_progress_bars_visible(true)
+	machine._update_hud()
+
+# Transient TV callouts temporarily own the information area so the FREE SPIN
+# banner and dealer countdown cannot visually overwrite PAIR/TRIPLE or power pops.
+func _check_tv_information_priority(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 10
+	run_store.freeSpinsRemaining = 1
+	run_store.dealerCountdown = 5
+	run_store.betMultiplier = 3
+	machine._hud_delta_hold = false
+	machine._spinning_anim = false
+	machine._spin_launch_pending = false
+	machine._stop_win_animation()
+	machine._stop_power_animation()
+	machine._tv_info_pop_sources.clear()
+	machine._set_tv_progress_bars_visible(true)
+	machine._update_hud()
+	var free_spin := machine._free_spin_sprite as CanvasItem
+	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
+	var dealer_icon := machine._dealer_icon as CanvasItem
+	if free_spin == null or not free_spin.visible:
+		failures.append("TV callout priority: FREE SPIN banner did not establish its baseline")
+	if dealer_bar == null or not dealer_bar.visible or dealer_icon == null or not dealer_icon.visible:
+		failures.append("TV callout priority: dealer information did not establish its baseline")
+
+	machine._play_win_animation("pair", 20)
+	if machine._win_anim_sprite == null or not machine._win_anim_sprite.visible:
+		failures.append("TV callout priority: PAIR callout did not show")
+	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible) \
+			or (dealer_icon != null and dealer_icon.visible):
+		failures.append("TV callout priority: PAIR did not hide persistent TV information")
+	machine._refresh_tv_indicators()
+	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible) \
+			or (dealer_icon != null and dealer_icon.visible):
+		failures.append("TV callout priority: HUD refresh overrode the PAIR priority")
+	machine._stop_win_animation()
+	if free_spin != null and not free_spin.visible:
+		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
+	if dealer_bar != null and not dealer_bar.visible:
+		failures.append("TV callout priority: dealer bar did not restore after PAIR")
+	if dealer_icon != null and not dealer_icon.visible:
+		failures.append("TV callout priority: dealer icon did not restore after PAIR")
+
+	# Power callouts share the same priority, and overlapping callouts keep it held
+	# until the last owner closes.
+	machine._show_power_animation("reroll")
+	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible):
+		failures.append("TV callout priority: power callout did not hide persistent TV information")
+	machine._stop_power_animation()
+	machine._play_win_animation("triple", 50)
+	machine._show_power_animation("shift")
+	machine._stop_win_animation()
+	if free_spin != null and free_spin.visible:
+		failures.append("TV callout priority: overlapping power callout released priority too early")
+	machine._stop_power_animation()
+	if free_spin != null and not free_spin.visible:
+		failures.append("TV callout priority: FREE SPIN banner did not restore after overlapping pops")
+	if dealer_bar != null and not dealer_bar.visible:
+		failures.append("TV callout priority: dealer bar did not restore after overlapping pops")
+	if not machine._tv_info_pop_sources.is_empty():
+		failures.append("TV callout priority: stale callout owner remained active")
+	run_store.reset_run_state()
+	machine._set_tv_progress_bars_visible(true)
+	machine._update_hud()
 
 # Issue #76: while Compulsion owns the spins the multiplier badge must read x1 (the
 # locked-x1 frame 4), overriding the player's chosen bet, so the takeover is obvious.
@@ -3311,12 +3505,139 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame == 4:
 		failures.append("issue76: multiplier showed forced-x1 without compulsion")
 
-	# Issue #155: the TV's DEALER countdown label tracks the store's number.
-	run_store.dealerCountdown = 5
+	# Issue #155: the authored dealer bar and all warning sheets share one progress
+	# frame. The bar starts at frame 0 for 0/12 progress, then walks through frames
+	# 1..3 at 3/12 and 4..8 at 8/12; shorter warning sheets clamp only at their
+	# final frame.
+	var dealer_bar := machine._dealer_bar_sprite as Sprite2D
+	var dealer_overlay_1 := machine._dealer_bar_overlay_1 as Sprite2D
+	var dealer_overlay_2 := machine._dealer_bar_overlay_2 as Sprite2D
+	var dealer_overlay_3 := machine._dealer_bar_overlay_3 as Sprite2D
+	run_store.betMultiplier = 1
+	run_store.isSpinning = false
+	machine._spinning_anim = false
+	machine._spin_launch_pending = false
+	machine._hud_delta_hold = false
+	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
-	var countdown_label := machine._bar_labels.get("dealer_count") as Label
-	if countdown_label == null or countdown_label.text != "5":
-		failures.append("issue155: TV dealer countdown label does not track the store")
+	if dealer_bar == null or dealer_bar.frame != 0:
+		failures.append("issue155: dealer bar did not start at frame 0")
+	var previous_progress := 0
+	for expected_progress in [3, 8, 12]:
+		run_store.dealerCountdown = 12 - int(expected_progress)
+		machine._refresh_dealer_countdown()
+		for intermediate_frame in range(previous_progress + 1, int(expected_progress) + 1):
+			machine._step_dealer_bar_progress(
+				float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+			if dealer_bar == null or dealer_bar.frame != intermediate_frame:
+				failures.append("issue155: dealer bar skipped frame %d while advancing to %d/12" \
+					% [intermediate_frame, int(expected_progress)])
+			if dealer_overlay_1 == null or dealer_overlay_1.frame != mini(intermediate_frame, dealer_overlay_1.hframes - 1) \
+					or dealer_overlay_2 == null or dealer_overlay_2.frame != mini(intermediate_frame, dealer_overlay_2.hframes - 1) \
+					or dealer_overlay_3 == null or dealer_overlay_3.frame != mini(intermediate_frame, dealer_overlay_3.hframes - 1):
+				failures.append("issue155: dealer overlays did not follow intermediate frame %d" % intermediate_frame)
+		previous_progress = int(expected_progress)
+	# A two-step spin follows the same path instead of jumping directly to frame 2.
+	run_store.dealerCountdown = 12
+	machine._refresh_dealer_countdown()
+	run_store.dealerCountdown = 10
+	machine._refresh_dealer_countdown()
+	for intermediate_frame in [1, 2]:
+		machine._step_dealer_bar_progress(
+			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+		if dealer_bar == null or dealer_bar.frame != int(intermediate_frame):
+			failures.append("issue155: two-step dealer bar transition skipped frame %d" % int(intermediate_frame))
+	# PR #169: Club/Joker doubles the countdown, but the authored bar still spans
+	# all 13 frames across the complete 24-step cycle.
+	var previous_augmented_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = "club"
+	run_store.dealerCountdown = 24
+	machine._refresh_dealer_countdown()
+	if dealer_bar == null or dealer_bar.frame != 0:
+		failures.append("pr169: Club dealer bar did not reset to frame 0 at countdown 24")
+	run_store.dealerCountdown = 12
+	machine._refresh_dealer_countdown()
+	if int(machine._dealer_bar_target_frame) != 6:
+		failures.append("pr169: Club dealer bar midpoint was not frame 6")
+	for _step in 6:
+		machine._step_dealer_bar_progress(
+			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+	if dealer_bar == null or dealer_bar.frame != 6:
+		failures.append("pr169: Club dealer bar did not reach frame 6 at countdown 12")
+	run_store.dealerCountdown = 0
+	machine._refresh_dealer_countdown()
+	if int(machine._dealer_bar_target_frame) != 12:
+		failures.append("pr169: Club dealer bar did not target frame 12 at countdown 0")
+	for _step in 6:
+		machine._step_dealer_bar_progress(
+			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+	if dealer_bar == null or dealer_bar.frame != 12:
+		failures.append("pr169: Club dealer bar did not reach its final frame")
+	run_store.augmentedTier = previous_augmented_tier
+	run_store.dealerCountdown = 12
+	machine._refresh_dealer_countdown()
+	run_store.betMultiplier = 3
+	machine._refresh_dealer_countdown()
+	if machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible \
+			or (machine._dealer_bar_overlay_2 != null and machine._dealer_bar_overlay_2.visible) \
+			or (machine._dealer_bar_overlay_3 != null and machine._dealer_bar_overlay_3.visible):
+		failures.append("issue155: x3 should show only dealer bar overlay 1")
+	run_store.betMultiplier = 2
+	machine._refresh_dealer_countdown()
+	if machine._dealer_bar_overlay_2 == null or not machine._dealer_bar_overlay_2.visible \
+			or machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible:
+		failures.append("issue155: x2 should show dealer bar overlays 1 and 2")
+	run_store.betMultiplier = 1
+	machine._refresh_dealer_countdown()
+	if machine._dealer_bar_overlay_3 == null or not machine._dealer_bar_overlay_3.visible \
+			or machine._dealer_bar_overlay_2 == null or not machine._dealer_bar_overlay_2.visible \
+			or machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible:
+		failures.append("issue155: x1 should show all three dealer bar overlays")
+	# The active overlays pulse without changing the frame selected by countdown
+	# progress, so the warning beeps but never spoils a different state.
+	if dealer_overlay_1 != null:
+		dealer_overlay_1.modulate.a = 1.0
+		machine._dealer_bar_overlay_beep_time = 0.0
+		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME) * 0.25)
+		if dealer_overlay_1.modulate.a >= 0.99:
+			failures.append("issue155: dealer warning overlays did not beep")
+		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME))
+		if dealer_overlay_1.modulate.a < 0.99:
+			failures.append("issue155: dealer warning overlay did not return to full alpha")
+	# A pending x2 loss falls to the x1 warning state, so it keeps the full
+	# cumulative stack. Pending x1 stays at x1 and must do the same.
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	machine._refresh_dealer_countdown()
+	if dealer_overlay_1 == null or not dealer_overlay_1.visible \
+			or dealer_overlay_2 == null or not dealer_overlay_2.visible \
+			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
+		failures.append("issue155: pending x2 loss did not show all three dealer overlays")
+	run_store.pendingComboMultiplier = 1
+	machine._refresh_dealer_countdown()
+	if dealer_overlay_1 == null or not dealer_overlay_1.visible \
+			or dealer_overlay_2 == null or not dealer_overlay_2.visible \
+			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
+		failures.append("issue155: pending x1 loss changed the full dealer warning stack")
+	run_store.comboDefeatPending = false
+	run_store.pendingComboMultiplier = 1
+
+	# A new spin keeps the warning lights hidden until its result/aftereffect hold
+	# releases; otherwise the countdown would reveal the current spin's outcome.
+	run_store.isSpinning = true
+	machine._hud_delta_hold = true
+	machine._refresh_dealer_countdown()
+	if (dealer_overlay_1 != null and dealer_overlay_1.visible) \
+			or (dealer_overlay_2 != null and dealer_overlay_2.visible) \
+			or (dealer_overlay_3 != null and dealer_overlay_3.visible):
+		failures.append("issue155: dealer warning overlays spoiled an in-flight spin")
+	run_store.isSpinning = false
+	machine._hud_delta_hold = false
+	machine._refresh_dealer_countdown()
+	if dealer_overlay_1 == null or not dealer_overlay_1.visible \
+			or dealer_overlay_2 == null or not dealer_overlay_2.visible \
+			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
+		failures.append("issue155: dealer warning overlays did not return after the result hold")
 
 	# The Energy-Drink forced spin no longer forces x1: the badge keeps showing the
 	# real gauge value through the compulsive phase.
@@ -3685,15 +4006,12 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
 	machine._update_hud()
-	var label := machine._bar_labels.get("life") as Label
-	if label == null:
-		failures.append("issue66: spins-left label missing")
+	var tube := machine._health_bar_sprite as Sprite2D
+	if tube == null:
+		failures.append("issue66: spins tube missing")
 		return
-	var before_n := String(label.text).get_slice(":", 1).to_int()
-	var life_fill := machine._life_fill_sprite as Sprite2D
-	var before_bar_width := 0.0
-	if life_fill != null:
-		before_bar_width = life_fill.region_rect.size.x
+	var before_n := int(machine._display_spins_left())
+	var before_frame := int(tube.frame)
 
 	# 3x vial restores +3 normal spins, spawns the fly-in, and holds the counter.
 	machine._apply_symbol_triple("vial", 0, false)
@@ -3701,18 +4019,18 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 		failures.append("issue66: 3x vial created free-spin credits instead of restoring spins")
 	if machine.get_node_or_null("SpinGainFx") == null:
 		failures.append("issue66: vial grant did not spawn the +3 fly-in")
-	if String(label.text).get_slice(":", 1).to_int() != before_n:
+	if int(machine._display_spins_left()) != before_n:
 		failures.append("issue66: counter ticked before the vial fly-in landed")
-	if life_fill != null and not is_equal_approx(life_fill.region_rect.size.x, before_bar_width):
-		failures.append("issue66: spins bar filled before the vial fly-in landed")
+	if int(tube.frame) != before_frame:
+		failures.append("issue66: spins tube filled before the vial fly-in landed")
 	await create_timer(1.3).timeout
 	if int(machine._pending_spin_gain) != 0:
 		failures.append("issue66: pending spin gain never landed")
-	var after_n := String(label.text).get_slice(":", 1).to_int()
+	var after_n := int(machine._display_spins_left())
 	if after_n != before_n + 3:
 		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
-	if life_fill != null and life_fill.region_rect.size.x <= before_bar_width:
-		failures.append("issue66: spins bar did not refill with the +3 vial grant")
+	if int(tube.frame) <= before_frame:
+		failures.append("issue66: spins tube did not refill with the +3 vial grant")
 
 	# Tea with no used powers restores +3 spins through the same fly-in.
 	run_store.isSpinning = false
@@ -3727,16 +4045,16 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	machine._power_batch_running = false
 	machine._set_sequence_lock(false)
 	machine._update_hud()
-	var tea_before := String(label.text).get_slice(":", 1).to_int()
+	var tea_before := int(machine._display_spins_left())
 	machine._on_stash_pressed(0)
 	if int(run_store.freeSpinsRemaining) != 0:
 		failures.append("issue66: tea fallback created free-spin credits instead of restoring spins")
 	if machine.get_node_or_null("SpinGainFx") == null:
 		failures.append("issue66: tea restore did not spawn the +3 fly-in")
-	if String(label.text).get_slice(":", 1).to_int() != tea_before:
+	if int(machine._display_spins_left()) != tea_before:
 		failures.append("issue66: counter ticked before the tea fly-in landed")
 	await create_timer(1.3).timeout
-	if String(label.text).get_slice(":", 1).to_int() != tea_before + 3:
+	if int(machine._display_spins_left()) != tea_before + 3:
 		failures.append("issue66: tea +3 did not land in the spins counter")
 
 	machine._pending_spin_gain = 0
@@ -3759,36 +4077,33 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 
-	var label := machine._bar_labels.get("life") as Label
-	if label == null:
-		failures.append("issue80: spins-left label missing")
+	var tube := machine._health_bar_sprite as Sprite2D
+	if tube == null:
+		failures.append("issue80: spins tube missing")
 		run_store.reset_run_state()
 		return
-	var life_fill := machine._life_fill_sprite as Sprite2D
-	var full_spins := String(label.text).get_slice(":", 1).to_int()
-	var full_width := 0.0
-	if life_fill != null:
-		full_width = life_fill.region_rect.size.x
+	var full_spins := int(machine._display_spins_left())
+	var full_frame := int(tube.frame)
 
 	# Lever pull: the reward-delta hold is on, and spin() has spent the neuron cost.
 	machine._hud_delta_hold = true
 	run_store.neurons = 2
 	machine._update_hud()
-	var during_hold := String(label.text).get_slice(":", 1).to_int()
+	var during_hold := int(machine._display_spins_left())
 	if during_hold >= full_spins:
 		failures.append("issue80: SPINS LEFT did not drop on lever pull while the HUD was held")
-	if life_fill != null and life_fill.region_rect.size.x >= full_width:
-		failures.append("issue80: spins bar did not shrink on lever pull while the HUD was held")
+	if int(tube.frame) >= full_frame:
+		failures.append("issue80: spins tube did not drain on lever pull while the HUD was held")
 
 	# A free spin granted by the same spin never enters the counter, held or not.
 	run_store.freeSpinsRemaining = 1
 	machine._update_hud()
-	if String(label.text).get_slice(":", 1).to_int() != during_hold:
+	if int(machine._display_spins_left()) != during_hold:
 		failures.append("issue80: granted free spin leaked into SPINS LEFT during the hold")
 
 	# Releasing the hold (score popup landed) lights the FREE SPIN banner instead.
 	machine._release_hud_delta_hold()
-	if String(label.text).get_slice(":", 1).to_int() != during_hold:
+	if int(machine._display_spins_left()) != during_hold:
 		failures.append("issue80: free spins must not inflate SPINS LEFT after release")
 	if not bool(machine._free_spin_overlay_active):
 		failures.append("issue80: released free-spin grant did not light the FREE SPIN banner")
@@ -3817,19 +4132,18 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 
-	var label := machine._bar_labels.get("life") as Label
-	if label == null:
-		failures.append("issue80: spins-left label missing")
-		run_store.reset_run_state()
-		return
-	var before := String(label.text).get_slice(":", 1).to_int()
+	var before := int(machine._display_spins_left())
 	if before != 20:
 		failures.append("issue85: SPINS LEFT should equal neurons=20, got %d" % before)
+	# The tube caps at its last frame (18): 20 spins still reads full.
+	var tube := machine._health_bar_sprite as Sprite2D
+	if tube != null and int(tube.frame) != 18:
+		failures.append("issue85: spins tube should clamp to its full frame at 20 spins")
 
 	# A +3 vial restore must move the counter by exactly +3 (read +4 under the rescale).
 	machine._apply_symbol_triple("vial", 0, false)
 	await create_timer(1.3).timeout # let the +3 fly-in land
-	var after := String(label.text).get_slice(":", 1).to_int()
+	var after := int(machine._display_spins_left())
 	if after != before + 3:
 		failures.append("issue80: +3 vial restore moved SPINS LEFT by %d, expected 3" % (after - before))
 
@@ -3841,7 +4155,7 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	run_store.spinCount = 500
 	machine._pending_spin_gain = 0
 	machine._update_hud()
-	var uncapped := String(label.text).get_slice(":", 1).to_int()
+	var uncapped := int(machine._display_spins_left())
 	if uncapped != 100:
 		failures.append("issue75: SPINS LEFT should ignore spin count (read %d, expected 100)" % uncapped)
 
@@ -5003,7 +5317,7 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 		failures.append("issue111: diamond blocked the second power of a spin")
 
 	# Club: dealer visits and spin rewards are halved. With the issue #155 fixed
-	# countdown, "half the visits" means the reset value doubles (8 -> 16).
+	# countdown, "half the visits" means the reset value doubles (12 -> 24).
 	run_store.augmentedTier = ""
 	var base_reset: int = run_store.dealer_countdown_reset_value()
 	var base_scale: float = run_store._active_reward_scale()
@@ -5412,7 +5726,7 @@ func _check_dealer_gate_161(machine: Node, run_store: Node, failures: Array) -> 
 	machine._compulsive_queued = false
 	machine._pending_dealer_offer = false
 	machine._power_bar_score = 0
-	machine._power_seen_lucidity = int(run_store.lucidityCoins)
+	machine._power_seen_lucidity = machine._power_point_total()
 
 	# A pending combo loss does not block the visit: the dealer opens above the
 	# warning (z100 over the z97 loss art) and closing him returns to the still-
@@ -5718,17 +6032,17 @@ func _check_ending_cleanup_161(machine: Node, run_store: Node, failures: Array) 
 	run_store.dealerPending = prev_pending
 	run_store.dealerOfferIds = prev_offers
 
-## New-run balance: 20 starting spins, dealer countdown 15 (Club modifier 30).
+## New-run balance: 15 starting spins, dealer countdown 12 (Club modifier 24).
 func _check_new_run_balance_161(run_store: Node, failures: Array) -> void:
-	if int(EconomyConst.STARTING_NEURONS) != 20:
-		failures.append("pr161: fresh runs should start with 20 spins")
-	if int(run_store.dealer_countdown_start) != 15:
-		failures.append("pr161: dealer countdown should start at 15")
+	if int(EconomyConst.STARTING_NEURONS) != 15:
+		failures.append("pr161: fresh runs should start with 15 spins")
+	if int(run_store.dealer_countdown_start) != 12:
+		failures.append("pr161: dealer countdown should start at 12")
 	var prev_tier := String(run_store.augmentedTier)
 	run_store.augmentedTier = ""
-	if int(run_store.dealer_countdown_reset_value()) != 15:
-		failures.append("pr161: dealer countdown should reset to 15")
+	if int(run_store.dealer_countdown_reset_value()) != 12:
+		failures.append("pr161: dealer countdown should reset to 12")
 	run_store.augmentedTier = "club"
-	if int(run_store.dealer_countdown_reset_value()) != 30:
-		failures.append("pr161: Club modifier should reset the dealer countdown to 30")
+	if int(run_store.dealer_countdown_reset_value()) != 24:
+		failures.append("pr161: Club modifier should reset the dealer countdown to 24")
 	run_store.augmentedTier = prev_tier

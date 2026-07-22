@@ -3,19 +3,17 @@
 [ext_resource type="Script" uid="uid://bty2dglqk8hul" path="res://scenes/machine_scene.gd" id="1_machine"]
 [ext_resource type="Texture2D" uid="uid://cle4mx7cn42t" path="res://assets/images/machine new view/reel_final_machine.png" id="2_reel"]
 [ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
-[ext_resource type="Texture2D" path="res://assets/images/machine new view/machine_neon.png" id="4_cabinet"]
-[ext_resource type="Texture2D" uid="uid://ojxjeqmf2wnp" path="res://assets/images/machine new view/health_track_final_machine.png" id="7_health_track"]
-[ext_resource type="Texture2D" uid="uid://dgs625hqb1ea0" path="res://assets/images/machine new view/health_fill_final_machine.png" id="8_health_fill"]
+[ext_resource type="Texture2D" uid="uid://brrjth68rbdf2" path="res://assets/images/machine new view/machine_neon.png" id="4_cabinet"]
 [ext_resource type="Texture2D" uid="uid://bux7jbe7o4let" path="res://assets/images/machine new view/multiplier_final_machine.png" id="9_multiplier"]
-[ext_resource type="Texture2D" path="res://assets/images/machine new view/neon_machine_lever.png" id="10_lever"]
-[ext_resource type="Texture2D" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
+[ext_resource type="Texture2D" uid="uid://pqc0qfbcf28q" path="res://assets/images/machine new view/neon_machine_lever.png" id="10_lever"]
+[ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
 [ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
 [ext_resource type="Texture2D" uid="uid://bugvu3ivgsp1m" path="res://assets/images/machine new view/reroll_final_machine.png" id="13_reroll"]
 [ext_resource type="Texture2D" uid="uid://dllrucw0rl5oc" path="res://assets/images/machine new view/shift_final_machine.png" id="14_shift"]
 [ext_resource type="Texture2D" uid="uid://6kxesj6e2w3x" path="res://assets/images/machine new view/lock_final_machine.png" id="15_memory"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
 [ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="17_vp1vd"]
-[ext_resource type="Texture2D" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
+[ext_resource type="Texture2D" uid="uid://d28yxo0yalrku" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="19_options"]
 
 [node name="MachineScene" type="Node2D" unique_id=322645154]
@@ -114,22 +112,8 @@ position = Vector2(107.5, 199)
 position = Vector2(107.5, 185)
 
 [node name="Cabinet" type="Sprite2D" parent="." unique_id=1998976856]
-scale = Vector2(1, 1)
 texture = ExtResource("4_cabinet")
 centered = false
-
-[node name="HealthTrack" type="Sprite2D" parent="." unique_id=1358964215]
-scale = Vector2(0.125, 0.125)
-texture = ExtResource("7_health_track")
-centered = false
-
-[node name="HealthFill" type="Sprite2D" parent="." unique_id=323378390]
-position = Vector2(43, 94)
-scale = Vector2(0.125, 0.125)
-texture = ExtResource("8_health_fill")
-centered = false
-region_enabled = true
-region_rect = Rect2(344, 752, 528, 40)
 
 [node name="Multiplier" type="Sprite2D" parent="." unique_id=1960969618]
 scale = Vector2(0.125, 0.125)
@@ -138,13 +122,11 @@ centered = false
 hframes = 6
 
 [node name="Lever" type="Sprite2D" parent="." unique_id=1583962497]
-scale = Vector2(1, 1)
 texture = ExtResource("10_lever")
 centered = false
 hframes = 6
 
 [node name="Jackpot" type="Sprite2D" parent="." unique_id=1717179247]
-scale = Vector2(1, 1)
 texture = ExtResource("11_jackpot")
 centered = false
 hframes = 3
@@ -247,15 +229,6 @@ texture_hover = ExtResource("18_settings")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="HealthLabel" type="Label" parent="." unique_id=1391294732]
-offset_left = 43.0
-offset_top = 85.0
-offset_right = 136.0
-offset_bottom = 95.0
-theme_override_colors/font_color = Color(0.75, 1, 0.8, 1)
-theme_override_fonts/font = ExtResource("16_font")
-theme_override_font_sizes/font_size = 6
-
 [node name="SpinButton" type="Button" parent="." unique_id=554475154]
 offset_left = 133.0
 offset_top = 160.0
@@ -357,12 +330,14 @@ offset_left = -46.5
 offset_top = -14.0
 offset_right = 46.5
 offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 0
 theme_override_colors/font_color = Color(0.8, 0.95, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 1
 theme_override_fonts/font = ExtResource("16_font")
 theme_override_font_sizes/font_size = 6
-theme_override_constants/outline_size = 1
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="OptionsOverlay" parent="." instance=ExtResource("19_options")]
+[node name="OptionsOverlay" parent="." unique_id=903920852 instance=ExtResource("19_options")]
