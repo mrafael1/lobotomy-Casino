@@ -133,7 +133,7 @@ func _normalise_card_unlocks(value: Variant, fallback: Array[String]) -> Array:
 	var result: Array = []
 	if value is Array:
 		for id in value:
-			var card_id := String(id)
+			var card_id := PacteCards.normalise_card_id(String(id))
 			if fallback.has(card_id) and not result.has(card_id):
 				result.append(card_id)
 		return result

@@ -21,7 +21,6 @@ extends Control
 
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
-const UPGRADES_SCENE := "res://scenes/upgrades_scene.tscn"
 const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 
 # Counter geometry: authored coords (1280x2560) / 8 -> the 160x320 canvas.
@@ -68,11 +67,9 @@ const COIN_ASSET := "ui/coin.png"
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_base_x8.png"
 const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON_x8.png"
-const LAB_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_LAB_BUTTON_x8.png"
 # Opaque bounds of each button's art (source px, measured with pngjs) — the
 # invisible hit buttons cover exactly these rects.
 const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
-const LAB_BUTTON_RECT := Rect2(63.0, 14.0, 37.0, 25.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
 const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_reroll_BUTTON_x8.png"
@@ -93,23 +90,17 @@ const AUGMENT_RARITY_COLORS := {
 	"legendary": Color(0.8, 0.42, 0.98),
 }
 const AUGMENT_BOUGHT_MESSAGE := "THE CHIP SLOTS INTO PLACE"
-const AUGMENT_PICKER_RECT := Rect2(10.0, 136.0, 140.0, 58.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const OFFER_PRICE_COIN_SIZE := 6.0
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
-# Issue #84: the LAB button pulses so it reads as an interactive button. The pulse
-# rides self_modulate (frame art stays on the 2-frame sheet) — dim → bright brighten
-# and back, looping. Values >1 brighten the CanvasItem, giving the glow.
+# Painting-glow pulse (originally the LAB button glow): dim → bright and back,
+# looping on self_modulate. Values >1 brighten the CanvasItem, giving the glow.
 const LAB_GLOW_DIM := Color(0.82, 0.82, 0.82)
 const LAB_GLOW_BRIGHT := Color(1.55, 1.5, 1.15)
 const LAB_GLOW_PERIOD := 0.85
-const LAB_SIGN_GLOW_DIM := Color(1.0, 1.0, 1.0, 0.0)
-const LAB_SIGN_GLOW_BRIGHT := Color(1.55, 1.5, 1.15, 0.55)
-const LAB_NORMAL_SIGN_RECT := Rect2(59.0, 0.0, 43.0, 40.0)
-const LAB_PRESSED_SIGN_RECT := Rect2(62.0, 12.0, 37.0, 25.0)
 
 # Issue #84: confirm before the machine button starts the run (misclick guard).
 const CANVAS_W := 160.0
@@ -143,11 +134,7 @@ var _counter_sprite: Sprite2D = null
 var _dealer_drop_zone: Control = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
-var _lab_button: Button = null
-var _lab_button_sprite: Sprite2D = null      # authored 2-frame lab button art
-var _lab_glow_sprite: Sprite2D = null        # sign-only pulse overlay
-var _lab_glow_frames: Array[AtlasTexture] = []
-var _lab_glow_tween: Tween = null            # issue #84: looping lab-button glow
+var _lab_button: Button = null               # authored node; kept hidden (lab retired)
 var _start_button: Button = null
 var _machine_button_sprite: Sprite2D = null  # authored 2-frame machine button art
 var _reroll_button: Button = null            # issue #117: painting hit area
@@ -198,6 +185,8 @@ func _ready() -> void:
 			MetaStateStore.meta_changed.connect(_refresh_campaign_label)
 		if _pre_run and not MetaStateStore.meta_changed.is_connected(_refresh_credits):
 			MetaStateStore.meta_changed.connect(_refresh_credits)
+		if not _pre_run and not RunStateStore.state_changed.is_connected(_refresh_credits):
+			RunStateStore.state_changed.connect(_refresh_credits)
 		_refresh_credits()
 	_refresh_campaign_label()
 
@@ -569,7 +558,9 @@ func _build_hud() -> void:
 		_configure_machine_button()
 		_configure_reroll_button()
 		if _credits_row != null:
-			_credits_row.visible = _pre_run
+			# Pre-run/post-run show wallet Lucidity; a live threshold/interruption
+			# dealer visit shows the active run's Lucidity in the same coin bank.
+			_credits_row.visible = true
 		_build_credits_display()
 		return
 	# Top-left settings/back icon (issue #25). Pre-run: BACK to the menu hub (issue #22);
@@ -585,6 +576,7 @@ func _build_hud() -> void:
 	_options_button = back
 	_configure_lab_button()
 	_configure_reroll_button()
+	_build_credits_display()
 	if _pre_run:
 		# Begin the run with whatever was bought; back/leave is a separate action.
 		# START rides on the arrow asset (issue #24 follow-up: the art is now 39x24 and
@@ -646,59 +638,13 @@ func _build_campaign_label() -> void:
 # self-position on the 160x320 canvas; the authored Buttons are invisible hit areas
 # over the art's opaque bounds, driving the pressed frame while held.
 
+## The lab is no longer reachable from the dealer scene: the authored LAB button
+## stays hidden and its art/glow are never built.
 func _configure_lab_button() -> void:
 	if _lab_button == null:
 		return
-	_lab_button.position = LAB_BUTTON_RECT.position
-	_lab_button.size = LAB_BUTTON_RECT.size
-	if _lab_button_sprite == null:
-		_lab_button_sprite = _build_button_art(LAB_BUTTON_ASSET, "LabButtonArt")
-	if _lab_glow_sprite == null:
-		_lab_glow_sprite = _build_lab_glow_art()
-	_wire_art_button(_lab_button, _lab_button_sprite, Callable(self, "_open_lab"))
-	_start_lab_glow()
-
-## Issue #84: give the LAB button a looping glow so it reads as a pressable button.
-## Only the sign is pulsed; the pressed frame's label above it stays unlit.
-func _start_lab_glow() -> void:
-	if _lab_button_sprite == null or _lab_glow_sprite == null or Engine.is_editor_hint():
-		return
-	if _lab_glow_tween != null and _lab_glow_tween.is_valid():
-		return
-	_lab_button_sprite.self_modulate = Color.WHITE
-	_lab_glow_sprite.self_modulate = LAB_SIGN_GLOW_DIM
-	_lab_glow_tween = create_tween().set_loops()
-	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_BRIGHT, LAB_GLOW_PERIOD) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_lab_glow_tween.tween_property(_lab_glow_sprite, "self_modulate", LAB_SIGN_GLOW_DIM, LAB_GLOW_PERIOD) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-func _build_lab_glow_art() -> Sprite2D:
-	var texture := Assets.texture(LAB_BUTTON_ASSET, true)
-	if texture == null:
-		return null
-	var frame_width := float(texture.get_width()) / 2.0
-	var source_scale := frame_width / CANVAS_W
-	_lab_glow_frames.clear()
-	for frame in 2:
-		var sign_rect := LAB_NORMAL_SIGN_RECT if frame == 0 else LAB_PRESSED_SIGN_RECT
-		var atlas := AtlasTexture.new()
-		atlas.atlas = texture
-		atlas.region = Rect2(
-			Vector2(float(frame) * frame_width, 0.0) + sign_rect.position * source_scale,
-			sign_rect.size * source_scale
-		)
-		_lab_glow_frames.append(atlas)
-	var glow := Sprite2D.new()
-	glow.name = "LabButtonGlowArt"
-	glow.texture = _lab_glow_frames[0]
-	glow.centered = false
-	glow.position = LAB_NORMAL_SIGN_RECT.position
-	glow.scale = Vector2.ONE / source_scale
-	glow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	glow.self_modulate = LAB_SIGN_GLOW_DIM
-	add_child(glow)
-	return glow
+	_lab_button.visible = false
+	_lab_button.disabled = true
 
 func _configure_machine_button() -> void:
 	if _start_button == null:
@@ -707,10 +653,18 @@ func _configure_machine_button() -> void:
 	_start_button.size = MACHINE_BUTTON_RECT.size
 	if _machine_button_sprite == null:
 		_machine_button_sprite = _build_button_art(MACHINE_BUTTON_ASSET, "MachineButtonArt")
-	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_confirm_start_run"))
-	_start_button.visible = _pre_run
-	if _machine_button_sprite != null:
-		_machine_button_sprite.visible = _pre_run
+	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_on_machine_button_pressed"))
+
+## Pre-run the machine button starts the run (behind the misclick confirm);
+## during an in-run dealer visit it returns to the machine, declining the
+## pending offer — the active run (and its Pacte card effects) is untouched.
+func _on_machine_button_pressed() -> void:
+	if Engine.is_editor_hint():
+		return
+	if _pre_run:
+		_confirm_start_run()
+		return
+	_on_leave()
 
 # ── painting reroll control (issue #117, repriced) ────────────────────────────────
 # The wall painting rerolls the current offer pair in BOTH dealer phases: the
@@ -924,16 +878,17 @@ func _commit_augment_purchase(id: String, choice: String) -> void:
 	_build_offers() # augment slot empties; consumable prices may have changed
 	_refresh_painting_state()
 
+## Symbol Level opens the odds table itself (no token wallet): the player reads
+## the live levels and taps a row's "+" to put the +1 there — up to level 9.
 func _open_symbol_level_picker(id: String) -> void:
 	_close_augment_picker()
-	_augment_picker = _augment_picker_root()
-	var symbols: Array[String] = []
-	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
-		if String(symbol_id) != "flatline":
-			symbols.append(String(symbol_id))
-	Assets.build_symbol_picker_panel(_augment_picker, symbols, "LEVEL SYMBOL", AUGMENT_PICKER_RECT,
-		Callable(self, "_on_augment_symbol_picked").bind(id),
-		Callable(self, "_close_augment_picker"), true)
+	var overlay := ODDS_OVERLAY_SCENE.instantiate() as OddsTableOverlay
+	overlay.name = "AugmentPicker"
+	_augment_picker = overlay
+	add_child(overlay)
+	overlay.symbol_picked.connect(_on_augment_symbol_picked.bind(id))
+	overlay.closed.connect(_close_augment_picker)
+	overlay.call_deferred("open_augment_picker")
 
 func _on_augment_symbol_picked(symbol_id: String, id: String) -> void:
 	_commit_augment_purchase(id, symbol_id)
@@ -1011,16 +966,6 @@ func _wire_art_button(button: Button, spr: Sprite2D, cb: Callable) -> void:
 func _set_button_art_frame(spr: Sprite2D, frame: int) -> void:
 	if spr != null and is_instance_valid(spr):
 		spr.frame = frame
-		if spr == _lab_button_sprite:
-			_set_lab_glow_frame(frame)
-
-func _set_lab_glow_frame(frame: int) -> void:
-	if _lab_glow_sprite == null or _lab_glow_frames.is_empty():
-		return
-	var clamped_frame := clampi(frame, 0, _lab_glow_frames.size() - 1)
-	_lab_glow_sprite.texture = _lab_glow_frames[clamped_frame]
-	_lab_glow_sprite.position = LAB_NORMAL_SIGN_RECT.position \
-			if clamped_frame == 0 else LAB_PRESSED_SIGN_RECT.position
 
 func _toggle_options_overlay() -> void:
 	if _options_overlay == null:
@@ -1033,14 +978,6 @@ func _restore_options_overlay_if_requested() -> void:
 	var scene_nav := get_node_or_null("/root/SceneNav")
 	if scene_nav != null and bool(scene_nav.call("consume_restore_options", String(scene_file_path))):
 		_options_overlay.call_deferred("show_overlay")
-
-func _open_lab() -> void:
-	if Engine.is_editor_hint():
-		return
-	var scene_nav := get_node_or_null("/root/SceneNav")
-	if scene_nav != null:
-		scene_nav.call("push_current_scene")
-	SceneNav.change_to(UPGRADES_SCENE)
 
 # ── machine-button confirmation (issue #84) ────────────────────────────────────────
 # The machine button leaves the lab and starts the run — an accidental tap would skip
@@ -1200,7 +1137,11 @@ func _build_credits_display() -> void:
 
 func _refresh_credits() -> void:
 	if _credits_label != null:
-		_credits_label.text = "0" if Engine.is_editor_hint() else str(MetaStateStore.lucidityWallet)
+		if Engine.is_editor_hint():
+			_credits_label.text = "0"
+		else:
+			_credits_label.text = str(MetaStateStore.lucidityWallet if _pre_run \
+				else RunStateStore.lucidityCoins)
 	# Wallet changes move the pre-run reroll's affordability state.
 	_refresh_painting_state()
 

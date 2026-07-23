@@ -44,6 +44,7 @@ func _run() -> void:
 	_check_machine_art_mix(machine, failures)
 	await _check_pacte_flow(machine, run_store, meta_store, failures)
 	_check_pacte_power_rules(machine, run_store, failures)
+	_check_pacte_augment_effects(machine, run_store, failures)
 	_check_base_scene_parity(failures)
 	_check_first_launch_tutorial(meta_store, failures)
 	_check_scene_nav(failures)
@@ -184,6 +185,16 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or jackpot.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: jackpot is not a 3-frame native sprite")
 
+	var multiplier := machine.get_node_or_null("Multiplier") as Sprite2D
+	if multiplier == null:
+		failures.append("machine art: native multiplier node is missing")
+	elif multiplier.texture == null \
+			or Vector2i(multiplier.texture.get_width(), multiplier.texture.get_height()) != Vector2i(960, 320) \
+			or multiplier.hframes != 6 \
+			or multiplier.scale != Vector2.ONE \
+			or multiplier.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: multiplier is not a 6-frame native nearest-neighbor sprite")
+
 	var power_bar := machine.get_node_or_null("PowerBar") as Sprite2D
 	if power_bar == null:
 		failures.append("machine art: native power bar node is missing")
@@ -194,6 +205,17 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or power_bar.scale != Vector2.ONE \
 			or power_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: power bar is not a 6-frame native sprite")
+
+	var power_callout := machine.get_node_or_null("PowerCallout") as Sprite2D
+	if power_callout == null:
+		failures.append("machine art: power callout node is missing")
+	elif power_callout.texture == null \
+			or Vector2i(power_callout.texture.get_width(), power_callout.texture.get_height()) \
+				!= Vector2i(1120, 320) \
+			or power_callout.hframes != 7 \
+			or power_callout.scale != Vector2.ONE \
+			or power_callout.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("machine art: power callout is not a 7-frame native sprite")
 
 	var wealth_odometer := machine.get_node_or_null("WealthOdometer") as WealthOdometer
 	if wealth_odometer == null:
@@ -1224,27 +1246,16 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 	_check_start_menu_button_style(back, Assets.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
 	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
-## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal,
-## and the LAB button glows (looping self_modulate pulse) so it reads as a button.
+## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal.
+## The LAB button is retired: it must stay hidden on the dealer scene.
 func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void:
-	# Lab glow is armed and looping.
-	if dealer._lab_glow_tween == null or not dealer._lab_glow_tween.is_valid():
-		failures.append("issue84: LAB button glow tween is not running")
-	elif not dealer._lab_glow_tween.is_running():
-		failures.append("issue84: LAB button glow tween is not looping")
-	var lab_glow := dealer.get_node_or_null("LabButtonGlowArt") as Sprite2D
-	if lab_glow == null:
-		failures.append("issue84: LAB sign-only glow layer is missing")
-	elif dealer._lab_button_sprite.self_modulate != Color.WHITE:
-		failures.append("issue84: LAB glow still modulates the label layer")
+	# The lab is no longer reachable from the dealer scene.
 	var lab_button := dealer.get_node_or_null("LabButton") as Button
-	if lab_button != null and lab_glow != null:
-		lab_button.button_down.emit()
-		if lab_glow.position != Vector2(62.0, 12.0):
-			failures.append("issue84: LAB glow did not follow the pressed sign frame")
-		lab_button.button_up.emit()
-		if lab_glow.position != Vector2(59.0, 0.0):
-			failures.append("issue84: LAB glow did not restore the normal sign frame")
+	if lab_button != null and (lab_button.visible or not lab_button.disabled):
+		failures.append("issue84: retired LAB button is still active on the dealer scene")
+	if dealer.get_node_or_null("LabButtonArt") != null \
+			or dealer.get_node_or_null("LabButtonGlowArt") != null:
+		failures.append("issue84: retired LAB button art/glow is still built")
 
 	# The machine button is wired to the confirm guard, not straight to _start_run.
 	var start_button := dealer.get_node_or_null("StartButton") as Button
@@ -1253,7 +1264,7 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 	else:
 		if start_button.pressed.is_connected(Callable(dealer, "_start_run")):
 			failures.append("issue84: machine button still starts the run without confirmation")
-		if not start_button.pressed.is_connected(Callable(dealer, "_confirm_start_run")):
+		if not start_button.pressed.is_connected(Callable(dealer, "_on_machine_button_pressed")):
 			failures.append("issue84: machine button is not gated behind the confirm modal")
 
 	# Pressing the machine button shows the modal instead of starting the run.
@@ -1282,26 +1293,9 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	_check_dealer_shop_light_art(dealer, failures)
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
-	for rel in ["dealer_scene_LAB_BUTTON.png", "dealer_scene_machine_BUTTON.png"]:
+	for rel in ["dealer_scene_machine_BUTTON.png"]:
 		if not ResourceLoader.exists("res://assets/images/" + String(rel)):
 			failures.append("issue55: %s not in godot/assets/images — missing from exported builds (APK)" % rel)
-	var lab_button := dealer.get_node_or_null("LabButton") as Button
-	var lab_art := dealer.get_node_or_null("LabButtonArt") as Sprite2D
-	if lab_button == null or lab_art == null:
-		failures.append("issue55: dealer LAB button/art pair is missing")
-	else:
-		if lab_button.text != "":
-			failures.append("issue55: lab hit button should render no text over the art")
-		if lab_art.hframes != 2:
-			failures.append("issue55: lab button art is not a 2-frame sheet")
-		if lab_art.position != Vector2.ZERO:
-			failures.append("issue55: lab art lost its dealer-canvas-relative position")
-		lab_button.button_down.emit()
-		if lab_art.frame != 1:
-			failures.append("issue55: lab press did not switch to the pressed frame")
-		lab_button.button_up.emit()
-		if lab_art.frame != 0:
-			failures.append("issue55: lab release did not restore the default frame")
 	var start_button := dealer.get_node_or_null("StartButton") as Button
 	var machine_art := dealer.get_node_or_null("MachineButtonArt") as Sprite2D
 	if start_button == null or machine_art == null:
@@ -1388,7 +1382,7 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 	elif counter.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 			or counter.hframes != 2 or counter.scale != Vector2(0.125, 0.125):
 		failures.append("dealer shop: counter is not a nearest-neighbor 2-frame 8x sheet")
-	for art_name in ["LabButtonArt", "MachineButtonArt", "RerollButtonArt"]:
+	for art_name in ["MachineButtonArt", "RerollButtonArt"]:
 		var art := dealer.get_node_or_null(art_name) as Sprite2D
 		if art == null or art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 				or art.hframes != 2 or art.scale != Vector2(0.125, 0.125):
@@ -1588,20 +1582,21 @@ func _check_chip_augments(failures: Array) -> void:
 	var prev_neurons := int(run_store.neurons)
 	var prev_owned: Array = (run_store.ownedUpgrades as Array).duplicate()
 
-	# Fresh pre-run cycle: stale augments expire, exactly one pool offer rolls.
+	# Fresh pre-run cycle: exactly one pool offer rolls. Augments persist for the
+	# whole campaign — only a fresh Pacte run or a full reset clears them.
 	run_store.runPhase = "idle"
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
 	run_store.prerunOfferIds = null
-	run_store.chipAugmentsPurchased = { "aug_extra_spins": 2 } # stale, must clear
+	run_store.chipAugmentsPurchased = { "aug_extra_spins": 2 } # must survive the roll
 	run_store.pairTripleAugmentChoice = "pair"
 	run_store.symbolAugmentLevels = { "eye": 1 }
 	meta_store.lucidityWallet = 1000
 	run_store.ensure_prerun_offer(7)
-	if not (run_store.chipAugmentsPurchased as Dictionary).is_empty() \
-			or String(run_store.pairTripleAugmentChoice) != "" \
-			or not (run_store.symbolAugmentLevels as Dictionary).is_empty():
-		failures.append("augments: fresh cycle did not expire the previous cycle's augments")
+	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 2 \
+			or String(run_store.pairTripleAugmentChoice) != "pair" \
+			or int((run_store.symbolAugmentLevels as Dictionary).get("eye", 0)) != 1:
+		failures.append("augments: a new cycle must keep the campaign's augments")
 	var offer_id := String(run_store.dealerAugmentOfferId)
 	if offer_id == "" or not ChipAugments.ids().has(offer_id):
 		failures.append("augments: fresh visit did not roll one augment offer from the pool")
@@ -1659,7 +1654,8 @@ func _check_chip_augments(failures: Array) -> void:
 			or int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 0:
 		failures.append("augments: failed purchase charged or consumed stock")
 
-	# Extra Spins: both copies, +3 spins each through the neuron decay model.
+	# Extra Spins: both copies, +3 spins each through the neuron decay model,
+	# subject to the new 18-spin run cap.
 	run_store.lucidityCoins = 500
 	run_store.ownedUpgrades = []
 	var decay := maxi(1, Economy.compute_neuron_decay([]))
@@ -1668,8 +1664,9 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.purchase_chip_augment("aug_extra_spins")
 	run_store.dealerAugmentOfferId = "aug_extra_spins"
 	run_store.purchase_chip_augment("aug_extra_spins")
-	if int(run_store.neurons) != neurons_before + 6 * decay:
-		failures.append("augments: two Extra Spins should add 6 spins' worth of neurons")
+	var expected_extra_spins := mini(EconomyConst.MAX_NEURONS, neurons_before + 6 * decay)
+	if int(run_store.neurons) != expected_extra_spins:
+		failures.append("augments: Extra Spins should respect the 18-spin cap")
 
 	# Symbol Level: needs a selection, raises the weight, honours the level-9 cap.
 	run_store.symbolAugmentLevels = {}
@@ -2831,11 +2828,11 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 		machine._overlay = null
 	machine._stop_flatline_countdown()
 
-	# The core fix: you never die just for spinning a lot. With neurons on the bar,
-	# no number of spins ends the run — there is no spin cap anymore (issue #75).
+	# The core fix: you never die just for the spin count. With neurons on the bar,
+	# a high spin count does not end the run; only the remaining spin pool does.
 	run_store.runPhase = "running"
 	run_store.lastEnding = null
-	run_store.neurons = 20
+	run_store.neurons = 5
 	run_store.freeSpinsRemaining = 0
 	run_store.wealthContinued = false
 	run_store.spinCount = 999
@@ -2846,6 +2843,122 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+# Pacte augment presentation and the three revised run effects.
+func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Array) -> void:
+	var glitch_card := PacteCards.card("augment_glitch_2")
+	if glitch_card.has("icon_rect"):
+		failures.append("pacte augment: GLITCH 2 should not define an icon")
+	for augment in PacteCards.AUGMENTS:
+		var description := String(augment.get("description", ""))
+		if description != description.to_upper():
+			failures.append("pacte augment: %s description is not uppercase" % String(augment.get("id", "")))
+	var pacte_ps := load("res://scenes/pacte_scene.tscn") as PackedScene
+	var pacte := pacte_ps.instantiate() as Control
+	var glitch_view: Control = pacte._make_card_view("augment_glitch_2", "augment")
+	if glitch_view.get_node_or_null("Icon") != null:
+		failures.append("pacte augment: GLITCH 2 still renders an icon")
+	if glitch_view.get_node_or_null("GlitchFx") == null:
+		failures.append("pacte augment: GLITCH 2 card is missing its intermittent tear effect")
+	pacte.free()
+
+	var saved_state: Dictionary = {}
+	for property_name in run_store._run_state_properties():
+		var value: Variant = run_store.get(property_name)
+		if value is Array:
+			saved_state[property_name] = (value as Array).duplicate(true)
+		elif value is Dictionary:
+			saved_state[property_name] = (value as Dictionary).duplicate(true)
+		else:
+			saved_state[property_name] = value
+
+	var combo_effect: Sprite2D = machine._combo_effect_sprite
+	if combo_effect == null or int(combo_effect.hframes) != 9:
+		failures.append("pacte augment: COMBO effect sheet is not wired as nine frames")
+	else:
+		machine._show_combo_effect(8, 45, 45)
+		if not combo_effect.visible or int(combo_effect.frame) != 8 \
+				or machine._combo_payout_label == null \
+				or String(machine._combo_payout_label.text) != "+ 45 (45%)":
+			failures.append("pacte augment: COMBO x9 did not show its frame and bonus")
+		machine._stop_combo_effect()
+
+	# Win Boost uses the 5/10/15...45% steps on successive paying results and
+	# exposes the stage/bonus separately for the machine's second TV beat.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 35
+	run_store.winBoostEnabled = true
+	run_store.winBoostCombo = 0
+	for expected_step in range(1, 10):
+		var expected_percent := expected_step * 5
+		run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+		run_store.lockedReels = [true, true, true]
+		run_store.lockedReelSpins = [2, 2, 2]
+		var boosted: Variant = run_store.spin()
+		run_store.set_spinning(false)
+		if boosted == null:
+			failures.append("pacte augment: Win Boost did not resolve stage %d" % expected_step)
+			continue
+		if int(boosted.get("winBoostPercent", 0)) != expected_percent \
+				or int(boosted.get("winBoostCombo", 0)) != expected_step \
+				or not bool(boosted.get("winBoostApplied", false)):
+			failures.append("pacte augment: Win Boost did not reach %d%% on its streak" % expected_percent)
+		var base_payout := int(boosted.get("scoreEarned", 0)) - int(boosted.get("winBoostBonus", 0))
+		var expected_bonus := floori(float(base_payout) * float(expected_percent) / 100.0 + 0.5)
+		if int(boosted.get("winBoostBonus", -1)) != expected_bonus:
+			failures.append("pacte augment: Win Boost bonus did not match %d%% of the base payout" % expected_percent)
+	if int(run_store.winBoostCombo) != 9:
+		failures.append("pacte augment: Win Boost streak did not cap at x9")
+
+	# Glitch 2 advances the dealer by three steps even at the x3 gauge.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 35
+	run_store.betMultiplier = 3
+	run_store.glitchDealerStepActive = true
+	run_store.dealerCountdown = 12
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	var glitch_result: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if glitch_result == null or int(run_store.dealerCountdown) != 9:
+		failures.append("pacte augment: GLITCH 2 did not move the dealer by three steps at x3")
+
+	# Joker activates on the first three-flatline strike and its assist is not a
+	# player power use. Try a few seeds because the assist is intentionally occasional.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.pacteJokerArmed = true
+	run_store.register_flatline_result()
+	if not run_store.pacteJokerActive:
+		failures.append("pacte augment: Joker did not activate after a three-flatline strike")
+	run_store.spinCount = 1
+	run_store.neurons = 35
+	run_store.lastResult = {
+		"reels": ["eye", "vial", "pill"], "scoreMultiplier": 1.0,
+		"isFreeSpin": false, "scoreEarned": 0, "coinsEarned": 0,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0,
+	}
+	var dealer_help: Dictionary = {}
+	for candidate_seed in range(1, 128):
+		run_store.pacteSeed = candidate_seed
+		run_store.dealerHelpSpinCount = -1
+		dealer_help = run_store.maybe_dealer_help()
+		if not dealer_help.is_empty():
+			break
+	if dealer_help.is_empty():
+		failures.append("pacte augment: Joker never produced a dealer assist")
+	elif not run_store.abilitiesUsed.is_empty() or int(run_store.powersUsedThisSpin) != 0:
+		failures.append("pacte augment: dealer assist consumed a player power")
+
+	for property_name in saved_state:
+		run_store.set(property_name, saved_state[property_name])
+	run_store._commit()
 
 # Issue #76: a 3x-flatline strike charges the NEXT winning pair/triple. The charge is
 # armed by register_flatline_result, survives non-scoring spins, doubles the next real
@@ -3076,8 +3189,9 @@ func _check_frenzy_gauge_155(run_store: Node, failures: Array) -> void:
 		run_store.set_spinning(false)
 		if int(run_store.betMultiplier) != expected:
 			failures.append("issue155: gauge expected x%d after a win, got x%d" % [expected, int(run_store.betMultiplier)])
-	# The decay no longer scales with the gauge: 3 spins = 3 neurons.
-	if int(run_store.neurons) != 97:
+	# The decay no longer scales with the gauge: three spins consume three of the
+	# capped 18-spin pool.
+	if int(run_store.neurons) != EconomyConst.MAX_NEURONS - 3:
 		failures.append("issue155: frenzy spins should decay 1 neuron each, got %d left" % int(run_store.neurons))
 
 	# A forced flatline spin (a 0-score "triple") opens the pending defeat window and
@@ -3167,6 +3281,8 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.runPhase = "running"
+	# Reroll is no longer implicit; opt into it here to cover the rescue path.
+	run_store.ownedPowerIds = ["reroll"]
 	run_store.neurons = 10
 	run_store.lastResult = { "reels": ["eye", "vial", "pill"], "isJackpot": false,
 		"winType": "miss", "scoreEarned": 0, "coinsEarned": 0,
@@ -3470,6 +3586,15 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 
 	# Power callouts share the same priority, and overlapping callouts keep it held
 	# until the last owner closes.
+	var expected_power_frames: Dictionary = {
+		"reroll": 0, "shift": 1, "memory": 2, "rewind": 3,
+		"heart": 4, "cheat": 5, "swap": 6,
+	}
+	for power_id in expected_power_frames:
+		machine._show_power_animation(String(power_id))
+		if machine._power_anim_sprite == null \
+				or int(machine._power_anim_sprite.frame) != int(expected_power_frames[power_id]):
+			failures.append("TV callout priority: %s uses the wrong power animation frame" % power_id)
 	machine._show_power_animation("reroll")
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible):
 		failures.append("TV callout priority: power callout did not hide persistent TV information")
@@ -3596,6 +3721,16 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			or machine._dealer_bar_overlay_2 == null or not machine._dealer_bar_overlay_2.visible \
 			or machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible:
 		failures.append("issue155: x1 should show all three dealer bar overlays")
+	# Glitch 2 keeps all three warning sheets visible even while the gauge is x3.
+	run_store.glitchDealerStepActive = true
+	run_store.betMultiplier = 3
+	machine._refresh_dealer_countdown()
+	if dealer_overlay_1 == null or not dealer_overlay_1.visible \
+			or dealer_overlay_2 == null or not dealer_overlay_2.visible \
+			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
+		failures.append("issue155: Glitch 2 did not show all three dealer warning overlays")
+	run_store.glitchDealerStepActive = false
+	run_store.betMultiplier = 1
 	# The active overlays pulse without changing the frame selected by countdown
 	# progress, so the warning beeps but never spoils a different state.
 	if dealer_overlay_1 != null:
@@ -3641,6 +3776,35 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			or dealer_overlay_2 == null or not dealer_overlay_2.visible \
 			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
 		failures.append("issue155: dealer warning overlays did not return after the result hold")
+
+	# Energy Drink keeps the authored engaged x2-cap frame through both protected
+	# spins and the queued compulsory spin, not only while forcedRandomBetSpins is > 0.
+	run_store.betMultiplier = 2
+	run_store.decaySkips = 2
+	run_store.forcedRandomBetSpins = 2
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.compulsiveSpinSkips = 0
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 5:
+		failures.append("energy drink: protected spins did not show the engaged x2-cap frame")
+	# The drink's visual activation must win over a score-popup HUD hold; otherwise
+	# the normal x2 frame remains on screen until an unrelated animation completes.
+	machine._hud_delta_hold = true
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 5:
+		failures.append("energy drink: engaged x2-cap frame was deferred by HUD hold")
+	machine._hud_delta_hold = false
+	run_store.decaySkips = 0
+	run_store.forcedRandomBetSpins = 0
+	run_store.compulsiveSpinSkips = 1
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 5:
+		failures.append("energy drink: compulsory spin lost the engaged x2-cap frame")
+	run_store.compulsiveSpinSkips = 0
+	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 1:
+		failures.append("energy drink: x2-cap frame did not release after activation")
+	run_store.betMultiplier = 1
 
 	# The Energy-Drink forced spin no longer forces x1: the badge keeps showing the
 	# real gauge value through the compulsive phase.
@@ -4002,7 +4166,7 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.neurons = 10
-	run_store.startingNeurons = 105
+	run_store.startingNeurons = EconomyConst.STARTING_NEURONS
 	run_store.freeSpinsRemaining = 0
 	# The REAL base cap (1): the user-reported bug was +3 grants clamping to +1.
 	run_store.maxFreeSpins = 1
@@ -4117,17 +4281,14 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._update_hud()
 	run_store.reset_run_state()
 
-# Issue #85/#80/#75: with a single 1:1 spin currency SPINS LEFT is just the neuron
-# pool (plus banked free spins). The #80 drift (a +3 vial restore reading +4, a spin
-# dropping the counter by 2) can't recur because neurons and spins no longer disagree,
-# and there is no spin-count cap (issue #75): the counter reads straight off the neuron
-# budget no matter how many spins have been taken.
+# Issue #85/#80/#75: with a single 1:1 spin currency SPINS LEFT is the capped neuron
+# pool (plus banked free spins). The readout turns dark red at the 18-spin maximum.
 func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.runPhase = "running"
 	run_store.startingNeurons = EconomyConst.STARTING_NEURONS
-	run_store.neurons = 20          # 1 neuron = 1 spin, well under the cap
+	run_store.neurons = EconomyConst.MAX_NEURONS
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 0
 	machine._pending_spin_gain = 0
@@ -4136,31 +4297,36 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	machine._update_hud()
 
 	var before := int(machine._display_spins_left())
-	if before != 20:
-		failures.append("issue85: SPINS LEFT should equal neurons=20, got %d" % before)
-	# The tube caps at its last frame (18): 20 spins still reads full.
+	if before != EconomyConst.MAX_NEURONS:
+		failures.append("issue85: SPINS LEFT should cap at 18, got %d" % before)
+	# The tube and number both show their full state at 18.
 	var tube := machine._health_bar_sprite as Sprite2D
 	if tube != null and int(tube.frame) != 18:
-		failures.append("issue85: spins tube should clamp to its full frame at 20 spins")
+		failures.append("issue85: spins tube should show its full frame at 18 spins")
+	if machine._spins_left_label == null \
+			or machine._spins_left_label.get_theme_color("font_color") != machine.SPINS_LEFT_MAX_COLOR:
+		failures.append("issue85: max SPINS LEFT number did not turn dark red")
 
-	# A +3 vial restore must move the counter by exactly +3 (read +4 under the rescale).
+	# A +3 vial restore fills a 15-spin pool to the 18-spin cap.
+	run_store.neurons = EconomyConst.STARTING_NEURONS
+	machine._update_hud()
+	var restore_before := int(machine._display_spins_left())
 	machine._apply_symbol_triple("vial", 0, false)
 	await create_timer(1.3).timeout # let the +3 fly-in land
 	var after := int(machine._display_spins_left())
-	if after != before + 3:
-		failures.append("issue80: +3 vial restore moved SPINS LEFT by %d, expected 3" % (after - before))
+	if after != EconomyConst.MAX_NEURONS or after - restore_before != 3:
+		failures.append("issue80: +3 vial restore did not land at the 18-spin cap")
 
-	# No spin cap (issue #75): even after a huge number of spins, SPINS LEFT reads the
-	# full neuron budget — 1:1, so neurons=100 => 100 spins — so spinning a lot never
-	# strands the run.
+	# Directly oversized/legacy state is clamped visually and by the store's next
+	# committed result; it can never display more than 18 spins.
 	run_store.neurons = 100
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 500
 	machine._pending_spin_gain = 0
 	machine._update_hud()
-	var uncapped := int(machine._display_spins_left())
-	if uncapped != 100:
-		failures.append("issue75: SPINS LEFT should ignore spin count (read %d, expected 100)" % uncapped)
+	var capped := int(machine._display_spins_left())
+	if capped != EconomyConst.MAX_NEURONS:
+		failures.append("issue75: SPINS LEFT exceeded the 18-spin cap (read %d)" % capped)
 
 	machine._pending_spin_gain = 0
 	run_store.reset_run_state()
@@ -4192,16 +4358,20 @@ func _check_free_spin_multiplier_cost(run_store: Node, failures: Array) -> void:
 
 # 3x eye: the player picks a reel; the pick arms the presentation-only reveal and
 # the popup names the picked reel's rolled symbol.
-# Issue #118: Shift joins Reroll ("Random") as an unconditional starting power,
-# and Random must never redraw the symbol already sitting on its target reel.
+	# Shift and Reroll are optional Pacte powers, and Random must never redraw the
+	# symbol already sitting on its target reel.
 func _check_starting_powers_and_random_118(run_store: Node, failures: Array) -> void:
-	# Starting loadout: a fresh run with zero purchased permanents still has Shift
-	# (perm_shift) and Reroll available, and this holds across restarts.
+	# Starting loadout: a fresh run with zero purchased permanents has neither
+	# Shift nor Reroll. Permanent Memory remains available when it is owned.
 	for owned_permanents in [[], ["perm_memory"]]:
 		run_store.reset_run_state()
 		run_store.start_new_run(owned_permanents, {}, false)
-		if not (run_store.ownedUpgrades as Array).has("perm_shift"):
-			failures.append("issue118: new run did not start with Shift (perm_shift) owned=%s" % str(owned_permanents))
+		if (run_store.ownedPowerIds as Array).has("shift") \
+				or (run_store.ownedPowerIds as Array).has("reroll"):
+			failures.append("issue118: new run injected Shift/Reroll into the default loadout")
+		if owned_permanents.has("perm_memory") \
+				and not (run_store.ownedPowerIds as Array).has("memory"):
+			failures.append("issue118: owned Memory was dropped from the direct loadout")
 		run_store.reset_run_state()
 
 	# Random candidate selection (pure): excludes the occupying symbol, and reports
@@ -4220,7 +4390,8 @@ func _check_starting_powers_and_random_118(run_store: Node, failures: Array) -> 
 	# Integration: Random never produces a no-op result, across many seeds/reels,
 	# and repeats are deterministic for a given spin/reel pairing.
 	run_store.start_new_run([], {}, false)
-	run_store.neurons = 100
+	run_store.ownedPowerIds = ["reroll"]
+	run_store.neurons = EconomyConst.MAX_NEURONS
 	for i in 12:
 		var pre: Variant = run_store.spin()
 		if pre == null:
@@ -4535,7 +4706,7 @@ func _check_base_scene_parity(failures: Array) -> void:
 		scene.queue_free()
 
 func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expects_frame: bool,
-		prefix: String, failures: Array) -> void:
+		prefix: String, failures: Array, expects_header: bool = true) -> void:
 	if picker == null:
 		failures.append("%s picker was not built" % prefix)
 		return
@@ -4546,9 +4717,13 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 	if panel.size.y < 54.0:
 		failures.append("%s picker is too cramped: %s" % [prefix, panel.size])
 	var cancel := panel.get_node_or_null("CancelButton") as Button
-	if cancel == null or cancel.size.x < 10.0 or cancel.size.y < 9.0:
-		failures.append("%s picker cancel target is missing or too small" % prefix)
 	var title := panel.get_node_or_null("TitleLabel") as Label
+	if expects_header:
+		if cancel == null or cancel.size.x < 10.0 or cancel.size.y < 9.0:
+			failures.append("%s picker cancel target is missing or too small" % prefix)
+	else:
+		if cancel != null or title != null:
+			failures.append("%s picker should not draw title/cancel chrome" % prefix)
 	var frame := panel.get_node_or_null("Frame") as TextureRect
 	var background := panel.get_node_or_null("Background") as ColorRect
 	if expects_frame:
@@ -4556,10 +4731,11 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
 		if background == null or background.size != Vector2.ZERO:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
-		if title == null or frame == null \
-				or title.position.y < frame.position.y - 6.0 or title.position.y > frame.position.y + 1.0:
+		if expects_header and (title == null or frame == null \
+				or title.position.y < frame.position.y - 6.0 \
+				or title.position.y > frame.position.y + 1.0):
 			failures.append("%s picker title should sit on the top band of the symbol choosing art" % prefix)
-		if cancel == null or frame == null or cancel.position.y < frame.position.y:
+		if expects_header and (cancel == null or frame == null or cancel.position.y < frame.position.y):
 			failures.append("%s picker cancel should sit on the symbol choosing art" % prefix)
 	elif frame != null:
 		failures.append("%s picker should use variable-count slots, not the five-slot art" % prefix)
@@ -4779,19 +4955,26 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: reward amp tier I description is not blue BBCode")
 	scene._build_reward_amp_picker("corr_reward_amp_1")
 	var reward_picker := scene._reward_amp_picker as Control
-	_check_symbol_picker_panel_63(reward_picker, 5, true, "issue63: Reward Amp", failures)
+	_check_symbol_picker_panel_63(reward_picker, 5, true, "issue63: Reward Amp", failures, false)
 	if reward_picker != null:
 		if reward_picker.find_child("SymbolButtonBrain", true, false) == null:
 			failures.append("issue63: Reward Amp picker should include brain")
 		if reward_picker.find_child("SymbolButtonFlatline", true, false) != null:
 			failures.append("issue63: Reward Amp picker should not include flatline")
+		if reward_picker.find_child("TitleLabel", true, false) != null \
+			or reward_picker.find_child("CancelButton", true, false) != null:
+			failures.append("issue63: Reward Amp picker still shows title/cross chrome")
 	if reward_picker != null:
-		var cancel_button := reward_picker.get_node_or_null("SymbolPickerPanel/CancelButton") as Button
-		if cancel_button != null:
-			cancel_button.pressed.emit()
+		var outside_reward_tap := InputEventMouseButton.new()
+		outside_reward_tap.button_index = MOUSE_BUTTON_LEFT
+		outside_reward_tap.pressed = true
+		scene._on_reward_amp_picker_input(outside_reward_tap)
 		await process_frame
-		if scene._reward_amp_picker != null or String(scene._pending_reward_amp_upgrade_id) != "":
-			failures.append("issue63: Reward Amp picker cancel did not close cleanly")
+		if scene._reward_amp_picker == null or String(scene._pending_reward_amp_upgrade_id) == "":
+			failures.append("issue63: Reward Amp picker can be dismissed outside the mandatory choice")
+		# Test cleanup is internal scene teardown, not a player-facing cancel path.
+		scene._pending_reward_amp_upgrade_id = ""
+		scene._close_reward_amp_picker()
 	# Simulate owning tier I/II so the "reward_amp" carousel slot resolves to the
 	# next unpurchased tier, mirroring the old row's price/description swap.
 	meta_store.ownedPermanents.append("corr_reward_amp_1")
@@ -6051,7 +6234,7 @@ func _check_new_run_balance_161(run_store: Node, failures: Array) -> void:
 	run_store.augmentedTier = prev_tier
 
 ## Pacte card ritual smoke coverage: native art, staged/saveable selections, the
-## one-time neuron threshold visit, and the seven-button machine loadout.
+## two campaign-neuron threshold visits, and the seven-button machine loadout.
 func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
 	var meta_before: Dictionary = meta_store._as_dict()
 	run_store.reset_run_state()
@@ -6064,14 +6247,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var power_offers := run_store.pacteOfferPowerIds as Array
 	if augment_offers.size() != 3 or power_offers.size() != 3:
 		failures.append("pacte: expected three augment and three power offers")
-	if PacteCards.power_ids().size() != 7 or PacteCards.power_draw_ids().has("reroll"):
-		failures.append("pacte: hero/pool power separation is incorrect")
+	if PacteCards.power_ids().size() != 7 or PacteCards.power_draw_ids().size() != 7 \
+			or not PacteCards.power_draw_ids().has("reroll") \
+			or not PacteCards.power_draw_ids().has("shift"):
+		failures.append("pacte: optional power deck is missing Shift or Reroll")
 	if machine._power_buttons.size() != 7:
 		failures.append("pacte: machine power bar does not expose all seven controls")
 
 	var pacte := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(pacte)
 	await process_frame
+	var pattern_view := pacte._make_card_view("augment_pattern_recognition", "augment") as Control
+	var pattern_icon := pattern_view.get_node_or_null("Icon") as AnimatedSprite2D
+	if pattern_icon == null or pattern_icon.sprite_frames == null \
+			or pattern_icon.sprite_frames.get_frame_count(&"pattern") != 5 \
+			or pattern_icon.animation != &"pattern":
+		failures.append("pacte: Pattern Recognition is missing its five-frame animated icon")
+	pattern_view.free()
 	for node_name in ["PacteBackground", "SelectedCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere"]:
 		if pacte.get_node_or_null(node_name) == null:
@@ -6102,6 +6294,20 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: choose-one prompt remained after card tap")
 	if pacte._description_bubble.size.x >= 152.0 or pacte._description_bubble.size.y >= 42.0:
 		failures.append("pacte: description bubble was not compacted")
+	if pacte._description_bubble.position != Vector2(25.0, 123.0):
+		failures.append("pacte: description bubble is not close to the card row")
+	if pacte._phase_label.position != Vector2(10.0, 104.0) \
+			or pacte._phase_label.size != Vector2(140.0, 16.0) \
+			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
+			or pacte._phase_label.vertical_alignment != VERTICAL_ALIGNMENT_CENTER \
+			or pacte._phase_label.get_theme_font_size("font_size") != 7 \
+			or not pacte._phase_label.get_theme_color("font_color").is_equal_approx(
+				pacte.DEALER_TEXT_COLOR):
+		failures.append("pacte: choose augment/power prompt does not match centered dealer text styling")
+	var description_bubble_rect: Rect2 = pacte._description_bubble.get_global_rect()
+	if not description_bubble_rect.encloses(pacte._description_title.get_global_rect()) \
+			or not description_bubble_rect.encloses(pacte._description_text.get_global_rect()):
+		failures.append("pacte: card preview text extends outside its description bubble")
 	if augment_offers.size() >= 2:
 		var alternate_augment := String(augment_offers[1])
 		pacte._set_face_up(alternate_augment)
@@ -6129,6 +6335,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if bool(pacte._description_bubble.visible) or String(pacte._instruction.text) != "" \
 			or pacte._emplacement.frame != 1:
 		failures.append("pacte: drag did not hide explanation and show authored DROP HERE frame")
+	# A screen drag can report coordinates outside the scaled viewport on mobile;
+	# the card itself must remain inside the native canvas while held.
+	pacte._update_drag(Vector2(-100.0, -100.0))
+	var card_visual_scale := Vector2(absf(first_button.scale.x), absf(first_button.scale.y))
+	var card_visual_top_left := first_button.position \
+		- first_button.pivot_offset * (card_visual_scale - Vector2.ONE)
+	var card_visual_size := first_button.size * card_visual_scale
+	if card_visual_top_left.x < 0.0 or card_visual_top_left.y < 0.0 \
+			or card_visual_top_left.x + card_visual_size.x > 160.0 \
+			or card_visual_top_left.y + card_visual_size.y > 320.0:
+		failures.append("pacte: mobile card drag escaped the native canvas")
+	pacte._update_drag(Vector2(40.0, 270.0))
 	pacte._finish_drag(Vector2(40.0, 270.0))
 	# The card button may be freed by the accepted drop; check the shadow removal
 	# before yielding a frame (remove_drag_shadow queues the shadow for deletion).
@@ -6166,27 +6384,69 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: initial power selection was rejected")
 	if String(run_store.runPhase) != "running" or run_store.selectedPowerCardIds.size() != 1:
 		failures.append("pacte: initial completion did not enter the machine with accumulated cards")
+	var pacte_badge := machine.get_node_or_null("PacteAugmentBadge") as Button
+	if pacte_badge == null or not pacte_badge.visible:
+		failures.append("pacte: selected augment is missing from the machine TV badge")
+	else:
+		if pacte_badge.get_node_or_null("CardContour") != null:
+			failures.append("pacte: augment badge should not draw a full card around the icon")
+		var badge_style := pacte_badge.get_theme_stylebox("normal") as StyleBoxFlat
+		if badge_style == null or badge_style.border_color != machine.PACTE_AUGMENT_CONTOUR_COLOR:
+			failures.append("pacte: augment badge is missing its compact blue icon contour")
+		if pacte_badge.position != machine.PACTE_AUGMENT_BADGE_POS \
+				or pacte_badge.size != machine.PACTE_AUGMENT_BADGE_SIZE:
+			failures.append("pacte: augment badge geometry changed unexpectedly")
+		var tv_left := float(machine.TV_SCREEN["left"])
+		var tv_top := float(machine.TV_SCREEN["top"])
+		var tv_right := tv_left + float(machine.TV_SCREEN["width"])
+		var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
+		if pacte_badge.position.x < tv_left + 10.0 \
+				or pacte_badge.position.x + pacte_badge.size.x > tv_right:
+			failures.append("pacte: augment badge is not at least 10px inside the TV on X")
+		if pacte_badge.position.y < tv_top \
+				or pacte_badge.position.y + pacte_badge.size.y > tv_bottom:
+			failures.append("pacte: augment badge is outside the TV vertically")
+		pacte_badge.pressed.emit()
+		if machine.get_node_or_null("PacteAugmentPopup") == null:
+			failures.append("pacte: augment badge did not open its description popup")
+		pacte_badge.pressed.emit()
+	pacte._show_reward_amp_picker()
+	var reward_amp_picker := pacte.get_node_or_null("RewardAmpPicker") as Control
+	if reward_amp_picker == null \
+			or reward_amp_picker.find_child("SymbolButtonBrain", true, false) == null:
+		failures.append("pacte: selecting Reward Amplification did not show the symbol picker")
+	elif reward_amp_picker.find_child("TitleLabel", true, false) != null \
+			or reward_amp_picker.find_child("CancelButton", true, false) != null:
+		failures.append("pacte: Reward Amplification picker still shows title/cross chrome")
+	if reward_amp_picker != null:
+		var outside_reward_tap := InputEventMouseButton.new()
+		outside_reward_tap.button_index = MOUSE_BUTTON_LEFT
+		outside_reward_tap.pressed = true
+		pacte._on_reward_amp_picker_input(outside_reward_tap)
+		if pacte._reward_amp_picker == null:
+			failures.append("pacte: Reward Amplification picker can be dismissed outside the choice")
+	pacte._on_reward_amp_symbol_picked("eye")
 
 	# A live machine spin must never interrupt into Pacte, even when its run-spin
-	# budget reaches five. The second visit is armed only by the later flatline
-	# handoff when the campaign count crosses from six to five.
-	run_store.neurons = 6
+	# budget reaches five. The first threshold visit is armed only by the later
+	# flatline handoff when the campaign count crosses from eight to seven.
+	run_store.neurons = 5
 	run_store.comboDefeatPending = false
 	var live_spin: Variant = run_store.spin()
 	run_store.set_spinning(false)
 	if live_spin == null or bool(run_store.pacteThresholdPending) \
 			or String(run_store.runPhase) != "running":
 		failures.append("pacte: live machine spin incorrectly opened the threshold visit")
-	meta_store.campaignNeuronsLeft = 6
+	meta_store.campaignNeuronsLeft = 8
 	run_store.campaignNeuronPending = true
 	run_store.end_run("flatline")
-	if int(meta_store.campaignNeuronsLeft) != 5 \
+	if int(meta_store.campaignNeuronsLeft) != 7 \
 			or not bool(run_store.pacteThresholdPending) \
 			or not bool(run_store.pacteAfterFlatlinePending) \
 			or String(run_store.runPhase) != "over":
-		failures.append("pacte: flatline did not arm the six-to-five campaign threshold")
+		failures.append("pacte: flatline did not arm the eight-to-seven campaign threshold")
 	if not run_store.open_threshold_pacte():
-		failures.append("pacte: threshold crossing did not open the second visit")
+		failures.append("pacte: first threshold crossing did not open the Pacte visit")
 	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(threshold_scene)
 	await process_frame
@@ -6211,23 +6471,77 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if not run_store.force_dealer_visit() or String(run_store.runPhase) != "running" \
 			or not bool(run_store.dealerPending):
 		failures.append("pacte: threshold completion did not queue dealer")
-	# The mid-run handoff lands on the Dealer scene WITHOUT the Machine button —
-	# that button belongs to the pre-run shop only.
+	# The mid-run handoff lands on the Dealer scene WITH the Machine button —
+	# there it returns to the machine (declining the offer), never starting a
+	# new run, so the active run's Pacte effects survive the visit.
 	var dealer_scene := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(dealer_scene)
 	await process_frame
 	if bool(dealer_scene._pre_run):
 		failures.append("pacte: mid-run dealer handoff still reads as pre-run")
+	var dealer_credits_label := dealer_scene.get_node_or_null("CreditsRow/CreditsLabel") as Label
+	if dealer_scene.get_node_or_null("CreditsRow") == null \
+			or not bool((dealer_scene.get_node("CreditsRow") as Control).visible) \
+			or dealer_credits_label == null \
+			or dealer_credits_label.text != str(run_store.lucidityCoins):
+		failures.append("pacte: mid-run dealer scene is missing the live Lucidity coin readout")
+	var dealer_augment_id := String(run_store.dealerAugmentOfferId)
+	if dealer_augment_id == "" \
+			or String(dealer_scene._augment_offer_id()) != dealer_augment_id \
+			or not (dealer_scene._offer_slots_by_id as Dictionary).has(dealer_augment_id):
+		failures.append("pacte: mid-run dealer scene is missing its Chip Augment offer")
 	var dealer_machine_button := dealer_scene._start_button as Button
-	if dealer_machine_button != null and dealer_machine_button.visible:
-		failures.append("pacte: mid-run dealer scene still shows the Machine button")
-	if dealer_scene._machine_button_sprite != null \
-			and bool(dealer_scene._machine_button_sprite.visible):
-		failures.append("pacte: mid-run dealer scene still shows the machine button art")
+	if dealer_machine_button == null or not dealer_machine_button.visible:
+		failures.append("pacte: mid-run dealer scene is missing the Machine button")
+	elif not dealer_machine_button.pressed.is_connected(
+			Callable(dealer_scene, "_on_machine_button_pressed")):
+		failures.append("pacte: mid-run Machine button is not wired to the return handler")
+	if dealer_scene._machine_button_sprite == null \
+			or not bool(dealer_scene._machine_button_sprite.visible):
+		failures.append("pacte: mid-run dealer scene is missing the machine button art")
 	dealer_scene.queue_free()
+
+	# A flatline continuation (post-run dealer -> machine) keeps the campaign's
+	# Pacte cards: powers rejoin the loadout, permanent augment effects re-apply.
+	var kept_augments: Array = (run_store.selectedAugmentCardIds as Array).duplicate()
+	var kept_powers: Array = (run_store.selectedPowerCardIds as Array).duplicate()
+	run_store.runPhase = "over"
+	run_store.lastEnding = "flatline"
+	run_store.start_new_run([], {}, false)
+	if str(run_store.selectedAugmentCardIds) != str(kept_augments) \
+			or str(run_store.selectedPowerCardIds) != str(kept_powers):
+		failures.append("pacte: flatline continuation dropped the selected cards")
+	for card_id in kept_powers:
+		if not (run_store.ownedPowerIds as Array).has(PacteCards.power_id(String(card_id))):
+			failures.append("pacte: flatline continuation lost the %s power" % card_id)
+	for card_id in kept_augments:
+		var kept_effect := PacteCards.card(String(card_id)).get("effect", {}) as Dictionary
+		if String(kept_effect.get("type", "")) == "owned_upgrade" \
+				and not (run_store.ownedUpgrades as Array).has(String(kept_effect.get("upgrade_id", ""))):
+			failures.append("pacte: flatline continuation lost the %s augment effect" % card_id)
+
+	# A later flatline crossing from five to four arms the additional threshold
+	# visit instead of treating the first Pacte encounter as the only one.
+	meta_store.campaignNeuronsLeft = 5
+	run_store.campaignNeuronPending = true
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 4 \
+			or not bool(run_store.pacteThresholdPending) \
+			or not bool(run_store.pacteAfterFlatlinePending) \
+			or String(run_store.runPhase) != "over":
+		failures.append("pacte: flatline did not arm the five-to-four campaign threshold")
+	if not run_store.open_threshold_pacte():
+		failures.append("pacte: second threshold crossing did not open the extra Pacte visit")
+	var second_threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(second_threshold_scene)
+	await process_frame
+	if String(run_store.runPhase) != "pacte_threshold" \
+			or String(second_threshold_scene._pool_kind) != "augment":
+		failures.append("pacte: extra threshold visit did not restore as augment draw")
 
 	pacte.queue_free()
 	threshold_scene.queue_free()
+	second_threshold_scene.queue_free()
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -6235,7 +6549,36 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false, 0x168, false)
-	run_store.ownedPowerIds = ["reroll", "rewind", "heart", "cheat", "move"]
+	run_store.runPhase = "running"
+	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	run_store.ownedPowerIds = ["swap", "heart", "reroll", "rewind"]
+	run_store.abilitiesUsed = []
+	machine._set_sequence_lock(false)
+	machine._refresh_controls()
+	for slot_index in 3:
+		var ordered_id: String = ["swap", "heart", "reroll"][slot_index]
+		var target_id: String = machine.POWER_IDS[slot_index]
+		var source_hit: Dictionary = machine.POWER_HITS[ordered_id]
+		var target_hit: Dictionary = machine.POWER_HITS[target_id]
+		var ordered_button := machine._power_buttons.get(ordered_id) as Button
+		var ordered_sprite := machine._power_sprites.get(ordered_id) as Sprite2D
+		var expected_position := Vector2(float(target_hit["left"]), float(target_hit["top"]))
+		var expected_offset := Vector2(
+			float(target_hit["left"]) - float(source_hit["left"]),
+			float(target_hit["top"]) - float(source_hit["top"]))
+		if ordered_button == null or not ordered_button.visible \
+				or ordered_button.position != expected_position:
+			failures.append("pacte powers: %s did not move into acquisition slot %d" % [ordered_id, slot_index + 1])
+		if ordered_sprite == null or ordered_sprite.position != expected_offset:
+			failures.append("pacte powers: %s art did not follow acquisition slot %d" % [ordered_id, slot_index + 1])
+	var fourth_button := machine._power_buttons.get("rewind") as Button
+	if fourth_button == null or fourth_button.visible:
+		failures.append("pacte powers: fourth owned power should stay off the three-slot bar")
+
+	# Rebuild the normal rewind fixture after the slot-order assertion.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x168, false)
+	run_store.ownedPowerIds = ["reroll", "rewind", "heart", "cheat", "swap"]
 	run_store.pacteSeed = 0x115156
 	run_store.neurons = 50
 	var first_spin: Variant = run_store.spin()
@@ -6247,12 +6590,16 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.comboDefeatPending = false
 	var first_reels: Array = (run_store.lastResult["reels"] as Array).duplicate()
 	var neurons_before_second := int(run_store.neurons)
-	run_store.abilitiesUsed = ["reroll", "cheat", "move"]
+	run_store.abilitiesUsed = ["reroll"]
+	if not run_store.heart_power(1):
+		failures.append("pacte powers: Heart could not be armed for the rewind fixture")
 	var second_spin: Variant = run_store.spin()
 	run_store.set_spinning(false)
 	if second_spin == null:
 		failures.append("pacte powers: second setup spin failed")
 	else:
+		# Reroll belongs to the older reveal. Heart was armed for the spin that will
+		# be rewound, so only Heart may be recovered.
 		run_store.scoreEarned = 777
 		run_store.lucidityCoins = 88
 		if not run_store.rewind():
@@ -6260,10 +6607,26 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		elif str(run_store.lastResult["reels"]) != str(first_reels) \
 				or int(run_store.neurons) != neurons_before_second \
 				or int(run_store.scoreEarned) != 777 or int(run_store.lucidityCoins) != 88 \
-				or bool(run_store.rewindHistoryAvailable):
+				or bool(run_store.rewindHistoryAvailable) \
+				or not (run_store.abilitiesUsed as Array).has("rewind") \
+				or not (run_store.abilitiesUsed as Array).has("reroll") \
+				or (run_store.abilitiesUsed as Array).has("heart"):
 			failures.append("pacte powers: Rewind did not restore state while preserving rewards")
+		var heart_neurons_before_rewind_use := int(run_store.neurons)
+		if not run_store.heart_power(1):
+			failures.append("pacte powers: a power restored by Rewind could not be used")
+		else:
+			var heart_after_rewind: Variant = run_store.spin()
+			run_store.set_spinning(false)
+			if heart_after_rewind == null \
+					or String(heart_after_rewind.get("winType", "")) != "heart" \
+					or int(run_store.neurons) <= heart_neurons_before_rewind_use:
+				failures.append("pacte powers: a restored Heart did not resolve its spin reward")
 		if run_store.rewind():
 			failures.append("pacte powers: Rewind remained available without history")
+		# A fresh spin can make a new history available, but Rewind's spent chip must
+		# be restored explicitly before the machine-side animation test.
+		run_store.abilitiesUsed = []
 		# Machine-side lock: the restore beat keeps the lever dead until the rewind
 		# sequence finishes, then always releases it.
 		run_store.comboDefeatPending = false
@@ -6293,7 +6656,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false, 0x157, false)
-	run_store.ownedPowerIds = ["reroll", "heart", "cheat", "move"]
+	run_store.ownedPowerIds = ["reroll", "heart", "cheat", "swap"]
 	run_store.runPhase = "running"
 	for heart_symbol in ["heart_x1", "heart_x2", "heart_x3"]:
 		var heart_view := Sprite2D.new()
@@ -6303,10 +6666,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		heart_view.free()
 	run_store.neurons = 5
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
+	run_store.betMultiplier = 1
 	var heart_score_before := int(run_store.scoreEarned)
 	var heart_neurons_before := int(run_store.neurons)
 	var heart_spins_before := int(run_store.freeSpinsRemaining)
 	var heart_spin_count_before := int(run_store.spinCount)
+	var heart_tier := 0
 	if not run_store.heart_power(1) \
 			or int(run_store.neurons) != heart_neurons_before \
 			or int(run_store.scoreEarned) != heart_score_before \
@@ -6315,20 +6680,24 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			or (run_store.abilitiesUsed as Array).count("heart") != 1:
 		failures.append("pacte powers: Heart preparation failed")
 	# Arming Heart immediately previews hearts on every strip symbol — centre AND
-	# both adjacent neighbours — until the next spin resolves the tier.
+	# adjacent — but only three of each tier show: the strip cycles x1/x2/x3
+	# (centre x1, top x3, bottom x2) until the next spin resolves the tier.
 	machine._refresh_reels_from_state()
-	var heart_preview_tex: Variant = machine._load_texture("symbols/heart x1.png", true)
+	var heart_x1_tex: Variant = machine._load_texture("symbols/heart x1.png", true)
+	var heart_x2_tex: Variant = machine._load_texture("symbols/heart x2.png", true)
+	var heart_x3_tex: Variant = machine._load_texture("symbols/heart x3.png", true)
 	for reel_index in 3:
-		if machine._reel_sprites[reel_index].texture != heart_preview_tex \
-				or machine._reel_top_sprites[reel_index].texture != heart_preview_tex \
-				or machine._reel_bottom_sprites[reel_index].texture != heart_preview_tex:
-			failures.append("pacte powers: arming Heart did not preview hearts on reel %d" % reel_index)
+		if machine._reel_sprites[reel_index].texture != heart_x1_tex \
+				or machine._reel_top_sprites[reel_index].texture != heart_x3_tex \
+				or machine._reel_bottom_sprites[reel_index].texture != heart_x2_tex:
+			failures.append("pacte powers: arming Heart did not preview the heart tier cycle on reel %d" % reel_index)
 			break
-	# A resolved heart triple fills its strips with the MATCHING heart tier.
+	# A resolved heart triple shows the landed tier flanked by the OTHER tiers —
+	# never nine copies of one heart symbol.
 	var heart_neighbours: Dictionary = machine._reel_neighbours("heart_x2")
-	if String(heart_neighbours["top"]) != "heart_x2" \
-			or String(heart_neighbours["bottom"]) != "heart_x2":
-		failures.append("pacte powers: heart reveal neighbours are not matching hearts")
+	if String(heart_neighbours["top"]) != "heart_x1" \
+			or String(heart_neighbours["bottom"]) != "heart_x3":
+		failures.append("pacte powers: heart reveal strip does not cycle the other tiers")
 	var heart_follow_up: Variant = run_store.spin()
 	if heart_follow_up == null:
 		failures.append("pacte powers: Heart did not arm a follow-up spin")
@@ -6336,7 +6705,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		run_store.set_spinning(false)
 		var heart_reels := heart_follow_up["reels"] as Array
 		var heart_symbol := String(heart_reels[0]) if not heart_reels.is_empty() else ""
-		var heart_tier := int(heart_symbol.trim_prefix("heart_x"))
+		heart_tier = int(heart_symbol.trim_prefix("heart_x"))
 		var valid_heart_symbols := ["heart_x1", "heart_x2", "heart_x3"]
 		var all_hearts_match := heart_reels.size() == 3
 		for symbol in heart_reels:
@@ -6348,47 +6717,110 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 				or int(heart_follow_up.get("coinsEarned", -1)) != 0 \
 				or bool(heart_follow_up.get("isFreeSpin", false)) != true \
 				or int(run_store.spinCount) != heart_spin_count_before + 1 \
+				or int(run_store.betMultiplier) != 2 \
 				or bool(run_store.heartPowerArmed):
-			failures.append("pacte powers: Heart did not resolve a free score-less matching triple")
-		if (run_store.abilitiesUsed as Array).has("heart"):
-			failures.append("pacte powers: Heart is not available again after the completed spin")
+			failures.append("pacte powers: Heart did not resolve a winning free score-less triple")
+		if not (run_store.abilitiesUsed as Array).has("heart"):
+			failures.append("pacte powers: Heart should stay spent until a 50-point restore")
 		if bool(run_store.comboDefeatPending):
 			failures.append("pacte powers: the heart spin opened a losing state")
-	# Move's UI is a drag gesture over every reel, including adjacent destinations.
+		# The heart triple uses the normal TRIPLE callout/music and a spin-gain
+		# fly-in plus the vial-style reaction flash even though its score payout remains zero.
+		machine._pending_spin_gain = heart_tier
+		machine._burst_prev_spin = -1
+		machine._burst_prev_score = 0
+		machine._refresh_reels_from_state()
+		machine._emit_score_burst(null)
+		if machine._win_anim_sprite == null or not bool(machine._win_anim_sprite.visible) \
+				or int(machine._win_anim_sprite.frame) != int(machine.WIN_ANIM_FRAME["triple"]):
+			failures.append("pacte powers: Heart did not use the TRIPLE callout animation")
+		var heart_gain_fx := machine.get_node_or_null("SpinGainFx") as Label
+		if heart_gain_fx == null or heart_gain_fx.text != "+%d" % heart_tier:
+			failures.append("pacte powers: Heart did not show its +%d spin gain" % heart_tier)
+		var heart_reaction_found := false
+		var heart_reaction_text := "+%d SPINS" % heart_tier
+		for transient: Node in machine.get_tree().get_nodes_in_group("wealth_transient_fx"):
+			for child: Node in transient.get_children():
+				var reaction_label := child as Label
+				if reaction_label != null and String(reaction_label.text) == heart_reaction_text:
+					heart_reaction_found = true
+		if not heart_reaction_found:
+			failures.append("pacte powers: Heart did not use the vial-style +%d reaction flash" % heart_tier)
+		if machine.get_node_or_null("HeartHealthOverlay") != null:
+			failures.append("pacte powers: Heart still builds the removed red health-bar overlay")
+		machine._stop_win_animation()
+		machine._pending_spin_gain = 0
+	# Swap's UI is a drag gesture over every reel, including adjacent destinations.
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
-	machine._arm_move_source()
+	machine._arm_swap_source()
 	if machine._targeting_layer == null \
-			or machine._targeting_layer.name != "MoveSymbolDragLayer":
-		failures.append("pacte powers: Move did not arm its drag layer")
-	if machine._move_shake_tween == null or not (machine._move_shake_tween as Tween).is_valid():
-		failures.append("pacte powers: Move targeting did not start the symbol shake")
+			or machine._targeting_layer.name != "SwapSymbolDragLayer":
+		failures.append("pacte powers: Swap did not arm its drag layer")
+	if machine._swap_shake_tween == null or not (machine._swap_shake_tween as Tween).is_valid():
+		failures.append("pacte powers: Swap targeting did not start the symbol shake")
+	if machine._swap_shake_sprites.size() != 9:
+		failures.append("pacte powers: Swap did not shake all centre and adjacent symbols")
 	if machine._targeting_layer != null:
 		for reel_index in 3:
-			if machine._targeting_layer.get_node_or_null("MoveRubbleHint%d" % reel_index) == null \
-					or machine._targeting_layer.get_node_or_null("MoveSymbol%d" % reel_index) == null:
-				failures.append("pacte powers: Move missing reel %d drag hint" % reel_index)
-		if int(machine._move_target_at(Vector2(75.5, 185.0))) != 1:
-			failures.append("pacte powers: Move rejected an adjacent reel destination")
-		var source_button := machine._targeting_layer.get_node_or_null("MoveSymbol0") as Button
+			if machine._targeting_layer.get_node_or_null("SwapRubbleHint%d" % reel_index) == null \
+					or machine._targeting_layer.get_node_or_null("SwapSymbol%d" % reel_index) == null:
+				failures.append("pacte powers: Swap missing reel %d drag hint" % reel_index)
+		if int(machine._swap_target_at(Vector2(75.5, 185.0))) != 1:
+			failures.append("pacte powers: Swap rejected an adjacent reel destination")
+		var source_button := machine._targeting_layer.get_node_or_null("SwapSymbol0") as Button
 		if source_button == null:
-			failures.append("pacte powers: Move source button is missing")
+			failures.append("pacte powers: Swap source button is missing")
 		else:
-			var move_press := source_button.get_global_transform_with_canvas() * Vector2(12.0, 15.0)
-			machine._begin_move_drag(0, source_button, move_press)
-			machine._update_move_drag(Vector2(75.5, 185.0))
-			if machine._move_drag_ghost == null or not bool(machine._move_drag_ghost.visible):
-				failures.append("pacte powers: Move did not expose a draggable symbol ghost")
-			elif machine._move_drag_ghost.get_node_or_null("DragShadow") == null:
-				failures.append("pacte powers: Move drag ghost has no drop shadow")
+			# The visible strip above the hole is a valid source, not just decoration.
+			var top_press := source_button.get_global_transform_with_canvas() * Vector2(12.0, 4.0)
+			machine._begin_swap_drag(0, source_button, top_press)
+			if machine._swap_source_slot != 0 \
+					or machine._swap_source_symbol != String(machine._reel_neighbours("brain")["top"]) \
+					or machine._swap_drag_ghost == null \
+					or not bool(machine._swap_drag_ghost.visible):
+				failures.append("pacte powers: Swap could not pick an adjacent symbol immediately")
+			if machine._swap_invalid_target_overlay == null \
+					or not bool(machine._swap_invalid_target_overlay.visible):
+				failures.append("pacte powers: Swap did not mark the source reel as a disabled destination")
+			machine._update_swap_drag(Vector2(43.5, 185.0))
+			if machine._swap_target_feedback_reel != 0 \
+					or machine._swap_invalid_target_overlay == null \
+					or machine._swap_invalid_target_overlay.modulate.a < 0.99:
+				failures.append("pacte powers: Swap did not show the red invalid state over the source reel")
+			var top_drag_start: Vector2 = machine._swap_drag_ghost.position \
+					if machine._swap_drag_ghost != null else Vector2.ZERO
+			machine._update_swap_drag(Vector2(75.5, 185.0))
+			if machine._swap_drag_ghost == null or machine._swap_drag_ghost.position == top_drag_start:
+				failures.append("pacte powers: Swap ghost did not follow the pointer during drag")
+			machine._cancel_swap_drag_gesture()
+			var swap_press := source_button.get_global_transform_with_canvas() * Vector2(12.0, 15.0)
+			machine._begin_swap_drag(0, source_button, swap_press)
+			machine._update_swap_drag(Vector2(75.5, 185.0))
+			if machine._swap_drag_ghost == null or not bool(machine._swap_drag_ghost.visible):
+				failures.append("pacte powers: Swap did not expose a draggable symbol ghost")
+			elif machine._swap_drag_ghost.get_node_or_null("DragShadow") == null:
+				failures.append("pacte powers: Swap drag ghost has no drop shadow")
 		machine._clear_targeting()
-		if machine._move_shake_tween != null:
-			failures.append("pacte powers: Move symbol shake survived targeting clear")
+		if machine._swap_shake_tween != null:
+			failures.append("pacte powers: Swap symbol shake survived targeting clear")
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	machine._arm_cheat_targets()
 	if machine.get_node_or_null("PowerRubbleAnimation") == null:
 		failures.append("pacte powers: Cheat did not show the rubble overlay")
+	machine._on_cheat_reel_pick(1)
+	if machine._cheat_selection_sprite == null \
+			or machine._cheat_selection_sprite.hframes != 9 \
+			or not bool(machine._cheat_selection_sprite.visible) \
+			or machine._cheat_selection_sprite.frame != 3:
+		failures.append("pacte powers: Cheat did not show the second-reel selection frame")
+	machine._set_cheat_selection_state(1)
+	if machine._cheat_selection_sprite != null and machine._cheat_selection_sprite.frame != 4:
+		failures.append("pacte powers: Cheat bottom-arrow frame was not selected")
+	machine._set_cheat_selection_state(2)
+	if machine._cheat_selection_sprite != null and machine._cheat_selection_sprite.frame != 5:
+		failures.append("pacte powers: Cheat top-arrow frame was not selected")
 	machine._clear_targeting()
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	if not run_store.cheat_symbol(1, "brain") \
@@ -6396,14 +6828,14 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		failures.append("pacte powers: Cheat did not replace the selected reel")
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
-	if not run_store.move_symbol(0, 1) \
+	if not run_store.swap_symbol(0, 1) \
 			or str(run_store.lastResult["reels"]) != str(["eye", "brain", "pill"]):
-		failures.append("pacte powers: Move did not swap adjacent reels")
+		failures.append("pacte powers: Swap did not exchange adjacent symbols")
 	run_store.abilitiesUsed = []
 	run_store.powersUsedThisSpin = 2
 	run_store.augmentedTier = "diamond"
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
-	if run_store.move_symbol(0, 2):
+	if run_store.swap_symbol(0, 2):
 		failures.append("pacte powers: augmented power-use limit was ignored")
 	run_store.powersUsedThisSpin = 0
 	run_store.augmentedTier = ""
@@ -6412,10 +6844,19 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
 	run_store.betMultiplier = 2
-	if run_store.heart_power(1) or not bool(run_store.comboDefeatPending) \
-			or (run_store.pending_combo_power_ids() as Array).has("heart") \
+	var pending_rescue_ids: Array[String] = run_store.pending_combo_power_ids()
+	if not pending_rescue_ids.has("heart"):
+		failures.append("pacte powers: Heart was not offered during a combo loss")
+	machine._set_sequence_lock(false)
+	machine._show_pending_combo_defeat()
+	machine._refresh_controls()
+	var heart_button := machine._power_buttons.get("heart") as Button
+	if heart_button == null or heart_button.disabled:
+		failures.append("pacte powers: Heart stayed disabled during a combo loss")
+	machine._on_power_pressed("heart")
+	if not bool(run_store.heartPowerArmed) or bool(run_store.comboDefeatPending) \
 			or int(run_store.betMultiplier) != 2:
-		failures.append("pacte powers: Heart should wait until after a combo loss")
+		failures.append("pacte powers: Heart did not rescue the combo loss without lowering its gauge")
 	run_store.reset_run_state()
 
 func _pacte_power_result(reels: Array) -> Dictionary:

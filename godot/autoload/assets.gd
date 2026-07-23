@@ -451,7 +451,8 @@ func _press_restore(b: BaseButton) -> void:
 		b.position.y = b.get_meta("_rest_y")
 
 func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_text: String, rect: Rect2,
-		picked: Callable, cancelled: Callable, use_five_slot_art := false) -> Control:
+		picked: Callable, cancelled: Callable, use_five_slot_art: bool = false,
+		show_title: bool = true, show_cancel: bool = true) -> Control:
 	var frame_texture := texture(SYMBOL_PICKER_FRAME_REL)
 	var uses_frame := use_five_slot_art and symbols.size() == 5 and frame_texture != null
 
@@ -486,37 +487,39 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	else:
 		_build_symbol_picker_slots(panel, symbols.size(), content)
 
-	var title := Label.new()
-	title.name = "TitleLabel"
-	title.text = title_text
-	title.position = Vector2(0.0, content.position.y - 5.0) if uses_frame else Vector2(0.0, 1.0)
-	title.size = Vector2(rect.size.x, 11.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.add_theme_font_size_override("font_size", 7)
-	title.add_theme_color_override("font_color", SYMBOL_PICKER_TITLE_COLOR)
-	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 1)
-	if font() != null:
-		title.add_theme_font_override("font", font())
-	panel.add_child(title)
+	if show_title:
+		var title := Label.new()
+		title.name = "TitleLabel"
+		title.text = title_text
+		title.position = Vector2(0.0, content.position.y - 5.0) if uses_frame else Vector2(0.0, 1.0)
+		title.size = Vector2(rect.size.x, 11.0)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title.add_theme_font_size_override("font_size", 7)
+		title.add_theme_color_override("font_color", SYMBOL_PICKER_TITLE_COLOR)
+		title.add_theme_color_override("font_outline_color", Color.BLACK)
+		title.add_theme_constant_override("outline_size", 1)
+		if font() != null:
+			title.add_theme_font_override("font", font())
+		panel.add_child(title)
 
-	var cancel := Button.new()
-	cancel.name = "CancelButton"
-	cancel.text = ""
-	cancel.focus_mode = Control.FOCUS_NONE
-	cancel.position = Vector2(rect.size.x - 12.0, content.position.y + 1.0) if uses_frame else Vector2(rect.size.x - 12.0, 1.0)
-	cancel.size = Vector2(10.0, 10.0)
-	cancel.add_theme_font_size_override("font_size", 6)
-	if font() != null:
-		cancel.add_theme_font_override("font", font())
-	skin_cancel_button(cancel)
-	cancel.pressed.connect(func() -> void:
-		if cancelled.is_valid():
-			cancelled.call()
-	)
-	panel.add_child(cancel)
+	if show_cancel:
+		var cancel := Button.new()
+		cancel.name = "CancelButton"
+		cancel.text = ""
+		cancel.focus_mode = Control.FOCUS_NONE
+		cancel.position = Vector2(rect.size.x - 12.0, content.position.y + 1.0) if uses_frame else Vector2(rect.size.x - 12.0, 1.0)
+		cancel.size = Vector2(10.0, 10.0)
+		cancel.add_theme_font_size_override("font_size", 6)
+		if font() != null:
+			cancel.add_theme_font_override("font", font())
+		skin_cancel_button(cancel)
+		cancel.pressed.connect(func() -> void:
+			if cancelled.is_valid():
+				cancelled.call()
+		)
+		panel.add_child(cancel)
 
 	var cell_w := content.size.x / float(maxi(1, symbols.size()))
 	for i in symbols.size():

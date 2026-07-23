@@ -18,6 +18,8 @@ extends Control
 ## weights in Symbols are never touched (see Evaluate._build_weights).
 
 signal closed
+## Augment-picker mode only: the player chose the symbol to level up.
+signal symbol_picked(symbol_id: String)
 
 const SRC_W := 160.0
 const SRC_H := 320.0
@@ -95,6 +97,10 @@ var _info_buttons := {}     # symbol -> Button ("i" under the level meter, #153)
 var _delta_anchors := {}    # symbol -> Vector2 (delta-bubble center, source px)
 var _pct_popup: Control = null
 var _delta_popup: Control = null
+# Symbol Level augment picker (dealer scene): the same authored table, but with
+# no token wallet, "+" as the pick action (up to the level-9 hard cap), and no
+# odds-phase transaction — the dealer commits the purchase on symbol_picked.
+var _augment_mode := false
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -109,11 +115,20 @@ func open_overlay() -> void:
 	_rebuild()
 	visible = true
 
+## Opens the table as the Symbol Level augment picker: no tokens, tapping a
+## row's "+" picks that symbol (the caller charges and applies the level).
+func open_augment_picker() -> void:
+	_augment_mode = true
+	_rebuild()
+	visible = true
+
 func _close() -> void:
 	# Closing finalizes: staged purchases become permanent, leftover tokens are
 	# banked for the next odds menu, and the screen locks until the next run.
+	# Augment mode stages nothing, so its close is a plain cancel.
 	_hide_pct_popup()
-	RunStateStore.finalize_odds_phase()
+	if not _augment_mode:
+		RunStateStore.finalize_odds_phase()
 	visible = false
 	closed.emit()
 
@@ -182,13 +197,14 @@ func _rebuild() -> void:
 	add_child(dim)
 
 	_sheet_sprite(ART_TABLE, 1, 0)
-	_tokens_sprite = _sheet_sprite(ART_TOKENS, TOKEN_FRAMES, 0)
+	# The augment picker has no chips to spend, so the token wallet stays off.
+	_tokens_sprite = null if _augment_mode else _sheet_sprite(ART_TOKENS, TOKEN_FRAMES, 0)
 
 	for i in Symbols.BASE_SYMBOL_CYCLE.size():
 		_build_row(String(Symbols.BASE_SYMBOL_CYCLE[i]), i)
 
 	var done := Button.new()
-	done.text = "DONE"
+	done.text = "CANCEL" if _augment_mode else "DONE"
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
 	done.z_index = 4
 	done.add_theme_font_size_override("font_size", 5)
@@ -483,14 +499,24 @@ func _symbol_percent(symbol_id: String) -> float:
 	var weight := 0.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var s := String(sym)
+		var level := RunStateStore.augment_symbol_level(s) if _augment_mode \
+			else RunStateStore.odds_upgrade_level(s)
 		var w := float(int(Symbols.WEIGHT[s])
-			+ RunStateStore.odds_upgrade_level(s) * RunStateStore.probability_increase_per_upgrade)
+			+ level * RunStateStore.probability_increase_per_upgrade)
 		total += w
 		if s == symbol_id:
 			weight = w
 	return (weight / total) * 100.0 if total > 0.0 else 0.0
 
 func _on_plus_pressed(symbol_id: String) -> void:
+	if _augment_mode:
+		# The pick is the whole transaction — the dealer scene charges and
+		# applies the level, so the table hands off without emitting `closed`
+		# (that path means cancel).
+		_hide_pct_popup()
+		visible = false
+		symbol_picked.emit(symbol_id)
+		return
 	var before := _symbol_percent(symbol_id)
 	if RunStateStore.buy_odds_upgrade(symbol_id):
 		_refresh()
@@ -508,7 +534,10 @@ func _refresh() -> void:
 		# odds_max_tokens (8) by the store, so the art can always show it.
 		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 1)
 	for symbol_id in _level_sprites:
-		var level := RunStateStore.odds_upgrade_level(String(symbol_id))
+		# Augment mode shows the EFFECTIVE level (persisted + augment levels) and
+		# lets "+" push past odds_max_level, up to the level-9 hard cap.
+		var level := RunStateStore.augment_symbol_level(String(symbol_id)) if _augment_mode \
+			else RunStateStore.odds_upgrade_level(String(symbol_id))
 		var spr := _level_sprites[symbol_id] as Sprite2D
 		if spr != null:
 			var base_x := LEVEL_LAST_ROW_IMG.position.x \
@@ -517,12 +546,17 @@ func _refresh() -> void:
 			_set_region_frame(spr, base_x, clampi(level, 0, 9))
 		var plus := _plus_buttons.get(symbol_id) as Button
 		if plus != null:
-			plus.disabled = level >= RunStateStore.odds_max_level \
-				or RunStateStore.odds_token_cost(String(symbol_id)) > RunStateStore.oddsTokensRemaining
+			if _augment_mode:
+				plus.disabled = String(symbol_id) == "flatline" \
+					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP
+			else:
+				plus.disabled = level >= RunStateStore.odds_max_level \
+					or RunStateStore.odds_token_cost(String(symbol_id)) > RunStateStore.oddsTokensRemaining
 			_dim_button_art(_plus_art.get(symbol_id) as Sprite2D, plus.disabled)
 		var minus := _minus_buttons.get(symbol_id) as Button
 		if minus != null:
-			minus.disabled = int(RunStateStore.oddsPendingUpgrades.get(symbol_id, 0)) <= 0
+			minus.disabled = _augment_mode \
+				or int(RunStateStore.oddsPendingUpgrades.get(symbol_id, 0)) <= 0
 			_dim_button_art(_minus_art.get(symbol_id) as Sprite2D, minus.disabled)
 
 ## Disabled buttons dim their baked art so the state reads without a stylebox.

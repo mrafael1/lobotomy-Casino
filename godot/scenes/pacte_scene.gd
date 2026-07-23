@@ -14,7 +14,23 @@ const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const CHOSEN_CARD_MARGIN := 2.0
 const SELECTION_PREVIEW_TIME := 0.24
-const DESCRIPTION_BUBBLE_RECT := Rect2(17.0, 128.0, 126.0, 31.0)
+const PATTERN_RECOGNITION_ID := "augment_pattern_recognition"
+const PATTERN_RECOGNITION_FRAME_COUNT := 5
+const PATTERN_RECOGNITION_FRAME_PITCH := 39.0
+const PATTERN_RECOGNITION_FPS := 7.0
+const GLITCH_AUGMENT_ID := "augment_glitch_2"
+const GLITCH_CARD_TICK_INTERVAL := 0.62
+const GLITCH_CARD_CHANCE := 0.42
+const REWARD_AMP_CARD_IDS: Array[String] = [
+	"augment_reward_1", "augment_reward_2", "augment_reward_3",
+]
+const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
+# Compact speech bubble sits between the dealer prompt and the card row, like a
+# small information bubble attached to the inspected card. Keep enough height
+# for wrapped descriptions while leaving the drag prompt and cards unobstructed.
+const DESCRIPTION_BUBBLE_RECT := Rect2(25.0, 123.0, 110.0, 24.0)
+const PHASE_LABEL_RECT := Rect2(10.0, 104.0, 140.0, 16.0)
+const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/pacte_scene.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
@@ -22,6 +38,7 @@ const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
+const DEALER_TEXT_COLOR := Color(1.0, 0.6, 0.6)
 const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
@@ -45,6 +62,7 @@ var _offer_ids: Array[String] = []
 var _pool_kind := "augment"
 var _chosen_augment_id := ""
 var _preview_id := ""
+var _reward_amp_picker: Control = null
 var _dragging := false
 var _drag_id := ""
 var _drag_index := -1
@@ -89,9 +107,12 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	return sprite
 
 func _build_overlay_ui() -> void:
-	_phase_label = _label("PacteTitle", Rect2(4.0, 110.0, 152.0, 11.0), 7, NEON_CYAN)
+	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, 7, DEALER_TEXT_COLOR)
 	_phase_label.text = "PACTE"
-	_instruction = _label("Instruction", Rect2(5.0, 164.0, 150.0, 10.0), 5, TEXT_COLOR)
+	_phase_label.size = PHASE_LABEL_RECT.size
+	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_phase_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_instruction = _label("Instruction", INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	_description_bubble = Panel.new()
@@ -101,12 +122,14 @@ func _build_overlay_ui() -> void:
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
-	_description_title = _label("CardTitle", Rect2(2.0, 2.0, 122.0, 7.0), 4, NEON_GOLD, _description_bubble)
+	_description_title = _label("CardTitle", Rect2(2.0, 1.0, 106.0, 7.0), 4, NEON_GOLD, _description_bubble)
 	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_description_text = _label("CardDescription", Rect2(4.0, 10.0, 118.0, 18.0), 3, TEXT_COLOR, _description_bubble)
+	_description_title.clip_text = true
+	_description_text = _label("CardDescription", Rect2(4.0, 8.0, 102.0, 15.0), 3, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_description_text.clip_text = true
 	_description_bubble.visible = false
 
 	# The hint belongs to the emplacement itself. At native resolution the slot is
@@ -197,19 +220,17 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(front)
 	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	var icon := TextureRect.new()
-	icon.name = "Icon"
-	icon.texture = _atlas(String(entry.get("sheet", "")), icon_rect)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_SCALE
-	var available := CHOSEN_CARD_SIZE - Vector2(CHOSEN_CARD_MARGIN * 2.0, CHOSEN_CARD_MARGIN * 2.0)
-	var icon_scale := minf(available.x / maxf(1.0, icon_rect.size.x),
-		available.y / maxf(1.0, icon_rect.size.y))
-	var icon_size := icon_rect.size * icon_scale
-	icon.size = icon_size
-	icon.position = (CHOSEN_CARD_SIZE - icon_size) * 0.5
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(icon)
+	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
+		var available := CHOSEN_CARD_SIZE - Vector2(CHOSEN_CARD_MARGIN * 2.0, CHOSEN_CARD_MARGIN * 2.0)
+		var icon_scale := minf(available.x / icon_rect.size.x,
+			available.y / icon_rect.size.y)
+		var icon_size := icon_rect.size * icon_scale
+		var icon := _make_card_icon(card_id, entry, icon_rect, icon_size)
+		_set_card_icon_position(icon, (CHOSEN_CARD_SIZE - icon_size) * 0.5)
+		if icon is Control:
+			(icon as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(icon)
+	_attach_glitch_card_fx(card, card_id)
 	return card
 
 func _show_pool(kind: String, ids: Array[String]) -> void:
@@ -221,6 +242,8 @@ func _show_pool(kind: String, ids: Array[String]) -> void:
 	_set_drop_hint_visible(false)
 	_description_bubble.visible = false
 	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
+	_phase_label.position = PHASE_LABEL_RECT.position
+	_phase_label.size = PHASE_LABEL_RECT.size
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	for index in _offer_ids.size():
 		_build_card(_offer_ids[index], index)
@@ -269,18 +292,157 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	front.visible = false
 	view.add_child(front)
 	var entry := PacteCards.card(card_id)
-	var icon := TextureRect.new()
-	icon.name = "Icon"
-	icon.texture = _atlas(String(entry.get("sheet", "")), entry.get("icon_rect", Rect2()) as Rect2)
 	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.size = icon_rect.size
-	icon.position = Vector2((CARD_SIZE.x - icon_rect.size.x) * 0.5,
-		(CARD_SIZE.y - icon_rect.size.y) * 0.5)
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon.visible = false
-	view.add_child(icon)
+	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
+		var icon := _make_card_icon(card_id, entry, icon_rect, icon_rect.size)
+		_set_card_icon_position(icon, Vector2((CARD_SIZE.x - icon_rect.size.x) * 0.5,
+			(CARD_SIZE.y - icon_rect.size.y) * 0.5))
+		if icon is Control:
+			(icon as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		(icon as CanvasItem).visible = false
+		view.add_child(icon)
+	_attach_glitch_card_fx(view, card_id)
 	return view
+
+## GLITCH 2 has no authored icon. Its card still occasionally tears for a few
+## frames so the empty card face reads as intentional rather than unfinished.
+func _attach_glitch_card_fx(view: Control, card_id: String) -> void:
+	if card_id != GLITCH_AUGMENT_ID:
+		return
+	var fx := Control.new()
+	fx.name = "GlitchFx"
+	fx.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx.z_index = 3
+	for index in 3:
+		var strip := ColorRect.new()
+		strip.name = "Tear%d" % index
+		strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		strip.visible = false
+		fx.add_child(strip)
+	view.add_child(fx)
+	var timer := Timer.new()
+	timer.name = "GlitchTimer"
+	timer.wait_time = GLITCH_CARD_TICK_INTERVAL
+	timer.autostart = true
+	timer.one_shot = false
+	timer.timeout.connect(_glitch_card_tick.bind(view, fx))
+	view.add_child(timer)
+
+func _glitch_card_tick(view: Control, fx: Control) -> void:
+	if not is_instance_valid(view) or not is_instance_valid(fx):
+		return
+	var front := view.get_node_or_null("Front") as CanvasItem
+	if front != null and not front.visible:
+		return
+	if randf() > GLITCH_CARD_CHANCE:
+		return
+	view.position = Vector2(randf_range(-1.0, 1.0), 0.0)
+	for child in fx.get_children():
+		var strip := child as ColorRect
+		if strip == null:
+			continue
+		strip.position = Vector2(randf_range(-2.0, 2.0), randf_range(6.0, 54.0))
+		strip.size = Vector2(maxf(1.0, view.size.x + 4.0), randf_range(1.0, 2.0))
+		strip.color = Color(0.2 + randf() * 0.8, 0.3 + randf() * 0.7, 1.0, 0.8)
+		strip.visible = true
+	var tween := create_tween()
+	tween.tween_interval(0.07)
+	tween.tween_callback(_clear_glitch_card_fx.bind(view, fx))
+
+func _clear_glitch_card_fx(view: Control, fx: Control) -> void:
+	if not is_instance_valid(view) or not is_instance_valid(fx):
+		return
+	view.position = Vector2.ZERO
+	for child in fx.get_children():
+		var strip := child as CanvasItem
+		if strip != null:
+			strip.visible = false
+
+func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
+		display_size: Vector2) -> Node:
+	if card_id != PATTERN_RECOGNITION_ID:
+		var icon := TextureRect.new()
+		icon.name = "Icon"
+		icon.texture = _atlas(String(entry.get("sheet", "")), source_rect)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_SCALE
+		icon.size = display_size
+		return icon
+
+	# Pattern Recognition's authored icon contains five 30x18 frames separated by
+	# one 39px card pitch. Use the original frame rectangles so the Pacte card shows
+	# the intended animated pattern rather than all five poses at once.
+	var animated_icon := AnimatedSprite2D.new()
+	animated_icon.name = "Icon"
+	var sprite_frames := SpriteFrames.new()
+	sprite_frames.add_animation(&"pattern")
+	sprite_frames.set_animation_loop(&"pattern", true)
+	sprite_frames.set_animation_speed(&"pattern", PATTERN_RECOGNITION_FPS)
+	var sheet := Assets.texture(String(entry.get("sheet", "")))
+	for frame_index in PATTERN_RECOGNITION_FRAME_COUNT:
+		var frame := AtlasTexture.new()
+		frame.atlas = sheet
+		frame.region = Rect2(
+			source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
+			source_rect.size)
+		sprite_frames.add_frame(&"pattern", frame)
+	animated_icon.sprite_frames = sprite_frames
+	animated_icon.animation = &"pattern"
+	animated_icon.autoplay = &"pattern"
+	animated_icon.centered = false
+	var scale := display_size / source_rect.size
+	animated_icon.scale = scale
+	animated_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	animated_icon.play(&"pattern")
+	return animated_icon
+
+func _set_card_icon_position(icon: Node, position: Vector2) -> void:
+	if icon is Control:
+		(icon as Control).position = position
+	elif icon is Node2D:
+		(icon as Node2D).position = position
+
+func _show_reward_amp_picker() -> void:
+	_close_reward_amp_picker()
+	var picker := Control.new()
+	picker.name = "RewardAmpPicker"
+	picker.size = CANVAS_SIZE
+	picker.mouse_filter = Control.MOUSE_FILTER_STOP
+	picker.z_index = 50
+	var dim := ColorRect.new()
+	dim.name = "Dim"
+	dim.color = Color(0.0, 0.0, 0.0, 0.58)
+	dim.size = CANVAS_SIZE
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picker.add_child(dim)
+	add_child(picker)
+	var symbols: Array[String] = []
+	for raw_symbol in Symbols.BASE_SYMBOL_CYCLE:
+		var symbol_id := String(raw_symbol)
+		if symbol_id != "flatline":
+			symbols.append(symbol_id)
+	Assets.build_symbol_picker_panel(picker, symbols, "", REWARD_AMP_PICKER_RECT,
+		Callable(self, "_on_reward_amp_symbol_picked"),
+		Callable(self, "_cancel_reward_amp_picker"), true, false, false)
+	_reward_amp_picker = picker
+
+func _on_reward_amp_picker_input(_event: InputEvent) -> void:
+	# Reward Amplification is a mandatory choice. The full-screen blocker consumes
+	# taps outside the symbol buttons, but an outside tap must not dismiss the picker.
+	pass
+
+func _cancel_reward_amp_picker() -> void:
+	_close_reward_amp_picker()
+
+func _close_reward_amp_picker() -> void:
+	if _reward_amp_picker != null:
+		_reward_amp_picker.queue_free()
+		_reward_amp_picker = null
+
+func _on_reward_amp_symbol_picked(symbol_id: String) -> void:
+	MetaStateStore.set_reward_amp_symbol(symbol_id)
+	_close_reward_amp_picker()
 
 func _atlas(asset: String, region: Rect2) -> AtlasTexture:
 	var atlas := AtlasTexture.new()
@@ -302,7 +464,7 @@ func _set_face_up(card_id: String) -> void:
 	if view == null:
 		return
 	var front := view.get_node_or_null("Front") as TextureRect
-	var icon := view.get_node_or_null("Icon") as TextureRect
+	var icon := view.get_node_or_null("Icon") as CanvasItem
 	if front != null:
 		front.visible = true
 	if icon != null:
@@ -364,7 +526,7 @@ func _update_drag(global_position: Vector2) -> void:
 	_description_bubble.visible = false
 	_instruction.text = ""
 	_set_drop_hint_visible(true)
-	button.position = _global_to_local(global_position) - _drag_offset
+	button.position = _clamp_drag_position(button, _global_to_local(global_position) - _drag_offset)
 
 func _finish_drag(global_position: Vector2) -> void:
 	var card_id := _drag_id
@@ -401,6 +563,19 @@ func _finish_drag(global_position: Vector2) -> void:
 func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform_with_canvas().affine_inverse() * global_position
 
+func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
+	# Screen-touch coordinates can briefly report outside the scaled viewport while
+	# a finger is held at an edge. Clamp the transformed card rect so it never
+	# visually spawns outside the native 160x320 canvas.
+	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
+	var visual_size := button.size * scale
+	var pivot_offset := button.pivot_offset * (scale - Vector2.ONE)
+	var minimum := pivot_offset
+	var maximum := CANVAS_SIZE - visual_size + pivot_offset
+	return Vector2(
+		clampf(desired_position.x, minimum.x, maximum.x),
+		clampf(desired_position.y, minimum.y, maximum.y))
+
 func _preview_card(card_id: String) -> void:
 	if not _offer_ids.has(card_id):
 		return
@@ -409,6 +584,11 @@ func _preview_card(card_id: String) -> void:
 	_description_bubble.visible = true
 	_description_title.text = String(entry.get("name", card_id))
 	_description_text.text = String(entry.get("description", ""))
+	# Label expands to its font line height when text is assigned. Reapply the
+	# authored rects after that update so the controls themselves stay inside the
+	# compact panel as well as their glyphs.
+	_description_title.size = Vector2(106.0, 7.0)
+	_description_text.size = Vector2(102.0, 15.0)
 	# Tapping a card replaces the generic prompt immediately, while the compact
 	# description remains visible until the player starts dragging it.
 	_instruction.text = "DRAG TO THE SLOT"
@@ -429,6 +609,8 @@ func _accept_card(card_id: String) -> void:
 		_chosen_augment_id = card_id
 		_show_chosen_card(card_id, "augment")
 		_show_pool("power", _offer_array(RunStateStore.pacteOfferPowerIds))
+		if REWARD_AMP_CARD_IDS.has(card_id):
+			_show_reward_amp_picker()
 		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
@@ -444,7 +626,15 @@ func _accept_card(card_id: String) -> void:
 	if not is_inside_tree():
 		return
 	if threshold_visit:
-		RunStateStore.force_dealer_visit()
+		# Completing the threshold Pacte visit must enter the real live-run dealer
+		# phase, with its run-Lucidity offers and dedicated Chip Augment. Keep the
+		# transition gated on a prepared pending visit instead of opening an empty
+		# dealer shell when offer preparation fails.
+		var dealer_ready := RunStateStore.force_dealer_visit()
+		if not dealer_ready:
+			_selection_locked = false
+			_instruction.text = "DEALER VISIT UNAVAILABLE"
+			return
 		SceneNav.change_to("res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
