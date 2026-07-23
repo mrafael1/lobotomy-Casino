@@ -2291,12 +2291,16 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		if overlay._pct_popup != null:
 			failures.append("issue153: releasing the info button did not hide the popup")
 	# Every row's symbol sits inside the baked box, scaled down to fit (issue #130).
+	# Measured against the authored rest scale, not the live one: the brain press
+	# above leaves a TRANS_BACK pop tween running, and its overshoot briefly pushes
+	# that icon past the box.
 	var box_icons := 0
 	for child in overlay.get_children():
 		if child is Sprite2D and (child as Sprite2D).centered \
 				and is_equal_approx((child as Sprite2D).position.x, float(overlay.SYMBOL_BOX_CENTER.x)):
 			var icon := child as Sprite2D
-			var icon_w: float = float(icon.texture.get_width()) * icon.scale.x
+			var rest_scale: Vector2 = icon.get_meta("rest_scale", icon.scale)
+			var icon_w: float = float(icon.texture.get_width()) * rest_scale.x
 			if icon_w <= float(overlay.ODD_ICON_SIZE) + 0.01:
 				box_icons += 1
 	if box_icons != 6:
