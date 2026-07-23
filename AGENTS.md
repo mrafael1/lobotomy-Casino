@@ -49,11 +49,13 @@ Resources and currencies:
 
 - **Campaign neurons (lives)** — a campaign grants 10; each run attempt spends
   one. Exhausting them ends the campaign fatally (Game Over).
-- **Run neurons (spins)** — a fresh run starts with 20; 1 neuron = 1 spin and each
-  spin decays 1 neuron unless protected. Restores cap at 35 (105 after a Wealth
-  continuation). The machine prints the current remaining-spin number under the
-  neuron tube; it updates whenever spins are gained, spent, or protected and
-  keeps counting past the tube art's 17-notch cap.
+- **Run spins / chips** — the serialized run field is still `neurons` for
+  save/parity compatibility, but the machine presents it as the CHIPS/SPINS
+  counter. A fresh run starts with 15 and the run can hold at most 18;
+  each spin spends 1 run spin unless protected. Restores and Wealth continuations
+  also stop at 18. The machine prints the current remaining-spin number under the
+  neuron tube; it updates whenever spins are gained, spent, or protected, and the
+  number turns dark red when the 18-spin cap is full.
 - **Score** — the run's win total. Reaching **2,000 score** triggers the Wealth
   ending; that is the objective of every run. The machine's four-reel wealth odometer
   advances directly with score payouts when their score pop appears; it does not collect
@@ -77,19 +79,27 @@ Resources and currencies:
 2. Reserve the campaign neuron and enter **Pacte**. Reveal three augment cards
    and three power cards, then select and place one of each. Pacte selections are
    saved mid-visit; the initial completion enters the machine directly.
-3. Enter the machine with the base spins, Reroll hero power, and the selected
-   Pacte power. The run begins with no pre-run consumables.
+3. Enter the machine with 15 CHIPS/SPINS and the selected Pacte power. No power is
+   granted implicitly; Reroll, Shift, and the other run powers must be selected in
+   Pacte. The run begins with no pre-run consumables.
+   A compact blue contour around the selected augment icon sits inside the machine
+   TV, shifted 10px right from the original placement; tapping it opens the active
+   Pacte augment(s)' names and descriptions.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
    state instead of dropping instantly.
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
-6. When spins cross from above 5 to 5 or fewer, finish the current result and
-   resolve any loss warning, then open the one-time threshold Pacte visit. Its
-   second augment and power append to the first selection and completion opens
-   the dealer scene.
+6. When a flatline consumes the reserved campaign neuron and the campaign count
+   crosses from 8 to 7 or from 5 to 4, finish the flatline presentation and then
+   open that threshold Pacte visit. A live machine's CHIPS/SPINS counter reaching
+   5 never opens Pacte. Each threshold visit adds one augment and power to the
+   earlier selections; completion opens the live dealer scene with the current
+   run's Lucidity balance, normal run-item offers, and a dedicated Chip Augment
+   offer.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
-   for x1/x2/x3 each spin, so lower gauges pull him in faster.
+   for x1/x2/x3 each spin, so lower gauges pull him in faster; Glitch 2 makes every
+   spin advance three steps.
 8. End the run: reach Wealth, flatline and keep part of the run's Lucidity, or
    exhaust the campaign into Game Over.
 9. Between runs, spend odds-phase tokens and wallet credits on permanent
@@ -108,31 +118,70 @@ Resources and currencies:
   score double, and stacked strikes can kill the run outright.
 - A pair or triple win also flashes its authored PAIR/TRIPLE TV callout, beeping
   (alpha pulse) four times after the win is identified, with a teal "+ score"
-  payout line beneath the word showing what that win paid. While a transient TV
-  callout is visible, it temporarily hides the FREE SPIN banner and dealer
-  countdown information so the pop remains readable; those indicators return
-  when the callout ends.
+  payout line beneath the word showing the base payout. When Win Boost is active,
+  that payout lands first, followed by the authored COMBO x1..x9 callout and its
+  separate bonus amount. While a transient TV callout is visible, it temporarily
+  hides the FREE SPIN banner and dealer countdown information so the pop remains
+  readable; those indicators return when the callout ends.
+- A Heart triple uses the authored TRIPLE music and the vial-style reaction flash
+  even though it pays no score: its tier shows a little "+1", "+2", or "+3"
+  fly-in while recovering the matching run spins.
 - Scores multiply by the frenzy gauge and Lab lucidity multipliers. Exact tables
   and edge cases live in `godot/rules/` and the parity vectors — this file only
   summarizes intent.
 
 ### Powers
 
-- **Reroll** (always owned) — rerolls one revealed reel.
+- **Reroll** — an optional Pacte power that rerolls one revealed reel.
 - **Shift** — steps one revealed reel along the symbol cycle.
 - **Lock** — locks a reel through upcoming spins.
 - **Rewind** — restores the immediately previous spin's reels, neuron/free-spin,
-  dealer, and combo state while preserving earned score/Lucidity and recovering
-  a deterministic 1–3 spent power chips. It is unavailable without spin history
-  or while another sequence is active.
-- **Heart** — replaces one, two, or three revealed symbols with hearts for
-  +1/+2/+3 neurons and +10/+20/+30 score.
-- **Cheat** — rubble-flashes the revealed symbols, then replaces one selected
-  reel with a symbol chosen from the existing symbol chooser.
-- **Move** — rubble-flashes the revealed symbols, then moves a selected symbol to
-  any other reel, including an adjacent reel, before rescoring.
+	dealer, and combo state while preserving earned score/Lucidity and recovering
+	a deterministic 1–3 other power chips used during that rewound spin. Powers
+	spent before that spin remain spent. Rewind itself is spent and cannot recover
+	itself, so one history can never create an infinite rewind loop. It is
+	unavailable without spin history or while another sequence is active. While the
+	restore's backwards reel roll plays, SPIN is locked out; the lever re-enables
+	only once the restored reveal (and any restored warning) has fully landed.
+- **Heart** — arms the next spin and immediately turns the whole reel strip —
+  centre and adjacent symbols — into hearts as a preview. That spin is free and
+  deterministically lands a matching triple of `heart_x1`, `heart_x2`, or
+  `heart_x3` with equal 1/3 odds, filling each strip with the matching heart
+  tier; it pays +1/+2/+3 run spins only — no score or Lucidity — and advances the
+  frenzy gauge one step. Heart can also be armed during a losing-state warning;
+  doing so rescues the warning without lowering the gauge. It is spent like the
+  other powers and returns only through the normal power-restore rules.
+- **Cheat** — shows the same rubble/reward-amplification overlay as the other
+  symbol powers, then replaces one selected reel with a symbol chosen from the
+  existing symbol chooser. After the reel is picked, its authored
+  `cheat_selection` sheet shows the idle, bottom-arrow, and top-arrow states.
+- **Swap** — rubble-flashes the revealed symbols; each reel's centre and adjacent
+  symbols shake while targeting is armed, and any visible symbol can be picked.
+  The selected symbol follows the finger/mouse immediately in a drag animation and
+  swaps with the centre symbol on any other reel, including an adjacent reel,
+  before rescoring the reveal. Symbol values do not need to be distinct. The
+  selected source reel is marked with a red X while dragging because it cannot be
+  used as its own destination.
+- **Pattern Recognition** — its five authored icon frames animate on the Pacte card.
+- **Reward Amplification** — selecting a Reward+ Pacte card opens a symbol-only
+	picker so the boosted symbol is chosen during the ritual; its title and close
+	cross are intentionally omitted from the compact overlay, and tapping outside
+	the choices cannot dismiss the mandatory picker.
+- **Win Boost** — successive paying pair/triple/jackpot results form a streak and
+  add 5%, 10%, 15%, …, 45% of that result's base payout (x1 through x9, capped at
+  45%). The base payout is shown first, then the COMBO xN callout and its separate
+  bonus; a miss resets the streak.
+- **Glitch 2** — the dealer countdown always advances by 3 steps per spin, even
+  while the machine is at x2 or x3. Its dealer warning bar always shows all three
+  warning overlays. Its Pacte card has no icon and occasionally tears visually.
+- **Joker** — after the first 3-flatline strike in the run, the dealer sometimes
+  uses a helpful Cheat, Shift, Reroll, or Lock effect. These assists are separate
+  from the player's loadout and never consume the player's power chips.
+- Power slots preserve acquisition order: the first three owned powers occupy the
+	authored 1/2/3 positions in the machine bar, regardless of their card IDs.
 - Selecting a power for targeting flashes its authored TV callout (with text
-  fallbacks for the four new powers) with
+  frames ordered Reroll, Shift, Lock, Rewind, Heart, Cheat, Swap (with text
+  fallbacks if an authored frame is unavailable) with
   a short beeping pulse; the callout stays up while targeting is armed and hides
   when the target is picked or the selection is cancelled.
 - Using a power spends it; the power gauge restores one random spent power per 50
@@ -155,14 +204,16 @@ Resources and currencies:
 ### Dealer
 
 - The in-run dealer runs on a fixed countdown starting/resetting at 12 (the club
-  modifier doubles it to 24). Every spin advances it by 3/2/1 at x1/x2/x3; the
-  authored 13-frame bar normalizes either countdown across its full range and
+  modifier doubles it to 24). Every spin advances it by 3/2/1 at x1/x2/x3; Glitch
+  2 overrides that cadence with 3 steps at every multiplier. The authored 13-frame
+  bar normalizes either countdown across its full range and
   walks through each intermediate frame toward its final arrival
   frame. Its warning lights use the matching countdown-progress frame, beep with
   an alpha pulse, and appear cumulatively only after the current spin's result
   (x3: overlay 1; x2: overlays 1+2; x1: overlays 1+2+3). They remain visible
   during a losing-state warning: pending x1 and x2 show all three lights, while
-  pending x3 shows the preceding x2 stack (overlays 1+2). At 0 he visits
+  pending x3 shows the preceding x2 stack (overlays 1+2). With Glitch 2 active,
+  all three overlays remain visible at every multiplier. At 0 he visits
   automatically. The compact dealer portrait sits just inside the TV border
   beside the countdown bar.
 - A visit offers 2 run items (3 with the offer-expand augment) plus one dedicated
@@ -180,7 +231,7 @@ Resources and currencies:
 
 ### Free spins, losses, and compulsions
 
-- Free spins never cost neurons. The bank caps at 1 (3 when upgraded); a jackpot
+- Free spins never cost run spins. The bank caps at 1 (3 when upgraded); a jackpot
   grants 1. The FREE SPIN banner covers banked credits and Energy Drink's
   protected spins.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
@@ -194,16 +245,17 @@ Resources and currencies:
   spins remaining resolves itself so the flatline procs without input.
 - Energy Drink: two protected spins (no decay, gauge pinned to x2, no losing
   state can open), then one machine-controlled compulsory spin at x2. The
-  compulsory spin discards any leftover warning, survives temporary locks, and
-  its result alone decides the next combo-loss state; the dealer stays queued
-  until it fully resolves.
+  multiplier badge stays in its engaged x2-cap state through the protected and
+  compulsory window. The compulsory spin discards any leftover warning, survives
+  temporary locks, and its result alone decides the next combo-loss state; the
+  dealer stays queued until it fully resolves.
 
 ### Endings and persistence
 
 - **Wealth** — 2,000 score. Wealth banking waits for the player's choice; the run
   can be continued once past Wealth (higher neuron cap, ends only by flatline).
   All three ending presentations draw above the machine HUD art.
-- **Flatline** — 0 neurons with no banked free spins. Keeps 10% of run Lucidity
+- **Flatline** — 0 run spins with no banked free spins. Keeps 10% of run Lucidity
   (20% with Smart Save, spade halves it) into the wallet.
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
@@ -224,7 +276,16 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — reusable initial/threshold card ritual: deterministic three-card
   augment and power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices.
+  partial choices. A dragged card casts a drop shadow (as do dragged dealer/stash
+  items everywhere). There is no arrow selector overlay and no CANCEL/EXIT text
+  buttons. The card preview is a compact information bubble between the dealer
+  prompt and card row; the centered CHOOSE AN AUGMENT/POWER prompt uses the same
+  font and color as dealer feedback text. Card dragging is bounded to the native
+  160x320 canvas. Once the machine has started, a reopened Pacte presents a clean table:
+  the initial visit's cards keep their effects in the run but are not re-shown.
+  Completing the mid-run (threshold) visit hands off to the live dealer scene,
+  which shows run Lucidity and the Chip Augment offer before returning to the
+  machine.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — in-run dealer visits and the post-run odds phase (gateway to the Lab).
 - `upgrades_scene` — the Lab: permanent upgrades.
@@ -232,9 +293,10 @@ Resources and currencies:
   and the ending overlays (flatline, game over, wealth).
 - `scores_scene` / `settings_scene` / `collection_scene` / `options_overlay` —
   meta screens.
-- Run lifecycle: `idle` → `pacte_initial` → `running` → `pacte_threshold` →
-  `running` → `over` (with `lastEnding` set to wealth/flatline/game_over); a
-  Wealth continuation returns `over` → `running`.
+- Run lifecycle: `idle` → `pacte_initial` → `running` → `over` (with
+  `lastEnding` set to wealth/flatline/game_over). A flatline that crosses the
+  campaign count from 6 to 5 resumes as `pacte_threshold`, then returns through
+  `running` to the dealer; a Wealth continuation returns `over` → `running`.
 
 ## Living Game Documentation
 

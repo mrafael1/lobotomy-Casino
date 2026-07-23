@@ -349,6 +349,62 @@ func neon_panel_style(border_color: Color, content_margin: float = 0.0) -> Style
 	style.content_margin_bottom = content_margin
 	return style
 
+## Drop shadow under an item/card while it is being dragged. Builds a black
+## silhouette from every visible TextureRect inside the item (nested one level or
+## more), parents it to the dragged node so it follows every drag update, and
+## draws it behind the item. remove_drag_shadow() clears it when the drag ends or
+## is cancelled; adding twice replaces the previous shadow.
+const DRAG_SHADOW_NAME := "DragShadow"
+const DRAG_SHADOW_OFFSET := Vector2(2.0, 3.0)
+const DRAG_SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.5)
+
+func add_drag_shadow(item: Control) -> void:
+	if item == null or not is_instance_valid(item):
+		return
+	remove_drag_shadow(item)
+	var shadow := Control.new()
+	shadow.name = DRAG_SHADOW_NAME
+	shadow.position = DRAG_SHADOW_OFFSET
+	shadow.size = item.size
+	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shadow.modulate = DRAG_SHADOW_COLOR
+	shadow.show_behind_parent = true
+	_copy_shadow_textures(item, item, shadow)
+	if item is TextureRect and (item as TextureRect).texture != null:
+		shadow.add_child(_shadow_texture_copy(item as TextureRect, Vector2.ZERO))
+	if shadow.get_child_count() == 0:
+		shadow.free()
+		return
+	item.add_child(shadow)
+	item.move_child(shadow, 0)
+
+func remove_drag_shadow(item: Control) -> void:
+	if item == null or not is_instance_valid(item):
+		return
+	var shadow := item.get_node_or_null(NodePath(DRAG_SHADOW_NAME))
+	if shadow != null:
+		shadow.queue_free()
+
+func _copy_shadow_textures(node: Control, base: Control, shadow: Control) -> void:
+	for child in node.get_children():
+		if not (child is Control) or not (child as Control).visible:
+			continue
+		if child is TextureRect and (child as TextureRect).texture != null:
+			var offset: Vector2 = (child as Control).global_position - base.global_position
+			shadow.add_child(_shadow_texture_copy(child as TextureRect, offset))
+		_copy_shadow_textures(child as Control, base, shadow)
+
+func _shadow_texture_copy(source: TextureRect, offset: Vector2) -> TextureRect:
+	var copy := TextureRect.new()
+	copy.texture = source.texture
+	copy.position = offset
+	copy.size = source.size
+	copy.expand_mode = source.expand_mode
+	copy.stretch_mode = source.stretch_mode
+	copy.texture_filter = source.texture_filter
+	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return copy
+
 # Shared "negative" skin (ignore / leave / back / close / decline) — the red sheet.
 func skin_negative_button(b: Button) -> void:
 	skin_sheet_button(b, _RED_BUTTON_REL, 4)
@@ -395,7 +451,8 @@ func _press_restore(b: BaseButton) -> void:
 		b.position.y = b.get_meta("_rest_y")
 
 func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_text: String, rect: Rect2,
-		picked: Callable, cancelled: Callable, use_five_slot_art := false) -> Control:
+		picked: Callable, cancelled: Callable, use_five_slot_art: bool = false,
+		show_title: bool = true, show_cancel: bool = true) -> Control:
 	var frame_texture := texture(SYMBOL_PICKER_FRAME_REL)
 	var uses_frame := use_five_slot_art and symbols.size() == 5 and frame_texture != null
 
@@ -430,37 +487,39 @@ func build_symbol_picker_panel(parent: Control, symbols: Array[String], title_te
 	else:
 		_build_symbol_picker_slots(panel, symbols.size(), content)
 
-	var title := Label.new()
-	title.name = "TitleLabel"
-	title.text = title_text
-	title.position = Vector2(0.0, content.position.y - 5.0) if uses_frame else Vector2(0.0, 1.0)
-	title.size = Vector2(rect.size.x, 11.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.add_theme_font_size_override("font_size", 7)
-	title.add_theme_color_override("font_color", SYMBOL_PICKER_TITLE_COLOR)
-	title.add_theme_color_override("font_outline_color", Color.BLACK)
-	title.add_theme_constant_override("outline_size", 1)
-	if font() != null:
-		title.add_theme_font_override("font", font())
-	panel.add_child(title)
+	if show_title:
+		var title := Label.new()
+		title.name = "TitleLabel"
+		title.text = title_text
+		title.position = Vector2(0.0, content.position.y - 5.0) if uses_frame else Vector2(0.0, 1.0)
+		title.size = Vector2(rect.size.x, 11.0)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title.add_theme_font_size_override("font_size", 7)
+		title.add_theme_color_override("font_color", SYMBOL_PICKER_TITLE_COLOR)
+		title.add_theme_color_override("font_outline_color", Color.BLACK)
+		title.add_theme_constant_override("outline_size", 1)
+		if font() != null:
+			title.add_theme_font_override("font", font())
+		panel.add_child(title)
 
-	var cancel := Button.new()
-	cancel.name = "CancelButton"
-	cancel.text = ""
-	cancel.focus_mode = Control.FOCUS_NONE
-	cancel.position = Vector2(rect.size.x - 12.0, content.position.y + 1.0) if uses_frame else Vector2(rect.size.x - 12.0, 1.0)
-	cancel.size = Vector2(10.0, 10.0)
-	cancel.add_theme_font_size_override("font_size", 6)
-	if font() != null:
-		cancel.add_theme_font_override("font", font())
-	skin_cancel_button(cancel)
-	cancel.pressed.connect(func() -> void:
-		if cancelled.is_valid():
-			cancelled.call()
-	)
-	panel.add_child(cancel)
+	if show_cancel:
+		var cancel := Button.new()
+		cancel.name = "CancelButton"
+		cancel.text = ""
+		cancel.focus_mode = Control.FOCUS_NONE
+		cancel.position = Vector2(rect.size.x - 12.0, content.position.y + 1.0) if uses_frame else Vector2(rect.size.x - 12.0, 1.0)
+		cancel.size = Vector2(10.0, 10.0)
+		cancel.add_theme_font_size_override("font_size", 6)
+		if font() != null:
+			cancel.add_theme_font_override("font", font())
+		skin_cancel_button(cancel)
+		cancel.pressed.connect(func() -> void:
+			if cancelled.is_valid():
+				cancelled.call()
+		)
+		panel.add_child(cancel)
 
 	var cell_w := content.size.x / float(maxi(1, symbols.size()))
 	for i in symbols.size():

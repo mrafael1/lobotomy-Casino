@@ -27,6 +27,9 @@ const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
 # Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
 # N spins remaining — frame 0 = empty/no spins, frame 18 = 18+ spins.
 const HEALTH_BAR_FRAME_COUNT := 19
+const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
+const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
+const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # Remaining-spin readout, centered in the badge chip under the neuron tube
 # (badge pixels span x4..16, y107..119). The rect rides ~6px above the chip
 # centre and 1px right of it because DTM-Sans' line metrics drop the glyphs
@@ -63,6 +66,13 @@ const STRIP_ADJ_H := 12.0
 const STRIP_OFFSET := 14.0 # vertical gap between symbol centres ((center+adj)/2)
 const STRIP_ADJ_ALPHA := 0.5
 
+# Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
+# candidate symbol, tapping the symbol commits it.
+const CHEAT_ARROW_SIZE := Vector2(14.0, 8.0)
+const CHEAT_ARROW_GAP := 3.0
+const CHEAT_SELECTION_SHEET := "machine new view/cheat_selection.png"
+const CHEAT_SELECTION_FRAMES := 9
+
 # Machine-mounted power button hit rects (source px).
 const POWER_HITS := {
 	"reroll": { "left": 21.0, "top": 223.0, "width": 15.0, "height": 15.0 },
@@ -71,9 +81,9 @@ const POWER_HITS := {
 	"rewind": { "left": 63.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 	"heart": { "left": 77.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 	"cheat": { "left": 91.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"move": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"swap": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 }
-const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "move"]
+const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
 const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
@@ -83,6 +93,9 @@ const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
 const REEL_STOP_SFX_LEAD_TIME := 0.1
+# Rewind rolls the previous spin back in: all three reels blur backwards for this
+# long while the sequence lock keeps the lever out of reach.
+const REWIND_RESTORE_DURATION := 0.9
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
@@ -104,20 +117,32 @@ const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
 const COMBO_LOSS_BEEP_FADE_TIME := 0.1
 const COMBO_LOSS_BEEP_PAUSE := 0.42
 # Authored TV callout sheets (full-canvas x1 frames): the win sheet flashes
-# PAIR/TRIPLE after a win is identified; the power sheet flashes REROLL/SHIFT/LOCK
-# while that power's targeting is armed. Both beep with the combo-loss pulse cadence.
+# PAIR/TRIPLE after a win is identified; the power sheet flashes the seven power
+# names in authored order while that power's targeting is armed. Both beep with
+# the combo-loss pulse cadence.
 const WIN_ANIM_SHEET := "machine new view/win_animation.png"
 const WIN_ANIM_FRAMES := 2
 const WIN_ANIM_FRAME := { "pair": 0, "triple": 1 }
+const COMBO_EFFECT_SHEET := "machine new view/COMBO_effect.png"
+const COMBO_EFFECT_FRAMES := 9
+const COMBO_EFFECT_DELAY := 0.9
+const COMBO_EFFECT_TIME := 1.05
 const POWER_ANIM_SHEET := "machine new view/power_animation.png"
-const POWER_ANIM_FRAMES := 3
-const POWER_ANIM_FRAME := { "reroll": 0, "shift": 1, "memory": 2 }
+const POWER_ANIM_FRAMES := 7
+const POWER_ANIM_FRAME := {
+	"reroll": 0, "shift": 1, "memory": 2,
+	"rewind": 3, "heart": 4, "cheat": 5, "swap": 6,
+}
 const CALLOUT_BEEP_COUNT := 4
 # "+ X" payout line under the PAIR/TRIPLE callout (both words centre on x~76 and
 # end at y86 in the re-authored art; the TV screen bottom is y108). Child of the
 # callout sprite, so it inherits the beep pulse and hides with it.
 const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
 const WIN_PAYOUT_COLOR := Color("#20d6c7")
+# The combo sheet already contains COMBO x1..x9 at y63..92. Keep the bonus line
+# below that authored title so the two payouts read as separate beats.
+const COMBO_PAYOUT_RECT := Rect2(35.0, 94.0, 82.0, 12.0)
+const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 # Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
 # is the empty bar at the start of the active cycle (12 steps normally, 24 for
 # Club/Joker); the last frame means the dealer arrives after the current spin. The
@@ -158,7 +183,7 @@ const POWER_SHEETS := {
 	"rewind": "machine new view/rewind_power.png",
 	"heart": "machine new view/chip_power.png",
 	"cheat": "machine new view/cheat_power.png",
-	"move": "machine new view/move_power.png",
+	"swap": "machine new view/move_power.png",
 }
 const REEL_SELECT_COLUMNS := 2
 const REEL_SELECT_ROWS := 2
@@ -205,6 +230,11 @@ const DEBUG_GRANT := false
 
 # Visible (non-book) symbols used for the spin-blur animation.
 const VISIBLE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
+const HEART_SYMBOL_ASSETS := {
+	"heart_x1": "symbols/heart x1.png",
+	"heart_x2": "symbols/heart x2.png",
+	"heart_x3": "symbols/heart x3.png",
+}
 
 # Score-burst (score-burst presentation). Visual only.
 const BURST_TIME := 1.05
@@ -259,6 +289,13 @@ const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 # run's restrictions.
 const AUGMENTED_BADGE_POS := Vector2(27.0, 6.0) # top strip, right of the options gear
 const AUGMENTED_BADGE_SIZE := 14.0
+# Pacte augment badge: a compact blue contour around the active card icon stays
+# inside the TV; it is shifted 10px right from the original left-side placement.
+# Pressing it opens the current card(s) and effects.
+const PACTE_AUGMENT_BADGE_POS := Vector2(37.0, 96.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 12.0)
+const PACTE_AUGMENT_ICON_SIZE := 7.0
+const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
 	"eye": Color("#ce3dde"),
@@ -349,7 +386,7 @@ const DURATION_BOOSTS := [
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 @export var coins_per_power_restore: int = EconomyConst.LUCIDITY_COINS_PER_RESTORE
-@export var default_run_power_ids: Array[String] = ["reroll"]
+@export var default_run_power_ids: Array[String] = []
 
 @export_group("Feedback")
 ## Grow-then-fade duration of the on-use +/- hint (issue #33). The animated
@@ -505,6 +542,10 @@ var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
 var _score_pct_buttons: Array[Button] = []
 var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
+var _pacte_augment_badge: Button = null
+var _pacte_augment_badge_icon: TextureRect = null
+var _pacte_augment_count: Label = null
+var _pacte_augment_popup: Control = null
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -540,9 +581,14 @@ var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
 var _win_anim_tween: Tween = null
 var _win_payout_label: Label = null # "+ X" line under the PAIR/TRIPLE callout
+var _combo_effect_sprite: Sprite2D = null
+var _combo_effect_delay_tween: Tween = null
+var _combo_effect_tween: Tween = null
+var _combo_payout_label: Label = null
 var _power_anim_sprite: Sprite2D = null
 var _power_anim_tween: Tween = null
 var _power_anim_label: Label = null
+var _cheat_selection_sprite: Sprite2D = null
 var _tv_info_pop_sources: Dictionary = {}
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
@@ -564,7 +610,24 @@ var _targeting_layer: Control = null # reel/arrow target buttons while a power i
 var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
 var _cheat_reel := -1
-var _move_source := -1
+var _cheat_symbol_pool: Array[String] = [] # cheat mini-reel: cycle order (+book)
+var _cheat_symbol_index := 0
+var _cheat_preview_sprite: Sprite2D = null # candidate symbol in the mini-reel
+var _swap_source := -1
+var _swap_drag_active := false
+var _swap_dragging := false
+var _swap_drag_button: Button = null
+var _swap_drag_ghost: Sprite2D = null
+var _swap_drag_press := Vector2.ZERO
+var _swap_drag_offset := Vector2.ZERO
+var _swap_drag_hint_tween: Tween = null
+var _swap_shake_tween: Tween = null      # revealed symbols shake while Swap is armed
+var _swap_shake_sprites: Array[Sprite2D] = []
+var _swap_shake_base: Array[Vector2] = []
+var _swap_invalid_target_overlay: Panel = null
+var _swap_target_feedback_reel := -1
+var _swap_source_slot := 1 # 0 = above, 1 = centre, 2 = below
+var _swap_source_symbol := ""
 var _rubble_overlay: ColorRect = null
 var _dealer_drag_active := false
 var _dealer_drag_node: Control = null
@@ -582,6 +645,7 @@ var _burst_prev_score := 0           # last announced result score (for power ga
 var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
+var _combo_score_pending := -1 # final score held until the COMBO bonus beat lands
 var _power_bar_sprite: Sprite2D = null
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
@@ -589,7 +653,6 @@ var _power_seen_lucidity := 0    # legacy name: total power points the gauge has
 var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
-var _threshold_waiting_for_power_coins := false
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
 var _jackpot_flash_tween: Tween = null
@@ -620,6 +683,9 @@ var _reroll_anim_active := false
 var _reroll_reel_index := -1
 var _reroll_elapsed := 0.0
 var _reroll_accum := 0.0
+var _rewind_anim_active := false
+var _rewind_elapsed := 0.0
+var _rewind_accum := 0.0
 var _flatline_countdown_active := false
 var _flatline_countdown_elapsed := 0.0
 var _flatline_total := 0
@@ -627,7 +693,7 @@ var _flatline_kept := 0
 var _flatline_display := 0
 var _flatline_score_label: Label = null
 var _flatline_lost_label: Label = null
-var _campaign_label: Label = null
+var _spin_label: Label = null
 var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
 var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
@@ -688,6 +754,7 @@ func _ready() -> void:
 	_restore_options_overlay_if_requested()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
+	_build_pacte_augment_badge()
 	_init_burst_tracking()
 
 func _apply_balance_exports() -> void:
@@ -787,6 +854,8 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "WinCallout"
 	if rel.ends_with("power_animation.png"):
 		return "PowerCallout"
+	if rel.ends_with("cheat_selection.png"):
+		return "CheatSelection"
 	if rel.ends_with("2_losing_animation.png"):
 		return "ComboLoss2"
 	if rel.ends_with("3_losing_animation.png"):
@@ -1086,7 +1155,7 @@ func _wealth_goal_text(node_name: String, rect: Rect2, font_size: int) -> Label:
 	return l
 
 ## Numeric spins-left readout under the neuron tube — tracks the same
-## _display_spins_left() budget the tube frames show, but past the tube's 17 cap.
+## _display_spins_left() budget the capped tube frames show.
 func _build_spins_left_label() -> void:
 	_spins_left_label = Label.new()
 	_spins_left_label.name = "SpinsLeftNumber"
@@ -1098,7 +1167,7 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_spins_left_label.add_theme_font_override("font", _font)
-	_spins_left_label.add_theme_color_override("font_color", NEON_CYAN)
+	_spins_left_label.add_theme_color_override("font_color", SPINS_LEFT_NORMAL_COLOR)
 	_spins_left_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_spins_left_label.add_theme_constant_override("outline_size", 1)
 	_spins_left_label.text = ""
@@ -1320,12 +1389,33 @@ func _build_machine_control_art() -> void:
 		_win_payout_label.add_theme_color_override("font_color", WIN_PAYOUT_COLOR)
 		_win_payout_label.text = ""
 		_win_anim_sprite.add_child(_win_payout_label)
+	_combo_effect_sprite = _build_full_canvas_sheet(COMBO_EFFECT_SHEET, COMBO_EFFECT_FRAMES)
+	if _combo_effect_sprite != null:
+		_combo_payout_label = Label.new()
+		_combo_payout_label.name = "ComboPayout"
+		_combo_payout_label.position = COMBO_PAYOUT_RECT.position
+		_combo_payout_label.size = COMBO_PAYOUT_RECT.size
+		_combo_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_combo_payout_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_combo_payout_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_combo_payout_label.add_theme_font_size_override("font_size", 8)
+		if _font != null:
+			_combo_payout_label.add_theme_font_override("font", _font)
+		_combo_payout_label.add_theme_color_override("font_color", COMBO_PAYOUT_COLOR)
+		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		_combo_payout_label.add_theme_constant_override("outline_size", 1)
+		_combo_payout_label.text = ""
+		_combo_effect_sprite.add_child(_combo_payout_label)
 	_power_anim_sprite = _build_full_canvas_sheet(POWER_ANIM_SHEET, POWER_ANIM_FRAMES)
+	_cheat_selection_sprite = _build_full_canvas_sheet(
+		CHEAT_SELECTION_SHEET, CHEAT_SELECTION_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
 			_combo_loss_2_sprite, _combo_loss_3_sprite,
-			_win_anim_sprite, _power_anim_sprite]:
+			_win_anim_sprite, _combo_effect_sprite, _power_anim_sprite, _cheat_selection_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
+	if _cheat_selection_sprite != null:
+		_cheat_selection_sprite.z_index = 98
 	for dealer_art in [_dealer_bar_sprite, _dealer_bar_overlay_1,
 			_dealer_bar_overlay_2, _dealer_bar_overlay_3]:
 		if dealer_art != null:
@@ -1471,6 +1561,15 @@ func _set_all_reels_visible(visible: bool) -> void:
 
 # Symbol above/below `sym` in the canonical cycle (book sits outside it).
 func _reel_neighbours(sym: String) -> Dictionary:
+	if sym.begins_with("heart"):
+		# A heart strip cycles x1 -> x2 -> x3 around the landed tier, so the
+		# display shows exactly three of each heart symbol — never nine of one.
+		var tier := clampi(int(sym.trim_prefix("heart_x")), 1, 3) \
+			if sym.begins_with("heart_x") else 1
+		return {
+			"top": "heart_x%d" % (((tier - 2) + 3) % 3 + 1),
+			"bottom": "heart_x%d" % (tier % 3 + 1),
+		}
 	var cyc: Array = Symbols.BASE_SYMBOL_CYCLE
 	var n := cyc.size()
 	var i := cyc.find(sym)
@@ -1482,9 +1581,22 @@ func _reel_neighbours(sym: String) -> Dictionary:
 	return { "top": cyc[(i - 1 + n) % n], "bottom": cyc[(i + 1) % n] }
 
 func _apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
+	var heart_asset := String(HEART_SYMBOL_ASSETS.get(symbol_id, ""))
+	if symbol_id == "heart" and heart_asset == "":
+		heart_asset = String(HEART_SYMBOL_ASSETS["heart_x1"])
+	if heart_asset != "":
+		var heart_tex := _load_texture(heart_asset, true)
+		if heart_tex == null:
+			return
+		s.region_enabled = false
+		s.texture = heart_tex
+		var heart_scale := minf(1.0, target_h / float(heart_tex.get_height()))
+		s.scale = Vector2(heart_scale, heart_scale)
+		return
 	var tex := _load_texture("symbols/%s.png" % symbol_id, true) # mipmaps for crisp downscale
 	if tex == null:
 		return
+	s.region_enabled = false
 	s.texture = tex
 	var k := minf(1.0, target_h / float(tex.get_height()))
 	s.scale = Vector2(k, k)
@@ -1505,7 +1617,7 @@ func _apply_adjacent_symbol_visibility(index: int) -> void:
 
 func _build_hud() -> void:
 	_build_score_button()
-	_build_campaign_label()
+	_build_spin_label()
 	_build_hint_layer()
 	_build_dealer_icon()
 
@@ -1554,12 +1666,19 @@ func _refresh_dealer_countdown() -> void:
 	# The warning sheets are cumulative: the x3 warning is overlay 1, x2 adds
 	# overlay 2, and x1 adds overlay 3. Each sheet follows the same countdown
 	# progress as the bar; its shorter tail clamps to its final authored frame.
-	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
+	var cap := 2 if RunStateStore.energy_drink_owns_multiplier() else 3
 	var effective := clampi(int(RunStateStore.betMultiplier), 1, cap)
 	var show_overlay_1 := false
 	var show_overlay_2 := false
 	var show_overlay_3 := false
-	if RunStateStore.comboDefeatPending:
+	if RunStateStore.glitchDealerStepActive:
+		# Glitch 2 keeps the complete warning stack lit at every multiplier. The
+		# countdown cadence and normal post-result visibility gate still apply;
+		# only the cumulative stack is overridden.
+		show_overlay_1 = true
+		show_overlay_2 = true
+		show_overlay_3 = true
+	elif RunStateStore.comboDefeatPending:
 		# A losing-state warning uses the dealer-warning state that follows a
 		# declined loss: pending x1 stays at x1, pending x2 falls to x1, and
 		# pending x3 falls to x2. Therefore x1/x2 keep all three lights and x3
@@ -1675,7 +1794,7 @@ func _refresh_score_button_lock() -> void:
 		or _dealer_offer_popup != null
 	_set_score_button_locked(locked)
 
-func _build_campaign_label() -> void:
+func _build_spin_label() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
 	if bottom_hud == null:
 		bottom_hud = Control.new()
@@ -1685,32 +1804,33 @@ func _build_campaign_label() -> void:
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
-	_campaign_label = bottom_hud.get_node_or_null("neuron_number") as Label
+	_spin_label = bottom_hud.get_node_or_null("spin_number") as Label
 	var legacy_label := get_node_or_null("neuron_number") as Label
-	if _campaign_label == null and legacy_label != null:
+	if _spin_label == null and legacy_label != null:
 		legacy_label.reparent(bottom_hud)
-		_campaign_label = legacy_label
-	if _campaign_label == null:
-		_campaign_label = Label.new()
-		_campaign_label.name = "neuron_number"
-		bottom_hud.add_child(_campaign_label)
-		_campaign_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		_campaign_label.offset_left = -46.5
-		_campaign_label.offset_top = -14.0
-		_campaign_label.offset_right = 46.5
-		_campaign_label.offset_bottom = -4.0
-	_campaign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_campaign_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_campaign_label.add_theme_font_size_override("font_size", 6)
+		legacy_label.name = "spin_number"
+		_spin_label = legacy_label
+	if _spin_label == null:
+		_spin_label = Label.new()
+		_spin_label.name = "spin_number"
+		bottom_hud.add_child(_spin_label)
+		_spin_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_spin_label.offset_left = -46.5
+		_spin_label.offset_top = -14.0
+		_spin_label.offset_right = 46.5
+		_spin_label.offset_bottom = -4.0
+	_spin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_spin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_spin_label.add_theme_font_size_override("font_size", 6)
 	if _font != null:
-		_campaign_label.add_theme_font_override("font", _font)
-	_campaign_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
-	_campaign_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_campaign_label.add_theme_constant_override("outline_size", 1)
-	_campaign_label.text = ""
-	# The neuron meter no longer lives on the in-run HUD — it shows on the start
-	# menu and the flatline overlay only. The label stays as the feedback anchor.
+		_spin_label.add_theme_font_override("font", _font)
+	_spin_label.add_theme_color_override("font_color", Color(0.8, 0.95, 1.0))
+	_spin_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_spin_label.add_theme_constant_override("outline_size", 1)
+	_spin_label.text = ""
+	# The campaign neuron meter belongs to the menu and flatline overlay. The
+	# machine HUD's empty anchor is explicitly named for the run's spin counter.
 
 func _build_hint_layer() -> void:
 	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
@@ -1763,6 +1883,7 @@ func _begin_fresh_run() -> bool:
 func _sync_visuals() -> void:
 	_stop_sfx(&"reel_spin")
 	_spin_launch_pending = false
+	_rewind_anim_active = false
 	# A spin whose scene was freed mid-resolution (e.g. opening options and tapping
 	# Settings/Scores while the reels are still turning) committed lastResult + run
 	# state inside RunStateStore.spin() but never reached _run_post_reveal_sequence,
@@ -1789,7 +1910,6 @@ func _sync_visuals() -> void:
 	_last_reacted_spin = -1
 	_reveal_reel_next_spin = -1
 	_pending_spin_gain = 0
-	_threshold_waiting_for_power_coins = false
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
@@ -1839,6 +1959,10 @@ func _resolve_interrupted_spin() -> void:
 		_update_hud() # defensive: nothing to resolve, just re-enable controls
 		_resolve_exhausted_resume()
 		return
+	var dealer_help := RunStateStore.maybe_dealer_help()
+	if not dealer_help.is_empty():
+		_refresh_reels_from_state()
+		_refresh_lock_art()
 	RunStateStore.check_dealer_trigger()
 	var dealer_pending := RunStateStore.dealerIncoming
 	_release_hud_delta_hold()
@@ -1855,8 +1979,6 @@ func _resolve_interrupted_spin() -> void:
 			return
 	if _check_ending():
 		return
-	if _defer_threshold_until_power_flow():
-		return
 	# Issue #96: resolve a pending compulsion before the dealer pops (see
 	# _run_post_reveal_sequence) — the dealer stays queued and presents afterward.
 	if RunStateStore.compulsiveSpinSkips > 0:
@@ -1872,7 +1994,7 @@ func _to_dealer() -> void:
 	SceneNav.change_to(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
-	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
 		return
 	# A pending loss is confirmed by the next manual spin. Powers still have the
 	# current reveal's rescue window, but pulling the lever means the pair/triple
@@ -1893,6 +2015,7 @@ func _do_spin(compulsive := false) -> void:
 	var expiring_boost_counters := _capture_expiring_boost_counters()
 	_clear_targeting()
 	_stop_win_animation() # last spin's PAIR/TRIPLE callout must not outlive its win
+	_stop_combo_effect() # finish the previous Win Boost beat before the next reveal
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
 	_refresh_jackpot_lamp(false)
@@ -1918,6 +2041,10 @@ func _do_spin(compulsive := false) -> void:
 	if result == null:
 		_hud_delta_hold = false
 		return
+	# Heart restores run spins inside spin(), but hold that gain visually until the
+	# triple reveal so the counter rises with its +1/+2/+3 fly-in.
+	if String(result.get("winType", "")) == "heart":
+		_pending_spin_gain += clampi(int(result.get("heartCount", 0)), 0, 3)
 	_apply_expiring_boost_linger(expiring_boost_counters)
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
@@ -1971,6 +2098,8 @@ func _process(delta: float) -> void:
 		_step_lever(delta)
 	if _reroll_anim_active:
 		_step_reroll(delta)
+	if _rewind_anim_active:
+		_step_rewind_restore(delta)
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
@@ -2081,6 +2210,16 @@ func _run_post_reveal_sequence() -> void:
 	_set_sequence_lock(true)
 	_update_hud()
 	_refresh_lock_art()
+	# Joker's dealer assist resolves before the reward pop so any rescued pair or
+	# triple is scored and reacted to as part of this reveal.
+	var dealer_help := RunStateStore.maybe_dealer_help()
+	if not dealer_help.is_empty():
+		_refresh_reels_from_state()
+		_refresh_lock_art()
+		_show_power_animation(String(dealer_help.get("power", "")))
+		await get_tree().create_timer(0.55).timeout
+		_stop_power_animation()
+		_update_hud()
 	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
 	RunStateStore.check_dealer_trigger()
@@ -2116,8 +2255,6 @@ func _finish_post_spin_sequence() -> void:
 		_post_spin_sequence_active = false
 		_set_sequence_lock(false)
 		return
-	if _defer_threshold_until_power_flow():
-		return
 	# Issue #96: a pending compulsion must fully resolve BEFORE the dealer pops.
 	# The dealer stays queued in the store (dealerIncoming) and presents again on
 	# the compulsive spin's own post-reveal. If the dealer took the scene first,
@@ -2136,34 +2273,6 @@ func _finish_post_spin_sequence() -> void:
 	else:
 		_set_sequence_lock(false)
 	_post_spin_sequence_active = false
-
-func _open_threshold_pacte_if_ready() -> bool:
-	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
-		return false
-	if not RunStateStore.open_threshold_pacte():
-		return false
-	# A dealer due on the same spin is re-rolled after the threshold Pacte choice,
-	# so the threshold visit remains the next interruption rather than being lost.
-	RunStateStore.dealerIncoming = false
-	RunStateStore.dealerPending = false
-	RunStateStore.dealerOfferIds = null
-	RunStateStore._commit()
-	_clear_targeting()
-	_close_pending_combo_defeat()
-	_set_sequence_lock(false)
-	_post_spin_sequence_active = false
-	SceneNav.change_to(PACTE_SCENE)
-	return true
-
-func _defer_threshold_until_power_flow() -> bool:
-	if not RunStateStore.pacteThresholdPending or RunStateStore.pacteThresholdOpened:
-		return false
-	if _power_sequence_active() or _power_has_pending_work():
-		_threshold_waiting_for_power_coins = true
-		_set_sequence_lock(false)
-		_post_spin_sequence_active = false
-		return true
-	return _open_threshold_pacte_if_ready()
 
 # ── compulsive takeover ──────────────────────────────────────────────────────────
 
@@ -2258,6 +2367,8 @@ func _start_combo_loss_beep() -> void:
 func _begin_tv_info_pop(source: StringName) -> void:
 	var was_empty := _tv_info_pop_sources.is_empty()
 	_tv_info_pop_sources[source] = true
+	_hide_pacte_augment_popup()
+	_refresh_pacte_augment_badge()
 	if not was_empty:
 		return
 	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar_sprite != null \
@@ -2273,6 +2384,7 @@ func _end_tv_info_pop(source: StringName) -> void:
 	if not _tv_info_pop_sources.is_empty():
 		return
 	_restore_tv_info_layers()
+	_refresh_pacte_augment_badge()
 
 func _hide_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
@@ -2299,14 +2411,14 @@ func _restore_tv_info_layers() -> void:
 ## PAIR/TRIPLE TV callout: the matching win_animation frame beeps (alpha pulse,
 ## combo-loss cadence) CALLOUT_BEEP_COUNT times after the win is identified, then
 ## hides. The "+ score" payout line rides along as a child of the callout sprite.
-func _play_win_animation(win_type: String, score: int) -> void:
+func _play_win_animation(win_type: String, score: int, payout_text := "") -> void:
 	if _win_anim_sprite == null or not WIN_ANIM_FRAME.has(win_type):
 		return
 	_stop_win_animation()
 	_begin_tv_info_pop(&"win")
 	_set_sheet_frame(_win_anim_sprite, int(WIN_ANIM_FRAME[win_type]))
 	if _win_payout_label != null:
-		_win_payout_label.text = "+ %d" % score
+		_win_payout_label.text = payout_text if payout_text != "" else "+ %d" % score
 	_win_anim_sprite.modulate.a = 1.0
 	_win_anim_sprite.visible = true
 	_win_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
@@ -2326,8 +2438,63 @@ func _stop_win_animation() -> void:
 		_win_anim_sprite.modulate.a = 1.0
 	_end_tv_info_pop(&"win")
 
-## REROLL/SHIFT/LOCK TV callout: the selected power's power_animation frame beeps
-## a few times and then holds while its targeting stays armed (_clear_targeting hides it).
+## Win Boost is deliberately a second TV beat: the PAIR/TRIPLE callout and its
+## base payout land first, then this authored x1..x9 sheet announces the streak
+## stage and the separate bonus amount.
+func _queue_combo_effect(combo_number: int, bonus: int, percent: int) -> float:
+	if _combo_effect_sprite == null:
+		return 0.0
+	_stop_combo_effect()
+	var frame := clampi(combo_number - 1, 0, COMBO_EFFECT_FRAMES - 1)
+	_combo_effect_delay_tween = create_tween()
+	_combo_effect_delay_tween.tween_interval(COMBO_EFFECT_DELAY)
+	_combo_effect_delay_tween.tween_callback(
+		_show_combo_effect.bind(frame, bonus, percent))
+	return COMBO_EFFECT_DELAY + COMBO_EFFECT_TIME
+
+func _show_combo_effect(frame: int, bonus: int, percent: int) -> void:
+	_combo_effect_delay_tween = null
+	if _combo_effect_sprite == null:
+		return
+	_stop_win_animation()
+	_begin_tv_info_pop(&"combo")
+	_set_sheet_frame(_combo_effect_sprite, clampi(frame, 0, COMBO_EFFECT_FRAMES - 1))
+	if _combo_payout_label != null:
+		_combo_payout_label.text = "+ %d (%d%%)" % [maxi(0, bonus), clampi(percent, 0, 45)]
+	_combo_effect_sprite.modulate.a = 1.0
+	_combo_effect_sprite.visible = true
+	if _combo_score_pending >= 0:
+		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
+		_combo_score_pending = -1
+	_combo_effect_tween = create_tween()
+	_combo_effect_tween.tween_property(_combo_effect_sprite, "modulate:a", 0.18,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_effect_tween.tween_property(_combo_effect_sprite, "modulate:a", 1.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_effect_tween.tween_interval(COMBO_EFFECT_TIME - COMBO_LOSS_BEEP_FADE_TIME * 3.0)
+	_combo_effect_tween.tween_property(_combo_effect_sprite, "modulate:a", 0.0,
+		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_combo_effect_tween.finished.connect(_stop_combo_effect)
+
+func _stop_combo_effect() -> void:
+	if _combo_effect_delay_tween != null and _combo_effect_delay_tween.is_valid():
+		_combo_effect_delay_tween.kill()
+	_combo_effect_delay_tween = null
+	if _combo_effect_tween != null and _combo_effect_tween.is_valid():
+		_combo_effect_tween.kill()
+	_combo_effect_tween = null
+	if _combo_effect_sprite != null:
+		_combo_effect_sprite.visible = false
+		_combo_effect_sprite.modulate.a = 1.0
+	if _combo_payout_label != null:
+		_combo_payout_label.text = ""
+	if _combo_score_pending >= 0:
+		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
+		_combo_score_pending = -1
+	_end_tv_info_pop(&"combo")
+
+## Power TV callout: the selected power's power_animation frame beeps a few times
+## and then holds while its targeting stays armed (_clear_targeting hides it).
 func _show_power_animation(id: String) -> void:
 	if _power_anim_sprite == null:
 		return
@@ -2478,7 +2645,8 @@ func _update_hud() -> void:
 		_set_tv_progress_bars_visible(false)
 		return
 	_refresh_tv_indicators()
-	_refresh_campaign_label()
+	_refresh_spin_label()
+	_refresh_pacte_augment_badge()
 	_refresh_controls()
 	_refresh_consumable_fx()
 
@@ -2494,11 +2662,11 @@ func _release_hud_delta_hold() -> void:
 	_update_hud()
 	_refresh_jackpot_lamp()
 
-# The authored neuron_number Label stays as an anchor/editor placeholder and
-# renders no text; the neuron meter lives on the start menu / flatline overlay.
-func _refresh_campaign_label() -> void:
-	if _campaign_label != null:
-		_campaign_label.text = ""
+# The authored spin_number Label stays as an anchor/editor placeholder and
+# renders no text; the live number is the SPINS LEFT readout under the tube.
+func _refresh_spin_label() -> void:
+	if _spin_label != null:
+		_spin_label.text = ""
 
 # "-1 NEURON" popup — flatline/neuron-loss overlay only. Spawns above the overlay's
 # neuron meter, timed with its losing pop.
@@ -2538,7 +2706,10 @@ func _refresh_reels_from_state() -> void:
 		return
 	_set_all_reels_visible(true)
 	for i in 3:
-		_set_reel_symbol(i, String(lr["reels"][i]))
+		# An armed Heart previews immediately: every strip symbol — centre and
+		# adjacent — turns into a heart until the next spin resolves the tier.
+		_set_reel_symbol(i, "heart" if RunStateStore.heartPowerArmed \
+			else String(lr["reels"][i]))
 	_refresh_lock_art()
 
 func _refresh_lock_art() -> void:
@@ -2566,10 +2737,13 @@ func _refresh_tv_indicators() -> void:
 		_set_sheet_frame(_health_bar_sprite,
 			clampi(spins_left, 0, HEALTH_BAR_FRAME_COUNT - 1))
 	# The numeric readout under the tube follows the same budget (spends, gains,
-	# protections all land here via _update_hud), uncapped by the tube's 17 frames.
+	# protections all land here via _update_hud), capped at 18 spins.
 	if _spins_left_label != null:
 		_spins_left_label.visible = true
 		_spins_left_label.text = str(spins_left)
+		_spins_left_label.add_theme_color_override(
+			"font_color",
+			SPINS_LEFT_MAX_COLOR if spins_left >= MAX_RUN_SPINS else SPINS_LEFT_NORMAL_COLOR)
 	# Issue #155: the dealer bar advances with the inverse multiplier step (not the
 	# reward hold), so its progress changes the moment the lever is pulled.
 	_refresh_dealer_countdown()
@@ -2579,6 +2753,10 @@ func _refresh_tv_indicators() -> void:
 	# The wealth odometer is a score total. Hold it (with the multiplier badge and
 	# jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
+		return
+	# Win Boost has a second payout beat. Keep the base PAIR/TRIPLE total visible
+	# until the COMBO sheet lands, then _show_combo_effect releases the final total.
+	if _combo_score_pending >= 0:
 		return
 	if RunStateStore.scoreEarned < _display_lucidity:
 		_set_display_lucidity(RunStateStore.scoreEarned)
@@ -2595,7 +2773,8 @@ func _spin_decay() -> int:
 func _neuron_spins_left() -> int:
 	if RunStateStore.neurons <= 0:
 		return 0
-	return maxi(1, int(ceili(float(RunStateStore.neurons) / float(_spin_decay()))))
+	return mini(MAX_RUN_SPINS,
+		maxi(1, int(ceili(float(RunStateStore.neurons) / float(_spin_decay())))))
 
 func _display_spins_left() -> int:
 	return maxi(0, _neuron_spins_left() - _pending_spin_gain)
@@ -2724,12 +2903,27 @@ func _emit_score_burst(source_reel) -> float:
 
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
+	var combo_applied := bool(lr.get("winBoostApplied", false)) \
+		and win_type in ["pair", "triple", "jackpot"]
+	var combo_bonus := maxi(0, int(lr.get("winBoostBonus", 0))) if combo_applied else 0
+	var combo_number := clampi(int(lr.get("winBoostCombo", 1)), 1, COMBO_EFFECT_FRAMES)
+	var combo_percent := clampi(int(lr.get("winBoostPercent", 0)), 0, 45)
+	var combo_base_gain := maxi(0, gain - combo_bonus)
+	if combo_applied and lr.has("winBoostBaseScore"):
+		combo_base_gain = mini(combo_base_gain, maxi(0, int(lr["winBoostBaseScore"])))
 	var color: Color = MULT_COLORS[clampi(int(RunStateStore.lastEffectiveBet), 1, 3)]
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
+	# A previous sequence can be interrupted by a power or a scene transition. Make
+	# sure a held final odometer value is not mistaken for this result's base payout.
+	if _combo_score_pending >= 0:
+		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
+		_combo_score_pending = -1
 	# Score is the wealth bar's source of truth. The number reels begin their roll with
 	# the score popup; no individual Lucidity coins leave the cash tray for this HUD.
 	var wealth_score := int(RunStateStore.scoreEarned)
-	if wealth_score > _display_lucidity:
+	if combo_bonus > 0 and _combo_effect_sprite != null:
+		_set_display_lucidity(maxi(_display_lucidity, wealth_score - combo_bonus))
+	elif wealth_score > _display_lucidity:
 		_set_display_lucidity(wealth_score)
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
@@ -2739,22 +2933,40 @@ func _emit_score_burst(source_reel) -> float:
 		_nudge(0.8)
 		return maxf(reward_time, BURST_TIME)
 
+	# Heart is a guaranteed triple that pays run spins instead of score. Reuse the
+	# authored TRIPLE callout/music and the vial-style reaction flash; the landed
+	# tier supplies the little +1/+2/+3 spin gain.
+	if is_new_spin and win_type == "heart":
+		var heart_tier := clampi(int(lr.get("heartTier", lr.get("heartCount", 1))), 1, 3)
+		_play_sfx(&"triple_win")
+		_play_win_animation("triple", 0, "+ %d" % heart_tier)
+		_play_spin_gain_fx(heart_tier, _reel_window_center(), 0.55, true)
+		_spawn_reaction_flash(triple_vial_color, "+%d SPINS" % heart_tier)
+		_nudge(1.0)
+		return maxf(reward_time, BURST_TIME)
+
 	# A rescore that doesn't increase the score must NOT pop (gain <= 0).
 	if gain > 0 and win_type != "miss":
 		# Jackpot is special (issue #22): a large GOLDEN number rising out of the
 		# machine centre — never a reel-anchored pair/triple-style burst.
 		if win_type == "jackpot":
 			_play_sfx(&"jackpot_win")
-			_spawn_jackpot_burst(score)
+			_spawn_jackpot_burst(combo_base_gain)
 			_flash_jackpot_lamp()
 			_nudge(2.2)
-			return maxf(reward_time, maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME))
-		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" else "BONUS")
+			var jackpot_combo_time: float = _queue_combo_effect(
+				combo_number, combo_bonus, combo_percent) if combo_applied else 0.0
+			if combo_bonus > 0 and jackpot_combo_time > 0.0:
+				_combo_score_pending = wealth_score
+			return maxf(reward_time, maxf(maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME),
+				jackpot_combo_time))
+		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" \
+			else ("HEART" if win_type == "heart" else "BONUS"))
 		if win_type == "triple":
 			_play_sfx(&"triple_win")
 		elif win_type == "pair":
 			_play_sfx(&"pair_win")
-		_play_win_animation(win_type, score)
+		_play_win_animation(win_type, combo_base_gain)
 		# Issue #76: a flatline strike charged this win — call it out and tint it red so
 		# the doubled score reads as the flatline payoff, not a normal pair/triple.
 		if is_new_spin and bool(lr.get("flatlineBoostApplied", false)):
@@ -2763,7 +2975,7 @@ func _emit_score_burst(source_reel) -> float:
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		if _active_hidden_reel_count() > 0:
 			reel = mini(reel, _visible_reel_count() - 1)
-		_spawn_burst(label, score, color, reel)
+		_spawn_burst(label, combo_base_gain, color, reel)
 		_nudge(1.0)
 		reward_time = maxf(reward_time, BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
@@ -2771,6 +2983,11 @@ func _emit_score_burst(source_reel) -> float:
 			var solo := _solo_reel(reels)
 			if solo != -1 and solo < _visible_reel_count():
 				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
+		if combo_applied:
+			var combo_time: float = _queue_combo_effect(combo_number, combo_bonus, combo_percent)
+			if combo_bonus > 0 and combo_time > 0.0:
+				_combo_score_pending = wealth_score
+			reward_time = maxf(reward_time, combo_time)
 	return reward_time
 
 func _cocktail_reel_bonus(symbol_id: String, score_multiplier: float) -> int:
@@ -2960,17 +3177,9 @@ func _advance_power_bar() -> void:
 		# only partially fills the bar; the power must not pop before the bar is full).
 		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 		_maybe_present_pending_dealer()
-		_maybe_open_threshold_after_power_flow()
 		return
 	_power_batch_running = true
 	_launch_power_coin_batch(steps)
-
-func _maybe_open_threshold_after_power_flow() -> void:
-	if not _threshold_waiting_for_power_coins or _power_sequence_active() \
-			or _power_has_pending_work():
-		return
-	_threshold_waiting_for_power_coins = false
-	_open_threshold_pacte_if_ready()
 
 ## Tea restores an ability instantly (a consumable, not a score event): commit its queued
 ## restore now and fly a coin from the cash tray straight to the power. No-op if Tea
@@ -3174,11 +3383,12 @@ func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vect
 ## sheet keeps its authored frames: 0/1/2 = x1/x2/x3 lit, 3/5 = the Energy-Drink
 ## "x2 cap" pair (frame 4, the old machine-forced compulsive x1, is unused now).
 func _refresh_multiplier_controls() -> void:
-	# The Energy-Drink forced spin no longer forces x1 — the machine takes the spin
-	# at the current combo, so the badge keeps showing the real gauge value.
-	if _hud_delta_hold:
+	# The Energy-Drink window owns the gauge through both protected spins and the
+	# queued/active compulsory spin, so its engaged x2-cap frame stays visible until
+	# the whole effect has resolved.
+	if _hud_delta_hold and not RunStateStore.energy_drink_owns_multiplier():
 		return # badge keeps its pre-commit frame until the score popup lands
-	var cap := 2 if RunStateStore.forcedRandomBetSpins > 0 else 3
+	var cap := 2 if RunStateStore.energy_drink_owns_multiplier() else 3
 	var effective := clampi(RunStateStore.betMultiplier, 1, cap)
 	var frame := effective - 1
 	if cap == 2:
@@ -3294,7 +3504,8 @@ func _step_free_spin_blink(delta: float) -> void:
 
 func _refresh_free_spin_banner() -> void:
 	var active := RunStateStore.runPhase == "running" \
-		and (int(RunStateStore.freeSpinsRemaining) > 0 or int(RunStateStore.decaySkips) > 0)
+		and (int(RunStateStore.freeSpinsRemaining) > 0 \
+			or int(RunStateStore.decaySkips) > 0 or RunStateStore.heartPowerArmed)
 	# Never turn the banner ON while a spin is in flight or its reward is still
 	# held — a grant made by the spin being revealed must not spoil the result.
 	# Turning it OFF mid-spin is fine (pressing spin consumed the last credit).
@@ -3401,7 +3612,8 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	# The pending-defeat rescue window keeps consumables live (issue #155 follow-up):
 	# a corrective item can still cancel the losing state before the confirming spin.
 	if (_sequence_lock_active and not RunStateStore.comboDefeatPending) \
-			or _spin_launch_pending or not RunStateStore._can_use_consumable() or _reroll_anim_active:
+			or _spin_launch_pending or not RunStateStore._can_use_consumable() \
+			or _reroll_anim_active or _rewind_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -3430,25 +3642,27 @@ func _refresh_controls() -> void:
 		and not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips <= 0
 	var sequence_allows_power := not _sequence_lock_active or combo_pending
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and sequence_allows_power
+		and not _rewind_anim_active and _dealer_offer_popup == null and sequence_allows_power
 	if _spin_button != null:
 		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
-			or _spinning_anim or _spin_launch_pending or _reroll_anim_active \
+			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active \
 			or (_sequence_lock_active and not combo_pending)
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.power_loadout()
+		var visible_power_order := _visible_power_order(owned)
 		# A restored power stays in its unavailable state until the restore coin
 		# lands on the button (commit_power_restore fires the refresh), so the
 		# unlock animation always plays before the button reads as usable (issue #54).
 		var pending: Array = RunStateStore.pendingPowerRestores
 		var rescue_ids := RunStateStore.pending_combo_power_ids()
 		for id in POWER_IDS:
-			var visible := _power_owned(id, owned)
+			var visible := visible_power_order.has(id)
 			var b: Button = _power_buttons[id]
 			b.visible = visible
 			b.disabled = not visible
 			if visible:
+				_apply_power_slot(id, visible_power_order.find(id))
 				var valid_pending_power: bool = not combo_pending or rescue_ids.has(id)
 				b.disabled = not (can_use and valid_pending_power and not used.has(id) \
 					and not pending.has(id))
@@ -3462,7 +3676,7 @@ func _refresh_controls() -> void:
 
 	var slots := _stash_slots()
 	var usable := (RunStateStore._can_use_consumable() and not _spin_launch_pending and not _reroll_anim_active \
-			and (not _sequence_lock_active or combo_pending)) \
+			and not _rewind_anim_active and (not _sequence_lock_active or combo_pending)) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -3474,8 +3688,36 @@ func _refresh_controls() -> void:
 			icon.modulate = Color.WHITE
 
 func _power_owned(id: String, owned: Array) -> bool:
-	var normalised := "memory" if id == "lock" else id
+	var normalised := PacteCards.normalise_card_id(id)
 	return owned.has(normalised)
+
+func _visible_power_order(owned: Array) -> Array[String]:
+	var result: Array[String] = []
+	for raw_id in owned:
+		var id := PacteCards.normalise_card_id(String(raw_id))
+		if POWER_IDS.has(id) and not result.has(id):
+			result.append(id)
+		if result.size() == 3:
+			break
+	return result
+
+## The first three authored power positions are the machine's visible slots. Power
+## sheets beyond those positions are full-canvas art, so offsetting the sprite by
+## the source/target slot delta moves the icon without changing its pixel scale.
+func _apply_power_slot(power_id: String, slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= 3:
+		return
+	var source: Dictionary = POWER_HITS[power_id]
+	var target_id := POWER_IDS[slot_index]
+	var target: Dictionary = POWER_HITS[target_id]
+	var button: Button = _power_buttons[power_id]
+	button.position = Vector2(target["left"], target["top"])
+	button.size = Vector2(maxf(float(target["width"]), 11.0), float(target["height"]))
+	var sprite: Sprite2D = _power_sprites[power_id]
+	if sprite != null:
+		sprite.position = Vector2(
+			float(target["left"]) - float(source["left"]),
+			float(target["top"]) - float(source["top"]))
 
 func _short_name(consumable_id: String) -> String:
 	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
@@ -3505,7 +3747,8 @@ func _boost_icon_for(boost: Dictionary) -> Texture2D:
 
 func _on_power_pressed(id: String) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
-	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
+	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending \
+			or _spinning_anim or _reroll_anim_active or _rewind_anim_active:
 		return
 	if combo_pending and not RunStateStore.pending_combo_power_ids().has(id):
 		return
@@ -3523,8 +3766,8 @@ func _on_power_pressed(id: String) -> void:
 		return
 	if id == "cheat":
 		_arm_cheat_targets()
-	elif id == "move":
-		_arm_move_source()
+	elif id == "swap":
+		_arm_swap_source()
 	elif id == "shift":
 		_arm_shift_targets()
 	else:
@@ -3535,53 +3778,196 @@ func _on_power_pressed(id: String) -> void:
 	_refresh_controls()
 
 func _use_rewind_power() -> void:
+	if _rewind_anim_active:
+		return
 	var was_pending := RunStateStore.comboDefeatPending
 	if not RunStateStore.rewind():
 		_refresh_controls()
 		return
 	_clear_targeting()
 	_maybe_cancel_combo_defeat_warning(was_pending)
+	_start_rewind_restore()
+
+## Rewind's restore beat: all three reels blur backwards while the previous state
+## rolls back in. The whole sequence runs under the sequence lock so the lever is
+## dead until the restored reveal has landed; _finish_rewind_restore always runs
+## (the step is driven from _process) and always releases the lock.
+func _start_rewind_restore() -> void:
+	_rewind_anim_active = true
+	# A rewind replaces the interrupted post-spin sequence with the restored state.
+	# Clearing this flag prevents stale reward/dealer sequencing from keeping SPIN
+	# disabled after the backwards reveal has landed.
+	_post_spin_sequence_active = false
+	_rewind_elapsed = 0.0
+	_rewind_accum = 0.0
+	_spin_frame = 0
+	_set_sequence_lock(true)
+	_stop_win_animation()
+	_stop_combo_effect()
+	_play_sfx(&"reel_spin")
+	for i in 3:
+		_reel_stop_sfx_played[i] = false
+		_set_reel_visible(i, false)
+		_set_reel_cover(i, false)
+		_set_spin_reel_frame(i, _spin_frame)
+		_set_spin_reel_visible(i, true)
+	_refresh_controls()
+
+func _step_rewind_restore(delta: float) -> void:
+	_rewind_elapsed += delta
+	_rewind_accum += delta
+	if _rewind_accum >= SPIN_FRAME_TIME:
+		_rewind_accum = 0.0
+		# The blur runs backwards — the machine is unwinding the previous spin.
+		_spin_frame = (_spin_frame - 1 + SPIN_FRAME_COUNT) % SPIN_FRAME_COUNT
+		for i in 3:
+			_set_spin_reel_frame(i, _spin_frame)
+	if _rewind_elapsed >= maxf(0.0, REWIND_RESTORE_DURATION - REEL_STOP_SFX_LEAD_TIME):
+		for i in 3:
+			_play_reel_stop_sfx(i)
+	if _rewind_elapsed >= REWIND_RESTORE_DURATION:
+		_finish_rewind_restore()
+
+func _finish_rewind_restore() -> void:
+	_stop_sfx(&"reel_spin")
+	_rewind_anim_active = false
+	_post_spin_sequence_active = false
+	for i in 3:
+		_set_spin_reel_visible(i, false)
+		_set_reel_cover(i, true)
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
+	# The restored snapshot may bring a pending combo defeat back with it; the
+	# lock hands over to that warning, otherwise spinning re-enables here.
+	if RunStateStore.comboDefeatPending:
+		_post_spin_sequence_active = true
+		_show_pending_combo_defeat()
+	else:
+		_close_pending_combo_defeat()
+		_set_sequence_lock(false)
 	_refresh_controls()
 
 func _use_heart_power() -> void:
 	var was_pending := RunStateStore.comboDefeatPending
-	_flash_power_rubble()
 	if not RunStateStore.heart_power():
 		_refresh_controls()
 		return
 	_pending_combo_power_flow = was_pending
 	_maybe_cancel_combo_defeat_warning(was_pending)
+	_pending_combo_power_flow = false
+	if was_pending:
+		# The old post-spin sequence was paused behind the loss warning. Heart
+		# replaces that warning with a new guaranteed spin, so the next reveal must
+		# be allowed to start a fresh post-spin sequence.
+		_post_spin_sequence_active = false
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	_play_reward_sequence(0, true)
+	# Heart is a preparation action: the next lever pull renders and resolves the
+	# guaranteed heart triple as a free spin.
+	if was_pending and RunStateStore.comboDefeatPending:
+		_show_pending_combo_defeat()
+	else:
+		_set_sequence_lock(false)
+	_refresh_controls()
 
 func _arm_cheat_targets() -> void:
+	# Cheat uses the same rubble/reward-amplification presentation as the other
+	# symbol-manipulation powers before the player chooses a reel.
+	_flash_power_rubble()
 	_arm_reel_picker(func(reel_index: int) -> void: _on_cheat_reel_pick(reel_index))
 
+## Cheat's symbol choice is a mini-reel laid over the picked reel's hole: the
+## up/down arrows step the candidate symbol along the pool, tapping the symbol
+## itself commits it, tapping anywhere else cancels.
 func _on_cheat_reel_pick(reel_index: int) -> void:
 	_cheat_reel = reel_index
 	_clear_targeting()
 	_targeting_power_id = "cheat"
 	_show_power_animation("cheat")
+	_set_cheat_selection_state(0)
+	_cheat_symbol_pool.clear()
+	for symbol in Symbols.BASE_SYMBOL_CYCLE:
+		_cheat_symbol_pool.append(String(symbol))
+	if Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0:
+		_cheat_symbol_pool.append("book")
+	# Start the mini-reel on the symbol currently in the hole.
+	var current := ""
+	if RunStateStore.lastResult != null:
+		var reels: Array = RunStateStore.lastResult["reels"] as Array
+		if reel_index >= 0 and reel_index < reels.size():
+			current = String(reels[reel_index])
+	_cheat_symbol_index = maxi(0, _cheat_symbol_pool.find(current))
 	_targeting_layer = Control.new()
-	_targeting_layer.name = "CheatSymbolPicker"
+	_targeting_layer.name = "CheatReelOverlay"
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_STOP
 	_targeting_layer.z_index = 97
 	_targeting_layer.gui_input.connect(_on_power_picker_input)
 	add_child(_targeting_layer)
-	var pool: Array[String] = []
-	for symbol in Symbols.BASE_SYMBOL_CYCLE:
-		pool.append(String(symbol))
-	if Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0:
-		pool.append("book")
-	Assets.build_symbol_picker_panel(_targeting_layer, pool, "CHEAT: PICK SYMBOL",
-		Rect2(8.0, 126.0, 144.0, 66.0), Callable(self, "_on_cheat_symbol_pick"),
-		Callable(self, "_cancel_power_picker"), false)
+	var hole: Dictionary = REEL_HOLES[reel_index]
+	var hole_rect := Rect2(float(hole["left"]), float(hole["top"]),
+		float(hole["width"]), float(hole["height"]))
+	_cheat_preview_sprite = Sprite2D.new()
+	_cheat_preview_sprite.name = "CheatPreviewSymbol"
+	_cheat_preview_sprite.centered = true
+	_cheat_preview_sprite.position = hole_rect.get_center()
+	_cheat_preview_sprite.z_index = 2
+	_cheat_preview_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	_targeting_layer.add_child(_cheat_preview_sprite)
+	_refresh_cheat_preview(false)
+	var confirm := _make_hit_button({
+		"left": hole_rect.position.x, "top": hole_rect.position.y,
+		"width": hole_rect.size.x, "height": hole_rect.size.y,
+	}, func() -> void: _on_cheat_symbol_pick(_cheat_symbol_pool[_cheat_symbol_index]))
+	confirm.name = "CheatConfirmButton"
+	_targeting_layer.add_child(confirm)
+	_build_cheat_arrow(hole_rect, true)
+	_build_cheat_arrow(hole_rect, false)
+
+## Transparent up/down hit targets flank the mini-reel; the authored
+## cheat_selection sheet supplies their visible arrows and selected-reel frame.
+func _build_cheat_arrow(hole_rect: Rect2, up: bool) -> void:
+	var arrow_size := CHEAT_ARROW_SIZE
+	var cx := hole_rect.get_center().x
+	var top := hole_rect.position.y - CHEAT_ARROW_GAP - arrow_size.y if up \
+		else hole_rect.end.y + CHEAT_ARROW_GAP
+	var b := _make_hit_button({
+		"left": cx - arrow_size.x * 0.5, "top": top,
+		"width": arrow_size.x, "height": arrow_size.y,
+	}, func() -> void: _cycle_cheat_symbol(-1 if up else 1))
+	b.name = "CheatArrowUp" if up else "CheatArrowDown"
+	var selection_state := 2 if up else 1
+	b.button_down.connect(_set_cheat_selection_state.bind(selection_state))
+	b.button_up.connect(_set_cheat_selection_state.bind(0))
+	_targeting_layer.add_child(b)
+
+func _set_cheat_selection_state(state: int) -> void:
+	if _cheat_selection_sprite == null or _cheat_reel < 0:
+		return
+	var frame := clampi(_cheat_reel * 3 + state, 0, CHEAT_SELECTION_FRAMES - 1)
+	_set_sheet_frame(_cheat_selection_sprite, frame)
+	_cheat_selection_sprite.visible = true
+
+## Steps match the strip: the up arrow rolls toward the symbol shown above the
+## hole (cycle -1), the down arrow toward the one below (+1).
+func _cycle_cheat_symbol(step: int) -> void:
+	if _cheat_symbol_pool.is_empty():
+		return
+	_cheat_symbol_index = posmod(_cheat_symbol_index + step, _cheat_symbol_pool.size())
+	_refresh_cheat_preview(true)
+
+func _refresh_cheat_preview(pop: bool) -> void:
+	if _cheat_preview_sprite == null or not is_instance_valid(_cheat_preview_sprite):
+		return
+	_apply_symbol(_cheat_preview_sprite, _cheat_symbol_pool[_cheat_symbol_index], STRIP_CENTER_H)
+	if pop:
+		var rest := _cheat_preview_sprite.scale
+		_cheat_preview_sprite.scale = rest * 1.25
+		var tw := create_tween()
+		tw.tween_property(_cheat_preview_sprite, "scale", rest, 0.1) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _on_cheat_symbol_pick(symbol_id: String) -> void:
 	var source := _cheat_reel
@@ -3597,39 +3983,299 @@ func _on_cheat_symbol_pick(symbol_id: String) -> void:
 	_play_reward_sequence(source, true)
 	_cheat_reel = -1
 
-func _arm_move_source() -> void:
-	_flash_power_rubble()
-	_arm_reel_picker(func(reel_index: int) -> void: _on_move_source_pick(reel_index))
-
-func _on_move_source_pick(reel_index: int) -> void:
-	_move_source = reel_index
+func _arm_swap_source() -> void:
 	_clear_targeting()
-	_targeting_power_id = "move"
-	_show_power_animation("move")
+	_targeting_power_id = "swap"
+	_show_power_animation("swap")
 	_targeting_layer = Control.new()
-	_targeting_layer.name = "MoveDestinationPicker"
+	_targeting_layer.name = "SwapSymbolDragLayer"
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
-	var selection := _build_control_grid_sheet_on(_targeting_layer,
-		"machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	for i in 3:
-		var destination := i
-		var b := _make_hit_button({
-			"left": REEL_CELL_CENTERS[destination] - 12.0,
-			"top": REEL_WINDOW["top"] - 8.0,
-			"width": 24.0, "height": REEL_WINDOW["height"] + 16.0,
-		}, func() -> void: _on_move_destination_pick(destination))
-		if selection != null:
-			b.button_down.connect(_set_sheet_frame.bind(selection, destination + 1))
-		_targeting_layer.add_child(b)
+		_build_swap_rubble_hint(i)
+		var hole: Dictionary = REEL_HOLES[i]
+		var button := Button.new()
+		button.name = "SwapSymbol%d" % i
+		button.position = Vector2(float(hole["left"]) - 2.0, float(hole["top"]) - 2.0)
+		button.size = Vector2(float(hole["width"]) + 4.0, float(hole["height"]) + 4.0)
+		button.flat = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.mouse_default_cursor_shape = Control.CURSOR_DRAG
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		button.gui_input.connect(_on_swap_symbol_gui_input.bind(i, button))
+		_targeting_layer.add_child(button)
+	_swap_drag_hint_tween = create_tween().set_loops()
+	_swap_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 0.58, 0.34)
+	_swap_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 1.0, 0.34)
+	_start_swap_symbol_shake()
 
-func _on_move_destination_pick(destination: int) -> void:
-	var source := _move_source
+## While Swap is armed the revealed symbols shake in place — the cue that they can
+## be grabbed and dropped onto another reel, including an adjacent one.
+func _start_swap_symbol_shake() -> void:
+	_stop_swap_symbol_shake()
+	_swap_shake_sprites.clear()
+	_swap_shake_base.clear()
+	for i in _reel_sprites.size():
+		for sprite in [_reel_top_sprites[i], _reel_sprites[i], _reel_bottom_sprites[i]]:
+			var symbol_sprite := sprite as Sprite2D
+			if symbol_sprite == null:
+				continue
+			_swap_shake_sprites.append(symbol_sprite)
+			_swap_shake_base.append(symbol_sprite.position)
+	_swap_shake_tween = create_tween().set_loops()
+	for offset in [Vector2(1.0, 0.0), Vector2(-1.0, 0.5), Vector2(0.5, -0.5), Vector2.ZERO]:
+		_swap_shake_tween.tween_callback(_set_swap_shake_offset.bind(offset))
+		_swap_shake_tween.tween_interval(0.06)
+
+func _set_swap_shake_offset(offset: Vector2) -> void:
+	for i in mini(_swap_shake_sprites.size(), _swap_shake_base.size()):
+		_swap_shake_sprites[i].position = _swap_shake_base[i] + offset
+
+func _stop_swap_symbol_shake() -> void:
+	if _swap_shake_tween != null and _swap_shake_tween.is_valid():
+		_swap_shake_tween.kill()
+	_swap_shake_tween = null
+	if not _swap_shake_base.is_empty():
+		_set_swap_shake_offset(Vector2.ZERO)
+		_swap_shake_base.clear()
+		_swap_shake_sprites.clear()
+
+func _build_swap_rubble_hint(reel_index: int) -> void:
+	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
+		return
+	var hole: Dictionary = REEL_HOLES[reel_index]
+	var origin := Vector2(float(hole["left"]), float(hole["top"]))
+	var base := ColorRect.new()
+	base.name = "SwapRubbleHint%d" % reel_index
+	base.position = origin
+	base.size = Vector2(float(hole["width"]), float(hole["height"]))
+	base.color = Color(0.73, 0.5, 0.22, 0.14)
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	base.z_index = -1
+	_targeting_layer.add_child(base)
+	var shards: Array[Dictionary] = [
+		{"position": Vector2(2.0, 4.0), "size": Vector2(5.0, 2.0)},
+		{"position": Vector2(13.0, 8.0), "size": Vector2(4.0, 2.0)},
+		{"position": Vector2(7.0, 23.0), "size": Vector2(6.0, 2.0)},
+	]
+	for shard_data: Dictionary in shards:
+		var shard := ColorRect.new()
+		shard.position = origin + shard_data["position"]
+		shard.size = shard_data["size"]
+		shard.color = Color(1.0, 0.78, 0.36, 0.3)
+		shard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shard.z_index = -1
+		_targeting_layer.add_child(shard)
+
+func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_begin_swap_drag(reel_index, button, get_global_mouse_position())
+	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
+			_begin_swap_drag(reel_index, button,
+				_input_canvas_position((event as InputEventScreenTouch).position))
+
+func _input_canvas_position(viewport_position: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
+
+func _swap_symbol_slot_at(reel_index: int, global_position: Vector2) -> int:
+	if reel_index < 0 or reel_index >= _reel_sprites.size():
+		return 1
+	var local_y := to_local(global_position).y
+	var slot_y := [
+		_reel_top_sprites[reel_index].position.y,
+		_reel_sprites[reel_index].position.y,
+		_reel_bottom_sprites[reel_index].position.y,
+	]
+	var selected := 1
+	var distance := INF
+	for slot in slot_y.size():
+		var candidate_distance := absf(local_y - float(slot_y[slot]))
+		if candidate_distance < distance:
+			distance = candidate_distance
+			selected = slot
+	return selected
+
+func _swap_symbol_at(reel_index: int, slot: int) -> String:
+	var result: Variant = RunStateStore.lastResult
+	if not result is Dictionary:
+		return ""
+	var reels: Array = result["reels"] as Array
+	if reel_index < 0 or reel_index >= reels.size():
+		return ""
+	var centre := String(reels[reel_index])
+	if slot == 1 or _adjacent_symbols_hidden_active:
+		return centre
+	var neighbours := _reel_neighbours(centre)
+	return String(neighbours["top"] if slot == 0 else neighbours["bottom"])
+
+func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2) -> void:
+	if _swap_drag_active or _targeting_layer == null:
+		return
+	var result: Variant = RunStateStore.lastResult
+	if not result is Dictionary:
+		return
+	var reels: Array = result["reels"] as Array
+	if reel_index < 0 or reel_index >= reels.size():
+		return
+	var source_slot := _swap_symbol_slot_at(reel_index, global_position)
+	var source_symbol := _swap_symbol_at(reel_index, source_slot)
+	if source_symbol == "":
+		return
+	_swap_drag_active = true
+	_swap_dragging = true
+	_swap_source = reel_index
+	_swap_source_slot = source_slot
+	_swap_source_symbol = source_symbol
+	_swap_drag_button = button
+	_swap_drag_press = global_position
+	var source_position := _swap_symbol_position(reel_index, source_slot)
+	_swap_drag_offset = _targeting_local_position(global_position) - source_position
+	_swap_drag_ghost = Sprite2D.new()
+	_swap_drag_ghost.name = "SwapDraggedSymbol"
+	_swap_drag_ghost.centered = true
+	_swap_drag_ghost.z_index = 5
+	_swap_drag_ghost.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	_swap_drag_ghost.position = _targeting_local_position(global_position) - _swap_drag_offset
+	_apply_symbol(_swap_drag_ghost, source_symbol, STRIP_CENTER_H)
+	# Drop shadow under the dragged symbol: same texture, black, slightly offset.
+	# It is a child of the ghost, so it follows the drag and dies with it.
+	var ghost_shadow := Sprite2D.new()
+	ghost_shadow.name = "DragShadow"
+	ghost_shadow.texture = _swap_drag_ghost.texture
+	ghost_shadow.centered = true
+	ghost_shadow.position = Vector2(2.0, 3.0)
+	ghost_shadow.modulate = Color(0.0, 0.0, 0.0, 0.5)
+	ghost_shadow.show_behind_parent = true
+	_swap_drag_ghost.add_child(ghost_shadow)
+	_build_swap_invalid_target_feedback(reel_index)
+	_swap_drag_ghost.visible = true
+	_targeting_layer.add_child(_swap_drag_ghost)
+	_swap_drag_button.modulate.a = 0.35
+
+## Mark the source reel as a disabled destination for the duration of a Swap drag.
+## The red X stays on that reel even when the ghost is carried elsewhere, so the
+## player can see the swap restriction before releasing the symbol.
+func _build_swap_invalid_target_feedback(reel_index: int) -> void:
+	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
+		return
+	if _swap_invalid_target_overlay != null and is_instance_valid(_swap_invalid_target_overlay):
+		_swap_invalid_target_overlay.queue_free()
+	var hole: Dictionary = REEL_HOLES[reel_index]
+	var overlay := Panel.new()
+	overlay.name = "SwapInvalidTarget"
+	overlay.position = Vector2(float(hole["left"]) + 2.0, float(hole["top"]) + 2.0)
+	overlay.size = Vector2(float(hole["width"]) - 4.0, float(hole["height"]) - 4.0)
+	overlay.z_index = 1
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.72, 0.04, 0.10, 0.22)
+	style.border_color = Color(1.0, 0.22, 0.28, 0.95)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(1)
+	overlay.add_theme_stylebox_override("panel", style)
+	var marker := Label.new()
+	marker.name = "InvalidMarker"
+	marker.text = "X"
+	marker.position = Vector2.ZERO
+	marker.size = overlay.size
+	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_theme_font_size_override("font_size", 10)
+	if _font != null:
+		marker.add_theme_font_override("font", _font)
+	marker.add_theme_color_override("font_color", Color(1.0, 0.3, 0.34))
+	marker.add_theme_color_override("font_outline_color", Color.BLACK)
+	marker.add_theme_constant_override("outline_size", 1)
+	overlay.add_child(marker)
+	_targeting_layer.add_child(overlay)
+	_swap_invalid_target_overlay = overlay
+	_swap_target_feedback_reel = reel_index
+
+func _update_swap_target_feedback(target_reel: int) -> void:
+	if _swap_invalid_target_overlay == null or not is_instance_valid(_swap_invalid_target_overlay):
+		return
+	_swap_target_feedback_reel = target_reel
+	# Make the warning more emphatic while the pointer is over the forbidden source
+	# reel, while keeping the disabled source visibly marked over every destination.
+	_swap_invalid_target_overlay.modulate.a = 1.0 if target_reel == _swap_source else 0.72
+
+func _update_swap_drag(global_position: Vector2) -> void:
+	if not _swap_drag_active or _swap_drag_button == null:
+		return
+	_swap_dragging = true
+	_swap_drag_button.modulate.a = 0.35
+	if _swap_drag_ghost != null:
+		_swap_drag_ghost.visible = true
+		_swap_drag_ghost.position = _targeting_local_position(global_position) - _swap_drag_offset
+	_update_swap_target_feedback(_swap_target_at(global_position))
+
+func _finish_swap_drag(global_position: Vector2) -> void:
+	var source := _swap_source
+	var was_dragging := _swap_dragging
+	var source_symbol := _swap_source_symbol
+	var target := _swap_target_at(global_position)
+	_cancel_swap_drag_gesture()
+	if not was_dragging or target < 0 or target == source:
+		return
+	_on_swap_destination_pick(target, source, source_symbol)
+
+func _cancel_swap_drag_gesture() -> void:
+	_swap_drag_active = false
+	_swap_dragging = false
+	if _swap_drag_button != null:
+		_swap_drag_button.modulate = Color.WHITE
+	_swap_drag_button = null
+	if _swap_drag_ghost != null and is_instance_valid(_swap_drag_ghost):
+		_swap_drag_ghost.queue_free()
+		_swap_drag_ghost = null
+	if _swap_invalid_target_overlay != null and is_instance_valid(_swap_invalid_target_overlay):
+		_swap_invalid_target_overlay.queue_free()
+	_swap_invalid_target_overlay = null
+	_swap_target_feedback_reel = -1
+	_swap_drag_press = Vector2.ZERO
+	_swap_drag_offset = Vector2.ZERO
+	_swap_source = -1
+	_swap_source_slot = 1
+	_swap_source_symbol = ""
+
+func _swap_symbol_position(reel_index: int, slot: int) -> Vector2:
+	if reel_index < 0 or reel_index >= _reel_sprites.size():
+		return Vector2.ZERO
+	if slot == 0:
+		return _reel_top_sprites[reel_index].position
+	if slot == 2:
+		return _reel_bottom_sprites[reel_index].position
+	return _reel_sprites[reel_index].position
+
+func _targeting_local_position(global_position: Vector2) -> Vector2:
+	if _targeting_layer == null:
+		return to_local(global_position)
+	return _targeting_layer.get_global_transform_with_canvas().affine_inverse() * global_position
+
+func _swap_target_at(global_position: Vector2) -> int:
+	var local_position := to_local(global_position)
+	for i in REEL_HOLES.size():
+		var hole: Dictionary = REEL_HOLES[i]
+		var rect := Rect2(float(hole["left"]), float(hole["top"]),
+			float(hole["width"]), float(hole["height"])).grow(4.0)
+		if rect.has_point(local_position):
+			return i
+	return -1
+
+func _on_swap_destination_pick(destination: int, source_override: int = -1,
+		source_symbol_override: String = "") -> void:
+	var source := _swap_source if source_override < 0 else source_override
+	var source_symbol := _swap_source_symbol if source_symbol_override == "" \
+		else source_symbol_override
 	var was_pending := RunStateStore.comboDefeatPending
 	_clear_targeting()
-	if not RunStateStore.move_symbol(source, destination):
+	if not RunStateStore.swap_symbol(source, destination, source_symbol):
 		_refresh_controls()
 		return
 	_pending_combo_power_flow = was_pending
@@ -3637,7 +4283,7 @@ func _on_move_destination_pick(destination: int) -> void:
 	_refresh_reels_from_state()
 	_update_hud()
 	_play_reward_sequence(destination, true)
-	_move_source = -1
+	_swap_source = -1
 
 func _on_power_picker_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
@@ -3645,7 +4291,9 @@ func _on_power_picker_input(event: InputEvent) -> void:
 
 func _cancel_power_picker() -> void:
 	_cheat_reel = -1
-	_move_source = -1
+	_swap_source = -1
+	_swap_source_slot = 1
+	_swap_source_symbol = ""
 	_clear_targeting()
 	_refresh_controls()
 
@@ -3742,6 +4390,7 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 
 func _start_reroll_animation(reel_index: int) -> void:
 	_stop_win_animation() # the rerolled reveal supersedes the previous win callout
+	_stop_combo_effect()
 	_reroll_anim_active = true
 	_reroll_reel_index = reel_index
 	_reroll_elapsed = 0.0
@@ -3848,14 +4497,21 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 			_close_pending_combo_defeat()
 			_finish_post_spin_sequence()
 		return
-	if _defer_threshold_until_power_flow():
-		return
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
+	if _swap_drag_hint_tween != null and _swap_drag_hint_tween.is_valid():
+		_swap_drag_hint_tween.kill()
+	_swap_drag_hint_tween = null
+	_stop_swap_symbol_shake()
+	_cancel_swap_drag_gesture()
 	if _targeting_layer != null:
 		_targeting_layer.queue_free()
 		_targeting_layer = null
+	_cheat_preview_sprite = null # freed with the targeting layer
+	if _cheat_selection_sprite != null:
+		_cheat_selection_sprite.visible = false
+		_set_sheet_frame(_cheat_selection_sprite, 0)
 	_targeting_power_id = ""
 	_stop_power_animation()
 
@@ -4535,13 +5191,17 @@ func _play_tea_flight(slot_index: int) -> void:
 ## The tube's fill is held back (_pending_spin_gain) while the popup is in
 ## flight, then ticks up with a flash exactly when it lands — reward visible,
 ## value in sync, ~0.7s total so gameplay is not delayed.
-func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55) -> void:
+func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
+		already_held := false) -> void:
 	if amount <= 0:
 		return
 	if not consumable_fx_enabled or _health_bar_sprite == null or not is_inside_tree():
+		if already_held:
+			_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 		_update_hud()
 		return
-	_pending_spin_gain += amount
+	if not already_held:
+		_pending_spin_gain += amount
 	_update_hud()
 	var gain := Label.new()
 	gain.name = "SpinGainFx"
@@ -5370,6 +6030,7 @@ func _cleanup_transient_presentation() -> void:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
 	_stop_win_animation()
+	_stop_combo_effect()
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
@@ -5507,6 +6168,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_clear_targeting()
 	_close_score_table()
 	_hide_augmented_popup()
+	_hide_pacte_augment_popup()
 	_close_serum_picker()
 	_close_book_choice_overlay()
 	if _dealer_overlay != null:
@@ -5548,7 +6210,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_potion_jump_tween = null
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	_nudge_tween = null
+		_nudge_tween = null
 	_clear_close_call_heartbeat()
 	position = Vector2.ZERO
 
@@ -5656,6 +6318,13 @@ func _on_flatline_action_pressed() -> void:
 		_attach_flatline_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
+		# The campaign-neuron threshold Pacte is a post-flatline handoff. It must
+		# never interrupt a live machine spin or a reward sequence.
+		if RunStateStore.pacteThresholdPending \
+				and RunStateStore.pacteAfterFlatlinePending \
+				and RunStateStore.open_threshold_pacte():
+			SceneNav.change_to(PACTE_SCENE)
+			return
 		_to_dealer()
 	else:
 		_to_menu()
@@ -5883,9 +6552,155 @@ func _hide_augmented_popup() -> void:
 		_augmented_popup.queue_free()
 		_augmented_popup = null
 
+func _active_pacte_augment_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for raw_id in RunStateStore.selectedAugmentCardIds:
+		var id := String(raw_id)
+		if not ids.has(id) and PacteCards.augment_map().has(id):
+			ids.append(id)
+	return ids
+
+func _pacte_augment_icon(card_id: String) -> Texture2D:
+	var entry := PacteCards.card(card_id)
+	var sheet := _load_texture(String(entry.get("sheet", "")), true)
+	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	if sheet == null or icon_rect.size == Vector2.ZERO:
+		return null
+	var atlas := AtlasTexture.new()
+	atlas.atlas = sheet
+	atlas.region = icon_rect
+	return atlas
+
+func _build_pacte_augment_badge() -> void:
+	if _pacte_augment_badge != null:
+		_refresh_pacte_augment_badge()
+		return
+	var badge := Button.new()
+	badge.name = "PacteAugmentBadge"
+	badge.position = PACTE_AUGMENT_BADGE_POS
+	badge.size = PACTE_AUGMENT_BADGE_SIZE
+	badge.z_index = 40
+	badge.text = ""
+	badge.flat = true
+	badge.focus_mode = Control.FOCUS_NONE
+	badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
+	badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
+	badge_style.set_border_width_all(1)
+	badge_style.set_corner_radius_all(1)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		badge.add_theme_stylebox_override(state, badge_style)
+	var icon := TextureRect.new()
+	icon.name = "Icon"
+	icon.position = (PACTE_AUGMENT_BADGE_SIZE - Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)) * 0.5
+	icon.size = Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(icon)
+	var count := Label.new()
+	count.name = "Count"
+	count.position = Vector2(8.0, 8.0)
+	count.size = Vector2(4.0, 4.0)
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	count.add_theme_font_size_override("font_size", 4)
+	if _font != null:
+		count.add_theme_font_override("font", _font)
+	count.add_theme_color_override("font_color", NEON_GOLD)
+	count.add_theme_color_override("font_outline_color", Color.BLACK)
+	count.add_theme_constant_override("outline_size", 1)
+	badge.add_child(count)
+	badge.pressed.connect(_toggle_pacte_augment_popup)
+	_pacte_augment_badge = badge
+	_pacte_augment_badge_icon = icon
+	_pacte_augment_count = count
+	add_child(badge)
+	_refresh_pacte_augment_badge()
+
+func _refresh_pacte_augment_badge() -> void:
+	if _pacte_augment_badge == null:
+		return
+	var ids := _active_pacte_augment_ids()
+	var should_show := not ids.is_empty() and _tv_info_pop_sources.is_empty()
+	_pacte_augment_badge.visible = should_show
+	if not should_show:
+		_hide_pacte_augment_popup()
+		return
+	if _pacte_augment_badge_icon != null:
+		_pacte_augment_badge_icon.texture = _pacte_augment_icon(ids[0])
+	if _pacte_augment_count != null:
+		_pacte_augment_count.visible = ids.size() > 1
+		_pacte_augment_count.text = str(ids.size())
+
+func _pacte_augment_popup_text() -> String:
+	var lines: Array[String] = []
+	for card_id in _active_pacte_augment_ids():
+		var entry := PacteCards.card(card_id)
+		lines.append("%s\n%s" % [
+			String(entry.get("name", card_id)), String(entry.get("description", ""))])
+	return "\n".join(lines)
+
+func _toggle_pacte_augment_popup() -> void:
+	if _pacte_augment_popup != null:
+		_hide_pacte_augment_popup()
+		return
+	if _pacte_augment_badge == null or _active_pacte_augment_ids().is_empty():
+		return
+	var text := _pacte_augment_popup_text()
+	if text == "":
+		return
+	var popup := Control.new()
+	popup.name = "PacteAugmentPopup"
+	popup.z_index = 41
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var popup_size := Vector2(126.0,
+		minf(116.0, 8.0 + float(_active_pacte_augment_ids().size()) * 22.0))
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
+	bg_style.border_color = NEON_CYAN
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", bg_style)
+	popup.add_child(bg)
+	var label := Label.new()
+	label.position = Vector2(4.0, 3.0)
+	label.size = popup_size - Vector2(8.0, 6.0)
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	var pos := _pacte_augment_badge.position + Vector2(
+		_pacte_augment_badge.size.x - popup_size.x,
+		-_pacte_augment_badge.size.y - popup_size.y - 3.0)
+	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+	popup.position = pos.round()
+	_pacte_augment_popup = popup
+	add_child(popup)
+
+func _hide_pacte_augment_popup() -> void:
+	if _pacte_augment_popup != null:
+		_pacte_augment_popup.queue_free()
+		_pacte_augment_popup = null
+
 ## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
-## neurons (or banked free spins) remain (issue #62). There is no spin cap — the run
-## lasts as long as the neuron economy allows (issue #75).
+## neurons (or banked free spins) remain (issue #62). The normal spin pool is capped
+## at 18, including after a Wealth continuation.
 func _can_resume_after_wealth() -> bool:
 	return int(RunStateStore.neurons) >= 1 or int(RunStateStore.freeSpinsRemaining) > 0
 
@@ -5996,6 +6811,24 @@ func _input(event: InputEvent) -> void:
 		_close_score_table()
 		get_viewport().set_input_as_handled()
 		return
+	if _swap_drag_active:
+		if event is InputEventMouseMotion:
+			_update_swap_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
+				and not event.pressed:
+			_finish_swap_drag(get_global_mouse_position())
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventScreenDrag and event.index == 0:
+			_update_swap_drag(_input_canvas_position((event as InputEventScreenDrag).position))
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventScreenTouch and event.index == 0 and not event.pressed:
+			_finish_swap_drag(_input_canvas_position((event as InputEventScreenTouch).position))
+			get_viewport().set_input_as_handled()
+			return
 	if not _dealer_drag_active:
 		return
 	if event is InputEventMouseMotion:
@@ -6003,6 +6836,8 @@ func _input(event: InputEvent) -> void:
 		if _dealer_drag_node != null:
 			_dealer_drag_node.global_position = m - _dealer_drag_node.size * 0.5
 		if m.distance_to(_dealer_drag_press) > 4.0:
+			if not _dealer_drag_moved:
+				Assets.add_drag_shadow(_dealer_drag_node)
 			_dealer_drag_moved = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_end_dealer_drag(get_global_mouse_position())
@@ -6019,6 +6854,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	if node != null:
+		Assets.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _dealer_drag_home
 		node.scale = Vector2.ONE

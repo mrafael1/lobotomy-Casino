@@ -97,7 +97,7 @@ const AUGMENTED_DESCRIPTIONS := {
 - Boost your overall gains.
 
 [color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 20 spins with x1, x2, or x3 bets.
+- You have 15 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the "Reroll" power.
 - 1 random power restores every 50 coins obtained."""
@@ -765,10 +765,15 @@ func _current_coins() -> int:
 	return int(MetaStateStore.lucidityWallet)
 
 func _resume_run() -> void:
-	var resume_pacte := RunStateStore.runPhase == "pacte_initial" \
-		or RunStateStore.runPhase == "pacte_threshold"
+	# A flatline threshold is saved while the ending screen is still resumable.
+	# Materialise the Pacte phase before entering the scene so the ritual does not
+	# appear as a closed screen after a reload.
+	if RunStateStore.runPhase == "over" and RunStateStore.pacteAfterFlatlinePending:
+		RunStateStore.open_threshold_pacte()
+	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
-		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline")
+		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline") \
+		or (RunStateStore.runPhase == "running" and RunStateStore.dealerPending)
 	var resume_scene := PACTE_SCENE if resume_pacte else (DEALER_SCENE if resume_dealer else MACHINE_SCENE)
 	SceneNav.change_to(resume_scene)
 

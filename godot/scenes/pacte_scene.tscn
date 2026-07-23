@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b1ndw7frp8qir"]
 
-[ext_resource type="Script" path="res://scenes/pacte_scene.gd" id="1_pacte"]
+[ext_resource type="Script" uid="uid://ewnul3i73gli" path="res://scenes/pacte_scene.gd" id="1_pacte"]
 
-[node name="PacteScene" type="Control"]
+[node name="PacteScene" type="Control" unique_id=712258181]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
