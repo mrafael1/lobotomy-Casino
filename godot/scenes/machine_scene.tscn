@@ -116,7 +116,7 @@ texture = ExtResource("4_cabinet")
 centered = false
 
 [node name="Multiplier" type="Sprite2D" parent="." unique_id=1960969618]
-scale = Vector2(0.125, 0.125)
+scale = Vector2(1, 1)
 texture = ExtResource("9_multiplier")
 centered = false
 hframes = 6
@@ -319,7 +319,7 @@ offset_right = 160.0
 offset_bottom = 320.0
 mouse_filter = 2
 
-[node name="neuron_number" type="Label" parent="BottomHudLayer" unique_id=1776525199]
+[node name="spin_number" type="Label" parent="BottomHudLayer" unique_id=1776525199]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5

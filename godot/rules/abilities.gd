@@ -79,3 +79,84 @@ static func apply_copy_reel(reels: Array, source_reel: int, target_reel: int, lu
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning, allow_free_spin_grant,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
 		symbol_reward_bonuses)
+
+## CHEAT replaces one revealed reel with a player-chosen symbol and then uses the
+## same scoring path as every other revealed-reel power.
+static func apply_cheat(reels: Array, reel_index: int, symbol: String,
+		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
+		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
+		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+	var next := reels.duplicate()
+	if reel_index < 0 or reel_index >= next.size():
+		return {}
+	next[reel_index] = symbol
+	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
+		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+
+## SWAP exchanges one selected visible strip symbol with the destination reel's
+## centre symbol. The source may be a centre or an adjacent preview symbol; the
+## symbol values are not required to be distinct.
+static func apply_swap_symbol(reels: Array, source_reel: int, target_reel: int,
+		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
+		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
+		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
+		source_symbol_override: String = "") -> Dictionary:
+	var next := reels.duplicate()
+	if source_reel < 0 or target_reel < 0 or source_reel >= next.size() \
+			or target_reel >= next.size() or source_reel == target_reel:
+		return {}
+	var source_symbol: Variant = next[source_reel] if source_symbol_override == "" \
+		else source_symbol_override
+	next[source_reel] = next[target_reel]
+	next[target_reel] = source_symbol
+	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
+		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+
+## HEART's three authored symbols carry their own tier. The power does not alter
+## the current reveal; it arms a guaranteed free next spin which resolves to one
+## of these triples. The payout is spins only (+1/+2/+3 run spins) — a heart
+## triple never awards score or Lucidity, but it advances the combo gauge.
+static func resolve_heart_spin(tier: int, _score_multiplier: float = 1.0,
+		_reward_scale: float = 1.0, _symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+	var selected_tier := clampi(tier, 1, 3)
+	var symbol := "heart_x%d" % selected_tier
+	return {
+		"reels": [symbol, symbol, symbol],
+		"heartTier": selected_tier,
+		"heartCount": selected_tier,
+		"neuronsDelta": selected_tier,
+		"scoreEarned": 0,
+		"coinsEarned": 0,
+		"winType": "heart",
+		"isJackpot": false,
+		"freeSpinsGranted": 0,
+	}
+
+static func resolve_hearts(heart_count: int) -> Dictionary:
+	var count := clampi(heart_count, 0, 3)
+	return {
+		"heartCount": count,
+		"neuronsDelta": count,
+		"scoreDelta": 0,
+		"coinsDelta": 0,
+		"winType": "heart" if count > 0 else "miss",
+	}
+
+static func apply_heart(reels: Array, heart_count: int = -1) -> Dictionary:
+	var count := reels.size() if heart_count < 0 else heart_count
+	count = clampi(count, 0, mini(3, reels.size()))
+	if count <= 0:
+		var miss := resolve_hearts(0)
+		miss["reels"] = reels.duplicate()
+		miss["isJackpot"] = false
+		miss["freeSpinsGranted"] = 0
+		return miss
+	var result := resolve_hearts(count)
+	result["reels"] = ["heart_x%d" % count, "heart_x%d" % count, "heart_x%d" % count]
+	result["isJackpot"] = false
+	result["freeSpinsGranted"] = 0
+	return result

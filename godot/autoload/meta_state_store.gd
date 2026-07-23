@@ -4,12 +4,13 @@ extends Node
 ## persistence layer (Step 4). Persists to user:// as JSON using the same logical
 ## shape as the MMKV `lobotomy-meta` save.
 ##
-## schemaVersion: v3 adds campaign/mind fields on top of the v2 meta shape.
+## schemaVersion: v4 adds the unlock-aware Pacte deck lists on top of the v3
+## campaign/mind shape.
 ## A migration seam is kept for future save changes but ships empty — a
 ## v1->v2 migration is only added if an actual v1 payload is ever found in the wild.
 
 const SAVE_PATH := "user://lobotomy-meta.json"
-const CANONICAL_SCHEMA_VERSION := 3
+const CANONICAL_SCHEMA_VERSION := 4
 
 var schemaVersion: int = CANONICAL_SCHEMA_VERSION
 var lucidityWallet: int = 0
@@ -34,6 +35,11 @@ var oddsUpgrades: Dictionary = {}
 # the next odds menu starts with these on top of its fresh budget.
 var oddsTokensBanked: int = 0
 var rewardAmpSymbol: String = ""
+# Pacte deck unlocks are meta progression.  The supplied card art ships with
+# every card unlocked; future achievement/lab flows can remove cards from this
+# default without changing the draw code.
+var unlockedAugmentCardIds: Array = []
+var unlockedPowerCardIds: Array = []
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -56,6 +62,10 @@ var _playtime_accum_ms := 0.0
 signal meta_changed
 
 func _ready() -> void:
+	if unlockedAugmentCardIds.is_empty():
+		unlockedAugmentCardIds = PacteCards.augment_ids()
+	if unlockedPowerCardIds.is_empty():
+		unlockedPowerCardIds = PacteCards.power_ids()
 	load_state()
 
 func _process(delta: float) -> void:
@@ -83,6 +93,8 @@ func _as_dict() -> Dictionary:
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
 		"oddsTokensBanked": oddsTokensBanked,
 		"rewardAmpSymbol": rewardAmpSymbol,
+		"unlockedAugmentCardIds": unlockedAugmentCardIds.duplicate(),
+		"unlockedPowerCardIds": unlockedPowerCardIds.duplicate(),
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -109,7 +121,49 @@ func _apply(meta: Dictionary) -> void:
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
 	rewardAmpSymbol = String(meta.get("rewardAmpSymbol", ""))
+	unlockedAugmentCardIds = _normalise_card_unlocks(
+		meta.get("unlockedAugmentCardIds", PacteCards.augment_ids()),
+		PacteCards.augment_ids())
+	unlockedPowerCardIds = _normalise_card_unlocks(
+		meta.get("unlockedPowerCardIds", PacteCards.power_ids()),
+		PacteCards.power_ids())
 	meta_changed.emit()
+
+func _normalise_card_unlocks(value: Variant, fallback: Array[String]) -> Array:
+	var result: Array = []
+	if value is Array:
+		for id in value:
+			var card_id := PacteCards.normalise_card_id(String(id))
+			if fallback.has(card_id) and not result.has(card_id):
+				result.append(card_id)
+		return result
+	if value == null and not fallback.is_empty():
+		result = fallback.duplicate()
+	return result
+
+func unlocked_augment_cards() -> Array[String]:
+	return _normalise_card_unlocks(unlockedAugmentCardIds, PacteCards.augment_ids())
+
+func unlocked_power_cards() -> Array[String]:
+	return _normalise_card_unlocks(unlockedPowerCardIds, PacteCards.power_ids())
+
+func unlock_augment_card(card_id: String) -> bool:
+	if not PacteCards.augment_ids().has(card_id) or unlockedAugmentCardIds.has(card_id):
+		return false
+	unlockedAugmentCardIds = unlockedAugmentCardIds.duplicate()
+	unlockedAugmentCardIds.append(card_id)
+	meta_changed.emit()
+	save_state()
+	return true
+
+func unlock_power_card(card_id: String) -> bool:
+	if not PacteCards.power_ids().has(card_id) or unlockedPowerCardIds.has(card_id):
+		return false
+	unlockedPowerCardIds = unlockedPowerCardIds.duplicate()
+	unlockedPowerCardIds.append(card_id)
+	meta_changed.emit()
+	save_state()
+	return true
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
 
@@ -406,6 +460,8 @@ func start_new_campaign(save_immediately := true) -> void:
 	oddsUpgrades = {}
 	oddsTokensBanked = 0
 	rewardAmpSymbol = ""
+	unlockedAugmentCardIds = PacteCards.augment_ids()
+	unlockedPowerCardIds = PacteCards.power_ids()
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -487,6 +543,10 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["oddsTokensBanked"] = 0
 	if not current.has("rewardAmpSymbol"):
 		current["rewardAmpSymbol"] = ""
+	if not current.has("unlockedAugmentCardIds"):
+		current["unlockedAugmentCardIds"] = PacteCards.augment_ids()
+	if not current.has("unlockedPowerCardIds"):
+		current["unlockedPowerCardIds"] = PacteCards.power_ids()
 	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
 	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
 	if pending.has("cons_syringe"):

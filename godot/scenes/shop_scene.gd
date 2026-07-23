@@ -1,13 +1,14 @@
 @tool
 extends Control
 
-## Pre-run shop + scores hub (Milestone 3). Spend wallet Lucidity on permanent
-## upgrades (buy_upgrade) and pre-run consumables (buy_consumable_charge), review
-## run history, then START RUN. All purchases go through MetaStateStore, which
+## Wallet/meta progression + scores hub (Milestone 3). Spend wallet Lucidity on
+## permanent upgrades (buy_upgrade) and review run history, then START RUN. All
+## purchases go through MetaStateStore, which
 ## persists to user:// immediately — so the wallet/upgrades survive an app restart
-## (the M3 save QA gate). This scene is the loop hub: shop -> run -> bank -> shop.
+## (the M3 save QA gate). This scene is a legacy/meta hub; START RUN now reserves
+## the run and opens Pacte, matching the campaign menu flow.
 
-const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
+const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 
@@ -172,17 +173,6 @@ func _build() -> void:
 		_list.add_child(b)
 		_rows["U:" + String(u["id"])] = b
 
-	_list.add_child(_label("— CONSUMABLES —", 8, Color(1.0, 0.7, 0.5)))
-	for c in Consumables.LIST:
-		var b := _styled_button("", 8)
-		var icon := _load_texture(ITEM_ICONS.get(String(c["id"]), "items/consumable_placeholder.png"))
-		if icon != null:
-			b.icon = icon
-			b.expand_icon = true
-		b.pressed.connect(_buy_consumable.bind(String(c["id"])))
-		_list.add_child(b)
-		_rows["C:" + String(c["id"])] = b
-
 	# Footer sits well above the bottom-right stash row (issue #26) so the wide button
 	# row never overlaps the corner stash icons.
 	var footer := HBoxContainer.new()
@@ -210,15 +200,6 @@ func _build_shop_rows(parent: VBoxContainer) -> void:
 		var id := String(u["id"])
 		var b := _shop_row_button(parent, "Upgrade_%s" % id, _buy_upgrade.bind(id))
 		_rows["U:" + id] = b
-	_shop_section_label(parent, "ConsumablesTitle", "-- CONSUMABLES --")
-	for c in Consumables.LIST:
-		var id := String(c["id"])
-		var b := _shop_row_button(parent, "Consumable_%s" % id, _buy_consumable.bind(id))
-		var icon := _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
-		if icon != null:
-			b.icon = icon
-			b.expand_icon = true
-		_rows["C:" + id] = b
 
 func _shop_section_label(parent: VBoxContainer, node_name: String, text: String) -> Label:
 	var l := parent.get_node_or_null(node_name) as Label
@@ -289,20 +270,8 @@ func _refresh() -> void:
 			b.text = "%s%s  %dL" % [String(u["name"]), tier, cost]
 			b.disabled = wallet < cost
 
-	var pending: Dictionary = _preview_pending_consumables() if Engine.is_editor_hint() else MetaStateStore.get_pending_consumables()
-	var slots_full := Consumables.total_copies(pending) >= Consumables.MAX_CONSUMABLE_SLOTS
-	for c in Consumables.LIST:
-		var id := String(c["id"])
-		var b: Button = _rows["C:" + id]
-		var cost := int(c["shopCost"])
-		var held := int(pending.get(id, 0))
-		b.text = "%s  %dL  x%d" % [String(c["name"]), cost, held]
-		b.disabled = slots_full or wallet < cost
-
-	_build_stash(pending)
-
-func _preview_pending_consumables() -> Dictionary:
-	return { "cons_focus": 1, "cons_white_powder": 1 }
+	# Consumables are dealer-run items now; the old pre-run purchase/stash UI is
+	# intentionally absent from this progression hub.
 
 # Read-only held-consumables stash, bottom-right, shared layout + scale (issue #26).
 # Rebuilt on every refresh since buying changes the pending pockets.
@@ -380,10 +349,10 @@ func _debug_add_lucidity() -> void:
 func _start_run() -> void:
 	if Engine.is_editor_hint():
 		return
-	if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, MetaStateStore.get_pending_consumables()):
+	if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, {}, true, -1, true):
 		SceneNav.change_to(MENU_SCENE)
 		return
-	SceneNav.change_to(MACHINE_SCENE)
+	SceneNav.change_to(PACTE_SCENE)
 
 func _go_scores() -> void:
 	if Engine.is_editor_hint():

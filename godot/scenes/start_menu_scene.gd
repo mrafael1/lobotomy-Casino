@@ -5,14 +5,11 @@ extends Control
 # while it is open in the 2D editor.
 
 ## Start-run menu (issue #21) — the game's launch screen. From here the player
-## starts a new run through the dealer pre-run shop, or continues an active run
-## directly in the machine.
+## starts a new run through Pacte, or continues an active run in its saved phase.
 ##
-## Flow: launch -> this menu -> START RUN -> dealer (pre-run shop) -> machine run.
+## Flow: launch -> this menu -> START RUN -> Pacte -> machine run.
 ## If RunStateStore still has a resumable session, START RUN becomes CONTINUE and
-## routes back to the dealer or machine with the current session intact.
-## The dealer scene self-detects pre-run mode from RunStateStore.runPhase, so no
-## state has to be threaded through the scene change here.
+## routes back to Pacte, the dealer, or the machine with the current session intact.
 ##
 ## Rendering (issue #111): the whole menu is the authored start_menu.png sheet —
 ## frame 0 before the Augmented Run unlock (three empty button plates), frame 1
@@ -22,6 +19,7 @@ extends Control
 ## (no augment, heart, diamond, spade, club, joker) aligned with the bar.
 
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
+const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
@@ -99,7 +97,7 @@ const AUGMENTED_DESCRIPTIONS := {
 - Boost your overall gains.
 
 [color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 20 spins with x1, x2, or x3 bets.
+- You have 15 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the "Reroll" power.
 - 1 random power restores every 50 coins obtained."""
@@ -659,14 +657,17 @@ func _start_run() -> void:
 		_refresh_campaign_ui()
 		return
 	# Augmented Run (issue #111): the picked suit applies to the run this visit
-	# starts. Set here (after every reset path above) so start_new_run keeps it.
+	# starts. Reserve the campaign neuron before opening Pacte so a partial card
+	# selection is a valid resumable run.
 	if not Engine.is_editor_hint():
 		RunStateStore.augmentedTier = _selected_augmented_tier \
 			if MetaStateStore.augmentedRunUnlocked else ""
-		RunStateStore.begin_pre_run()
-	# Begin a fresh run by visiting the dealer FIRST; the dealer scene runs in
-	# pre-run shop mode and starts the run once the player leaves the counter.
-	SceneNav.change_to(DEALER_SCENE)
+		if not RunStateStore.start_new_run(MetaStateStore.ownedPermanents, {}, true, -1, true):
+			_refresh_campaign_ui()
+			return
+	# Pacte replaces the pre-run dealer/shop handoff. The dealer remains available
+	# for in-run interruptions and the post-Wealth odds phase.
+	SceneNav.change_to(PACTE_SCENE)
 
 # ── run-state modal (held run) ───────────────────────────────────────────────────────
 # CONTINUE opens this instead of switching scenes: the neuron meter (moved off
@@ -759,14 +760,21 @@ func _hide_continue_modal() -> void:
 func _current_coins() -> int:
 	# The active machine owns the live run balance. Dealer and post-run states
 	# show the persistent wallet that the dealer actually spends and displays.
-	if RunStateStore.runPhase == "running":
+	if RunStateStore.runPhase in ["pacte_initial", "pacte_threshold", "running"]:
 		return int(RunStateStore.lucidityCoins)
 	return int(MetaStateStore.lucidityWallet)
 
 func _resume_run() -> void:
+	# A flatline threshold is saved while the ending screen is still resumable.
+	# Materialise the Pacte phase before entering the scene so the ritual does not
+	# appear as a closed screen after a reload.
+	if RunStateStore.runPhase == "over" and RunStateStore.pacteAfterFlatlinePending:
+		RunStateStore.open_threshold_pacte()
+	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
-		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline")
-	var resume_scene := DEALER_SCENE if resume_dealer else MACHINE_SCENE
+		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline") \
+		or (RunStateStore.runPhase == "running" and RunStateStore.dealerPending)
+	var resume_scene := PACTE_SCENE if resume_pacte else (DEALER_SCENE if resume_dealer else MACHINE_SCENE)
 	SceneNav.change_to(resume_scene)
 
 ## Abandoning starts a fresh campaign: nothing is banked, the held run is

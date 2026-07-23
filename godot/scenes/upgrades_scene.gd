@@ -720,19 +720,20 @@ func _build_reward_amp_picker(upgrade_id: String) -> void:
 	_reward_amp_picker.size = LAB_SIZE
 	_reward_amp_picker.mouse_filter = Control.MOUSE_FILTER_STOP
 	_reward_amp_picker.z_index = 200
-	_reward_amp_picker.gui_input.connect(_on_reward_amp_picker_input)
 	_ui_container.add_child(_reward_amp_picker)
 
 	var symbols: Array[String] = []
 	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
 		if String(symbol_id) != "flatline":
 			symbols.append(String(symbol_id))
-	Assets.build_symbol_picker_panel(_reward_amp_picker, symbols, "BOOST SYMBOL", REWARD_AMP_PICKER_RECT,
-		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"), true)
+	Assets.build_symbol_picker_panel(_reward_amp_picker, symbols, "", REWARD_AMP_PICKER_RECT,
+		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"),
+		true, false, false)
 
-func _on_reward_amp_picker_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-		_cancel_reward_amp_picker()
+func _on_reward_amp_picker_input(_event: InputEvent) -> void:
+	# Reward Amplification requires a symbol choice. The modal blocker consumes
+	# outside taps without providing a way to cancel the purchase.
+	pass
 
 func _cancel_reward_amp_picker() -> void:
 	_pending_reward_amp_upgrade_id = ""
