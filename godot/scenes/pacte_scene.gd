@@ -18,10 +18,8 @@ const DESCRIPTION_BUBBLE_RECT := Rect2(17.0, 128.0, 126.0, 31.0)
 const BG_ASSET := "pacte_scene/pacte_scene.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
-const SELECTED_OVERLAY_ASSET := "pacte_scene/pacte_scene_selected_card.png"
 
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
-const NEON_PINK := Color(1.0, 0.42, 0.68)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
 const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
@@ -29,7 +27,6 @@ const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
 var _emplacement: Sprite2D = null
-var _selected_overlay: Sprite2D = null
 var _chosen_cards_layer: Control = null
 var _description_bubble: Panel = null
 var _description_title: Label = null
@@ -39,8 +36,6 @@ var _instruction: Label = null
 var _drop_label: Label = null
 var _augment_drop_label: Label = null
 var _power_drop_label: Label = null
-var _cancel_button: Button = null
-var _exit_button: Button = null
 
 var _card_buttons: Dictionary = {}
 var _card_views: Dictionary = {}
@@ -76,11 +71,6 @@ func _build_background() -> void:
 	_emplacement.visible = true
 	add_child(_emplacement)
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET)
-	_selected_overlay = _full_canvas_sprite(SELECTED_OVERLAY_ASSET, 0)
-	_selected_overlay.name = "SelectedCardOverlay"
-	_selected_overlay.hframes = 3
-	_selected_overlay.visible = false
-	add_child(_selected_overlay)
 	_chosen_cards_layer = Control.new()
 	_chosen_cards_layer.name = "ChosenCardsLayer"
 	_chosen_cards_layer.position = Vector2.ZERO
@@ -128,21 +118,13 @@ func _build_overlay_ui() -> void:
 	_drop_label = _augment_drop_label
 	_set_drop_hint_visible(false)
 
-	_cancel_button = _small_button("CancelSelection", "CANCEL", Rect2(112.0, 295.0, 42.0, 14.0), NEON_PINK)
-	_cancel_button.pressed.connect(_cancel_selection)
-	_exit_button = _small_button("ExitPacte", "EXIT", Rect2(4.0, 295.0, 35.0, 14.0), NEON_CYAN)
-	_exit_button.pressed.connect(_exit_pacte)
-
 func _restore_saved_selection() -> void:
 	if not RunStateStore.pacte_active():
 		_instruction.text = "PACTE IS CLOSED"
-		_cancel_button.visible = false
-		_exit_button.visible = false
 		return
-	if not RunStateStore.selectedAugmentCardIds.is_empty():
-		_show_chosen_card(String(RunStateStore.selectedAugmentCardIds.back()), "augment")
-	if not RunStateStore.selectedPowerCardIds.is_empty():
-		_show_chosen_card(String(RunStateStore.selectedPowerCardIds.back()), "power")
+	# Cards chosen on an earlier visit are NOT re-shown: once the machine has
+	# started, the ritual presents a clean table while the earlier picks keep
+	# their effects in the active run. Only this visit's staged augment returns.
 	var saved_augment := String(RunStateStore.pacteSelectedAugmentId)
 	if saved_augment != "":
 		_chosen_augment_id = saved_augment
@@ -240,7 +222,6 @@ func _show_pool(kind: String, ids: Array[String]) -> void:
 	_description_bubble.visible = false
 	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
-	_cancel_button.visible = true
 	for index in _offer_ids.size():
 		_build_card(_offer_ids[index], index)
 	_reveal_cards()
@@ -375,6 +356,8 @@ func _update_drag(global_position: Vector2) -> void:
 		return
 	if not _dragging and global_position.distance_to(_press_position) <= DRAG_SLOP:
 		return
+	if not _dragging:
+		Assets.add_drag_shadow(button)
 	_dragging = true
 	# Keep the odds explanation open while a card is only being inspected. It
 	# closes when the drag gesture actually leaves the card.
@@ -395,6 +378,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	_set_drop_hint_visible(false)
 	if button == null:
 		return
+	Assets.remove_drag_shadow(button)
 	button.position = _drag_origin
 	button.z_index = _drag_origin_z
 	if not was_dragging:
@@ -433,9 +417,6 @@ func _preview_card(card_id: String) -> void:
 		if candidate != null:
 			candidate.scale = Vector2.ONE * (1.08 if id == card_id else 1.0)
 			candidate.pivot_offset = CARD_SIZE * 0.5
-	if _selected_overlay != null:
-		_selected_overlay.visible = true
-		_selected_overlay.frame = _offer_ids.find(card_id)
 
 func _accept_card(card_id: String) -> void:
 	if _selection_locked:
@@ -468,35 +449,6 @@ func _accept_card(card_id: String) -> void:
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
 
-func _cancel_selection() -> void:
-	if _selection_locked:
-		return
-	var return_to_augments := _pool_kind == "power" and RunStateStore.pacteSelectedAugmentId != ""
-	_preview_id = ""
-	if _selected_overlay != null:
-		_selected_overlay.visible = false
-	for id in _offer_ids:
-		var button := _card_buttons.get(id, null) as Button
-		if button != null:
-			button.scale = Vector2.ONE
-	RunStateStore.cancel_pacte_selection()
-	_description_bubble.visible = false
-	var chosen_power := _chosen_card_views.get("power", null) as Control
-	if chosen_power != null:
-		chosen_power.queue_free()
-	_chosen_card_views.erase("power")
-	if return_to_augments:
-		_chosen_augment_id = ""
-		var chosen_augment := _chosen_card_views.get("augment", null) as Control
-		if chosen_augment != null:
-			chosen_augment.queue_free()
-		_chosen_card_views.erase("augment")
-		_show_pool("augment", _offer_array(RunStateStore.pacteOfferAugmentIds))
-
-func _exit_pacte() -> void:
-	RunStateStore._commit()
-	SceneNav.change_to("res://scenes/start_menu_scene.tscn")
-
 func _clear_cards() -> void:
 	for child in get_children():
 		if child is Button and String(child.name).begins_with("Card_"):
@@ -506,8 +458,6 @@ func _clear_cards() -> void:
 	_revealed.clear()
 	_offer_ids = []
 	_preview_id = ""
-	if _selected_overlay != null:
-		_selected_overlay.visible = false
 
 func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 	var label := _label(label_name, rect, 3, DRAG_COLOR)
@@ -546,20 +496,3 @@ func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		label.add_theme_font_override("font", font)
 	(parent if parent != null else self).add_child(label)
 	return label
-
-func _small_button(button_name: String, text: String, rect: Rect2, color: Color) -> Button:
-	var button := Button.new()
-	button.name = button_name
-	button.text = text
-	button.position = rect.position
-	button.size = rect.size
-	button.custom_minimum_size = Vector2.ZERO
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 5)
-	button.add_theme_color_override("font_color", color)
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	add_child(button)
-	return button

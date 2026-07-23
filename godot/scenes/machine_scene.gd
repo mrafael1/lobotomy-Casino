@@ -83,6 +83,9 @@ const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
 const REEL_STOP_SFX_LEAD_TIME := 0.1
+# Rewind rolls the previous spin back in: all three reels blur backwards for this
+# long while the sequence lock keeps the lever out of reach.
+const REWIND_RESTORE_DURATION := 0.9
 const FLATLINE_HOLD_TIME := 0.7
 const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
@@ -576,6 +579,8 @@ var _move_drag_button: Button = null
 var _move_drag_ghost: Sprite2D = null
 var _move_drag_press := Vector2.ZERO
 var _move_drag_hint_tween: Tween = null
+var _move_shake_tween: Tween = null      # revealed symbols shake while Move is armed
+var _move_shake_base: Array[Vector2] = []
 var _rubble_overlay: ColorRect = null
 var _dealer_drag_active := false
 var _dealer_drag_node: Control = null
@@ -630,6 +635,9 @@ var _reroll_anim_active := false
 var _reroll_reel_index := -1
 var _reroll_elapsed := 0.0
 var _reroll_accum := 0.0
+var _rewind_anim_active := false
+var _rewind_elapsed := 0.0
+var _rewind_accum := 0.0
 var _flatline_countdown_active := false
 var _flatline_countdown_elapsed := 0.0
 var _flatline_total := 0
@@ -1481,6 +1489,10 @@ func _set_all_reels_visible(visible: bool) -> void:
 
 # Symbol above/below `sym` in the canonical cycle (book sits outside it).
 func _reel_neighbours(sym: String) -> Dictionary:
+	if sym.begins_with("heart"):
+		# A heart reveal fills its whole strip: the adjacent symbols match the
+		# landed heart tier instead of showing cycle neighbours.
+		return { "top": sym, "bottom": sym }
 	var cyc: Array = Symbols.BASE_SYMBOL_CYCLE
 	var n := cyc.size()
 	var i := cyc.find(sym)
@@ -1787,6 +1799,7 @@ func _begin_fresh_run() -> bool:
 func _sync_visuals() -> void:
 	_stop_sfx(&"reel_spin")
 	_spin_launch_pending = false
+	_rewind_anim_active = false
 	# A spin whose scene was freed mid-resolution (e.g. opening options and tapping
 	# Settings/Scores while the reels are still turning) committed lastResult + run
 	# state inside RunStateStore.spin() but never reached _run_post_reveal_sequence,
@@ -1893,7 +1906,7 @@ func _to_dealer() -> void:
 	SceneNav.change_to(DEALER_SCENE)
 
 func _do_spin(compulsive := false) -> void:
-	if _spinning_anim or _spin_launch_pending or _reroll_anim_active:
+	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
 		return
 	# A pending loss is confirmed by the next manual spin. Powers still have the
 	# current reveal's rescue window, but pulling the lever means the pair/triple
@@ -1992,6 +2005,8 @@ func _process(delta: float) -> void:
 		_step_lever(delta)
 	if _reroll_anim_active:
 		_step_reroll(delta)
+	if _rewind_anim_active:
+		_step_rewind_restore(delta)
 	if _flatline_countdown_active:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
@@ -2529,7 +2544,10 @@ func _refresh_reels_from_state() -> void:
 		return
 	_set_all_reels_visible(true)
 	for i in 3:
-		_set_reel_symbol(i, String(lr["reels"][i]))
+		# An armed Heart previews immediately: every strip symbol — centre and
+		# adjacent — turns into a heart until the next spin resolves the tier.
+		_set_reel_symbol(i, "heart" if RunStateStore.heartPowerArmed \
+			else String(lr["reels"][i]))
 	_refresh_lock_art()
 
 func _refresh_lock_art() -> void:
@@ -3386,7 +3404,8 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 	# The pending-defeat rescue window keeps consumables live (issue #155 follow-up):
 	# a corrective item can still cancel the losing state before the confirming spin.
 	if (_sequence_lock_active and not RunStateStore.comboDefeatPending) \
-			or _spin_launch_pending or not RunStateStore._can_use_consumable() or _reroll_anim_active:
+			or _spin_launch_pending or not RunStateStore._can_use_consumable() \
+			or _reroll_anim_active or _rewind_anim_active:
 		return
 	_on_stash_pressed(slot_index)
 
@@ -3415,10 +3434,10 @@ func _refresh_controls() -> void:
 		and not RunStateStore.isSpinning and RunStateStore.compulsiveSpinSkips <= 0
 	var sequence_allows_power := not _sequence_lock_active or combo_pending
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
-		and _dealer_offer_popup == null and sequence_allows_power
+		and not _rewind_anim_active and _dealer_offer_popup == null and sequence_allows_power
 	if _spin_button != null:
 		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
-			or _spinning_anim or _spin_launch_pending or _reroll_anim_active \
+			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active \
 			or (_sequence_lock_active and not combo_pending)
 	if not _power_buttons.is_empty():
 		var used: Array = RunStateStore.abilitiesUsed
@@ -3447,7 +3466,7 @@ func _refresh_controls() -> void:
 
 	var slots := _stash_slots()
 	var usable := (RunStateStore._can_use_consumable() and not _spin_launch_pending and not _reroll_anim_active \
-			and (not _sequence_lock_active or combo_pending)) \
+			and not _rewind_anim_active and (not _sequence_lock_active or combo_pending)) \
 		or _dealer_offer_popup != null
 	for i in _stash_icons.size():
 		var icon := _stash_icons[i]
@@ -3490,7 +3509,8 @@ func _boost_icon_for(boost: Dictionary) -> Texture2D:
 
 func _on_power_pressed(id: String) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
-	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
+	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending \
+			or _spinning_anim or _reroll_anim_active or _rewind_anim_active:
 		return
 	if combo_pending and not RunStateStore.pending_combo_power_ids().has(id):
 		return
@@ -3520,15 +3540,66 @@ func _on_power_pressed(id: String) -> void:
 	_refresh_controls()
 
 func _use_rewind_power() -> void:
+	if _rewind_anim_active:
+		return
 	var was_pending := RunStateStore.comboDefeatPending
 	if not RunStateStore.rewind():
 		_refresh_controls()
 		return
 	_clear_targeting()
 	_maybe_cancel_combo_defeat_warning(was_pending)
+	_start_rewind_restore()
+
+## Rewind's restore beat: all three reels blur backwards while the previous state
+## rolls back in. The whole sequence runs under the sequence lock so the lever is
+## dead until the restored reveal has landed; _finish_rewind_restore always runs
+## (the step is driven from _process) and always releases the lock.
+func _start_rewind_restore() -> void:
+	_rewind_anim_active = true
+	_rewind_elapsed = 0.0
+	_rewind_accum = 0.0
+	_spin_frame = 0
+	_set_sequence_lock(true)
+	_stop_win_animation()
+	_play_sfx(&"reel_spin")
+	for i in 3:
+		_reel_stop_sfx_played[i] = false
+		_set_reel_visible(i, false)
+		_set_reel_cover(i, false)
+		_set_spin_reel_frame(i, _spin_frame)
+		_set_spin_reel_visible(i, true)
+	_refresh_controls()
+
+func _step_rewind_restore(delta: float) -> void:
+	_rewind_elapsed += delta
+	_rewind_accum += delta
+	if _rewind_accum >= SPIN_FRAME_TIME:
+		_rewind_accum = 0.0
+		# The blur runs backwards — the machine is unwinding the previous spin.
+		_spin_frame = (_spin_frame - 1 + SPIN_FRAME_COUNT) % SPIN_FRAME_COUNT
+		for i in 3:
+			_set_spin_reel_frame(i, _spin_frame)
+	if _rewind_elapsed >= maxf(0.0, REWIND_RESTORE_DURATION - REEL_STOP_SFX_LEAD_TIME):
+		for i in 3:
+			_play_reel_stop_sfx(i)
+	if _rewind_elapsed >= REWIND_RESTORE_DURATION:
+		_finish_rewind_restore()
+
+func _finish_rewind_restore() -> void:
+	_stop_sfx(&"reel_spin")
+	_rewind_anim_active = false
+	for i in 3:
+		_set_spin_reel_visible(i, false)
+		_set_reel_cover(i, true)
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
+	# The restored snapshot may bring a pending combo defeat back with it; the
+	# lock hands over to that warning, otherwise spinning re-enables here.
+	if RunStateStore.comboDefeatPending:
+		_show_pending_combo_defeat()
+	else:
+		_set_sequence_lock(false)
 	_refresh_controls()
 
 func _use_heart_power() -> void:
@@ -3619,6 +3690,31 @@ func _arm_move_source() -> void:
 	_move_drag_hint_tween = create_tween().set_loops()
 	_move_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 0.58, 0.34)
 	_move_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 1.0, 0.34)
+	_start_move_symbol_shake()
+
+## While Move is armed the revealed symbols shake in place — the cue that they can
+## be grabbed and dropped onto another reel, including an adjacent one.
+func _start_move_symbol_shake() -> void:
+	_stop_move_symbol_shake()
+	_move_shake_base.clear()
+	for sprite in _reel_sprites:
+		_move_shake_base.append((sprite as Sprite2D).position)
+	_move_shake_tween = create_tween().set_loops()
+	for offset in [Vector2(1.0, 0.0), Vector2(-1.0, 0.5), Vector2(0.5, -0.5), Vector2.ZERO]:
+		_move_shake_tween.tween_callback(_set_move_shake_offset.bind(offset))
+		_move_shake_tween.tween_interval(0.06)
+
+func _set_move_shake_offset(offset: Vector2) -> void:
+	for i in mini(_reel_sprites.size(), _move_shake_base.size()):
+		(_reel_sprites[i] as Sprite2D).position = _move_shake_base[i] + offset
+
+func _stop_move_symbol_shake() -> void:
+	if _move_shake_tween != null and _move_shake_tween.is_valid():
+		_move_shake_tween.kill()
+	_move_shake_tween = null
+	if not _move_shake_base.is_empty():
+		_set_move_shake_offset(Vector2.ZERO)
+		_move_shake_base.clear()
 
 func _build_move_rubble_hint(reel_index: int) -> void:
 	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
@@ -3675,6 +3771,16 @@ func _begin_move_drag(reel_index: int, button: Button, global_position: Vector2)
 	_move_drag_ghost.modulate = Color(1.0, 1.0, 1.0, 0.92)
 	_move_drag_ghost.position = _targeting_local_position(global_position)
 	_apply_symbol(_move_drag_ghost, String(reels[reel_index]), STRIP_CENTER_H)
+	# Drop shadow under the dragged symbol: same texture, black, slightly offset.
+	# It is a child of the ghost, so it follows the drag and dies with it.
+	var ghost_shadow := Sprite2D.new()
+	ghost_shadow.name = "DragShadow"
+	ghost_shadow.texture = _move_drag_ghost.texture
+	ghost_shadow.centered = true
+	ghost_shadow.position = Vector2(2.0, 3.0)
+	ghost_shadow.modulate = Color(0.0, 0.0, 0.0, 0.5)
+	ghost_shadow.show_behind_parent = true
+	_move_drag_ghost.add_child(ghost_shadow)
 	_move_drag_ghost.visible = false
 	_targeting_layer.add_child(_move_drag_ghost)
 
@@ -3956,6 +4062,7 @@ func _clear_targeting() -> void:
 	if _move_drag_hint_tween != null and _move_drag_hint_tween.is_valid():
 		_move_drag_hint_tween.kill()
 	_move_drag_hint_tween = null
+	_stop_move_symbol_shake()
 	_cancel_move_drag_gesture()
 	if _targeting_layer != null:
 		_targeting_layer.queue_free()
@@ -6132,6 +6239,8 @@ func _input(event: InputEvent) -> void:
 		if _dealer_drag_node != null:
 			_dealer_drag_node.global_position = m - _dealer_drag_node.size * 0.5
 		if m.distance_to(_dealer_drag_press) > 4.0:
+			if not _dealer_drag_moved:
+				Assets.add_drag_shadow(_dealer_drag_node)
 			_dealer_drag_moved = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_end_dealer_drag(get_global_mouse_position())
@@ -6148,6 +6257,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	if node != null:
+		Assets.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _dealer_drag_home
 		node.scale = Vector2.ONE

@@ -1321,6 +1321,7 @@ func _begin_drag_visual() -> void:
 	_drag_node.z_index = 10
 	_drag_node.scale = Vector2(1.25, 1.25)
 	_drag_node.modulate = Color(1.2, 1.2, 1.2)
+	Assets.add_drag_shadow(_drag_node)
 
 func _update_drag_position(pos: Vector2) -> void:
 	if _drag_node == null:
@@ -1355,6 +1356,7 @@ func _end_drag(release_pos: Vector2) -> void:
 	_drag_active = false
 	_drag_node = null
 	if node != null:
+		Assets.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _drag_home # snap back
 		node.scale = Vector2.ONE

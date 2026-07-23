@@ -116,22 +116,19 @@ static func apply_move_symbol(reels: Array, source_reel: int, target_reel: int,
 
 ## HEART's three authored symbols carry their own tier. The power does not alter
 ## the current reveal; it arms a free next spin which resolves to one of these
-## triples. Multipliers and reward scales are applied at the same point as normal
-## reel scores, while the default tier payouts remain +10/+20/+30.
-static func resolve_heart_spin(tier: int, score_multiplier: float = 1.0,
-		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+## triples. The payout is spins only (+1/+2/+3 run spins) — a heart triple never
+## awards score or Lucidity.
+static func resolve_heart_spin(tier: int, _score_multiplier: float = 1.0,
+		_reward_scale: float = 1.0, _symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
 	var selected_tier := clampi(tier, 1, 3)
 	var symbol := "heart_x%d" % selected_tier
-	var symbol_bonus := maxf(0.0, float(symbol_reward_bonuses.get(symbol, 0.0)))
-	var base_score := float(selected_tier * 10) * (1.0 + symbol_bonus)
-	var score := floori(base_score * score_multiplier * reward_scale + 0.5)
 	return {
 		"reels": [symbol, symbol, symbol],
 		"heartTier": selected_tier,
 		"heartCount": selected_tier,
 		"neuronsDelta": selected_tier,
-		"scoreEarned": score,
-		"coinsEarned": score,
+		"scoreEarned": 0,
+		"coinsEarned": 0,
 		"winType": "heart",
 		"isJackpot": false,
 		"freeSpinsGranted": 0,
@@ -139,12 +136,11 @@ static func resolve_heart_spin(tier: int, score_multiplier: float = 1.0,
 
 static func resolve_hearts(heart_count: int) -> Dictionary:
 	var count := clampi(heart_count, 0, 3)
-	var score := count * 10
 	return {
 		"heartCount": count,
 		"neuronsDelta": count,
-		"scoreDelta": score,
-		"coinsDelta": score,
+		"scoreDelta": 0,
+		"coinsDelta": 0,
 		"winType": "heart" if count > 0 else "miss",
 	}
 

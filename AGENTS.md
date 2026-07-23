@@ -127,15 +127,22 @@ Resources and currencies:
 - **Rewind** — restores the immediately previous spin's reels, neuron/free-spin,
   dealer, and combo state while preserving earned score/Lucidity and recovering
   a deterministic 1–3 spent power chips. It is unavailable without spin history
-  or while another sequence is active.
-- **Heart** — arms the next spin. That spin is free and deterministically lands
-  a matching triple of `heart_x1`, `heart_x2`, or `heart_x3` with equal 1/3 odds;
-  it pays +1/+2/+3 run spins and +10/+20/+30 score.
+  or while another sequence is active. While the restore's backwards reel roll
+  plays, SPIN is locked out; the lever re-enables only once the restored reveal
+  (and any restored warning) has fully landed.
+- **Heart** — arms the next spin and immediately turns the whole reel strip —
+  centre and adjacent symbols — into hearts as a preview. That spin is free and
+  deterministically lands a matching triple of `heart_x1`, `heart_x2`, or
+  `heart_x3` with equal 1/3 odds, filling each strip with the matching heart
+  tier; it pays +1/+2/+3 run spins only — no score, no Lucidity — and leaves the
+  frenzy gauge and losing states untouched. Heart is not spent for the run: it
+  becomes available again after every completed spin.
 - **Cheat** — shows the same rubble/reward-amplification overlay as the other
   symbol powers, then replaces one selected reel with a symbol chosen from the
   existing symbol chooser.
-- **Move** — rubble-flashes the revealed symbols, then moves a selected symbol to
-  any other reel, including an adjacent reel, before rescoring.
+- **Move** — rubble-flashes the revealed symbols, which shake in place while
+  targeting is armed, then drags ONE selected symbol to any other reel,
+  including an adjacent reel, before rescoring the new reveal.
 - Selecting a power for targeting flashes its authored TV callout (with text
   fallbacks for the four new powers) with
   a short beeping pulse; the callout stays up while targeting is armed and hides
@@ -229,7 +236,12 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — reusable initial/threshold card ritual: deterministic three-card
   augment and power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices.
+  partial choices. A dragged card casts a drop shadow (as do dragged dealer/stash
+  items everywhere). There is no arrow selector overlay and no CANCEL/EXIT text
+  buttons. Once the machine has started, a reopened Pacte presents a clean table:
+  the initial visit's cards keep their effects in the run but are not re-shown.
+  Completing the mid-run (threshold) visit hands off to the dealer scene, which
+  never shows the Machine button while a run is live.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — in-run dealer visits and the post-run odds phase (gateway to the Lab).
 - `upgrades_scene` — the Lab: permanent upgrades.

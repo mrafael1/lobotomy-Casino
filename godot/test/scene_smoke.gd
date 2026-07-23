@@ -6072,10 +6072,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var pacte := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(pacte)
 	await process_frame
-	for node_name in ["PacteBackground", "SelectedCardEmplacement", "SelectedCardOverlay",
+	for node_name in ["PacteBackground", "SelectedCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
+	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
+	for removed_name in ["SelectedCardOverlay", "CancelSelection", "ExitPacte"]:
+		if pacte.get_node_or_null(removed_name) != null:
+			failures.append("pacte: %s should have been removed" % removed_name)
 	var augment_drop := pacte.get_node_or_null("DropHere") as Label
 	var power_drop := pacte.get_node_or_null("PowerDropHere") as Label
 	if augment_drop == null or augment_drop.position != Vector2(28.0, 256.0) \
@@ -6092,8 +6096,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	pacte._preview_card(first_augment)
-	if not bool(pacte._description_bubble.visible) or not bool(pacte._selected_overlay.visible):
-		failures.append("pacte: card preview did not show overlay and description bubble")
+	if not bool(pacte._description_bubble.visible):
+		failures.append("pacte: card preview did not show the description bubble")
 	if String(pacte._instruction.text) == "CHOOSE ONE CARD":
 		failures.append("pacte: choose-one prompt remained after card tap")
 	if pacte._description_bubble.size.x >= 152.0 or pacte._description_bubble.size.y >= 42.0:
@@ -6118,10 +6122,20 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	pacte._update_drag(Vector2(40.0, 270.0))
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
+	var drag_shadow := first_button.get_node_or_null("DragShadow") as Control
+	if drag_shadow == null or drag_shadow.get_index() != 0 \
+			or drag_shadow.position != Vector2(2.0, 3.0) or not drag_shadow.show_behind_parent:
+		failures.append("pacte: dragged card is missing its drop shadow")
 	if bool(pacte._description_bubble.visible) or String(pacte._instruction.text) != "" \
 			or pacte._emplacement.frame != 1:
 		failures.append("pacte: drag did not hide explanation and show authored DROP HERE frame")
 	pacte._finish_drag(Vector2(40.0, 270.0))
+	# The card button may be freed by the accepted drop; check the shadow removal
+	# before yielding a frame (remove_drag_shadow queues the shadow for deletion).
+	if is_instance_valid(first_button):
+		var lingering_shadow := first_button.get_node_or_null("DragShadow")
+		if lingering_shadow != null and not lingering_shadow.is_queued_for_deletion():
+			failures.append("pacte: drop shadow survived the end of the drag")
 	await process_frame
 	if String(run_store.pacteSelectedAugmentId) != first_augment \
 			or String(pacte._pool_kind) != "power":
@@ -6179,6 +6193,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if String(run_store.runPhase) != "pacte_threshold" \
 			or String(threshold_scene._pool_kind) != "augment":
 		failures.append("pacte: threshold visit did not restore as augment draw")
+	# The initial visit's chosen cards keep their run effects but are no longer
+	# presented on the ritual table when Pacte reopens mid-run.
+	if not (threshold_scene._chosen_card_views as Dictionary).is_empty() \
+			or threshold_scene._chosen_cards_layer.get_node_or_null("ChosenAugmentCard") != null \
+			or threshold_scene._chosen_cards_layer.get_node_or_null("ChosenPowerCard") != null:
+		failures.append("pacte: threshold visit re-presented the initial visit's cards")
+	if run_store.ownedPowerIds.is_empty() or run_store.selectedAugmentCardIds.is_empty():
+		failures.append("pacte: clearing the threshold presentation dropped earlier effects")
 	var threshold_augments := run_store.pacteOfferAugmentIds as Array
 	var threshold_powers := run_store.pacteOfferPowerIds as Array
 	if threshold_augments.is_empty() or threshold_powers.is_empty() \
@@ -6189,6 +6211,20 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if not run_store.force_dealer_visit() or String(run_store.runPhase) != "running" \
 			or not bool(run_store.dealerPending):
 		failures.append("pacte: threshold completion did not queue dealer")
+	# The mid-run handoff lands on the Dealer scene WITHOUT the Machine button —
+	# that button belongs to the pre-run shop only.
+	var dealer_scene := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer_scene)
+	await process_frame
+	if bool(dealer_scene._pre_run):
+		failures.append("pacte: mid-run dealer handoff still reads as pre-run")
+	var dealer_machine_button := dealer_scene._start_button as Button
+	if dealer_machine_button != null and dealer_machine_button.visible:
+		failures.append("pacte: mid-run dealer scene still shows the Machine button")
+	if dealer_scene._machine_button_sprite != null \
+			and bool(dealer_scene._machine_button_sprite.visible):
+		failures.append("pacte: mid-run dealer scene still shows the machine button art")
+	dealer_scene.queue_free()
 
 	pacte.queue_free()
 	threshold_scene.queue_free()
@@ -6228,6 +6264,32 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			failures.append("pacte powers: Rewind did not restore state while preserving rewards")
 		if run_store.rewind():
 			failures.append("pacte powers: Rewind remained available without history")
+		# Machine-side lock: the restore beat keeps the lever dead until the rewind
+		# sequence finishes, then always releases it.
+		run_store.comboDefeatPending = false
+		var third_spin: Variant = run_store.spin()
+		run_store.set_spinning(false)
+		run_store.comboDefeatPending = false
+		if third_spin == null:
+			failures.append("pacte powers: rewind lock setup spin failed")
+		else:
+			machine._use_rewind_power()
+			# Rewind rolls spinCount back with the snapshot; the locked baseline is
+			# whatever the restore landed on.
+			var spin_count_during_lock := int(run_store.spinCount)
+			if not bool(machine._rewind_anim_active) or not bool(machine._sequence_lock_active):
+				failures.append("pacte powers: rewind restore did not lock the sequence")
+			if machine._spin_button != null and not bool(machine._spin_button.disabled):
+				failures.append("pacte powers: SPIN stayed enabled during the rewind restore")
+			# _do_spin must bail out synchronously — a spin that got through would
+			# call RunStateStore.spin() (and bump spinCount) before its first await.
+			# No frame yield here: this helper runs without await from _run().
+			machine._do_spin()
+			if int(run_store.spinCount) != spin_count_during_lock:
+				failures.append("pacte powers: SPIN input worked during the rewind restore")
+			machine._finish_rewind_restore()
+			if bool(machine._rewind_anim_active) or bool(machine._sequence_lock_active):
+				failures.append("pacte powers: rewind restore did not release the lock")
 
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false, 0x157, false)
@@ -6252,6 +6314,21 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			or not bool(run_store.heartPowerArmed) \
 			or (run_store.abilitiesUsed as Array).count("heart") != 1:
 		failures.append("pacte powers: Heart preparation failed")
+	# Arming Heart immediately previews hearts on every strip symbol — centre AND
+	# both adjacent neighbours — until the next spin resolves the tier.
+	machine._refresh_reels_from_state()
+	var heart_preview_tex: Variant = machine._load_texture("symbols/heart x1.png", true)
+	for reel_index in 3:
+		if machine._reel_sprites[reel_index].texture != heart_preview_tex \
+				or machine._reel_top_sprites[reel_index].texture != heart_preview_tex \
+				or machine._reel_bottom_sprites[reel_index].texture != heart_preview_tex:
+			failures.append("pacte powers: arming Heart did not preview hearts on reel %d" % reel_index)
+			break
+	# A resolved heart triple fills its strips with the MATCHING heart tier.
+	var heart_neighbours: Dictionary = machine._reel_neighbours("heart_x2")
+	if String(heart_neighbours["top"]) != "heart_x2" \
+			or String(heart_neighbours["bottom"]) != "heart_x2":
+		failures.append("pacte powers: heart reveal neighbours are not matching hearts")
 	var heart_follow_up: Variant = run_store.spin()
 	if heart_follow_up == null:
 		failures.append("pacte powers: Heart did not arm a follow-up spin")
@@ -6266,11 +6343,17 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			all_hearts_match = all_hearts_match and String(symbol) == heart_symbol
 		if not valid_heart_symbols.has(heart_symbol) or not all_hearts_match \
 				or int(run_store.neurons) != heart_neurons_before + heart_tier \
-				or int(run_store.scoreEarned) != heart_score_before + heart_tier * 10 \
+				or int(run_store.scoreEarned) != heart_score_before \
+				or int(heart_follow_up.get("scoreEarned", -1)) != 0 \
+				or int(heart_follow_up.get("coinsEarned", -1)) != 0 \
 				or bool(heart_follow_up.get("isFreeSpin", false)) != true \
 				or int(run_store.spinCount) != heart_spin_count_before + 1 \
 				or bool(run_store.heartPowerArmed):
-			failures.append("pacte powers: Heart did not resolve a free matching triple")
+			failures.append("pacte powers: Heart did not resolve a free score-less matching triple")
+		if (run_store.abilitiesUsed as Array).has("heart"):
+			failures.append("pacte powers: Heart is not available again after the completed spin")
+		if bool(run_store.comboDefeatPending):
+			failures.append("pacte powers: the heart spin opened a losing state")
 	# Move's UI is a drag gesture over every reel, including adjacent destinations.
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
@@ -6278,6 +6361,8 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	if machine._targeting_layer == null \
 			or machine._targeting_layer.name != "MoveSymbolDragLayer":
 		failures.append("pacte powers: Move did not arm its drag layer")
+	if machine._move_shake_tween == null or not (machine._move_shake_tween as Tween).is_valid():
+		failures.append("pacte powers: Move targeting did not start the symbol shake")
 	if machine._targeting_layer != null:
 		for reel_index in 3:
 			if machine._targeting_layer.get_node_or_null("MoveRubbleHint%d" % reel_index) == null \
@@ -6294,7 +6379,11 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			machine._update_move_drag(Vector2(75.5, 185.0))
 			if machine._move_drag_ghost == null or not bool(machine._move_drag_ghost.visible):
 				failures.append("pacte powers: Move did not expose a draggable symbol ghost")
+			elif machine._move_drag_ghost.get_node_or_null("DragShadow") == null:
+				failures.append("pacte powers: Move drag ghost has no drop shadow")
 		machine._clear_targeting()
+		if machine._move_shake_tween != null:
+			failures.append("pacte powers: Move symbol shake survived targeting clear")
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	machine._arm_cheat_targets()

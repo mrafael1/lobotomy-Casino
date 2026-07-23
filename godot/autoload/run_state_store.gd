@@ -685,7 +685,10 @@ func spin(compulsive := false) -> Variant:
 			final_result["freeSpinsGranted"] = 0
 			final_result["augmentedJackpotCut"] = augmented_jackpot_cut
 
-	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), abilitiesUsed, seed, coins_per_power_restore)
+	# Heart re-arms after every completed spin: it leaves the spent pool before the
+	# Lucidity plan runs so a 50-coin restore is never wasted on it.
+	var plan_abilities: Array = abilitiesUsed.filter(func(a): return String(a) != "heart")
+	var plan := Lucidity.plan_gain(lucidityCoins, int(final_result["scoreEarned"]), plan_abilities, seed, coins_per_power_restore)
 
 	var was_energy_last: bool = stasis and decaySkips == 1
 
@@ -734,6 +737,12 @@ func spin(compulsive := false) -> Variant:
 			betMultiplier = 2 # the drink still owns the gauge — no x3 until it ends
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
+	elif String(final_result["winType"]) == "heart":
+		# A heart spin pays spins, not score: it neither steps the gauge nor opens
+		# a losing state — the frenzy holds where it was.
+		comboDefeatPending = false
+		pendingComboMultiplier = 1
+		betMultiplier = combo_before
 	elif decaySkips > 0:
 		# Energy Drink protected spin (decaySkips not yet consumed here): the drink
 		# owns the x2, so a miss never opens a losing state — the forced spin that
@@ -1160,13 +1169,6 @@ func stage_pacte_power_selection(card_id: String) -> bool:
 	pacteSelectedPowerId = normalised
 	_commit()
 	return complete_pacte_selection("", normalised)
-
-func cancel_pacte_selection() -> void:
-	if not pacte_active():
-		return
-	pacteSelectedAugmentId = ""
-	pacteSelectedPowerId = ""
-	_commit()
 
 func open_threshold_pacte() -> bool:
 	var post_flatline_visit: bool = runPhase == "over" and lastEnding == "flatline" \
