@@ -116,7 +116,7 @@ texture = ExtResource("4_cabinet")
 centered = false
 
 [node name="Multiplier" type="Sprite2D" parent="." unique_id=1960969618]
-scale = Vector2(0.125, 0.125)
+scale = Vector2(1, 1)
 texture = ExtResource("9_multiplier")
 centered = false
 hframes = 6

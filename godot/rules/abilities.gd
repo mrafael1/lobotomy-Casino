@@ -95,19 +95,21 @@ static func apply_cheat(reels: Array, reel_index: int, symbol: String,
 		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
 		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
 
-## MOVE is a physical symbol move rather than Shift's adjacent strip step. Swapping
-## the source and destination preserves both revealed symbols while allowing every
-## destination, including the two adjacent reels.
-static func apply_move_symbol(reels: Array, source_reel: int, target_reel: int,
+## SWAP exchanges one selected visible strip symbol with the destination reel's
+## centre symbol. The source may be a centre or an adjacent preview symbol; the
+## symbol values are not required to be distinct.
+static func apply_swap_symbol(reels: Array, source_reel: int, target_reel: int,
 		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
 		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
 		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
-		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
+		source_symbol_override: String = "") -> Dictionary:
 	var next := reels.duplicate()
 	if source_reel < 0 or target_reel < 0 or source_reel >= next.size() \
 			or target_reel >= next.size() or source_reel == target_reel:
 		return {}
-	var source_symbol: Variant = next[source_reel]
+	var source_symbol: Variant = next[source_reel] if source_symbol_override == "" \
+		else source_symbol_override
 	next[source_reel] = next[target_reel]
 	next[target_reel] = source_symbol
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
@@ -115,23 +117,20 @@ static func apply_move_symbol(reels: Array, source_reel: int, target_reel: int,
 		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
 
 ## HEART's three authored symbols carry their own tier. The power does not alter
-## the current reveal; it arms a free next spin which resolves to one of these
-## triples. Multipliers and reward scales are applied at the same point as normal
-## reel scores, while the default tier payouts remain +10/+20/+30.
-static func resolve_heart_spin(tier: int, score_multiplier: float = 1.0,
-		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+## the current reveal; it arms a guaranteed free next spin which resolves to one
+## of these triples. The payout is spins only (+1/+2/+3 run spins) — a heart
+## triple never awards score or Lucidity, but it advances the combo gauge.
+static func resolve_heart_spin(tier: int, _score_multiplier: float = 1.0,
+		_reward_scale: float = 1.0, _symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
 	var selected_tier := clampi(tier, 1, 3)
 	var symbol := "heart_x%d" % selected_tier
-	var symbol_bonus := maxf(0.0, float(symbol_reward_bonuses.get(symbol, 0.0)))
-	var base_score := float(selected_tier * 10) * (1.0 + symbol_bonus)
-	var score := floori(base_score * score_multiplier * reward_scale + 0.5)
 	return {
 		"reels": [symbol, symbol, symbol],
 		"heartTier": selected_tier,
 		"heartCount": selected_tier,
 		"neuronsDelta": selected_tier,
-		"scoreEarned": score,
-		"coinsEarned": score,
+		"scoreEarned": 0,
+		"coinsEarned": 0,
 		"winType": "heart",
 		"isJackpot": false,
 		"freeSpinsGranted": 0,
@@ -139,12 +138,11 @@ static func resolve_heart_spin(tier: int, score_multiplier: float = 1.0,
 
 static func resolve_hearts(heart_count: int) -> Dictionary:
 	var count := clampi(heart_count, 0, 3)
-	var score := count * 10
 	return {
 		"heartCount": count,
 		"neuronsDelta": count,
-		"scoreDelta": score,
-		"coinsDelta": score,
+		"scoreDelta": 0,
+		"coinsDelta": 0,
 		"winType": "heart" if count > 0 else "miss",
 	}
 

@@ -13,7 +13,7 @@ const POWER_FRONT_RECT := Rect2(40.0, 0.0, 38.0, 61.0)
 const AUGMENTS: Array[Dictionary] = [
 	{
 		"id": "augment_pattern_recognition", "name": "PATTERN RECOGNITION",
-		"description": "BOOKS CAN COMPLETE A TRIPLE.", "pool": "augment",
+		"description": "TWO SYMBOLS APART COUNT AS A PAIR.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(5.0, 144.0, 30.0, 18.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "corr_pattern_23" },
@@ -34,59 +34,58 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_smart_saving", "name": "SMART SAVING",
-		"description": "KEEP 20% OF LUCIDITY ON FLATLINE.", "pool": "augment",
+		"description": "KEEP 20% OF LUCIDITY INSTEAD OF 10% ON FLATLINE.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(6.0, 324.0, 27.0, 26.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pos_smart_save" },
 	},
 	{
 		"id": "augment_reward_1", "name": "REWARD + I",
-		"description": "CHOOSE A SYMBOL AT THE NEXT DEALER VISIT.", "pool": "augment",
+		"description": "CHOOSE A SYMBOL TO BOOST. TIER I.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(8.0, 386.0, 22.0, 21.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "corr_reward_amp_1" },
 	},
 	{
 		"id": "augment_reward_2", "name": "REWARD + II",
-		"description": "STACKS WITH REWARD + I.", "pool": "augment",
+		"description": "CHOOSE A SYMBOL TO BOOST. TIER II.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(8.0, 447.0, 22.0, 21.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "corr_reward_amp_2" },
 	},
 	{
 		"id": "augment_reward_3", "name": "REWARD + III",
-		"description": "THE COMPLETE REWARD AMPLIFICATION STACK.", "pool": "augment",
+		"description": "CHOOSE A SYMBOL TO BOOST. TIER III.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(8.0, 508.0, 22.0, 21.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "corr_reward_amp_3" },
 	},
 	{
 		"id": "augment_joker", "name": "JOKER",
-		"description": "A SEEDED CHAOS EFFECT: +3 SPINS OR A GUARANTEED WIN.", "pool": "augment",
+		"description": "AFTER 3 FLATLINES, THE DEALER SOMETIMES HELPS YOU.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(0.0, 549.0, 39.0, 61.0),
 		"effect": { "type": "joker" },
 	},
 	{
 		"id": "augment_win_boost", "name": "WIN BOOST",
-		"description": "THE NEXT PAYING WIN RECEIVES A FLATLINE STRIKE BONUS.", "pool": "augment",
+		"description": "SUCCESSIVE WINS SHOW COMBO X1-X9 AND ADD 5%-45% TO THE BASE REWARD.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(0.0, 623.0, 20.0, 34.0),
+		"icon_rect": Rect2(9.0, 623.0, 20.0, 34.0),
 		"effect": { "type": "win_boost" },
 	},
 	{
-		"id": "augment_glitch_2", "name": "GLITCH 2",
-		"description": "THE NEXT TWO PAYING RESULTS GAIN LUCIDITY.", "pool": "augment",
+		"id": "augment_glitch_2", "name": "GLITCH",
+		"description": "THE DEALER ALWAYS MOVES 3 STEPS, EVEN AT X2 OR X3.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(0.0, 623.0, 20.0, 34.0),
-		"effect": { "type": "glitch_lucidity", "spins": 2, "multiplier": 2.0 },
+		"effect": { "type": "glitch_dealer" },
 	},
 ]
 
 const POWERS: Array[Dictionary] = [
 	{
 		"id": "reroll", "name": "REROLL", "description": "REROLL ONE REVEALED REEL.",
-		"pool": "power", "hero": true, "power_id": "reroll",
+		"pool": "power", "power_id": "reroll",
 		"sheet": POWER_SHEET, "sheet_rect": POWER_FRONT_RECT,
 		"icon_rect": Rect2(81.0, 0.0, 33.0, 61.0),
 	},
@@ -103,13 +102,13 @@ const POWERS: Array[Dictionary] = [
 		"icon_rect": Rect2(165.0, 0.0, 21.0, 61.0),
 	},
 	{
-		"id": "rewind", "name": "REWIND", "description": "RESTORE THE PREVIOUS SPIN AND RECOVER 1–3 POWER CHIPS.",
+		"id": "rewind", "name": "REWIND", "description": "RESTORE THE PREVIOUS SPIN AND RECOVER 1–3 OTHER POWER CHIPS.",
 		"pool": "power", "power_id": "rewind",
 		"sheet": POWER_SHEET, "sheet_rect": POWER_FRONT_RECT,
 		"icon_rect": Rect2(207.0, 0.0, 15.0, 61.0),
 	},
 	{
-		"id": "heart", "name": "HEART", "description": "NEXT SPIN: HEART x1/x2/x3 TRIPLE; +1/+2/+3 SPINS, +10/+20/+30 SCORE.",
+		"id": "heart", "name": "HEART", "description": "NEXT SPIN: GUARANTEED HEART x1/x2/x3 TRIPLE; +1/+2/+3 SPINS; ADVANCES COMBO.",
 		"pool": "power", "power_id": "heart",
 		"sheet": POWER_SHEET, "sheet_rect": POWER_FRONT_RECT,
 		"icon_rect": Rect2(242.0, 0.0, 23.0, 61.0),
@@ -121,8 +120,8 @@ const POWERS: Array[Dictionary] = [
 		"icon_rect": Rect2(285.0, 0.0, 15.0, 61.0),
 	},
 	{
-		"id": "move", "name": "MOVE", "description": "DRAG ANY REVEALED SYMBOL TO ANOTHER REEL.",
-		"pool": "power", "power_id": "move",
+		"id": "swap", "name": "SWAP", "description": "SWAP ONE REVEALED SYMBOL WITH ANOTHER REEL.",
+		"pool": "power", "power_id": "swap",
 		"sheet": POWER_SHEET, "sheet_rect": POWER_FRONT_RECT,
 		"icon_rect": Rect2(318.0, 0.0, 27.0, 61.0),
 	},
@@ -166,14 +165,34 @@ static func _ids(cards: Array[Dictionary]) -> Array[String]:
 	return result
 
 static func card(card_id: String) -> Dictionary:
-	var value: Variant = map().get(card_id, {})
+	var value: Variant = map().get(normalise_card_id(card_id), {})
 	return (value as Dictionary).duplicate(true)
+
+## Card IDs are persisted in MetaStateStore and in resumable run snapshots. Keep
+## the old names readable so a pre-rename save becomes the canonical card ID the
+## next time it is loaded, without exposing the removed name to new draws.
+static func normalise_card_id(card_id: String) -> String:
+	if card_id == "lock":
+		return "memory"
+	if card_id == "move":
+		return "swap"
+	return card_id
 
 static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [], count := 3) -> Array[String]:
 	var candidates: Array = []
 	var source := augment_ids() if pool == "augment" else power_draw_ids()
+	var unlocked_ids: Array[String] = []
+	for raw_id in unlocked:
+		var normalised := normalise_card_id(String(raw_id))
+		if not unlocked_ids.has(normalised):
+			unlocked_ids.append(normalised)
+	var excluded_ids: Array[String] = []
+	for raw_id in excluded:
+		var normalised := normalise_card_id(String(raw_id))
+		if not excluded_ids.has(normalised):
+			excluded_ids.append(normalised)
 	for id in source:
-		if unlocked.has(id) and not excluded.has(id):
+		if unlocked_ids.has(id) and not excluded_ids.has(id):
 			candidates.append(id)
 	if candidates.size() < count:
 		var all_ids: Array[String] = []
@@ -189,5 +208,6 @@ static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [],
 	return result
 
 static func power_id(card_id: String) -> String:
-	var entry := power_map().get(card_id, {}) as Dictionary
-	return String(entry.get("power_id", card_id))
+	var normalised := normalise_card_id(card_id)
+	var entry := power_map().get(normalised, {}) as Dictionary
+	return String(entry.get("power_id", normalised))
