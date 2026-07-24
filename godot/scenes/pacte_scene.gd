@@ -32,6 +32,9 @@ const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
 const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
 const DEALER_ASSET := "pacte_scene/dealer.png"
 const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
+const DEALER_TEXT_FRAME_COUNT := 2
+const DEALER_AUGMENT_FRAME := 0
+const DEALER_POWER_FRAME := 1
 const TABLE_ASSET := "pacte_scene/table.png"
 const DECK_FRAME_COUNT := 1
 const DECK_FRAME := 0
@@ -48,9 +51,9 @@ const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
 const DESCRIPTION_TITLE_RECT := Rect2(2.0, 2.0, 46.0, 7.0)
 const DESCRIPTION_TEXT_RECT := Rect2(3.0, 9.0, 44.0, 17.0)
 const DESCRIPTION_BUBBLE_GAP := 1.0
-const DEALER_BUBBLE_RECT := Rect2(60.0, 74.0, 39.0, 43.0)
+const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
-const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
+const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
@@ -136,6 +139,7 @@ func _build_background() -> void:
 	add_child(_power_deck)
 	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, ART_Z_INDEX)
 	_dealer_bubble.name = "DealerBubble"
+	_configure_native_sheet(_dealer_bubble, DEALER_TEXT_FRAME_COUNT)
 	add_child(_dealer_bubble)
 	_augment_emplacement = _full_canvas_sprite(AUGMENT_EMPLACEMENT_ASSET, ART_Z_INDEX)
 	_augment_emplacement.name = "SelectedCardEmplacement"
@@ -188,6 +192,7 @@ func _build_overlay_ui() -> void:
 	_phase_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_phase_label.clip_text = true
 	_phase_label.z_index = UI_Z_INDEX + 1
+	_phase_label.visible = false
 	_instruction = _label("Instruction", INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_instruction.z_index = UI_Z_INDEX
@@ -315,15 +320,20 @@ func _show_pool(kind: String, ids: Array[String]) -> void:
 	_drop_label = _augment_drop_label if kind == "augment" else _power_drop_label
 	_set_drop_hint_visible(false)
 	_description_bubble.visible = false
-	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
-	_phase_label.add_theme_color_override("font_color",
-		AUGMENT_PROMPT_COLOR if kind == "augment" else DEALER_TEXT_COLOR)
+	_set_dealer_text_frame(kind)
+	_phase_label.visible = false
 	_phase_label.position = PHASE_LABEL_RECT.position
 	_phase_label.size = PHASE_LABEL_RECT.size
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	for index in _offer_ids.size():
 		_build_card(_offer_ids[index], index)
 	_reveal_cards(_reveal_generation)
+
+func _set_dealer_text_frame(kind: String) -> void:
+	if _dealer_bubble == null:
+		return
+	_dealer_bubble.frame = DEALER_AUGMENT_FRAME if kind == "augment" else DEALER_POWER_FRAME
+	_dealer_bubble.visible = true
 
 func _build_card(card_id: String, index: int) -> void:
 	var button := Button.new()
@@ -580,7 +590,7 @@ func _reveal_cards(generation: int) -> void:
 			return
 		_set_face_up(_offer_ids[index])
 	if generation == _reveal_generation and is_inside_tree():
-		_instruction.text = "CHOOSE ONE CARD"
+		_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 
 func _set_face_up(card_id: String) -> void:
 	var view := _card_views.get(card_id, null) as Control
@@ -681,7 +691,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
 		_accept_card(card_id)
 	else:
-		_instruction.text = "CHOOSE ONE CARD"
+		_instruction.text = "DRAG TO THE SLOT"
 
 func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform_with_canvas().affine_inverse() * global_position

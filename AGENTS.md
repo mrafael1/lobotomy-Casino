@@ -285,14 +285,16 @@ Resources and currencies:
   authored left/right positions during both draw phases. Each emplacement uses a
   no-DROP-HERE frame and a DROP HERE frame while dragging. The active deck shuffles
   briefly while the three cards remain facedown, and dragging either card type
-  shows its authored DROP HERE frame. A dragged card casts a drop shadow (as do
+  shows its authored DROP HERE frame. Both proposition card types use the same
+  authored 39x61 front size, including the power card's left edge. A dragged card
+  casts a drop shadow (as do
   dragged dealer/stash items everywhere). There is no arrow selector overlay and
   no CANCEL/EXIT text buttons. The card preview is a compact dark information
   bubble with a gold contour, gold title, and light description above the currently
-  inspected card;
-  the centered CHOOSE AN AUGMENT/POWER prompt is drawn inside the dealer bubble,
-  using blue text for augment selection and red text for power selection.
-  Card dragging is bounded to the native 160x320 canvas.
+  inspected card. The authored two-frame dealer text supplies the augment/power
+  prompt; no separate CHOOSE AN AUGMENT, CHOOSE A POWER, or CHOOSE ONE CARD label
+  is drawn. The drag instruction sits below the offer-card row, and card dragging
+  is bounded to the native 160x320 canvas.
   Once the machine has started, a reopened Pacte presents a clean table: the
   initial visit's cards keep their effects in the run but are not re-shown.
   Completing the mid-run (threshold) visit hands off to the live dealer scene,

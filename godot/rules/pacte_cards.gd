@@ -8,7 +8,9 @@ extends RefCounted
 const CARD_SHEET := "cards/augment_cards.png"
 const POWER_SHEET := "cards/power_cards.png"
 const AUGMENT_FRONT_RECT := Rect2(0.0, 61.0, 39.0, 61.0)
-const POWER_FRONT_RECT := Rect2(40.0, 0.0, 38.0, 61.0)
+# Keep the power proposition at the same authored 39x61 size as augment cards.
+# Starting at x40 drops the left red edge and makes the 38px crop upscale.
+const POWER_FRONT_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
 
 const AUGMENTS: Array[Dictionary] = [
 	{

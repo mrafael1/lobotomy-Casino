@@ -6306,10 +6306,17 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or not (pacte.BACKGROUND_Z_INDEX < pacte.DEALER_Z_INDEX \
 				and pacte.DEALER_Z_INDEX < pacte.TABLE_Z_INDEX):
 		failures.append("pacte: background/dealer/table draw order is incorrect")
-	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX \
-			or pacte._phase_label == null or int(pacte._phase_label.z_index) <= int(pacte._dealer_bubble.z_index) \
-			or not pacte.DEALER_BUBBLE_RECT.encloses(pacte.PHASE_LABEL_RECT):
-		failures.append("pacte: choose prompt is not drawn inside the dealer bubble")
+	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
+		failures.append("pacte: dealer text does not draw above the table")
+	if pacte._dealer_bubble == null \
+			or pacte._dealer_bubble.hframes != pacte.DEALER_TEXT_FRAME_COUNT \
+			or pacte._dealer_bubble.frame != pacte.DEALER_AUGMENT_FRAME \
+			or pacte._phase_label.visible:
+		failures.append("pacte: authored augment dealer text frame is not active")
+	if pacte._instruction == null \
+			or pacte._instruction.position != pacte.INSTRUCTION_RECT.position \
+			or pacte._instruction.position.y <= pacte.CARD_POSITIONS[1].y + pacte.CARD_SIZE.y:
+		failures.append("pacte: drag instruction did not move below the card row")
 	if augment_offers.size() >= 3:
 		var expected_card_positions: Array[Vector2] = [
 			Vector2(10.0, 174.0), Vector2(61.0, 176.0), Vector2(112.0, 174.0),
@@ -6326,6 +6333,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._power_deck.frame != pacte.DECK_FRAME \
 			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
 		failures.append("pacte: fixed dual-deck state is not initialized")
+	if PacteCards.POWER_FRONT_RECT != Rect2(39.0, 0.0, 39.0, 61.0):
+		failures.append("pacte: power proposition does not use the full authored 39x61 front")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
 	for removed_name in ["SelectedCardOverlay", "CancelSelection", "ExitPacte"]:
 		if pacte.get_node_or_null(removed_name) != null:
@@ -6360,9 +6369,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
 			or pacte._phase_label.vertical_alignment != VERTICAL_ALIGNMENT_CENTER \
 			or pacte._phase_label.get_theme_font_size("font_size") != pacte.DEALER_PROMPT_FONT_SIZE \
-			or not pacte._phase_label.get_theme_color("font_color").is_equal_approx(
-				pacte.AUGMENT_PROMPT_COLOR):
-		failures.append("pacte: choose augment prompt is not centered blue dealer-bubble text")
+			or pacte._phase_label.visible:
+		failures.append("pacte: dynamic choose prompt label was not removed")
 	var description_bubble_rect: Rect2 = pacte._description_bubble.get_global_rect()
 	if not description_bubble_rect.encloses(pacte._description_title.get_global_rect()) \
 			or not description_bubble_rect.encloses(pacte._description_text.get_global_rect()):
@@ -6436,8 +6444,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:
 		failures.append("pacte: power pool did not switch to the power emplacement hint")
-	if pacte._phase_label.get_theme_color("font_color") != pacte.DEALER_TEXT_COLOR:
-		failures.append("pacte: choose power prompt did not stay red")
+	if pacte._dealer_bubble.frame != pacte.DEALER_POWER_FRAME or pacte._phase_label.visible:
+		failures.append("pacte: authored power dealer text frame did not replace the choose label")
 	if not pacte._augment_deck.visible or not pacte._power_deck.visible \
 			or pacte._augment_deck.frame != pacte.DECK_FRAME \
 			or pacte._power_deck.frame != pacte.DECK_FRAME:
