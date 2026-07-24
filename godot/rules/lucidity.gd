@@ -2,7 +2,7 @@ class_name Lucidity
 extends RefCounted
 
 ## Lucidity gain planner. Restores one spent power per
-## 50-coin threshold crossed; the eligible list shrinks each crossing so the same
+## restore threshold crossed; the eligible list shrinks each crossing so the same
 ## instance is never restored twice. Pure and seed-driven (see lucidity_restore.json).
 
 const M32 := 0xFFFFFFFF

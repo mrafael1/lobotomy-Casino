@@ -20,14 +20,18 @@ const UPGRADED_MAX_FREE_SPINS := 3
 
 const BASE_LUCIDITY_MULTIPLIER := 1.0
 
-const WEALTH_SCORE_THRESHOLD := 2000
+# Wealth objectives advance through the authored ladder. The final target is the
+# ending threshold; the earlier steps keep the odometer's TARGET readout useful
+# throughout a run.
+const WEALTH_TARGETS := [100, 200, 500, 800, 1500, 2500, 3500, 5000]
+const WEALTH_SCORE_THRESHOLD := 5000
 const EXIT_LUCIDITY_THRESHOLD := 750
 const LUCIDITY_OBJECTIVE := 1000
 const LUCIDITY_COINS_PER_RESTORE := 50
 const END_OF_RUN_LUCIDITY_KEPT := 0.10
 const SMART_SAVE_LUCIDITY_KEPT := 0.20
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
-const CAMPAIGN_STARTING_NEURONS := 10
+const CAMPAIGN_STARTING_NEURONS := 3
 
 # Issue #76: a 3x-flatline strike charges the NEXT winning pair/triple to score at
 # this multiplier (its points AND lucidity coins both scale, since the bonus rides
@@ -36,5 +40,7 @@ const CAMPAIGN_STARTING_NEURONS := 10
 const FLATLINE_WIN_BOOST_MULT := 2
 
 # The Nth coin (50, 100, …) is a "power coin". Pass the total AFTER counting it.
-static func is_power_coin(total_after_coin: int) -> bool:
-	return total_after_coin > 0 and total_after_coin % LUCIDITY_COINS_PER_RESTORE == 0
+static func is_power_coin(total_after_coin: int,
+		coins_per_restore: int = LUCIDITY_COINS_PER_RESTORE) -> bool:
+	var threshold := maxi(1, coins_per_restore)
+	return total_after_coin > 0 and total_after_coin % threshold == 0

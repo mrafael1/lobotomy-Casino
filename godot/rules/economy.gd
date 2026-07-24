@@ -63,6 +63,24 @@ static func compute_hallucination_reward_scale(owned: Array) -> float:
 			scale *= float(u["effect"].get("rewardScale", 1.0))
 	return scale
 
+static func compute_tunnel_vision_reward_scale(owned: Array) -> float:
+	var m := _map()
+	var scale := 1.0
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "tunnelVision":
+			scale *= float(u["effect"].get("rewardMultiplier", 1.0))
+	return scale
+
+static func compute_power_restore_threshold(owned: Array, base_threshold: int) -> int:
+	var m := _map()
+	var threshold := maxi(1, base_threshold)
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "powerRestoreThreshold":
+			threshold = mini(threshold, maxi(1, int(u["effect"]["amount"])))
+	return threshold
+
 static func compute_jackpot_multiplier(owned: Array) -> float:
 	var m := _map()
 	var mult := 1.0
@@ -83,6 +101,31 @@ static func compute_passive_lucidity(owned: Array) -> int:
 		if u != null and u["effect"]["type"] == "passiveLucidityPerSpin":
 			passive += int(u["effect"]["amount"])
 	return passive
+
+static func compute_pair_score_multiplier(owned: Array) -> float:
+	var m := _map()
+	var multiplier := 1.0
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "soloAsPair":
+			multiplier *= float(u["effect"].get("pairMultiplier", 1.0))
+	return multiplier
+
+static func has_solo_as_pair(owned: Array) -> bool:
+	var m := _map()
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "soloAsPair":
+			return true
+	return false
+
+static func has_tunnel_vision(owned: Array) -> bool:
+	var m := _map()
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "tunnelVision":
+			return true
+	return false
 
 static func compute_book_weight(owned: Array) -> int:
 	var m := _map()

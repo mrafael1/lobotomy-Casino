@@ -82,6 +82,34 @@ const AUGMENTS: Array[Dictionary] = [
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"effect": { "type": "glitch_dealer" },
 	},
+	{
+		"id": "augment_tunnel_vision", "name": "TUNNEL VISION",
+		"description": "HIDE THE THIRD REEL. REWARDS +50%.", "pool": "augment",
+		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
+		"icon_rect": Rect2(3.0, 685.0, 32.0, 29.0),
+		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_tunnel_vision" },
+	},
+	{
+		"id": "augment_how_to_cheat", "name": "HOW TO CHEAT",
+		"description": "A SOLO SYMBOL COUNTS AS A PAIR. PAIRS PAY X0.6.", "pool": "augment",
+		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
+		"icon_rect": Rect2(10.0, 744.0, 18.0, 19.0),
+		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_how_to_cheat" },
+	},
+	{
+		"id": "augment_adrenaline", "name": "ADRENALINE",
+		"description": "POWER RESTORE THRESHOLD: 30 LUCIDITY.", "pool": "augment",
+		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
+		"icon_rect": Rect2(8.0, 799.0, 23.0, 45.0),
+		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_adrenaline" },
+	},
+	{
+		"id": "augment_passive_gain", "name": "PASSIVE GAIN",
+		"description": "GAIN 10 LUCIDITY EVERY SPIN.", "pool": "augment",
+		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
+		"icon_rect": Rect2(8.0, 868.0, 23.0, 31.0),
+		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_passive_gain" },
+	},
 ]
 
 const POWERS: Array[Dictionary] = [
@@ -149,6 +177,12 @@ static func _map_for(cards: Array[Dictionary]) -> Dictionary:
 
 static func augment_ids() -> Array[String]:
 	return _ids(AUGMENTS)
+
+static func newly_shipped_augment_ids() -> Array[String]:
+	return [
+		"augment_tunnel_vision", "augment_how_to_cheat",
+		"augment_adrenaline", "augment_passive_gain",
+	]
 
 static func power_ids() -> Array[String]:
 	return _ids(POWERS)

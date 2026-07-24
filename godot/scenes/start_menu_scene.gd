@@ -84,7 +84,7 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var tutorial_pauses_tree: bool = true
 @export var tutorial_title_text: String = "HOW TO PLAY"
 @export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 10 neurons -> attain wealth before hitting 0.
+- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
 
 [color=#f2d37c][b]Dealer Scene[/b][/color]
 - Buy consumables for your run.

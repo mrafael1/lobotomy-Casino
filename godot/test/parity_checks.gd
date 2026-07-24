@@ -222,6 +222,35 @@ static func check_endings(out: Array) -> void:
 		if got != bool(c["expect"]):
 			_fail(out, "checkExitEligibility " + str(c["input"]), got, bool(c["expect"]))
 
+static func check_issue176(out: Array) -> void:
+	if EconomyConst.CAMPAIGN_STARTING_NEURONS != 3:
+		_fail(out, "issue176 campaign health", EconomyConst.CAMPAIGN_STARTING_NEURONS, 3)
+	var targets := [100, 200, 500, 800, 1500, 2500, 3500, 5000]
+	for i in targets.size():
+		var score := 0 if i == 0 else int(targets[i - 1])
+		var got := Endings.next_wealth_target(score)
+		if got != int(targets[i]):
+			_fail(out, "issue176 wealth target score=%d" % score, got, targets[i])
+	if Endings.next_wealth_target(5000) != 5000:
+		_fail(out, "issue176 final wealth target", Endings.next_wealth_target(5000), 5000)
+	var tunnel_owned: Array = ["pacte_tunnel_vision"]
+	var tunnel := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, false, Economy.compute_tunnel_vision_reward_scale(tunnel_owned))
+	if String(tunnel["winType"]) != "pair" or int(tunnel["scoreEarned"]) != 15:
+		_fail(out, "issue176 tunnel vision scoring", tunnel, "pair / 15")
+	var cheat := Evaluate.score_reels(["brain", "eye", "pill"], 1.0, true,
+		false, false, Economy.compute_pair_score_multiplier(["pacte_how_to_cheat"]),
+		0, false, 1.0, {}, true)
+	if String(cheat["winType"]) != "pair" or int(cheat["scoreEarned"]) != 12 \
+			or not bool(cheat.get("soloAsPair", false)):
+		_fail(out, "issue176 solo-as-pair scoring", cheat, "pair / 12")
+	if Economy.compute_passive_lucidity(["pacte_passive_gain"]) != 10:
+		_fail(out, "issue176 passive gain", Economy.compute_passive_lucidity(["pacte_passive_gain"]), 10)
+	if Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50) != 30:
+		_fail(out, "issue176 adrenaline threshold",
+			Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50), 30)
+
+
 static func check_pacte_deck_and_powers(out: Array) -> void:
 	var augment_unlocks: Array[String] = PacteCards.augment_ids()
 	var power_unlocks: Array[String] = PacteCards.power_draw_ids()
@@ -284,5 +313,6 @@ static func run_all() -> Array:
 	check_bank(out)
 	check_lucidity(out)
 	check_endings(out)
+	check_issue176(out)
 	check_pacte_deck_and_powers(out)
 	return out

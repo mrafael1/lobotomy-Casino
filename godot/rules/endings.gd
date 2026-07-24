@@ -15,6 +15,12 @@ static func check_ending(run: Dictionary, _meta: Dictionary,
 		return "flatline"
 	return null
 
+static func next_wealth_target(score: int) -> int:
+	for target in EconomyConst.WEALTH_TARGETS:
+		if score < int(target):
+			return int(target)
+	return EconomyConst.WEALTH_SCORE_THRESHOLD
+
 static func check_exit_eligibility(run: Dictionary, meta: Dictionary) -> bool:
 	return (not bool(meta["corruptionEverUsed"])) \
 		and int(run["lucidityCoins"]) >= EconomyConst.EXIT_LUCIDITY_THRESHOLD

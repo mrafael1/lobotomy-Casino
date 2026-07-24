@@ -72,10 +72,22 @@ static func _score_pair(symbol: String, lucidity_multiplier: float, pair_score_m
 		lucidity_multiplier, reward_scale)
 	return { "winType": "pair", "scoreEarned": score, "coinsEarned": score, "freeSpinsGranted": 0 }
 
+static func _highest_pair_symbol(symbols: Array) -> String:
+	var selected := ""
+	var selected_value := -1
+	for raw_symbol in symbols:
+		var symbol := String(raw_symbol)
+		var value := int(Payouts.PAIR_SCORE.get(symbol, 0))
+		if value > selected_value:
+			selected = symbol
+			selected_value = value
+	return selected
+
 static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		allow_free_spin_grant: bool, pattern23_triple: bool,
 		pair_score_mult: float, hidden_reel_count: int, visible_pair_as_triple: bool,
-		reward_scale: float, symbol_reward_bonuses: Dictionary) -> Dictionary:
+		reward_scale: float, symbol_reward_bonuses: Dictionary,
+		solo_as_pair: bool) -> Dictionary:
 	var a := String(reels[0])
 	var b := String(reels[1])
 	var c := String(reels[2])
@@ -93,6 +105,14 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 					reward_scale, symbol_reward_bonuses)
 			return _score_pair(vmatch, lucidity_multiplier, pair_score_mult,
 				reward_scale, symbol_reward_bonuses)
+		if solo_as_pair:
+			var solo_symbol := _highest_pair_symbol(visible)
+			if solo_symbol != "":
+				var solo_result := _score_pair(solo_symbol, lucidity_multiplier,
+					pair_score_mult, reward_scale, symbol_reward_bonuses)
+				solo_result["soloAsPair"] = true
+				solo_result["soloAsPairSymbol"] = solo_symbol
+				return solo_result
 		return { "winType": "miss", "scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0 }
 
 	if a == b and b == c:
@@ -114,7 +134,7 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		elif a == c:
 			match_sym = a
 		if match_sym != "":
-			var pscore := _score_base(_pair_base(match_sym, 2.0, symbol_reward_bonuses),
+			var pscore := _score_base(_pair_base(match_sym, 2.0 * pair_score_mult, symbol_reward_bonuses),
 				lucidity_multiplier, reward_scale)
 			return { "winType": "pair", "scoreEarned": pscore, "coinsEarned": pscore, "freeSpinsGranted": 0 }
 	else:
@@ -122,6 +142,15 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 			var match_symbol := a if a == b else b
 			return _score_pair(match_symbol, lucidity_multiplier, pair_score_mult,
 				reward_scale, symbol_reward_bonuses)
+
+	if solo_as_pair:
+		var solo_symbol := _highest_pair_symbol(reels)
+		if solo_symbol != "":
+			var solo_result := _score_pair(solo_symbol, lucidity_multiplier,
+				pair_score_mult, reward_scale, symbol_reward_bonuses)
+			solo_result["soloAsPair"] = true
+			solo_result["soloAsPairSymbol"] = solo_symbol
+			return solo_result
 
 	return { "winType": "miss", "scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0 }
 
@@ -139,7 +168,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 		pattern23_triple: bool = false, learning_active: bool = false,
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
-		symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false) -> Dictionary:
 	var has_book := false
 	for reel_value in reels:
 		if String(reel_value) == "book":
@@ -148,7 +177,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 	if not learning_active or not has_book:
 		return _score_reels_without_book(reels, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
-			reward_scale, symbol_reward_bonuses)
+			reward_scale, symbol_reward_bonuses, solo_as_pair)
 
 	var candidates: Array[String] = []
 	for candidate_reel in reels:
@@ -165,7 +194,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 			resolved.append(candidate if String(resolved_reel) == "book" else String(resolved_reel))
 		var scored := _score_reels_without_book(resolved, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
-			reward_scale, symbol_reward_bonuses)
+			reward_scale, symbol_reward_bonuses, solo_as_pair)
 		scored["bookJoker"] = true
 		scored["resolvedSymbol"] = candidate
 		if reels.count("book") == reels.size() and candidate == "eye":
@@ -205,6 +234,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var visible_pair_as_triple := bool(input.get("visiblePairAsTriple", false))
 	var reward_scale := float(input.get("rewardScale", 1.0))
 	var symbol_reward_bonuses: Dictionary = input.get("symbolRewardBonuses", {})
+	var solo_as_pair := bool(input.get("soloAsPair", false))
 	var guarantee_symbol_id: Variant = input.get("guaranteeSymbolId", null)
 	var force_reel_symbols: Variant = input.get("forceReelSymbols", null)
 	var weight_overrides: Dictionary = input.get("weightOverrides", {})
@@ -218,7 +248,8 @@ static func evaluate(input: Dictionary) -> Dictionary:
 
 	if guaranteed_win:
 		var temp := score_reels(reels, 1.0, false, pattern23, learning, pair_score_mult,
-			hidden_reel_count, visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+			hidden_reel_count, visible_pair_as_triple, reward_scale, symbol_reward_bonuses,
+			solo_as_pair)
 		if temp["winType"] == "miss":
 			reels = [reels[0], reels[0], reels[2]]
 
@@ -267,7 +298,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var neurons_after := neurons if is_free_spin else maxi(0, neurons - neuron_decay)
 	var score := score_reels(reels, lucidity_multiplier, not is_free_spin, pattern23, learning,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 
 	var free_spins_after: int
 	if is_free_spin:
@@ -293,4 +324,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 		out["bookJoker"] = bool(score["bookJoker"])
 	if score.has("bookTripleChoice"):
 		out["bookTripleChoice"] = bool(score["bookTripleChoice"])
+	if score.has("soloAsPair"):
+		out["soloAsPair"] = true
+		out["soloAsPairSymbol"] = String(score.get("soloAsPairSymbol", ""))
 	return out

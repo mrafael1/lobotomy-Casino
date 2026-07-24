@@ -47,6 +47,20 @@ const POSITIVE_UPGRADES := [
 	  "effect": { "type": "smartSaveRetention", "kept": 0.20 } },
 ]
 
+# These definitions are resolved by Economy so Pacte can re-apply a selected
+# augment after a save/continue, but they are intentionally absent from
+# all_upgrades(): they are run-choice cards, not Lab purchases.
+const PACTE_UPGRADES := [
+	{ "id": "pacte_tunnel_vision", "name": "Tunnel Vision", "category": "augment",
+	  "effect": { "type": "tunnelVision", "hiddenReels": 1, "rewardMultiplier": 1.50 } },
+	{ "id": "pacte_how_to_cheat", "name": "How to Cheat", "category": "augment",
+	  "effect": { "type": "soloAsPair", "pairMultiplier": 0.60 } },
+	{ "id": "pacte_adrenaline", "name": "Adrenaline", "category": "augment",
+	  "effect": { "type": "powerRestoreThreshold", "amount": 30 } },
+	{ "id": "pacte_passive_gain", "name": "Passive Gain", "category": "augment",
+	  "effect": { "type": "passiveLucidityPerSpin", "amount": 10 } },
+]
+
 static func all_upgrades() -> Array:
 	var out := []
 	out.append_array(ABILITY_UPGRADES)
@@ -57,5 +71,7 @@ static func all_upgrades() -> Array:
 static func upgrade_map() -> Dictionary:
 	var m := {}
 	for u in all_upgrades():
+		m[u["id"]] = u
+	for u in PACTE_UPGRADES:
 		m[u["id"]] = u
 	return m

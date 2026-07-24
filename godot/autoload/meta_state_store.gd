@@ -124,6 +124,12 @@ func _apply(meta: Dictionary) -> void:
 	unlockedAugmentCardIds = _normalise_card_unlocks(
 		meta.get("unlockedAugmentCardIds", PacteCards.augment_ids()),
 		PacteCards.augment_ids())
+	# Issue #176 ships these cards as part of the supplied deck. Add them to an
+	# older save's unlock list without changing the future achievement gate for
+	# cards that may be added later.
+	for card_id in PacteCards.newly_shipped_augment_ids():
+		if not unlockedAugmentCardIds.has(card_id):
+			unlockedAugmentCardIds.append(card_id)
 	unlockedPowerCardIds = _normalise_card_unlocks(
 		meta.get("unlockedPowerCardIds", PacteCards.power_ids()),
 		PacteCards.power_ids())
@@ -555,8 +561,8 @@ func _migrate(record: Dictionary) -> Dictionary:
 		pending.erase("cons_syringe")
 		current = current.duplicate(true)
 		current["pendingConsumables"] = pending
-	# Campaign rebalance (issue #38): saves from the 12-neuron era reclamp down to
-	# the current starting count, and Left re-clamps to the new Max.
+	# Campaign rebalance: saves from an older health-count era reclamp down to the
+	# current starting count, and Left re-clamps to the new Max.
 	current["campaignNeuronsMax"] = mini(int(current["campaignNeuronsMax"]), campaign_starting_neurons)
 	current["campaignNeuronsLeft"] = mini(int(current["campaignNeuronsLeft"]), int(current["campaignNeuronsMax"]))
 	return current

@@ -18,6 +18,14 @@ const PATTERN_RECOGNITION_ID := "augment_pattern_recognition"
 const PATTERN_RECOGNITION_FRAME_COUNT := 5
 const PATTERN_RECOGNITION_FRAME_PITCH := 39.0
 const PATTERN_RECOGNITION_FPS := 7.0
+const HOW_TO_CHEAT_ID := "augment_how_to_cheat"
+const HOW_TO_CHEAT_FRAME_FPS := 6.0
+const HOW_TO_CHEAT_FRAME_RECTS: Array[Rect2] = [
+	Rect2(10.0, 744.0, 18.0, 20.0), Rect2(49.0, 748.0, 18.0, 20.0),
+	Rect2(88.0, 751.0, 18.0, 20.0), Rect2(127.0, 754.0, 18.0, 20.0),
+	Rect2(166.0, 758.0, 18.0, 20.0), Rect2(205.0, 761.0, 18.0, 20.0),
+	Rect2(244.0, 763.0, 18.0, 20.0),
+]
 const GLITCH_AUGMENT_ID := "augment_glitch_2"
 const GLITCH_CARD_TICK_INTERVAL := 0.62
 const GLITCH_CARD_CHANCE := 0.42
@@ -447,7 +455,7 @@ func _clear_glitch_card_fx(view: Control, fx: Control) -> void:
 
 func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		display_size: Vector2) -> Node:
-	if card_id != PATTERN_RECOGNITION_ID:
+	if card_id != PATTERN_RECOGNITION_ID and card_id != HOW_TO_CHEAT_ID:
 		var icon := TextureRect.new()
 		icon.name = "Icon"
 		icon.texture = _atlas(String(entry.get("sheet", "")), source_rect)
@@ -456,31 +464,38 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		icon.size = display_size
 		return icon
 
-	# Pattern Recognition's authored icon contains five 30x18 frames separated by
-	# one 39px card pitch. Use the original frame rectangles so the Pacte card shows
-	# the intended animated pattern rather than all five poses at once.
+	# Both authored animated icons use their own atlas regions so the Pacte card
+	# shows one pose at a time rather than the whole source strip.
 	var animated_icon := AnimatedSprite2D.new()
 	animated_icon.name = "Icon"
 	var sprite_frames := SpriteFrames.new()
-	sprite_frames.add_animation(&"pattern")
-	sprite_frames.set_animation_loop(&"pattern", true)
-	sprite_frames.set_animation_speed(&"pattern", PATTERN_RECOGNITION_FPS)
+	var animation_name := &"pattern" if card_id == PATTERN_RECOGNITION_ID else &"cheat"
+	sprite_frames.add_animation(animation_name)
+	sprite_frames.set_animation_loop(animation_name, true)
+	sprite_frames.set_animation_speed(animation_name,
+		PATTERN_RECOGNITION_FPS if card_id == PATTERN_RECOGNITION_ID else HOW_TO_CHEAT_FRAME_FPS)
 	var sheet := Assets.texture(String(entry.get("sheet", "")))
-	for frame_index in PATTERN_RECOGNITION_FRAME_COUNT:
+	var frame_rects: Array[Rect2] = []
+	if card_id == PATTERN_RECOGNITION_ID:
+		for frame_index in PATTERN_RECOGNITION_FRAME_COUNT:
+			frame_rects.append(Rect2(
+				source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
+				source_rect.size))
+	else:
+		frame_rects = HOW_TO_CHEAT_FRAME_RECTS.duplicate()
+	for frame_rect in frame_rects:
 		var frame := AtlasTexture.new()
 		frame.atlas = sheet
-		frame.region = Rect2(
-			source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
-			source_rect.size)
-		sprite_frames.add_frame(&"pattern", frame)
+		frame.region = frame_rect
+		sprite_frames.add_frame(animation_name, frame)
 	animated_icon.sprite_frames = sprite_frames
-	animated_icon.animation = &"pattern"
-	animated_icon.autoplay = &"pattern"
+	animated_icon.animation = animation_name
+	animated_icon.autoplay = animation_name
 	animated_icon.centered = false
 	var scale := display_size / source_rect.size
 	animated_icon.scale = scale
 	animated_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	animated_icon.play(&"pattern")
+	animated_icon.play(animation_name)
 	return animated_icon
 
 func _set_card_icon_position(icon: Node, position: Vector2) -> void:

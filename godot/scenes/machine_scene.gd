@@ -576,6 +576,7 @@ var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
+var _wealth_goal_digit_labels: Array[Label] = []
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
@@ -1129,16 +1130,31 @@ func _build_wealth_goal_label() -> void:
 		return
 	var word := _wealth_goal_text("WealthGoalWordLabel", WEALTH_GOAL_WORD_RECT, 5)
 	word.text = "TARGET"
-	var digits := str(campaign_goal_score)
+	for i in str(EconomyConst.WEALTH_SCORE_THRESHOLD).length():
+		var digit := _wealth_goal_text("WealthGoalDigit%d" % i,
+			WEALTH_GOAL_NUMBER_RECT, 5)
+		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
+		_wealth_goal_digit_labels.append(digit)
+	_refresh_wealth_goal_label()
+
+func _refresh_wealth_goal_label() -> void:
+	if _wealth_goal_digit_labels.is_empty():
+		return
+	var target := campaign_goal_score
+	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD:
+		target = Endings.next_wealth_target(int(RunStateStore.scoreEarned))
+	var digits := str(target)
 	var start_x := roundf(WEALTH_GOAL_NUMBER_RECT.position.x
 		+ (WEALTH_GOAL_NUMBER_RECT.size.x - WEALTH_GOAL_DIGIT_PITCH * digits.length()) * 0.5)
-	for i in digits.length():
-		var cell := Rect2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
-			WEALTH_GOAL_NUMBER_RECT.position.y,
-			WEALTH_GOAL_DIGIT_PITCH, WEALTH_GOAL_NUMBER_RECT.size.y)
-		var digit := _wealth_goal_text("WealthGoalDigit%d" % i, cell, 5)
+	for i in _wealth_goal_digit_labels.size():
+		var digit: Label = _wealth_goal_digit_labels[i]
+		var visible := i < digits.length()
+		digit.visible = visible
+		if not visible:
+			continue
+		digit.position = Vector2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
+			WEALTH_GOAL_NUMBER_RECT.position.y)
 		digit.text = digits[i]
-		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
 
 func _wealth_goal_text(node_name: String, rect: Rect2, font_size: int) -> Label:
 	var l := Label.new()
@@ -2812,6 +2828,7 @@ func _refresh_combo_effect() -> void:
 	_combo_effect_sprite.visible = true
 
 func _refresh_tv_indicators() -> void:
+	_refresh_wealth_goal_label()
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
@@ -3173,11 +3190,12 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 func _spawn_lucidity_coins(_gain: int, _target_lucidity: int) -> float:
 	return 0.0
 
-# Power points per gauge frame: one power coin banks this much wealth score (10 for a 6-frame /
-# 50-threshold gauge). Cocktail rarity points are part of that score. Lucidity-only bonuses still
+# Power points per gauge frame: one power coin banks this much wealth score (10 for the base
+# 50-threshold gauge, 6 with Adrenaline). Cocktail rarity points are part of that score. Lucidity-only bonuses still
 # keep the existing restore economy caught up, so the point source is the higher of the two totals.
 func _power_bar_step() -> int:
-	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
+	return maxi(1, int(RunStateStore.effective_coins_per_power_restore() \
+		/ (POWER_BAR_FRAMES - 1)))
 
 func _power_point_total() -> int:
 	return maxi(0, maxi(int(RunStateStore.scoreEarned), int(RunStateStore.lucidityCoins)))
@@ -3216,7 +3234,7 @@ func _try_start_power_coin_flow() -> void:
 func _compute_power_plan() -> Dictionary:
 	var power_points := _power_point_total()
 	var gain := power_points - _power_seen_lucidity
-	var per := maxi(1, coins_per_power_restore)
+	var per := maxi(1, RunStateStore.effective_coins_per_power_restore())
 	var step := _power_bar_step()
 	var score := _power_bar_score
 	var out: Array = []

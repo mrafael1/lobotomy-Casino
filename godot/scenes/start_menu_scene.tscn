@@ -148,7 +148,7 @@ theme_override_font_sizes/normal_font_size = 5
 theme_override_font_sizes/bold_font_size = 5
 bbcode_enabled = true
 text = "[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 12 neurons -> attain wealth before hitting 0.
+- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
 
 [color=#f2d37c][b]Dealer Scene[/b][/color]
 - Buy consumables for your run.
