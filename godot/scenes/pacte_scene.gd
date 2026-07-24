@@ -7,7 +7,7 @@ extends Control
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(10.0, 174.0), Vector2(61.0, 176.0), Vector2(112.0, 174.0),
+	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
 ]
 const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
 const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)

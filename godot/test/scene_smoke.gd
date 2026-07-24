@@ -6319,7 +6319,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag instruction did not move below the card row")
 	if augment_offers.size() >= 3:
 		var expected_card_positions: Array[Vector2] = [
-			Vector2(10.0, 174.0), Vector2(61.0, 176.0), Vector2(112.0, 174.0),
+			Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
 		]
 		for index in expected_card_positions.size():
 			var card_id := String(augment_offers[index])
