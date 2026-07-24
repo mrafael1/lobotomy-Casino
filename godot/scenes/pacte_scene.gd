@@ -25,24 +25,39 @@ const REWARD_AMP_CARD_IDS: Array[String] = [
 	"augment_reward_1", "augment_reward_2", "augment_reward_3",
 ]
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
+# Pacte's authored split art is intentionally kept as full-canvas pieces. The
+# table, decks, dealer, and prompt bubble can then animate independently while
+# retaining native 160x320 pixel alignment.
+const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
+const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
+const DEALER_ASSET := "pacte_scene/dealer.png"
+const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
+const FACE_DOWN_SHUFFLE_TIME := 0.24
+const FACE_DOWN_SHUFFLE_OFFSET := 2.0
+const DEALER_PROMPT_FONT_SIZE := 5
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
 const DESCRIPTION_BUBBLE_RECT := Rect2(25.0, 123.0, 110.0, 24.0)
-const PHASE_LABEL_RECT := Rect2(10.0, 104.0, 140.0, 16.0)
+const PHASE_LABEL_RECT := Rect2(56.0, 82.0, 48.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
-const BG_ASSET := "pacte_scene/pacte_scene.png"
-const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
-const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
+const BG_ASSET := "pacte_scene/bg.png"
+const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
+const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
 
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
 const DEALER_TEXT_COLOR := Color(1.0, 0.6, 0.6)
+const AUGMENT_PROMPT_COLOR := Color(0.42, 1.0, 0.95)
 const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _augment_deck: Sprite2D = null
+var _power_deck: Sprite2D = null
+var _dealer_sprite: Sprite2D = null
+var _dealer_bubble: Sprite2D = null
 var _emplacement: Sprite2D = null
 var _chosen_cards_layer: Control = null
 var _description_bubble: Panel = null
@@ -71,6 +86,8 @@ var _press_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_origin_z := 0
 var _selection_locked := false
+var _reveal_generation := 0
+var _deck_tween: Tween = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -83,12 +100,26 @@ func _build_background() -> void:
 	_background.name = "PacteBackground"
 	add_child(_background)
 	move_child(_background, 0)
+	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, 1)
+	_augment_deck.name = "AugmentDeck"
+	add_child(_augment_deck)
+	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, 1)
+	_power_deck.name = "PowerDeck"
+	add_child(_power_deck)
+	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, 1)
+	_dealer_sprite.name = "PacteDealer"
+	add_child(_dealer_sprite)
+	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, 2)
+	_dealer_bubble.name = "DealerBubble"
+	add_child(_dealer_bubble)
 	_emplacement = _full_canvas_sprite(
 		AUGMENT_EMPLACEMENT_ASSET if _pool_kind == "augment" else POWER_EMPLACEMENT_ASSET, 0)
 	_emplacement.name = "SelectedCardEmplacement"
 	_emplacement.visible = true
+	_emplacement.z_index = 3
 	add_child(_emplacement)
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET)
+	_set_deck_visible("augment")
 	_chosen_cards_layer = Control.new()
 	_chosen_cards_layer.name = "ChosenCardsLayer"
 	_chosen_cards_layer.position = Vector2.ZERO
@@ -107,11 +138,14 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	return sprite
 
 func _build_overlay_ui() -> void:
-	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, 7, DEALER_TEXT_COLOR)
+	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, DEALER_PROMPT_FONT_SIZE,
+		AUGMENT_PROMPT_COLOR)
 	_phase_label.text = "PACTE"
 	_phase_label.size = PHASE_LABEL_RECT.size
 	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_phase_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_phase_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_phase_label.clip_text = true
 	_instruction = _label("Instruction", INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -235,19 +269,23 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 
 func _show_pool(kind: String, ids: Array[String]) -> void:
 	_pool_kind = kind
+	_reveal_generation += 1
 	_clear_cards()
 	_offer_ids = ids.duplicate()
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET if kind == "augment" else POWER_EMPLACEMENT_ASSET)
+	_set_deck_visible(kind)
 	_drop_label = _augment_drop_label if kind == "augment" else _power_drop_label
 	_set_drop_hint_visible(false)
 	_description_bubble.visible = false
 	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
+	_phase_label.add_theme_color_override("font_color",
+		AUGMENT_PROMPT_COLOR if kind == "augment" else DEALER_TEXT_COLOR)
 	_phase_label.position = PHASE_LABEL_RECT.position
 	_phase_label.size = PHASE_LABEL_RECT.size
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	for index in _offer_ids.size():
 		_build_card(_offer_ids[index], index)
-	_reveal_cards()
+	_reveal_cards(_reveal_generation)
 
 func _build_card(card_id: String, index: int) -> void:
 	var button := Button.new()
@@ -450,13 +488,56 @@ func _atlas(asset: String, region: Rect2) -> AtlasTexture:
 	atlas.region = region
 	return atlas
 
-func _reveal_cards() -> void:
+func _set_deck_visible(kind: String) -> void:
+	if _augment_deck != null:
+		_augment_deck.visible = kind == "augment"
+	if _power_deck != null:
+		_power_deck.visible = kind == "power"
+
+func _shuffle_active_deck() -> void:
+	var deck := _augment_deck if _pool_kind == "augment" else _power_deck
+	if deck == null:
+		return
+	if _deck_tween != null and _deck_tween.is_valid():
+		_deck_tween.kill()
+	deck.position = Vector2.ZERO
+	deck.rotation = 0.0
+	_deck_tween = create_tween()
+	_deck_tween.tween_property(deck, "position", Vector2(-1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", Vector2(1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", Vector2.ZERO, 0.05)
+
+func _shuffle_face_down_cards(generation: int) -> void:
+	if _offer_ids.is_empty():
+		return
+	for index in _offer_ids.size():
+		if generation != _reveal_generation:
+			return
+		var card_id := _offer_ids[index]
+		var button := _card_buttons.get(card_id, null) as Button
+		if button == null:
+			continue
+		var origin := CARD_POSITIONS[index]
+		var direction := -1.0 if index % 2 == 0 else 1.0
+		var offset := Vector2(direction * FACE_DOWN_SHUFFLE_OFFSET, 0.0)
+		var tween := create_tween()
+		tween.tween_interval(float(index) * 0.02)
+		tween.tween_property(button, "position", origin + offset, 0.06)
+		tween.tween_property(button, "position", origin - offset, 0.06)
+		tween.tween_property(button, "position", origin, 0.06)
+	_shuffle_active_deck()
+	await get_tree().create_timer(FACE_DOWN_SHUFFLE_TIME).timeout
+
+func _reveal_cards(generation: int) -> void:
+	await _shuffle_face_down_cards(generation)
+	if generation != _reveal_generation or not is_inside_tree():
+		return
 	for index in _offer_ids.size():
 		await get_tree().create_timer(0.08 * float(index + 1)).timeout
-		if not is_inside_tree():
+		if generation != _reveal_generation or not is_inside_tree():
 			return
 		_set_face_up(_offer_ids[index])
-	if is_inside_tree():
+	if generation == _reveal_generation and is_inside_tree():
 		_instruction.text = "CHOOSE ONE CARD"
 
 func _set_face_up(card_id: String) -> void:

@@ -2877,14 +2877,17 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 			saved_state[property_name] = value
 
 	var combo_effect: Sprite2D = machine._combo_effect_sprite
-	if combo_effect == null or int(combo_effect.hframes) != 9:
-		failures.append("pacte augment: COMBO effect sheet is not wired as nine frames")
+	if combo_effect == null or int(combo_effect.hframes) < 1 \
+			or int(combo_effect.hframes) > machine.COMBO_EFFECT_FRAMES:
+		failures.append("pacte augment: COMBO effect sheet has an invalid frame count")
 	else:
-		machine._show_combo_effect(8, 45, 45)
-		if not combo_effect.visible or int(combo_effect.frame) != 8 \
+		run_store.winBoostEnabled = true
+		var last_combo_frame := int(combo_effect.hframes) - 1
+		machine._show_combo_effect(last_combo_frame, 45, 45)
+		if not combo_effect.visible or int(combo_effect.frame) != last_combo_frame \
 				or machine._combo_payout_label == null \
 				or String(machine._combo_payout_label.text) != "+ 45 (45%)":
-			failures.append("pacte augment: COMBO x9 did not show its frame and bonus")
+			failures.append("pacte augment: COMBO did not show its frame and bonus")
 		machine._stop_combo_effect()
 
 	# Win Boost uses the 5/10/15...45% steps on successive paying results and
@@ -2915,6 +2918,28 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 			failures.append("pacte augment: Win Boost bonus did not match %d%% of the base payout" % expected_percent)
 	if int(run_store.winBoostCombo) != 9:
 		failures.append("pacte augment: Win Boost streak did not cap at x9")
+	# A miss leaves the current COMBO stage in the same rescue window as the
+	# frenzy loss. Confirming that loss clears the streak; the machine presentation
+	# beeps while the decision is pending.
+	run_store.winBoostCombo = 4
+	run_store.lastResult = { "reels": ["eye", "vial", "pill"] }
+	run_store.lockedReels = [true, true, true]
+	var combo_miss: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if combo_miss == null or String(combo_miss.get("winType", "")) != "miss" \
+			or int(run_store.winBoostCombo) != 4 \
+			or not bool(run_store.comboDefeatPending):
+		failures.append("pacte augment: a COMBO miss did not enter a recoverable warning")
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	machine._refresh_combo_effect()
+	machine._show_pending_combo_defeat()
+	if not combo_effect.visible or machine._combo_loss_beep_tween == null:
+		failures.append("pacte augment: COMBO did not beep during its recoverable loss")
+	run_store.resolve_pending_combo_defeat(false)
+	machine._close_pending_combo_defeat()
+	if int(run_store.winBoostCombo) != 0:
+		failures.append("pacte augment: confirming COMBO loss did not clear its streak")
 
 	# Glitch 2 advances the dealer by three steps even at the x3 gauge.
 	run_store.reset_run_state()
@@ -6269,7 +6294,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: Pattern Recognition is missing its five-frame animated icon")
 	pattern_view.free()
 	for node_name in ["PacteBackground", "SelectedCardEmplacement",
-			"OddsTableDescriptionBubble", "DropHere"]:
+			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
+			"PacteDealer", "DealerBubble"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
@@ -6300,14 +6326,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: description bubble was not compacted")
 	if pacte._description_bubble.position != Vector2(25.0, 123.0):
 		failures.append("pacte: description bubble is not close to the card row")
-	if pacte._phase_label.position != Vector2(10.0, 104.0) \
-			or pacte._phase_label.size != Vector2(140.0, 16.0) \
+	if pacte._phase_label.position != pacte.PHASE_LABEL_RECT.position \
+			or pacte._phase_label.size != pacte.PHASE_LABEL_RECT.size \
 			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
 			or pacte._phase_label.vertical_alignment != VERTICAL_ALIGNMENT_CENTER \
-			or pacte._phase_label.get_theme_font_size("font_size") != 7 \
+			or pacte._phase_label.get_theme_font_size("font_size") != pacte.DEALER_PROMPT_FONT_SIZE \
 			or not pacte._phase_label.get_theme_color("font_color").is_equal_approx(
-				pacte.DEALER_TEXT_COLOR):
-		failures.append("pacte: choose augment/power prompt does not match centered dealer text styling")
+				pacte.AUGMENT_PROMPT_COLOR):
+		failures.append("pacte: choose augment prompt is not centered blue dealer-bubble text")
 	var description_bubble_rect: Rect2 = pacte._description_bubble.get_global_rect()
 	if not description_bubble_rect.encloses(pacte._description_title.get_global_rect()) \
 			or not description_bubble_rect.encloses(pacte._description_text.get_global_rect()):
@@ -6371,6 +6397,21 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:
 		failures.append("pacte: power pool did not switch to the power emplacement hint")
+	if pacte._phase_label.get_theme_color("font_color") != pacte.DEALER_TEXT_COLOR:
+		failures.append("pacte: choose power prompt did not stay red")
+	if pacte._augment_deck.visible or not pacte._power_deck.visible:
+		failures.append("pacte: deck art did not switch to the power deck")
+	var first_power := String(power_offers[0])
+	pacte._set_face_up(first_power)
+	var power_button := pacte._card_buttons.get(first_power, null) as Button
+	if power_button == null:
+		failures.append("pacte: first power offer has no draggable card")
+	else:
+		pacte._begin_drag(first_power, 0, power_button, Vector2(70.0, 190.0))
+		pacte._update_drag(Vector2(100.0, 270.0))
+		if pacte._emplacement.frame != 1:
+			failures.append("pacte: power drag did not show authored DROP HERE frame")
+		pacte._finish_drag(Vector2(0.0, 0.0))
 
 	# A saved partial selection must restore the same Pacte phase and offers.
 	var saved_power_offers := (run_store.pacteOfferPowerIds as Array).duplicate()

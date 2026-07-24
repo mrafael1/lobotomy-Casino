@@ -314,6 +314,10 @@ func resolve_pending_combo_defeat(rescued: bool = false) -> bool:
 		betMultiplier = 2
 	comboDefeatPending = false
 	pendingComboMultiplier = 1
+	if not rescued and winBoostEnabled:
+		# The COMBO display is recoverable for the duration of the warning. Only
+		# the player's explicit loss confirmation breaks its streak.
+		winBoostCombo = 0
 	_commit()
 	return true
 
@@ -717,7 +721,7 @@ func spin(compulsive := false) -> Variant:
 			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
 		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		flatline_boost_applied = true
-	# Win Boost is a separate Pacte streak from the flatline strike above. Each
+	# COMBO is a separate Pacte streak from the flatline strike above. Each
 	# successive paying result earns the next 5%-step bonus, then caps at 45%.
 	var win_boost_bonus := 0
 	var win_boost_percent := 0
@@ -836,9 +840,13 @@ func spin(compulsive := false) -> Variant:
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
 		betMultiplier = combo_before
-	else:
 		if winBoostEnabled:
+			# Protected spins have no rescue window, so a miss breaks COMBO now.
 			winBoostCombo = 0
+	else:
+		# Keep COMBO at its current stage while the losing-state warning is open.
+		# resolve_pending_combo_defeat(false) clears it if the player confirms the
+		# loss; a corrective power can still recover it here.
 		comboDefeatPending = true
 		pendingComboMultiplier = combo_before
 		betMultiplier = combo_before
@@ -1792,7 +1800,7 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
 			and outcome_win_type in ["pair", "triple", "jackpot"]:
 		winBoostCombo = mini(9, winBoostCombo + 1)
-	elif winBoostEnabled and outcome_win_type != "heart":
+	elif winBoostEnabled and outcome_win_type != "heart" and not comboDefeatPending:
 		winBoostCombo = 0
 
 func _apply_revealed_power_outcome(outcome: Dictionary, power_id: String,
