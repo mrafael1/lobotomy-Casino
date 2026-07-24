@@ -118,11 +118,12 @@ Resources and currencies:
   score double, and stacked strikes can kill the run outright.
 - A pair or triple win also flashes its authored PAIR/TRIPLE TV callout, beeping
   (alpha pulse) four times after the win is identified, with a teal "+ score"
-  payout line beneath the word showing the base payout. When Win Boost is active,
-  that payout lands first, followed by the authored COMBO x1..x9 callout and its
-  separate bonus amount. While a transient TV callout is visible, it temporarily
-  hides the FREE SPIN banner and dealer countdown information so the pop remains
-  readable; those indicators return when the callout ends.
+  payout line beneath the word showing the base payout. When the COMBO augment is
+  active, its authored COMBO x1..x9 indicator stays mounted in the machine TV at
+  the current streak. The base payout lands first, then the COMBO indicator shakes
+  and sends out its separate bonus amount. Any transient TV callout temporarily
+  hides COMBO, the FREE SPIN banner, and dealer countdown information so the pop
+  remains readable; those indicators return when the callout ends.
 - A Heart triple uses the authored TRIPLE music and the vial-style reaction flash
   even though it pays no score: its tier shows a little "+1", "+2", or "+3"
   fly-in while recovering the matching run spins.
@@ -167,10 +168,12 @@ Resources and currencies:
 	picker so the boosted symbol is chosen during the ritual; its title and close
 	cross are intentionally omitted from the compact overlay, and tapping outside
 	the choices cannot dismiss the mandatory picker.
-- **Win Boost** — successive paying pair/triple/jackpot results form a streak and
-  add 5%, 10%, 15%, …, 45% of that result's base payout (x1 through x9, capped at
-  45%). The base payout is shown first, then the COMBO xN callout and its separate
-  bonus; a miss resets the streak.
+- **COMBO** — successive paying pair/triple/jackpot results form a streak and add
+  5%, 10%, 15%, …, 45% of that result's base payout (x1 through x9, capped at
+  45%). The base payout is shown first, then the persistent COMBO xN indicator
+  shakes and emits its separate bonus. A miss opens the same rescuable losing
+  state used by the frenzy gauge; while that warning is pending, COMBO beeps and
+  a corrective power can recover the streak. Confirming the loss clears it.
 - **Glitch 2** — the dealer countdown always advances by 3 steps per spin, even
   while the machine is at x2 or x3. Its dealer warning bar always shows all three
   warning overlays. Its Pacte card has no icon and occasionally tears visually.
@@ -276,13 +279,25 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — reusable initial/threshold card ritual: deterministic three-card
   augment and power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices. A dragged card casts a drop shadow (as do dragged dealer/stash
-  items everywhere). There is no arrow selector overlay and no CANCEL/EXIT text
-  buttons. The card preview is a compact information bubble between the dealer
-  prompt and card row; the centered CHOOSE AN AUGMENT/POWER prompt uses the same
-  font and color as dealer feedback text. Card dragging is bounded to the native
-  160x320 canvas. Once the machine has started, a reopened Pacte presents a clean table:
-  the initial visit's cards keep their effects in the run but are not re-shown.
+  partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
+  emplacement assets are composed at native resolution in bg -> dealer -> table ->
+  overlay order. The one-frame augment and power decks stay visible at their
+  authored left/right positions during both draw phases. Each emplacement uses a
+  no-DROP-HERE frame and a DROP HERE frame while dragging. The active deck shuffles
+  briefly while the three cards remain facedown, and dragging either card type
+  shows its authored DROP HERE frame. Both proposition card types use the same
+  authored 39x61 front size, including the power card's left edge. A dragged card
+  casts a drop shadow (as do
+  dragged dealer/stash items everywhere). There is no arrow selector overlay and
+  no CANCEL/EXIT text buttons. The card preview is a compact dark information
+  bubble with a gold contour, gold title, and light description above the currently
+  inspected card. The authored two-frame dealer text supplies the augment/power
+  prompt; no separate CHOOSE AN AUGMENT, CHOOSE A POWER, or CHOOSE ONE CARD label
+  is drawn. The drag instruction sits below the offer-card row, and card dragging
+  maps mobile viewport touches into the native canvas while preserving the point
+  grabbed under the finger, and remains bounded to the native 160x320 canvas.
+  Once the machine has started, a reopened Pacte presents a clean table: the
+  initial visit's cards keep their effects in the run but are not re-shown.
   Completing the mid-run (threshold) visit hands off to the live dealer scene,
   which shows run Lucidity and the Chip Augment offer before returning to the
   machine.

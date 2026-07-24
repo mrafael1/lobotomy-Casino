@@ -7,7 +7,7 @@ extends Control
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(9.0, 175.0), Vector2(61.0, 175.0), Vector2(112.0, 175.0),
+	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
 ]
 const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
 const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
@@ -25,24 +25,62 @@ const REWARD_AMP_CARD_IDS: Array[String] = [
 	"augment_reward_1", "augment_reward_2", "augment_reward_3",
 ]
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
+# Pacte's authored split art is intentionally kept as full-canvas pieces. The
+# table, decks, dealer, and prompt bubble can then animate independently while
+# retaining native 160x320 pixel alignment.
+const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
+const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
+const DEALER_ASSET := "pacte_scene/dealer.png"
+const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
+const DEALER_TEXT_FRAME_COUNT := 2
+const DEALER_AUGMENT_FRAME := 0
+const DEALER_POWER_FRAME := 1
+const TABLE_ASSET := "pacte_scene/table.png"
+const DECK_FRAME_COUNT := 1
+const DECK_FRAME := 0
+const EMPLACEMENT_FRAME_COUNT := 2
+const EMPLACEMENT_SELECTING_FRAME := 0
+const EMPLACEMENT_DROP_FRAME := 1
+const FACE_DOWN_SHUFFLE_TIME := 0.24
+const FACE_DOWN_SHUFFLE_OFFSET := 2.0
+const DEALER_PROMPT_FONT_SIZE := 5
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
-const DESCRIPTION_BUBBLE_RECT := Rect2(25.0, 123.0, 110.0, 24.0)
-const PHASE_LABEL_RECT := Rect2(10.0, 104.0, 140.0, 16.0)
-const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
-const BG_ASSET := "pacte_scene/pacte_scene.png"
-const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_augment_card.png"
-const POWER_EMPLACEMENT_ASSET := "pacte_scene/pacte_scene_power_card.png"
+const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
+const DESCRIPTION_TITLE_RECT := Rect2(2.0, 2.0, 46.0, 7.0)
+const DESCRIPTION_TEXT_RECT := Rect2(3.0, 9.0, 44.0, 17.0)
+const DESCRIPTION_BUBBLE_GAP := 1.0
+const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
+const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
+const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
+const BG_ASSET := "pacte_scene/bg.png"
+const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
+const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
+
+const BACKGROUND_Z_INDEX := 0
+const DEALER_Z_INDEX := 1
+const TABLE_Z_INDEX := 2
+const ART_Z_INDEX := 3
+const UI_Z_INDEX := 4
+const SELECTED_CARDS_Z_INDEX := 5
 
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
 const DEALER_TEXT_COLOR := Color(1.0, 0.6, 0.6)
+const AUGMENT_PROMPT_COLOR := Color(0.42, 1.0, 0.95)
 const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _table: Sprite2D = null
+var _augment_deck: Sprite2D = null
+var _power_deck: Sprite2D = null
+var _dealer_sprite: Sprite2D = null
+var _dealer_bubble: Sprite2D = null
+var _augment_emplacement: Sprite2D = null
+var _power_emplacement: Sprite2D = null
 var _emplacement: Sprite2D = null
 var _chosen_cards_layer: Control = null
 var _description_bubble: Panel = null
@@ -71,6 +109,8 @@ var _press_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_origin_z := 0
 var _selection_locked := false
+var _reveal_generation := 0
+var _deck_tween: Tween = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -79,22 +119,45 @@ func _ready() -> void:
 	_restore_saved_selection()
 
 func _build_background() -> void:
-	_background = _full_canvas_sprite(BG_ASSET, 0)
+	_background = _full_canvas_sprite(BG_ASSET, BACKGROUND_Z_INDEX)
 	_background.name = "PacteBackground"
 	add_child(_background)
 	move_child(_background, 0)
-	_emplacement = _full_canvas_sprite(
-		AUGMENT_EMPLACEMENT_ASSET if _pool_kind == "augment" else POWER_EMPLACEMENT_ASSET, 0)
-	_emplacement.name = "SelectedCardEmplacement"
-	_emplacement.visible = true
-	add_child(_emplacement)
+	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, DEALER_Z_INDEX)
+	_dealer_sprite.name = "PacteDealer"
+	add_child(_dealer_sprite)
+	_table = _full_canvas_sprite(TABLE_ASSET, TABLE_Z_INDEX)
+	_table.name = "PacteTable"
+	add_child(_table)
+	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
+	_augment_deck.name = "AugmentDeck"
+	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+	add_child(_augment_deck)
+	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, ART_Z_INDEX)
+	_power_deck.name = "PowerDeck"
+	_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+	add_child(_power_deck)
+	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, ART_Z_INDEX)
+	_dealer_bubble.name = "DealerBubble"
+	_configure_native_sheet(_dealer_bubble, DEALER_TEXT_FRAME_COUNT)
+	add_child(_dealer_bubble)
+	_augment_emplacement = _full_canvas_sprite(AUGMENT_EMPLACEMENT_ASSET, ART_Z_INDEX)
+	_augment_emplacement.name = "SelectedCardEmplacement"
+	_configure_native_sheet(_augment_emplacement, EMPLACEMENT_FRAME_COUNT)
+	add_child(_augment_emplacement)
+	_power_emplacement = _full_canvas_sprite(POWER_EMPLACEMENT_ASSET, ART_Z_INDEX)
+	_power_emplacement.name = "PowerCardEmplacement"
+	_configure_native_sheet(_power_emplacement, EMPLACEMENT_FRAME_COUNT)
+	add_child(_power_emplacement)
+	_emplacement = _augment_emplacement
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET)
+	_set_deck_visible("augment")
 	_chosen_cards_layer = Control.new()
 	_chosen_cards_layer.name = "ChosenCardsLayer"
 	_chosen_cards_layer.position = Vector2.ZERO
 	_chosen_cards_layer.size = CANVAS_SIZE
 	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_chosen_cards_layer.z_index = 4
+	_chosen_cards_layer.z_index = SELECTED_CARDS_Z_INDEX
 	add_child(_chosen_cards_layer)
 
 func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
@@ -106,26 +169,46 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return sprite
 
+func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
+	if sprite == null or sprite.texture == null:
+		return
+	var safe_frame_count := maxi(frame_count, 1)
+	sprite.centered = false
+	sprite.position = Vector2.ZERO
+	sprite.hframes = safe_frame_count
+	sprite.vframes = 1
+	sprite.frame = 0
+	var frame_width := float(sprite.texture.get_width()) / float(safe_frame_count)
+	sprite.scale = Vector2(CANVAS_SIZE.x / frame_width,
+		CANVAS_SIZE.y / float(sprite.texture.get_height()))
+
 func _build_overlay_ui() -> void:
-	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, 7, DEALER_TEXT_COLOR)
+	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, DEALER_PROMPT_FONT_SIZE,
+		AUGMENT_PROMPT_COLOR)
 	_phase_label.text = "PACTE"
 	_phase_label.size = PHASE_LABEL_RECT.size
 	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_phase_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_phase_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_phase_label.clip_text = true
+	_phase_label.z_index = UI_Z_INDEX + 1
+	_phase_label.visible = false
 	_instruction = _label("Instruction", INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_instruction.z_index = UI_Z_INDEX
 
 	_description_bubble = Panel.new()
 	_description_bubble.name = "OddsTableDescriptionBubble"
 	_description_bubble.position = DESCRIPTION_BUBBLE_RECT.position
 	_description_bubble.size = DESCRIPTION_BUBBLE_RECT.size
+	_description_bubble.z_index = UI_Z_INDEX
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
-	_description_title = _label("CardTitle", Rect2(2.0, 1.0, 106.0, 7.0), 4, NEON_GOLD, _description_bubble)
+	_description_title = _label("CardTitle", DESCRIPTION_TITLE_RECT, 4, NEON_GOLD, _description_bubble)
 	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_title.clip_text = true
-	_description_text = _label("CardDescription", Rect2(4.0, 8.0, 102.0, 15.0), 3, TEXT_COLOR, _description_bubble)
+	_description_text = _label("CardDescription", DESCRIPTION_TEXT_RECT, 3, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -166,26 +249,19 @@ func _offer_array(value: Variant) -> Array[String]:
 	return result
 
 func _set_emplacement(asset: String) -> void:
-	if _emplacement == null:
+	var target := _augment_emplacement if asset == AUGMENT_EMPLACEMENT_ASSET else _power_emplacement
+	if target == null:
 		return
-	var texture := Assets.texture(asset)
-	_emplacement.texture = texture
-	_emplacement.centered = false
-	_emplacement.position = Vector2.ZERO
-	if texture == null:
-		_emplacement.hframes = 1
-		_emplacement.frame = 0
-		return
-	# The supplied emplacement textures contain the normal slot and the baked
-	# DROP HERE slot as two native-resolution frames side by side. Without hframes
-	# Godot draws both frames across the canvas at once.
-	var hframes := 2 if texture.get_width() >= int(CANVAS_SIZE.x * 2.0) else 1
-	_emplacement.hframes = hframes
-	_emplacement.vframes = 1
-	_emplacement.frame = 0
-	var frame_width := float(texture.get_width()) / float(hframes)
-	_emplacement.scale = Vector2(CANVAS_SIZE.x / frame_width,
-		CANVAS_SIZE.y / float(texture.get_height()))
+	_emplacement = target
+	_configure_native_sheet(_emplacement, EMPLACEMENT_FRAME_COUNT)
+	_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
+	_sync_emplacement_visibility()
+
+func _sync_emplacement_visibility() -> void:
+	if _augment_emplacement != null:
+		_augment_emplacement.visible = _pool_kind == "augment" or _chosen_augment_id != ""
+	if _power_emplacement != null:
+		_power_emplacement.visible = _pool_kind == "power"
 
 func _show_chosen_card(card_id: String, kind: String) -> void:
 	if _chosen_cards_layer == null or card_id == "":
@@ -235,19 +311,29 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 
 func _show_pool(kind: String, ids: Array[String]) -> void:
 	_pool_kind = kind
+	_reveal_generation += 1
 	_clear_cards()
 	_offer_ids = ids.duplicate()
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET if kind == "augment" else POWER_EMPLACEMENT_ASSET)
+	_sync_emplacement_visibility()
+	_set_deck_visible(kind)
 	_drop_label = _augment_drop_label if kind == "augment" else _power_drop_label
 	_set_drop_hint_visible(false)
 	_description_bubble.visible = false
-	_phase_label.text = "CHOOSE AN AUGMENT" if kind == "augment" else "CHOOSE A POWER"
+	_set_dealer_text_frame(kind)
+	_phase_label.visible = false
 	_phase_label.position = PHASE_LABEL_RECT.position
 	_phase_label.size = PHASE_LABEL_RECT.size
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	for index in _offer_ids.size():
 		_build_card(_offer_ids[index], index)
-	_reveal_cards()
+	_reveal_cards(_reveal_generation)
+
+func _set_dealer_text_frame(kind: String) -> void:
+	if _dealer_bubble == null:
+		return
+	_dealer_bubble.frame = DEALER_AUGMENT_FRAME if kind == "augment" else DEALER_POWER_FRAME
+	_dealer_bubble.visible = true
 
 func _build_card(card_id: String, index: int) -> void:
 	var button := Button.new()
@@ -450,14 +536,61 @@ func _atlas(asset: String, region: Rect2) -> AtlasTexture:
 	atlas.region = region
 	return atlas
 
-func _reveal_cards() -> void:
+func _set_deck_visible(_kind: String) -> void:
+	if _augment_deck != null:
+		_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+		_augment_deck.visible = true
+		_augment_deck.frame = DECK_FRAME
+	if _power_deck != null:
+		_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+		_power_deck.visible = true
+		_power_deck.frame = DECK_FRAME
+
+func _shuffle_active_deck() -> void:
+	var deck := _augment_deck if _pool_kind == "augment" else _power_deck
+	if deck == null:
+		return
+	if _deck_tween != null and _deck_tween.is_valid():
+		_deck_tween.kill()
+	deck.position = Vector2.ZERO
+	deck.rotation = 0.0
+	_deck_tween = create_tween()
+	_deck_tween.tween_property(deck, "position", Vector2(-1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", Vector2(1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", Vector2.ZERO, 0.05)
+
+func _shuffle_face_down_cards(generation: int) -> void:
+	if _offer_ids.is_empty():
+		return
+	for index in _offer_ids.size():
+		if generation != _reveal_generation:
+			return
+		var card_id := _offer_ids[index]
+		var button := _card_buttons.get(card_id, null) as Button
+		if button == null:
+			continue
+		var origin := CARD_POSITIONS[index]
+		var direction := -1.0 if index % 2 == 0 else 1.0
+		var offset := Vector2(direction * FACE_DOWN_SHUFFLE_OFFSET, 0.0)
+		var tween := create_tween()
+		tween.tween_interval(float(index) * 0.02)
+		tween.tween_property(button, "position", origin + offset, 0.06)
+		tween.tween_property(button, "position", origin - offset, 0.06)
+		tween.tween_property(button, "position", origin, 0.06)
+	_shuffle_active_deck()
+	await get_tree().create_timer(FACE_DOWN_SHUFFLE_TIME).timeout
+
+func _reveal_cards(generation: int) -> void:
+	await _shuffle_face_down_cards(generation)
+	if generation != _reveal_generation or not is_inside_tree():
+		return
 	for index in _offer_ids.size():
 		await get_tree().create_timer(0.08 * float(index + 1)).timeout
-		if not is_inside_tree():
+		if generation != _reveal_generation or not is_inside_tree():
 			return
 		_set_face_up(_offer_ids[index])
-	if is_inside_tree():
-		_instruction.text = "CHOOSE ONE CARD"
+	if generation == _reveal_generation and is_inside_tree():
+		_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 
 func _set_face_up(card_id: String) -> void:
 	var view := _card_views.get(card_id, null) as Control
@@ -481,7 +614,9 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 		if event.pressed:
 			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			_begin_drag(card_id, index, button, (event as InputEventScreenTouch).position)
+		var touch_event := event as InputEventScreenTouch
+		_begin_drag(card_id, index, button,
+			button.get_global_transform() * touch_event.position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -495,9 +630,11 @@ func _input(event: InputEvent) -> void:
 		_finish_drag(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == 0:
-		_update_drag((event as InputEventScreenDrag).position)
+		var drag_event := event as InputEventScreenDrag
+		_update_drag(_input_canvas_position(drag_event.position))
 	elif event is InputEventScreenTouch and event.index == 0 and not event.pressed:
-		_finish_drag((event as InputEventScreenTouch).position)
+		var release_event := event as InputEventScreenTouch
+		_finish_drag(_input_canvas_position(release_event.position))
 		get_viewport().set_input_as_handled()
 
 func _begin_drag(card_id: String, index: int, button: Button,
@@ -507,7 +644,13 @@ func _begin_drag(card_id: String, index: int, button: Button,
 	_drag_origin_z = button.z_index
 	button.z_index = 30
 	button.move_to_front()
-	_drag_offset = button.get_global_transform_with_canvas().affine_inverse() * global_position
+	# Store the grabbed point in the card parent's space. This keeps the exact
+	# finger anchor even while the inspected card is scaled around its pivot.
+	var parent := button.get_parent() as CanvasItem
+	var parent_position := global_position
+	if parent != null:
+		parent_position = parent.get_global_transform().affine_inverse() * global_position
+	_drag_offset = parent_position - button.position
 	_drag_id = card_id
 	_drag_index = index
 	_dragging = false
@@ -558,10 +701,13 @@ func _finish_drag(global_position: Vector2) -> void:
 	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
 		_accept_card(card_id)
 	else:
-		_instruction.text = "CHOOSE ONE CARD"
+		_instruction.text = "DRAG TO THE SLOT"
 
 func _global_to_local(global_position: Vector2) -> Vector2:
-	return get_global_transform_with_canvas().affine_inverse() * global_position
+	return get_global_transform().affine_inverse() * global_position
+
+func _input_canvas_position(viewport_position: Vector2) -> Vector2:
+	return make_canvas_position_local(viewport_position)
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	# Screen-touch coordinates can briefly report outside the scaled viewport while
@@ -587,8 +733,10 @@ func _preview_card(card_id: String) -> void:
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
 	# compact panel as well as their glyphs.
-	_description_title.size = Vector2(106.0, 7.0)
-	_description_text.size = Vector2(102.0, 15.0)
+	_description_title.position = DESCRIPTION_TITLE_RECT.position
+	_description_title.size = DESCRIPTION_TITLE_RECT.size
+	_description_text.position = DESCRIPTION_TEXT_RECT.position
+	_description_text.size = DESCRIPTION_TEXT_RECT.size
 	# Tapping a card replaces the generic prompt immediately, while the compact
 	# description remains visible until the player starts dragging it.
 	_instruction.text = "DRAG TO THE SLOT"
@@ -597,6 +745,27 @@ func _preview_card(card_id: String) -> void:
 		if candidate != null:
 			candidate.scale = Vector2.ONE * (1.08 if id == card_id else 1.0)
 			candidate.pivot_offset = CARD_SIZE * 0.5
+	_position_description_bubble(card_id)
+
+func _position_description_bubble(card_id: String) -> void:
+	if _description_bubble == null:
+		return
+	_description_bubble.position = _description_bubble_position_for_card(card_id)
+
+func _description_bubble_position_for_card(card_id: String) -> Vector2:
+	var button := _card_buttons.get(card_id, null) as Button
+	if button == null:
+		return DESCRIPTION_BUBBLE_RECT.position
+	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
+	var visual_top_left := button.position - button.pivot_offset * (scale - Vector2.ONE)
+	var visual_size := button.size * scale
+	var desired := Vector2(
+		visual_top_left.x + (visual_size.x - DESCRIPTION_BUBBLE_RECT.size.x) * 0.5,
+		visual_top_left.y - DESCRIPTION_BUBBLE_RECT.size.y - DESCRIPTION_BUBBLE_GAP)
+	var maximum := CANVAS_SIZE - DESCRIPTION_BUBBLE_RECT.size
+	return Vector2(
+		clampf(desired.x, 0.0, maximum.x),
+		clampf(desired.y, 0.0, maximum.y))
 
 func _accept_card(card_id: String) -> void:
 	if _selection_locked:
@@ -658,7 +827,7 @@ func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.z_index = 2
+	label.z_index = UI_Z_INDEX
 	return label
 
 func _set_drop_hint_visible(visible: bool) -> void:
@@ -668,7 +837,8 @@ func _set_drop_hint_visible(visible: bool) -> void:
 	if _power_drop_label != null:
 		_power_drop_label.visible = false
 	if _emplacement != null:
-		_emplacement.frame = 1 if visible and _emplacement.hframes > 1 else 0
+		_emplacement.frame = EMPLACEMENT_DROP_FRAME if visible \
+			else EMPLACEMENT_SELECTING_FRAME
 
 func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		parent: Node = null) -> Label:
@@ -681,6 +851,7 @@ func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
+	label.z_index = UI_Z_INDEX
 	var font := Assets.font()
 	if font != null:
 		label.add_theme_font_override("font", font)

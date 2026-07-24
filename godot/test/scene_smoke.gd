@@ -2877,14 +2877,17 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 			saved_state[property_name] = value
 
 	var combo_effect: Sprite2D = machine._combo_effect_sprite
-	if combo_effect == null or int(combo_effect.hframes) != 9:
-		failures.append("pacte augment: COMBO effect sheet is not wired as nine frames")
+	if combo_effect == null or int(combo_effect.hframes) < 1 \
+			or int(combo_effect.hframes) > machine.COMBO_EFFECT_FRAMES:
+		failures.append("pacte augment: COMBO effect sheet has an invalid frame count")
 	else:
-		machine._show_combo_effect(8, 45, 45)
-		if not combo_effect.visible or int(combo_effect.frame) != 8 \
+		run_store.winBoostEnabled = true
+		var last_combo_frame := int(combo_effect.hframes) - 1
+		machine._show_combo_effect(last_combo_frame, 45, 45)
+		if not combo_effect.visible or int(combo_effect.frame) != last_combo_frame \
 				or machine._combo_payout_label == null \
 				or String(machine._combo_payout_label.text) != "+ 45 (45%)":
-			failures.append("pacte augment: COMBO x9 did not show its frame and bonus")
+			failures.append("pacte augment: COMBO did not show its frame and bonus")
 		machine._stop_combo_effect()
 
 	# Win Boost uses the 5/10/15...45% steps on successive paying results and
@@ -2915,6 +2918,28 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 			failures.append("pacte augment: Win Boost bonus did not match %d%% of the base payout" % expected_percent)
 	if int(run_store.winBoostCombo) != 9:
 		failures.append("pacte augment: Win Boost streak did not cap at x9")
+	# A miss leaves the current COMBO stage in the same rescue window as the
+	# frenzy loss. Confirming that loss clears the streak; the machine presentation
+	# beeps while the decision is pending.
+	run_store.winBoostCombo = 4
+	run_store.lastResult = { "reels": ["eye", "vial", "pill"] }
+	run_store.lockedReels = [true, true, true]
+	var combo_miss: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if combo_miss == null or String(combo_miss.get("winType", "")) != "miss" \
+			or int(run_store.winBoostCombo) != 4 \
+			or not bool(run_store.comboDefeatPending):
+		failures.append("pacte augment: a COMBO miss did not enter a recoverable warning")
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	machine._refresh_combo_effect()
+	machine._show_pending_combo_defeat()
+	if not combo_effect.visible or machine._combo_loss_beep_tween == null:
+		failures.append("pacte augment: COMBO did not beep during its recoverable loss")
+	run_store.resolve_pending_combo_defeat(false)
+	machine._close_pending_combo_defeat()
+	if int(run_store.winBoostCombo) != 0:
+		failures.append("pacte augment: confirming COMBO loss did not clear its streak")
 
 	# Glitch 2 advances the dealer by three steps even at the x3 gauge.
 	run_store.reset_run_state()
@@ -6268,10 +6293,48 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pattern_icon.animation != &"pattern":
 		failures.append("pacte: Pattern Recognition is missing its five-frame animated icon")
 	pattern_view.free()
-	for node_name in ["PacteBackground", "SelectedCardEmplacement",
-			"OddsTableDescriptionBubble", "DropHere"]:
+	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
+			"PowerCardEmplacement",
+			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
+			"PacteDealer", "DealerBubble"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
+	if pacte._background == null or pacte._dealer_sprite == null or pacte._table == null \
+			or int(pacte._background.z_index) != pacte.BACKGROUND_Z_INDEX \
+			or int(pacte._dealer_sprite.z_index) != pacte.DEALER_Z_INDEX \
+			or int(pacte._table.z_index) != pacte.TABLE_Z_INDEX \
+			or not (pacte.BACKGROUND_Z_INDEX < pacte.DEALER_Z_INDEX \
+				and pacte.DEALER_Z_INDEX < pacte.TABLE_Z_INDEX):
+		failures.append("pacte: background/dealer/table draw order is incorrect")
+	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
+		failures.append("pacte: dealer text does not draw above the table")
+	if pacte._dealer_bubble == null \
+			or pacte._dealer_bubble.hframes != pacte.DEALER_TEXT_FRAME_COUNT \
+			or pacte._dealer_bubble.frame != pacte.DEALER_AUGMENT_FRAME \
+			or pacte._phase_label.visible:
+		failures.append("pacte: authored augment dealer text frame is not active")
+	if pacte._instruction == null \
+			or pacte._instruction.position != pacte.INSTRUCTION_RECT.position \
+			or pacte._instruction.position.y <= pacte.CARD_POSITIONS[1].y + pacte.CARD_SIZE.y:
+		failures.append("pacte: drag instruction did not move below the card row")
+	if augment_offers.size() >= 3:
+		var expected_card_positions: Array[Vector2] = [
+			Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+		]
+		for index in expected_card_positions.size():
+			var card_id := String(augment_offers[index])
+			var card_button := pacte._card_buttons.get(card_id, null) as Button
+			if card_button == null or card_button.position != expected_card_positions[index]:
+				failures.append("pacte: card slot %d did not use its authored offset" % (index + 1))
+	if pacte._augment_deck == null or pacte._power_deck == null \
+			or pacte._augment_deck.hframes != pacte.DECK_FRAME_COUNT \
+			or pacte._power_deck.hframes != pacte.DECK_FRAME_COUNT \
+			or pacte._augment_deck.frame != pacte.DECK_FRAME \
+			or pacte._power_deck.frame != pacte.DECK_FRAME \
+			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
+		failures.append("pacte: fixed dual-deck state is not initialized")
+	if PacteCards.POWER_FRONT_RECT != Rect2(39.0, 0.0, 39.0, 61.0):
+		failures.append("pacte: power proposition does not use the full authored 39x61 front")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
 	for removed_name in ["SelectedCardOverlay", "CancelSelection", "ExitPacte"]:
 		if pacte.get_node_or_null(removed_name) != null:
@@ -6286,9 +6349,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: power DROP HERE is not inside its emplacement")
 	if augment_drop != null and augment_drop.visible or power_drop != null and power_drop.visible:
 		failures.append("pacte: DROP HERE was not moved into the emplacement artwork")
-	if pacte._emplacement == null or pacte._emplacement.hframes != 2 \
-			or pacte._emplacement.frame != 0:
-		failures.append("pacte: emplacement did not start on its normal authored frame")
+	if pacte._emplacement == null or pacte._emplacement.hframes != pacte.EMPLACEMENT_FRAME_COUNT \
+			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
+			or pacte._power_emplacement == null or pacte._power_emplacement.visible:
+		failures.append("pacte: emplacement did not start on its centered selecting frame")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	pacte._preview_card(first_augment)
@@ -6296,18 +6360,17 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: card preview did not show the description bubble")
 	if String(pacte._instruction.text) == "CHOOSE ONE CARD":
 		failures.append("pacte: choose-one prompt remained after card tap")
-	if pacte._description_bubble.size.x >= 152.0 or pacte._description_bubble.size.y >= 42.0:
-		failures.append("pacte: description bubble was not compacted")
-	if pacte._description_bubble.position != Vector2(25.0, 123.0):
-		failures.append("pacte: description bubble is not close to the card row")
-	if pacte._phase_label.position != Vector2(10.0, 104.0) \
-			or pacte._phase_label.size != Vector2(140.0, 16.0) \
+	if pacte._description_bubble.size != pacte.DESCRIPTION_BUBBLE_RECT.size:
+		failures.append("pacte: description bubble geometry does not match the authored card preview")
+	if pacte._description_bubble.position != pacte._description_bubble_position_for_card(first_augment):
+		failures.append("pacte: description bubble is not positioned above the inspected card")
+	if pacte._phase_label.position != pacte.PHASE_LABEL_RECT.position \
+			or pacte._phase_label.size != pacte.PHASE_LABEL_RECT.size \
 			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
 			or pacte._phase_label.vertical_alignment != VERTICAL_ALIGNMENT_CENTER \
-			or pacte._phase_label.get_theme_font_size("font_size") != 7 \
-			or not pacte._phase_label.get_theme_color("font_color").is_equal_approx(
-				pacte.DEALER_TEXT_COLOR):
-		failures.append("pacte: choose augment/power prompt does not match centered dealer text styling")
+			or pacte._phase_label.get_theme_font_size("font_size") != pacte.DEALER_PROMPT_FONT_SIZE \
+			or pacte._phase_label.visible:
+		failures.append("pacte: dynamic choose prompt label was not removed")
 	var description_bubble_rect: Rect2 = pacte._description_bubble.get_global_rect()
 	if not description_bubble_rect.encloses(pacte._description_title.get_global_rect()) \
 			or not description_bubble_rect.encloses(pacte._description_text.get_global_rect()):
@@ -6319,17 +6382,31 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if String(pacte._preview_id) != alternate_augment \
 				or String(pacte._description_title.text) != String(PacteCards.card(alternate_augment).get("name", "")):
 			failures.append("pacte: tapping another card did not replace the preview")
+		if pacte._description_bubble.position == pacte._description_bubble_position_for_card(first_augment):
+			failures.append("pacte: description bubble stayed on the first card after another card was inspected")
 		pacte._preview_card(first_augment)
 	var first_button := pacte._card_buttons.get(first_augment, null) as Button
 	if first_button == null or first_button.scale.x <= 1.0:
 		failures.append("pacte: preview card did not scale up")
 	if pacte._drop_label.text != "DROP HERE":
 		failures.append("pacte: drag target is missing DROP HERE")
-	var press_position := first_button.get_global_transform_with_canvas() * Vector2(15.0, 20.0)
-	pacte._begin_drag(first_augment, 0, first_button, press_position)
+	var screen_press := InputEventScreenTouch.new()
+	screen_press.index = 0
+	# gui_input receives touch positions local to the card; the scene converts
+	# that point back to canvas space before calculating the drag offset.
+	screen_press.position = Vector2(15.0, 20.0)
+	screen_press.pressed = true
+	pacte._on_card_gui_input(screen_press, first_augment, 0, first_button)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card explanation disappeared before drag movement")
-	pacte._update_drag(Vector2(40.0, 270.0))
+	var screen_drag := InputEventScreenDrag.new()
+	screen_drag.index = 0
+	screen_drag.position = Vector2(40.0, 270.0)
+	pacte._input(screen_drag)
+	var dragged_finger_position := first_button.get_global_transform() * screen_press.position
+	var expected_finger_position: Vector2 = pacte._input_canvas_position(screen_drag.position)
+	if dragged_finger_position.distance_to(expected_finger_position) > 0.1:
+		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
 	var drag_shadow := first_button.get_node_or_null("DragShadow") as Control
@@ -6351,7 +6428,11 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or card_visual_top_left.y + card_visual_size.y > 320.0:
 		failures.append("pacte: mobile card drag escaped the native canvas")
 	pacte._update_drag(Vector2(40.0, 270.0))
-	pacte._finish_drag(Vector2(40.0, 270.0))
+	var screen_release := InputEventScreenTouch.new()
+	screen_release.index = 0
+	screen_release.position = Vector2(40.0, 270.0)
+	screen_release.pressed = false
+	pacte._input(screen_release)
 	# The card button may be freed by the accepted drop; check the shadow removal
 	# before yielding a frame (remove_drag_shadow queues the shadow for deletion).
 	if is_instance_valid(first_button):
@@ -6362,8 +6443,16 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if String(run_store.pacteSelectedAugmentId) != first_augment \
 			or String(pacte._pool_kind) != "power":
 		failures.append("pacte: augment selection did not stage before power selection")
-	if bool(pacte._description_bubble.visible) or pacte._emplacement.frame != 0:
+	if bool(pacte._description_bubble.visible) \
+			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME:
 		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
+	if pacte._augment_emplacement == null \
+			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
+			or not pacte._augment_emplacement.visible \
+			or pacte._power_emplacement == null \
+			or pacte._power_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
+			or not pacte._power_emplacement.visible:
+		failures.append("pacte: augment and power emplacement frames are incorrect")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
 			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
@@ -6371,6 +6460,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:
 		failures.append("pacte: power pool did not switch to the power emplacement hint")
+	if pacte._dealer_bubble.frame != pacte.DEALER_POWER_FRAME or pacte._phase_label.visible:
+		failures.append("pacte: authored power dealer text frame did not replace the choose label")
+	if not pacte._augment_deck.visible or not pacte._power_deck.visible \
+			or pacte._augment_deck.frame != pacte.DECK_FRAME \
+			or pacte._power_deck.frame != pacte.DECK_FRAME:
+		failures.append("pacte: both fixed-position decks are not visible during power drawing")
+	var first_power := String(power_offers[0])
+	pacte._set_face_up(first_power)
+	var power_button := pacte._card_buttons.get(first_power, null) as Button
+	if power_button == null:
+		failures.append("pacte: first power offer has no draggable card")
+	else:
+		pacte._begin_drag(first_power, 0, power_button, Vector2(70.0, 190.0))
+		pacte._update_drag(Vector2(100.0, 270.0))
+		if pacte._emplacement.frame != 1:
+			failures.append("pacte: power drag did not show authored DROP HERE frame")
+		pacte._finish_drag(Vector2(0.0, 0.0))
 
 	# A saved partial selection must restore the same Pacte phase and offers.
 	var saved_power_offers := (run_store.pacteOfferPowerIds as Array).duplicate()

@@ -8,7 +8,9 @@ extends RefCounted
 const CARD_SHEET := "cards/augment_cards.png"
 const POWER_SHEET := "cards/power_cards.png"
 const AUGMENT_FRONT_RECT := Rect2(0.0, 61.0, 39.0, 61.0)
-const POWER_FRONT_RECT := Rect2(40.0, 0.0, 38.0, 61.0)
+# Keep the power proposition at the same authored 39x61 size as augment cards.
+# Starting at x40 drops the left red edge and makes the 38px crop upscale.
+const POWER_FRONT_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
 
 const AUGMENTS: Array[Dictionary] = [
 	{
@@ -62,21 +64,21 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_joker", "name": "JOKER",
-		"description": "AFTER 3 FLATLINES, THE DEALER SOMETIMES HELPS YOU.", "pool": "augment",
+		"description": "AFTER 3 FLATLINES, POWER IS UNLOCKED.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(0.0, 549.0, 39.0, 61.0),
 		"effect": { "type": "joker" },
 	},
 	{
-		"id": "augment_win_boost", "name": "WIN BOOST",
-		"description": "SUCCESSIVE WINS SHOW COMBO X1-X9 AND ADD 5%-45% TO THE BASE REWARD.", "pool": "augment",
+		"id": "augment_win_boost", "name": "COMBO",
+		"description": "ADD 5% PER SUCCESSIVE WIN TO BASE REWARD.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(9.0, 623.0, 20.0, 34.0),
 		"effect": { "type": "win_boost" },
 	},
 	{
 		"id": "augment_glitch_2", "name": "GLITCH",
-		"description": "THE DEALER ALWAYS MOVES 3 STEPS, EVEN AT X2 OR X3.", "pool": "augment",
+		"description": "THE DEALER ALWAYS MOVES 3 STEPS.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"effect": { "type": "glitch_dealer" },
 	},
