@@ -7,7 +7,7 @@ extends Control
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(9.0, 175.0), Vector2(61.0, 175.0), Vector2(112.0, 175.0),
+	Vector2(10.0, 174.0), Vector2(61.0, 176.0), Vector2(112.0, 174.0),
 ]
 const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
 const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
@@ -47,6 +47,7 @@ const DEALER_PROMPT_FONT_SIZE := 5
 const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
 const DESCRIPTION_TITLE_RECT := Rect2(2.0, 2.0, 46.0, 7.0)
 const DESCRIPTION_TEXT_RECT := Rect2(3.0, 9.0, 44.0, 17.0)
+const DESCRIPTION_BUBBLE_GAP := 1.0
 const DEALER_BUBBLE_RECT := Rect2(60.0, 74.0, 39.0, 43.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
@@ -721,6 +722,27 @@ func _preview_card(card_id: String) -> void:
 		if candidate != null:
 			candidate.scale = Vector2.ONE * (1.08 if id == card_id else 1.0)
 			candidate.pivot_offset = CARD_SIZE * 0.5
+	_position_description_bubble(card_id)
+
+func _position_description_bubble(card_id: String) -> void:
+	if _description_bubble == null:
+		return
+	_description_bubble.position = _description_bubble_position_for_card(card_id)
+
+func _description_bubble_position_for_card(card_id: String) -> Vector2:
+	var button := _card_buttons.get(card_id, null) as Button
+	if button == null:
+		return DESCRIPTION_BUBBLE_RECT.position
+	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
+	var visual_top_left := button.position - button.pivot_offset * (scale - Vector2.ONE)
+	var visual_size := button.size * scale
+	var desired := Vector2(
+		visual_top_left.x + (visual_size.x - DESCRIPTION_BUBBLE_RECT.size.x) * 0.5,
+		visual_top_left.y - DESCRIPTION_BUBBLE_RECT.size.y - DESCRIPTION_BUBBLE_GAP)
+	var maximum := CANVAS_SIZE - DESCRIPTION_BUBBLE_RECT.size
+	return Vector2(
+		clampf(desired.x, 0.0, maximum.x),
+		clampf(desired.y, 0.0, maximum.y))
 
 func _accept_card(card_id: String) -> void:
 	if _selection_locked:

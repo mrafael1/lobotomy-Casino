@@ -288,7 +288,8 @@ Resources and currencies:
   shows its authored DROP HERE frame. A dragged card casts a drop shadow (as do
   dragged dealer/stash items everywhere). There is no arrow selector overlay and
   no CANCEL/EXIT text buttons. The card preview is a compact dark information
-  bubble with a gold contour, gold title, and light description over the card row;
+  bubble with a gold contour, gold title, and light description above the currently
+  inspected card;
   the centered CHOOSE AN AUGMENT/POWER prompt is drawn inside the dealer bubble,
   using blue text for augment selection and red text for power selection.
   Card dragging is bounded to the native 160x320 canvas.

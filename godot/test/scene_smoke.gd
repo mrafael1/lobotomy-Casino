@@ -6310,6 +6310,15 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._phase_label == null or int(pacte._phase_label.z_index) <= int(pacte._dealer_bubble.z_index) \
 			or not pacte.DEALER_BUBBLE_RECT.encloses(pacte.PHASE_LABEL_RECT):
 		failures.append("pacte: choose prompt is not drawn inside the dealer bubble")
+	if augment_offers.size() >= 3:
+		var expected_card_positions: Array[Vector2] = [
+			Vector2(10.0, 174.0), Vector2(61.0, 176.0), Vector2(112.0, 174.0),
+		]
+		for index in expected_card_positions.size():
+			var card_id := String(augment_offers[index])
+			var card_button := pacte._card_buttons.get(card_id, null) as Button
+			if card_button == null or card_button.position != expected_card_positions[index]:
+				failures.append("pacte: card slot %d did not use its authored offset" % (index + 1))
 	if pacte._augment_deck == null or pacte._power_deck == null \
 			or pacte._augment_deck.hframes != pacte.DECK_FRAME_COUNT \
 			or pacte._power_deck.hframes != pacte.DECK_FRAME_COUNT \
@@ -6342,9 +6351,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: card preview did not show the description bubble")
 	if String(pacte._instruction.text) == "CHOOSE ONE CARD":
 		failures.append("pacte: choose-one prompt remained after card tap")
-	if pacte._description_bubble.position != pacte.DESCRIPTION_BUBBLE_RECT.position \
-			or pacte._description_bubble.size != pacte.DESCRIPTION_BUBBLE_RECT.size:
+	if pacte._description_bubble.size != pacte.DESCRIPTION_BUBBLE_RECT.size:
 		failures.append("pacte: description bubble geometry does not match the authored card preview")
+	if pacte._description_bubble.position != pacte._description_bubble_position_for_card(first_augment):
+		failures.append("pacte: description bubble is not positioned above the inspected card")
 	if pacte._phase_label.position != pacte.PHASE_LABEL_RECT.position \
 			or pacte._phase_label.size != pacte.PHASE_LABEL_RECT.size \
 			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
@@ -6364,6 +6374,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if String(pacte._preview_id) != alternate_augment \
 				or String(pacte._description_title.text) != String(PacteCards.card(alternate_augment).get("name", "")):
 			failures.append("pacte: tapping another card did not replace the preview")
+		if pacte._description_bubble.position == pacte._description_bubble_position_for_card(first_augment):
+			failures.append("pacte: description bubble stayed on the first card after another card was inspected")
 		pacte._preview_card(first_augment)
 	var first_button := pacte._card_buttons.get(first_augment, null) as Button
 	if first_button == null or first_button.scale.x <= 1.0:
