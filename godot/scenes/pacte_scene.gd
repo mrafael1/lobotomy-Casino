@@ -32,6 +32,14 @@ const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
 const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
 const DEALER_ASSET := "pacte_scene/dealer.png"
 const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
+const TABLE_ASSET := "pacte_scene/table.png"
+const DECK_FRAME_COUNT := 2
+const EMPLACEMENT_FRAME_COUNT := 3
+const DECK_ACTIVE_FRAME := 0
+const DECK_IDLE_FRAME := 1
+const EMPLACEMENT_SELECTING_FRAME := 0
+const EMPLACEMENT_DROP_FRAME := 1
+const EMPLACEMENT_SELECTED_FRAME := 2
 const FACE_DOWN_SHUFFLE_TIME := 0.24
 const FACE_DOWN_SHUFFLE_OFFSET := 2.0
 const DEALER_PROMPT_FONT_SIZE := 5
@@ -39,11 +47,19 @@ const DEALER_PROMPT_FONT_SIZE := 5
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
 const DESCRIPTION_BUBBLE_RECT := Rect2(25.0, 123.0, 110.0, 24.0)
-const PHASE_LABEL_RECT := Rect2(56.0, 82.0, 48.0, 34.0)
+const DEALER_BUBBLE_RECT := Rect2(60.0, 74.0, 39.0, 43.0)
+const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
+
+const BACKGROUND_Z_INDEX := 0
+const DEALER_Z_INDEX := 1
+const TABLE_Z_INDEX := 2
+const ART_Z_INDEX := 3
+const UI_Z_INDEX := 4
+const SELECTED_CARDS_Z_INDEX := 5
 
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
@@ -54,10 +70,13 @@ const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _table: Sprite2D = null
 var _augment_deck: Sprite2D = null
 var _power_deck: Sprite2D = null
 var _dealer_sprite: Sprite2D = null
 var _dealer_bubble: Sprite2D = null
+var _augment_emplacement: Sprite2D = null
+var _power_emplacement: Sprite2D = null
 var _emplacement: Sprite2D = null
 var _chosen_cards_layer: Control = null
 var _description_bubble: Panel = null
@@ -96,28 +115,36 @@ func _ready() -> void:
 	_restore_saved_selection()
 
 func _build_background() -> void:
-	_background = _full_canvas_sprite(BG_ASSET, 0)
+	_background = _full_canvas_sprite(BG_ASSET, BACKGROUND_Z_INDEX)
 	_background.name = "PacteBackground"
 	add_child(_background)
 	move_child(_background, 0)
-	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, 1)
-	_augment_deck.name = "AugmentDeck"
-	add_child(_augment_deck)
-	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, 1)
-	_power_deck.name = "PowerDeck"
-	add_child(_power_deck)
-	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, 1)
+	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, DEALER_Z_INDEX)
 	_dealer_sprite.name = "PacteDealer"
 	add_child(_dealer_sprite)
-	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, 2)
+	_table = _full_canvas_sprite(TABLE_ASSET, TABLE_Z_INDEX)
+	_table.name = "PacteTable"
+	add_child(_table)
+	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
+	_augment_deck.name = "AugmentDeck"
+	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+	add_child(_augment_deck)
+	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, ART_Z_INDEX)
+	_power_deck.name = "PowerDeck"
+	_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+	add_child(_power_deck)
+	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, ART_Z_INDEX)
 	_dealer_bubble.name = "DealerBubble"
 	add_child(_dealer_bubble)
-	_emplacement = _full_canvas_sprite(
-		AUGMENT_EMPLACEMENT_ASSET if _pool_kind == "augment" else POWER_EMPLACEMENT_ASSET, 0)
-	_emplacement.name = "SelectedCardEmplacement"
-	_emplacement.visible = true
-	_emplacement.z_index = 3
-	add_child(_emplacement)
+	_augment_emplacement = _full_canvas_sprite(AUGMENT_EMPLACEMENT_ASSET, ART_Z_INDEX)
+	_augment_emplacement.name = "SelectedCardEmplacement"
+	_configure_native_sheet(_augment_emplacement, EMPLACEMENT_FRAME_COUNT)
+	add_child(_augment_emplacement)
+	_power_emplacement = _full_canvas_sprite(POWER_EMPLACEMENT_ASSET, ART_Z_INDEX)
+	_power_emplacement.name = "PowerCardEmplacement"
+	_configure_native_sheet(_power_emplacement, EMPLACEMENT_FRAME_COUNT)
+	add_child(_power_emplacement)
+	_emplacement = _augment_emplacement
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET)
 	_set_deck_visible("augment")
 	_chosen_cards_layer = Control.new()
@@ -125,7 +152,7 @@ func _build_background() -> void:
 	_chosen_cards_layer.position = Vector2.ZERO
 	_chosen_cards_layer.size = CANVAS_SIZE
 	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_chosen_cards_layer.z_index = 4
+	_chosen_cards_layer.z_index = SELECTED_CARDS_Z_INDEX
 	add_child(_chosen_cards_layer)
 
 func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
@@ -137,6 +164,19 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return sprite
 
+func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
+	if sprite == null or sprite.texture == null:
+		return
+	var safe_frame_count := maxi(frame_count, 1)
+	sprite.centered = false
+	sprite.position = Vector2.ZERO
+	sprite.hframes = safe_frame_count
+	sprite.vframes = 1
+	sprite.frame = 0
+	var frame_width := float(sprite.texture.get_width()) / float(safe_frame_count)
+	sprite.scale = Vector2(CANVAS_SIZE.x / frame_width,
+		CANVAS_SIZE.y / float(sprite.texture.get_height()))
+
 func _build_overlay_ui() -> void:
 	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, DEALER_PROMPT_FONT_SIZE,
 		AUGMENT_PROMPT_COLOR)
@@ -146,13 +186,16 @@ func _build_overlay_ui() -> void:
 	_phase_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_phase_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_phase_label.clip_text = true
+	_phase_label.z_index = UI_Z_INDEX + 1
 	_instruction = _label("Instruction", INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_instruction.z_index = UI_Z_INDEX
 
 	_description_bubble = Panel.new()
 	_description_bubble.name = "OddsTableDescriptionBubble"
 	_description_bubble.position = DESCRIPTION_BUBBLE_RECT.position
 	_description_bubble.size = DESCRIPTION_BUBBLE_RECT.size
+	_description_bubble.z_index = UI_Z_INDEX
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
@@ -200,26 +243,25 @@ func _offer_array(value: Variant) -> Array[String]:
 	return result
 
 func _set_emplacement(asset: String) -> void:
-	if _emplacement == null:
+	var target := _augment_emplacement if asset == AUGMENT_EMPLACEMENT_ASSET else _power_emplacement
+	if target == null:
 		return
-	var texture := Assets.texture(asset)
-	_emplacement.texture = texture
-	_emplacement.centered = false
-	_emplacement.position = Vector2.ZERO
-	if texture == null:
-		_emplacement.hframes = 1
-		_emplacement.frame = 0
+	_emplacement = target
+	_configure_native_sheet(_emplacement, EMPLACEMENT_FRAME_COUNT)
+	_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
+	_sync_emplacement_visibility()
+
+func _set_emplacement_frame_for_kind(kind: String, frame: int) -> void:
+	var target := _augment_emplacement if kind == "augment" else _power_emplacement
+	if target == null or target.hframes <= 0:
 		return
-	# The supplied emplacement textures contain the normal slot and the baked
-	# DROP HERE slot as two native-resolution frames side by side. Without hframes
-	# Godot draws both frames across the canvas at once.
-	var hframes := 2 if texture.get_width() >= int(CANVAS_SIZE.x * 2.0) else 1
-	_emplacement.hframes = hframes
-	_emplacement.vframes = 1
-	_emplacement.frame = 0
-	var frame_width := float(texture.get_width()) / float(hframes)
-	_emplacement.scale = Vector2(CANVAS_SIZE.x / frame_width,
-		CANVAS_SIZE.y / float(texture.get_height()))
+	target.frame = clampi(frame, 0, target.hframes - 1)
+
+func _sync_emplacement_visibility() -> void:
+	if _augment_emplacement != null:
+		_augment_emplacement.visible = _pool_kind == "augment" or _chosen_augment_id != ""
+	if _power_emplacement != null:
+		_power_emplacement.visible = _pool_kind == "power"
 
 func _show_chosen_card(card_id: String, kind: String) -> void:
 	if _chosen_cards_layer == null or card_id == "":
@@ -273,6 +315,7 @@ func _show_pool(kind: String, ids: Array[String]) -> void:
 	_clear_cards()
 	_offer_ids = ids.duplicate()
 	_set_emplacement(AUGMENT_EMPLACEMENT_ASSET if kind == "augment" else POWER_EMPLACEMENT_ASSET)
+	_sync_emplacement_visibility()
 	_set_deck_visible(kind)
 	_drop_label = _augment_drop_label if kind == "augment" else _power_drop_label
 	_set_drop_hint_visible(false)
@@ -490,9 +533,20 @@ func _atlas(asset: String, region: Rect2) -> AtlasTexture:
 
 func _set_deck_visible(kind: String) -> void:
 	if _augment_deck != null:
-		_augment_deck.visible = kind == "augment"
+		_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+		_augment_deck.visible = kind == "augment" or _chosen_augment_id != ""
+		_augment_deck.frame = DECK_ACTIVE_FRAME if kind == "augment" else DECK_IDLE_FRAME
 	if _power_deck != null:
+		_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
 		_power_deck.visible = kind == "power"
+		_power_deck.frame = DECK_ACTIVE_FRAME
+
+func _set_deck_idle(kind: String) -> void:
+	var deck := _augment_deck if kind == "augment" else _power_deck
+	if deck == null:
+		return
+	deck.visible = true
+	deck.frame = DECK_IDLE_FRAME
 
 func _shuffle_active_deck() -> void:
 	var deck := _augment_deck if _pool_kind == "augment" else _power_deck
@@ -688,6 +742,8 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			return
 		_chosen_augment_id = card_id
+		_set_emplacement_frame_for_kind("augment", EMPLACEMENT_SELECTED_FRAME)
+		_set_deck_idle("augment")
 		_show_chosen_card(card_id, "augment")
 		_show_pool("power", _offer_array(RunStateStore.pacteOfferPowerIds))
 		if REWARD_AMP_CARD_IDS.has(card_id):
@@ -703,6 +759,8 @@ func _accept_card(card_id: String) -> void:
 		_chosen_card_views.erase("power")
 		_selection_locked = false
 		return
+	_set_emplacement_frame_for_kind("power", EMPLACEMENT_SELECTED_FRAME)
+	_set_deck_idle("power")
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
@@ -739,7 +797,7 @@ func _drop_hint_label(label_name: String, rect: Rect2) -> Label:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.z_index = 2
+	label.z_index = UI_Z_INDEX
 	return label
 
 func _set_drop_hint_visible(visible: bool) -> void:
@@ -749,7 +807,8 @@ func _set_drop_hint_visible(visible: bool) -> void:
 	if _power_drop_label != null:
 		_power_drop_label.visible = false
 	if _emplacement != null:
-		_emplacement.frame = 1 if visible and _emplacement.hframes > 1 else 0
+		_emplacement.frame = EMPLACEMENT_DROP_FRAME if visible \
+			else EMPLACEMENT_SELECTING_FRAME
 
 func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		parent: Node = null) -> Label:
@@ -762,6 +821,7 @@ func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
+	label.z_index = UI_Z_INDEX
 	var font := Assets.font()
 	if font != null:
 		label.add_theme_font_override("font", font)

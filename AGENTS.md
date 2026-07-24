@@ -279,15 +279,19 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — reusable initial/threshold card ritual: deterministic three-card
   augment and power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
-  emplacement assets are composed at native resolution. The active deck shuffles
-  briefly while the three cards remain facedown, and dragging either card type
-  shows its authored DROP HERE frame. A dragged card casts a drop shadow (as do
-  dragged dealer/stash items everywhere). There is no arrow selector overlay and
-  no CANCEL/EXIT text buttons. The card preview is a compact information bubble
-  between the dealer prompt and card row; the centered CHOOSE AN AUGMENT/POWER
-  prompt sits in the dealer bubble, using blue text for augment selection and red
-  text for power selection. Card dragging is bounded to the native 160x320 canvas.
+  partial choices. Its authored table, deck, dealer, dealer-bubble, and three-frame
+  emplacement assets are composed at native resolution in bg -> dealer -> table ->
+  overlay order. Each deck starts centered and moves to its authored idle side
+  frame after that card type is selected; the selected augment remains left while
+  the power deck/card is centered. Each emplacement uses selecting, DROP HERE,
+  and selected frames. The active deck shuffles briefly while the three cards
+  remain facedown, and dragging either card type shows its authored DROP HERE
+  frame. A dragged card casts a drop shadow (as do dragged dealer/stash items
+  everywhere). There is no arrow selector overlay and no CANCEL/EXIT text buttons.
+  The card preview is a compact information bubble between the dealer prompt and
+  card row; the centered CHOOSE AN AUGMENT/POWER prompt is drawn inside the dealer
+  bubble, using blue text for augment selection and red text for power selection.
+  Card dragging is bounded to the native 160x320 canvas.
   Once the machine has started, a reopened Pacte presents a clean table: the
   initial visit's cards keep their effects in the run but are not re-shown.
   Completing the mid-run (threshold) visit hands off to the live dealer scene,

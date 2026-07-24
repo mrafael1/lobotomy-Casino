@@ -6293,11 +6293,29 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pattern_icon.animation != &"pattern":
 		failures.append("pacte: Pattern Recognition is missing its five-frame animated icon")
 	pattern_view.free()
-	for node_name in ["PacteBackground", "SelectedCardEmplacement",
+	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
+			"PowerCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
 			"PacteDealer", "DealerBubble"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
+	if pacte._background == null or pacte._dealer_sprite == null or pacte._table == null \
+			or int(pacte._background.z_index) != pacte.BACKGROUND_Z_INDEX \
+			or int(pacte._dealer_sprite.z_index) != pacte.DEALER_Z_INDEX \
+			or int(pacte._table.z_index) != pacte.TABLE_Z_INDEX \
+			or not (pacte.BACKGROUND_Z_INDEX < pacte.DEALER_Z_INDEX \
+				and pacte.DEALER_Z_INDEX < pacte.TABLE_Z_INDEX):
+		failures.append("pacte: background/dealer/table draw order is incorrect")
+	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX \
+			or pacte._phase_label == null or int(pacte._phase_label.z_index) <= int(pacte._dealer_bubble.z_index) \
+			or not pacte.DEALER_BUBBLE_RECT.encloses(pacte.PHASE_LABEL_RECT):
+		failures.append("pacte: choose prompt is not drawn inside the dealer bubble")
+	if pacte._augment_deck == null or pacte._power_deck == null \
+			or pacte._augment_deck.hframes != pacte.DECK_FRAME_COUNT \
+			or pacte._power_deck.hframes != pacte.DECK_FRAME_COUNT \
+			or pacte._augment_deck.frame != pacte.DECK_ACTIVE_FRAME \
+			or pacte._power_deck.visible:
+		failures.append("pacte: centered augment deck state is not initialized")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
 	for removed_name in ["SelectedCardOverlay", "CancelSelection", "ExitPacte"]:
 		if pacte.get_node_or_null(removed_name) != null:
@@ -6312,9 +6330,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: power DROP HERE is not inside its emplacement")
 	if augment_drop != null and augment_drop.visible or power_drop != null and power_drop.visible:
 		failures.append("pacte: DROP HERE was not moved into the emplacement artwork")
-	if pacte._emplacement == null or pacte._emplacement.hframes != 2 \
-			or pacte._emplacement.frame != 0:
-		failures.append("pacte: emplacement did not start on its normal authored frame")
+	if pacte._emplacement == null or pacte._emplacement.hframes != pacte.EMPLACEMENT_FRAME_COUNT \
+			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
+			or pacte._power_emplacement == null or pacte._power_emplacement.visible:
+		failures.append("pacte: emplacement did not start on its centered selecting frame")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	pacte._preview_card(first_augment)
@@ -6388,8 +6407,16 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if String(run_store.pacteSelectedAugmentId) != first_augment \
 			or String(pacte._pool_kind) != "power":
 		failures.append("pacte: augment selection did not stage before power selection")
-	if bool(pacte._description_bubble.visible) or pacte._emplacement.frame != 0:
+	if bool(pacte._description_bubble.visible) \
+			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME:
 		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
+	if pacte._augment_emplacement == null \
+			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTED_FRAME \
+			or not pacte._augment_emplacement.visible \
+			or pacte._power_emplacement == null \
+			or pacte._power_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
+			or not pacte._power_emplacement.visible:
+		failures.append("pacte: selected augment and centered power emplacement frames are incorrect")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
 			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
@@ -6399,8 +6426,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: power pool did not switch to the power emplacement hint")
 	if pacte._phase_label.get_theme_color("font_color") != pacte.DEALER_TEXT_COLOR:
 		failures.append("pacte: choose power prompt did not stay red")
-	if pacte._augment_deck.visible or not pacte._power_deck.visible:
-		failures.append("pacte: deck art did not switch to the power deck")
+	if not pacte._augment_deck.visible or not pacte._power_deck.visible \
+			or pacte._augment_deck.frame != pacte.DECK_IDLE_FRAME \
+			or pacte._power_deck.frame != pacte.DECK_ACTIVE_FRAME:
+		failures.append("pacte: deck art did not move to the augment-idle/power-centered state")
 	var first_power := String(power_offers[0])
 	pacte._set_face_up(first_power)
 	var power_button := pacte._card_buttons.get(first_power, null) as Button
