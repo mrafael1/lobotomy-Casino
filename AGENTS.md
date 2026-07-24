@@ -164,6 +164,9 @@ Resources and currencies:
   selected source reel is marked with a red X while dragging because it cannot be
   used as its own destination.
 - **Pattern Recognition** — its five authored icon frames animate on the Pacte card.
+- **Hallucination** — keeps all three reels visible; a visible pair is scored as its
+  corresponding triple while the authored reward scale applies. It does not hide or
+  cover the third reel.
 - **Reward Amplification** — selecting a Reward+ Pacte card opens a symbol-only
 	picker so the boosted symbol is chosen during the ritual; its title and close
 	cross are intentionally omitted from the compact overlay, and tapping outside

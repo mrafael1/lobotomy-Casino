@@ -283,13 +283,13 @@ func power_loadout() -> Array[String]:
 	return result
 
 ## Powers that can rescue the current reveal, plus Heart's guaranteed next-spin
-## rescue, are valid choices while a combo defeat is pending. Memory affects a
-## future spin and therefore is intentionally not offered in that window.
+## rescue, are valid choices while a combo defeat is pending. Memory is also
+## available here so the player can lock a reel before confirming the loss.
 func pending_combo_power_ids() -> Array[String]:
 	var ids: Array[String] = []
 	if not comboDefeatPending or not _can_use_ability():
 		return ids
-	for id in ["reroll", "shift", "rewind", "cheat", "swap", "heart"]:
+	for id in ["reroll", "shift", "memory", "rewind", "cheat", "swap", "heart"]:
 		if has_power(id) and not abilitiesUsed.has(id) and not pendingPowerRestores.has(id):
 			ids.append(id)
 	return ids
@@ -1705,8 +1705,6 @@ func _weights_with_bonuses(brain_bonus: int, book_weight: int) -> Array:
 
 func _active_hidden_reel_count(pair_boost_active: bool) -> int:
 	var hidden := pairBoostHiddenReels if pair_boost_active else 0
-	if Economy.has_hallucination(ownedUpgrades):
-		hidden = maxi(hidden, 1)
 	return clampi(hidden, 0, 2)
 
 func _active_reward_scale() -> float:
@@ -1717,11 +1715,21 @@ func _active_reward_scale() -> float:
 	return scale
 
 func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
+	var flatline_boost_bonus := 0
+	var flatline_boost_applied := false
 	var win_boost_bonus := 0
 	var win_boost_percent := 0
 	var win_boost_combo := 0
 	var win_boost_applied := false
 	var outcome_win_type := String(outcome.get("winType", ""))
+	if flatlineWinBoostArmed and int(outcome.get("scoreDelta", 0)) > 0 \
+			and outcome_win_type in ["pair", "triple", "jackpot"]:
+		flatline_boost_bonus = int(outcome["scoreDelta"]) \
+			* (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
+		flatline_boost_applied = true
+		outcome = outcome.duplicate(true)
+		outcome["scoreDelta"] = int(outcome["scoreDelta"]) + flatline_boost_bonus
+		outcome["coinsDelta"] = int(outcome["coinsDelta"]) + flatline_boost_bonus
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
 			and outcome_win_type in ["pair", "triple", "jackpot"]:
 		var boost_step := clampi(winBoostCombo + 1, 1, 9)
@@ -1766,6 +1774,12 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 		lr.erase("bookTripleChoice")
 	lr["scoreEarned"] = maxi(0, int(lastResult["scoreEarned"]) + int(outcome["scoreDelta"]))
 	lr["coinsEarned"] = maxi(0, int(lastResult["coinsEarned"]) + int(outcome["coinsDelta"]))
+	if flatline_boost_applied:
+		lr["flatlineBoostApplied"] = true
+		lr["flatlineBoostBonus"] = flatline_boost_bonus
+	else:
+		lr.erase("flatlineBoostApplied")
+		lr.erase("flatlineBoostBonus")
 	if win_boost_applied:
 		lr["winBoostApplied"] = true
 		lr["winBoostPercent"] = win_boost_percent
@@ -1802,6 +1816,8 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 		winBoostCombo = mini(9, winBoostCombo + 1)
 	elif winBoostEnabled and outcome_win_type != "heart" and not comboDefeatPending:
 		winBoostCombo = 0
+	if flatline_boost_applied:
+		flatlineWinBoostArmed = false
 
 func _apply_revealed_power_outcome(outcome: Dictionary, power_id: String,
 		seed: int, neuron_delta: int = 0) -> bool:

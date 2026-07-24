@@ -282,7 +282,7 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 		failures.append("issue92: book should complete the highest near symbol triple: %s" % str(joker_eye))
 
 	var hallucination := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
-		false, false, 1.0, 1, true, 0.70)
+		false, false, 1.0, 0, true, 0.70)
 	if String(hallucination["winType"]) != "triple" or int(hallucination["scoreEarned"]) != 35:
 		failures.append("issue92: hallucination should score visible pair as 70%% triple: %s" % str(hallucination))
 
@@ -327,12 +327,12 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	run_store.cocktailBoostSpins = 1
 	run_store.cocktailPairTriplePenalty = 0.0
 	var cocktail_result: Variant = run_store.spin(false)
-	if cocktail_result == null or int((cocktail_result as Dictionary).get("cocktailBonus", -1)) != 10:
-		failures.append("issue92: hallucination cocktail bonus should ignore hidden third reel: %s" % str(cocktail_result))
+	if cocktail_result == null or int((cocktail_result as Dictionary).get("cocktailBonus", -1)) != 16:
+		failures.append("issue174: hallucination cocktail bonus should include the visible third reel: %s" % str(cocktail_result))
 	run_store.set_spinning(false)
 
 	run_store.ownedUpgrades = ["pos_enlightenment"]
-	run_store.lastResult = { "reels": ["vial", "vial", "brain"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	run_store.lastResult = { "reels": ["vial", "vial", "brain"], "winType": "triple", "freeSpinsGranted": 0 }
 	run_store.neurons = 10
 	var before_vial := int(run_store.neurons)
 	machine._last_reacted_reels = []
@@ -340,7 +340,7 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	machine._apply_machine_reactions(true)
 	if int(run_store.neurons) <= before_vial:
 		failures.append("issue92: hallucination power-made visible pair did not trigger vial triple effect")
-	run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "winType": "triple", "freeSpinsGranted": 0, "hiddenReelCount": 1 }
+	run_store.lastResult = { "reels": ["flatline", "flatline", "flatline"], "winType": "triple", "freeSpinsGranted": 0 }
 	var before_flatline := int(run_store.flatlineResultCount)
 	machine._last_reacted_reels = []
 	machine._last_reacted_spin = -1
@@ -350,17 +350,20 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 
 	if machine._derive_source_reel(["vial", "vial", "brain"]) != 1:
 		failures.append("issue92: hallucination score burst should derive from second reel")
+	if machine._derive_source_reel(["brain", "vial", "vial"]) != 2:
+		failures.append("issue174: hallucination should derive a last-two pair from the third reel")
+	run_store.lockedReels = [false, false, false]
 	machine._start_reel_spin_animation([false, false, false])
-	if not bool(machine._locked_reels_during_spin[2]) or bool(machine._spin_reel_sprites[2].visible):
-		failures.append("issue92: hallucination should not spin the hidden third reel")
+	if bool(machine._locked_reels_during_spin[2]) or not bool(machine._spin_reel_sprites[2].visible):
+		failures.append("issue174: hallucination should keep the third reel visible")
 	machine._stop_sfx(&"reel_spin")
 
 	run_store.pairBoostSpins = 0
 	run_store.pairBoostHiddenReels = 0
 	run_store.ownedUpgrades = ["pos_enlightenment"]
 	machine._refresh_tobacco_fx()
-	if not bool(machine._tobacco_covers[2].visible):
-		failures.append("issue92: hallucination should still cover the hidden third reel")
+	if bool(machine._tobacco_covers[2].visible):
+		failures.append("issue174: hallucination should not cover the third reel")
 	if bool(machine._tobacco_smoke[2].emitting) or bool(machine._tobacco_smoke[2].visible):
 		failures.append("issue92: hallucination hidden reel should not emit cigarette smoke")
 	run_store.ownedUpgrades = []
@@ -3049,6 +3052,34 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 	if plain != null and bool(plain.get("flatlineBoostApplied", false)):
 		failures.append("issue76: boost fired again without a fresh strike")
 
+	# The same flatline charge must also apply to a paying power result. Copying
+	# the first reel onto the second turns the current reveal into an eye pair.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false)
+	run_store.runPhase = "running"
+	run_store.neurons = 100
+	run_store.lastResult = {
+		"reels": ["eye", "vial", "pill"], "scoreEarned": 0,
+		"coinsEarned": 0, "freeSpinsGranted": 0, "freeSpinsAfter": 0,
+		"isJackpot": false, "winType": "miss", "isFreeSpin": false,
+		"scoreMultiplier": 1.0,
+	}
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = []
+	run_store.flatlineWinBoostArmed = true
+	if not run_store.copy_reel(0, 1):
+		failures.append("issue174: power pair could not be resolved")
+	else:
+		var power_win: Dictionary = run_store.lastResult
+		if not bool(power_win.get("flatlineBoostApplied", false)):
+			failures.append("issue174: flatline charge did not boost a power win")
+		var power_boost := int(power_win.get("flatlineBoostBonus", 0))
+		if power_boost <= 0 or int(power_win["scoreEarned"]) != power_boost * 2 \
+				or int(power_win["coinsEarned"]) != int(power_win["scoreEarned"]):
+			failures.append("issue174: power flatline boost did not double score and coins")
+		if run_store.flatlineWinBoostArmed:
+			failures.append("issue174: power flatline charge was not consumed")
+
 	run_store.reset_run_state()
 
 # Issue #76: deferred-negative items show only the precise upside on use; the downside
@@ -4080,6 +4111,32 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			or int(cocktail_points["seen"]) != 17:
 		failures.append("issue76: Cocktail score points did not advance the 10-point power threshold")
 
+	# A restore queued by the spin fires before that spin's point fill, and the
+	# queued power is not counted a second time as a bar-driven restore.
+	machine._power_bar_score = 20
+	machine._power_seen_lucidity = 0
+	run_store.scoreEarned = 10
+	run_store.lucidityCoins = 0
+	run_store.pendingPowerRestores = ["reroll"]
+	run_store.abilitiesUsed = []
+	var restore_first: Dictionary = machine._compute_power_plan()
+	var restore_first_steps: Array = restore_first["steps"]
+	if restore_first_steps.size() != 2 \
+			or not bool(restore_first_steps[0]["restore"]) \
+			or bool(restore_first_steps[1]["restore"]) \
+			or int(restore_first["score"]) != 10:
+		failures.append("issue174: queued restore did not precede the point fill")
+
+	run_store.scoreEarned = 60
+	var restore_no_double: Dictionary = machine._compute_power_plan()
+	var restore_no_double_steps: Array = restore_no_double["steps"]
+	var restore_step_count := 0
+	for stepd in restore_no_double_steps:
+		if bool(stepd["restore"]):
+			restore_step_count += 1
+	if restore_step_count != 1 or int(restore_no_double["score"]) != 40:
+		failures.append("issue174: queued restore was counted again by the power bar")
+
 	# Cocktail can award points on a miss, which opens the combo-loss warning. The warning
 	# must not swallow the already-landed threshold coin sequence.
 	machine._power_bar_score = 0
@@ -4139,16 +4196,18 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	if int(cap["score"]) != 40:
 		failures.append("issue76: no-restore gauge did not cap at 4/5 (score %d, expected 40)" % int(cap["score"]))
 
-	# At 4/5, scoring 10 with a restore available => 1 coin, restore, reset to 0 (no refill).
+	# A queued restore fires first, then the same gain starts filling the reset gauge.
 	machine._power_bar_score = 40
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = ["reroll"]
 	run_store.lucidityCoins = 110
 	var atcap: Dictionary = machine._compute_power_plan()
-	if (atcap["steps"] as Array).size() != 1 or not bool((atcap["steps"] as Array)[0]["restore"]):
-		failures.append("issue76: 4/5 + 10 with a restore should be a single restore coin")
-	if int(atcap["score"]) != 0:
-		failures.append("issue76: after the restore the gauge should sit at 0, got %d" % int(atcap["score"]))
+	if (atcap["steps"] as Array).size() != 2 \
+			or not bool((atcap["steps"] as Array)[0]["restore"]) \
+			or bool((atcap["steps"] as Array)[1]["restore"]):
+		failures.append("issue174: 4/5 + 10 should restore before the new point coin")
+	if int(atcap["score"]) != 10:
+		failures.append("issue174: point fill after restore should leave 10 banked, got %d" % int(atcap["score"]))
 
 	# At 4/5 with NO pending but a SPENT ability, scoring 10 completes the fill and the
 	# gauge restores the spent power itself (e.g. Water at 4/5 with a used power).
@@ -6392,9 +6451,11 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag target is missing DROP HERE")
 	var screen_press := InputEventScreenTouch.new()
 	screen_press.index = 0
-	# gui_input receives touch positions local to the card; the scene converts
-	# that point back to canvas space before calculating the drag offset.
-	screen_press.position = Vector2(15.0, 20.0)
+	# Screen-touch positions are viewport coordinates. The scene converts this
+	# canvas-space point before calculating the drag offset.
+	var grabbed_card_point := Vector2(15.0, 20.0)
+	screen_press.position = pacte._input_canvas_position(
+		first_button.get_global_transform() * grabbed_card_point)
 	screen_press.pressed = true
 	pacte._on_card_gui_input(screen_press, first_augment, 0, first_button)
 	if not bool(pacte._description_bubble.visible):
@@ -6403,7 +6464,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	screen_drag.index = 0
 	screen_drag.position = Vector2(40.0, 270.0)
 	pacte._input(screen_drag)
-	var dragged_finger_position := first_button.get_global_transform() * screen_press.position
+	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
 	var expected_finger_position: Vector2 = pacte._input_canvas_position(screen_drag.position)
 	if dragged_finger_position.distance_to(expected_finger_position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
@@ -6950,19 +7011,38 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.powersUsedThisSpin = 0
 	run_store.augmentedTier = ""
 	run_store.abilitiesUsed = []
+	run_store.ownedPowerIds = ["memory", "heart", "reroll", "cheat", "swap"]
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
 	run_store.betMultiplier = 2
 	var pending_rescue_ids: Array[String] = run_store.pending_combo_power_ids()
-	if not pending_rescue_ids.has("heart"):
-		failures.append("pacte powers: Heart was not offered during a combo loss")
+	if not pending_rescue_ids.has("heart") or not pending_rescue_ids.has("memory"):
+		failures.append("issue174: Heart and Lock were not offered during a combo loss")
 	machine._set_sequence_lock(false)
 	machine._show_pending_combo_defeat()
 	machine._refresh_controls()
 	var heart_button := machine._power_buttons.get("heart") as Button
 	if heart_button == null or heart_button.disabled:
 		failures.append("pacte powers: Heart stayed disabled during a combo loss")
+	var memory_button := machine._power_buttons.get("memory") as Button
+	if memory_button == null or memory_button.disabled:
+		failures.append("issue174: Lock stayed disabled during a combo loss")
+	machine._on_power_pressed("memory")
+	machine._apply_reel_power("memory", 1)
+	if not (run_store.lockedReels as Array)[1] \
+			or not (run_store.abilitiesUsed as Array).has("memory") \
+			or bool(run_store.comboDefeatPending) \
+			or int(run_store.betMultiplier) != 1:
+		failures.append("issue174: Lock did not resolve the combo-loss state")
+	if machine._targeting_layer != null:
+		failures.append("issue174: Lock targeting stayed open after combo-loss use")
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 2
+	run_store.betMultiplier = 2
+	machine._set_sequence_lock(false)
+	machine._show_pending_combo_defeat()
+	machine._refresh_controls()
 	machine._on_power_pressed("heart")
 	if not bool(run_store.heartPowerArmed) or bool(run_store.comboDefeatPending) \
 			or int(run_store.betMultiplier) != 2:
