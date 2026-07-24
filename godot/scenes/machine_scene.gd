@@ -205,13 +205,11 @@ const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
+const TARGET_REACHED_SCENE := preload("res://scenes/target_reached_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const ENDING_OVERLAY_Z_INDEX := 150
 const WEALTH_TARGET_FX_Z_INDEX := 140
-const WEALTH_TARGET_POP_TIME := 0.22
-const WEALTH_TARGET_REMAINING_TIME := 0.32
-const WEALTH_TARGET_COLOR := Color(1.0, 0.86, 0.36)
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -581,9 +579,7 @@ var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
 var _wealth_goal_digit_labels: Array[Label] = []
-var _wealth_target_transition: Control = null
-var _wealth_target_label: Label = null
-var _wealth_remaining_label: Label = null
+var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
@@ -2031,34 +2027,24 @@ func _to_menu() -> void:
 func _to_dealer() -> void:
 	SceneNav.change_to(DEALER_SCENE)
 
+## The beaten intermediate target now takes over the screen with a focused payout
+## overlay (issue #176), styled like the flatline screen but without the trace or
+## neuron-loss animations: the target pops in beside the running score, flies onto
+## it, and the number counts down by that amount (the money paid to the casino).
+## A normal neon CONTINUE button resumes the run through _finish_wealth_target_transition.
 func _start_wealth_target_transition(info: Dictionary) -> bool:
 	if _wealth_target_transition_active or info.is_empty():
 		return false
 	_wealth_target_transition_active = true
 	_set_sequence_lock(true)
-	_wealth_target_transition = Control.new()
-	_wealth_target_transition.name = "WealthTargetTransition"
-	_wealth_target_transition.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
-	_wealth_target_transition.size = Vector2(SRC_W, SRC_H)
-	_wealth_target_transition.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_wealth_target_transition.z_index = WEALTH_TARGET_FX_Z_INDEX
-	add_child(_wealth_target_transition)
-	_wealth_remaining_label = _reaction_label(_wealth_target_transition, "TARGET REACHED",
-		Vector2(0.0, 130.0), 7, WEALTH_TARGET_COLOR)
-	_wealth_remaining_label.modulate.a = 0.0
-	_wealth_target_label = _reaction_label(_wealth_target_transition,
-		str(int(info.get("target", 0))), Vector2(0.0, 150.0), 18, WEALTH_TARGET_COLOR)
-	_wealth_target_label.pivot_offset = Vector2(SRC_W * 0.5, 10.0)
-	_wealth_target_label.scale = Vector2(0.45, 0.45)
-	_wealth_target_label.modulate.a = 0.0
-	var pop := create_tween()
-	pop.set_parallel(true)
-	pop.tween_property(_wealth_remaining_label, "modulate:a", 1.0, 0.12)
-	pop.tween_property(_wealth_target_label, "modulate:a", 1.0, 0.12)
-	pop.tween_property(_wealth_target_label, "scale", Vector2.ONE,
-		WEALTH_TARGET_POP_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	pop.chain().tween_interval(0.18)
-	pop.chain().tween_callback(Callable(self, "_finish_wealth_target_transition"))
+	var overlay := TARGET_REACHED_SCENE.instantiate() as TargetReachedOverlay
+	overlay.name = "WealthTargetTransition"
+	overlay.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
+	overlay.z_index = WEALTH_TARGET_FX_Z_INDEX
+	add_child(overlay)
+	_wealth_target_transition = overlay
+	overlay.present(int(RunStateStore.scoreEarned), int(info.get("target", 0)))
+	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
 
 func _finish_wealth_target_transition() -> void:
@@ -2067,6 +2053,7 @@ func _finish_wealth_target_transition() -> void:
 	var completed := RunStateStore.complete_wealth_target()
 	if completed.is_empty():
 		_stop_wealth_target_transition()
+		_wealth_target_transition_active = false
 		_set_sequence_lock(false)
 		return
 	if bool(completed.get("final", false)):
@@ -2080,43 +2067,31 @@ func _finish_wealth_target_transition() -> void:
 		}
 		_show_ending("wealth", final_run)
 		return
-	if _wealth_remaining_label != null:
-		_wealth_remaining_label.text = "MONEY REMAINING"
-	if _wealth_target_label != null:
-		_wealth_target_label.text = str(int(completed.get("remaining", 0)))
-		_wealth_target_label.add_theme_color_override("font_color", NEON_CYAN)
-	var remaining_tween := create_tween()
-	if _wealth_remaining_label != null:
-		remaining_tween.tween_property(_wealth_remaining_label, "modulate:a", 1.0, 0.10)
-	remaining_tween.tween_interval(WEALTH_TARGET_REMAINING_TIME)
-	await remaining_tween.finished
-	if not _wealth_target_transition_active or _wealth_target_transition == null \
-			or not is_instance_valid(_wealth_target_transition):
-		return
 	var target := int(completed.get("target", 0))
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
+	# 500/1500 route through the threshold Pacte first; that scene then rejoins the
+	# shared between-run flow. Every other target enters it directly via
+	# begin_target_round -> the one between-run dealer (odds table -> shop), whose
+	# START begins a fresh run (issue #176).
 	if RunStateStore.arm_pacte_for_wealth_target(target) \
 			and RunStateStore.open_threshold_pacte():
 		_set_sequence_lock(false)
 		SceneNav.change_to(PACTE_SCENE)
 		return
-	if RunStateStore.prepare_dealer_scene_visit():
-		_set_sequence_lock(false)
+	_set_sequence_lock(false)
+	if RunStateStore.begin_target_round():
 		SceneNav.change_to(DEALER_SCENE)
 		return
-	# A failed offer roll should not strand the run behind a visual lock. The
+	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
-	_set_sequence_lock(false)
 	_update_hud()
 
 func _stop_wealth_target_transition() -> void:
 	if _wealth_target_transition != null and is_instance_valid(_wealth_target_transition):
 		_wealth_target_transition.queue_free()
 	_wealth_target_transition = null
-	_wealth_target_label = null
-	_wealth_remaining_label = null
 
 func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
@@ -4292,8 +4267,10 @@ func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Butto
 		if event.pressed:
 			_begin_swap_drag(reel_index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			_begin_swap_drag(reel_index, button,
-				_input_canvas_position((event as InputEventScreenTouch).position))
+		# gui_input positions arrive local to the reel button; lift them into canvas
+		# space so the grabbed symbol tracks the finger (the mouse branch already is).
+		_begin_swap_drag(reel_index, button,
+			button.get_global_transform() * (event as InputEventScreenTouch).position)
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position

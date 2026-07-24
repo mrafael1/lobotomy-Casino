@@ -206,6 +206,14 @@ var wealthContinued := false
 var wealthTargetIndex := 0
 var wealthTargetPending := false
 var wealthTargetPendingValue := 0
+## A beaten intermediate target sends the player to the persistent dealer shop and
+## then starts a fresh machine run (issue #176). This flag survives the dealer visit
+## so the next start keeps augments/powers/consumables + the advanced target while
+## resetting score and the run-spin budget; a campaign neuron is NOT spent.
+var roundContinuationPending := false
+## Distinguishes a threshold Pacte opened by a Wealth target (routes to the target
+## round break) from one opened by a campaign-health crossing (post-flatline visit).
+var pacteTargetRoundVisit := false
 var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
 
@@ -407,9 +415,12 @@ func load_run_state() -> void:
 	var saved_flatline := saved_phase == "over" \
 		and str(saved.get("lastEnding", "")) == "flatline" \
 		and int(MetaStateStore.campaignNeuronsLeft) > 0
+	# A between-target break parks at the shared dealer with runPhase "over" (issue #176).
+	var saved_target_break := saved_phase == "over" \
+		and bool(saved.get("roundContinuationPending", false))
 	if saved_phase != "running" and saved_phase != "pre_run" \
 			and saved_phase != "pacte_initial" and saved_phase != "pacte_threshold" \
-			and not saved_flatline:
+			and not saved_flatline and not saved_target_break:
 		DirAccess.remove_absolute(RUN_SAVE_PATH)
 		return
 	for prop in _run_state_properties():
@@ -1027,6 +1038,8 @@ func reset_run_state() -> void:
 	wealthTargetIndex = 0
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
+	roundContinuationPending = false
+	pacteTargetRoundVisit = false
 	campaignNeuronPending = false
 	augmentedTier = ""
 	powersUsedThisSpin = 0
@@ -1061,11 +1074,72 @@ func begin_pre_run() -> void:
 	runPhase = "pre_run"
 	lastEnding = null
 	campaignNeuronPending = false
+	roundContinuationPending = false
+	pacteTargetRoundVisit = false
 	_commit()
+
+## Closes the current machine run as a between-target break (issue #176): the
+## beaten intermediate target hands off to the shared between-run dealer flow
+## (odds table -> dealer shop), and the next START begins a fresh run that keeps
+## the campaign progress. Uses runPhase "over" so the dealer opens in the SAME
+## post-run mode a flatline uses — there is only one between-run dealer. This is
+## not a death, so no campaign neuron is finalised; the next run reserves its own.
+## The Wealth target has already advanced through complete_wealth_target().
+func begin_target_round() -> bool:
+	if runPhase != "running" and runPhase != "pacte_threshold" \
+			and runPhase != "pacte_initial":
+		return false
+	roundContinuationPending = true
+	pacteTargetRoundVisit = false
+	runPhase = "over"
+	lastEnding = null
+	# A survived target costs no campaign health; release the run's reservation so
+	# the next run re-reserves cleanly (health only drops when a run truly dies).
+	campaignNeuronPending = false
+	dealerIncoming = false
+	dealerPending = false
+	dealerOfferIds = null
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
+	_commit()
+	return true
+
+## Restores the post-flatline between-run state after a campaign-health-crossing
+## Pacte (3->2 or 2->1). The flatline already spent the neuron and set "over"; the
+## Pacte selection flipped runPhase back to "running", so re-enter the shared
+## odds -> dealer flow instead of the mid-run dealer offer (issue #176).
+func enter_between_run_dealer_after_flatline() -> bool:
+	runPhase = "over"
+	lastEnding = "flatline"
+	pacteTargetRoundVisit = false
+	dealerIncoming = false
+	dealerPending = false
+	dealerOfferIds = null
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
+	_commit()
+	return int(MetaStateStore.campaignNeuronsLeft) > 0
+
+## Folds the between-round dealer's freshly bought consumables into the run's
+## carried stash, never exceeding the run slot cap.
+func _merge_run_consumables(base: Dictionary, extra: Dictionary) -> Dictionary:
+	var merged := base.duplicate(true)
+	var cap := Consumables.MAX_CONSUMABLE_SLOTS
+	for id in extra:
+		var add := int(extra[id])
+		while add > 0 and Consumables.total_copies(merged) < cap:
+			merged[id] = int(merged.get(id, 0)) + 1
+			add -= 1
+	return merged
 
 func has_resume_state() -> bool:
 	if runPhase == "pre_run" or runPhase == "pacte_initial" \
 			or runPhase == "pacte_threshold" or runPhase == "running":
+		return true
+	# A between-target break is a resumable post-run dealer visit (issue #176).
+	if runPhase == "over" and roundContinuationPending:
 		return true
 	# A flatline remains a resumable post-run dealer visit until the player
 	# starts a fresh run or gives up. Wealth exits go straight to the menu.
@@ -1082,10 +1156,16 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# scene that followed the ritual. A fresh Pacte run (open_pacte) resets them.
 	var continuing_campaign := not open_pacte \
 		and runPhase == "over" and str(lastEnding) == "flatline"
-	var kept_augment_cards: Array = selectedAugmentCardIds.duplicate() if continuing_campaign else []
-	var kept_power_cards: Array = selectedPowerCardIds.duplicate() if continuing_campaign else []
-	var kept_joker_active := pacteJokerActive if continuing_campaign else false
-	var kept_pacte_threshold_visits := pacteThresholdVisits if continuing_campaign else 0
+	# A Wealth-target round (issue #176) begins a fresh machine run but keeps the
+	# campaign progress: augments/powers/consumables and the already-advanced
+	# target survive, only the score and the run-spin budget reset.
+	var continuing_round := not open_pacte and roundContinuationPending
+	var continuing := continuing_campaign or continuing_round
+	var kept_augment_cards: Array = selectedAugmentCardIds.duplicate() if continuing else []
+	var kept_power_cards: Array = selectedPowerCardIds.duplicate() if continuing else []
+	var kept_joker_active := pacteJokerActive if continuing else false
+	var kept_pacte_threshold_visits := pacteThresholdVisits if continuing else 0
+	var kept_consumables := runConsumables.duplicate(true) if continuing_round else {}
 	if consume_campaign_neuron:
 		if not MetaStateStore.reserve_campaign_neuron_for_run():
 			_commit()
@@ -1095,9 +1175,13 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	neurons = startingNeurons
 	scoreEarned = 0
 	lucidityCoins = 0
-	wealthTargetIndex = 0
+	# The advanced target survives a round continuation; every other start resets it.
+	if not continuing_round:
+		wealthTargetIndex = 0
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
+	roundContinuationPending = false
+	pacteTargetRoundVisit = false
 	freeSpinsRemaining = 0
 	maxFreeSpins = Economy.compute_max_free_spins(owned_permanents)
 	lucidityMultiplier = Economy.compute_lucidity_multiplier(owned_permanents)
@@ -1107,8 +1191,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	lockedReels = [false, false, false]
 	lockedReelSpins = [0, 0, 0]
 	# The Pacte flow replaces the pre-run shop. Legacy dealer callers still pass
-	# their purchased stash, while the player-facing Pacte path starts empty.
-	runConsumables = {} if open_pacte else pending_consumables.duplicate(true)
+	# their purchased stash, while the player-facing Pacte path starts empty. A
+	# round continuation carries the run's consumables and folds in anything bought
+	# at the between-round dealer, capped at the run's slot limit.
+	if open_pacte:
+		runConsumables = {}
+	elif continuing_round:
+		runConsumables = _merge_run_consumables(kept_consumables, pending_consumables)
+	else:
+		runConsumables = pending_consumables.duplicate(true)
 	if open_pacte and not MetaStateStore.pendingConsumables.is_empty():
 		# Old saves may still contain a pre-run stash. Pacte starts clean and the
 		# stale wallet purchase must not survive into a future run.
@@ -1150,7 +1241,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 			if kept_upgrade != "" and not ownedUpgrades.has(kept_upgrade):
 				ownedUpgrades.append(kept_upgrade)
 	_reapply_pacte_runtime_effects()
-	if continuing_campaign:
+	if continuing:
 		maxFreeSpins = Economy.compute_max_free_spins(ownedUpgrades)
 		lucidityMultiplier = Economy.compute_lucidity_multiplier(ownedUpgrades)
 	lastPowerFailureReason = ""
@@ -1305,6 +1396,9 @@ func arm_pacte_for_wealth_target(target: int) -> bool:
 	var milestone_index := PACTE_WEALTH_TARGETS.find(target)
 	if not _pacte_threshold_available(milestone_index):
 		return false
+	# The visit belongs to a Wealth target, so completing it routes to the target
+	# round break rather than the post-flatline dealer resume (issue #176).
+	pacteTargetRoundVisit = true
 	if pacteThresholdPending:
 		return true
 	pacteThresholdPending = true
@@ -1516,6 +1610,8 @@ func end_run(ending: String) -> void:
 		pacteThresholdPending = true
 		pacteThresholdOpened = false
 		pacteAfterFlatlinePending = true
+		# A health crossing resumes the post-flatline dealer, not a target round.
+		pacteTargetRoundVisit = false
 	_commit()
 
 func continue_run() -> void:

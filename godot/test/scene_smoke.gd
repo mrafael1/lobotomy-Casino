@@ -2721,11 +2721,18 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	if not machine._start_wealth_target_transition(target_info):
 		failures.append("issue176: target transition did not start")
 	else:
-		if machine._wealth_target_label == null \
-				or machine._wealth_target_label.text != "500" \
-				or not is_equal_approx(machine._wealth_target_label.position.x, 0.0) \
-				or not is_equal_approx(machine._wealth_target_label.position.y, 150.0):
-			failures.append("issue176: target number is not centered in the target animation")
+		var overlay: Node = machine._wealth_target_transition
+		if overlay == null:
+			failures.append("issue176: target reached overlay was not created")
+		else:
+			# The overlay owns the flatline-style payout: the running score, the
+			# beaten target flying onto it, and the red money-paid line.
+			if overlay.score_label == null or overlay.score_label.text != "650":
+				failures.append("issue176: target overlay did not show the running score")
+			if overlay.target_label == null or overlay.target_label.text != "-500":
+				failures.append("issue176: target overlay did not show the beaten target")
+			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
+				failures.append("issue176: target overlay is missing its TARGET REACHED title")
 		machine._stop_wealth_target_transition()
 		machine._wealth_target_transition_active = false
 		machine._set_sequence_lock(false)
@@ -2770,6 +2777,47 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	run_store.end_run("flatline")
 	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
 		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
+	# Round break: paying a target sends the run to the PERSISTENT dealer shop and the
+	# next START begins a fresh run. Augments/powers/consumables and campaign health
+	# carry; score and the run-spin budget reset; the advanced target survives; and no
+	# campaign neuron is spent along the way.
+	run_store.reset_run_state()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.neurons = 4
+	run_store.scoreEarned = 150
+	run_store.wealthTargetIndex = 3
+	run_store.selectedAugmentCardIds = ["issue176_kept_augment"]
+	run_store.runConsumables = {"cons_tea": 1}
+	if not run_store.begin_target_round():
+		failures.append("issue176: begin_target_round did not open the dealer break")
+	# The between-run dealer is the shared post-run flow (odds table -> shop), so the
+	# target break parks at runPhase "over" just like a flatline continuation does.
+	if String(run_store.runPhase) != "over" or not run_store.roundContinuationPending:
+		failures.append("issue176: target break did not enter the shared between-run dealer")
+	if not run_store.has_resume_state():
+		failures.append("issue176: target break dealer visit is not resumable")
+	if int(meta_store.campaignNeuronsLeft) != 3:
+		failures.append("issue176: target break wrongly spent a campaign neuron")
+	if not run_store.start_new_run([], {}):
+		failures.append("issue176: could not start the next target round")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue176: next round did not reset the score")
+	if int(run_store.wealthTargetIndex) != 3:
+		failures.append("issue176: next round lost the advanced target")
+	if run_store.roundContinuationPending:
+		failures.append("issue176: round continuation flag was not consumed")
+	if not run_store.runConsumables.has("cons_tea"):
+		failures.append("issue176: next round dropped the carried consumables")
+	if run_store.selectedAugmentCardIds.is_empty():
+		failures.append("issue176: next round dropped the selected augments")
+	if int(meta_store.campaignNeuronsLeft) != 3:
+		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
+	if String(run_store.runPhase) != "running":
+		failures.append("issue176: next round did not enter the machine")
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -6576,22 +6624,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag target is missing DROP HERE")
 	var screen_press := InputEventScreenTouch.new()
 	screen_press.index = 0
-	# Screen-touch positions are viewport coordinates. The scene converts this
-	# canvas-space point before calculating the drag offset.
+	# gui_input delivers positions local to the card button, so feed the handler
+	# exactly what the engine would. Deriving this point with the scene's own
+	# conversion instead would make the check pass whatever that conversion does.
 	var grabbed_card_point := Vector2(15.0, 20.0)
-	screen_press.position = pacte._input_canvas_position(
-		first_button.get_global_transform() * grabbed_card_point)
+	screen_press.position = grabbed_card_point
 	screen_press.pressed = true
 	pacte._on_card_gui_input(screen_press, first_augment, 0, first_button)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card explanation disappeared before drag movement")
 	var screen_drag := InputEventScreenDrag.new()
 	screen_drag.index = 0
+	# _input receives events the viewport has already mapped into canvas space.
 	screen_drag.position = Vector2(40.0, 270.0)
 	pacte._input(screen_drag)
+	# The grabbed point of the card must end up exactly under the reported finger.
 	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
-	var expected_finger_position: Vector2 = pacte._input_canvas_position(screen_drag.position)
-	if dragged_finger_position.distance_to(expected_finger_position) > 0.1:
+	if dragged_finger_position.distance_to(screen_drag.position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
@@ -6764,37 +6813,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: threshold draw did not accumulate exclusions")
 	if not run_store.complete_pacte_selection(String(threshold_augments[0]), String(threshold_powers[0])):
 		failures.append("pacte: threshold selection was rejected")
-	if not run_store.force_dealer_visit() or String(run_store.runPhase) != "running" \
-			or not bool(run_store.dealerPending):
-		failures.append("pacte: threshold completion did not queue dealer")
-	# The mid-run handoff lands on the Dealer scene WITH the Machine button —
-	# there it returns to the machine (declining the offer), never starting a
-	# new run, so the active run's Pacte effects survive the visit.
+	# A campaign-health-crossing Pacte rejoins the shared between-run flow (odds
+	# table -> dealer shop), the same one a plain flatline uses, instead of the
+	# mid-run dealer offer (issue #176).
+	if not run_store.enter_between_run_dealer_after_flatline() \
+			or String(run_store.runPhase) != "over" \
+			or str(run_store.lastEnding) != "flatline":
+		failures.append("pacte: health-crossing Pacte did not rejoin the between-run dealer")
+	run_store.oddsPhaseCompleted = false
 	var dealer_scene := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(dealer_scene)
 	await process_frame
-	if bool(dealer_scene._pre_run):
-		failures.append("pacte: mid-run dealer handoff still reads as pre-run")
-	var dealer_credits_label := dealer_scene.get_node_or_null("CreditsRow/CreditsLabel") as Label
-	if dealer_scene.get_node_or_null("CreditsRow") == null \
-			or not bool((dealer_scene.get_node("CreditsRow") as Control).visible) \
-			or dealer_credits_label == null \
-			or dealer_credits_label.text != str(run_store.lucidityCoins):
-		failures.append("pacte: mid-run dealer scene is missing the live Lucidity coin readout")
-	var dealer_augment_id := String(run_store.dealerAugmentOfferId)
-	if dealer_augment_id == "" \
-			or String(dealer_scene._augment_offer_id()) != dealer_augment_id \
-			or not (dealer_scene._offer_slots_by_id as Dictionary).has(dealer_augment_id):
-		failures.append("pacte: mid-run dealer scene is missing its Chip Augment offer")
-	var dealer_machine_button := dealer_scene._start_button as Button
-	if dealer_machine_button == null or not dealer_machine_button.visible:
-		failures.append("pacte: mid-run dealer scene is missing the Machine button")
-	elif not dealer_machine_button.pressed.is_connected(
-			Callable(dealer_scene, "_on_machine_button_pressed")):
-		failures.append("pacte: mid-run Machine button is not wired to the return handler")
-	if dealer_scene._machine_button_sprite == null \
-			or not bool(dealer_scene._machine_button_sprite.visible):
-		failures.append("pacte: mid-run dealer scene is missing the machine button art")
+	# The shared between-run dealer is the post-run shop: pre-run presentation with
+	# the odds table overlay shown on top before the consumables.
+	if not bool(dealer_scene._pre_run) or not bool(dealer_scene._post_run):
+		failures.append("pacte: health-crossing dealer is not the shared between-run shop")
+	if dealer_scene._odds_overlay == null:
+		failures.append("pacte: health-crossing dealer did not show the odds table")
 	dealer_scene.queue_free()
 
 	# A flatline continuation (post-run dealer -> machine) keeps the campaign's

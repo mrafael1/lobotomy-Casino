@@ -40,8 +40,9 @@ const AUGMENTS: Array[Dictionary] = [
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		# The authored saving glyph has one transparent pixel of visual balance on
 		# its left edge; include it in the crop so the glyph sits one pixel right,
-		# centered like the other augment icons on the 39px card face.
-		"icon_rect": Rect2(5.0, 324.0, 27.0, 26.0),
+		# centered like the other augment icons on the 39px card face. The glyph's
+		# rightmost column reaches x32, so the crop is 28 wide to keep it uncropped.
+		"icon_rect": Rect2(5.0, 324.0, 28.0, 26.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pos_smart_save" },
 	},
 	{
@@ -89,11 +90,13 @@ const AUGMENTS: Array[Dictionary] = [
 		"id": "augment_tunnel_vision", "name": "TUNNEL VISION",
 		"description": "HIDE THE THIRD REEL. REWARDS +50%.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(3.0, 685.0, 32.0, 29.0),
+		# Glyph spans x[3,36) y[685,715); the crop matches so the right column and
+		# bottom row are not clipped.
+		"icon_rect": Rect2(3.0, 685.0, 33.0, 30.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_tunnel_vision" },
 	},
 	{
-		"id": "augment_how_to_cheat", "name": "HOW TO CHEAT",
+		"id": "augment_how_to_cheat", "name": "IS IT CHEATING ?",
 		"description": "A SOLO SYMBOL COUNTS AS A PAIR. PAIRS PAY X0.6.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(10.0, 744.0, 18.0, 19.0),
@@ -103,14 +106,18 @@ const AUGMENTS: Array[Dictionary] = [
 		"id": "augment_adrenaline", "name": "ADRENALINE",
 		"description": "POWER RESTORE THRESHOLD: 30 LUCIDITY.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(8.0, 799.0, 23.0, 45.0),
+		# Glyph spans x[8,32) y[799,845); widen/heighten by one so the right column
+		# and bottom row are not clipped.
+		"icon_rect": Rect2(8.0, 799.0, 24.0, 46.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_adrenaline" },
 	},
 	{
 		"id": "augment_passive_gain", "name": "PASSIVE GAIN",
 		"description": "GAIN 10 LUCIDITY EVERY SPIN.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(8.0, 868.0, 23.0, 31.0),
+		# Glyph spans x[8,32) y[868,900); widen/heighten by one so the right column
+		# and bottom row are not clipped.
+		"icon_rect": Rect2(8.0, 868.0, 24.0, 32.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pacte_passive_gain" },
 	},
 ]

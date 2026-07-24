@@ -1245,7 +1245,10 @@ func _on_item_input(event: InputEvent, node: Control, id: String, kind: String) 
 	elif event is InputEventScreenTouch:
 		var touch_event := event as InputEventScreenTouch
 		if touch_event.pressed and not _drag_active:
-			_begin_item_press(node, id, kind, touch_event.position)
+			# gui_input reports the touch local to the item node, while every later
+			# drag update is canvas space. Match them, or DRAG_SLOP compares two
+			# different coordinate systems and turns every tap into a drag.
+			_begin_item_press(node, id, kind, node.get_global_transform() * touch_event.position)
 
 func _begin_item_press(node: Control, id: String, kind: String, press_pos: Vector2) -> void:
 	_drag_active = true

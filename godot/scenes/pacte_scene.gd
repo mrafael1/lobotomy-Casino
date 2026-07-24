@@ -482,6 +482,7 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 				source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
 				source_rect.size))
 	else:
+		# The authored strip already reads front-to-back; play it as drawn.
 		frame_rects = HOW_TO_CHEAT_FRAME_RECTS.duplicate()
 	for frame_rect in frame_rects:
 		var frame := AtlasTexture.new()
@@ -630,10 +631,10 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
 		var touch_event := event as InputEventScreenTouch
-		# Screen-touch positions are reported in viewport coordinates, unlike
-		# mouse positions delivered through Control._gui_input. Convert them to
-		# the Pacte canvas once so the grabbed point stays under the finger.
-		_begin_drag(card_id, index, button, _input_canvas_position(touch_event.position))
+		# Events delivered through gui_input are already local to the card button,
+		# so lift the grabbed point back into canvas space. The mouse branch above
+		# asks the viewport directly and is already in that space.
+		_begin_drag(card_id, index, button, button.get_global_transform() * touch_event.position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -800,6 +801,10 @@ func _accept_card(card_id: String) -> void:
 		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	# A threshold visit armed by a Wealth target (issue #176) ends with the
+	# between-target dealer + a fresh run; a health-crossing visit resumes the
+	# post-flatline dealer. Capture it before the selection restores "running".
+	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
 		var chosen_power := _chosen_card_views.get("power", null) as Control
@@ -811,13 +816,19 @@ func _accept_card(card_id: String) -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
-	if threshold_visit:
-		# Completing the threshold Pacte visit must enter the real live-run dealer
-		# phase, with its run-Lucidity offers and dedicated Chip Augment. Keep the
-		# transition gated on a prepared pending visit instead of opening an empty
-		# dealer shell when offer preparation fails.
-		var dealer_ready := RunStateStore.force_dealer_visit()
-		if not dealer_ready:
+	if target_round_visit:
+		# Wealth-target visit: end the run as a between-target break and hand off to
+		# the persistent dealer shop, whose START begins the next fresh run.
+		if not RunStateStore.begin_target_round():
+			_selection_locked = false
+			_instruction.text = "DEALER VISIT UNAVAILABLE"
+			return
+		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+	elif threshold_visit:
+		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
+		# dealer shop), the same one a plain flatline uses, instead of the mid-run
+		# dealer offer. The flatline already spent the neuron and set "over".
+		if not RunStateStore.enter_between_run_dealer_after_flatline():
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return

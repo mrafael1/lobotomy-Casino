@@ -773,6 +773,7 @@ func _resume_run() -> void:
 	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
 		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline") \
+		or (RunStateStore.runPhase == "over" and RunStateStore.roundContinuationPending) \
 		or (RunStateStore.runPhase == "running" and RunStateStore.dealerPending)
 	var resume_scene := PACTE_SCENE if resume_pacte else (DEALER_SCENE if resume_dealer else MACHINE_SCENE)
 	SceneNav.change_to(resume_scene)

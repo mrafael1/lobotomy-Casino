@@ -1,0 +1,122 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/target_reached_overlay.gd" id="1_script"]
+[ext_resource type="FontFile" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+
+[node name="TargetReachedOverlay" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 0
+script = ExtResource("1_script")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+color = Color(0.006, 0.01, 0.022, 0.82)
+
+[node name="TitleLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 6.0
+offset_top = 48.0
+offset_right = 154.0
+offset_bottom = 92.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "TARGET REACHED"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="SubtitleLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 12.0
+offset_top = 94.0
+offset_right = 148.0
+offset_bottom = 110.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+text = "still a long way to go"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CaptionLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 20.0
+offset_top = 118.0
+offset_right = 140.0
+offset_bottom = 130.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 7
+text = "paying the casino"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ScoreLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 4.0
+offset_top = 132.0
+offset_right = 156.0
+offset_bottom = 178.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 30
+text = "650"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TargetLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 96.0
+offset_top = 140.0
+offset_right = 156.0
+offset_bottom = 168.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 15
+text = "-500"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LostLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 20.0
+offset_top = 180.0
+offset_right = 140.0
+offset_bottom = 194.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 8
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ButtonHost" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 43.0
+offset_top = 236.0
+offset_right = 117.0
+offset_bottom = 271.0
+
+[node name="ContinueButton" type="Button" parent="ButtonHost"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 74.0
+offset_bottom = 35.0
+focus_mode = 0
+mouse_default_cursor_shape = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 7
+text = "CONTINUE"
