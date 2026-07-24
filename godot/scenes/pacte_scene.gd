@@ -18,6 +18,14 @@ const PATTERN_RECOGNITION_ID := "augment_pattern_recognition"
 const PATTERN_RECOGNITION_FRAME_COUNT := 5
 const PATTERN_RECOGNITION_FRAME_PITCH := 39.0
 const PATTERN_RECOGNITION_FPS := 7.0
+const HOW_TO_CHEAT_ID := "augment_how_to_cheat"
+const HOW_TO_CHEAT_FRAME_FPS := 6.0
+const HOW_TO_CHEAT_FRAME_RECTS: Array[Rect2] = [
+	Rect2(10.0, 744.0, 18.0, 20.0), Rect2(49.0, 748.0, 18.0, 20.0),
+	Rect2(88.0, 751.0, 18.0, 20.0), Rect2(127.0, 754.0, 18.0, 20.0),
+	Rect2(166.0, 758.0, 18.0, 20.0), Rect2(205.0, 761.0, 18.0, 20.0),
+	Rect2(244.0, 763.0, 18.0, 20.0),
+]
 const GLITCH_AUGMENT_ID := "augment_glitch_2"
 const GLITCH_CARD_TICK_INTERVAL := 0.62
 const GLITCH_CARD_CHANCE := 0.42
@@ -447,7 +455,7 @@ func _clear_glitch_card_fx(view: Control, fx: Control) -> void:
 
 func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		display_size: Vector2) -> Node:
-	if card_id != PATTERN_RECOGNITION_ID:
+	if card_id != PATTERN_RECOGNITION_ID and card_id != HOW_TO_CHEAT_ID:
 		var icon := TextureRect.new()
 		icon.name = "Icon"
 		icon.texture = _atlas(String(entry.get("sheet", "")), source_rect)
@@ -456,31 +464,39 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		icon.size = display_size
 		return icon
 
-	# Pattern Recognition's authored icon contains five 30x18 frames separated by
-	# one 39px card pitch. Use the original frame rectangles so the Pacte card shows
-	# the intended animated pattern rather than all five poses at once.
+	# Both authored animated icons use their own atlas regions so the Pacte card
+	# shows one pose at a time rather than the whole source strip.
 	var animated_icon := AnimatedSprite2D.new()
 	animated_icon.name = "Icon"
 	var sprite_frames := SpriteFrames.new()
-	sprite_frames.add_animation(&"pattern")
-	sprite_frames.set_animation_loop(&"pattern", true)
-	sprite_frames.set_animation_speed(&"pattern", PATTERN_RECOGNITION_FPS)
+	var animation_name := &"pattern" if card_id == PATTERN_RECOGNITION_ID else &"cheat"
+	sprite_frames.add_animation(animation_name)
+	sprite_frames.set_animation_loop(animation_name, true)
+	sprite_frames.set_animation_speed(animation_name,
+		PATTERN_RECOGNITION_FPS if card_id == PATTERN_RECOGNITION_ID else HOW_TO_CHEAT_FRAME_FPS)
 	var sheet := Assets.texture(String(entry.get("sheet", "")))
-	for frame_index in PATTERN_RECOGNITION_FRAME_COUNT:
+	var frame_rects: Array[Rect2] = []
+	if card_id == PATTERN_RECOGNITION_ID:
+		for frame_index in PATTERN_RECOGNITION_FRAME_COUNT:
+			frame_rects.append(Rect2(
+				source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
+				source_rect.size))
+	else:
+		# The authored strip already reads front-to-back; play it as drawn.
+		frame_rects = HOW_TO_CHEAT_FRAME_RECTS.duplicate()
+	for frame_rect in frame_rects:
 		var frame := AtlasTexture.new()
 		frame.atlas = sheet
-		frame.region = Rect2(
-			source_rect.position + Vector2(PATTERN_RECOGNITION_FRAME_PITCH * frame_index, 0.0),
-			source_rect.size)
-		sprite_frames.add_frame(&"pattern", frame)
+		frame.region = frame_rect
+		sprite_frames.add_frame(animation_name, frame)
 	animated_icon.sprite_frames = sprite_frames
-	animated_icon.animation = &"pattern"
-	animated_icon.autoplay = &"pattern"
+	animated_icon.animation = animation_name
+	animated_icon.autoplay = animation_name
 	animated_icon.centered = false
 	var scale := display_size / source_rect.size
 	animated_icon.scale = scale
 	animated_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	animated_icon.play(&"pattern")
+	animated_icon.play(animation_name)
 	return animated_icon
 
 func _set_card_icon_position(icon: Node, position: Vector2) -> void:
@@ -615,10 +631,10 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
 		var touch_event := event as InputEventScreenTouch
-		# Screen-touch positions are reported in viewport coordinates, unlike
-		# mouse positions delivered through Control._gui_input. Convert them to
-		# the Pacte canvas once so the grabbed point stays under the finger.
-		_begin_drag(card_id, index, button, _input_canvas_position(touch_event.position))
+		# Events delivered through gui_input are already local to the card button,
+		# so lift the grabbed point back into canvas space. The mouse branch above
+		# asks the viewport directly and is already in that space.
+		_begin_drag(card_id, index, button, button.get_global_transform() * touch_event.position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -785,6 +801,10 @@ func _accept_card(card_id: String) -> void:
 		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	# A threshold visit armed by a Wealth target (issue #176) ends with the
+	# between-target dealer + a fresh run; a health-crossing visit resumes the
+	# post-flatline dealer. Capture it before the selection restores "running".
+	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
 		var chosen_power := _chosen_card_views.get("power", null) as Control
@@ -796,13 +816,19 @@ func _accept_card(card_id: String) -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
-	if threshold_visit:
-		# Completing the threshold Pacte visit must enter the real live-run dealer
-		# phase, with its run-Lucidity offers and dedicated Chip Augment. Keep the
-		# transition gated on a prepared pending visit instead of opening an empty
-		# dealer shell when offer preparation fails.
-		var dealer_ready := RunStateStore.force_dealer_visit()
-		if not dealer_ready:
+	if target_round_visit:
+		# Wealth-target visit: end the run as a between-target break and hand off to
+		# the persistent dealer shop, whose START begins the next fresh run.
+		if not RunStateStore.begin_target_round():
+			_selection_locked = false
+			_instruction.text = "DEALER VISIT UNAVAILABLE"
+			return
+		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+	elif threshold_visit:
+		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
+		# dealer shop), the same one a plain flatline uses, instead of the mid-run
+		# dealer offer. The flatline already spent the neuron and set "over".
+		if not RunStateStore.enter_between_run_dealer_after_flatline():
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return

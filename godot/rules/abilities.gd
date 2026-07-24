@@ -12,13 +12,13 @@ static func _rescore(before: Array, after: Array, lucidity_multiplier: float,
 		pattern23: bool, learning: bool, allow_free_spin_grant: bool,
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
-		symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false) -> Dictionary:
 	var old := Evaluate.score_reels(before, lucidity_multiplier, false, pattern23, learning,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 	var new := Evaluate.score_reels(after, lucidity_multiplier, allow_free_spin_grant, pattern23, learning,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 	var free_granted := int(new["freeSpinsGranted"]) if old["winType"] != "jackpot" else 0
 	var out := {
 		"reels": after,
@@ -34,6 +34,9 @@ static func _rescore(before: Array, after: Array, lucidity_multiplier: float,
 		out["bookJoker"] = bool(new["bookJoker"])
 	if new.has("bookTripleChoice"):
 		out["bookTripleChoice"] = bool(new["bookTripleChoice"])
+	if new.has("soloAsPair"):
+		out["soloAsPair"] = true
+		out["soloAsPairSymbol"] = String(new.get("soloAsPairSymbol", ""))
 	return out
 
 ## Issue #118: Random must never redraw the symbol already occupying its target —
@@ -46,18 +49,19 @@ static func apply_reroll(reels: Array, reel_index: int, rng: LobRNG, lucidity_mu
 		symbol_weights: Array, pattern23: bool = false, learning: bool = false,
 		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
 		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
-		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
+		solo_as_pair: bool = false) -> Dictionary:
 	var next := reels.duplicate()
 	next[reel_index] = LobRNG.weighted_pick(symbol_weights, rng)
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning, allow_free_spin_grant,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 
 static func apply_move_column(reels: Array, reel_index: int, direction: int, lucidity_multiplier: float,
 		pattern23: bool = false, learning: bool = false, allow_free_spin_grant: bool = false,
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
-		symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false) -> Dictionary:
 	var order := move_order()
 	var current := order.find(reels[reel_index])
 	var idx := 0 if current < 0 else current
@@ -67,18 +71,18 @@ static func apply_move_column(reels: Array, reel_index: int, direction: int, luc
 	next[reel_index] = next_symbol
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning, allow_free_spin_grant,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 
 static func apply_copy_reel(reels: Array, source_reel: int, target_reel: int, lucidity_multiplier: float,
 		pattern23: bool = false, learning: bool = false, allow_free_spin_grant: bool = false,
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
-		symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false) -> Dictionary:
 	var next := reels.duplicate()
 	next[target_reel] = reels[source_reel]
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning, allow_free_spin_grant,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses)
+		symbol_reward_bonuses, solo_as_pair)
 
 ## CHEAT replaces one revealed reel with a player-chosen symbol and then uses the
 ## same scoring path as every other revealed-reel power.
@@ -86,14 +90,15 @@ static func apply_cheat(reels: Array, reel_index: int, symbol: String,
 		lucidity_multiplier: float, pattern23: bool = false, learning: bool = false,
 		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
 		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
-		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {}) -> Dictionary:
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
+		solo_as_pair: bool = false) -> Dictionary:
 	var next := reels.duplicate()
 	if reel_index < 0 or reel_index >= next.size():
 		return {}
 	next[reel_index] = symbol
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
 		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
-		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses, solo_as_pair)
 
 ## SWAP exchanges one selected visible strip symbol with the destination reel's
 ## centre symbol. The source may be a centre or an adjacent preview symbol; the
@@ -103,7 +108,7 @@ static func apply_swap_symbol(reels: Array, source_reel: int, target_reel: int,
 		allow_free_spin_grant: bool = false, pair_score_mult: float = 1.0,
 		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
 		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
-		source_symbol_override: String = "") -> Dictionary:
+		source_symbol_override: String = "", solo_as_pair: bool = false) -> Dictionary:
 	var next := reels.duplicate()
 	if source_reel < 0 or target_reel < 0 or source_reel >= next.size() \
 			or target_reel >= next.size() or source_reel == target_reel:
@@ -114,7 +119,7 @@ static func apply_swap_symbol(reels: Array, source_reel: int, target_reel: int,
 	next[target_reel] = source_symbol
 	return _rescore(reels, next, lucidity_multiplier, pattern23, learning,
 		allow_free_spin_grant, pair_score_mult, hidden_reel_count,
-		visible_pair_as_triple, reward_scale, symbol_reward_bonuses)
+		visible_pair_as_triple, reward_scale, symbol_reward_bonuses, solo_as_pair)
 
 ## HEART's three authored symbols carry their own tier. The power does not alter
 ## the current reveal; it arms a guaranteed free next spin which resolves to one

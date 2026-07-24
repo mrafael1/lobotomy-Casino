@@ -205,9 +205,11 @@ const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
+const TARGET_REACHED_SCENE := preload("res://scenes/target_reached_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const ENDING_OVERLAY_Z_INDEX := 150
+const WEALTH_TARGET_FX_Z_INDEX := 140
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -576,6 +578,9 @@ var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
+var _wealth_goal_digit_labels: Array[Label] = []
+var _wealth_target_transition: TargetReachedOverlay = null
+var _wealth_target_transition_active := false
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
@@ -1129,16 +1134,31 @@ func _build_wealth_goal_label() -> void:
 		return
 	var word := _wealth_goal_text("WealthGoalWordLabel", WEALTH_GOAL_WORD_RECT, 5)
 	word.text = "TARGET"
-	var digits := str(campaign_goal_score)
+	for i in str(EconomyConst.WEALTH_SCORE_THRESHOLD).length():
+		var digit := _wealth_goal_text("WealthGoalDigit%d" % i,
+			WEALTH_GOAL_NUMBER_RECT, 5)
+		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
+		_wealth_goal_digit_labels.append(digit)
+	_refresh_wealth_goal_label()
+
+func _refresh_wealth_goal_label() -> void:
+	if _wealth_goal_digit_labels.is_empty():
+		return
+	var target := campaign_goal_score
+	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD:
+		target = RunStateStore.current_wealth_target()
+	var digits := str(target)
 	var start_x := roundf(WEALTH_GOAL_NUMBER_RECT.position.x
 		+ (WEALTH_GOAL_NUMBER_RECT.size.x - WEALTH_GOAL_DIGIT_PITCH * digits.length()) * 0.5)
-	for i in digits.length():
-		var cell := Rect2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
-			WEALTH_GOAL_NUMBER_RECT.position.y,
-			WEALTH_GOAL_DIGIT_PITCH, WEALTH_GOAL_NUMBER_RECT.size.y)
-		var digit := _wealth_goal_text("WealthGoalDigit%d" % i, cell, 5)
+	for i in _wealth_goal_digit_labels.size():
+		var digit: Label = _wealth_goal_digit_labels[i]
+		var visible := i < digits.length()
+		digit.visible = visible
+		if not visible:
+			continue
+		digit.position = Vector2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
+			WEALTH_GOAL_NUMBER_RECT.position.y)
 		digit.text = digits[i]
-		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
 
 func _wealth_goal_text(node_name: String, rect: Rect2, font_size: int) -> Label:
 	var l := Label.new()
@@ -1942,6 +1962,11 @@ func _sync_visuals() -> void:
 		_show_pending_combo_defeat()
 	else:
 		_resolve_exhausted_resume()
+		# A score can overshoot the next target before the scene is freed for the
+		# dealer/Pacte visit. Re-check on rebuild so the next target cannot be skipped.
+		if RunStateStore.runPhase == "running" and not RunStateStore.isSpinning \
+				and not RunStateStore.comboDefeatPending:
+			call_deferred("_check_ending")
 
 ## A save can land after the final neuron cost is committed but before the normal
 ## post-reveal ending check runs. Reconcile that state when the machine is rebuilt so
@@ -2001,6 +2026,72 @@ func _to_menu() -> void:
 
 func _to_dealer() -> void:
 	SceneNav.change_to(DEALER_SCENE)
+
+## The beaten intermediate target now takes over the screen with a focused payout
+## overlay (issue #176), styled like the flatline screen but without the trace or
+## neuron-loss animations: the target pops in beside the running score, flies onto
+## it, and the number counts down by that amount (the money paid to the casino).
+## A normal neon CONTINUE button resumes the run through _finish_wealth_target_transition.
+func _start_wealth_target_transition(info: Dictionary) -> bool:
+	if _wealth_target_transition_active or info.is_empty():
+		return false
+	_wealth_target_transition_active = true
+	_set_sequence_lock(true)
+	var overlay := TARGET_REACHED_SCENE.instantiate() as TargetReachedOverlay
+	overlay.name = "WealthTargetTransition"
+	overlay.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
+	overlay.z_index = WEALTH_TARGET_FX_Z_INDEX
+	add_child(overlay)
+	_wealth_target_transition = overlay
+	overlay.present(int(RunStateStore.scoreEarned), int(info.get("target", 0)))
+	overlay.continue_pressed.connect(_finish_wealth_target_transition)
+	return true
+
+func _finish_wealth_target_transition() -> void:
+	if not _wealth_target_transition_active:
+		return
+	var completed := RunStateStore.complete_wealth_target()
+	if completed.is_empty():
+		_stop_wealth_target_transition()
+		_wealth_target_transition_active = false
+		_set_sequence_lock(false)
+		return
+	if bool(completed.get("final", false)):
+		_wealth_target_transition_active = false
+		_stop_wealth_target_transition()
+		_post_spin_sequence_active = false
+		var final_run := {
+			"neurons": RunStateStore.neurons,
+			"scoreEarned": RunStateStore.scoreEarned,
+			"lucidityCoins": RunStateStore.lucidityCoins,
+		}
+		_show_ending("wealth", final_run)
+		return
+	var target := int(completed.get("target", 0))
+	_stop_wealth_target_transition()
+	_wealth_target_transition_active = false
+	_post_spin_sequence_active = false
+	# 500/1500 route through the threshold Pacte first; that scene then rejoins the
+	# shared between-run flow. Every other target enters it directly via
+	# begin_target_round -> the one between-run dealer (odds table -> shop), whose
+	# START begins a fresh run (issue #176).
+	if RunStateStore.arm_pacte_for_wealth_target(target) \
+			and RunStateStore.open_threshold_pacte():
+		_set_sequence_lock(false)
+		SceneNav.change_to(PACTE_SCENE)
+		return
+	_set_sequence_lock(false)
+	if RunStateStore.begin_target_round():
+		SceneNav.change_to(DEALER_SCENE)
+		return
+	# A failed transition should not strand the run behind a visual lock. The
+	# target has already been paid out; the next HUD refresh can retry normally.
+	_update_hud()
+
+func _stop_wealth_target_transition() -> void:
+	if _wealth_target_transition != null and is_instance_valid(_wealth_target_transition):
+		_wealth_target_transition.queue_free()
+	_wealth_target_transition = null
 
 func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
@@ -2812,6 +2903,7 @@ func _refresh_combo_effect() -> void:
 	_combo_effect_sprite.visible = true
 
 func _refresh_tv_indicators() -> void:
+	_refresh_wealth_goal_label()
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
@@ -3173,11 +3265,12 @@ func _drive_burst(t: float, burst: Control, base_y: float) -> void:
 func _spawn_lucidity_coins(_gain: int, _target_lucidity: int) -> float:
 	return 0.0
 
-# Power points per gauge frame: one power coin banks this much wealth score (10 for a 6-frame /
-# 50-threshold gauge). Cocktail rarity points are part of that score. Lucidity-only bonuses still
+# Power points per gauge frame: one power coin banks this much wealth score (10 for the base
+# 50-threshold gauge, 6 with Adrenaline). Cocktail rarity points are part of that score. Lucidity-only bonuses still
 # keep the existing restore economy caught up, so the point source is the higher of the two totals.
 func _power_bar_step() -> int:
-	return maxi(1, int(maxi(1, coins_per_power_restore) / (POWER_BAR_FRAMES - 1)))
+	return maxi(1, int(RunStateStore.effective_coins_per_power_restore() \
+		/ (POWER_BAR_FRAMES - 1)))
 
 func _power_point_total() -> int:
 	return maxi(0, maxi(int(RunStateStore.scoreEarned), int(RunStateStore.lucidityCoins)))
@@ -3216,7 +3309,7 @@ func _try_start_power_coin_flow() -> void:
 func _compute_power_plan() -> Dictionary:
 	var power_points := _power_point_total()
 	var gain := power_points - _power_seen_lucidity
-	var per := maxi(1, coins_per_power_restore)
+	var per := maxi(1, RunStateStore.effective_coins_per_power_restore())
 	var step := _power_bar_step()
 	var score := _power_bar_score
 	var out: Array = []
@@ -4174,8 +4267,10 @@ func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Butto
 		if event.pressed:
 			_begin_swap_drag(reel_index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			_begin_swap_drag(reel_index, button,
-				_input_canvas_position((event as InputEventScreenTouch).position))
+		# gui_input positions arrive local to the reel button; lift them into canvas
+		# space so the grabbed symbol tracks the finger (the mouse branch already is).
+		_begin_swap_drag(reel_index, button,
+			button.get_global_transform() * (event as InputEventScreenTouch).position)
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
@@ -6093,6 +6188,14 @@ func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int
 func _check_ending() -> bool:
 	if RunStateStore.comboDefeatPending:
 		return false
+	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD \
+			and not RunStateStore.wealthContinued \
+			and RunStateStore.current_wealth_target() < EconomyConst.WEALTH_SCORE_THRESHOLD \
+			and not _wealth_target_transition_active \
+			and RunStateStore.wealth_target_due():
+		var target_info := RunStateStore.begin_wealth_target()
+		if not target_info.is_empty() and _start_wealth_target_transition(target_info):
+			return true
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -6122,6 +6225,8 @@ func _check_ending() -> bool:
 ## warning, gauge effect, or transient sequence overlay survives into the
 ## terminal screens.
 func _cleanup_transient_presentation() -> void:
+	_stop_wealth_target_transition()
+	_wealth_target_transition_active = false
 	if _dealer_overlay != null or _dealer_offer_popup != null:
 		_close_dealer(false)
 	_stop_combo_loss_beep()
@@ -6242,6 +6347,12 @@ func _build_game_over_screen(run: Dictionary = {}) -> void:
 	var game_over_screen := GAME_OVER_ENDING_SCENE.instantiate() as GameOverEndingOverlay
 	_overlay.add_child(game_over_screen)
 	game_over_screen.present(int(run.get("lucidityCoins", 0)))
+	# The terminal loss still shows the third campaign neuron being spent. The
+	# meter keeps all completed death overlays above the damaged machine art.
+	var game_over_meter := NeuronMeter.attach(game_over_screen, Vector2(80.0, 84.0))
+	game_over_meter.name = "CampaignNeuronMeter"
+	game_over_meter.z_index = 2
+	game_over_meter.play_loss_animation()
 	game_over_screen.try_again_pressed.connect(_on_game_over_try_again_pressed)
 
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again

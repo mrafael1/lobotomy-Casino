@@ -47,7 +47,7 @@ mind against a machine that fights back.
 
 Resources and currencies:
 
-- **Campaign neurons (lives)** — a campaign grants 10; each run attempt spends
+- **Campaign neurons (lives)** — a campaign grants 3; each run attempt spends
   one. Exhausting them ends the campaign fatally (Game Over).
 - **Run spins / chips** — the serialized run field is still `neurons` for
   save/parity compatibility, but the machine presents it as the CHIPS/SPINS
@@ -56,17 +56,23 @@ Resources and currencies:
   also stop at 18. The machine prints the current remaining-spin number under the
   neuron tube; it updates whenever spins are gained, spent, or protected, and the
   number turns dark red when the 18-spin cap is full.
-- **Score** — the run's win total. Reaching **2,000 score** triggers the Wealth
-  ending; that is the objective of every run. The machine's four-reel wealth odometer
+- **Score** — the run's win total. The Wealth targets advance through **100 → 200 →
+  500 → 800 → 1,500 → 2,500 → 3,500 → 5,000**; reaching **5,000 score** triggers
+  the Wealth ending. The machine's four-reel wealth odometer
   advances directly with score payouts when their score pop appears; it does not collect
   the separate Lucidity coins from the cash tray. Changed digits roll and carry like
   physical number drums. Its white cases sit behind the rolling digits and the
   authored Wealth bar frame sits above them. The white box below the odometer shows
-  the run's Wealth objective as a single "TARGET: 2000" line.
+  the run's current Wealth objective as a single "TARGET: n" line. Reaching an
+  intermediate target briefly presents that target in the centre of the machine,
+  subtracts it from the run score, shows the remaining money, and hands the run to
+  the dealer scene. The 500 and 1,500 target handoffs use the two threshold Pacte
+  visits; each visit is consumed by whichever happens first, its target or the
+  matching campaign-health crossing.
 - **Run Lucidity (coins)** — earned alongside score during the run. Every 50 coins
-  restores one random spent power; coins also pay for mid-run dealer offer
-  rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save, halved by the
-  spade modifier) and banked into the wallet.
+  restores one random spent power (30 with Adrenaline); coins also pay for mid-run
+  dealer offer rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save,
+  halved by the spade modifier) and banked into the wallet.
 - **Wallet Lucidity (credits)** — the persistent meta currency. Buys Lab upgrades
   and persistent progression between runs.
 
@@ -90,13 +96,14 @@ Resources and currencies:
    state instead of dropping instantly.
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
-6. When a flatline consumes the reserved campaign neuron and the campaign count
-   crosses from 8 to 7 or from 5 to 4, finish the flatline presentation and then
-   open that threshold Pacte visit. A live machine's CHIPS/SPINS counter reaching
-   5 never opens Pacte. Each threshold visit adds one augment and power to the
-   earlier selections; completion opens the live dealer scene with the current
-   run's Lucidity balance, normal run-item offers, and a dedicated Chip Augment
-   offer.
+6. When an intermediate target is reached, finish its target/remainder
+   presentation and leave the machine for the dealer. The 500 target or campaign
+   health crossing from 3 to 2 opens the first threshold Pacte visit; the 1,500
+   target or crossing from 2 to 1 opens the second. Only the first event in each
+   pair can proc that visit. A live machine's CHIPS/SPINS counter reaching 5 never
+   opens Pacte. Each threshold visit adds one augment and power to the earlier
+   selections; completion opens the live dealer scene with the current run's
+   Lucidity balance, normal run-item offers, and a dedicated Chip Augment offer.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
    for x1/x2/x3 each spin, so lower gauges pull him in faster; Glitch 2 makes every
    spin advance three steps.
@@ -167,6 +174,12 @@ Resources and currencies:
 - **Hallucination** — keeps all three reels visible; a visible pair is scored as its
   corresponding triple while the authored reward scale applies. It does not hide or
   cover the third reel.
+- **Tunnel Vision** — hides the third reel and increases rewards by 50%.
+- **How to Cheat** — a solo visible symbol counts as a pair; all pair payouts use
+  a x0.6 multiplier.
+- **Adrenaline** — lowers the power-restore threshold from 50 to 30 Lucidity;
+  its six-frame gauge therefore advances in six-point steps.
+- **Passive Gain** — adds 10 run Lucidity on every spin, including misses.
 - **Reward Amplification** — selecting a Reward+ Pacte card opens a symbol-only
 	picker so the boosted symbol is chosen during the ritual; its title and close
 	cross are intentionally omitted from the compact overlay, and tapping outside
@@ -258,11 +271,15 @@ Resources and currencies:
 
 ### Endings and persistence
 
-- **Wealth** — 2,000 score. Wealth banking waits for the player's choice; the run
+- **Wealth** — 5,000 score after the authored target ladder. Wealth banking waits for
+  the player's choice; the run
   can be continued once past Wealth (higher neuron cap, ends only by flatline).
   All three ending presentations draw above the machine HUD art.
 - **Flatline** — 0 run spins with no banked free spins. Keeps 10% of run Lucidity
   (20% with Smart Save, spade halves it) into the wallet.
+- Campaign neuron loss plays through the authored three-frame death sheet and keeps
+  its final frame over the meter for the rest of the run; successive losses retain
+  the first, second, and third overlays before Game Over.
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
 - Progression persists in MetaStateStore: wallet, Lab permanents, unlock-aware
@@ -270,7 +287,8 @@ Resources and currencies:
   history, permanent odds upgrades (post-run token phase, max 8 tokens held per
   menu), and ending history. Lab permanents include Shift, Memory, Hydration,
   Reward Amplification, Sedative Protocol, Pattern Fabrication, Euphoria Spiral,
-  Passive Cognition, Hallucination, Learning, and Smart Save.
+  Passive Cognition, Hallucination, Learning, and Smart Save. Pacte-only augments
+  include Tunnel Vision, How to Cheat, Adrenaline, and Passive Gain.
 - **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu:
   heart (jackpot pays 100, no free spin), spade (end-of-run Lucidity kept is
   halved), diamond (two power uses per spin), club (dealer wait doubled, spin
@@ -313,7 +331,7 @@ Resources and currencies:
   meta screens.
 - Run lifecycle: `idle` → `pacte_initial` → `running` → `over` (with
   `lastEnding` set to wealth/flatline/game_over). A flatline that crosses the
-  campaign count from 6 to 5 resumes as `pacte_threshold`, then returns through
+  campaign count from 3 to 2 or 2 to 1 resumes as `pacte_threshold`, then returns through
   `running` to the dealer; a Wealth continuation returns `over` → `running`.
 
 ## Living Game Documentation

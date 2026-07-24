@@ -78,6 +78,7 @@ func _run() -> void:
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
+	_check_wealth_target_flow_176(machine, run_store, meta_store, failures)
 	_check_wealth_score_feed(machine, run_store, failures)
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
@@ -727,18 +728,19 @@ func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.neurons = 0
-	run_store.scoreEarned = 1960
+	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
+	run_store.scoreEarned = 4960
 	run_store.lucidityCoins = 20
 	run_store.runConsumables = { "item_water": 1 }
 	run_store.lastResult = {
-		"scoreEarned": 1960, "coinsEarned": 1960, "winType": "pair",
+		"scoreEarned": 4960, "coinsEarned": 4960, "winType": "pair",
 		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
 	}
 	machine._set_sequence_lock(false)
-	machine._set_display_lucidity(1960, false)
+	machine._set_display_lucidity(4960, false)
 	machine._on_stash_pressed(0)
 	if String(run_store.runPhase) != "over" or String(run_store.lastEnding) != "wealth":
-		failures.append("pr169: Water crossing 2000 did not open the Wealth ending")
+		failures.append("pr169: Water crossing 5000 did not open the Wealth ending")
 	if machine._overlay == null:
 		failures.append("pr169: Water Wealth resolution left no ending overlay")
 	if machine._overlay != null:
@@ -1965,9 +1967,34 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 		else:
 			if sprite.hframes != meter.frame_count:
 				failures.append("menu: meter hframes do not match frame_count")
-			var lost := int(meta_store.campaignNeuronsMax) - int(meta_store.campaignNeuronsLeft)
-			if sprite.frame != clampi(lost, 0, meter.frame_count - 1):
-				failures.append("menu: meter frame is not wired to neurons lost")
+			if meter.frame_count != 34 or sprite.frame < 0 or sprite.frame >= meter.frame_count:
+				failures.append("menu: meter is not using the 34-frame idle neuron animation")
+		var death_sprites: Array[Sprite2D] = [
+			meter.get_node_or_null("Death") as Sprite2D,
+			meter.get_node_or_null("Death2") as Sprite2D,
+			meter.get_node_or_null("Death3") as Sprite2D,
+		]
+		for index: int in range(death_sprites.size()):
+			var death_sprite := death_sprites[index]
+			if death_sprite == null or death_sprite.hframes != 3 or death_sprite.visible:
+				failures.append("menu: meter is missing its hidden three-frame death overlay %d" % (index + 1))
+		# Each loss finishes on frame 3 and remains as a permanent overlay. Later
+		# losses must not clear the earlier damage (issue #176 feedback).
+		var health_before_animation := int(meta_store.campaignNeuronsLeft)
+		for remaining: int in [2, 1, 0]:
+			meta_store.campaignNeuronsLeft = remaining
+			meter.play_loss_animation()
+			await create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.65).timeout
+			var lost_count := int(meta_store.campaignNeuronsMax) - remaining
+			for index: int in range(death_sprites.size()):
+				var death_sprite := death_sprites[index]
+				var expected_visible := index < lost_count
+				if death_sprite == null or death_sprite.visible != expected_visible:
+					failures.append("menu: neuron death overlay %d did not persist" % (index + 1))
+				elif expected_visible and death_sprite.frame != NeuronMeter.DEATH_FRAME_COUNT - 1:
+					failures.append("menu: neuron death overlay %d did not stop on frame 3" % (index + 1))
+		meta_store.campaignNeuronsLeft = health_before_animation
+		meter.refresh()
 		var count := meter.get_node_or_null("CountLabel") as Label
 		if count == null:
 			failures.append("menu: modal meter is missing the numeric neuron count")
@@ -2054,12 +2081,12 @@ func _check_campaign_rebalance_38(machine: Node, failures: Array) -> void:
 	if int(migrated["campaignNeuronsMax"]) != int(meta_store.campaign_starting_neurons) \
 			or int(migrated["campaignNeuronsLeft"]) != int(migrated["campaignNeuronsMax"]):
 		failures.append("issue38: 12-neuron save did not reclamp to the new starting count")
-	if int(meta_store.campaign_starting_neurons) != 10:
-		failures.append("issue38: campaigns should start at 10 neurons")
-	# Wealth ending fires at the (default 2000) goal; the @export override threads through.
-	if Endings.check_ending({ "scoreEarned": 2000, "neurons": 5 }, {}) != "wealth":
-		failures.append("issue38: 2000 score did not trigger the wealth ending")
-	if Endings.check_ending({ "scoreEarned": 1999, "neurons": 5 }, {}) != null:
+	if int(meta_store.campaign_starting_neurons) != 3:
+		failures.append("issue38: campaigns should start at 3 neurons")
+	# Wealth ending fires at the final 5000 target; the @export override threads through.
+	if Endings.check_ending({ "scoreEarned": 5000, "neurons": 5 }, {}) != "wealth":
+		failures.append("issue38: 5000 score did not trigger the wealth ending")
+	if Endings.check_ending({ "scoreEarned": 4999, "neurons": 5 }, {}) != null:
 		failures.append("issue38: sub-goal score triggered an ending")
 	if Endings.check_ending({ "scoreEarned": 2500, "neurons": 5 }, {}, 3000) != null:
 		failures.append("issue38: raised campaign_goal_score was ignored")
@@ -2427,6 +2454,14 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	if game_over_screen == null:
 		failures.append("game over: dedicated screen missing when neurons are exhausted")
 	else:
+		var game_over_meter := _find_neuron_meter(game_over_screen)
+		if game_over_meter == null:
+			failures.append("game over: final neuron-loss meter is missing")
+		else:
+			for death_name: String in ["Death", "Death2", "Death3"]:
+				var death_overlay := game_over_meter.get_node_or_null(death_name) as Sprite2D
+				if death_overlay == null or not death_overlay.visible or death_overlay.hframes != 3:
+					failures.append("game over: %s death overlay is not retained" % death_name)
 		var game_over_texts := _overlay_label_texts(game_over_screen)
 		if not game_over_texts.has("GAME OVER"):
 			failures.append("game over: red GAME OVER title is missing")
@@ -2493,7 +2528,7 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var meta_before: Dictionary = meta_store._as_dict()
-	var run := { "neurons": 5, "scoreEarned": 2000, "lucidityCoins": 300 }
+	var run := { "neurons": 5, "scoreEarned": 5000, "lucidityCoins": 300 }
 
 	# The authored four-reel odometer replaces the old progress bar and x/goal label.
 	machine._set_display_lucidity(300, false)
@@ -2515,7 +2550,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var wallet_before := int(meta_store.lucidityWallet)
 	var wealth_screen := machine._overlay.get_node_or_null("WealthEndingOverlay") as Control
 	var texts := _overlay_label_texts(wealth_screen)
-	for required_copy in ["You've become rich", "is it enough ?", "2,000"]:
+	for required_copy in ["You've become rich", "is it enough ?", "5,000"]:
 		if not texts.has(required_copy):
 			failures.append("wealth: missing ending copy %s" % required_copy)
 	if texts.has("FINAL SCORE"):
@@ -2572,7 +2607,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: wealth action does not use the shared classic neon button style")
 	var coin_field := wealth_screen.get_node_or_null("CoinFloodClip/CoinField") \
 		if wealth_screen != null else null
-	if coin_field == null or coin_field.get_child_count() < 2000:
+	if coin_field == null or coin_field.get_child_count() < EconomyConst.WEALTH_SCORE_THRESHOLD:
 		failures.append("wealth: full-screen coin flood did not prepare enough coins")
 	var coin_clip := wealth_screen.get_node_or_null("CoinFloodClip") as Control \
 		if wealth_screen != null else null
@@ -2622,7 +2657,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		failures.append("wealth: subtitle is not just below the joker inside the machine TV")
 	var score := wealth_screen.get_node_or_null("ScoreLabel") as Label \
 		if wealth_screen != null else null
-	if score == null or score.text != "2,000":
+	if score == null or score.text != "5,000":
 		failures.append("wealth: final score did not populate: %s" % (score.text if score != null else "missing"))
 	if int(meta_store.lucidityWallet) != wallet_before:
 		failures.append("wealth: run banked before the player chose to leave")
@@ -2666,6 +2701,124 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		machine._overlay.queue_free()
 		machine._overlay = null
 	machine._set_stash_tray_visible(true)
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	# The target payout is a run-local sequence. Exercise the 500 milestone, its
+	# centered presentation, the score remainder, and the shared Pacte visit gate.
+	var meta_before: Dictionary = meta_store._as_dict()
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 10
+	run_store.scoreEarned = 650
+	run_store.wealthTargetIndex = 2
+	run_store.pacteThresholdVisits = 0
+	var target_info: Dictionary = run_store.begin_wealth_target()
+	if int(target_info.get("target", 0)) != 500:
+		failures.append("issue176: current target did not resolve to 500")
+	if not machine._start_wealth_target_transition(target_info):
+		failures.append("issue176: target transition did not start")
+	else:
+		var overlay: Node = machine._wealth_target_transition
+		if overlay == null:
+			failures.append("issue176: target reached overlay was not created")
+		else:
+			# The overlay owns the flatline-style payout: the running score, the
+			# beaten target flying onto it, and the red money-paid line.
+			if overlay.score_label == null or overlay.score_label.text != "650":
+				failures.append("issue176: target overlay did not show the running score")
+			if overlay.target_label == null or overlay.target_label.text != "-500":
+				failures.append("issue176: target overlay did not show the beaten target")
+			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
+				failures.append("issue176: target overlay is missing its TARGET REACHED title")
+		machine._stop_wealth_target_transition()
+		machine._wealth_target_transition_active = false
+		machine._set_sequence_lock(false)
+	var payout: Dictionary = run_store.complete_wealth_target()
+	if int(payout.get("remaining", -1)) != 150 \
+			or int(run_store.scoreEarned) != 150 \
+			or int(run_store.wealthTargetIndex) != 3:
+		failures.append("issue176: 500 target did not leave the 150 score remainder")
+	if not run_store.arm_pacte_for_wealth_target(500):
+		failures.append("issue176: first 500 target did not arm Pacte")
+	# Once the first visit is consumed, the same 500 milestone cannot arm it again,
+	# while the second 1500/health-one visit remains available.
+	run_store.pacteThresholdVisits = 1
+	run_store.pacteThresholdPending = false
+	run_store.pacteThresholdOpened = false
+	if run_store.arm_pacte_for_wealth_target(500):
+		failures.append("issue176: second event incorrectly reopened the first Pacte visit")
+	if not run_store.arm_pacte_for_wealth_target(1500):
+		failures.append("issue176: second Pacte milestone was consumed with the first")
+	run_store.pacteThresholdVisits = 2
+	run_store.pacteThresholdPending = false
+	if run_store.arm_pacte_for_wealth_target(1500):
+		failures.append("issue176: exhausted Pacte visits still accepted a target")
+	# The health crossings use the same visit counter: 3 -> 2 arms visit one,
+	# then 2 -> 1 arms visit two after the first visit has been consumed.
+	run_store.reset_run_state()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.pacteThresholdVisits = 0
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 2 or not run_store.pacteThresholdPending:
+		failures.append("issue176: health 3 -> 2 did not arm the first Pacte visit")
+	run_store.runPhase = "running"
+	run_store.lastEnding = null
+	run_store.campaignNeuronPending = true
+	run_store.pacteThresholdPending = false
+	run_store.pacteThresholdVisits = 1
+	run_store.pacteAfterFlatlinePending = false
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
+		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
+	# Round break: paying a target sends the run to the PERSISTENT dealer shop and the
+	# next START begins a fresh run. Augments/powers/consumables and campaign health
+	# carry; score and the run-spin budget reset; the advanced target survives; and no
+	# campaign neuron is spent along the way.
+	run_store.reset_run_state()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.neurons = 4
+	run_store.scoreEarned = 150
+	run_store.wealthTargetIndex = 3
+	run_store.selectedAugmentCardIds = ["issue176_kept_augment"]
+	run_store.runConsumables = {"cons_tea": 1}
+	if not run_store.begin_target_round():
+		failures.append("issue176: begin_target_round did not open the dealer break")
+	# The between-run dealer is the shared post-run flow (odds table -> shop), so the
+	# target break parks at runPhase "over" just like a flatline continuation does.
+	if String(run_store.runPhase) != "over" or not run_store.roundContinuationPending:
+		failures.append("issue176: target break did not enter the shared between-run dealer")
+	if not run_store.has_resume_state():
+		failures.append("issue176: target break dealer visit is not resumable")
+	if int(meta_store.campaignNeuronsLeft) != 3:
+		failures.append("issue176: target break wrongly spent a campaign neuron")
+	if not run_store.start_new_run([], {}):
+		failures.append("issue176: could not start the next target round")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue176: next round did not reset the score")
+	if int(run_store.wealthTargetIndex) != 3:
+		failures.append("issue176: next round lost the advanced target")
+	if run_store.roundContinuationPending:
+		failures.append("issue176: round continuation flag was not consumed")
+	if not run_store.runConsumables.has("cons_tea"):
+		failures.append("issue176: next round dropped the carried consumables")
+	if run_store.selectedAugmentCardIds.is_empty():
+		failures.append("issue176: next round dropped the selected augments")
+	if int(meta_store.campaignNeuronsLeft) != 3:
+		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
+	if String(run_store.runPhase) != "running":
+		failures.append("issue176: next round did not enter the machine")
+	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
@@ -2720,7 +2873,8 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	# over the no-spins dead-end.
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
-	run_store.scoreEarned = 2000
+	run_store.scoreEarned = 5000
+	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 0
 	if not machine._check_ending():
@@ -2758,6 +2912,7 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	# is past the goal (the wealth ending is suppressed by wealthContinued).
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 1 # keep the target-transition flow out of this flatline gate test
 	run_store.scoreEarned = 2500
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 0
@@ -2797,6 +2952,7 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 1
 	run_store.scoreEarned = 100
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 2
@@ -5296,6 +5452,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	var prev_neurons := int(run_store.neurons)
 	var prev_starting := int(run_store.startingNeurons)
 	var prev_score := int(run_store.scoreEarned)
+	var prev_target_index := int(run_store.wealthTargetIndex)
+	var prev_target_pending := bool(run_store.wealthTargetPending)
+	var prev_target_pending_value := int(run_store.wealthTargetPendingValue)
 	var prev_spin_count := int(run_store.spinCount)
 	var prev_flat := int(run_store.flatlineResultCount)
 	var prev_locked_spins: Array = run_store.lockedReelSpins.duplicate()
@@ -5314,6 +5473,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	run_store.compulsiveSpinSkips = 0
 	run_store.freeSpinsRemaining = 0
 	run_store.neurons = 8
+	run_store.wealthTargetIndex = 1
+	run_store.wealthTargetPending = false
+	run_store.wealthTargetPendingValue = 0
 	run_store.scoreEarned = 100
 	run_store.spinCount = 1
 	run_store.lockedReelSpins = [0, 0, 0]
@@ -5381,6 +5543,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	run_store.neurons = prev_neurons
 	run_store.startingNeurons = prev_starting
 	run_store.scoreEarned = prev_score
+	run_store.wealthTargetIndex = prev_target_index
+	run_store.wealthTargetPending = prev_target_pending
+	run_store.wealthTargetPendingValue = prev_target_pending_value
 	run_store.spinCount = prev_spin_count
 	run_store.flatlineResultCount = prev_flat
 	run_store.lockedReelSpins = prev_locked_spins
@@ -5794,6 +5959,7 @@ func _check_save_resume_151(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.neurons = 0
+	run_store.wealthTargetIndex = 1
 	run_store.freeSpinsRemaining = 0
 	run_store.isSpinning = false
 	run_store.scoreEarned = 123
@@ -5845,7 +6011,7 @@ func _check_tier_win_counter_142(run_store: Node, meta_store: Node, failures: Ar
 	if int(meta_store.tier_wins("classic")) != 1:
 		failures.append("issue142: classic wealth did not register a classic win")
 	# The deferred Start Again bank must not count the same win twice.
-	meta_store.bank_run({ "lucidityCoins": 0, "scoreEarned": 2000, "neurons": 1 }, "wealth")
+	meta_store.bank_run({ "lucidityCoins": 0, "scoreEarned": 5000, "neurons": 1 }, "wealth")
 	if int(meta_store.tier_wins("classic")) != 1:
 		failures.append("issue142: the wealth bank double-counted the win")
 
@@ -6352,6 +6518,13 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pattern_icon.animation != &"pattern":
 		failures.append("pacte: Pattern Recognition is missing its five-frame animated icon")
 	pattern_view.free()
+	var cheat_view := pacte._make_card_view("augment_how_to_cheat", "augment") as Control
+	var cheat_icon := cheat_view.get_node_or_null("Icon") as AnimatedSprite2D
+	if cheat_icon == null or cheat_icon.sprite_frames == null \
+			or cheat_icon.sprite_frames.get_frame_count(&"cheat") != 7 \
+			or cheat_icon.animation != &"cheat":
+		failures.append("pacte: How to Cheat is missing its seven-frame animated icon")
+	cheat_view.free()
 	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
 			"PowerCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
@@ -6451,22 +6624,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag target is missing DROP HERE")
 	var screen_press := InputEventScreenTouch.new()
 	screen_press.index = 0
-	# Screen-touch positions are viewport coordinates. The scene converts this
-	# canvas-space point before calculating the drag offset.
+	# gui_input delivers positions local to the card button, so feed the handler
+	# exactly what the engine would. Deriving this point with the scene's own
+	# conversion instead would make the check pass whatever that conversion does.
 	var grabbed_card_point := Vector2(15.0, 20.0)
-	screen_press.position = pacte._input_canvas_position(
-		first_button.get_global_transform() * grabbed_card_point)
+	screen_press.position = grabbed_card_point
 	screen_press.pressed = true
 	pacte._on_card_gui_input(screen_press, first_augment, 0, first_button)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card explanation disappeared before drag movement")
 	var screen_drag := InputEventScreenDrag.new()
 	screen_drag.index = 0
+	# _input receives events the viewport has already mapped into canvas space.
 	screen_drag.position = Vector2(40.0, 270.0)
 	pacte._input(screen_drag)
+	# The grabbed point of the card must end up exactly under the reported finger.
 	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
-	var expected_finger_position: Vector2 = pacte._input_canvas_position(screen_drag.position)
-	if dragged_finger_position.distance_to(expected_finger_position) > 0.1:
+	if dragged_finger_position.distance_to(screen_drag.position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
@@ -6600,7 +6774,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 
 	# A live machine spin must never interrupt into Pacte, even when its run-spin
 	# budget reaches five. The first threshold visit is armed only by the later
-	# flatline handoff when the campaign count crosses from eight to seven.
+	# flatline handoff when the campaign count crosses from three to two.
 	run_store.neurons = 5
 	run_store.comboDefeatPending = false
 	var live_spin: Variant = run_store.spin()
@@ -6608,14 +6782,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if live_spin == null or bool(run_store.pacteThresholdPending) \
 			or String(run_store.runPhase) != "running":
 		failures.append("pacte: live machine spin incorrectly opened the threshold visit")
-	meta_store.campaignNeuronsLeft = 8
+	meta_store.campaignNeuronsLeft = 3
 	run_store.campaignNeuronPending = true
 	run_store.end_run("flatline")
-	if int(meta_store.campaignNeuronsLeft) != 7 \
+	if int(meta_store.campaignNeuronsLeft) != 2 \
 			or not bool(run_store.pacteThresholdPending) \
 			or not bool(run_store.pacteAfterFlatlinePending) \
 			or String(run_store.runPhase) != "over":
-		failures.append("pacte: flatline did not arm the eight-to-seven campaign threshold")
+		failures.append("pacte: flatline did not arm the three-to-two campaign threshold")
 	if not run_store.open_threshold_pacte():
 		failures.append("pacte: first threshold crossing did not open the Pacte visit")
 	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
@@ -6639,37 +6813,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: threshold draw did not accumulate exclusions")
 	if not run_store.complete_pacte_selection(String(threshold_augments[0]), String(threshold_powers[0])):
 		failures.append("pacte: threshold selection was rejected")
-	if not run_store.force_dealer_visit() or String(run_store.runPhase) != "running" \
-			or not bool(run_store.dealerPending):
-		failures.append("pacte: threshold completion did not queue dealer")
-	# The mid-run handoff lands on the Dealer scene WITH the Machine button —
-	# there it returns to the machine (declining the offer), never starting a
-	# new run, so the active run's Pacte effects survive the visit.
+	# A campaign-health-crossing Pacte rejoins the shared between-run flow (odds
+	# table -> dealer shop), the same one a plain flatline uses, instead of the
+	# mid-run dealer offer (issue #176).
+	if not run_store.enter_between_run_dealer_after_flatline() \
+			or String(run_store.runPhase) != "over" \
+			or str(run_store.lastEnding) != "flatline":
+		failures.append("pacte: health-crossing Pacte did not rejoin the between-run dealer")
+	run_store.oddsPhaseCompleted = false
 	var dealer_scene := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(dealer_scene)
 	await process_frame
-	if bool(dealer_scene._pre_run):
-		failures.append("pacte: mid-run dealer handoff still reads as pre-run")
-	var dealer_credits_label := dealer_scene.get_node_or_null("CreditsRow/CreditsLabel") as Label
-	if dealer_scene.get_node_or_null("CreditsRow") == null \
-			or not bool((dealer_scene.get_node("CreditsRow") as Control).visible) \
-			or dealer_credits_label == null \
-			or dealer_credits_label.text != str(run_store.lucidityCoins):
-		failures.append("pacte: mid-run dealer scene is missing the live Lucidity coin readout")
-	var dealer_augment_id := String(run_store.dealerAugmentOfferId)
-	if dealer_augment_id == "" \
-			or String(dealer_scene._augment_offer_id()) != dealer_augment_id \
-			or not (dealer_scene._offer_slots_by_id as Dictionary).has(dealer_augment_id):
-		failures.append("pacte: mid-run dealer scene is missing its Chip Augment offer")
-	var dealer_machine_button := dealer_scene._start_button as Button
-	if dealer_machine_button == null or not dealer_machine_button.visible:
-		failures.append("pacte: mid-run dealer scene is missing the Machine button")
-	elif not dealer_machine_button.pressed.is_connected(
-			Callable(dealer_scene, "_on_machine_button_pressed")):
-		failures.append("pacte: mid-run Machine button is not wired to the return handler")
-	if dealer_scene._machine_button_sprite == null \
-			or not bool(dealer_scene._machine_button_sprite.visible):
-		failures.append("pacte: mid-run dealer scene is missing the machine button art")
+	# The shared between-run dealer is the post-run shop: pre-run presentation with
+	# the odds table overlay shown on top before the consumables.
+	if not bool(dealer_scene._pre_run) or not bool(dealer_scene._post_run):
+		failures.append("pacte: health-crossing dealer is not the shared between-run shop")
+	if dealer_scene._odds_overlay == null:
+		failures.append("pacte: health-crossing dealer did not show the odds table")
 	dealer_scene.queue_free()
 
 	# A flatline continuation (post-run dealer -> machine) keeps the campaign's
@@ -6691,16 +6851,16 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 				and not (run_store.ownedUpgrades as Array).has(String(kept_effect.get("upgrade_id", ""))):
 			failures.append("pacte: flatline continuation lost the %s augment effect" % card_id)
 
-	# A later flatline crossing from five to four arms the additional threshold
+	# A later flatline crossing from two to one arms the additional threshold
 	# visit instead of treating the first Pacte encounter as the only one.
-	meta_store.campaignNeuronsLeft = 5
+	meta_store.campaignNeuronsLeft = 2
 	run_store.campaignNeuronPending = true
 	run_store.end_run("flatline")
-	if int(meta_store.campaignNeuronsLeft) != 4 \
+	if int(meta_store.campaignNeuronsLeft) != 1 \
 			or not bool(run_store.pacteThresholdPending) \
 			or not bool(run_store.pacteAfterFlatlinePending) \
 			or String(run_store.runPhase) != "over":
-		failures.append("pacte: flatline did not arm the five-to-four campaign threshold")
+		failures.append("pacte: flatline did not arm the two-to-one campaign threshold")
 	if not run_store.open_threshold_pacte():
 		failures.append("pacte: second threshold crossing did not open the extra Pacte visit")
 	var second_threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()

@@ -84,7 +84,7 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var tutorial_pauses_tree: bool = true
 @export var tutorial_title_text: String = "HOW TO PLAY"
 @export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 10 neurons -> attain wealth before hitting 0.
+- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
 
 [color=#f2d37c][b]Dealer Scene[/b][/color]
 - Buy consumables for your run.
@@ -773,6 +773,7 @@ func _resume_run() -> void:
 	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
 		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline") \
+		or (RunStateStore.runPhase == "over" and RunStateStore.roundContinuationPending) \
 		or (RunStateStore.runPhase == "running" and RunStateStore.dealerPending)
 	var resume_scene := PACTE_SCENE if resume_pacte else (DEALER_SCENE if resume_dealer else MACHINE_SCENE)
 	SceneNav.change_to(resume_scene)
