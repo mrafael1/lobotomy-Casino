@@ -2966,8 +2966,6 @@ func _active_hidden_reel_count() -> int:
 	var lr: Variant = RunStateStore.lastResult
 	if lr != null and (lr as Dictionary).has("hiddenReelCount"):
 		return clampi(int((lr as Dictionary)["hiddenReelCount"]), 0, 2)
-	if Economy.has_hallucination(RunStateStore.ownedUpgrades):
-		return 1
 	return 0
 
 func _visible_reel_count() -> int:
@@ -3211,6 +3209,7 @@ func _try_start_power_coin_flow() -> void:
 	_advance_power_bar()
 
 ## Pure: plan the coins for power points gained since the gauge last caught up. Each coin banks
+## Pending restore entries are prefixed so their reset happens before this point fill.
 ## one step; a full gauge is only completed when a restore is available (else it caps at 4/5 and
 ## the rest of the gain is discarded — never fake-fills or loops). Returns { steps:
 ## [{frame, restore}], score: <final banked score>, seen: <power points now> }.
@@ -3219,11 +3218,18 @@ func _compute_power_plan() -> Dictionary:
 	var gain := power_points - _power_seen_lucidity
 	var per := maxi(1, coins_per_power_restore)
 	var step := _power_bar_step()
-	# Restorable = plan_gain's queued restores plus any spent ability the gauge can bring
-	# back itself. A fill completes only while one of those exists (else it caps at 4/5).
-	var avail := RunStateStore.pendingPowerRestores.size() + RunStateStore.abilitiesUsed.size()
 	var score := _power_bar_score
 	var out: Array = []
+	# Lucidity.plan_gain (and Potion's direct restore) already removed these powers from
+	# abilitiesUsed. Emit their visual restore coins before planning this gain, and start
+	# the point fill from the reset gauge. They must not also count as bar-driven restores.
+	var pending_restores := RunStateStore.pendingPowerRestores.size()
+	for _restore_index in pending_restores:
+		out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
+	if pending_restores > 0:
+		score = 0
+	# Only powers still in abilitiesUsed are available for a later bar-completion restore.
+	var avail := RunStateStore.abilitiesUsed.size()
 	var g := gain
 	while g > 0:
 		var to_next := step - (score % step)
@@ -3265,9 +3271,8 @@ func _advance_power_bar() -> void:
 	_power_seen_lucidity = int(plan["seen"])
 	var steps: Array = plan["steps"]
 	if steps.is_empty():
-		# Nothing to bank. A queued restore is NOT fired here — it waits for the gauge to
-		# actually fill (a plan_gain threshold can queue a restore on a spin whose score
-		# only partially fills the bar; the power must not pop before the bar is full).
+		# Pending restore steps are part of this plan, so this branch only means
+		# that there is no visual work at all.
 		_set_power_bar_frame(_bar_frame_for_score(_power_bar_score))
 		_maybe_present_pending_dealer()
 		return
@@ -4449,7 +4454,7 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
-	if combo_pending and power_id not in ["reroll", "shift"]:
+	if combo_pending and power_id not in ["reroll", "shift", "memory"]:
 		return
 	if not RunStateStore._can_use_ability():
 		return
@@ -5508,18 +5513,16 @@ func _refresh_consumable_fx() -> void:
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
 
-## Hidden-reel effects hide the LAST reels from scoring (reels.slice keeps the
-## first ones), so smoke exactly those.
+## Tobacco hides the LAST reels from scoring (reels.slice keeps the first ones),
+## so smoke exactly those. Hallucination changes scoring/reward scale but leaves
+## all three reels visible.
 func _refresh_tobacco_fx() -> void:
 	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
 		or _boost_zero_linger.has("pairBoostSpins")
-	var hallucination_active := Economy.has_hallucination(RunStateStore.ownedUpgrades)
-	var active := consumable_fx_enabled and tobacco_fx_enabled and (tobacco_active or hallucination_active)
+	var active := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
 	var hidden := 0
 	if active:
-		hidden = clampi(RunStateStore.pairBoostHiddenReels if tobacco_active else 0, 0, 2)
-		if hallucination_active:
-			hidden = maxi(hidden, 1)
+		hidden = clampi(RunStateStore.pairBoostHiddenReels, 0, 2)
 	for i in 3:
 		var smoked: bool = i >= 3 - hidden
 		if i < _tobacco_covers.size():
@@ -5763,7 +5766,11 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 			_apply_symbol_triple(String(lr.get("resolvedSymbol", "")),
 				int(lr.get("freeSpinsGranted", 0)), power_triggered)
 		return
-	if _active_hidden_reel_count() > 0 and String(reels[0]) == String(reels[1]):
+	var hallucination_pair := Economy.has_hallucination(RunStateStore.ownedUpgrades) \
+		and String(reels[0]) == String(reels[1]) \
+		and String(reels[1]) != String(reels[2])
+	if (_active_hidden_reel_count() > 0 or hallucination_pair) \
+			and String(reels[0]) == String(reels[1]):
 		if String(reels[0]) == "flatline":
 			var count := RunStateStore.register_flatline_result()
 			_show_flatline_result_reaction(count)

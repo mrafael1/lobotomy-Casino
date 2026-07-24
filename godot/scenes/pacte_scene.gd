@@ -615,8 +615,10 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
 		var touch_event := event as InputEventScreenTouch
-		_begin_drag(card_id, index, button,
-			button.get_global_transform() * touch_event.position)
+		# Screen-touch positions are reported in viewport coordinates, unlike
+		# mouse positions delivered through Control._gui_input. Convert them to
+		# the Pacte canvas once so the grabbed point stays under the finger.
+		_begin_drag(card_id, index, button, _input_canvas_position(touch_event.position))
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.

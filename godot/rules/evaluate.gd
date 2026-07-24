@@ -99,6 +99,12 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		return _score_triple(a, lucidity_multiplier, allow_free_spin_grant,
 			reward_scale, symbol_reward_bonuses)
 
+	# Hallucination keeps the third reel visible, but the original first-two
+	# visible-pair scoring effect remains active without treating that reel as hidden.
+	if visible_pair_as_triple and a == b:
+		return _score_triple(a, lucidity_multiplier, allow_free_spin_grant,
+			reward_scale, symbol_reward_bonuses)
+
 	if pattern23_triple:
 		var match_sym := ""
 		if a == b:
