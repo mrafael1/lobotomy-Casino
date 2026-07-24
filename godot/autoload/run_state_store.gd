@@ -26,6 +26,7 @@ const DEALER_REROLL_BASE_COST := 5
 ## Pacte owns the run's power loadout. No power is granted by default; legacy
 ## callers that skip the ritual still receive only the permanent powers they own.
 const PACTE_CAMPAIGN_NEURON_THRESHOLDS: Array[int] = [2, 1]
+const PACTE_WEALTH_TARGETS: Array[int] = [500, 1500]
 const PACTE_INITIAL_DRAW_SEED := 0x50414354
 const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
 const HERO_POWER_IDS: Array[String] = []
@@ -200,6 +201,11 @@ var oddsPhaseCompleted := false           # closed screens stay closed until the
 var runPhase := "idle" # idle | pre_run | pacte_initial | pacte_threshold | running | over
 var lastEnding: Variant = null
 var wealthContinued := false
+## Intermediate Wealth targets are paid out from the run score in sequence. The
+## final target still hands the full run to the Wealth ending screen.
+var wealthTargetIndex := 0
+var wealthTargetPending := false
+var wealthTargetPendingValue := 0
 var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
 
@@ -216,6 +222,10 @@ var ownedPowerIds: Array = []
 var pacteThresholdPending := false
 var pacteThresholdOpened := false
 var pacteAfterFlatlinePending := false
+## Number of the two campaign Pacte threshold visits already completed. A target
+## milestone and a campaign-health crossing share this sequence, so whichever
+## event happens first consumes the corresponding visit.
+var pacteThresholdVisits := 0
 var pacteJokerArmed := false
 var pacteJokerActive := false
 var winBoostEnabled := false
@@ -405,6 +415,21 @@ func load_run_state() -> void:
 	for prop in _run_state_properties():
 		if saved.has(prop):
 			set(prop, saved[prop])
+	# Older live-run saves did not track which of the two campaign Pacte visits
+	# had already been completed. The selected card history is enough to recover
+	# that count without changing the visible run state.
+	if not saved.has("pacteThresholdVisits"):
+		pacteThresholdVisits = clampi(selectedAugmentCardIds.size() - 1, 0, PACTE_CAMPAIGN_NEURON_THRESHOLDS.size())
+	if not saved.has("wealthTargetIndex"):
+		# Pre-milestone saves stored cumulative score. Resume them at the first
+		# ladder target they had not already passed instead of replaying TARGET 100.
+		wealthTargetIndex = 0
+		for target_value: int in EconomyConst.WEALTH_TARGETS:
+			if scoreEarned < target_value:
+				break
+			wealthTargetIndex += 1
+	wealthTargetIndex = clampi(int(wealthTargetIndex), 0, EconomyConst.WEALTH_TARGETS.size() - 1)
+	wealthTargetPendingValue = maxi(0, int(wealthTargetPendingValue))
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
 	selectedPowerCardIds = _normalise_power_ids(selectedPowerCardIds)
 	pacteSelectedPowerId = PacteCards.normalise_card_id(pacteSelectedPowerId)
@@ -999,6 +1024,9 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	wealthTargetIndex = 0
+	wealthTargetPending = false
+	wealthTargetPendingValue = 0
 	campaignNeuronPending = false
 	augmentedTier = ""
 	powersUsedThisSpin = 0
@@ -1013,6 +1041,7 @@ func reset_run_state() -> void:
 	pacteThresholdPending = false
 	pacteThresholdOpened = false
 	pacteAfterFlatlinePending = false
+	pacteThresholdVisits = 0
 	pacteJokerArmed = false
 	pacteJokerActive = false
 	winBoostEnabled = false
@@ -1056,6 +1085,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	var kept_augment_cards: Array = selectedAugmentCardIds.duplicate() if continuing_campaign else []
 	var kept_power_cards: Array = selectedPowerCardIds.duplicate() if continuing_campaign else []
 	var kept_joker_active := pacteJokerActive if continuing_campaign else false
+	var kept_pacte_threshold_visits := pacteThresholdVisits if continuing_campaign else 0
 	if consume_campaign_neuron:
 		if not MetaStateStore.reserve_campaign_neuron_for_run():
 			_commit()
@@ -1065,6 +1095,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	neurons = startingNeurons
 	scoreEarned = 0
 	lucidityCoins = 0
+	wealthTargetIndex = 0
+	wealthTargetPending = false
+	wealthTargetPendingValue = 0
 	freeSpinsRemaining = 0
 	maxFreeSpins = Economy.compute_max_free_spins(owned_permanents)
 	lucidityMultiplier = Economy.compute_lucidity_multiplier(owned_permanents)
@@ -1088,6 +1121,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	ownedUpgrades = owned_permanents.duplicate()
 	selectedAugmentCardIds = kept_augment_cards
 	selectedPowerCardIds = kept_power_cards
+	pacteThresholdVisits = kept_pacte_threshold_visits
 	# The Pacte selection is the source of run powers. A direct/legacy start keeps
 	# only the permanent powers the player actually owns; Shift and Reroll are not
 	# silently injected into a fresh loadout.
@@ -1205,6 +1239,80 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 func pacte_active() -> bool:
 	return runPhase == "pacte_initial" or runPhase == "pacte_threshold"
 
+func current_wealth_target() -> int:
+	return int(EconomyConst.WEALTH_TARGETS[clampi(wealthTargetIndex,
+		0, EconomyConst.WEALTH_TARGETS.size() - 1)])
+
+func wealth_target_due() -> bool:
+	if wealthContinued:
+		return false
+	return wealthTargetPending or scoreEarned >= current_wealth_target()
+
+## Claims the next target before its presentation starts. Claiming makes the
+## transition resumable if the scene is closed during the animation.
+func begin_wealth_target() -> Dictionary:
+	if wealthContinued:
+		return {}
+	if wealthTargetPending:
+		var pending_target := wealthTargetPendingValue if wealthTargetPendingValue > 0 \
+			else current_wealth_target()
+		return {
+			"target": pending_target,
+			"final": pending_target >= EconomyConst.WEALTH_SCORE_THRESHOLD,
+		}
+	var target := current_wealth_target()
+	if scoreEarned < target:
+		return {}
+	wealthTargetPending = true
+	wealthTargetPendingValue = target
+	_commit()
+	return {
+		"target": target,
+		"final": target >= EconomyConst.WEALTH_SCORE_THRESHOLD,
+	}
+
+## Pays an intermediate target out of the running score. The final target is
+## intentionally not deducted: it belongs to the full-score Wealth ending.
+func complete_wealth_target() -> Dictionary:
+	if not wealthTargetPending:
+		return {}
+	var target := wealthTargetPendingValue if wealthTargetPendingValue > 0 \
+		else current_wealth_target()
+	var final_target := target >= EconomyConst.WEALTH_SCORE_THRESHOLD
+	if not final_target:
+		scoreEarned = maxi(0, scoreEarned - target)
+		wealthTargetIndex = mini(wealthTargetIndex + 1, EconomyConst.WEALTH_TARGETS.size() - 1)
+		if lastResult is Dictionary:
+			var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
+			updated_result["scoreEarned"] = scoreEarned
+			lastResult = updated_result
+	wealthTargetPending = false
+	wealthTargetPendingValue = 0
+	_commit()
+	return {
+		"target": target,
+		"final": final_target,
+		"remaining": scoreEarned,
+	}
+
+func _pacte_threshold_available(milestone_index: int) -> bool:
+	return milestone_index >= 0 and milestone_index < PACTE_WEALTH_TARGETS.size() \
+		and pacteThresholdVisits <= milestone_index
+
+## Target milestones and campaign-health crossings consume the same two Pacte
+## visits. Returning false means that milestone was already consumed earlier.
+func arm_pacte_for_wealth_target(target: int) -> bool:
+	var milestone_index := PACTE_WEALTH_TARGETS.find(target)
+	if not _pacte_threshold_available(milestone_index):
+		return false
+	if pacteThresholdPending:
+		return true
+	pacteThresholdPending = true
+	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
+	_commit()
+	return true
+
 func _pacte_offer_array(value: Variant) -> Array[String]:
 	var result: Array[String] = []
 	if value is Array:
@@ -1293,7 +1401,9 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	pacteOfferAugmentIds = null
 	pacteOfferPowerIds = null
 	if runPhase == "pacte_threshold":
+		pacteThresholdVisits = mini(pacteThresholdVisits + 1, PACTE_CAMPAIGN_NEURON_THRESHOLDS.size())
 		pacteThresholdPending = false
+		pacteThresholdOpened = false
 		pacteAfterFlatlinePending = false
 		lastEnding = null
 	runPhase = "running"
@@ -1318,6 +1428,10 @@ func open_threshold_pacte() -> bool:
 	if (runPhase != "running" and not post_flatline_visit) \
 			or not pacteThresholdPending or pacteThresholdOpened:
 		return false
+	# A countdown offer may have arrived on the same reveal as the target. Keep
+	# that offer pending so Pacte completion can hand off to its dealer scene.
+	if runPhase == "running" and dealerIncoming:
+		reveal_dealer()
 	var draw_seed := (pacteSeed ^ PACTE_THRESHOLD_DRAW_SEED ^ (spinCount * 0x9e3779b9)) & M32
 	pacteOfferAugmentIds = PacteCards.draw("augment", draw_seed,
 		MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
@@ -1362,6 +1476,18 @@ func force_dealer_visit() -> bool:
 	_commit()
 	return true
 
+## Prepares the full dealer scene for a milestone handoff. A countdown-triggered
+## offer may already be incoming; reveal that same offer instead of creating a
+## second visit.
+func prepare_dealer_scene_visit() -> bool:
+	if runPhase != "running":
+		return false
+	if dealerIncoming:
+		reveal_dealer()
+	if dealerPending:
+		return dealerOfferIds is Array and not (dealerOfferIds as Array).is_empty()
+	return force_dealer_visit()
+
 func end_run(ending: String) -> void:
 	var campaign_neuron_before := int(MetaStateStore.campaignNeuronsLeft)
 	var consumed_campaign_neuron := campaignNeuronPending
@@ -1376,17 +1502,19 @@ func end_run(ending: String) -> void:
 		campaignNeuronPending = false
 	# Threshold Pacte visits belong to the campaign-neuron count, not to the
 	# machine's run-spin counter. Arm a visit whenever a flatline crosses one of
-	# the campaign thresholds (3 -> 2 or 2 -> 1).
+	# the campaign thresholds (3 -> 2 or 2 -> 1), unless that visit was already
+	# consumed by the matching Wealth target.
 	var campaign_neurons_after := int(MetaStateStore.campaignNeuronsLeft)
-	var crossed_pacte_threshold := false
+	var crossed_pacte_threshold := -1
 	if ending == "flatline" and consumed_campaign_neuron and campaign_neurons_after > 0:
-		for threshold_value in PACTE_CAMPAIGN_NEURON_THRESHOLDS:
-			var threshold := int(threshold_value)
+		for milestone_index: int in range(PACTE_CAMPAIGN_NEURON_THRESHOLDS.size()):
+			var threshold := int(PACTE_CAMPAIGN_NEURON_THRESHOLDS[milestone_index])
 			if campaign_neuron_before > threshold and campaign_neurons_after <= threshold:
-				crossed_pacte_threshold = true
+				crossed_pacte_threshold = milestone_index
 				break
-	if crossed_pacte_threshold:
+	if _pacte_threshold_available(crossed_pacte_threshold):
 		pacteThresholdPending = true
+		pacteThresholdOpened = false
 		pacteAfterFlatlinePending = true
 	_commit()
 

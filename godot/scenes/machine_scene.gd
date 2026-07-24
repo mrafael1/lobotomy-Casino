@@ -208,6 +208,10 @@ const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tsc
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const ENDING_OVERLAY_Z_INDEX := 150
+const WEALTH_TARGET_FX_Z_INDEX := 140
+const WEALTH_TARGET_POP_TIME := 0.22
+const WEALTH_TARGET_REMAINING_TIME := 0.32
+const WEALTH_TARGET_COLOR := Color(1.0, 0.86, 0.36)
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -577,6 +581,10 @@ var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
 var _wealth_goal_digit_labels: Array[Label] = []
+var _wealth_target_transition: Control = null
+var _wealth_target_label: Label = null
+var _wealth_remaining_label: Label = null
+var _wealth_target_transition_active := false
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
@@ -1142,7 +1150,7 @@ func _refresh_wealth_goal_label() -> void:
 		return
 	var target := campaign_goal_score
 	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD:
-		target = Endings.next_wealth_target(int(RunStateStore.scoreEarned))
+		target = RunStateStore.current_wealth_target()
 	var digits := str(target)
 	var start_x := roundf(WEALTH_GOAL_NUMBER_RECT.position.x
 		+ (WEALTH_GOAL_NUMBER_RECT.size.x - WEALTH_GOAL_DIGIT_PITCH * digits.length()) * 0.5)
@@ -1958,6 +1966,11 @@ func _sync_visuals() -> void:
 		_show_pending_combo_defeat()
 	else:
 		_resolve_exhausted_resume()
+		# A score can overshoot the next target before the scene is freed for the
+		# dealer/Pacte visit. Re-check on rebuild so the next target cannot be skipped.
+		if RunStateStore.runPhase == "running" and not RunStateStore.isSpinning \
+				and not RunStateStore.comboDefeatPending:
+			call_deferred("_check_ending")
 
 ## A save can land after the final neuron cost is committed but before the normal
 ## post-reveal ending check runs. Reconcile that state when the machine is rebuilt so
@@ -2017,6 +2030,93 @@ func _to_menu() -> void:
 
 func _to_dealer() -> void:
 	SceneNav.change_to(DEALER_SCENE)
+
+func _start_wealth_target_transition(info: Dictionary) -> bool:
+	if _wealth_target_transition_active or info.is_empty():
+		return false
+	_wealth_target_transition_active = true
+	_set_sequence_lock(true)
+	_wealth_target_transition = Control.new()
+	_wealth_target_transition.name = "WealthTargetTransition"
+	_wealth_target_transition.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
+	_wealth_target_transition.size = Vector2(SRC_W, SRC_H)
+	_wealth_target_transition.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wealth_target_transition.z_index = WEALTH_TARGET_FX_Z_INDEX
+	add_child(_wealth_target_transition)
+	_wealth_remaining_label = _reaction_label(_wealth_target_transition, "TARGET REACHED",
+		Vector2(0.0, 130.0), 7, WEALTH_TARGET_COLOR)
+	_wealth_remaining_label.modulate.a = 0.0
+	_wealth_target_label = _reaction_label(_wealth_target_transition,
+		str(int(info.get("target", 0))), Vector2(0.0, 150.0), 18, WEALTH_TARGET_COLOR)
+	_wealth_target_label.pivot_offset = Vector2(SRC_W * 0.5, 10.0)
+	_wealth_target_label.scale = Vector2(0.45, 0.45)
+	_wealth_target_label.modulate.a = 0.0
+	var pop := create_tween()
+	pop.set_parallel(true)
+	pop.tween_property(_wealth_remaining_label, "modulate:a", 1.0, 0.12)
+	pop.tween_property(_wealth_target_label, "modulate:a", 1.0, 0.12)
+	pop.tween_property(_wealth_target_label, "scale", Vector2.ONE,
+		WEALTH_TARGET_POP_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.chain().tween_interval(0.18)
+	pop.chain().tween_callback(Callable(self, "_finish_wealth_target_transition"))
+	return true
+
+func _finish_wealth_target_transition() -> void:
+	if not _wealth_target_transition_active:
+		return
+	var completed := RunStateStore.complete_wealth_target()
+	if completed.is_empty():
+		_stop_wealth_target_transition()
+		_set_sequence_lock(false)
+		return
+	if bool(completed.get("final", false)):
+		_wealth_target_transition_active = false
+		_stop_wealth_target_transition()
+		_post_spin_sequence_active = false
+		var final_run := {
+			"neurons": RunStateStore.neurons,
+			"scoreEarned": RunStateStore.scoreEarned,
+			"lucidityCoins": RunStateStore.lucidityCoins,
+		}
+		_show_ending("wealth", final_run)
+		return
+	if _wealth_remaining_label != null:
+		_wealth_remaining_label.text = "MONEY REMAINING"
+	if _wealth_target_label != null:
+		_wealth_target_label.text = str(int(completed.get("remaining", 0)))
+		_wealth_target_label.add_theme_color_override("font_color", NEON_CYAN)
+	var remaining_tween := create_tween()
+	if _wealth_remaining_label != null:
+		remaining_tween.tween_property(_wealth_remaining_label, "modulate:a", 1.0, 0.10)
+	remaining_tween.tween_interval(WEALTH_TARGET_REMAINING_TIME)
+	await remaining_tween.finished
+	if not _wealth_target_transition_active or _wealth_target_transition == null \
+			or not is_instance_valid(_wealth_target_transition):
+		return
+	var target := int(completed.get("target", 0))
+	_stop_wealth_target_transition()
+	_wealth_target_transition_active = false
+	_post_spin_sequence_active = false
+	if RunStateStore.arm_pacte_for_wealth_target(target) \
+			and RunStateStore.open_threshold_pacte():
+		_set_sequence_lock(false)
+		SceneNav.change_to(PACTE_SCENE)
+		return
+	if RunStateStore.prepare_dealer_scene_visit():
+		_set_sequence_lock(false)
+		SceneNav.change_to(DEALER_SCENE)
+		return
+	# A failed offer roll should not strand the run behind a visual lock. The
+	# target has already been paid out; the next HUD refresh can retry normally.
+	_set_sequence_lock(false)
+	_update_hud()
+
+func _stop_wealth_target_transition() -> void:
+	if _wealth_target_transition != null and is_instance_valid(_wealth_target_transition):
+		_wealth_target_transition.queue_free()
+	_wealth_target_transition = null
+	_wealth_target_label = null
+	_wealth_remaining_label = null
 
 func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
@@ -6111,6 +6211,14 @@ func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int
 func _check_ending() -> bool:
 	if RunStateStore.comboDefeatPending:
 		return false
+	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD \
+			and not RunStateStore.wealthContinued \
+			and RunStateStore.current_wealth_target() < EconomyConst.WEALTH_SCORE_THRESHOLD \
+			and not _wealth_target_transition_active \
+			and RunStateStore.wealth_target_due():
+		var target_info := RunStateStore.begin_wealth_target()
+		if not target_info.is_empty() and _start_wealth_target_transition(target_info):
+			return true
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -6140,6 +6248,8 @@ func _check_ending() -> bool:
 ## warning, gauge effect, or transient sequence overlay survives into the
 ## terminal screens.
 func _cleanup_transient_presentation() -> void:
+	_stop_wealth_target_transition()
+	_wealth_target_transition_active = false
 	if _dealer_overlay != null or _dealer_offer_popup != null:
 		_close_dealer(false)
 	_stop_combo_loss_beep()
@@ -6260,6 +6370,12 @@ func _build_game_over_screen(run: Dictionary = {}) -> void:
 	var game_over_screen := GAME_OVER_ENDING_SCENE.instantiate() as GameOverEndingOverlay
 	_overlay.add_child(game_over_screen)
 	game_over_screen.present(int(run.get("lucidityCoins", 0)))
+	# The terminal loss still shows the third campaign neuron being spent. The
+	# meter keeps all completed death overlays above the damaged machine art.
+	var game_over_meter := NeuronMeter.attach(game_over_screen, Vector2(80.0, 84.0))
+	game_over_meter.name = "CampaignNeuronMeter"
+	game_over_meter.z_index = 2
+	game_over_meter.play_loss_animation()
 	game_over_screen.try_again_pressed.connect(_on_game_over_try_again_pressed)
 
 ## Dedicated wealth-ending screen: the final score is presented, then Start Again

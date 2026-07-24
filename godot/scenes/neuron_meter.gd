@@ -2,9 +2,11 @@ class_name NeuronMeter
 extends Control
 
 ## Campaign health meter. The idle composition is a 34-frame 64px animation of
-## the three campaign neurons; a matching three-frame death sheet is overlaid on
-## the neuron position spent by the current flatline. The numeric count remains
-## authoritative for saves and for campaigns with fewer than three health left.
+## the three campaign neurons; matching three-frame death sheets are overlaid on
+## each neuron position as it is spent. A completed death frame remains visible
+## for the rest of the run, so the meter tells the story of the campaign's losses.
+## The numeric count remains authoritative for saves and for campaigns with fewer
+## than three health left.
 ##
 ## Autoloads are resolved through /root so this class can still be parsed by the
 ## headless test runner before the project autoloads are available.
@@ -31,9 +33,11 @@ const LOSS_ANIM_POP_SCALE := 1.25
 
 var _sprite: Sprite2D = null
 var _death_sprite: Sprite2D = null
+var _death_sprites: Array[Sprite2D] = []
 var _count_label: Label = null
 var _idle_timer: Timer = null
 var _loss_tween: Tween = null
+var _active_death_index: int = -1
 
 ## Builds a meter centred on `center` (source px) and parents it. The scenes keep
 ## their authored `neuron_number` Label as an editor placeholder; this rides on top
@@ -71,14 +75,19 @@ func _ready() -> void:
 	if show_count:
 		_build_count_label(size.x, size.y)
 
-	_death_sprite = Sprite2D.new()
-	_death_sprite.name = "Death"
-	_death_sprite.centered = false
-	_death_sprite.hframes = DEATH_FRAME_COUNT
-	_death_sprite.scale = Vector2.ONE / scale_factor
-	_death_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_death_sprite.visible = false
-	add_child(_death_sprite)
+	for index: int in range(death_sheet_assets.size()):
+		var death_sprite := Sprite2D.new()
+		death_sprite.name = "Death" if index == 0 else "Death%d" % (index + 1)
+		death_sprite.centered = false
+		death_sprite.hframes = DEATH_FRAME_COUNT
+		death_sprite.scale = Vector2.ONE / scale_factor
+		death_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		death_sprite.visible = false
+		var death_tex := assets.call("texture", death_sheet_assets[index], true) as Texture2D
+		death_sprite.texture = death_tex
+		add_child(death_sprite)
+		_death_sprites.append(death_sprite)
+	_death_sprite = _death_sprites[0] if not _death_sprites.is_empty() else null
 
 	_idle_timer = Timer.new()
 	_idle_timer.name = "IdleTimer"
@@ -116,30 +125,40 @@ func _build_count_label(frame_w: float, frame_h: float) -> void:
 	size.y = frame_h - COUNT_LABEL_OVERLAP + COUNT_LABEL_HEIGHT
 
 func _advance_idle_frame() -> void:
-	if _sprite == null or _death_sprite == null or _death_sprite.visible:
+	if _sprite == null:
 		return
 	_sprite.frame = (_sprite.frame + 1) % maxi(1, frame_count)
 
 func refresh() -> void:
 	_refresh_count()
+	_sync_death_overlays()
 
 ## Flatline-overlay losing animation. The idle composition remains underneath so
 ## the two surviving neurons stay visible while the matching neuron dies.
 func play_loss_animation() -> void:
-	if _sprite == null or _death_sprite == null:
+	if _sprite == null or _death_sprites.is_empty():
 		return
-	var lost := clampi(_neurons_lost(), 1, DEATH_FRAME_COUNT)
-	var assets := get_node_or_null("/root/Assets")
-	if assets == null or lost > death_sheet_assets.size():
+	var lost := clampi(_neurons_lost(), 1, _death_sprites.size())
+	var current_index := lost - 1
+	if current_index >= death_sheet_assets.size():
 		return
-	var death_tex := assets.call("texture", death_sheet_assets[lost - 1], true) as Texture2D
-	if death_tex == null:
+	var current_sprite := _death_sprites[current_index]
+	if current_sprite == null or current_sprite.texture == null:
 		return
-	_death_sprite.texture = death_tex
-	_death_sprite.hframes = DEATH_FRAME_COUNT
-	_death_sprite.frame = 0
-	_death_sprite.visible = true
+	for index: int in range(_death_sprites.size()):
+		var death_sprite := _death_sprites[index]
+		if index < current_index:
+			death_sprite.frame = DEATH_FRAME_COUNT - 1
+			death_sprite.visible = true
+		elif index == current_index:
+			death_sprite.frame = 0
+			death_sprite.visible = true
+		else:
+			death_sprite.frame = 0
+			death_sprite.visible = false
+	_active_death_index = current_index
 	_refresh_count()
+	_sync_death_overlays()
 	pivot_offset = size * 0.5
 	if _loss_tween != null and _loss_tween.is_valid():
 		_loss_tween.kill()
@@ -152,12 +171,27 @@ func play_loss_animation() -> void:
 	_loss_tween.tween_property(self, "scale", Vector2.ONE, 0.16)
 
 func _set_death_frame(value: float) -> void:
-	if _death_sprite != null:
-		_death_sprite.frame = clampi(roundi(value), 0, DEATH_FRAME_COUNT - 1)
+	if _active_death_index < 0 or _active_death_index >= _death_sprites.size():
+		return
+	_death_sprites[_active_death_index].frame = clampi(roundi(value), 0, DEATH_FRAME_COUNT - 1)
 
 func _finish_loss_animation() -> void:
-	if _death_sprite != null:
-		_death_sprite.visible = false
+	if _active_death_index >= 0 and _active_death_index < _death_sprites.size():
+		_death_sprites[_active_death_index].frame = DEATH_FRAME_COUNT - 1
+	_active_death_index = -1
+	_sync_death_overlays()
+
+func _sync_death_overlays() -> void:
+	var lost := clampi(_neurons_lost(), 0, _death_sprites.size())
+	for index: int in range(_death_sprites.size()):
+		var death_sprite := _death_sprites[index]
+		if index < lost:
+			death_sprite.visible = true
+			if index != _active_death_index:
+				death_sprite.frame = DEATH_FRAME_COUNT - 1
+		else:
+			death_sprite.visible = false
+			death_sprite.frame = 0
 
 func _neurons_lost() -> int:
 	var meta := get_node_or_null("/root/MetaStateStore")

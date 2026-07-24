@@ -38,7 +38,10 @@ const AUGMENTS: Array[Dictionary] = [
 		"id": "augment_smart_saving", "name": "SMART SAVING",
 		"description": "KEEP 20% OF LUCIDITY INSTEAD OF 10% ON FLATLINE.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
-		"icon_rect": Rect2(6.0, 324.0, 27.0, 26.0),
+		# The authored saving glyph has one transparent pixel of visual balance on
+		# its left edge; include it in the crop so the glyph sits one pixel right,
+		# centered like the other augment icons on the 39px card face.
+		"icon_rect": Rect2(5.0, 324.0, 27.0, 26.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pos_smart_save" },
 	},
 	{

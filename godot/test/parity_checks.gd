@@ -274,6 +274,10 @@ static func check_pacte_deck_and_powers(out: Array) -> void:
 		if int(icon_rect.position.y) != int(authored_augment_rows[card_id]):
 			_fail(out, "Pacte augment sheet row %s" % card_id, icon_rect,
 				authored_augment_rows[card_id])
+	var smart_save_icon := PacteCards.card("augment_smart_saving").get(
+		"icon_rect", Rect2()) as Rect2
+	if int(smart_save_icon.position.x) != 5:
+		_fail(out, "Smart Save icon horizontal centering", smart_save_icon.position.x, 5)
 	var one_heart := Abilities.resolve_hearts(1)
 	var three_hearts := Abilities.resolve_hearts(3)
 	if not deep_equal(one_heart, {

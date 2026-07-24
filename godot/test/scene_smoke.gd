@@ -78,6 +78,7 @@ func _run() -> void:
 	await _check_neuron_meter_on_menu(failures)
 	_check_flatline_overlay_meter(machine, failures)
 	_check_wealth_screen(machine, run_store, failures)
+	_check_wealth_target_flow_176(machine, run_store, meta_store, failures)
 	_check_wealth_score_feed(machine, run_store, failures)
 	_check_wealth_zero_spins_62(machine, run_store, failures)
 	_check_flatline_free_spins_75(machine, run_store, failures)
@@ -727,6 +728,7 @@ func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.neurons = 0
+	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
 	run_store.scoreEarned = 4960
 	run_store.lucidityCoins = 20
 	run_store.runConsumables = { "item_water": 1 }
@@ -1967,9 +1969,32 @@ func _check_neuron_meter_on_menu(failures: Array) -> void:
 				failures.append("menu: meter hframes do not match frame_count")
 			if meter.frame_count != 34 or sprite.frame < 0 or sprite.frame >= meter.frame_count:
 				failures.append("menu: meter is not using the 34-frame idle neuron animation")
-		var death_sprite := meter.get_node_or_null("Death") as Sprite2D
-		if death_sprite == null or death_sprite.hframes != 3 or death_sprite.visible:
-			failures.append("menu: meter is missing its hidden three-frame death overlay")
+		var death_sprites: Array[Sprite2D] = [
+			meter.get_node_or_null("Death") as Sprite2D,
+			meter.get_node_or_null("Death2") as Sprite2D,
+			meter.get_node_or_null("Death3") as Sprite2D,
+		]
+		for index: int in range(death_sprites.size()):
+			var death_sprite := death_sprites[index]
+			if death_sprite == null or death_sprite.hframes != 3 or death_sprite.visible:
+				failures.append("menu: meter is missing its hidden three-frame death overlay %d" % (index + 1))
+		# Each loss finishes on frame 3 and remains as a permanent overlay. Later
+		# losses must not clear the earlier damage (issue #176 feedback).
+		var health_before_animation := int(meta_store.campaignNeuronsLeft)
+		for remaining: int in [2, 1, 0]:
+			meta_store.campaignNeuronsLeft = remaining
+			meter.play_loss_animation()
+			await create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.65).timeout
+			var lost_count := int(meta_store.campaignNeuronsMax) - remaining
+			for index: int in range(death_sprites.size()):
+				var death_sprite := death_sprites[index]
+				var expected_visible := index < lost_count
+				if death_sprite == null or death_sprite.visible != expected_visible:
+					failures.append("menu: neuron death overlay %d did not persist" % (index + 1))
+				elif expected_visible and death_sprite.frame != NeuronMeter.DEATH_FRAME_COUNT - 1:
+					failures.append("menu: neuron death overlay %d did not stop on frame 3" % (index + 1))
+		meta_store.campaignNeuronsLeft = health_before_animation
+		meter.refresh()
 		var count := meter.get_node_or_null("CountLabel") as Label
 		if count == null:
 			failures.append("menu: modal meter is missing the numeric neuron count")
@@ -2429,6 +2454,14 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	if game_over_screen == null:
 		failures.append("game over: dedicated screen missing when neurons are exhausted")
 	else:
+		var game_over_meter := _find_neuron_meter(game_over_screen)
+		if game_over_meter == null:
+			failures.append("game over: final neuron-loss meter is missing")
+		else:
+			for death_name: String in ["Death", "Death2", "Death3"]:
+				var death_overlay := game_over_meter.get_node_or_null(death_name) as Sprite2D
+				if death_overlay == null or not death_overlay.visible or death_overlay.hframes != 3:
+					failures.append("game over: %s death overlay is not retained" % death_name)
 		var game_over_texts := _overlay_label_texts(game_over_screen)
 		if not game_over_texts.has("GAME OVER"):
 			failures.append("game over: red GAME OVER title is missing")
@@ -2671,6 +2704,76 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
+func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	# The target payout is a run-local sequence. Exercise the 500 milestone, its
+	# centered presentation, the score remainder, and the shared Pacte visit gate.
+	var meta_before: Dictionary = meta_store._as_dict()
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 10
+	run_store.scoreEarned = 650
+	run_store.wealthTargetIndex = 2
+	run_store.pacteThresholdVisits = 0
+	var target_info: Dictionary = run_store.begin_wealth_target()
+	if int(target_info.get("target", 0)) != 500:
+		failures.append("issue176: current target did not resolve to 500")
+	if not machine._start_wealth_target_transition(target_info):
+		failures.append("issue176: target transition did not start")
+	else:
+		if machine._wealth_target_label == null \
+				or machine._wealth_target_label.text != "500" \
+				or not is_equal_approx(machine._wealth_target_label.position.x, 0.0) \
+				or not is_equal_approx(machine._wealth_target_label.position.y, 150.0):
+			failures.append("issue176: target number is not centered in the target animation")
+		machine._stop_wealth_target_transition()
+		machine._wealth_target_transition_active = false
+		machine._set_sequence_lock(false)
+	var payout: Dictionary = run_store.complete_wealth_target()
+	if int(payout.get("remaining", -1)) != 150 \
+			or int(run_store.scoreEarned) != 150 \
+			or int(run_store.wealthTargetIndex) != 3:
+		failures.append("issue176: 500 target did not leave the 150 score remainder")
+	if not run_store.arm_pacte_for_wealth_target(500):
+		failures.append("issue176: first 500 target did not arm Pacte")
+	# Once the first visit is consumed, the same 500 milestone cannot arm it again,
+	# while the second 1500/health-one visit remains available.
+	run_store.pacteThresholdVisits = 1
+	run_store.pacteThresholdPending = false
+	run_store.pacteThresholdOpened = false
+	if run_store.arm_pacte_for_wealth_target(500):
+		failures.append("issue176: second event incorrectly reopened the first Pacte visit")
+	if not run_store.arm_pacte_for_wealth_target(1500):
+		failures.append("issue176: second Pacte milestone was consumed with the first")
+	run_store.pacteThresholdVisits = 2
+	run_store.pacteThresholdPending = false
+	if run_store.arm_pacte_for_wealth_target(1500):
+		failures.append("issue176: exhausted Pacte visits still accepted a target")
+	# The health crossings use the same visit counter: 3 -> 2 arms visit one,
+	# then 2 -> 1 arms visit two after the first visit has been consumed.
+	run_store.reset_run_state()
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.pacteThresholdVisits = 0
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 2 or not run_store.pacteThresholdPending:
+		failures.append("issue176: health 3 -> 2 did not arm the first Pacte visit")
+	run_store.runPhase = "running"
+	run_store.lastEnding = null
+	run_store.campaignNeuronPending = true
+	run_store.pacteThresholdPending = false
+	run_store.pacteThresholdVisits = 1
+	run_store.pacteAfterFlatlinePending = false
+	run_store.end_run("flatline")
+	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
+		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
 func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -> void:
 	var previous_result: Variant = run_store.lastResult
 	var previous_phase := String(run_store.runPhase)
@@ -2723,6 +2826,7 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.scoreEarned = 5000
+	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 0
 	if not machine._check_ending():
@@ -2760,6 +2864,7 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	# is past the goal (the wealth ending is suppressed by wealthContinued).
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 1 # keep the target-transition flow out of this flatline gate test
 	run_store.scoreEarned = 2500
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 0
@@ -2799,6 +2904,7 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 1
 	run_store.scoreEarned = 100
 	run_store.neurons = 0
 	run_store.freeSpinsRemaining = 2
@@ -5298,6 +5404,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	var prev_neurons := int(run_store.neurons)
 	var prev_starting := int(run_store.startingNeurons)
 	var prev_score := int(run_store.scoreEarned)
+	var prev_target_index := int(run_store.wealthTargetIndex)
+	var prev_target_pending := bool(run_store.wealthTargetPending)
+	var prev_target_pending_value := int(run_store.wealthTargetPendingValue)
 	var prev_spin_count := int(run_store.spinCount)
 	var prev_flat := int(run_store.flatlineResultCount)
 	var prev_locked_spins: Array = run_store.lockedReelSpins.duplicate()
@@ -5316,6 +5425,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	run_store.compulsiveSpinSkips = 0
 	run_store.freeSpinsRemaining = 0
 	run_store.neurons = 8
+	run_store.wealthTargetIndex = 1
+	run_store.wealthTargetPending = false
+	run_store.wealthTargetPendingValue = 0
 	run_store.scoreEarned = 100
 	run_store.spinCount = 1
 	run_store.lockedReelSpins = [0, 0, 0]
@@ -5383,6 +5495,9 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	run_store.neurons = prev_neurons
 	run_store.startingNeurons = prev_starting
 	run_store.scoreEarned = prev_score
+	run_store.wealthTargetIndex = prev_target_index
+	run_store.wealthTargetPending = prev_target_pending
+	run_store.wealthTargetPendingValue = prev_target_pending_value
 	run_store.spinCount = prev_spin_count
 	run_store.flatlineResultCount = prev_flat
 	run_store.lockedReelSpins = prev_locked_spins
@@ -5796,6 +5911,7 @@ func _check_save_resume_151(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.neurons = 0
+	run_store.wealthTargetIndex = 1
 	run_store.freeSpinsRemaining = 0
 	run_store.isSpinning = false
 	run_store.scoreEarned = 123

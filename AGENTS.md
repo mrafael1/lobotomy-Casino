@@ -63,7 +63,12 @@ Resources and currencies:
   the separate Lucidity coins from the cash tray. Changed digits roll and carry like
   physical number drums. Its white cases sit behind the rolling digits and the
   authored Wealth bar frame sits above them. The white box below the odometer shows
-  the run's current Wealth objective as a single "TARGET: n" line.
+  the run's current Wealth objective as a single "TARGET: n" line. Reaching an
+  intermediate target briefly presents that target in the centre of the machine,
+  subtracts it from the run score, shows the remaining money, and hands the run to
+  the dealer scene. The 500 and 1,500 target handoffs use the two threshold Pacte
+  visits; each visit is consumed by whichever happens first, its target or the
+  matching campaign-health crossing.
 - **Run Lucidity (coins)** — earned alongside score during the run. Every 50 coins
   restores one random spent power (30 with Adrenaline); coins also pay for mid-run
   dealer offer rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save,
@@ -91,13 +96,14 @@ Resources and currencies:
    state instead of dropping instantly.
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
-6. When a flatline consumes the reserved campaign neuron and the campaign count
-   crosses from 3 to 2 or from 2 to 1, finish the flatline presentation and then
-   open that threshold Pacte visit. A live machine's CHIPS/SPINS counter reaching
-   5 never opens Pacte. Each threshold visit adds one augment and power to the
-   earlier selections; completion opens the live dealer scene with the current
-   run's Lucidity balance, normal run-item offers, and a dedicated Chip Augment
-   offer.
+6. When an intermediate target is reached, finish its target/remainder
+   presentation and leave the machine for the dealer. The 500 target or campaign
+   health crossing from 3 to 2 opens the first threshold Pacte visit; the 1,500
+   target or crossing from 2 to 1 opens the second. Only the first event in each
+   pair can proc that visit. A live machine's CHIPS/SPINS counter reaching 5 never
+   opens Pacte. Each threshold visit adds one augment and power to the earlier
+   selections; completion opens the live dealer scene with the current run's
+   Lucidity balance, normal run-item offers, and a dedicated Chip Augment offer.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
    for x1/x2/x3 each spin, so lower gauges pull him in faster; Glitch 2 makes every
    spin advance three steps.
@@ -271,6 +277,9 @@ Resources and currencies:
   All three ending presentations draw above the machine HUD art.
 - **Flatline** — 0 run spins with no banked free spins. Keeps 10% of run Lucidity
   (20% with Smart Save, spade halves it) into the wallet.
+- Campaign neuron loss plays through the authored three-frame death sheet and keeps
+  its final frame over the meter for the rest of the run; successive losses retain
+  the first, second, and third overlays before Game Over.
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
 - Progression persists in MetaStateStore: wallet, Lab permanents, unlock-aware
