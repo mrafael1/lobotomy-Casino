@@ -6313,9 +6313,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if pacte._augment_deck == null or pacte._power_deck == null \
 			or pacte._augment_deck.hframes != pacte.DECK_FRAME_COUNT \
 			or pacte._power_deck.hframes != pacte.DECK_FRAME_COUNT \
-			or pacte._augment_deck.frame != pacte.DECK_ACTIVE_FRAME \
-			or pacte._power_deck.visible:
-		failures.append("pacte: centered augment deck state is not initialized")
+			or pacte._augment_deck.frame != pacte.DECK_FRAME \
+			or pacte._power_deck.frame != pacte.DECK_FRAME \
+			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
+		failures.append("pacte: fixed dual-deck state is not initialized")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
 	for removed_name in ["SelectedCardOverlay", "CancelSelection", "ExitPacte"]:
 		if pacte.get_node_or_null(removed_name) != null:
@@ -6341,10 +6342,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: card preview did not show the description bubble")
 	if String(pacte._instruction.text) == "CHOOSE ONE CARD":
 		failures.append("pacte: choose-one prompt remained after card tap")
-	if pacte._description_bubble.size.x >= 152.0 or pacte._description_bubble.size.y >= 42.0:
-		failures.append("pacte: description bubble was not compacted")
-	if pacte._description_bubble.position != Vector2(25.0, 123.0):
-		failures.append("pacte: description bubble is not close to the card row")
+	if pacte._description_bubble.position != pacte.DESCRIPTION_BUBBLE_RECT.position \
+			or pacte._description_bubble.size != pacte.DESCRIPTION_BUBBLE_RECT.size:
+		failures.append("pacte: description bubble geometry does not match the authored card preview")
 	if pacte._phase_label.position != pacte.PHASE_LABEL_RECT.position \
 			or pacte._phase_label.size != pacte.PHASE_LABEL_RECT.size \
 			or pacte._phase_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER \
@@ -6411,12 +6411,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME:
 		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
 	if pacte._augment_emplacement == null \
-			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTED_FRAME \
+			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
 			or not pacte._augment_emplacement.visible \
 			or pacte._power_emplacement == null \
 			or pacte._power_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
 			or not pacte._power_emplacement.visible:
-		failures.append("pacte: selected augment and centered power emplacement frames are incorrect")
+		failures.append("pacte: augment and power emplacement frames are incorrect")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
 			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
@@ -6427,9 +6427,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if pacte._phase_label.get_theme_color("font_color") != pacte.DEALER_TEXT_COLOR:
 		failures.append("pacte: choose power prompt did not stay red")
 	if not pacte._augment_deck.visible or not pacte._power_deck.visible \
-			or pacte._augment_deck.frame != pacte.DECK_IDLE_FRAME \
-			or pacte._power_deck.frame != pacte.DECK_ACTIVE_FRAME:
-		failures.append("pacte: deck art did not move to the augment-idle/power-centered state")
+			or pacte._augment_deck.frame != pacte.DECK_FRAME \
+			or pacte._power_deck.frame != pacte.DECK_FRAME:
+		failures.append("pacte: both fixed-position decks are not visible during power drawing")
 	var first_power := String(power_offers[0])
 	pacte._set_face_up(first_power)
 	var power_button := pacte._card_buttons.get(first_power, null) as Button

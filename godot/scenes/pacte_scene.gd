@@ -33,20 +33,20 @@ const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
 const DEALER_ASSET := "pacte_scene/dealer.png"
 const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
 const TABLE_ASSET := "pacte_scene/table.png"
-const DECK_FRAME_COUNT := 2
-const EMPLACEMENT_FRAME_COUNT := 3
-const DECK_ACTIVE_FRAME := 0
-const DECK_IDLE_FRAME := 1
+const DECK_FRAME_COUNT := 1
+const DECK_FRAME := 0
+const EMPLACEMENT_FRAME_COUNT := 2
 const EMPLACEMENT_SELECTING_FRAME := 0
 const EMPLACEMENT_DROP_FRAME := 1
-const EMPLACEMENT_SELECTED_FRAME := 2
 const FACE_DOWN_SHUFFLE_TIME := 0.24
 const FACE_DOWN_SHUFFLE_OFFSET := 2.0
 const DEALER_PROMPT_FONT_SIZE := 5
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
-const DESCRIPTION_BUBBLE_RECT := Rect2(25.0, 123.0, 110.0, 24.0)
+const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
+const DESCRIPTION_TITLE_RECT := Rect2(2.0, 2.0, 46.0, 7.0)
+const DESCRIPTION_TEXT_RECT := Rect2(3.0, 9.0, 44.0, 17.0)
 const DEALER_BUBBLE_RECT := Rect2(60.0, 74.0, 39.0, 43.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 164.0, 150.0, 10.0)
@@ -199,10 +199,10 @@ func _build_overlay_ui() -> void:
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
-	_description_title = _label("CardTitle", Rect2(2.0, 1.0, 106.0, 7.0), 4, NEON_GOLD, _description_bubble)
+	_description_title = _label("CardTitle", DESCRIPTION_TITLE_RECT, 4, NEON_GOLD, _description_bubble)
 	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_title.clip_text = true
-	_description_text = _label("CardDescription", Rect2(4.0, 8.0, 102.0, 15.0), 3, TEXT_COLOR, _description_bubble)
+	_description_text = _label("CardDescription", DESCRIPTION_TEXT_RECT, 3, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -250,12 +250,6 @@ func _set_emplacement(asset: String) -> void:
 	_configure_native_sheet(_emplacement, EMPLACEMENT_FRAME_COUNT)
 	_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
 	_sync_emplacement_visibility()
-
-func _set_emplacement_frame_for_kind(kind: String, frame: int) -> void:
-	var target := _augment_emplacement if kind == "augment" else _power_emplacement
-	if target == null or target.hframes <= 0:
-		return
-	target.frame = clampi(frame, 0, target.hframes - 1)
 
 func _sync_emplacement_visibility() -> void:
 	if _augment_emplacement != null:
@@ -531,22 +525,15 @@ func _atlas(asset: String, region: Rect2) -> AtlasTexture:
 	atlas.region = region
 	return atlas
 
-func _set_deck_visible(kind: String) -> void:
+func _set_deck_visible(_kind: String) -> void:
 	if _augment_deck != null:
 		_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
-		_augment_deck.visible = kind == "augment" or _chosen_augment_id != ""
-		_augment_deck.frame = DECK_ACTIVE_FRAME if kind == "augment" else DECK_IDLE_FRAME
+		_augment_deck.visible = true
+		_augment_deck.frame = DECK_FRAME
 	if _power_deck != null:
 		_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
-		_power_deck.visible = kind == "power"
-		_power_deck.frame = DECK_ACTIVE_FRAME
-
-func _set_deck_idle(kind: String) -> void:
-	var deck := _augment_deck if kind == "augment" else _power_deck
-	if deck == null:
-		return
-	deck.visible = true
-	deck.frame = DECK_IDLE_FRAME
+		_power_deck.visible = true
+		_power_deck.frame = DECK_FRAME
 
 func _shuffle_active_deck() -> void:
 	var deck := _augment_deck if _pool_kind == "augment" else _power_deck
@@ -722,8 +709,10 @@ func _preview_card(card_id: String) -> void:
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
 	# compact panel as well as their glyphs.
-	_description_title.size = Vector2(106.0, 7.0)
-	_description_text.size = Vector2(102.0, 15.0)
+	_description_title.position = DESCRIPTION_TITLE_RECT.position
+	_description_title.size = DESCRIPTION_TITLE_RECT.size
+	_description_text.position = DESCRIPTION_TEXT_RECT.position
+	_description_text.size = DESCRIPTION_TEXT_RECT.size
 	# Tapping a card replaces the generic prompt immediately, while the compact
 	# description remains visible until the player starts dragging it.
 	_instruction.text = "DRAG TO THE SLOT"
@@ -742,8 +731,6 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			return
 		_chosen_augment_id = card_id
-		_set_emplacement_frame_for_kind("augment", EMPLACEMENT_SELECTED_FRAME)
-		_set_deck_idle("augment")
 		_show_chosen_card(card_id, "augment")
 		_show_pool("power", _offer_array(RunStateStore.pacteOfferPowerIds))
 		if REWARD_AMP_CARD_IDS.has(card_id):
@@ -759,8 +746,6 @@ func _accept_card(card_id: String) -> void:
 		_chosen_card_views.erase("power")
 		_selection_locked = false
 		return
-	_set_emplacement_frame_for_kind("power", EMPLACEMENT_SELECTED_FRAME)
-	_set_deck_idle("power")
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
