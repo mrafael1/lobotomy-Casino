@@ -6390,11 +6390,23 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: preview card did not scale up")
 	if pacte._drop_label.text != "DROP HERE":
 		failures.append("pacte: drag target is missing DROP HERE")
-	var press_position := first_button.get_global_transform_with_canvas() * Vector2(15.0, 20.0)
-	pacte._begin_drag(first_augment, 0, first_button, press_position)
+	var screen_press := InputEventScreenTouch.new()
+	screen_press.index = 0
+	# gui_input receives touch positions local to the card; the scene converts
+	# that point back to canvas space before calculating the drag offset.
+	screen_press.position = Vector2(15.0, 20.0)
+	screen_press.pressed = true
+	pacte._on_card_gui_input(screen_press, first_augment, 0, first_button)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card explanation disappeared before drag movement")
-	pacte._update_drag(Vector2(40.0, 270.0))
+	var screen_drag := InputEventScreenDrag.new()
+	screen_drag.index = 0
+	screen_drag.position = Vector2(40.0, 270.0)
+	pacte._input(screen_drag)
+	var dragged_finger_position := first_button.get_global_transform() * screen_press.position
+	var expected_finger_position: Vector2 = pacte._input_canvas_position(screen_drag.position)
+	if dragged_finger_position.distance_to(expected_finger_position) > 0.1:
+		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
 	var drag_shadow := first_button.get_node_or_null("DragShadow") as Control
@@ -6416,7 +6428,11 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or card_visual_top_left.y + card_visual_size.y > 320.0:
 		failures.append("pacte: mobile card drag escaped the native canvas")
 	pacte._update_drag(Vector2(40.0, 270.0))
-	pacte._finish_drag(Vector2(40.0, 270.0))
+	var screen_release := InputEventScreenTouch.new()
+	screen_release.index = 0
+	screen_release.position = Vector2(40.0, 270.0)
+	screen_release.pressed = false
+	pacte._input(screen_release)
 	# The card button may be freed by the accepted drop; check the shadow removal
 	# before yielding a frame (remove_drag_shadow queues the shadow for deletion).
 	if is_instance_valid(first_button):

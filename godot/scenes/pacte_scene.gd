@@ -614,7 +614,9 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 		if event.pressed:
 			_begin_drag(card_id, index, button, get_global_mouse_position())
 	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
-			_begin_drag(card_id, index, button, (event as InputEventScreenTouch).position)
+		var touch_event := event as InputEventScreenTouch
+		_begin_drag(card_id, index, button,
+			button.get_global_transform() * touch_event.position)
 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
@@ -628,9 +630,11 @@ func _input(event: InputEvent) -> void:
 		_finish_drag(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag and event.index == 0:
-		_update_drag((event as InputEventScreenDrag).position)
+		var drag_event := event as InputEventScreenDrag
+		_update_drag(_input_canvas_position(drag_event.position))
 	elif event is InputEventScreenTouch and event.index == 0 and not event.pressed:
-		_finish_drag((event as InputEventScreenTouch).position)
+		var release_event := event as InputEventScreenTouch
+		_finish_drag(_input_canvas_position(release_event.position))
 		get_viewport().set_input_as_handled()
 
 func _begin_drag(card_id: String, index: int, button: Button,
@@ -640,7 +644,13 @@ func _begin_drag(card_id: String, index: int, button: Button,
 	_drag_origin_z = button.z_index
 	button.z_index = 30
 	button.move_to_front()
-	_drag_offset = button.get_global_transform_with_canvas().affine_inverse() * global_position
+	# Store the grabbed point in the card parent's space. This keeps the exact
+	# finger anchor even while the inspected card is scaled around its pivot.
+	var parent := button.get_parent() as CanvasItem
+	var parent_position := global_position
+	if parent != null:
+		parent_position = parent.get_global_transform().affine_inverse() * global_position
+	_drag_offset = parent_position - button.position
 	_drag_id = card_id
 	_drag_index = index
 	_dragging = false
@@ -694,7 +704,10 @@ func _finish_drag(global_position: Vector2) -> void:
 		_instruction.text = "DRAG TO THE SLOT"
 
 func _global_to_local(global_position: Vector2) -> Vector2:
-	return get_global_transform_with_canvas().affine_inverse() * global_position
+	return get_global_transform().affine_inverse() * global_position
+
+func _input_canvas_position(viewport_position: Vector2) -> Vector2:
+	return make_canvas_position_local(viewport_position)
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	# Screen-touch coordinates can briefly report outside the scaled viewport while

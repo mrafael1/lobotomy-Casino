@@ -294,7 +294,8 @@ Resources and currencies:
   inspected card. The authored two-frame dealer text supplies the augment/power
   prompt; no separate CHOOSE AN AUGMENT, CHOOSE A POWER, or CHOOSE ONE CARD label
   is drawn. The drag instruction sits below the offer-card row, and card dragging
-  is bounded to the native 160x320 canvas.
+  maps mobile viewport touches into the native canvas while preserving the point
+  grabbed under the finger, and remains bounded to the native 160x320 canvas.
   Once the machine has started, a reopened Pacte presents a clean table: the
   initial visit's cards keep their effects in the run but are not re-shown.
   Completing the mid-run (threshold) visit hands off to the live dealer scene,
