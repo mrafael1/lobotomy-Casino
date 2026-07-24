@@ -370,8 +370,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var back := TextureRect.new()
 	back.name = "Back"
-	back.texture = _atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
-		Rect2(0.0, 0.0, 39.0, 61.0))
+	back.texture = _atlas(PacteCards.sheet_for_pool(kind), PacteCards.back_rect_for_pool(kind))
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE

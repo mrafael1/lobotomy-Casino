@@ -283,7 +283,8 @@ Resources and currencies:
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
 - Progression persists in MetaStateStore: wallet, Lab permanents, unlock-aware
-  Pacte augment/power card IDs (all supplied cards start unlocked), selected card
+  Pacte augment/power card IDs (all supplied cards start unlocked), the pending
+  card-unlock queue awaiting its popup, selected card
   history, permanent odds upgrades (post-run token phase, max 8 tokens held per
   menu), and ending history. Lab permanents include Shift, Memory, Hydration,
   Reward Amplification, Sedative Protocol, Pattern Fabrication, Euphoria Spiral,
@@ -327,8 +328,29 @@ Resources and currencies:
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
-- `scores_scene` / `settings_scene` / `collection_scene` / `options_overlay` —
-  meta screens.
+- `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
+- `collection_scene` — the complete Pacte card catalog, in two scrollable
+  sections (AUGMENTS, then POWERS) that follow the authored card order, so a card
+  never changes position once it is earned. Unlocked cards show their authored
+  card front with the card icon centred on it and the card name beneath; locked
+  cards keep their slot but show only the shared card back, muted and tear-lined,
+  with no readable name or description. Tapping an unlocked card opens its detail
+  modal with the full front, icon, name, and effect text; tapping a locked card
+  opens the same modal in its minimal LOCKED state, which reveals nothing about
+  the card. The unlocked ID lists in MetaStateStore are the single source of truth
+  for what is revealed, and all card art/names/descriptions/icons are resolved
+  from the shared PacteCards metadata.
+- `unlock_card_popup` — the acknowledgement flow for a newly unlocked card. Every
+  progression unlock goes through the single MetaStateStore card-unlock API, which
+  refuses unknown cards and already-owned cards, adds the card to the unlocked
+  list, and queues it for presentation. The popup dims and blocks the scene it is
+  mounted over, flips the enlarged card front into view with its icon under a
+  CARD UNLOCKED heading, and shows the card name and description. VIEW COLLECTION
+  acknowledges the card and opens Collection with it scrolled into view and
+  pulsing; CONTINUE acknowledges it and returns to the scene underneath. Several
+  cards unlocking at once are presented one after another, and the queue is
+  persisted, so an unlock earned at the end of a session is still celebrated on
+  the next launch.
 - Run lifecycle: `idle` → `pacte_initial` → `running` → `over` (with
   `lastEnding` set to wealth/flatline/game_over). A flatline that crosses the
   campaign count from 3 to 2 or 2 to 1 resumes as `pacte_threshold`, then returns through

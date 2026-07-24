@@ -149,6 +149,9 @@ func _ready() -> void:
 	_refresh_campaign_ui()
 	_configure_tutorial_modal()
 	_maybe_show_tutorial()
+	# Card unlocks earned mid-run are celebrated here if the run ended before the
+	# popup could be shown (issue #52).
+	UnlockCardPopup.attach_to(self)
 
 func _exit_tree() -> void:
 	if not Engine.is_editor_hint() and tutorial_pauses_tree and get_tree().paused:

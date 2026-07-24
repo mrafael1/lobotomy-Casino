@@ -57,7 +57,40 @@ theme_override_font_sizes/font_size = 11
 text = "COLLECTION"
 horizontal_alignment = 1
 
-[node name="Grid" type="GridContainer" parent="Panel/Rows"]
+[node name="Scroll" type="ScrollContainer" parent="Panel/Rows"]
+custom_minimum_size = Vector2(128, 196)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Catalog" type="VBoxContainer" parent="Panel/Rows/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 5
+
+[node name="AugmentsHeader" type="Label" parent="Panel/Rows/Scroll/Catalog"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.42, 1, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 7
+text = "AUGMENTS"
+horizontal_alignment = 1
+
+[node name="AugmentGrid" type="GridContainer" parent="Panel/Rows/Scroll/Catalog"]
+layout_mode = 2
+theme_override_constants/h_separation = 5
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="PowersHeader" type="Label" parent="Panel/Rows/Scroll/Catalog"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.42, 1, 0.95, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 7
+text = "POWERS"
+horizontal_alignment = 1
+
+[node name="PowerGrid" type="GridContainer" parent="Panel/Rows/Scroll/Catalog"]
 layout_mode = 2
 theme_override_constants/h_separation = 5
 theme_override_constants/v_separation = 6
@@ -74,10 +107,10 @@ text = "BACK"
 visible = false
 z_index = 50
 layout_mode = 0
-offset_left = 18.0
-offset_top = 104.0
-offset_right = 142.0
-offset_bottom = 209.0
+offset_left = 14.0
+offset_top = 66.0
+offset_right = 146.0
+offset_bottom = 250.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="Rows" type="VBoxContainer" parent="UnlockModal"]
@@ -94,7 +127,7 @@ text = "POWER"
 horizontal_alignment = 1
 
 [node name="DescriptionLabel" type="Label" parent="UnlockModal/Rows"]
-custom_minimum_size = Vector2(104, 34)
+custom_minimum_size = Vector2(112, 34)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.86, 0.9, 0.96, 1)
 theme_override_fonts/font = ExtResource("2_font")

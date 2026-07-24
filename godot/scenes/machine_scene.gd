@@ -763,6 +763,9 @@ func _ready() -> void:
 	_enter_run()
 	_build_pacte_augment_badge()
 	_init_burst_tracking()
+	# A card unlocked during the run interrupts play until it is acknowledged
+	# (issue #52); the popup blocks the machine behind its dimmed background.
+	UnlockCardPopup.attach_to(self)
 
 func _apply_balance_exports() -> void:
 	if Engine.is_editor_hint():

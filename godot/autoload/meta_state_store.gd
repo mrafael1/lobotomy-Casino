@@ -4,13 +4,13 @@ extends Node
 ## persistence layer (Step 4). Persists to user:// as JSON using the same logical
 ## shape as the MMKV `lobotomy-meta` save.
 ##
-## schemaVersion: v4 adds the unlock-aware Pacte deck lists on top of the v3
-## campaign/mind shape.
+## schemaVersion: v5 adds the pending card-unlock presentation queue on top of the
+## v4 unlock-aware Pacte deck lists.
 ## A migration seam is kept for future save changes but ships empty — a
 ## v1->v2 migration is only added if an actual v1 payload is ever found in the wild.
 
 const SAVE_PATH := "user://lobotomy-meta.json"
-const CANONICAL_SCHEMA_VERSION := 4
+const CANONICAL_SCHEMA_VERSION := 5
 
 var schemaVersion: int = CANONICAL_SCHEMA_VERSION
 var lucidityWallet: int = 0
@@ -40,6 +40,11 @@ var rewardAmpSymbol: String = ""
 # default without changing the draw code.
 var unlockedAugmentCardIds: Array = []
 var unlockedPowerCardIds: Array = []
+# Cards unlocked but not yet shown to the player (issue #52). Each entry is
+# { "cardId": String, "pool": "augment"|"power", "presented": bool }; the popup
+# drains them in queue order and acknowledges them one at a time. Persisted so an
+# unlock earned in the last seconds of a session is still celebrated next launch.
+var pendingCardUnlocks: Array = []
 
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
@@ -60,6 +65,9 @@ const SCORE_TIERS: Array[String] = ["classic", "heart", "diamond", "spade", "clu
 var _playtime_accum_ms := 0.0
 
 signal meta_changed
+## Emitted by unlock_card() the moment a card joins the unlocked list (issue #52).
+## Scenes hosting the unlock popup listen for it instead of polling the queue.
+signal card_unlocked(card_id: String, pool: String)
 
 func _ready() -> void:
 	if unlockedAugmentCardIds.is_empty():
@@ -95,6 +103,7 @@ func _as_dict() -> Dictionary:
 		"rewardAmpSymbol": rewardAmpSymbol,
 		"unlockedAugmentCardIds": unlockedAugmentCardIds.duplicate(),
 		"unlockedPowerCardIds": unlockedPowerCardIds.duplicate(),
+		"pendingCardUnlocks": pendingCardUnlocks.duplicate(true),
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -133,6 +142,7 @@ func _apply(meta: Dictionary) -> void:
 	unlockedPowerCardIds = _normalise_card_unlocks(
 		meta.get("unlockedPowerCardIds", PacteCards.power_ids()),
 		PacteCards.power_ids())
+	pendingCardUnlocks = _normalise_pending_card_unlocks(meta.get("pendingCardUnlocks", []))
 	meta_changed.emit()
 
 func _normalise_card_unlocks(value: Variant, fallback: Array[String]) -> Array:
@@ -154,22 +164,120 @@ func unlocked_power_cards() -> Array[String]:
 	return _normalise_card_unlocks(unlockedPowerCardIds, PacteCards.power_ids())
 
 func unlock_augment_card(card_id: String) -> bool:
-	if not PacteCards.augment_ids().has(card_id) or unlockedAugmentCardIds.has(card_id):
-		return false
-	unlockedAugmentCardIds = unlockedAugmentCardIds.duplicate()
-	unlockedAugmentCardIds.append(card_id)
-	meta_changed.emit()
-	save_state()
-	return true
+	return unlock_card(card_id, "augment")
 
 func unlock_power_card(card_id: String) -> bool:
-	if not PacteCards.power_ids().has(card_id) or unlockedPowerCardIds.has(card_id):
+	return unlock_card(card_id, "power")
+
+## The single card-unlock entry point (issue #52). Every achievement/progression
+## unlock routes through here instead of appending to the unlock arrays directly,
+## so the presentation queue can never drift from what the player actually owns.
+## Returns true only when the card was newly unlocked (and therefore queued).
+## `pool` may be left empty to resolve it from the card metadata.
+func unlock_card(card_id: String, pool: String = "", save_immediately := true) -> bool:
+	var normalised := PacteCards.normalise_card_id(card_id)
+	var resolved_pool := PacteCards.pool_of(normalised)
+	if resolved_pool == "":
 		return false
-	unlockedPowerCardIds = unlockedPowerCardIds.duplicate()
-	unlockedPowerCardIds.append(card_id)
+	# A caller that names a pool must name the right one: a mismatch is a bug in
+	# the progression rule, not a reason to unlock the card under the other pool.
+	if pool != "" and pool != resolved_pool:
+		return false
+	var unlocked := unlockedAugmentCardIds if resolved_pool == "augment" else unlockedPowerCardIds
+	if unlocked.has(normalised):
+		return false
+	unlocked = unlocked.duplicate()
+	unlocked.append(normalised)
+	if resolved_pool == "augment":
+		unlockedAugmentCardIds = unlocked
+	else:
+		unlockedPowerCardIds = unlocked
+	_queue_card_unlock(normalised, resolved_pool)
+	meta_changed.emit()
+	card_unlocked.emit(normalised, resolved_pool)
+	if save_immediately:
+		save_state()
+	return true
+
+func _queue_card_unlock(card_id: String, pool: String) -> void:
+	for entry in pendingCardUnlocks:
+		if String((entry as Dictionary).get("cardId", "")) == card_id:
+			return
+	pendingCardUnlocks = pendingCardUnlocks.duplicate(true)
+	pendingCardUnlocks.append({ "cardId": card_id, "pool": pool, "presented": false })
+
+## Queue entries still waiting to be shown, in unlock order.
+func pending_card_unlocks() -> Array:
+	var result: Array = []
+	for entry in pendingCardUnlocks:
+		var record := entry as Dictionary
+		if not bool(record.get("presented", false)):
+			result.append(record.duplicate(true))
+	return result
+
+func has_pending_card_unlocks() -> bool:
+	return not pending_card_unlocks().is_empty()
+
+## The card the popup should present next, or {} when the queue is drained.
+func next_pending_card_unlock() -> Dictionary:
+	var pending := pending_card_unlocks()
+	return {} if pending.is_empty() else pending[0] as Dictionary
+
+## Marks one queued card as presented and drops it from the queue. Called by the
+## popup for both CONTINUE and VIEW COLLECTION so an acknowledged card is never
+## celebrated twice.
+func acknowledge_card_unlock(card_id: String, save_immediately := true) -> bool:
+	var normalised := PacteCards.normalise_card_id(card_id)
+	var next: Array = []
+	var acknowledged := false
+	for entry in pendingCardUnlocks:
+		var record := (entry as Dictionary).duplicate(true)
+		if String(record.get("cardId", "")) == normalised \
+				and not bool(record.get("presented", false)):
+			acknowledged = true
+			continue
+		next.append(record)
+	if not acknowledged:
+		return false
+	pendingCardUnlocks = next
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
+	return true
+
+func clear_pending_card_unlocks() -> void:
+	if pendingCardUnlocks.is_empty():
+		return
+	pendingCardUnlocks = []
 	meta_changed.emit()
 	save_state()
-	return true
+
+## Drops malformed/unknown/duplicate entries and any queued card that is no longer
+## unlocked, so a hand-edited or downgraded save can never surface a locked card's
+## metadata through the popup.
+func _normalise_pending_card_unlocks(value: Variant) -> Array:
+	var result: Array = []
+	if not (value is Array):
+		return result
+	var seen: Array[String] = []
+	for entry in value as Array:
+		if not (entry is Dictionary):
+			continue
+		var record := entry as Dictionary
+		var card_id := PacteCards.normalise_card_id(String(record.get("cardId", "")))
+		var pool := PacteCards.pool_of(card_id)
+		if pool == "" or seen.has(card_id):
+			continue
+		var unlocked := unlockedAugmentCardIds if pool == "augment" else unlockedPowerCardIds
+		if not unlocked.has(card_id):
+			continue
+		seen.append(card_id)
+		result.append({
+			"cardId": card_id,
+			"pool": pool,
+			"presented": bool(record.get("presented", false)),
+		})
+	return result
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
 
@@ -468,6 +576,9 @@ func start_new_campaign(save_immediately := true) -> void:
 	rewardAmpSymbol = ""
 	unlockedAugmentCardIds = PacteCards.augment_ids()
 	unlockedPowerCardIds = PacteCards.power_ids()
+	# A fresh campaign hands the whole deck back at once; queueing every card would
+	# open a popup chain the player never earned.
+	pendingCardUnlocks = []
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -553,6 +664,10 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["unlockedAugmentCardIds"] = PacteCards.augment_ids()
 	if not current.has("unlockedPowerCardIds"):
 		current["unlockedPowerCardIds"] = PacteCards.power_ids()
+	# Issue #52: pre-v5 saves predate the presentation queue. It migrates in empty —
+	# cards already owned before the popup existed are not retroactively celebrated.
+	if not current.has("pendingCardUnlocks"):
+		current["pendingCardUnlocks"] = []
 	# Issue #53: cons_syringe was renamed cons_potion — migrate stashed copies.
 	var pending: Dictionary = current.get("pendingConsumables", {}) as Dictionary
 	if pending.has("cons_syringe"):
