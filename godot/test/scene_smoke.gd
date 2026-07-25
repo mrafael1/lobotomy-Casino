@@ -104,6 +104,8 @@ func _run() -> void:
 	_check_run_persistence_111(run_store, failures)
 	_check_save_resume_151(machine, run_store, failures)
 	_check_tier_win_counter_142(run_store, meta_store, failures)
+	await _check_card_collection_52(meta_store, failures)
+	_check_card_unlock_rules_52(machine, run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -2778,9 +2780,9 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
 		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
 	# Round break: paying a target sends the run to the PERSISTENT dealer shop and the
-	# next START begins a fresh run. Augments/powers/consumables and campaign health
-	# carry; score and the run-spin budget reset; the advanced target survives; and no
-	# campaign neuron is spent along the way.
+	# next START begins a fresh run. Augments/powers/consumables, campaign health, the
+	# advanced target, and the money left after the payout all carry; the run-spin
+	# budget resets; and no campaign neuron is spent along the way.
 	run_store.reset_run_state()
 	meta_store.campaignActive = true
 	meta_store.campaignFailed = false
@@ -2804,8 +2806,8 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: target break wrongly spent a campaign neuron")
 	if not run_store.start_new_run([], {}):
 		failures.append("issue176: could not start the next target round")
-	if int(run_store.scoreEarned) != 0:
-		failures.append("issue176: next round did not reset the score")
+	if int(run_store.scoreEarned) != 150:
+		failures.append("issue176: next round did not keep the money left after the target")
 	if int(run_store.wealthTargetIndex) != 3:
 		failures.append("issue176: next round lost the advanced target")
 	if run_store.roundContinuationPending:
@@ -2818,6 +2820,21 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
 	if String(run_store.runPhase) != "running":
 		failures.append("issue176: next round did not enter the machine")
+	# A flatline with campaign health left resumes the campaign at the target it died
+	# on: the money is gone, but the player does not replay targets already beaten.
+	run_store.reset_run_state()
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.scoreEarned = 900
+	run_store.wealthTargetIndex = 2
+	run_store.end_run("flatline")
+	if not run_store.start_new_run([], {}):
+		failures.append("issue176: could not resume the campaign after a flatline")
+	if int(run_store.wealthTargetIndex) != 2:
+		failures.append("issue176: a flatline continuation reset the wealth target")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue176: a flatline continuation kept the run's money")
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -6893,9 +6910,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		var target_hit: Dictionary = machine.POWER_HITS[target_id]
 		var ordered_button := machine._power_buttons.get(ordered_id) as Button
 		var ordered_sprite := machine._power_sprites.get(ordered_id) as Sprite2D
-		var expected_position := Vector2(float(target_hit["left"]), float(target_hit["top"]))
+		# Each emplacement carries its own pixel nudge against the machine art, and it
+		# applies to whichever power lands there.
+		var nudge_x: float = machine.POWER_SLOT_NUDGE_X[slot_index]
+		var expected_position := Vector2(float(target_hit["left"]) + nudge_x, float(target_hit["top"]))
 		var expected_offset := Vector2(
-			float(target_hit["left"]) - float(source_hit["left"]),
+			float(target_hit["left"]) - float(source_hit["left"]) + nudge_x,
 			float(target_hit["top"]) - float(source_hit["top"]))
 		if ordered_button == null or not ordered_button.visible \
 				or ordered_button.position != expected_position:
@@ -7215,3 +7235,328 @@ func _pacte_power_result(reels: Array) -> Dictionary:
 		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
 		"winType": "miss", "isFreeSpin": false, "scoreMultiplier": 1.0,
 	}
+
+# ── issue #52: Collection card catalog and the unlock popup ──────────────────────
+
+func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
+	var saved_augments: Array = meta_store.unlockedAugmentCardIds.duplicate()
+	var saved_powers: Array = meta_store.unlockedPowerCardIds.duplicate()
+	var saved_pending: Array = meta_store.pendingCardUnlocks.duplicate(true)
+	var saved_progress: Dictionary = meta_store.cardUnlockProgress.duplicate(true)
+	var locked_augment := "augment_hallucination"
+	var locked_power := "heart"
+	var unlocked_augment := "augment_book"
+
+	var augments: Array = PacteCards.augment_ids()
+	augments.erase(locked_augment)
+	var powers: Array = PacteCards.power_ids()
+	powers.erase(locked_power)
+	meta_store.unlockedAugmentCardIds = augments
+	meta_store.unlockedPowerCardIds = powers
+	meta_store.pendingCardUnlocks = []
+
+	var collection := (load("res://scenes/collection_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(collection)
+
+	# The catalog is complete and ordered by PacteCards, locked cards included.
+	var expected: Array[String] = []
+	expected.append_array(PacteCards.augment_ids())
+	expected.append_array(PacteCards.power_ids())
+	if str(collection.catalog_card_ids()) != str(expected):
+		failures.append("issue52: Collection catalog order/contents drifted from PacteCards")
+
+	# An unlocked card shows its authored front, icon, and name.
+	var unlocked_entry := collection.card_entry(unlocked_augment) as Button
+	if unlocked_entry == null:
+		failures.append("issue52: unlocked augment has no catalog entry")
+	else:
+		var art := unlocked_entry.get_node_or_null("CardArt") as TextureRect
+		var atlas := art.texture as AtlasTexture if art != null else null
+		if atlas == null or atlas.region != PacteCards.AUGMENT_FRONT_RECT:
+			failures.append("issue52: unlocked augment did not render the card front")
+		if unlocked_entry.get_node_or_null("CardIcon") == null:
+			failures.append("issue52: unlocked augment did not render its icon")
+		var name_label := unlocked_entry.get_node_or_null("NameLabel") as Label
+		if name_label == null or name_label.text != String(PacteCards.card(unlocked_augment)["name"]).to_upper():
+			failures.append("issue52: unlocked augment did not show its name")
+
+	# A locked card keeps its slot but shows only the card back.
+	for locked in [
+		{ "id": locked_augment, "back": PacteCards.AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
+		{ "id": locked_power, "back": PacteCards.POWER_BACK_RECT, "name": "HEART" },
+	]:
+		var locked_id := String(locked["id"])
+		var locked_entry := collection.card_entry(locked_id) as Button
+		if locked_entry == null:
+			failures.append("issue52: locked card %s lost its catalog slot" % locked_id)
+			continue
+		var locked_art := locked_entry.get_node_or_null("CardArt") as TextureRect
+		var locked_atlas := locked_art.texture as AtlasTexture if locked_art != null else null
+		if locked_atlas == null or locked_atlas.region != (locked["back"] as Rect2):
+			failures.append("issue52: locked card %s did not render the card back" % locked_id)
+		if locked_entry.get_node_or_null("CardIcon") != null:
+			failures.append("issue52: locked card %s leaked its icon" % locked_id)
+		var locked_label := locked_entry.get_node_or_null("NameLabel") as Label
+		if locked_label == null or locked_label.text != "":
+			failures.append("issue52: locked card %s leaked a readable name" % locked_id)
+		if locked_entry.modulate == Color.WHITE:
+			failures.append("issue52: locked card %s was not muted" % locked_id)
+
+	# Selecting a card opens the matching modal state.
+	var unlocked_button := collection.card_entry(unlocked_augment) as Button
+	if unlocked_button != null:
+		unlocked_button.pressed.emit()
+	var unlocked_card := PacteCards.card(unlocked_augment)
+	if collection.modal_state() != "unlocked" or collection.modal_card_id() != unlocked_augment:
+		failures.append("issue52: selecting an unlocked card did not open the unlocked modal")
+	if collection._modal_description.text != String(unlocked_card["description"]):
+		failures.append("issue52: the unlocked modal did not show the authored description")
+	if not collection._modal.visible:
+		failures.append("issue52: the detail modal stayed hidden for an unlocked card")
+
+	var locked_button := collection.card_entry(locked_augment) as Button
+	if locked_button != null:
+		locked_button.pressed.emit()
+	if collection.modal_state() != "locked" or collection.modal_card_id() != locked_augment:
+		failures.append("issue52: selecting a locked card did not open the LOCKED modal")
+	var locked_meta := PacteCards.card(locked_augment)
+	if collection._modal_name.text != collection.LOCKED_NAME \
+			or collection._modal_description.text == String(locked_meta["description"]) \
+			or collection._modal_description.text.contains(String(locked_meta["name"])):
+		failures.append("issue52: the LOCKED modal revealed the card's metadata")
+	if collection._modal_card_icon != null and collection._modal_card_icon.visible:
+		failures.append("issue52: the LOCKED modal revealed the card icon")
+	collection.queue_free()
+
+	# ── unlock popup ─────────────────────────────────────────────────────────────
+	var host := Control.new()
+	get_root().add_child(host)
+	var popup := UnlockCardPopup.attach_to(host)
+	if popup == null:
+		failures.append("issue52: the unlock popup did not attach to its host")
+		host.queue_free()
+		_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
+		return
+	if popup.visible:
+		failures.append("issue52: the unlock popup opened with an empty queue")
+
+	# A new unlock queues exactly one entry and opens the popup on that card.
+	if not meta_store.unlock_card(locked_augment, "augment", false):
+		failures.append("issue52: unlock_card refused a locked card")
+	if meta_store.pending_card_unlocks().size() != 1:
+		failures.append("issue52: a new unlock did not create exactly one popup entry")
+	if not popup.visible or popup._card_id != locked_augment:
+		failures.append("issue52: the popup did not present the newly unlocked card")
+	if popup._name_label.text != String(PacteCards.card(locked_augment)["name"]).to_upper() \
+			or popup._description_label.text != String(PacteCards.card(locked_augment)["description"]):
+		failures.append("issue52: the popup did not show the card's authored name/description")
+	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.AUGMENT_FRONT_RECT:
+		failures.append("issue52: the popup did not show the enlarged card front")
+	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("issue52: the popup card front is not nearest-filtered")
+	if popup._heading.text != "CARD UNLOCKED":
+		failures.append("issue52: the popup is missing its CARD UNLOCKED heading")
+	if popup._dim == null or popup.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("issue52: the popup does not block the scene behind it")
+
+	# A duplicate unlock attempt changes nothing.
+	if meta_store.unlock_card(locked_augment, "augment", false):
+		failures.append("issue52: an already-unlocked card unlocked twice")
+	if meta_store.pending_card_unlocks().size() != 1:
+		failures.append("issue52: a duplicate unlock added a second popup entry")
+
+	# A second unlock waits its turn behind the card on screen.
+	if not meta_store.unlock_card(locked_power, "power", false):
+		failures.append("issue52: unlock_card refused a locked power card")
+	if meta_store.pending_card_unlocks().size() != 2:
+		failures.append("issue52: a second unlock was not queued")
+	if popup._card_id != locked_augment:
+		failures.append("issue52: a second unlock interrupted the card being presented")
+
+	# CONTINUE acknowledges the presented card and advances to the next one.
+	popup._on_continue_pressed()
+	if meta_store.pending_card_unlocks().size() != 1:
+		failures.append("issue52: CONTINUE did not acknowledge the presented card")
+	if meta_store.pending_card_unlocks().size() == 1 \
+			and String((meta_store.pending_card_unlocks()[0] as Dictionary)["cardId"]) != locked_power:
+		failures.append("issue52: CONTINUE acknowledged the wrong card")
+	if not popup.visible or popup._card_id != locked_power:
+		failures.append("issue52: multiple pending unlocks did not present sequentially")
+
+	# VIEW COLLECTION acknowledges the card and hands its ID to Collection. The
+	# popup is detached first so the check exercises the acknowledgement/highlight
+	# handoff without changing the harness's scene out from under the run.
+	host.remove_child(popup)
+	popup._on_view_collection_pressed()
+	if not meta_store.pending_card_unlocks().is_empty():
+		failures.append("issue52: VIEW COLLECTION did not acknowledge the presented card")
+	if UnlockCardPopup.pending_highlight_card_id != locked_power:
+		failures.append("issue52: VIEW COLLECTION did not hand the card to Collection")
+	if popup.visible:
+		failures.append("issue52: the popup stayed open after VIEW COLLECTION")
+	if popup.COLLECTION_SCENE != "res://scenes/collection_scene.tscn":
+		failures.append("issue52: VIEW COLLECTION does not route to the Collection scene")
+	popup.queue_free()
+	host.queue_free()
+
+	var highlighted := (load("res://scenes/collection_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(highlighted)
+	if highlighted.highlighted_card_id() != locked_power:
+		failures.append("issue52: Collection did not highlight the newly unlocked card")
+	if highlighted.card_entry(locked_power) == null \
+			or not bool(highlighted.card_entry(locked_power).get_meta(&"unlocked")):
+		failures.append("issue52: the unlocked card is still locked in Collection")
+	if UnlockCardPopup.pending_highlight_card_id != "":
+		failures.append("issue52: the Collection highlight handoff was not consumed")
+	highlighted.queue_free()
+
+	# Draw filtering keeps reading the unlocked lists.
+	var draw_pool: Array = PacteCards.augment_ids()
+	draw_pool.erase(locked_augment)
+	for drawn_id in PacteCards.draw("augment", 991, draw_pool, [], 3):
+		if String(drawn_id) == locked_augment:
+			failures.append("issue52: Pacte draw offered a card outside the unlocked list")
+
+	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
+	await process_frame
+
+func _restore_card_unlock_state(meta_store: Node, augments: Array, powers: Array, pending: Array,
+		progress: Dictionary = {}) -> void:
+	meta_store.unlockedAugmentCardIds = augments
+	meta_store.unlockedPowerCardIds = powers
+	meta_store.pendingCardUnlocks = pending
+	meta_store.cardUnlockProgress = progress
+	UnlockCardPopup.pending_highlight_card_id = ""
+
+# ── issue #52: the deck is gated and the run feeds the unlock counters ───────────
+
+func _check_card_unlock_rules_52(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var saved_augments: Array = meta_store.unlockedAugmentCardIds.duplicate()
+	var saved_powers: Array = meta_store.unlockedPowerCardIds.duplicate()
+	var saved_pending: Array = meta_store.pendingCardUnlocks.duplicate(true)
+	var saved_progress: Dictionary = meta_store.cardUnlockProgress.duplicate(true)
+
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store.unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	meta_store.pendingCardUnlocks = []
+	meta_store.cardUnlockProgress = {}
+
+	# The Pacte only ever draws from the gated roster.
+	for pool in PacteCards.POOLS:
+		var unlocked: Array = meta_store.unlocked_augment_cards() if pool == "augment" \
+			else meta_store.unlocked_power_cards()
+		for card_id in unlocked:
+			if not CardUnlocks.default_ids(pool).has(String(card_id)):
+				failures.append("issue52 rules: %s starts outside the default %s roster" % [card_id, pool])
+		for drawn_id in PacteCards.draw(pool, 7331, unlocked, [], 3):
+			if not unlocked.has(String(drawn_id)):
+				failures.append("issue52 rules: a %s draw offered a locked card" % pool)
+
+	# Collection shows the unlock condition on a locked card, never its effect.
+	var collection := (load("res://scenes/collection_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(collection)
+	collection.show_card_detail("augment_adrenaline", "augment")
+	var adrenaline := PacteCards.card("augment_adrenaline")
+	if collection.modal_state() != "locked":
+		failures.append("issue52 rules: a gated card did not open the LOCKED modal")
+	if collection._modal_description.text == String(adrenaline["description"]) \
+			or collection._modal_description.text.contains(String(adrenaline["name"])):
+		failures.append("issue52 rules: the LOCKED modal leaked a gated card's metadata")
+	if not collection._modal_description.text.contains("30"):
+		failures.append("issue52 rules: the LOCKED modal did not show the unlock condition")
+	collection.queue_free()
+
+	# The run feeds the counters. Spin results are fed through the tracker directly:
+	# the counters are the unit under test, not the parity-pinned spin math.
+	run_store.runPairCount = 0
+	run_store.runTripleCounts = {}
+	run_store.scoreEarned = 2100
+	run_store._track_spin_card_progress(_card_progress_result(["brain", "brain", "eye"], "pair", 40))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_PAIRS_IN_RUN) != 1:
+		failures.append("issue52 rules: a paying pair was not counted")
+	if not meta_store.unlockedAugmentCardIds.has("augment_reward_2"):
+		failures.append("issue52 rules: a 2100 run did not unlock REWARD + II")
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 2:
+		failures.append("issue52 rules: repeated same-symbol triples were not counted")
+	run_store._track_spin_card_progress(_card_progress_result(["pill", "pill", "pill"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 2:
+		failures.append("issue52 rules: a different triple advanced the same-triple metric")
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 3 \
+			or not meta_store.unlockedAugmentCardIds.has("augment_tunnel_vision"):
+		failures.append("issue52 rules: the third same triple did not unlock Tunnel Vision")
+	run_store._track_spin_card_progress(_card_progress_result(["brain", "eye", "pill"], "miss", 0))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_PAIRS_IN_RUN) != 1:
+		failures.append("issue52 rules: a losing spin counted as a pair")
+
+	# Per-run counters reset with the run; the meta record keeps the best.
+	run_store.reset_run_state()
+	if int(run_store.runPairCount) != 0 or not (run_store.runTripleCounts as Dictionary).is_empty():
+		failures.append("issue52 rules: per-run card counters survived a run reset")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 3:
+		failures.append("issue52 rules: a run reset cleared the banked best-run metric")
+
+	# Endings settle the win/death metrics.
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	run_store.flatlineResultCount = 0
+	run_store.augmentedTier = ""
+	meta_store._record_ending_card_progress("wealth")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_WINS) != 1 \
+			or not meta_store.unlockedPowerCardIds.has("cheat"):
+		failures.append("issue52 rules: a win did not unlock the Cheat power")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_FLAWLESS_WINS) != 1 \
+			or not meta_store.unlockedAugmentCardIds.has("augment_win_boost"):
+		failures.append("issue52 rules: a flatline-free win did not unlock COMBO")
+	run_store.flatlineResultCount = 2
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store._record_ending_card_progress("wealth")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_FLAWLESS_WINS) != 0:
+		failures.append("issue52 rules: a win after a flatline counted as flawless")
+	meta_store._record_ending_card_progress("flatline")
+	if not meta_store.unlockedAugmentCardIds.has("augment_glitch_2"):
+		failures.append("issue52 rules: dying of flatline did not unlock GLITCH")
+	run_store.flatlineResultCount = 0
+
+	# An unlock earned during the run raises the blocking popup over the machine, but
+	# only once the spin it was earned on has finished playing out.
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store.pendingCardUnlocks = []
+	var popup := machine.get_node_or_null("UnlockCardPopup") as UnlockCardPopup
+	if popup == null:
+		failures.append("issue52 rules: the machine scene has no unlock popup attached")
+	else:
+		# The Collection check earlier in the run drove this same attached popup (both
+		# popups answer card_unlocked). Put it back down so this block starts from a
+		# quiet machine rather than a card left on screen there.
+		popup._dismiss()
+		var previous_spinning: bool = run_store.isSpinning
+		run_store.isSpinning = true
+		meta_store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 10, false)
+		if popup.visible:
+			failures.append("issue52 rules: an unlock interrupted a spin in progress")
+		run_store.isSpinning = previous_spinning
+		machine._maybe_present_card_unlocks()
+		if not popup.visible or popup._card_id != "augment_hallucination":
+			failures.append("issue52 rules: a held unlock was not raised once the spin ended")
+		popup._on_continue_pressed()
+		# An ending screen owns the scene until the player leaves it, so the card a
+		# wealth/flatline run just earned is celebrated afterwards (on the menu). The
+		# ending host is claimed before the commits that earn the card, so a live
+		# _overlay is enough to hold the queue.
+		var previous_overlay: Control = machine._overlay
+		machine._overlay = Control.new()
+		if machine._can_present_card_unlock():
+			failures.append("issue52 rules: an unlock could interrupt an ending screen")
+		machine._overlay.queue_free()
+		machine._overlay = previous_overlay
+
+	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
+
+func _card_progress_result(reels: Array, win_type: String, score: int) -> Dictionary:
+	return { "reels": reels, "winType": win_type, "scoreEarned": score }

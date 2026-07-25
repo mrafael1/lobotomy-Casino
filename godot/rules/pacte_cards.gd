@@ -11,6 +11,12 @@ const AUGMENT_FRONT_RECT := Rect2(0.0, 61.0, 39.0, 61.0)
 # Keep the power proposition at the same authored 39x61 size as augment cards.
 # Starting at x40 drops the left red edge and makes the 38px crop upscale.
 const POWER_FRONT_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
+# Both sheets author their shared card back as the first 39x61 cell. Collection
+# renders locked entries with it, and Pacte deals every card face-down with it.
+const AUGMENT_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
+const POWER_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
+const CARD_SIZE := Vector2(39.0, 61.0)
+const POOLS: Array[String] = ["augment", "power"]
 
 const AUGMENTS: Array[Dictionary] = [
 	{
@@ -252,6 +258,30 @@ static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [],
 	for id in picked:
 		result.append(String(id))
 	return result
+
+## Pool ("augment" / "power") a card ID belongs to, or "" when it is unknown.
+## Collection and the unlock popup resolve every display value through here so a
+## renamed or removed card can never be presented as the wrong pool.
+static func pool_of(card_id: String) -> String:
+	var entry := card(card_id)
+	return String(entry.get("pool", "")) if not entry.is_empty() else ""
+
+static func ids_for_pool(pool: String) -> Array[String]:
+	if pool == "augment":
+		return augment_ids()
+	if pool == "power":
+		return power_ids()
+	var empty: Array[String] = []
+	return empty
+
+static func sheet_for_pool(pool: String) -> String:
+	return CARD_SHEET if pool == "augment" else POWER_SHEET
+
+static func front_rect_for_pool(pool: String) -> Rect2:
+	return AUGMENT_FRONT_RECT if pool == "augment" else POWER_FRONT_RECT
+
+static func back_rect_for_pool(pool: String) -> Rect2:
+	return AUGMENT_BACK_RECT if pool == "augment" else POWER_BACK_RECT
 
 static func power_id(card_id: String) -> String:
 	var normalised := normalise_card_id(card_id)

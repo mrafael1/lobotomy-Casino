@@ -173,6 +173,10 @@ const COCKTAIL_RARITY_POINTS := {
 # machine's post-reveal reactions AFTER the parity-pinned spin()/power results —
 # they never feed evaluate()/spin(), so the pinned vectors stay untouched.
 var flatlineResultCount := 0    # count of 3-flatline reel outcomes seen this run
+# Card-unlock tracking (issue #52): paying pairs seen this run, and how many times
+# each symbol paid as a triple this run. Both feed "best single run" meta metrics.
+var runPairCount := 0
+var runTripleCounts: Dictionary = {}
 var flatlineWinBoostArmed := false  # issue #76: a flatline strike charges the next winning pair/triple
 var lastUsedConsumableId := ""  # for the syringe-triple "recover last consumable"
 # Presentation-only (issue #34): the Potion pool pick rolled for the last spin, so the
@@ -595,6 +599,7 @@ func rewind() -> bool:
 	rewindHistoryAvailable = false
 	previousSpinSnapshot = null
 	powersUsedThisSpin += 1
+	_note_card_metric(CardUnlocks.METRIC_REWINDS)
 	_commit()
 	return true
 
@@ -844,10 +849,15 @@ func spin(compulsive := false) -> Variant:
 	if potion_restore_spins > 0:
 		neurons += potion_restore_spins * maxi(1, base_decay)
 	_clamp_neurons()
-	scoreEarned += int(final_result["scoreEarned"])
+	# Passive gain is wealth, not just power fuel: it feeds the run total (and so the
+	# wealth odometer and the target) alongside the Lucidity it already paid out. The
+	# per-spin result keeps only the reel payout, so the score popup still announces
+	# what the reels won.
+	scoreEarned += int(final_result["scoreEarned"]) + passive_lucidity
 	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
+	_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 	if potion_restored_power != "":
 		pendingPowerRestores.append(potion_restored_power)
 	# Compulsive spins don't consume banked free spins, but the parity-pinned
@@ -858,6 +868,7 @@ func spin(compulsive := false) -> Variant:
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
+	_track_spin_card_progress(final_result)
 	if int(final_result.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastPotionEffect = potion_pick
@@ -956,6 +967,52 @@ func _is_winning_result(result: Dictionary) -> bool:
 	return win_type in ["pair", "triple", "jackpot"] \
 		and int(result["scoreEarned"]) > 0
 
+# ── card-unlock tracking (issue #52) ─────────────────────────────────────────────
+# The run only reports events; MetaStateStore owns the counters, the unlock rules,
+# and the popup queue. The store is looked up at runtime so this script still
+# compiles outside the autoload context used by the headless save checks.
+
+func _meta_store() -> Node:
+	return get_node_or_null(^"/root/MetaStateStore") if is_inside_tree() else null
+
+func _note_card_metric(metric: String, amount := 1) -> void:
+	if amount <= 0:
+		return
+	var meta := _meta_store()
+	if meta != null:
+		meta.add_card_unlock_progress(metric, amount, false)
+
+func _note_best_card_metric(metric: String, value: int) -> void:
+	var meta := _meta_store()
+	if meta != null:
+		meta.record_best_card_unlock_progress(metric, value, false)
+
+## Counts one resolved spin toward the per-run card metrics. Called once per spin
+## with the committed result, so powers reshaping the reveal afterwards cannot
+## inflate the pair/triple tallies.
+func _track_spin_card_progress(result: Dictionary) -> void:
+	_note_best_card_metric(CardUnlocks.METRIC_BEST_RUN_SCORE, scoreEarned)
+	# Every spin handed back counts as a recovered spin, whatever gave it: the Rewind
+	# power, a vial reward, or a consumable. The metric is about spins the player got
+	# back, not about which source produced them.
+	_note_card_metric(CardUnlocks.METRIC_REWINDS, int(result.get("freeSpinsGranted", 0)))
+	if int(result.get("scoreEarned", 0)) <= 0:
+		return
+	var win_type := String(result.get("winType", ""))
+	if win_type == "pair":
+		runPairCount += 1
+		_note_best_card_metric(CardUnlocks.METRIC_PAIRS_IN_RUN, runPairCount)
+		return
+	if win_type != "triple" and win_type != "jackpot":
+		return
+	var reels: Array = result.get("reels", []) as Array
+	if reels.size() < 3 or String(reels[0]) != String(reels[1]) or String(reels[1]) != String(reels[2]):
+		return
+	var symbol := String(reels[0])
+	runTripleCounts = runTripleCounts.duplicate()
+	runTripleCounts[symbol] = int(runTripleCounts.get(symbol, 0)) + 1
+	_note_best_card_metric(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN, int(runTripleCounts[symbol]))
+
 func _combo_after(prev: int, result: Dictionary) -> int:
 	return mini(3, prev + 1) if _is_winning_result(result) else maxi(1, prev - 1)
 
@@ -1023,6 +1080,8 @@ func reset_run_state() -> void:
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
 	flatlineResultCount = 0
+	runPairCount = 0
+	runTripleCounts = {}
 	flatlineWinBoostArmed = false
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
@@ -1173,10 +1232,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	campaignNeuronPending = consume_campaign_neuron
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
-	scoreEarned = 0
+	# A target round keeps the change: complete_wealth_target() already paid the
+	# beaten target out of the score, and the payout screen shows that remainder as
+	# the money the player walks away with. A flatline keeps nothing.
+	scoreEarned = scoreEarned if continuing_round else 0
 	lucidityCoins = 0
-	# The advanced target survives a round continuation; every other start resets it.
-	if not continuing_round:
+	# The advanced target survives a round continuation, and a flatline continuation
+	# resumes the campaign where it died rather than sending the player back to the
+	# first target. Only a genuinely fresh run resets it.
+	if not continuing:
 		wealthTargetIndex = 0
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
@@ -1287,6 +1351,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
 	flatlineResultCount = 0
+	runPairCount = 0
+	runTripleCounts = {}
 	flatlineWinBoostArmed = false
 	lastUsedConsumableId = ""
 	lastPotionEffect = null
@@ -2001,6 +2067,7 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	scoreEarned = maxi(0, scoreEarned + int(outcome["scoreDelta"]))
 	lucidityCoins = int(plan["lucidityCoins"])
 	pendingPowerRestores.append_array(plan["restores"])
+	_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 	var lr: Dictionary = (lastResult as Dictionary).duplicate(true)
 	lr["reels"] = outcome["reels"]
 	lr["isJackpot"] = outcome["isJackpot"]
@@ -2048,9 +2115,12 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 		lr.erase("winBoostBonus")
 		lr.erase("winBoostCombo")
 		lr.erase("winBoostBaseScore")
-	lr["freeSpinsGranted"] = int(lastResult["freeSpinsGranted"]) + (free_after - freeSpinsRemaining)
+	# Spins a power's reshaped result hands back count as recovered spins too.
+	var power_spins_granted := free_after - freeSpinsRemaining
+	lr["freeSpinsGranted"] = int(lastResult["freeSpinsGranted"]) + power_spins_granted
 	lr["freeSpinsAfter"] = free_after
 	freeSpinsRemaining = free_after
+	_note_card_metric(CardUnlocks.METRIC_REWINDS, power_spins_granted)
 	if int(outcome.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastResult = lr
@@ -2149,6 +2219,8 @@ func move_reel(reel_index: int, direction: int) -> bool:
 	marked.append("shift")
 	powersUsedThisSpin += 1
 	_apply_outcome(outcome, marked, seed)
+	if lastResult is Dictionary and _is_winning_result(lastResult as Dictionary):
+		_note_card_metric(CardUnlocks.METRIC_SHIFT_WINS)
 	_commit()
 	return true
 
@@ -2235,8 +2307,11 @@ func cheat_symbol(reel_index: int, symbol: String) -> bool:
 			_pair_score_multiplier(pair_boost_active), hidden_reel_count,
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
 			Economy.has_solo_as_pair(ownedUpgrades))
-	return _apply_revealed_power_outcome(outcome, "cheat",
+	var cheated := _apply_revealed_power_outcome(outcome, "cheat",
 			_seed(spinCount * 0x165667b1 + reel_index), 0)
+	if cheated:
+		_note_card_metric(CardUnlocks.METRIC_CHEATS_USED)
+	return cheated
 
 func swap_symbol(source_reel: int, target_reel: int, source_symbol: String = "") -> bool:
 	if not _can_use_ability() or lastResult == null or not has_power("swap") \
@@ -2277,6 +2352,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 	if charges < 1:
 		return false
 	lastUsedConsumableId = consumable_id  # syringe-triple recovery target (issue #35)
+	_note_card_metric(CardUnlocks.METRIC_CONSUMABLES_USED)
 	runConsumables = runConsumables.duplicate(true)
 	runConsumables[consumable_id] = charges - 1
 
@@ -2305,6 +2381,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				lucidityCoins = int(plan["lucidityCoins"])
 				abilitiesUsed = plan["abilitiesUsed"]
 				pendingPowerRestores.append_array(plan["restores"])
+				_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 				# Water is a direct score event as well as a Lucidity refresh. Keep the
 				# current result's running score in sync so a same-spin power only pops
 				# its own gain after the drink has been used.
