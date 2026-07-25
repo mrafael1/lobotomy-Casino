@@ -2780,9 +2780,9 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
 		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
 	# Round break: paying a target sends the run to the PERSISTENT dealer shop and the
-	# next START begins a fresh run. Augments/powers/consumables and campaign health
-	# carry; score and the run-spin budget reset; the advanced target survives; and no
-	# campaign neuron is spent along the way.
+	# next START begins a fresh run. Augments/powers/consumables, campaign health, the
+	# advanced target, and the money left after the payout all carry; the run-spin
+	# budget resets; and no campaign neuron is spent along the way.
 	run_store.reset_run_state()
 	meta_store.campaignActive = true
 	meta_store.campaignFailed = false
@@ -2806,8 +2806,8 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: target break wrongly spent a campaign neuron")
 	if not run_store.start_new_run([], {}):
 		failures.append("issue176: could not start the next target round")
-	if int(run_store.scoreEarned) != 0:
-		failures.append("issue176: next round did not reset the score")
+	if int(run_store.scoreEarned) != 150:
+		failures.append("issue176: next round did not keep the money left after the target")
 	if int(run_store.wealthTargetIndex) != 3:
 		failures.append("issue176: next round lost the advanced target")
 	if run_store.roundContinuationPending:
@@ -2820,6 +2820,21 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
 	if String(run_store.runPhase) != "running":
 		failures.append("issue176: next round did not enter the machine")
+	# A flatline with campaign health left resumes the campaign at the target it died
+	# on: the money is gone, but the player does not replay targets already beaten.
+	run_store.reset_run_state()
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.scoreEarned = 900
+	run_store.wealthTargetIndex = 2
+	run_store.end_run("flatline")
+	if not run_store.start_new_run([], {}):
+		failures.append("issue176: could not resume the campaign after a flatline")
+	if int(run_store.wealthTargetIndex) != 2:
+		failures.append("issue176: a flatline continuation reset the wealth target")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue176: a flatline continuation kept the run's money")
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -6895,9 +6910,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		var target_hit: Dictionary = machine.POWER_HITS[target_id]
 		var ordered_button := machine._power_buttons.get(ordered_id) as Button
 		var ordered_sprite := machine._power_sprites.get(ordered_id) as Sprite2D
-		var expected_position := Vector2(float(target_hit["left"]), float(target_hit["top"]))
+		# Each emplacement carries its own pixel nudge against the machine art, and it
+		# applies to whichever power lands there.
+		var nudge_x: float = machine.POWER_SLOT_NUDGE_X[slot_index]
+		var expected_position := Vector2(float(target_hit["left"]) + nudge_x, float(target_hit["top"]))
 		var expected_offset := Vector2(
-			float(target_hit["left"]) - float(source_hit["left"]),
+			float(target_hit["left"]) - float(source_hit["left"]) + nudge_x,
 			float(target_hit["top"]) - float(source_hit["top"]))
 		if ordered_button == null or not ordered_button.visible \
 				or ordered_button.position != expected_position:
@@ -7504,7 +7522,8 @@ func _check_card_unlock_rules_52(machine: Node, run_store: Node, meta_store: Nod
 		failures.append("issue52 rules: dying of flatline did not unlock GLITCH")
 	run_store.flatlineResultCount = 0
 
-	# An unlock earned during the run raises the blocking popup over the machine.
+	# An unlock earned during the run raises the blocking popup over the machine, but
+	# only once the spin it was earned on has finished playing out.
 	meta_store.cardUnlockProgress = {}
 	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
 	meta_store.pendingCardUnlocks = []
@@ -7512,10 +7531,30 @@ func _check_card_unlock_rules_52(machine: Node, run_store: Node, meta_store: Nod
 	if popup == null:
 		failures.append("issue52 rules: the machine scene has no unlock popup attached")
 	else:
+		# The Collection check earlier in the run drove this same attached popup (both
+		# popups answer card_unlocked). Put it back down so this block starts from a
+		# quiet machine rather than a card left on screen there.
+		popup._dismiss()
+		var previous_spinning: bool = run_store.isSpinning
+		run_store.isSpinning = true
 		meta_store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 10, false)
+		if popup.visible:
+			failures.append("issue52 rules: an unlock interrupted a spin in progress")
+		run_store.isSpinning = previous_spinning
+		machine._maybe_present_card_unlocks()
 		if not popup.visible or popup._card_id != "augment_hallucination":
-			failures.append("issue52 rules: a mid-run unlock did not raise the popup")
+			failures.append("issue52 rules: a held unlock was not raised once the spin ended")
 		popup._on_continue_pressed()
+		# An ending screen owns the scene until the player leaves it, so the card a
+		# wealth/flatline run just earned is celebrated afterwards (on the menu). The
+		# ending host is claimed before the commits that earn the card, so a live
+		# _overlay is enough to hold the queue.
+		var previous_overlay: Control = machine._overlay
+		machine._overlay = Control.new()
+		if machine._can_present_card_unlock():
+			failures.append("issue52 rules: an unlock could interrupt an ending screen")
+		machine._overlay.queue_free()
+		machine._overlay = previous_overlay
 
 	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
 

@@ -849,7 +849,11 @@ func spin(compulsive := false) -> Variant:
 	if potion_restore_spins > 0:
 		neurons += potion_restore_spins * maxi(1, base_decay)
 	_clamp_neurons()
-	scoreEarned += int(final_result["scoreEarned"])
+	# Passive gain is wealth, not just power fuel: it feeds the run total (and so the
+	# wealth odometer and the target) alongside the Lucidity it already paid out. The
+	# per-spin result keeps only the reel payout, so the score popup still announces
+	# what the reels won.
+	scoreEarned += int(final_result["scoreEarned"]) + passive_lucidity
 	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
@@ -988,6 +992,10 @@ func _note_best_card_metric(metric: String, value: int) -> void:
 ## inflate the pair/triple tallies.
 func _track_spin_card_progress(result: Dictionary) -> void:
 	_note_best_card_metric(CardUnlocks.METRIC_BEST_RUN_SCORE, scoreEarned)
+	# Every spin handed back counts as a recovered spin, whatever gave it: the Rewind
+	# power, a vial reward, or a consumable. The metric is about spins the player got
+	# back, not about which source produced them.
+	_note_card_metric(CardUnlocks.METRIC_REWINDS, int(result.get("freeSpinsGranted", 0)))
 	if int(result.get("scoreEarned", 0)) <= 0:
 		return
 	var win_type := String(result.get("winType", ""))
@@ -1224,10 +1232,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	campaignNeuronPending = consume_campaign_neuron
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
-	scoreEarned = 0
+	# A target round keeps the change: complete_wealth_target() already paid the
+	# beaten target out of the score, and the payout screen shows that remainder as
+	# the money the player walks away with. A flatline keeps nothing.
+	scoreEarned = scoreEarned if continuing_round else 0
 	lucidityCoins = 0
-	# The advanced target survives a round continuation; every other start resets it.
-	if not continuing_round:
+	# The advanced target survives a round continuation, and a flatline continuation
+	# resumes the campaign where it died rather than sending the player back to the
+	# first target. Only a genuinely fresh run resets it.
+	if not continuing:
 		wealthTargetIndex = 0
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
@@ -2102,9 +2115,12 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 		lr.erase("winBoostBonus")
 		lr.erase("winBoostCombo")
 		lr.erase("winBoostBaseScore")
-	lr["freeSpinsGranted"] = int(lastResult["freeSpinsGranted"]) + (free_after - freeSpinsRemaining)
+	# Spins a power's reshaped result hands back count as recovered spins too.
+	var power_spins_granted := free_after - freeSpinsRemaining
+	lr["freeSpinsGranted"] = int(lastResult["freeSpinsGranted"]) + power_spins_granted
 	lr["freeSpinsAfter"] = free_after
 	freeSpinsRemaining = free_after
+	_note_card_metric(CardUnlocks.METRIC_REWINDS, power_spins_granted)
 	if int(outcome.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastResult = lr

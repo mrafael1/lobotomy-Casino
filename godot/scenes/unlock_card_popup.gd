@@ -51,12 +51,17 @@ var _nav: Node = null
 # An attached popup lives for as long as its host scene and hides between cards;
 # a one-off popup frees itself once its card is acknowledged.
 var _attached := false
+## Optional host veto, checked before every card is raised. While it returns false
+## the queue simply waits: an unlock earned mid-spin or under an ending screen must
+## not steal the scene from a presentation the player is still watching. The host
+## calls present_next() again once it is idle.
+var present_gate := Callable()
 
 ## Mounts a popup on `host` that watches for card unlocks for the rest of that
 ## scene's life, and immediately drains anything already queued (an unlock earned
 ## just before the scene changed, or in a previous session). Being a child of the
 ## host means the signal connection dies with the scene.
-static func attach_to(host: Node) -> UnlockCardPopup:
+static func attach_to(host: Node, gate := Callable()) -> UnlockCardPopup:
 	if host == null or not is_instance_valid(host) or Engine.is_editor_hint():
 		return null
 	var existing := host.get_node_or_null(NodePath("UnlockCardPopup")) as UnlockCardPopup
@@ -65,6 +70,7 @@ static func attach_to(host: Node) -> UnlockCardPopup:
 	var popup := UnlockCardPopup.new()
 	popup.name = "UnlockCardPopup"
 	popup._attached = true
+	popup.present_gate = gate
 	host.add_child(popup)
 	var store := popup._meta
 	if store != null and not store.is_connected("card_unlocked", popup._on_card_unlocked):
@@ -246,6 +252,8 @@ func _make_action_button(node_name: String, text: String, color: Color) -> Butto
 func present_next() -> bool:
 	_bind_singletons()
 	if _meta == null:
+		return false
+	if present_gate.is_valid() and not bool(present_gate.call()):
 		return false
 	var entry: Dictionary = _meta.call("next_pending_card_unlock")
 	if entry.is_empty():

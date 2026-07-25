@@ -84,6 +84,10 @@ const POWER_HITS := {
 	"swap": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 }
 const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
+# Per-emplacement pixel nudge applied to whichever power occupies each of the three
+# visible slots. The authored sheets place the middle chip a few pixels too far to
+# the right against the machine art, so slot two sits 4px left of its sheet origin.
+const POWER_SLOT_NUDGE_X: Array[float] = [0.0, -4.0, 0.0]
 const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
@@ -581,6 +585,7 @@ var _wealth_odometer: WealthOdometer = null
 var _wealth_goal_digit_labels: Array[Label] = []
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
+var _unlock_popup: UnlockCardPopup = null
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
@@ -764,8 +769,9 @@ func _ready() -> void:
 	_build_pacte_augment_badge()
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
-	# (issue #52); the popup blocks the machine behind its dimmed background.
-	UnlockCardPopup.attach_to(self)
+	# (issue #52); the popup blocks the machine behind its dimmed background. It
+	# waits for a quiet moment first — see _can_present_card_unlock.
+	_unlock_popup = UnlockCardPopup.attach_to(self, _can_present_card_unlock)
 
 func _apply_balance_exports() -> void:
 	if Engine.is_editor_hint():
@@ -2812,6 +2818,33 @@ func _update_hud() -> void:
 	_refresh_pacte_augment_badge()
 	_refresh_controls()
 	_refresh_consumable_fx()
+	_maybe_present_card_unlocks()
+
+## A card earned mid-spin waits for the reels, the power coins, the payout sequence
+## and any ending screen to finish: the unlock popup takes over the whole scene, so
+## raising it over a running presentation would cut the spin the player is watching
+## short. The wealth ending is the extreme case — its card is celebrated only once
+## the player has left that screen (the menu drains the same queue).
+func _can_present_card_unlock() -> bool:
+	return not RunStateStore.isSpinning \
+		and not _spinning_anim \
+		and not _spin_launch_pending \
+		and not _reroll_anim_active \
+		and not _rewind_anim_active \
+		and not _sequence_lock_active \
+		and not _post_spin_sequence_active \
+		and not _power_sequence_active() \
+		and not _wealth_target_transition_active \
+		and not RunStateStore.comboDefeatPending \
+		and _overlay == null
+
+## Drains anything the gate above held back, once the machine is idle again.
+func _maybe_present_card_unlocks() -> void:
+	if _unlock_popup == null or not is_instance_valid(_unlock_popup):
+		return
+	if _unlock_popup.visible:
+		return
+	_unlock_popup.present_next()
 
 func _wealth_ending_is_visible() -> bool:
 	return _overlay != null and _overlay.get_node_or_null("WealthEndingOverlay") != null
@@ -3545,7 +3578,13 @@ func _make_power_coin(pos: Vector2) -> Sprite2D:
 	_coin_layer.add_child(coin)
 	return coin
 
+## Centre of the emplacement a power currently occupies. The live button rect is the
+## source of truth: powers are re-slotted per loadout and each slot carries its own
+## pixel nudge, so the authored hit box only stands in before the buttons exist.
 func _power_center(power_id: String) -> Vector2:
+	var button: Button = _power_buttons.get(power_id) as Button
+	if button != null and is_instance_valid(button) and button.visible:
+		return button.position + button.size * 0.5
 	var hit: Dictionary = POWER_HITS.get(power_id, POWER_HITS["reroll"])
 	return Vector2(float(hit["left"]) + float(hit["width"]) * 0.5, float(hit["top"]) + float(hit["height"]) * 0.5)
 
@@ -3904,13 +3943,14 @@ func _apply_power_slot(power_id: String, slot_index: int) -> void:
 	var source: Dictionary = POWER_HITS[power_id]
 	var target_id := POWER_IDS[slot_index]
 	var target: Dictionary = POWER_HITS[target_id]
+	var nudge_x := POWER_SLOT_NUDGE_X[slot_index]
 	var button: Button = _power_buttons[power_id]
-	button.position = Vector2(target["left"], target["top"])
+	button.position = Vector2(float(target["left"]) + nudge_x, target["top"])
 	button.size = Vector2(maxf(float(target["width"]), 11.0), float(target["height"]))
 	var sprite: Sprite2D = _power_sprites[power_id]
 	if sprite != null:
 		sprite.position = Vector2(
-			float(target["left"]) - float(source["left"]),
+			float(target["left"]) - float(source["left"]) + nudge_x,
 			float(target["top"]) - float(source["top"]))
 
 func _short_name(consumable_id: String) -> String:
@@ -6249,6 +6289,15 @@ func _cleanup_transient_presentation() -> void:
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
+	# The ending host is claimed before the state commits below, not after: end_run
+	# and mark_ending_reached are what earn this ending's cards, and a live _overlay
+	# is what tells the unlock popup to wait rather than beat the ending screen onto
+	# the scene. The queue is drained once the player leaves it (issue #52).
+	_overlay = Control.new()
+	_overlay.position = Vector2.ZERO
+	_overlay.size = Vector2(SRC_W, SRC_H)
+	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
+	add_child(_overlay)
 	# A running campaign reserves its neuron until end_run(). Account for that
 	# pending spend while resolving the terminal presentation, then commit the
 	# resolved ending once so lastEnding and the persisted balance agree.
@@ -6263,11 +6312,6 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	if resolved_ending != "wealth":
 		MetaStateStore.bank_run(run, resolved_ending)
 
-	_overlay = Control.new()
-	_overlay.position = Vector2.ZERO
-	_overlay.size = Vector2(SRC_W, SRC_H)
-	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
-	add_child(_overlay)
 	# The stash tray draws at z 50 and would float over the ending presentation.
 	_set_stash_tray_visible(false)
 	if resolved_ending == "wealth":
