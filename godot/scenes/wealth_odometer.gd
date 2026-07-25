@@ -121,16 +121,16 @@ func _build_art() -> void:
 	if _built:
 		return
 
-	# A snapshot is only the digits: the cases below and the bar frame above belong to
-	# the machine cabinet and must not travel with the number.
-	if not snapshot_mode:
-		var cases := Sprite2D.new()
-		cases.name = "WealthCasesArt"
-		cases.texture = CASES_TEXTURE
-		cases.centered = false
-		cases.z_index = 0
-		cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
-		add_child(cases)
+	# The cases plate paints only the four digit windows, and the reel glyphs are dark
+	# art authored to be read against it — so a snapshot keeps it and the lifted number
+	# stays legible. Only the bar frame is dropped: it is cabinet trim.
+	var cases := Sprite2D.new()
+	cases.name = "WealthCasesArt"
+	cases.texture = CASES_TEXTURE
+	cases.centered = false
+	cases.z_index = 0
+	cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	add_child(cases)
 
 	# The authored frame sits above the white cases and the rolling digits. Its
 	# transparent windows leave the number reels visible while its borders stay

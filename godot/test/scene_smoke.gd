@@ -2844,15 +2844,28 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		if overlay == null:
 			failures.append("issue176: target reached overlay was not created")
 		else:
-			# The overlay owns the flatline-style payout: the running score, the
-			# beaten target flying onto it, and the red money-paid line.
-			if overlay.score_label == null or overlay.score_label.text != "650":
-				failures.append("issue176: target overlay did not show the running score")
-			if overlay.target_label == null or overlay.target_label.text != "-500":
-				failures.append("issue176: target overlay did not show the beaten target")
+			# Issue #181: the number is the machine's own wealth reels, lifted off the
+			# cabinet as a detached snapshot rather than retyped as a Label.
+			if overlay._snapshot == null or overlay._snapshot.get_value() != 650:
+				failures.append("issue181: target overlay did not lift the running score")
+			if overlay.target_text() != "-500":
+				failures.append("issue181: target overlay did not show the beaten target")
 			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
 				failures.append("issue176: target overlay is missing its TARGET REACHED title")
+			# The TV shuts down behind the payout, and the live reels blank the moment
+			# the snapshot says it has lifted them.
+			if machine._tv_blackout_rect == null or not machine._tv_blackout_rect.visible:
+				failures.append("issue181: the payout screen did not shut the TV down")
+			overlay._skip_to_end()
+			if overlay._snapshot.get_value() != 150:
+				failures.append("issue181: skipping the payout did not settle on the remainder")
+			if machine._wealth_odometer.get_node("Reel3").visible:
+				failures.append("issue181: the machine kept drawing the digits it handed over")
 		machine._stop_wealth_target_transition()
+		if machine._tv_blackout_rect != null and machine._tv_blackout_rect.visible:
+			failures.append("issue181: the TV stayed dark after the payout screen closed")
+		if not machine._wealth_odometer.get_node("Reel3").visible:
+			failures.append("issue181: the machine never got its wealth digits back")
 		machine._wealth_target_transition_active = false
 		machine._set_sequence_lock(false)
 	var payout: Dictionary = run_store.complete_wealth_target()

@@ -240,6 +240,13 @@ const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const ENDING_OVERLAY_Z_INDEX := 150
 const WEALTH_TARGET_FX_Z_INDEX := 140
+# The payout screen shuts the TV down behind itself (issue #181). The rect sits above
+# everything the TV draws — boost icons (12), dealer bar (11), augment row (40) — and
+# below the targeting layer (97) and the overlay itself.
+const TV_BLACKOUT_Z_INDEX := 45
+const TV_BLACKOUT_COLOR := Color(0.004, 0.008, 0.016, 1.0)
+const TV_BLACKOUT_ALPHA := 0.94 # not opaque: the CRT keeps a faint presence
+const TV_BLACKOUT_SOURCE := &"wealth_target"
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -634,6 +641,8 @@ var _target_bar_sprite: Sprite2D = null
 var _target_goals_sprite: Sprite2D = null
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
+var _tv_blackout_rect: ColorRect = null
+var _tv_blackout_tween: Tween = null
 var _unlock_popup: UnlockCardPopup = null
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
@@ -2122,15 +2131,66 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 		return false
 	_wealth_target_transition_active = true
 	_set_sequence_lock(true)
+	var score := int(RunStateStore.scoreEarned)
+	var target := int(info.get("target", 0))
 	var overlay := TARGET_REACHED_SCENE.instantiate() as TargetReachedOverlay
 	overlay.name = "WealthTargetTransition"
 	overlay.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	overlay.z_index = WEALTH_TARGET_FX_Z_INDEX
 	add_child(overlay)
 	_wealth_target_transition = overlay
-	overlay.present(int(RunStateStore.scoreEarned), int(info.get("target", 0)))
+	# The overlay flies a copy of the machine's own wealth reels, so the roll has to be
+	# quiesced first — _drive_roll rewrites the digit transforms every frame.
+	var snapshot: WealthOdometer = null
+	if _wealth_odometer != null:
+		_wealth_odometer.stop_roll()
+		snapshot = WealthOdometer.make_snapshot(score)
+	_begin_tv_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
+	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
+	overlay.present(score, target, snapshot)
 	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
+
+## The lifted copy has reached the TV; blank the cabinet's own digits so the number is
+## never on screen twice.
+func _on_wealth_target_digits_lifted() -> void:
+	if _wealth_odometer != null:
+		_wealth_odometer.set_digits_hidden(true)
+
+## Fades the TV to black behind the payout screen. Reuses the shared content mute for
+## the layers that already know how to step aside (dealer bar, combo, free spins) and
+## covers everything else — boost icons, augment row, callout sheets — with one rect,
+## rather than enumerating a node list that would rot.
+func _begin_tv_blackout(fade_time: float) -> void:
+	_begin_tv_info_pop(TV_BLACKOUT_SOURCE)
+	if _tv_blackout_rect == null or not is_instance_valid(_tv_blackout_rect):
+		_tv_blackout_rect = ColorRect.new()
+		_tv_blackout_rect.name = "TvBlackout"
+		_tv_blackout_rect.position = Vector2(TV_SCREEN["left"], TV_SCREEN["top"])
+		_tv_blackout_rect.size = Vector2(TV_SCREEN["width"], TV_SCREEN["height"])
+		_tv_blackout_rect.color = TV_BLACKOUT_COLOR
+		_tv_blackout_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_tv_blackout_rect.z_index = TV_BLACKOUT_Z_INDEX
+		_tv_blackout_rect.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
+		add_child(_tv_blackout_rect)
+	_tv_blackout_rect.visible = true
+	_tv_blackout_rect.modulate.a = 0.0
+	if _tv_blackout_tween != null and _tv_blackout_tween.is_valid():
+		_tv_blackout_tween.kill()
+	_tv_blackout_tween = create_tween()
+	_tv_blackout_tween.tween_property(_tv_blackout_rect, "modulate:a",
+		TV_BLACKOUT_ALPHA, fade_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+func _end_tv_blackout() -> void:
+	if _tv_blackout_tween != null and _tv_blackout_tween.is_valid():
+		_tv_blackout_tween.kill()
+	_tv_blackout_tween = null
+	if _tv_blackout_rect != null and is_instance_valid(_tv_blackout_rect):
+		_tv_blackout_rect.visible = false
+		_tv_blackout_rect.modulate.a = 0.0
+	_end_tv_info_pop(TV_BLACKOUT_SOURCE)
+	if _wealth_odometer != null:
+		_wealth_odometer.set_digits_hidden(false)
 
 func _finish_wealth_target_transition() -> void:
 	if not _wealth_target_transition_active:
@@ -2174,6 +2234,7 @@ func _finish_wealth_target_transition() -> void:
 	_update_hud()
 
 func _stop_wealth_target_transition() -> void:
+	_end_tv_blackout()
 	if _wealth_target_transition != null and is_instance_valid(_wealth_target_transition):
 		_wealth_target_transition.queue_free()
 	_wealth_target_transition = null
@@ -6746,6 +6807,9 @@ func _clear_wealth_presentation_fx() -> void:
 	_white_powder_distortion_tween = null
 	if _wealth_odometer != null:
 		_wealth_odometer.stop_roll()
+	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
+	# wealth digits — the group sweep below only hides nodes, it restores nothing.
+	_end_tv_blackout()
 	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
 		_jackpot_flash_tween.kill()
 	_jackpot_flash_tween = null
