@@ -19,6 +19,9 @@ const REEL_WINDOWS: Array[Rect2] = [
 const ROLL_DISTANCE := 12.0
 const MIN_ROLL_TIME := 0.24
 const MAX_ROLL_TIME := 0.9
+# A caller that asks for a specific roll length (the jackpot's deliberately slow
+# payout) is allowed past MAX_ROLL_TIME, but not indefinitely.
+const OVERRIDE_MAX_ROLL_TIME := 2.4
 const VALUE_MODULUS := 10_000
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
@@ -37,6 +40,13 @@ var _reels: Array[Dictionary] = []
 var _roll_tween: Tween = null
 var _value := 0
 var _built := false
+## A snapshot is a detached copy of the digit reels alone — no cases, no bar frame —
+## so an overlay can fly the machine's own number around without the surrounding art
+## coming with it. Set before the node enters the tree; _build_art() reads it once.
+var snapshot_mode := false
+## How many digit slots stay visible, counted from the units end. Locking this keeps
+## a drain that drops a digit from re-laying-out mid-animation.
+var digit_window := DIGIT_COUNT
 
 
 func _ready() -> void:
@@ -47,7 +57,9 @@ func _ready() -> void:
 	_show_static_value(_value)
 
 
-func set_value(new_value: int, animated := true) -> void:
+## `duration_override` lets a caller pace the roll itself (the jackpot rolls slowly on
+## purpose); 0.0 keeps the delta-derived default.
+func set_value(new_value: int, animated := true, duration_override := 0.0) -> void:
 	new_value = maxi(0, new_value)
 	if not _built:
 		_value = new_value
@@ -63,10 +75,12 @@ func set_value(new_value: int, animated := true) -> void:
 		return
 
 	var value_delta := absi(_value - from_value)
-	var duration := clampf(
-		MIN_ROLL_TIME + log(1.0 + float(value_delta)) * 0.1,
-		MIN_ROLL_TIME,
-		MAX_ROLL_TIME)
+	var duration := clampf(duration_override, MIN_ROLL_TIME, OVERRIDE_MAX_ROLL_TIME) \
+		if duration_override > 0.0 \
+		else clampf(
+			MIN_ROLL_TIME + log(1.0 + float(value_delta)) * 0.1,
+			MIN_ROLL_TIME,
+			MAX_ROLL_TIME)
 	_roll_tween = create_tween()
 	_roll_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_roll_tween.tween_method(
@@ -90,27 +104,45 @@ func is_rolling() -> bool:
 	return _roll_tween != null and _roll_tween.is_valid()
 
 
+## A detached, art-free copy of the digit reels showing `value`. The caller owns it and
+## is free to reparent, move and scale it — the per-digit clip Controls keep isolating
+## their glyph out of the full-canvas sheet at any transform.
+static func make_snapshot(value: int, window := DIGIT_COUNT) -> WealthOdometer:
+	var snapshot := WealthOdometer.new()
+	snapshot.name = "WealthDigitSnapshot"
+	snapshot.snapshot_mode = true
+	snapshot.digit_window = clampi(window, 1, DIGIT_COUNT)
+	# _built is still false here, so this only seeds the value _ready() will draw.
+	snapshot.set_value(value, false)
+	return snapshot
+
+
 func _build_art() -> void:
 	if _built:
 		return
 
-	var cases := Sprite2D.new()
-	cases.name = "WealthCasesArt"
-	cases.texture = CASES_TEXTURE
-	cases.centered = false
-	cases.z_index = 0
-	cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	add_child(cases)
+	# A snapshot is only the digits: the cases below and the bar frame above belong to
+	# the machine cabinet and must not travel with the number.
+	if not snapshot_mode:
+		var cases := Sprite2D.new()
+		cases.name = "WealthCasesArt"
+		cases.texture = CASES_TEXTURE
+		cases.centered = false
+		cases.z_index = 0
+		cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
+		add_child(cases)
 
 	# The authored frame sits above the white cases and the rolling digits. Its
 	# transparent windows leave the number reels visible while its borders stay
 	# crisp on top of them.
-	var bar := Sprite2D.new()
-	bar.name = "WealthBarArt"
-	bar.texture = BAR_TEXTURE
-	bar.centered = false
-	bar.z_index = 2
-	bar.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	var bar: Sprite2D = null
+	if not snapshot_mode:
+		bar = Sprite2D.new()
+		bar.name = "WealthBarArt"
+		bar.texture = BAR_TEXTURE
+		bar.centered = false
+		bar.z_index = 2
+		bar.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 	for i in DIGIT_COUNT:
 		var window_rect := REEL_WINDOWS[i]
@@ -130,11 +162,42 @@ func _build_art() -> void:
 		clip.add_child(next)
 		_reels.append({
 			"window": window_rect,
+			"clip": clip,
 			"current": current,
 			"next": next,
 		})
-	add_child(bar)
+	if bar != null:
+		add_child(bar)
 	_built = true
+	_apply_digit_window()
+
+
+## Leading slots outside the window are hidden, so a 3-digit snapshot is three reels
+## wide rather than a number with a blank thousands column.
+func _apply_digit_window() -> void:
+	var first_visible := DIGIT_COUNT - clampi(digit_window, 1, DIGIT_COUNT)
+	for i in _reels.size():
+		(_reels[i]["clip"] as Control).visible = i >= first_visible
+
+
+## Canvas-space box of the currently visible reel windows — what an overlay needs to
+## centre and scale the number it lifted off the machine.
+func visible_digit_bounds() -> Rect2:
+	var first_visible := DIGIT_COUNT - clampi(digit_window, 1, DIGIT_COUNT)
+	var bounds := REEL_WINDOWS[first_visible]
+	for i in range(first_visible + 1, DIGIT_COUNT):
+		bounds = bounds.merge(REEL_WINDOWS[i])
+	return bounds
+
+
+## Hides the digits on the REAL odometer while an overlay flies a snapshot of them,
+## leaving the cases and bar frame in place so the cabinet keeps its empty windows.
+func set_digits_hidden(hidden: bool) -> void:
+	if not _built:
+		return
+	var first_visible := DIGIT_COUNT - clampi(digit_window, 1, DIGIT_COUNT)
+	for i in _reels.size():
+		(_reels[i]["clip"] as Control).visible = (not hidden) and i >= first_visible
 
 
 func _make_digit_sprite(
