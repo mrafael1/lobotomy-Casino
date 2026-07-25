@@ -331,6 +331,22 @@ const SCORE_TABLE_BULBS: Array[Vector2] = [
 const SCORE_TABLE_BULB_GLOW_SIZE := 13.0
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 const JACKPOT_FLASH_TIME := 0.9
+# Issue #181: a jackpot is the biggest thing the machine does, so the money landing
+# IS the reward — the wealth reels roll deliberately slowly instead of snapping, and
+# the tray throws a coin spray up through the cabinet like a casino payout.
+const JACKPOT_ODOMETER_ROLL_TIME := 1.60
+const JACKPOT_ROLL_TAIL := 0.25 # a beat of stillness after the reels land
+const JACKPOT_COIN_COUNT := 14
+const JACKPOT_COIN_STAGGER := 0.06
+const JACKPOT_COIN_FLIGHT := 0.95
+const JACKPOT_COIN_GRAVITY := 260.0
+const JACKPOT_COIN_RISE := 132.0
+const JACKPOT_COIN_RISE_JITTER := 34.0
+const JACKPOT_COIN_SPREAD := 46.0
+const JACKPOT_COIN_ORIGIN_JITTER := 14.0
+const JACKPOT_COIN_SPIN := 2.5
+const JACKPOT_COIN_FADE_IN := 0.10
+const JACKPOT_COIN_FADE_START := 0.74
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
@@ -668,6 +684,8 @@ var _power_batch_running := false # a batch of bank coins is being launched/proc
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
 var _jackpot_flash_tween: Tween = null
+var _jackpot_coin_tween: Tween = null
+var _jackpot_coins: Array[Sprite2D] = []
 var _jackpot_flashing := false
 var _font: FontFile = null
 var _tex_cache := {}
@@ -3003,12 +3021,13 @@ func _display_spins_left() -> int:
 func _current_display_spins_left() -> int:
 	return _display_spins_left()
 
-func _set_display_lucidity(value: int, animated := true) -> void:
+func _set_display_lucidity(value: int, animated := true, duration_override := 0.0) -> void:
 	# The legacy method name is kept because scene smoke hooks call it; its value is
-	# now the cumulative score shown by the wealth odometer.
+	# now the cumulative score shown by the wealth odometer. `duration_override` lets a
+	# payout pace its own roll (the jackpot); 0.0 keeps the delta-derived default.
 	_display_lucidity = maxi(0, value)
 	if _wealth_odometer != null:
-		_wealth_odometer.set_value(_display_lucidity, animated)
+		_wealth_odometer.set_value(_display_lucidity, animated, duration_override)
 
 func _refresh_jackpot_lamp(use_result := true) -> void:
 	if _jackpot_sprite == null or _jackpot_flashing:
@@ -3139,11 +3158,15 @@ func _emit_score_burst(source_reel) -> float:
 		_combo_score_pending = -1
 	# Score is the wealth bar's source of truth. The number reels begin their roll with
 	# the score popup; no individual Lucidity coins leave the cash tray for this HUD.
+	# A jackpot rolls them slowly on purpose (issue #181) — watching the money land is
+	# the reward. The catch-up above keeps the default pace: it is a correction, not a
+	# payout beat.
 	var wealth_score := int(RunStateStore.scoreEarned)
+	var roll_override := JACKPOT_ODOMETER_ROLL_TIME if gain > 0 and win_type == "jackpot" else 0.0
 	if combo_bonus > 0 and _combo_effect_sprite != null:
-		_set_display_lucidity(maxi(_display_lucidity, wealth_score - combo_bonus))
+		_set_display_lucidity(maxi(_display_lucidity, wealth_score - combo_bonus), true, roll_override)
 	elif wealth_score > _display_lucidity:
-		_set_display_lucidity(wealth_score)
+		_set_display_lucidity(wealth_score, true, roll_override)
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
@@ -3171,14 +3194,18 @@ func _emit_score_burst(source_reel) -> float:
 		if win_type == "jackpot":
 			_play_sfx(&"jackpot_win")
 			_spawn_jackpot_burst(combo_base_gain)
+			var fountain_time := _spawn_jackpot_coin_fountain()
 			_flash_jackpot_lamp()
 			_nudge(2.2)
 			var jackpot_combo_time: float = _queue_combo_effect(
 				combo_number, combo_bonus, combo_percent) if combo_applied else 0.0
 			if combo_bonus > 0 and jackpot_combo_time > 0.0:
 				_combo_score_pending = wealth_score
-			return maxf(reward_time, maxf(maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME),
-				jackpot_combo_time))
+			# The lock has to outlast the slow reel roll AND the coin spray, or the next
+			# spin can be pulled while the money is still landing (issue #181).
+			return maxf(reward_time, maxf(
+				maxf(maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME), jackpot_combo_time),
+				maxf(JACKPOT_ODOMETER_ROLL_TIME + JACKPOT_ROLL_TAIL, fountain_time)))
 		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" \
 			else ("HEART" if win_type == "heart" else "BONUS"))
 		if win_type == "triple":
@@ -3577,6 +3604,86 @@ func _make_power_coin(pos: Vector2) -> Sprite2D:
 	coin.modulate.a = 0.0
 	_coin_layer.add_child(coin)
 	return coin
+
+## Casino-TV payout spray (issue #181): coins erupt out of the cash tray mouth and arc
+## up through the cabinet while the wealth reels roll. Purely decorative — no coin
+## corresponds to a Lucidity unit. Returns how long the spray runs so the caller can
+## keep the sequence locked until the money has finished landing.
+func _spawn_jackpot_coin_fountain() -> float:
+	# Back-to-back jackpots (a rescore, a power) must not stack two tweens.
+	_clear_jackpot_coins()
+	if _coin_layer == null:
+		return 0.0
+	var tray := _cash_tray_pos()
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	_jackpot_coin_tween = create_tween()
+	_jackpot_coin_tween.set_parallel(true)
+	for i in JACKPOT_COIN_COUNT:
+		var origin := tray + Vector2(
+			rng.randf_range(-JACKPOT_COIN_ORIGIN_JITTER, JACKPOT_COIN_ORIGIN_JITTER), 0.0)
+		var coin := _make_power_coin(origin)
+		if coin == null:
+			break
+		_jackpot_coins.append(coin)
+		var rise := JACKPOT_COIN_RISE + rng.randf_range(
+			-JACKPOT_COIN_RISE_JITTER, JACKPOT_COIN_RISE_JITTER)
+		# Launch speed for the wanted apex; the coins fade while still rising, so the
+		# spray reads as leaving the cabinet rather than raining back into the tray.
+		var velocity := Vector2(
+			rng.randf_range(-JACKPOT_COIN_SPREAD, JACKPOT_COIN_SPREAD),
+			-sqrt(2.0 * JACKPOT_COIN_GRAVITY * maxf(8.0, rise)))
+		var base_scale := POWER_COIN_SIZE / float(maxi(1, coin.texture.get_width()))
+		var delay := float(i) * JACKPOT_COIN_STAGGER
+		_jackpot_coin_tween.tween_method(
+			_drive_jackpot_coin.bind(coin, origin, velocity, base_scale, rng.randf() * TAU),
+			0.0, 1.0, JACKPOT_COIN_FLIGHT).set_delay(delay)
+		_jackpot_coin_tween.tween_callback(_free_jackpot_coin.bind(coin)) \
+			.set_delay(delay + JACKPOT_COIN_FLIGHT)
+	return jackpot_coin_fountain_time()
+
+
+func jackpot_coin_fountain_time() -> float:
+	return float(JACKPOT_COIN_COUNT - 1) * JACKPOT_COIN_STAGGER + JACKPOT_COIN_FLIGHT
+
+
+func _drive_jackpot_coin(t: float, coin: Sprite2D, origin: Vector2, velocity: Vector2,
+		base_scale: float, spin_phase: float) -> void:
+	if not is_instance_valid(coin):
+		return
+	var elapsed := t * JACKPOT_COIN_FLIGHT
+	coin.position = origin + velocity * elapsed \
+		+ Vector2(0.0, 0.5 * JACKPOT_COIN_GRAVITY * elapsed * elapsed)
+	# Horizontal squash only: a flat pixel coin reads as tumbling without needing
+	# authored spin frames.
+	var squash := maxf(0.16, absf(cos(spin_phase + t * TAU * JACKPOT_COIN_SPIN)))
+	coin.scale = Vector2(base_scale * squash, base_scale)
+	if t < JACKPOT_COIN_FADE_IN:
+		coin.modulate.a = t / JACKPOT_COIN_FADE_IN
+	elif t > JACKPOT_COIN_FADE_START:
+		coin.modulate.a = clampf(
+			1.0 - (t - JACKPOT_COIN_FADE_START) / (1.0 - JACKPOT_COIN_FADE_START), 0.0, 1.0)
+	else:
+		coin.modulate.a = 1.0
+
+
+func _free_jackpot_coin(coin: Node) -> void:
+	if coin != null and is_instance_valid(coin):
+		_jackpot_coins.erase(coin)
+		coin.queue_free()
+
+
+## The coin-layer sweep only hides its children, so the spray needs an explicit free or
+## it leaks across an ending.
+func _clear_jackpot_coins() -> void:
+	if _jackpot_coin_tween != null and _jackpot_coin_tween.is_valid():
+		_jackpot_coin_tween.kill()
+	_jackpot_coin_tween = null
+	for coin: Sprite2D in _jackpot_coins:
+		if is_instance_valid(coin):
+			coin.queue_free()
+	_jackpot_coins.clear()
+
 
 ## Centre of the emplacement a power currently occupies. The live button rect is the
 ## source of truth: powers are re-slotted per loadout and each slot carries its own
@@ -6481,6 +6588,7 @@ func _clear_wealth_presentation_fx() -> void:
 		_jackpot_flash_tween.kill()
 	_jackpot_flash_tween = null
 	_jackpot_flashing = false
+	_clear_jackpot_coins()
 	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
 
 	if _burst_layer != null:

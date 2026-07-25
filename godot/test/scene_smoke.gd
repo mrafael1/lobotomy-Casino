@@ -52,6 +52,7 @@ func _run() -> void:
 	_check_flatline_action_text(machine, meta_store, failures)
 	_check_global_options_layout(failures)
 	_check_water_lucidity_gain(run_store, failures)
+	_check_jackpot_payout_181(machine, run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
 	_check_water_wealth_169(machine, run_store, meta_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
@@ -722,6 +723,58 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.lastResult = previous_result
 	machine._burst_prev_spin = previous_burst_spin
 	machine._burst_prev_score = previous_burst_score
+
+## Issue #181: a jackpot is paced deliberately — the wealth reels roll slowly and the
+## cash tray throws a coin spray — and the sequence lock has to outlast both.
+func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) -> void:
+	var previous_result: Variant = run_store.lastResult
+	var previous_phase := String(run_store.runPhase)
+	var previous_score := int(run_store.scoreEarned)
+	var previous_spin := int(run_store.spinCount)
+	var previous_burst_spin := int(machine._burst_prev_spin)
+	var previous_burst_score := int(machine._burst_prev_score)
+	var previous_display := int(machine._display_lucidity)
+
+	if not machine.has_method("_spawn_jackpot_coin_fountain"):
+		failures.append("issue181: machine is missing the jackpot coin fountain")
+	run_store.runPhase = "running"
+	run_store.spinCount = 7
+	run_store.scoreEarned = 400
+	run_store.lastResult = {
+		"scoreEarned": 200, "coinsEarned": 200, "winType": "jackpot", "isJackpot": true,
+		"reels": ["brain", "brain", "brain"], "scoreMultiplier": 1.0,
+	}
+	machine._burst_prev_spin = 6
+	machine._burst_prev_score = 0
+	machine._set_display_lucidity(200, false)
+	var reward_time: float = machine._emit_score_burst(null)
+	var slow_roll: float = machine.JACKPOT_ODOMETER_ROLL_TIME + machine.JACKPOT_ROLL_TAIL
+	if reward_time < slow_roll:
+		failures.append("issue181: jackpot sequence unlocks before the slow score roll ends")
+	if reward_time < machine.jackpot_coin_fountain_time():
+		failures.append("issue181: jackpot sequence unlocks before the coin spray ends")
+	if machine._jackpot_coins.is_empty():
+		failures.append("issue181: jackpot did not throw any coins from the cash tray")
+	else:
+		var first_coin := machine._jackpot_coins[0] as Sprite2D
+		var tray: Vector2 = machine._cash_tray_pos()
+		if first_coin == null or absf(first_coin.position.y - tray.y) > 1.0:
+			failures.append("issue181: jackpot coins do not start at the cash tray mouth")
+	if machine._wealth_odometer != null and not machine._wealth_odometer.is_rolling():
+		failures.append("issue181: jackpot did not roll the wealth odometer")
+	# The coin layer sweep only hides children, so the spray needs its own free.
+	machine._clear_jackpot_coins()
+	if not machine._jackpot_coins.is_empty():
+		failures.append("issue181: jackpot coins survived the teardown")
+
+	machine._set_display_lucidity(previous_display, false)
+	machine._burst_prev_spin = previous_burst_spin
+	machine._burst_prev_score = previous_burst_score
+	machine._combo_score_pending = -1
+	run_store.lastResult = previous_result
+	run_store.runPhase = previous_phase
+	run_store.scoreEarned = previous_score
+	run_store.spinCount = previous_spin
 
 func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 		failures: Array) -> void:
