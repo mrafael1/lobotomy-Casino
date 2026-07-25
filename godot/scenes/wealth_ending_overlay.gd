@@ -25,6 +25,14 @@ const COIN_BOTTOM_HOLD_TIME := 0.14
 const COIN_PILE_SETTLE_TIME := 0.24
 const COIN_FALL_RISE := 4.0
 const COIN_PILE_SETTLE_RISE := 3.0
+# Issue #181: the money fills the bottom two thirds of the screen and stops there,
+# leaving the title and the final score in the clear. Left unclamped the pile builds
+# ~834px tall for a 5000-coin payout and simply runs off the top of the canvas.
+const COIN_PILE_TOP_Y := 107.0
+# Coins past the ceiling still exist (they are the payout), they just pack into the
+# top of the pile. Releasing them on the normal stagger would keep the flood running
+# for ~30s after the pile stopped growing, so they ride a short tail instead.
+const COIN_PILE_SURPLUS_WINDOW := 1.5
 const TV_SCREEN_CENTER := Vector2(80.0, 75.0)
 const JOKER_OPACITY := 0.26
 const SUBTITLE_OPACITY := 0.62
@@ -205,6 +213,12 @@ func _prepare_coin_flood() -> void:
 	var source_local := _cash_tray_pos - coin_flood_clip.position
 	var surface_offsets: Array[float] = []
 	var row_count := maxi(1, int(ceili(float(COIN_COUNT) / float(COIN_PILE_COLUMNS))))
+	# Rows that fit under the ceiling, and the coin index at which the pile is full.
+	var visible_rows := maxi(1, int(floori(
+		(COIN_FLOOD_HEIGHT - COIN_SIZE.y - COIN_PILE_TOP_Y) / COIN_PILE_ROW_SPACING)) + 1)
+	var pile_capacity := mini(COIN_COUNT, visible_rows * COIN_PILE_COLUMNS)
+	var surplus_stagger := COIN_PILE_SURPLUS_WINDOW / float(maxi(1, COIN_COUNT - pile_capacity))
+	var pile_full_delay := COIN_RELEASE_START_DELAY + float(pile_capacity) * COIN_RELEASE_STAGGER
 	for column in COIN_PILE_COLUMNS:
 		surface_offsets.append(_coin_rng.randf_range(-3.5, 3.5))
 	for index in COIN_COUNT:
@@ -228,6 +242,9 @@ func _prepare_coin_flood() -> void:
 		var target_y := COIN_FLOOD_HEIGHT - COIN_SIZE.y \
 			- float(row) * COIN_PILE_ROW_SPACING \
 			+ surface_offsets[column] * row_depth + _coin_rng.randf_range(-0.7, 0.7)
+		# The pile stops at its ceiling: everything above it packs into the top rather
+		# than flying off the canvas behind the clip (issue #181).
+		target_y = maxf(target_y, COIN_PILE_TOP_Y)
 		var target := Vector2(target_x, target_y)
 		var bottom_pos := Vector2(
 			target_x + _coin_rng.randf_range(-2.0, 2.0),
@@ -241,7 +258,9 @@ func _prepare_coin_flood() -> void:
 		_coin_bottom_positions.append(bottom_pos)
 		_coin_targets.append(target)
 		_coin_rotations.append(_coin_rng.randf_range(-0.26, 0.26))
-		_coin_delays.append(COIN_RELEASE_START_DELAY + float(index) * COIN_RELEASE_STAGGER)
+		_coin_delays.append(COIN_RELEASE_START_DELAY + float(index) * COIN_RELEASE_STAGGER \
+			if index < pile_capacity \
+			else pile_full_delay + float(index - pile_capacity) * surplus_stagger)
 		_coin_alphas.append(_coin_rng.randf_range(0.85, 1.0))
 
 
