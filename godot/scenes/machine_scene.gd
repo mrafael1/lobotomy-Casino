@@ -36,18 +36,17 @@ const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # below a centered box and its digits carry a lopsided side bearing (verified
 # against rendered pixels; same trick as the wealth goal rects).
 const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
-# White objective boxes baked into the updated wealth_bar art, below the odometer
-# reels (left box pixels x47..69, right box x74..100, both y275..280). "TARGET"
-# centres in the left box, the goal number in the right one; both rects ride ~8px
-# higher than the glyph row because DTM-Sans' line metrics drop the glyphs that
-# far below a centered box.
-const WEALTH_GOAL_WORD_RECT := Rect2(48.0, 267.0, 23.0, 8.0)
-const WEALTH_GOAL_NUMBER_RECT := Rect2(74.0, 267.0, 27.0, 8.0)
-# The goal digits render one per fixed-width cell (like the odometer reels) so
-# the spacing between them stays even regardless of the font's digit advances.
-const WEALTH_GOAL_DIGIT_PITCH := 3.0
-const WEALTH_GOAL_TEXT_COLOR := Color(0.13, 0.12, 0.1)
-const WEALTH_GOAL_NUMBER_COLOR := Color(0.72, 0.11, 0.11)
+# Objective readout on the TV (issue #181). Two authored full-canvas sheets: the
+# TARGET plate with its fill bar (art at x60..91, y84..94) and the goal number below
+# it (y98..102). The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
+# entry, so its frame index is the target index; the bar's twelve frames are the fill
+# steps. They replace the old TARGET word + red digit labels drawn into the bottom
+# wealth bar, which the new art supersedes.
+const TARGET_BAR_SHEET := "machine new view/target_bar.png"
+const TARGET_BAR_FRAME_COUNT := 12
+const TARGET_GOALS_SHEET := "machine new view/target_goals.png"
+const TARGET_GOALS_FRAME_COUNT := 8
+const TARGET_TV_Z_INDEX := 8 # above the cabinet and callout sheets, below the icons
 # Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
 # the lever animation starts.
 const COIN_INSERT_FRAME_COUNT := 4
@@ -325,9 +324,14 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
 # Pressing it opens the current card(s) and effects.
-const PACTE_AUGMENT_BADGE_POS := Vector2(37.0, 96.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 12.0)
-const PACTE_AUGMENT_ICON_SIZE := 7.0
+# Issue #181: the held augments read as a row along the TV's bottom-left with bigger
+# icons. x34 keeps the row a comfortable margin inside the TV, and three 11px badges
+# end at x66 — one pixel clear of the TARGET goal number, which starts at x67.
+const PACTE_AUGMENT_BADGE_POS := Vector2(34.0, 96.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(11.0, 11.0)
+const PACTE_AUGMENT_BADGE_PITCH := 11.0
+const PACTE_AUGMENT_BADGE_MAX := 3
+const PACTE_AUGMENT_ICON_SIZE := 9.0
 const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
@@ -591,7 +595,8 @@ var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
 var _score_pct_buttons: Array[Button] = []
 var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
-var _pacte_augment_badge: Button = null
+var _pacte_augment_badges: Array[Dictionary] = []
+var _pacte_augment_badge: Button = null # first slot; anchors the popup
 var _pacte_augment_badge_icon: TextureRect = null
 var _pacte_augment_count: Label = null
 var _pacte_augment_popup: Control = null
@@ -625,7 +630,8 @@ var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
-var _wealth_goal_digit_labels: Array[Label] = []
+var _target_bar_sprite: Sprite2D = null
+var _target_goals_sprite: Sprite2D = null
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
 var _unlock_popup: UnlockCardPopup = null
@@ -1173,7 +1179,7 @@ func _build_tv_indicators() -> void:
 	_wealth_odometer = WealthOdometer.new()
 	_wealth_odometer.name = "WealthOdometer"
 	add_child(_wealth_odometer)
-	_build_wealth_goal_label()
+	_build_target_readout()
 	_health_bar_sprite = _build_full_canvas_sheet(
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
 	_build_spins_left_label()
@@ -1184,55 +1190,40 @@ func _build_tv_indicators() -> void:
 	_build_boost_indicators()
 	_build_power_bar()
 
-## Objective readout inside the wealth bar's baked white boxes: the word
-## "TARGET" (dark) in the left box, the goal number (red, one digit per
-## fixed-pitch cell for even spacing) in the right one.
-func _build_wealth_goal_label() -> void:
-	if _wealth_odometer == null:
-		return
-	var word := _wealth_goal_text("WealthGoalWordLabel", WEALTH_GOAL_WORD_RECT, 5)
-	word.text = "TARGET"
-	for i in str(EconomyConst.WEALTH_SCORE_THRESHOLD).length():
-		var digit := _wealth_goal_text("WealthGoalDigit%d" % i,
-			WEALTH_GOAL_NUMBER_RECT, 5)
-		digit.add_theme_color_override("font_color", WEALTH_GOAL_NUMBER_COLOR)
-		_wealth_goal_digit_labels.append(digit)
-	_refresh_wealth_goal_label()
+## Objective readout on the TV (issue #181): the authored TARGET plate with its fill
+## bar, and the goal number below it. Both are full-canvas sheets, so their placement
+## is baked into the art — the code only picks frames.
+func _build_target_readout() -> void:
+	_target_bar_sprite = _build_full_canvas_sheet(TARGET_BAR_SHEET, TARGET_BAR_FRAME_COUNT)
+	if _target_bar_sprite != null:
+		_target_bar_sprite.z_index = TARGET_TV_Z_INDEX
+	_target_goals_sprite = _build_full_canvas_sheet(TARGET_GOALS_SHEET, TARGET_GOALS_FRAME_COUNT)
+	if _target_goals_sprite != null:
+		_target_goals_sprite.z_index = TARGET_TV_Z_INDEX
+	_refresh_target_readout()
 
-func _refresh_wealth_goal_label() -> void:
-	if _wealth_goal_digit_labels.is_empty():
+## The goal frames are authored one per WEALTH_TARGETS entry, so the frame index IS the
+## target index. The bar fills with progress toward the CURRENT target and therefore
+## empties again each time one is paid — complete_wealth_target() subtracts the target
+## from the score and advances the index together.
+func _refresh_target_readout() -> void:
+	if _target_goals_sprite == null and _target_bar_sprite == null:
 		return
-	var target := campaign_goal_score
-	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD:
-		target = RunStateStore.current_wealth_target()
-	var digits := str(target)
-	var start_x := roundf(WEALTH_GOAL_NUMBER_RECT.position.x
-		+ (WEALTH_GOAL_NUMBER_RECT.size.x - WEALTH_GOAL_DIGIT_PITCH * digits.length()) * 0.5)
-	for i in _wealth_goal_digit_labels.size():
-		var digit: Label = _wealth_goal_digit_labels[i]
-		var visible := i < digits.length()
-		digit.visible = visible
-		if not visible:
-			continue
-		digit.position = Vector2(start_x + i * WEALTH_GOAL_DIGIT_PITCH,
-			WEALTH_GOAL_NUMBER_RECT.position.y)
-		digit.text = digits[i]
-
-func _wealth_goal_text(node_name: String, rect: Rect2, font_size: int) -> Label:
-	var l := Label.new()
-	l.name = node_name
-	l.position = rect.position
-	l.size = rect.size
-	l.z_index = 3 # keep the live TARGET labels readable above the authored bar
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", font_size)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", WEALTH_GOAL_TEXT_COLOR)
-	_wealth_odometer.add_child(l)
-	return l
+	# A win callout or power animation owns the whole TV while it plays; the objective
+	# readout steps aside for it exactly like the augment row does.
+	var should_show := _tv_info_pop_sources.is_empty()
+	if _target_bar_sprite != null:
+		_target_bar_sprite.visible = should_show
+	if _target_goals_sprite != null:
+		_target_goals_sprite.visible = should_show
+	if not should_show:
+		return
+	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
+	_set_sheet_frame(_target_goals_sprite, index)
+	var target := maxi(1, RunStateStore.current_wealth_target())
+	var progress := clampf(float(RunStateStore.scoreEarned) / float(target), 0.0, 1.0)
+	_set_sheet_frame(_target_bar_sprite, clampi(
+		floori(progress * float(TARGET_BAR_FRAME_COUNT - 1)), 0, TARGET_BAR_FRAME_COUNT - 1))
 
 ## Numeric spins-left readout under the neuron tube — tracks the same
 ## _display_spins_left() budget the capped tube frames show.
@@ -1292,6 +1283,15 @@ func _build_power_bar() -> void:
 ## bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
+# Issue #181: the item icons live in a fixed column down the TV's right edge. The
+# slots are authored rather than derived so they stay clear of everything else that
+# owns the screen — the dealer icon (x100..114, y59..80), the dealer bar art above it,
+# and the TARGET plate (x60..91). That free corner is x92..108 by y82..108, which is
+# exactly two 12px slots; further simultaneous boosts fold into a "+N" on the last.
+# The old layout was a right-aligned row that grew leftwards and pushed its sixth icon
+# onto the left bezel, outside the TV, with nothing clipping it.
+const BOOST_COLUMN_X := 96.0
+const BOOST_COLUMN_SLOT_Y: Array[float] = [82.0, 95.0]
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 # Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
@@ -1353,23 +1353,35 @@ func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Colo
 	mark.add_theme_color_override("font_outline_color", Color.BLACK)
 	mark.add_theme_constant_override("outline_size", 1)
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Same min-height trick as the count badge: size the box from the font's real
-	# min height and pin it to the icon's top edge, nudged 3px up so the sign
-	# reads as a corner badge instead of covering the art.
-	mark.size = Vector2(BOOST_ICON_SIZE, mark.get_minimum_size().y)
+	# Pinned to the icon's top edge, nudged 3px up so the sign reads as a corner badge
+	# instead of covering the art. The box height comes from the font's real min height
+	# on refresh — asking for it here, before the node is in the tree, can return zero.
 	mark.position = Vector2(0.0, -3.0)
 	mark.visible = false
 	return mark
 
-## Shows one icon per active multi-spin boost, stacked horizontally inside the TV's
-## top-right, each with a spins-remaining badge. A boost whose icon is missing is skipped
-## rather than shown as a bare number. Unused slots hide (issue #76).
+
+## Whether a boost currently owns a slot: either it has spins left, or it just expired
+## and is lingering on zero for one refresh.
+func _boost_is_active(boost: Dictionary) -> bool:
+	var counter := String(boost["counter"])
+	var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
+	if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
+		return false
+	return int(RunStateStore.get(counter)) > 0 or _boost_zero_linger.has(counter)
+
+## Shows one icon per active multi-spin boost, stacked down the TV's right edge, each
+## with a spins-remaining badge. A boost whose icon is missing is skipped rather than
+## shown as a bare number. Unused slots hide (issue #76). There are more boosts than
+## slots, so the last visible one carries a "+N" overflow count (issue #181).
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	# Anchor to the TV status column, clear of the bezel and health bar below.
-	var row_right := TV_STATUS_RIGHT
-	var row_top := float(TV_SCREEN["top"]) + 13.0
+	var column_capacity := mini(BOOST_COLUMN_SLOT_Y.size(), _boost_indicator_slots.size())
+	var active_total := 0
+	for boost in DURATION_BOOSTS:
+		if _boost_is_active(boost):
+			active_total += 1
 	var col := 0
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
@@ -1380,14 +1392,14 @@ func _refresh_boost_indicators() -> void:
 			continue
 		if remaining > 0:
 			_boost_zero_linger.erase(counter)
-		if (remaining <= 0 and not show_zero) or col >= _boost_indicator_slots.size():
+		if (remaining <= 0 and not show_zero) or col >= column_capacity:
 			continue
 		var tex := _boost_icon_for(boost)
 		if tex == null:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
 		var slot: Control = s["slot"]
-		slot.position = Vector2(row_right - BOOST_ICON_SIZE - float(col) * (BOOST_ICON_SIZE + BOOST_ICON_GAP), row_top)
+		slot.position = Vector2(BOOST_COLUMN_X, BOOST_COLUMN_SLOT_Y[col])
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
 		cn.text = str(maxi(0, remaining))
@@ -1405,10 +1417,25 @@ func _refresh_boost_indicators() -> void:
 		var mh := cn.get_minimum_size().y
 		cn.size = Vector2(BOOST_ICON_SIZE, mh)
 		cn.position = Vector2(0.0, BOOST_ICON_SIZE - mh)
+		# The polarity glyphs share the count's font metrics, which are only reliable
+		# once the label is in the tree — sizing them at build time can yield a zero-high
+		# box and clip the sign.
+		for mark_key in ["pos_mark", "neg_mark"]:
+			var mark: Label = s[mark_key]
+			mark.size = Vector2(BOOST_ICON_SIZE, mark.get_minimum_size().y)
 		slot.visible = true
 		col += 1
+	# More boosts than slots: the last one carries how many are not shown, so the player
+	# still knows something is running rather than silently losing it.
+	if col > 0 and active_total > col:
+		var overflow: Label = _boost_indicator_slots[col - 1]["count"]
+		overflow.text = "+%d" % (active_total - col + 1)
 	for i in range(col, _boost_indicator_slots.size()):
-		(_boost_indicator_slots[i]["slot"] as Control).visible = false
+		var hidden: Dictionary = _boost_indicator_slots[i]
+		(hidden["slot"] as Control).visible = false
+		# Drop the texture too: a slot re-shown before its icon is resolved would
+		# otherwise flash the previous boost's art.
+		(hidden["icon"] as TextureRect).texture = null
 
 func _capture_expiring_boost_counters() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -2543,6 +2570,7 @@ func _begin_tv_info_pop(source: StringName) -> void:
 	_tv_info_pop_sources[source] = true
 	_hide_pacte_augment_popup()
 	_refresh_pacte_augment_badge()
+	_refresh_target_readout()
 	if not was_empty:
 		return
 	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar_sprite != null \
@@ -2559,6 +2587,7 @@ func _end_tv_info_pop(source: StringName) -> void:
 		return
 	_restore_tv_info_layers()
 	_refresh_pacte_augment_badge()
+	_refresh_target_readout()
 
 func _hide_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
@@ -2988,7 +3017,7 @@ func _refresh_combo_effect() -> void:
 	_combo_effect_sprite.visible = true
 
 func _refresh_tv_indicators() -> void:
-	_refresh_wealth_goal_label()
+	_refresh_target_readout()
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
@@ -7070,70 +7099,99 @@ func _pacte_augment_icon(card_id: String) -> Texture2D:
 	atlas.region = icon_rect
 	return atlas
 
+## A row of augment icons along the TV's bottom-left, one badge per held card up to
+## PACTE_AUGMENT_BADGE_MAX (issue #181). The row stops short of the TARGET goal number
+## in the middle of the screen; a fourth augment turns the last badge into a "+N".
+## Every badge opens the same description popup.
 func _build_pacte_augment_badge() -> void:
 	if _pacte_augment_badge != null:
 		_refresh_pacte_augment_badge()
 		return
-	var badge := Button.new()
-	badge.name = "PacteAugmentBadge"
-	badge.position = PACTE_AUGMENT_BADGE_POS
-	badge.size = PACTE_AUGMENT_BADGE_SIZE
-	badge.z_index = 40
-	badge.text = ""
-	badge.flat = true
-	badge.focus_mode = Control.FOCUS_NONE
-	badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var badge_style := StyleBoxFlat.new()
-	badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
-	badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
-	badge_style.set_border_width_all(1)
-	badge_style.set_corner_radius_all(1)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		badge.add_theme_stylebox_override(state, badge_style)
-	var icon := TextureRect.new()
-	icon.name = "Icon"
-	icon.position = (PACTE_AUGMENT_BADGE_SIZE - Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)) * 0.5
-	icon.size = Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.add_child(icon)
-	var count := Label.new()
-	count.name = "Count"
-	count.position = Vector2(8.0, 8.0)
-	count.size = Vector2(4.0, 4.0)
-	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	count.add_theme_font_size_override("font_size", 4)
-	if _font != null:
-		count.add_theme_font_override("font", _font)
-	count.add_theme_color_override("font_color", NEON_GOLD)
-	count.add_theme_color_override("font_outline_color", Color.BLACK)
-	count.add_theme_constant_override("outline_size", 1)
-	badge.add_child(count)
-	badge.pressed.connect(_toggle_pacte_augment_popup)
-	_pacte_augment_badge = badge
-	_pacte_augment_badge_icon = icon
-	_pacte_augment_count = count
-	add_child(badge)
+	for i in PACTE_AUGMENT_BADGE_MAX:
+		var badge := Button.new()
+		# The first badge keeps the historical node name; the scene smoke and the popup
+		# anchoring both look it up by it.
+		badge.name = "PacteAugmentBadge" if i == 0 else "PacteAugmentBadge%d" % (i + 1)
+		badge.position = PACTE_AUGMENT_BADGE_POS + Vector2(float(i) * PACTE_AUGMENT_BADGE_PITCH, 0.0)
+		badge.size = PACTE_AUGMENT_BADGE_SIZE
+		badge.z_index = 40
+		badge.text = ""
+		badge.flat = true
+		badge.visible = false
+		badge.focus_mode = Control.FOCUS_NONE
+		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var badge_style := StyleBoxFlat.new()
+		badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
+		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
+		badge_style.set_border_width_all(1)
+		badge_style.set_corner_radius_all(1)
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			badge.add_theme_stylebox_override(state, badge_style)
+		var icon := TextureRect.new()
+		icon.name = "Icon"
+		icon.position = (PACTE_AUGMENT_BADGE_SIZE
+			- Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)) * 0.5
+		icon.size = Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_child(icon)
+		# The overflow count replaces the last icon rather than sitting on top of one,
+		# so it can never obscure the art it is counting.
+		var count := Label.new()
+		count.name = "Count"
+		count.position = Vector2.ZERO
+		count.size = PACTE_AUGMENT_BADGE_SIZE
+		count.visible = false
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		count.add_theme_font_size_override("font_size", 5)
+		if _font != null:
+			count.add_theme_font_override("font", _font)
+		count.add_theme_color_override("font_color", NEON_GOLD)
+		count.add_theme_color_override("font_outline_color", Color.BLACK)
+		count.add_theme_constant_override("outline_size", 1)
+		badge.add_child(count)
+		badge.pressed.connect(_toggle_pacte_augment_popup)
+		add_child(badge)
+		_pacte_augment_badges.append({ "badge": badge, "icon": icon, "count": count })
+	if not _pacte_augment_badges.is_empty():
+		_pacte_augment_badge = _pacte_augment_badges[0]["badge"]
+		_pacte_augment_badge_icon = _pacte_augment_badges[0]["icon"]
+		_pacte_augment_count = _pacte_augment_badges[0]["count"]
 	_refresh_pacte_augment_badge()
 
 func _refresh_pacte_augment_badge() -> void:
-	if _pacte_augment_badge == null:
+	if _pacte_augment_badges.is_empty():
 		return
 	var ids := _active_pacte_augment_ids()
 	var should_show := not ids.is_empty() and _tv_info_pop_sources.is_empty()
-	_pacte_augment_badge.visible = should_show
 	if not should_show:
+		for entry: Dictionary in _pacte_augment_badges:
+			(entry["badge"] as Button).visible = false
 		_hide_pacte_augment_popup()
 		return
-	if _pacte_augment_badge_icon != null:
-		_pacte_augment_badge_icon.texture = _pacte_augment_icon(ids[0])
-	if _pacte_augment_count != null:
-		_pacte_augment_count.visible = ids.size() > 1
-		_pacte_augment_count.text = str(ids.size())
+	var shown := mini(ids.size(), _pacte_augment_badges.size())
+	for i in _pacte_augment_badges.size():
+		var entry: Dictionary = _pacte_augment_badges[i]
+		var badge: Button = entry["badge"]
+		var icon: TextureRect = entry["icon"]
+		var count: Label = entry["count"]
+		badge.visible = i < shown
+		if not badge.visible:
+			icon.texture = null
+			continue
+		# The last slot counts the remainder instead of showing one more icon.
+		var overflow := i == shown - 1 and ids.size() > shown
+		count.visible = overflow
+		icon.visible = not overflow
+		if overflow:
+			count.text = "+%d" % (ids.size() - shown + 1)
+			icon.texture = null
+		else:
+			icon.texture = _pacte_augment_icon(ids[i])
 
 func _pacte_augment_popup_text() -> String:
 	var lines: Array[String] = []

@@ -53,6 +53,7 @@ func _run() -> void:
 	_check_global_options_layout(failures)
 	_check_water_lucidity_gain(run_store, failures)
 	_check_jackpot_payout_181(machine, run_store, failures)
+	_check_target_readout_181(machine, run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
 	_check_water_wealth_169(machine, run_store, meta_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
@@ -723,6 +724,55 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.lastResult = previous_result
 	machine._burst_prev_spin = previous_burst_spin
 	machine._burst_prev_score = previous_burst_score
+
+## Issue #181: the TV's objective readout is two authored sheets — a goal frame per
+## WEALTH_TARGETS entry, and a bar whose frames are the fill toward the current target.
+func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) -> void:
+	var previous_phase := String(run_store.runPhase)
+	var previous_score := int(run_store.scoreEarned)
+	var previous_index := int(run_store.wealthTargetIndex)
+
+	if machine._target_bar_sprite == null or machine._target_goals_sprite == null:
+		failures.append("issue181: the TV is missing the TARGET bar/goal art")
+		return
+	if machine._target_bar_sprite.hframes != machine.TARGET_BAR_FRAME_COUNT \
+			or machine._target_goals_sprite.hframes != machine.TARGET_GOALS_FRAME_COUNT:
+		failures.append("issue181: the TARGET sheets were sliced into the wrong frame count")
+	if machine._target_goals_sprite.hframes != EconomyConst.WEALTH_TARGETS.size():
+		failures.append("issue181: the goal sheet does not carry one frame per wealth target")
+
+	run_store.runPhase = "running"
+	# An empty run shows the first goal and an empty bar.
+	run_store.wealthTargetIndex = 0
+	run_store.scoreEarned = 0
+	machine._refresh_target_readout()
+	if machine._target_goals_sprite.frame != 0 or machine._target_bar_sprite.frame != 0:
+		failures.append("issue181: a fresh run did not show goal 0 with an empty bar")
+	# Meeting the current target fills the bar completely.
+	run_store.scoreEarned = EconomyConst.WEALTH_TARGETS[0]
+	machine._refresh_target_readout()
+	if machine._target_bar_sprite.frame != machine.TARGET_BAR_FRAME_COUNT - 1:
+		failures.append("issue181: reaching the target did not fill the TARGET bar")
+	# Paying it advances the goal frame and empties the bar again.
+	run_store.wealthTargetIndex = 3
+	run_store.scoreEarned = 0
+	machine._refresh_target_readout()
+	if machine._target_goals_sprite.frame != 3:
+		failures.append("issue181: the goal frame does not follow the wealth target index")
+	if machine._target_bar_sprite.frame != 0:
+		failures.append("issue181: the TARGET bar did not refill from empty after a payout")
+	# Half way to the last target reads as a partially filled bar, never a full one.
+	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
+	run_store.scoreEarned = int(run_store.current_wealth_target() / 2)
+	machine._refresh_target_readout()
+	var half_frame: int = machine._target_bar_sprite.frame
+	if half_frame <= 0 or half_frame >= machine.TARGET_BAR_FRAME_COUNT - 1:
+		failures.append("issue181: half progress did not land mid-bar (frame %d)" % half_frame)
+
+	run_store.wealthTargetIndex = previous_index
+	run_store.scoreEarned = previous_score
+	run_store.runPhase = previous_phase
+	machine._refresh_target_readout()
 
 ## Issue #181: a jackpot is paced deliberately — the wealth reels roll slowly and the
 ## cash tray throws a coin spray — and the sequence lock has to outlast both.
@@ -4197,11 +4247,25 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
-	# Stacking is horizontal: same row (y), second icon to the LEFT of the first.
+	# Issue #181: stacking is vertical down the TV's right edge — same column (x),
+	# second icon BELOW the first, and every slot clear of the TV bounds and of the
+	# dealer icon's band.
 	var p0: Vector2 = (slots[0]["slot"] as Control).position
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
-	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
-		failures.append("issue76: boost icons did not stack horizontally (%s vs %s)" % [p0, p1])
+	if not is_equal_approx(p0.x, p1.x) or not (p1.y > p0.y):
+		failures.append("issue181: boost icons did not stack vertically (%s vs %s)" % [p0, p1])
+	var tv_left := float(machine.TV_SCREEN["left"])
+	var tv_top := float(machine.TV_SCREEN["top"])
+	var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
+	var icon_size: float = machine.BOOST_ICON_SIZE
+	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
+	for slot_y: float in machine.BOOST_COLUMN_SLOT_Y:
+		var rect := Rect2(Vector2(machine.BOOST_COLUMN_X, slot_y), Vector2(icon_size, icon_size))
+		if rect.position.x < tv_left or rect.end.x > machine.TV_STATUS_RIGHT \
+				or rect.position.y < tv_top or rect.end.y > tv_bottom:
+			failures.append("issue181: boost slot %s falls outside the TV" % rect)
+		if rect.intersects(dealer_rect):
+			failures.append("issue181: boost slot %s collides with the dealer icon" % rect)
 	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slot 0 is
 	# the Energy Drink no-decay rush (pure upside → "+" only); slot 1 is the Cocktail
 	# (rarity bonus with a live pair/triple tax → mixed, both "+" and "-").
@@ -6835,6 +6899,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if pacte_badge.position.y < tv_top \
 				or pacte_badge.position.y + pacte_badge.size.y > tv_bottom:
 			failures.append("pacte: augment badge is outside the TV vertically")
+		# Issue #181: the augments read as a row, and it has to stop before the TARGET
+		# goal number that sits in the middle of the TV's bottom band (x67..84).
+		if machine._pacte_augment_badges.size() != machine.PACTE_AUGMENT_BADGE_MAX:
+			failures.append("issue181: the augment row was not built to its full width")
+		var augment_row_end: float = machine.PACTE_AUGMENT_BADGE_POS.x \
+			+ float(machine.PACTE_AUGMENT_BADGE_MAX - 1) * machine.PACTE_AUGMENT_BADGE_PITCH \
+			+ machine.PACTE_AUGMENT_BADGE_SIZE.x
+		if augment_row_end > 67.0:
+			failures.append("issue181: the augment row runs into the TARGET goal number (ends %.1f)"
+				% augment_row_end)
+		if machine.PACTE_AUGMENT_ICON_SIZE < 8.0:
+			failures.append("issue181: the augment icons were not enlarged")
 		pacte_badge.pressed.emit()
 		if machine.get_node_or_null("PacteAugmentPopup") == null:
 			failures.append("pacte: augment badge did not open its description popup")
