@@ -66,6 +66,33 @@ const STRIP_ADJ_H := 12.0
 const STRIP_OFFSET := 14.0 # vertical gap between symbol centres ((center+adj)/2)
 const STRIP_ADJ_ALPHA := 0.5
 
+# Swap presentation (issue #181). One cue per idea: the slot frames say where a symbol
+# may land, the symbol shake says what can be grabbed, the instruction says what to do,
+# and the red cross appears only when the pointer is over a reel that would be refused.
+const SWAP_SHAKE_STEP := 0.09
+const SWAP_SHAKE_OFFSETS: Array[Vector2] = [
+	Vector2(0.0, -1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0), Vector2(-1.0, 0.0),
+]
+const SWAP_SLOT_FRAME_FILL := Color(1.0, 0.82, 0.42, 0.05)
+const SWAP_SLOT_FRAME_BORDER := Color(1.0, 0.82, 0.42, 0.55)
+const SWAP_SLOT_TICK_SIZE := Vector2(3.0, 1.0)
+const SWAP_SLOT_PULSE_TIME := 0.9
+const SWAP_SLOT_PULSE_LOW := 0.45
+const SWAP_SLOT_PULSE_HIGH := 0.9
+const SWAP_VALID_FILL := Color(0.30, 0.90, 0.52, 0.16)
+const SWAP_VALID_BORDER := Color(0.45, 1.0, 0.62, 0.9)
+const SWAP_INVALID_FILL := Color(0.72, 0.04, 0.10, 0.28)
+const SWAP_INVALID_BORDER := Color(1.0, 0.22, 0.28, 0.95)
+const SWAP_CROSS_COLOR := Color(1.0, 0.30, 0.34, 0.95)
+const SWAP_CROSS_THICKNESS := 1.0
+const SWAP_CROSS_ANGLE_DEG := 38.0
+const SWAP_HINT_RECT := Rect2(12.0, 152.0, 136.0, 12.0)
+const SWAP_HINT_ARMED_TEXT := "DRAG A SYMBOL ONTO ANOTHER REEL"
+const SWAP_HINT_DRAG_TEXT := "DROP IT ON A DIFFERENT REEL"
+const SWAP_HINT_COLOR := Color(1.0, 0.86, 0.5)
+const SWAP_HINT_FADE_TIME := 0.18
+const SWAP_HINT_DRAG_ALPHA := 0.45 # recedes so it never competes with the drag ghost
+
 # Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
 # candidate symbol, tapping the symbol commits it.
 const CHEAT_ARROW_SIZE := Vector2(14.0, 8.0)
@@ -648,11 +675,15 @@ var _swap_drag_button: Button = null
 var _swap_drag_ghost: Sprite2D = null
 var _swap_drag_press := Vector2.ZERO
 var _swap_drag_offset := Vector2.ZERO
-var _swap_drag_hint_tween: Tween = null
 var _swap_shake_tween: Tween = null      # revealed symbols shake while Swap is armed
 var _swap_shake_sprites: Array[Sprite2D] = []
 var _swap_shake_base: Array[Vector2] = []
+var _swap_slot_hints: Array[Panel] = []
+var _swap_slot_pulse_tween: Tween = null
+var _swap_instruction_label: Label = null
+var _swap_instruction_tween: Tween = null
 var _swap_invalid_target_overlay: Panel = null
+var _swap_valid_target_overlay: Panel = null
 var _swap_target_feedback_reel := -1
 var _swap_source_slot := 1 # 0 = above, 1 = centre, 2 = below
 var _swap_source_symbol := ""
@@ -4334,8 +4365,9 @@ func _arm_swap_source() -> void:
 	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
+	_swap_slot_hints.clear()
 	for i in 3:
-		_build_swap_rubble_hint(i)
+		_build_swap_slot_hint(i)
 		var hole: Dictionary = REEL_HOLES[i]
 		var button := Button.new()
 		button.name = "SwapSymbol%d" % i
@@ -4349,10 +4381,13 @@ func _arm_swap_source() -> void:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 		button.gui_input.connect(_on_swap_symbol_gui_input.bind(i, button))
 		_targeting_layer.add_child(button)
-	_swap_drag_hint_tween = create_tween().set_loops()
-	_swap_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 0.58, 0.34)
-	_swap_drag_hint_tween.tween_property(_targeting_layer, "modulate:a", 1.0, 0.34)
+	# Issue #181: one cue per idea. The slot frames breathe (these are the places that
+	# take part), the symbols shake (these are the things you can grab), and a line of
+	# text says what to do. The old whole-layer opacity flash is gone — it pulsed the
+	# buttons, the hints and the drag ghost together and read as an error state.
+	_start_swap_slot_pulse()
 	_start_swap_symbol_shake()
+	_show_swap_instruction(SWAP_HINT_ARMED_TEXT, 1.0)
 
 ## While Swap is armed the revealed symbols shake in place — the cue that they can
 ## be grabbed and dropped onto another reel, including an adjacent one.
@@ -4367,10 +4402,12 @@ func _start_swap_symbol_shake() -> void:
 				continue
 			_swap_shake_sprites.append(symbol_sprite)
 			_swap_shake_base.append(symbol_sprite.position)
+	# A slow 1px orbit rather than a jitter: the symbols should look loose in their
+	# slots, not broken (issue #181).
 	_swap_shake_tween = create_tween().set_loops()
-	for offset in [Vector2(1.0, 0.0), Vector2(-1.0, 0.5), Vector2(0.5, -0.5), Vector2.ZERO]:
+	for offset in SWAP_SHAKE_OFFSETS:
 		_swap_shake_tween.tween_callback(_set_swap_shake_offset.bind(offset))
-		_swap_shake_tween.tween_interval(0.06)
+		_swap_shake_tween.tween_interval(SWAP_SHAKE_STEP)
 
 func _set_swap_shake_offset(offset: Vector2) -> void:
 	for i in mini(_swap_shake_sprites.size(), _swap_shake_base.size()):
@@ -4385,32 +4422,98 @@ func _stop_swap_symbol_shake() -> void:
 		_swap_shake_base.clear()
 		_swap_shake_sprites.clear()
 
-func _build_swap_rubble_hint(reel_index: int) -> void:
+## Marks one reel hole as a slot that takes part in the swap: a thin amber frame with
+## corner ticks. Replaces the old brown wash and three hand-placed shard rectangles,
+## which were programmer art and read as damage rather than as a target (issue #181).
+## The node keeps its historical name — the scene smoke looks it up by it.
+func _build_swap_slot_hint(reel_index: int) -> void:
 	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
 		return
 	var hole: Dictionary = REEL_HOLES[reel_index]
-	var origin := Vector2(float(hole["left"]), float(hole["top"]))
-	var base := ColorRect.new()
-	base.name = "SwapRubbleHint%d" % reel_index
-	base.position = origin
-	base.size = Vector2(float(hole["width"]), float(hole["height"]))
-	base.color = Color(0.73, 0.5, 0.22, 0.14)
-	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	base.z_index = -1
-	_targeting_layer.add_child(base)
-	var shards: Array[Dictionary] = [
-		{"position": Vector2(2.0, 4.0), "size": Vector2(5.0, 2.0)},
-		{"position": Vector2(13.0, 8.0), "size": Vector2(4.0, 2.0)},
-		{"position": Vector2(7.0, 23.0), "size": Vector2(6.0, 2.0)},
-	]
-	for shard_data: Dictionary in shards:
-		var shard := ColorRect.new()
-		shard.position = origin + shard_data["position"]
-		shard.size = shard_data["size"]
-		shard.color = Color(1.0, 0.78, 0.36, 0.3)
-		shard.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		shard.z_index = -1
-		_targeting_layer.add_child(shard)
+	var frame := Panel.new()
+	frame.name = "SwapRubbleHint%d" % reel_index
+	frame.position = Vector2(float(hole["left"]), float(hole["top"]))
+	frame.size = Vector2(float(hole["width"]), float(hole["height"]))
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.z_index = -1
+	var style := StyleBoxFlat.new()
+	style.bg_color = SWAP_SLOT_FRAME_FILL
+	style.border_color = SWAP_SLOT_FRAME_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(1)
+	frame.add_theme_stylebox_override("panel", style)
+	_targeting_layer.add_child(frame)
+	# Corner ticks: the pixel-art shorthand for "slot" at this size.
+	for corner in [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, 1.0), Vector2(1.0, 1.0)]:
+		var tick := ColorRect.new()
+		tick.color = SWAP_SLOT_FRAME_BORDER
+		tick.size = SWAP_SLOT_TICK_SIZE
+		tick.position = Vector2(
+			corner.x * (frame.size.x - SWAP_SLOT_TICK_SIZE.x),
+			corner.y * (frame.size.y - SWAP_SLOT_TICK_SIZE.y))
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		frame.add_child(tick)
+	_swap_slot_hints.append(frame)
+
+
+## One shared breath across all three slot frames, replacing the old flash on the whole
+## targeting layer so the drag ghost and buttons keep a steady opacity.
+func _start_swap_slot_pulse() -> void:
+	_stop_swap_slot_pulse()
+	if _swap_slot_hints.is_empty():
+		return
+	_swap_slot_pulse_tween = create_tween().set_loops()
+	for target_alpha in [SWAP_SLOT_PULSE_LOW, SWAP_SLOT_PULSE_HIGH]:
+		_swap_slot_pulse_tween.set_parallel(true)
+		for hint: Panel in _swap_slot_hints:
+			_swap_slot_pulse_tween.tween_property(hint, "modulate:a", target_alpha,
+				SWAP_SLOT_PULSE_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_swap_slot_pulse_tween.chain()
+
+
+func _stop_swap_slot_pulse() -> void:
+	if _swap_slot_pulse_tween != null and _swap_slot_pulse_tween.is_valid():
+		_swap_slot_pulse_tween.kill()
+	_swap_slot_pulse_tween = null
+	_swap_slot_hints.clear()
+
+
+## The one line of text Swap has ever had. It lives on the targeting layer so it dies
+## with it, and sits above the reel holes so the drag never covers it.
+func _show_swap_instruction(text: String, alpha: float) -> void:
+	if _targeting_layer == null:
+		return
+	if _swap_instruction_label == null or not is_instance_valid(_swap_instruction_label):
+		var label := Label.new()
+		label.name = "SwapInstruction"
+		label.position = SWAP_HINT_RECT.position
+		label.size = SWAP_HINT_RECT.size
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 7)
+		if _font != null:
+			label.add_theme_font_override("font", _font)
+		label.add_theme_color_override("font_color", SWAP_HINT_COLOR)
+		label.add_theme_color_override("font_outline_color", Color.BLACK)
+		label.add_theme_constant_override("outline_size", 1)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.z_index = 2
+		label.modulate.a = 0.0
+		_targeting_layer.add_child(label)
+		_swap_instruction_label = label
+	_swap_instruction_label.text = text
+	if _swap_instruction_tween != null and _swap_instruction_tween.is_valid():
+		_swap_instruction_tween.kill()
+	_swap_instruction_tween = create_tween()
+	_swap_instruction_tween.tween_property(_swap_instruction_label, "modulate:a", alpha,
+		SWAP_HINT_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+func _stop_swap_instruction() -> void:
+	if _swap_instruction_tween != null and _swap_instruction_tween.is_valid():
+		_swap_instruction_tween.kill()
+	_swap_instruction_tween = null
+	_swap_instruction_label = null
 
 func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -4499,54 +4602,77 @@ func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2)
 	_swap_drag_ghost.visible = true
 	_targeting_layer.add_child(_swap_drag_ghost)
 	_swap_drag_button.modulate.a = 0.35
+	# The symbol is in hand now — the instruction recedes so it never competes with it.
+	_show_swap_instruction(SWAP_HINT_DRAG_TEXT, SWAP_HINT_DRAG_ALPHA)
 
-## Mark the source reel as a disabled destination for the duration of a Swap drag.
-## The red X stays on that reel even when the ghost is carried elsewhere, so the
-## player can see the swap restriction before releasing the symbol.
+## Builds both destination cues for a Swap drag: a green frame that follows whichever
+## legal reel the pointer is over, and a red cross on the source reel. Both start
+## silent — the rejection cue is raised only when the player actually offends, rather
+## than shouting at them for the whole drag the way it used to (issue #181).
 func _build_swap_invalid_target_feedback(reel_index: int) -> void:
 	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
 		return
 	if _swap_invalid_target_overlay != null and is_instance_valid(_swap_invalid_target_overlay):
 		_swap_invalid_target_overlay.queue_free()
+	if _swap_valid_target_overlay != null and is_instance_valid(_swap_valid_target_overlay):
+		_swap_valid_target_overlay.queue_free()
+	var overlay := _make_swap_target_panel("SwapInvalidTarget", reel_index,
+		SWAP_INVALID_FILL, SWAP_INVALID_BORDER)
+	# Two rotated 1px bars, not a font glyph: a DTM-Sans "X" crammed into a 17x26 panel
+	# was the least legible thing on the machine.
+	var span := minf(overlay.size.x, overlay.size.y) - 6.0
+	for angle_deg in [SWAP_CROSS_ANGLE_DEG, -SWAP_CROSS_ANGLE_DEG]:
+		var bar := ColorRect.new()
+		bar.color = SWAP_CROSS_COLOR
+		bar.size = Vector2(span, SWAP_CROSS_THICKNESS)
+		bar.pivot_offset = bar.size * 0.5
+		bar.position = overlay.size * 0.5 - bar.size * 0.5
+		bar.rotation = deg_to_rad(angle_deg)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		overlay.add_child(bar)
+	# Visible but fully transparent: _update_swap_target_feedback owns the alpha.
+	overlay.modulate.a = 0.0
+	_swap_invalid_target_overlay = overlay
+	var valid := _make_swap_target_panel("SwapValidTarget", reel_index,
+		SWAP_VALID_FILL, SWAP_VALID_BORDER)
+	valid.visible = false
+	_swap_valid_target_overlay = valid
+	_swap_target_feedback_reel = reel_index
+
+func _make_swap_target_panel(node_name: String, reel_index: int, fill: Color,
+		border: Color) -> Panel:
 	var hole: Dictionary = REEL_HOLES[reel_index]
 	var overlay := Panel.new()
-	overlay.name = "SwapInvalidTarget"
+	overlay.name = node_name
 	overlay.position = Vector2(float(hole["left"]) + 2.0, float(hole["top"]) + 2.0)
 	overlay.size = Vector2(float(hole["width"]) - 4.0, float(hole["height"]) - 4.0)
 	overlay.z_index = 1
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.72, 0.04, 0.10, 0.22)
-	style.border_color = Color(1.0, 0.22, 0.28, 0.95)
+	style.bg_color = fill
+	style.border_color = border
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(1)
 	overlay.add_theme_stylebox_override("panel", style)
-	var marker := Label.new()
-	marker.name = "InvalidMarker"
-	marker.text = "X"
-	marker.position = Vector2.ZERO
-	marker.size = overlay.size
-	marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.add_theme_font_size_override("font_size", 10)
-	if _font != null:
-		marker.add_theme_font_override("font", _font)
-	marker.add_theme_color_override("font_color", Color(1.0, 0.3, 0.34))
-	marker.add_theme_color_override("font_outline_color", Color.BLACK)
-	marker.add_theme_constant_override("outline_size", 1)
-	overlay.add_child(marker)
 	_targeting_layer.add_child(overlay)
-	_swap_invalid_target_overlay = overlay
-	_swap_target_feedback_reel = reel_index
+	return overlay
 
+## Exactly one destination cue is live at a time: a green frame on a legal reel, a red
+## cross on the source reel the symbol may not go back onto, and nothing at all while
+## the pointer is off the reels.
 func _update_swap_target_feedback(target_reel: int) -> void:
-	if _swap_invalid_target_overlay == null or not is_instance_valid(_swap_invalid_target_overlay):
-		return
 	_swap_target_feedback_reel = target_reel
-	# Make the warning more emphatic while the pointer is over the forbidden source
-	# reel, while keeping the disabled source visibly marked over every destination.
-	_swap_invalid_target_overlay.modulate.a = 1.0 if target_reel == _swap_source else 0.72
+	var invalid := target_reel == _swap_source
+	if _swap_invalid_target_overlay != null and is_instance_valid(_swap_invalid_target_overlay):
+		_swap_invalid_target_overlay.modulate.a = 1.0 if invalid else 0.0
+	if _swap_valid_target_overlay == null or not is_instance_valid(_swap_valid_target_overlay):
+		return
+	var legal := target_reel >= 0 and target_reel < REEL_HOLES.size() and not invalid
+	_swap_valid_target_overlay.visible = legal
+	if legal:
+		var hole: Dictionary = REEL_HOLES[target_reel]
+		_swap_valid_target_overlay.position = Vector2(
+			float(hole["left"]) + 2.0, float(hole["top"]) + 2.0)
 
 func _update_swap_drag(global_position: Vector2) -> void:
 	if not _swap_drag_active or _swap_drag_button == null:
@@ -4580,6 +4706,12 @@ func _cancel_swap_drag_gesture() -> void:
 	if _swap_invalid_target_overlay != null and is_instance_valid(_swap_invalid_target_overlay):
 		_swap_invalid_target_overlay.queue_free()
 	_swap_invalid_target_overlay = null
+	if _swap_valid_target_overlay != null and is_instance_valid(_swap_valid_target_overlay):
+		_swap_valid_target_overlay.queue_free()
+	_swap_valid_target_overlay = null
+	# Back to the armed state: the instruction returns to full strength.
+	if _swap_instruction_label != null and is_instance_valid(_swap_instruction_label):
+		_show_swap_instruction(SWAP_HINT_ARMED_TEXT, 1.0)
 	_swap_target_feedback_reel = -1
 	_swap_drag_press = Vector2.ZERO
 	_swap_drag_offset = Vector2.ZERO
@@ -4843,11 +4975,12 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
-	if _swap_drag_hint_tween != null and _swap_drag_hint_tween.is_valid():
-		_swap_drag_hint_tween.kill()
-	_swap_drag_hint_tween = null
+	_stop_swap_slot_pulse()
 	_stop_swap_symbol_shake()
 	_cancel_swap_drag_gesture()
+	# The instruction is a child of the targeting layer, so freeing the layer frees it;
+	# only its tween and the cached reference need clearing here.
+	_stop_swap_instruction()
 	if _targeting_layer != null:
 		_targeting_layer.queue_free()
 		_targeting_layer = null
