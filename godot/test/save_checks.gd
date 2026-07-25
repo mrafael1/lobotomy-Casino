@@ -53,6 +53,7 @@ static func run_all() -> Array:
 	_check(out, store.ownedPermanents.is_empty(), "fresh campaign resets upgrades")
 	_check(out, store.pendingConsumables.is_empty(), "fresh campaign resets consumables")
 	_check_card_unlock_queue_52(store, out)
+	_check_card_unlock_rules_52(store, out)
 	store.free()
 	return out
 
@@ -65,6 +66,32 @@ static func _check_card_unlock_queue_52(store: Object, out: Array) -> void:
 		"unlockedAugmentCardIds": PacteCards.augment_ids(),
 		"unlockedPowerCardIds": PacteCards.power_ids(),
 	}
+	# Fresh saves start on the default roster only, listed in catalog order.
+	for pool in PacteCards.POOLS:
+		var fresh: Array = CardUnlocks.unlocked_ids_for(pool, {})
+		var defaults: Array = CardUnlocks.default_ids(pool)
+		var sorted_fresh := fresh.duplicate()
+		sorted_fresh.sort()
+		var sorted_defaults := defaults.duplicate()
+		sorted_defaults.sort()
+		_check(out, str(sorted_fresh) == str(sorted_defaults),
+			"a fresh save owns only the default %s roster" % pool)
+		var catalog: Array = PacteCards.ids_for_pool(pool)
+		var in_order := true
+		var last := -1
+		for card_id in fresh:
+			var index := catalog.find(card_id)
+			if index <= last:
+				in_order = false
+			last = index
+		_check(out, in_order, "the default %s roster is listed in catalog order" % pool)
+
+	# Progress already banked pulls its cards into the starting roster.
+	var earned: Array = CardUnlocks.unlocked_ids_for("power",
+		{ CardUnlocks.METRIC_WINS: 1 })
+	_check(out, earned.has("cheat"), "a recorded win owns the Cheat power")
+	_check(out, not CardUnlocks.unlocked_ids_for("power", {}).has("cheat"),
+		"Cheat is locked without a win")
 	var migrated: Dictionary = store._migrate(pre_queue_save)
 	_check(out, int(migrated["schemaVersion"]) == store.CANONICAL_SCHEMA_VERSION,
 		"card queue migration canonicalizes the schema version")
@@ -72,7 +99,7 @@ static func _check_card_unlock_queue_52(store: Object, out: Array) -> void:
 		"pre-queue saves migrate to an empty pending card-unlock queue")
 
 	# A card removed from the unlock list and re-earned queues exactly once.
-	var card_id := "augment_book"
+	var card_id := "augment_hallucination"
 	var without_card: Array = PacteCards.augment_ids()
 	without_card.erase(card_id)
 	store._apply({
@@ -131,3 +158,114 @@ static func _check_card_unlock_queue_52(store: Object, out: Array) -> void:
 		if not without_card.has(String(drawn_id)):
 			leaked = true
 	_check(out, not leaked, "Pacte draw filtering still respects the unlocked list")
+
+## Issue #52 unlock rules: the deck is gated behind CardUnlocks, progress counters
+## drive the unlocks, and a pre-v6 save is re-gated from the history it carries.
+static func _check_card_unlock_rules_52(store: Object, out: Array) -> void:
+	# Every card is either a default or has exactly one unlock rule — no card can
+	# be stranded with no way to earn it.
+	var rules := CardUnlocks.rule_map()
+	var catalog: Array[String] = []
+	catalog.append_array(PacteCards.augment_ids())
+	catalog.append_array(PacteCards.power_ids())
+	for card_id in catalog:
+		var reachable := CardUnlocks.is_default(card_id) or rules.has(card_id)
+		_check(out, reachable, "card %s is either a default or has an unlock rule" % card_id)
+		_check(out, not (CardUnlocks.is_default(card_id) and rules.has(card_id)),
+			"card %s is not both a default and a rule" % card_id)
+	for card_id in rules:
+		_check(out, String((rules[card_id] as Dictionary)["pool"]) == PacteCards.pool_of(String(card_id)),
+			"rule for %s names the card's real pool" % card_id)
+
+	# Progress crosses a threshold -> the card unlocks and queues exactly once.
+	store._apply({
+		"schemaVersion": store.CANONICAL_SCHEMA_VERSION,
+		"unlockedAugmentCardIds": CardUnlocks.default_ids("augment"),
+		"unlockedPowerCardIds": CardUnlocks.default_ids("power"),
+		"pendingCardUnlocks": [],
+		"cardUnlockProgress": {},
+	})
+	_check(out, not store.unlockedPowerCardIds.has("cheat"), "Cheat starts locked")
+	_check(out, not store.unlockedAugmentCardIds.has("augment_hallucination"),
+		"Hallucination starts locked")
+
+	var unlocked: Array = store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 9, false)
+	_check(out, unlocked.is_empty(), "9 consumables does not unlock Hallucination")
+	_check(out, not store.unlockedAugmentCardIds.has("augment_hallucination"),
+		"Hallucination stays locked below its threshold")
+	unlocked = store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 1, false)
+	_check(out, unlocked == ["augment_hallucination"], "the 10th consumable unlocks Hallucination")
+	_check(out, store.unlockedAugmentCardIds.has("augment_hallucination"),
+		"the unlocked card joins the augment list")
+	_check(out, store.pending_card_unlocks().size() == 1, "a rule unlock queues one popup entry")
+	unlocked = store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 5, false)
+	_check(out, unlocked.is_empty(), "further progress past the threshold unlocks nothing new")
+	_check(out, store.pending_card_unlocks().size() == 1, "further progress queues no duplicate")
+
+	# "Best single run" metrics only move upward.
+	store.record_best_card_unlock_progress(CardUnlocks.METRIC_BEST_RUN_SCORE, 2100, false)
+	_check(out, store.unlockedAugmentCardIds.has("augment_reward_2"),
+		"a 2100 run unlocks REWARD + II")
+	_check(out, not store.unlockedAugmentCardIds.has("augment_reward_3"),
+		"a 2100 run does not unlock REWARD + III")
+	store.record_best_card_unlock_progress(CardUnlocks.METRIC_BEST_RUN_SCORE, 900, false)
+	_check(out, store.card_unlock_progress(CardUnlocks.METRIC_BEST_RUN_SCORE) == 2100,
+		"a weaker run does not lower the best-run record")
+	store.record_best_card_unlock_progress(CardUnlocks.METRIC_BEST_RUN_SCORE, 4000, false)
+	_check(out, store.unlockedAugmentCardIds.has("augment_reward_3"),
+		"a 4000 run unlocks REWARD + III")
+
+	# Unlocks and their progress survive a fresh campaign; the defaults are re-asserted.
+	store.start_new_campaign(false)
+	_check(out, store.unlockedAugmentCardIds.has("augment_hallucination"),
+		"a new campaign keeps earned cards")
+	_check(out, store.card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED) == 15,
+		"a new campaign keeps unlock progress")
+	for card_id in CardUnlocks.DEFAULT_AUGMENT_IDS:
+		_check(out, store.unlockedAugmentCardIds.has(card_id),
+			"a new campaign keeps default augment %s" % card_id)
+
+	# A pre-#52 save (whole catalog unlocked) is re-gated, keeping what its history earned.
+	var legacy := {
+		"schemaVersion": 4,
+		"unlockedAugmentCardIds": PacteCards.augment_ids(),
+		"unlockedPowerCardIds": PacteCards.power_ids(),
+		"endingsReached": ["wealth", "flatline"],
+		"history": { "bestScoreRun": 2500, "winsByTier": { "classic": 1, "joker": 1 } },
+	}
+	var migrated: Dictionary = store._migrate(legacy)
+	var augments: Array = migrated["unlockedAugmentCardIds"]
+	var powers: Array = migrated["unlockedPowerCardIds"]
+	_check(out, not augments.has("augment_adrenaline"),
+		"migration re-locks a card the old save never earned")
+	_check(out, not powers.has("rewind"), "migration re-locks Rewind")
+	for card_id in CardUnlocks.DEFAULT_AUGMENT_IDS:
+		_check(out, augments.has(card_id), "migration keeps default augment %s" % card_id)
+	for card_id in CardUnlocks.DEFAULT_POWER_IDS:
+		_check(out, powers.has(card_id), "migration keeps default power %s" % card_id)
+	_check(out, augments.has("augment_reward_2"), "migration credits the recorded best run")
+	_check(out, augments.has("augment_joker"), "migration credits a recorded joker-tier win")
+	_check(out, augments.has("augment_glitch_2"), "migration credits a recorded flatline death")
+	_check(out, powers.has("cheat"), "migration credits a recorded win")
+	_check(out, not powers.has("heart"), "migration does not credit an unearned heart-tier win")
+	# Re-applying a migrated save is stable: nothing re-locks and nothing re-queues.
+	store._apply(migrated)
+	var after_augments: Array = store.unlockedAugmentCardIds.duplicate()
+	store._apply(store._migrate(store._as_dict()))
+	_check(out, str(store.unlockedAugmentCardIds) == str(after_augments),
+		"re-loading a migrated save keeps the same unlocked cards")
+
+	# Locked-card hints describe the condition and never the card itself. The two
+	# tier-win cards are the documented exception: their condition is a named
+	# Augmented Run tier that happens to share the card's name, and the player
+	# cannot act on the hint without it.
+	var tier_named: Array[String] = ["augment_joker", "heart"]
+	for card_id in rules:
+		var hint := CardUnlocks.hint_for(String(card_id), {})
+		var card := PacteCards.card(String(card_id))
+		_check(out, hint != "", "card %s exposes an unlock hint" % card_id)
+		if not tier_named.has(String(card_id)):
+			_check(out, not hint.contains(String(card["name"])),
+				"the hint for %s does not name the card" % card_id)
+		_check(out, not hint.contains(String(card["description"])),
+			"the hint for %s does not leak its description" % card_id)

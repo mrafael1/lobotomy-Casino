@@ -269,7 +269,15 @@ func show_card_detail(card_id: String, pool: String = "") -> void:
 	_apply_modal_icon(entry, resolved_pool, unlocked)
 	inject_modal_data(
 		String(entry.get("name", "")) if unlocked else LOCKED_NAME,
-		String(entry.get("description", "")) if unlocked else LOCKED_DESCRIPTION)
+		String(entry.get("description", "")) if unlocked else _locked_description(card_id))
+
+## What a locked slot is allowed to say: how the card is earned, never what it
+## does. Cards with no unlock rule fall back to the bare LOCKED copy.
+func _locked_description(card_id: String) -> String:
+	if Engine.is_editor_hint():
+		return LOCKED_DESCRIPTION
+	var hint := CardUnlocks.hint_for(card_id, MetaStateStore.card_unlock_progress_snapshot())
+	return hint if hint != "" else LOCKED_DESCRIPTION
 
 func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 	if _modal_card_icon == null:

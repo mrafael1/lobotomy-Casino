@@ -1,26 +1,25 @@
 extends SceneTree
-## Debug helper (issue #52): open the Collection catalog with a couple of cards
-## re-locked, plus the unlock popup, and save screenshots for visual inspection.
+## Debug helper (issue #52): open the Collection catalog on a fresh save's default
+## roster, plus the unlock popup, and save screenshots for visual inspection.
 ## Never saves meta.
 ##
 ##   SHOT_PATH=/tmp/collection.png SHOT_PATH_LOCKED_MODAL=/tmp/locked.png \
 ##   SHOT_PATH_POPUP=/tmp/popup.png godot --path godot -s res://test/debug_collection_shot.gd
 
-const LOCKED_AUGMENT := "augment_book"
-const LOCKED_POWER := "heart"
+# A rule-gated card (not a CardUnlocks default), so the shots show the real
+# locked-card treatment and the real unlock hint.
+const LOCKED_AUGMENT := "augment_hallucination"
 
 func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
 	var meta: Node = get_root().get_node("MetaStateStore")
-	var augments: Array = PacteCards.augment_ids()
-	augments.erase(LOCKED_AUGMENT)
-	var powers: Array = PacteCards.power_ids()
-	powers.erase(LOCKED_POWER)
-	meta.unlockedAugmentCardIds = augments
-	meta.unlockedPowerCardIds = powers
+	# Exactly what a fresh save owns.
+	meta.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta.unlockedPowerCardIds = CardUnlocks.default_ids("power")
 	meta.pendingCardUnlocks = []
+	meta.cardUnlockProgress = { CardUnlocks.METRIC_CONSUMABLES_USED: 4 }
 
 	var scene := (load("res://scenes/collection_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(scene)
@@ -28,7 +27,7 @@ func _run() -> void:
 		await process_frame
 	_save(OS.get_environment("SHOT_PATH"))
 
-	scene.highlight_card("swap")
+	scene.highlight_card("cheat")
 	for i in 4:
 		await process_frame
 	_save(OS.get_environment("SHOT_PATH_POWERS"))

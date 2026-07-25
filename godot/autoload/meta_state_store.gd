@@ -4,13 +4,15 @@ extends Node
 ## persistence layer (Step 4). Persists to user:// as JSON using the same logical
 ## shape as the MMKV `lobotomy-meta` save.
 ##
-## schemaVersion: v5 adds the pending card-unlock presentation queue on top of the
-## v4 unlock-aware Pacte deck lists.
+## schemaVersion: v6 gates the Pacte deck behind the issue #52 unlock rules: the
+## starting roster shrinks to CardUnlocks' defaults and the rest is earned through
+## the persisted progress counters. v5 added the pending card-unlock presentation
+## queue on top of the v4 unlock-aware deck lists.
 ## A migration seam is kept for future save changes but ships empty — a
 ## v1->v2 migration is only added if an actual v1 payload is ever found in the wild.
 
 const SAVE_PATH := "user://lobotomy-meta.json"
-const CANONICAL_SCHEMA_VERSION := 5
+const CANONICAL_SCHEMA_VERSION := 6
 
 var schemaVersion: int = CANONICAL_SCHEMA_VERSION
 var lucidityWallet: int = 0
@@ -35,11 +37,14 @@ var oddsUpgrades: Dictionary = {}
 # the next odds menu starts with these on top of its fresh budget.
 var oddsTokensBanked: int = 0
 var rewardAmpSymbol: String = ""
-# Pacte deck unlocks are meta progression.  The supplied card art ships with
-# every card unlocked; future achievement/lab flows can remove cards from this
-# default without changing the draw code.
+# Pacte deck unlocks are meta progression (issue #52). A fresh save owns only the
+# CardUnlocks default roster; every other card is earned through the unlock rules
+# and stays owned across campaigns. The draw code just reads these lists.
 var unlockedAugmentCardIds: Array = []
 var unlockedPowerCardIds: Array = []
+# Progress counters behind the card-unlock rules (metric ID -> value). Totals
+# accumulate for the life of the save; "best" metrics keep the highest run value.
+var cardUnlockProgress: Dictionary = {}
 # Cards unlocked but not yet shown to the player (issue #52). Each entry is
 # { "cardId": String, "pool": "augment"|"power", "presented": bool }; the popup
 # drains them in queue order and acknowledges them one at a time. Persisted so an
@@ -71,9 +76,9 @@ signal card_unlocked(card_id: String, pool: String)
 
 func _ready() -> void:
 	if unlockedAugmentCardIds.is_empty():
-		unlockedAugmentCardIds = PacteCards.augment_ids()
+		unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
 	if unlockedPowerCardIds.is_empty():
-		unlockedPowerCardIds = PacteCards.power_ids()
+		unlockedPowerCardIds = CardUnlocks.default_ids("power")
 	load_state()
 
 func _process(delta: float) -> void:
@@ -104,6 +109,7 @@ func _as_dict() -> Dictionary:
 		"unlockedAugmentCardIds": unlockedAugmentCardIds.duplicate(),
 		"unlockedPowerCardIds": unlockedPowerCardIds.duplicate(),
 		"pendingCardUnlocks": pendingCardUnlocks.duplicate(true),
+		"cardUnlockProgress": cardUnlockProgress.duplicate(true),
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -130,20 +136,33 @@ func _apply(meta: Dictionary) -> void:
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
 	rewardAmpSymbol = String(meta.get("rewardAmpSymbol", ""))
+	cardUnlockProgress = _normalise_card_progress(meta.get("cardUnlockProgress", {}))
 	unlockedAugmentCardIds = _normalise_card_unlocks(
-		meta.get("unlockedAugmentCardIds", PacteCards.augment_ids()),
+		meta.get("unlockedAugmentCardIds", CardUnlocks.default_ids("augment")),
 		PacteCards.augment_ids())
-	# Issue #176 ships these cards as part of the supplied deck. Add them to an
-	# older save's unlock list without changing the future achievement gate for
-	# cards that may be added later.
-	for card_id in PacteCards.newly_shipped_augment_ids():
-		if not unlockedAugmentCardIds.has(card_id):
-			unlockedAugmentCardIds.append(card_id)
 	unlockedPowerCardIds = _normalise_card_unlocks(
-		meta.get("unlockedPowerCardIds", PacteCards.power_ids()),
+		meta.get("unlockedPowerCardIds", CardUnlocks.default_ids("power")),
 		PacteCards.power_ids())
+	# The default roster is never lost, and progress already banked always owns the
+	# cards it earns — a save cannot end up holding a metric with no card to show
+	# for it (e.g. after the rules themselves change).
+	for pool in PacteCards.POOLS:
+		var owned := unlockedAugmentCardIds if pool == "augment" else unlockedPowerCardIds
+		for card_id in CardUnlocks.unlocked_ids_for(pool, cardUnlockProgress):
+			if not owned.has(card_id):
+				owned.append(card_id)
 	pendingCardUnlocks = _normalise_pending_card_unlocks(meta.get("pendingCardUnlocks", []))
 	meta_changed.emit()
+
+func _normalise_card_progress(value: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	if not (value is Dictionary):
+		return result
+	for key in value as Dictionary:
+		var amount := int((value as Dictionary)[key])
+		if amount > 0:
+			result[String(key)] = amount
+	return result
 
 func _normalise_card_unlocks(value: Variant, fallback: Array[String]) -> Array:
 	var result: Array = []
@@ -244,6 +263,53 @@ func acknowledge_card_unlock(card_id: String, save_immediately := true) -> bool:
 	if save_immediately:
 		save_state()
 	return true
+
+# ── card-unlock progress (issue #52) ──────────────────────────────────────────────
+
+func card_unlock_progress(metric: String) -> int:
+	return int(cardUnlockProgress.get(metric, 0))
+
+func card_unlock_progress_snapshot() -> Dictionary:
+	return cardUnlockProgress.duplicate(true)
+
+## Adds to a cumulative metric (consumables used, power restores, wins, ...) and
+## unlocks whatever that crosses. Returns the newly unlocked card IDs.
+func add_card_unlock_progress(metric: String, amount := 1, save_immediately := true) -> Array[String]:
+	if metric == "" or amount <= 0:
+		var none: Array[String] = []
+		return none
+	return _set_card_unlock_progress(metric,
+		card_unlock_progress(metric) + amount, save_immediately)
+
+## Raises a "best single run" metric (run score, pairs in a run, ...) to `value`
+## when it beats the stored record. Returns the newly unlocked card IDs.
+func record_best_card_unlock_progress(metric: String, value: int, save_immediately := true) -> Array[String]:
+	if metric == "" or value <= card_unlock_progress(metric):
+		var none: Array[String] = []
+		return none
+	return _set_card_unlock_progress(metric, value, save_immediately)
+
+func _set_card_unlock_progress(metric: String, value: int, save_immediately: bool) -> Array[String]:
+	cardUnlockProgress = cardUnlockProgress.duplicate(true)
+	cardUnlockProgress[metric] = value
+	var unlocked := _evaluate_card_unlocks(false)
+	meta_changed.emit()
+	# An unlock always hits the disk: callers pass save_immediately = false for the
+	# per-spin counters, but a card the player just earned must survive a crash.
+	if save_immediately or not unlocked.is_empty():
+		save_state()
+	return unlocked
+
+## Unlocks every card whose rule the current progress satisfies. Each one goes
+## through unlock_card(), so it is queued for the popup exactly once.
+func _evaluate_card_unlocks(save_immediately := true) -> Array[String]:
+	var unlocked: Array[String] = []
+	for card_id in CardUnlocks.satisfied_ids(cardUnlockProgress):
+		if unlock_card(card_id, "", false):
+			unlocked.append(card_id)
+	if not unlocked.is_empty() and save_immediately:
+		save_state()
+	return unlocked
 
 func clear_pending_card_unlocks() -> void:
 	if pendingCardUnlocks.is_empty():
@@ -409,6 +475,7 @@ func mark_ending_reached(ending: String) -> void:
 	if not endingsReached.has(ending):
 		endingsReached = endingsReached.duplicate()
 		endingsReached.append(ending)
+	_record_ending_card_progress(ending)
 	if ending == "wealth":
 		wealthEndingReached = true
 		campaignActive = false
@@ -446,6 +513,26 @@ func mark_ending_reached(ending: String) -> void:
 		lucidityWallet = 0
 	meta_changed.emit()
 	save_state()
+
+## Card-unlock metrics an ending settles (issue #52): winning at all, winning a
+## specific augmented tier, winning without ever flatlining, and dying of flatline.
+## The run store is looked up at runtime — save_checks compiles this script outside
+## the autoload context, where the RunStateStore identifier does not resolve.
+func _record_ending_card_progress(ending: String) -> void:
+	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	if ending == "wealth":
+		add_card_unlock_progress(CardUnlocks.METRIC_WINS, 1, false)
+		var tier := _current_run_tier()
+		if tier == "joker":
+			add_card_unlock_progress(CardUnlocks.METRIC_JOKER_TIER_WINS, 1, false)
+		elif tier == "heart":
+			add_card_unlock_progress(CardUnlocks.METRIC_HEART_TIER_WINS, 1, false)
+		# "Without a flatline" is the run's flatline reel results, not the ending:
+		# the win has to be clean all the way through.
+		if run_store != null and int(run_store.flatlineResultCount) <= 0:
+			add_card_unlock_progress(CardUnlocks.METRIC_FLAWLESS_WINS, 1, false)
+	elif ending == "flatline" or ending == "game_over":
+		add_card_unlock_progress(CardUnlocks.METRIC_FLATLINE_DEATHS, 1, false)
 
 func get_pending_consumables() -> Dictionary:
 	return pendingConsumables.duplicate(true)
@@ -574,11 +661,15 @@ func start_new_campaign(save_immediately := true) -> void:
 	oddsUpgrades = {}
 	oddsTokensBanked = 0
 	rewardAmpSymbol = ""
-	unlockedAugmentCardIds = PacteCards.augment_ids()
-	unlockedPowerCardIds = PacteCards.power_ids()
-	# A fresh campaign hands the whole deck back at once; queueing every card would
-	# open a popup chain the player never earned.
-	pendingCardUnlocks = []
+	# Card unlocks and their progress are achievements, not campaign state: a new
+	# campaign keeps every card the player earned, and the pending popup queue with
+	# it. Only the default roster is re-asserted, in case an older save lost it.
+	for card_id in CardUnlocks.DEFAULT_AUGMENT_IDS:
+		if not unlockedAugmentCardIds.has(card_id):
+			unlockedAugmentCardIds.append(card_id)
+	for card_id in CardUnlocks.DEFAULT_POWER_IDS:
+		if not unlockedPowerCardIds.has(card_id):
+			unlockedPowerCardIds.append(card_id)
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -622,6 +713,35 @@ func load_state() -> void:
 # If a real v1 payload is ever found, register it in _MIGRATIONS keyed by version.
 const _MIGRATIONS := {}
 
+## Best-effort card-unlock progress reconstructed from what an older save already
+## recorded. Only metrics the pre-#52 save actually tracked can be recovered; the
+## rest legitimately start at zero.
+func _card_progress_from_history(record: Dictionary) -> Dictionary:
+	var progress: Dictionary = {}
+	var record_history: Dictionary = record.get("history", {}) as Dictionary
+	var best_score := int(record_history.get("bestScoreRun", 0))
+	if best_score > 0:
+		progress[CardUnlocks.METRIC_BEST_RUN_SCORE] = best_score
+	var wins_by_tier: Dictionary = record_history.get("winsByTier", {}) as Dictionary
+	var total_wins := 0
+	for tier in wins_by_tier:
+		total_wins += int(wins_by_tier[tier])
+	var reached: Array = record.get("endingsReached", []) as Array
+	# A wealth ending recorded before the per-tier counters existed still counts.
+	if total_wins <= 0 and (bool(record.get("wealthEndingReached", false)) or reached.has("wealth")):
+		total_wins = 1
+	if total_wins > 0:
+		progress[CardUnlocks.METRIC_WINS] = total_wins
+	var joker_wins := int(wins_by_tier.get("joker", 0))
+	if joker_wins > 0:
+		progress[CardUnlocks.METRIC_JOKER_TIER_WINS] = joker_wins
+	var heart_wins := int(wins_by_tier.get("heart", 0))
+	if heart_wins > 0:
+		progress[CardUnlocks.METRIC_HEART_TIER_WINS] = heart_wins
+	if reached.has("flatline") or reached.has("game_over"):
+		progress[CardUnlocks.METRIC_FLATLINE_DEATHS] = 1
+	return progress
+
 func _migrate(record: Dictionary) -> Dictionary:
 	var current := record
 	var version := int(current.get("schemaVersion", 0))
@@ -660,10 +780,20 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["oddsTokensBanked"] = 0
 	if not current.has("rewardAmpSymbol"):
 		current["rewardAmpSymbol"] = ""
+	# Issue #52 gates the deck. Saves written before v6 hold either nothing or the
+	# whole catalog (the pre-#52 default), so their unlock lists are rebuilt from
+	# the new rules: the default roster plus whatever their existing history has
+	# already earned. Progress the old save never tracked starts at zero.
+	if int(record.get("schemaVersion", 0)) < 6 or not current.has("cardUnlockProgress"):
+		current = current.duplicate(true)
+		current["cardUnlockProgress"] = _card_progress_from_history(current)
+		var progress: Dictionary = current["cardUnlockProgress"]
+		current["unlockedAugmentCardIds"] = CardUnlocks.unlocked_ids_for("augment", progress)
+		current["unlockedPowerCardIds"] = CardUnlocks.unlocked_ids_for("power", progress)
 	if not current.has("unlockedAugmentCardIds"):
-		current["unlockedAugmentCardIds"] = PacteCards.augment_ids()
+		current["unlockedAugmentCardIds"] = CardUnlocks.default_ids("augment")
 	if not current.has("unlockedPowerCardIds"):
-		current["unlockedPowerCardIds"] = PacteCards.power_ids()
+		current["unlockedPowerCardIds"] = CardUnlocks.default_ids("power")
 	# Issue #52: pre-v5 saves predate the presentation queue. It migrates in empty —
 	# cards already owned before the popup existed are not retroactively celebrated.
 	if not current.has("pendingCardUnlocks"):

@@ -105,6 +105,7 @@ func _run() -> void:
 	_check_save_resume_151(machine, run_store, failures)
 	_check_tier_win_counter_142(run_store, meta_store, failures)
 	await _check_card_collection_52(meta_store, failures)
+	_check_card_unlock_rules_52(machine, run_store, meta_store, failures)
 	machine.queue_free()
 
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
@@ -7223,9 +7224,10 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	var saved_augments: Array = meta_store.unlockedAugmentCardIds.duplicate()
 	var saved_powers: Array = meta_store.unlockedPowerCardIds.duplicate()
 	var saved_pending: Array = meta_store.pendingCardUnlocks.duplicate(true)
-	var locked_augment := "augment_book"
+	var saved_progress: Dictionary = meta_store.cardUnlockProgress.duplicate(true)
+	var locked_augment := "augment_hallucination"
 	var locked_power := "heart"
-	var unlocked_augment := "augment_pattern_recognition"
+	var unlocked_augment := "augment_book"
 
 	var augments: Array = PacteCards.augment_ids()
 	augments.erase(locked_augment)
@@ -7262,7 +7264,7 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 
 	# A locked card keeps its slot but shows only the card back.
 	for locked in [
-		{ "id": locked_augment, "back": PacteCards.AUGMENT_BACK_RECT, "name": "PATTERN" },
+		{ "id": locked_augment, "back": PacteCards.AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
 		{ "id": locked_power, "back": PacteCards.POWER_BACK_RECT, "name": "HEART" },
 	]:
 		var locked_id := String(locked["id"])
@@ -7315,7 +7317,7 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	if popup == null:
 		failures.append("issue52: the unlock popup did not attach to its host")
 		host.queue_free()
-		_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending)
+		_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
 		return
 	if popup.visible:
 		failures.append("issue52: the unlock popup opened with an empty queue")
@@ -7397,11 +7399,125 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 		if String(drawn_id) == locked_augment:
 			failures.append("issue52: Pacte draw offered a card outside the unlocked list")
 
-	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending)
+	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
 	await process_frame
 
-func _restore_card_unlock_state(meta_store: Node, augments: Array, powers: Array, pending: Array) -> void:
+func _restore_card_unlock_state(meta_store: Node, augments: Array, powers: Array, pending: Array,
+		progress: Dictionary = {}) -> void:
 	meta_store.unlockedAugmentCardIds = augments
 	meta_store.unlockedPowerCardIds = powers
 	meta_store.pendingCardUnlocks = pending
+	meta_store.cardUnlockProgress = progress
 	UnlockCardPopup.pending_highlight_card_id = ""
+
+# ── issue #52: the deck is gated and the run feeds the unlock counters ───────────
+
+func _check_card_unlock_rules_52(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var saved_augments: Array = meta_store.unlockedAugmentCardIds.duplicate()
+	var saved_powers: Array = meta_store.unlockedPowerCardIds.duplicate()
+	var saved_pending: Array = meta_store.pendingCardUnlocks.duplicate(true)
+	var saved_progress: Dictionary = meta_store.cardUnlockProgress.duplicate(true)
+
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store.unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	meta_store.pendingCardUnlocks = []
+	meta_store.cardUnlockProgress = {}
+
+	# The Pacte only ever draws from the gated roster.
+	for pool in PacteCards.POOLS:
+		var unlocked: Array = meta_store.unlocked_augment_cards() if pool == "augment" \
+			else meta_store.unlocked_power_cards()
+		for card_id in unlocked:
+			if not CardUnlocks.default_ids(pool).has(String(card_id)):
+				failures.append("issue52 rules: %s starts outside the default %s roster" % [card_id, pool])
+		for drawn_id in PacteCards.draw(pool, 7331, unlocked, [], 3):
+			if not unlocked.has(String(drawn_id)):
+				failures.append("issue52 rules: a %s draw offered a locked card" % pool)
+
+	# Collection shows the unlock condition on a locked card, never its effect.
+	var collection := (load("res://scenes/collection_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(collection)
+	collection.show_card_detail("augment_adrenaline", "augment")
+	var adrenaline := PacteCards.card("augment_adrenaline")
+	if collection.modal_state() != "locked":
+		failures.append("issue52 rules: a gated card did not open the LOCKED modal")
+	if collection._modal_description.text == String(adrenaline["description"]) \
+			or collection._modal_description.text.contains(String(adrenaline["name"])):
+		failures.append("issue52 rules: the LOCKED modal leaked a gated card's metadata")
+	if not collection._modal_description.text.contains("30"):
+		failures.append("issue52 rules: the LOCKED modal did not show the unlock condition")
+	collection.queue_free()
+
+	# The run feeds the counters. Spin results are fed through the tracker directly:
+	# the counters are the unit under test, not the parity-pinned spin math.
+	run_store.runPairCount = 0
+	run_store.runTripleCounts = {}
+	run_store.scoreEarned = 2100
+	run_store._track_spin_card_progress(_card_progress_result(["brain", "brain", "eye"], "pair", 40))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_PAIRS_IN_RUN) != 1:
+		failures.append("issue52 rules: a paying pair was not counted")
+	if not meta_store.unlockedAugmentCardIds.has("augment_reward_2"):
+		failures.append("issue52 rules: a 2100 run did not unlock REWARD + II")
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 2:
+		failures.append("issue52 rules: repeated same-symbol triples were not counted")
+	run_store._track_spin_card_progress(_card_progress_result(["pill", "pill", "pill"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 2:
+		failures.append("issue52 rules: a different triple advanced the same-triple metric")
+	run_store._track_spin_card_progress(_card_progress_result(["eye", "eye", "eye"], "triple", 90))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 3 \
+			or not meta_store.unlockedAugmentCardIds.has("augment_tunnel_vision"):
+		failures.append("issue52 rules: the third same triple did not unlock Tunnel Vision")
+	run_store._track_spin_card_progress(_card_progress_result(["brain", "eye", "pill"], "miss", 0))
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_PAIRS_IN_RUN) != 1:
+		failures.append("issue52 rules: a losing spin counted as a pair")
+
+	# Per-run counters reset with the run; the meta record keeps the best.
+	run_store.reset_run_state()
+	if int(run_store.runPairCount) != 0 or not (run_store.runTripleCounts as Dictionary).is_empty():
+		failures.append("issue52 rules: per-run card counters survived a run reset")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_SAME_TRIPLE_IN_RUN) != 3:
+		failures.append("issue52 rules: a run reset cleared the banked best-run metric")
+
+	# Endings settle the win/death metrics.
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	run_store.flatlineResultCount = 0
+	run_store.augmentedTier = ""
+	meta_store._record_ending_card_progress("wealth")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_WINS) != 1 \
+			or not meta_store.unlockedPowerCardIds.has("cheat"):
+		failures.append("issue52 rules: a win did not unlock the Cheat power")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_FLAWLESS_WINS) != 1 \
+			or not meta_store.unlockedAugmentCardIds.has("augment_win_boost"):
+		failures.append("issue52 rules: a flatline-free win did not unlock COMBO")
+	run_store.flatlineResultCount = 2
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store._record_ending_card_progress("wealth")
+	if meta_store.card_unlock_progress(CardUnlocks.METRIC_FLAWLESS_WINS) != 0:
+		failures.append("issue52 rules: a win after a flatline counted as flawless")
+	meta_store._record_ending_card_progress("flatline")
+	if not meta_store.unlockedAugmentCardIds.has("augment_glitch_2"):
+		failures.append("issue52 rules: dying of flatline did not unlock GLITCH")
+	run_store.flatlineResultCount = 0
+
+	# An unlock earned during the run raises the blocking popup over the machine.
+	meta_store.cardUnlockProgress = {}
+	meta_store.unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	meta_store.pendingCardUnlocks = []
+	var popup := machine.get_node_or_null("UnlockCardPopup") as UnlockCardPopup
+	if popup == null:
+		failures.append("issue52 rules: the machine scene has no unlock popup attached")
+	else:
+		meta_store.add_card_unlock_progress(CardUnlocks.METRIC_CONSUMABLES_USED, 10, false)
+		if not popup.visible or popup._card_id != "augment_hallucination":
+			failures.append("issue52 rules: a mid-run unlock did not raise the popup")
+		popup._on_continue_pressed()
+
+	_restore_card_unlock_state(meta_store, saved_augments, saved_powers, saved_pending, saved_progress)
+
+func _card_progress_result(reels: Array, win_type: String, score: int) -> Dictionary:
+	return { "reels": reels, "winType": win_type, "scoreEarned": score }

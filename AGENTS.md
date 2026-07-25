@@ -283,13 +283,31 @@ Resources and currencies:
 - **Game Over** — a flatline with no campaign neurons left; fatal, no coming
   back.
 - Progression persists in MetaStateStore: wallet, Lab permanents, unlock-aware
-  Pacte augment/power card IDs (all supplied cards start unlocked), the pending
+  Pacte augment/power card IDs (gated — see Pacte card unlocks below), the card
+  unlock progress counters, the pending
   card-unlock queue awaiting its popup, selected card
   history, permanent odds upgrades (post-run token phase, max 8 tokens held per
   menu), and ending history. Lab permanents include Shift, Memory, Hydration,
   Reward Amplification, Sedative Protocol, Pattern Fabrication, Euphoria Spiral,
   Passive Cognition, Hallucination, Learning, and Smart Save. Pacte-only augments
   include Tunnel Vision, How to Cheat, Adrenaline, and Passive Gain.
+- **Pacte card unlocks** — a new save owns four augments (Reward + I, Smart
+  Saving, Passive Gain, Book) and three powers (Reroll, Shift, Lock). Everything
+  else is earned, and stays earned across campaigns:
+  - Reward + II — reach a run target of 2,000.
+  - Reward + III — reach a run target of 4,000.
+  - Hallucination — use 10 consumables.
+  - Pattern Recognition — land 20 pairs in one run.
+  - Tunnel Vision — land the same triple 3 times in one run.
+  - Adrenaline — restore power 30 times.
+  - Joker — win a joker Augmented Run.
+  - Combo — win a run without a single flatline.
+  - Glitch — die of flatline.
+  - Is It Cheating? — use the Cheat power 10 times.
+  - Heart power — win a heart Augmented Run.
+  - Cheat power — win a run.
+  - Rewind power — recover 20 spent spins.
+  - Swap power — turn 10 spins into a win with Shift.
 - **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu:
   heart (jackpot pays 100, no free spin), spade (end-of-run Lucidity kept is
   halved), diamond (two power uses per spin), club (dealer wait doubled, spin
@@ -339,7 +357,8 @@ Resources and currencies:
   opens the same modal in its minimal LOCKED state, which reveals nothing about
   the card. The unlocked ID lists in MetaStateStore are the single source of truth
   for what is revealed, and all card art/names/descriptions/icons are resolved
-  from the shared PacteCards metadata.
+  from the shared PacteCards metadata. A locked card's modal shows how the card is
+  earned, with progress toward the threshold, and nothing about what it does.
 - `unlock_card_popup` — the acknowledgement flow for a newly unlocked card. Every
   progression unlock goes through the single MetaStateStore card-unlock API, which
   refuses unknown cards and already-owned cards, adds the card to the unlocked
