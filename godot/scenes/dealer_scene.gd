@@ -877,6 +877,10 @@ func _commit_augment_purchase(id: String, choice: String) -> void:
 	_dealer_react()
 	_build_offers() # augment slot empties; consumable prices may have changed
 	_refresh_painting_state()
+	# A Symbol Level augment changes the very levels the odds table is showing, so
+	# a table still open behind the offer must not keep the pre-purchase meter.
+	if _odds_overlay != null and is_instance_valid(_odds_overlay):
+		_odds_overlay.refresh_levels()
 
 ## Symbol Level opens the odds table itself (no token wallet): the player reads
 ## the live levels and taps a row's "+" to put the +1 there — up to level 9.

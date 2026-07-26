@@ -1252,9 +1252,9 @@ func _advance_target_bar_animation(delta: float) -> void:
 func _refresh_target_readout() -> void:
 	if _target_goals_sprite == null and _target_bar_sprite == null:
 		return
-	# A win callout or power animation owns the whole TV while it plays; the objective
-	# readout steps aside for it exactly like the augment row does.
-	var should_show := _tv_info_pop_sources.is_empty()
+	# A win callout, a power animation or the lit FREE SPIN banner owns the whole TV
+	# while it is up; the objective readout steps aside for it.
+	var should_show := not _tv_content_muted()
 	if _target_bar_sprite != null:
 		_target_bar_sprite.visible = should_show
 	if _target_goals_sprite != null:
@@ -1421,6 +1421,11 @@ func _boost_is_active(boost: Dictionary) -> bool:
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
+	# The item icons live on the TV, so they step aside for whatever owns it — a
+	# PAIR/TRIPLE or power callout, or the lit FREE SPIN banner.
+	if _tv_content_muted():
+		_hide_boost_indicators()
+		return
 	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
 	var active_total := 0
 	for boost in DURATION_BOOSTS:
@@ -1474,11 +1479,14 @@ func _refresh_boost_indicators() -> void:
 	if col > 0 and active_total > col:
 		var overflow: Label = _boost_indicator_slots[col - 1]["count"]
 		overflow.text = "+%d" % (active_total - col + 1)
-	for i in range(col, _boost_indicator_slots.size()):
+	_hide_boost_indicators(col)
+
+## Blanks the boost slots from `first` onwards. Dropping the texture matters: a slot
+## re-shown before its icon is resolved would otherwise flash the previous boost's art.
+func _hide_boost_indicators(first := 0) -> void:
+	for i in range(first, _boost_indicator_slots.size()):
 		var hidden: Dictionary = _boost_indicator_slots[i]
 		(hidden["slot"] as Control).visible = false
-		# Drop the texture too: a slot re-shown before its icon is resolved would
-		# otherwise flash the previous boost's art.
 		(hidden["icon"] as TextureRect).texture = null
 
 func _capture_expiring_boost_counters() -> Array[Dictionary]:
@@ -1854,7 +1862,7 @@ func _refresh_dealer_countdown() -> void:
 	# soon as the lever is pulled would leak the next gauge state into the spin.
 	var overlay_ready := not _spinning_anim and not _spin_launch_pending \
 		and not RunStateStore.isSpinning and not _hud_delta_hold
-	var dealer_info_allowed := _tv_info_pop_sources.is_empty() \
+	var dealer_info_allowed := not _tv_content_muted() \
 		or RunStateStore.comboDefeatPending
 	var overlay_states: Array = [
 		{ "sprite": _dealer_bar_overlay_1, "visible": show_overlay_1 },
@@ -1872,7 +1880,7 @@ func _refresh_dealer_countdown() -> void:
 			overlay.modulate.a = 1.0
 		elif not overlay.visible:
 			overlay.modulate.a = 1.0
-	if not _tv_info_pop_sources.is_empty() and not RunStateStore.comboDefeatPending:
+	if _tv_content_muted() and not RunStateStore.comboDefeatPending:
 		_hide_tv_info_layers()
 	elif RunStateStore.comboDefeatPending:
 		# The dealer warning remains readable over the losing-state art, even if
@@ -2663,18 +2671,24 @@ func _start_combo_loss_beep() -> void:
 ## Multiple callouts can overlap (for example a power callout over a win callout),
 ## so each owner holds a source until its own presentation has finished.
 func _begin_tv_info_pop(source: StringName) -> void:
-	var was_empty := _tv_info_pop_sources.is_empty()
+	_capture_tv_restore_state()
 	_tv_info_pop_sources[source] = true
 	_hide_pacte_augment_popup()
 	_refresh_pacte_augment_badge()
 	_refresh_target_readout()
-	if not was_empty:
+	_hide_tv_info_layers()
+
+## Remembers whether the dealer strip was actually on screen before the TV was muted,
+## so an ending that hid it wholesale (_set_tv_progress_bars_visible) does not get it
+## back when the mute lifts. Only the FIRST owner captures: a later one would snapshot
+## the already-hidden state and the strip would never return.
+func _capture_tv_restore_state() -> void:
+	if _tv_content_muted():
 		return
 	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar_sprite != null \
 		and _dealer_bar_sprite.visible
 	_tv_info_pop_restore_dealer_icon_visible = _dealer_icon != null \
 		and _dealer_icon.visible
-	_hide_tv_info_layers()
 
 func _end_tv_info_pop(source: StringName) -> void:
 	if not _tv_info_pop_sources.has(source):
@@ -2686,11 +2700,29 @@ func _end_tv_info_pop(source: StringName) -> void:
 	_refresh_pacte_augment_badge()
 	_refresh_target_readout()
 
+## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
+## through _tv_info_pop_sources (PAIR/TRIPLE win, power, target blackout), and the
+## blinking FREE SPIN banner, which owns the screen for as long as it is lit. While
+## either is up, every persistent readout on the TV — the objective, the dealer
+## countdown and his icon, the boost/item icons, the COMBO stage — steps aside.
+func _tv_content_muted() -> bool:
+	return not _tv_info_pop_sources.is_empty() or _free_spin_overlay_active
+
+## Re-applies the mute after the set of TV owners changes.
+func _apply_tv_content_mute() -> void:
+	if _tv_content_muted():
+		_hide_tv_info_layers()
+	else:
+		_restore_tv_info_layers()
+
 func _hide_tv_info_layers() -> void:
-	if _free_spin_sprite != null:
+	# The FREE SPIN banner is an owner in its own right, so it hides only for a
+	# callout — never for its own mute.
+	if _free_spin_sprite != null and not _tv_info_pop_sources.is_empty():
 		_free_spin_sprite.visible = false
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = false
+	_hide_boost_indicators()
 	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
 			_dealer_bar_overlay_3, _dealer_icon]:
 		var info := node as CanvasItem
@@ -2702,6 +2734,12 @@ func _restore_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = _free_spin_overlay_active \
 			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
+	# The callout is gone but the banner is lit: the TV stays its own, and nothing
+	# else comes back until the free spins are spent.
+	if _free_spin_overlay_active:
+		_hide_tv_info_layers()
+		return
+	_refresh_boost_indicators()
 	_refresh_dealer_countdown()
 	if _dealer_bar_sprite != null:
 		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
@@ -2768,7 +2806,7 @@ func _show_combo_effect(frame: int, bonus: int, percent: int) -> void:
 		_combo_payout_label.modulate.a = 1.0
 		_combo_payout_label.visible = true
 	_combo_effect_sprite.modulate.a = 1.0
-	_combo_effect_sprite.visible = _tv_info_pop_sources.is_empty()
+	_combo_effect_sprite.visible = not _tv_content_muted()
 	if _combo_score_pending >= 0:
 		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
 		_combo_score_pending = -1
@@ -2830,7 +2868,7 @@ func _stop_combo_effect() -> void:
 		_combo_score_pending = -1
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = RunStateStore.winBoostEnabled \
-			and _tv_info_pop_sources.is_empty()
+			and not _tv_content_muted()
 		if _combo_effect_sprite.visible:
 			_set_sheet_frame(_combo_effect_sprite,
 				_combo_effect_frame(int(RunStateStore.winBoostCombo)))
@@ -3108,19 +3146,23 @@ func _refresh_combo_effect() -> void:
 		_stop_combo_effect()
 		_combo_effect_sprite.visible = false
 		return
-	if not _tv_info_pop_sources.is_empty():
+	if _tv_content_muted():
+		_combo_effect_sprite.visible = false
 		return
 	_set_sheet_frame(_combo_effect_sprite, _combo_effect_frame(int(RunStateStore.winBoostCombo)))
 	_combo_effect_sprite.visible = true
 
 func _refresh_tv_indicators() -> void:
+	# The FREE SPIN banner lights the TV while the next spin is free (banked free
+	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
+	# It resolves FIRST because it is itself a TV owner (_tv_content_muted): every
+	# readout below reads the mute it just set, so the banner never shares the screen
+	# with the objective, the dealer countdown or the item icons for a frame.
+	_refresh_free_spin_banner()
 	_refresh_target_readout()
 	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
-	# The FREE SPIN banner lights the TV while the next spin is free (banked free
-	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
-	_refresh_free_spin_banner()
 	if _health_bar_sprite != null:
 		# A HUD refresh re-derives the tube from state (an ending that wants it
 		# hidden skips this refresh entirely, see _update_hud).
@@ -4025,10 +4067,15 @@ func _refresh_free_spin_banner() -> void:
 func _set_free_spin_display(active: bool) -> void:
 	if active == _free_spin_overlay_active:
 		return
+	if active:
+		_capture_tv_restore_state()
 	_free_spin_overlay_active = active
 	_free_spin_blink_time = 0.0
 	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = active
+	# Lighting the banner takes the TV; letting it go out hands it back. Either way
+	# every other readout has to re-evaluate its mute right here.
+	_apply_tv_content_mute()
 
 func _build_power_buttons() -> void:
 	for id in POWER_IDS:
@@ -5105,6 +5152,11 @@ func _play_reward_sequence(source_reel: int, apply_power_reaction := false) -> v
 			_close_pending_combo_defeat()
 			_finish_post_spin_sequence()
 		return
+	# A power that rescored the reveal can beat the target on its own — the payout
+	# screen belongs to that moment, not to whatever spin the player takes next.
+	if _settle_off_spin_score_change():
+		_post_spin_sequence_active = false
+		return
 	_set_sequence_lock(false)
 
 func _clear_targeting() -> void:
@@ -5439,8 +5491,12 @@ func _symbol_draw_percent(symbol_id: String) -> float:
 	var weight := 0.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var s := String(sym)
+		# Symbol Level augments bought from the in-run dealer are live weights, so
+		# the score table has to quote the level the reels roll on, not just the
+		# permanent one (see RunStateStore.effective_symbol_level).
 		var w := float(int(Symbols.WEIGHT[s])
-			+ RunStateStore.odds_upgrade_level(s) * RunStateStore.probability_increase_per_upgrade)
+			+ RunStateStore.effective_symbol_level(s)
+				* RunStateStore.probability_increase_per_upgrade)
 		total += w
 		if s == symbol_id:
 			weight = w
@@ -5640,7 +5696,9 @@ func _on_stash_pressed(slot_index: int) -> void:
 			_play_tea_flight(slot_index)
 			_play_spin_gain_fx(spins_gained,
 				Assets.stash_slot_pos(slot_index, max_consumable_slots) - Vector2(0.0, 10.0))
-	if direct_score_gain > 0 and _check_ending():
+	# Water and friends can beat the target on the spot; the payout screen pops here
+	# rather than waiting for a spin the player no longer needs to take.
+	if direct_score_gain > 0 and _settle_off_spin_score_change():
 		return
 
 func _item_display_name(id: String) -> String:
@@ -6601,17 +6659,40 @@ func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int
 	parent.add_child(label)
 	return label
 
+## Whether an intermediate Wealth target is standing beaten and unpaid. Reaching it
+## is a score fact, not a spin outcome: an item or a power that pushes the score over
+## the line makes it due exactly like a paying reveal does.
+func _wealth_target_due_now() -> bool:
+	return campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD \
+		and not RunStateStore.wealthContinued \
+		and RunStateStore.current_wealth_target() < EconomyConst.WEALTH_SCORE_THRESHOLD \
+		and RunStateStore.wealth_target_due()
+
+## Claims a due target and puts its payout screen up. Called from every path that can
+## move the score — the spin tail, a consumable, a power rescore — so the player never
+## has to pull the lever again just to be told the target was already beaten.
+## Returns true when the transition took the screen.
+func _proc_wealth_target() -> bool:
+	if _wealth_target_transition_active or RunStateStore.comboDefeatPending:
+		return false
+	if not _wealth_target_due_now():
+		return false
+	var target_info := RunStateStore.begin_wealth_target()
+	return not target_info.is_empty() and _start_wealth_target_transition(target_info)
+
+## Score gained outside the spin sequence (item / power). Pops the target payout the
+## moment it is earned; returns true when something took the screen and the caller
+## must not carry on with its own presentation.
+func _settle_off_spin_score_change() -> bool:
+	if _proc_wealth_target():
+		return true
+	return _check_ending()
+
 func _check_ending() -> bool:
 	if RunStateStore.comboDefeatPending:
 		return false
-	if campaign_goal_score == EconomyConst.WEALTH_SCORE_THRESHOLD \
-			and not RunStateStore.wealthContinued \
-			and RunStateStore.current_wealth_target() < EconomyConst.WEALTH_SCORE_THRESHOLD \
-			and not _wealth_target_transition_active \
-			and RunStateStore.wealth_target_due():
-		var target_info := RunStateStore.begin_wealth_target()
-		if not target_info.is_empty() and _start_wealth_target_transition(target_info):
-			return true
+	if _proc_wealth_target():
+		return true
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -7058,7 +7139,7 @@ func _set_stash_elevated(elevated: bool) -> void:
 		tray.z_index = DEALER_STASH_Z_INDEX if elevated else STASH_TRAY_Z_INDEX
 
 func _set_tv_progress_bars_visible(visible: bool) -> void:
-	if not visible and not _tv_info_pop_sources.is_empty():
+	if not visible and _tv_content_muted():
 		_tv_info_pop_restore_dealer_bar_visible = false
 		_tv_info_pop_restore_dealer_icon_visible = false
 	for node_name: String in [
@@ -7411,8 +7492,17 @@ func _can_open_dealer_now() -> bool:
 		and not _power_has_pending_work() \
 		and RunStateStore.compulsiveSpinSkips <= 0
 
+## A beaten target outranks a queued visit: the round that dealer belonged to is
+## over, so he is dropped rather than deferred — the between-run dealer on the other
+## side of the payout screen is the next one the player meets.
+func _dealer_stands_down_for_target() -> bool:
+	return _wealth_target_transition_active or _wealth_target_due_now()
+
 func _present_dealer_or_defer() -> void:
 	if not RunStateStore.dealerIncoming:
+		return
+	if _dealer_stands_down_for_target():
+		_pending_dealer_offer = false
 		return
 	if not _can_open_dealer_now():
 		_pending_dealer_offer = true
@@ -7421,6 +7511,9 @@ func _present_dealer_or_defer() -> void:
 	_show_dealer_incoming()
 
 func _maybe_present_pending_dealer() -> void:
+	if _dealer_stands_down_for_target():
+		_pending_dealer_offer = false
+		return
 	if _pending_dealer_offer and RunStateStore.dealerIncoming and _can_open_dealer_now():
 		_pending_dealer_offer = false
 		_show_dealer_incoming()
