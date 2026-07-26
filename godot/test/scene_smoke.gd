@@ -2848,7 +2848,7 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			# cabinet as a detached snapshot rather than retyped as a Label.
 			if overlay._snapshot == null or overlay._snapshot.get_value() != 650:
 				failures.append("issue181: target overlay did not lift the running score")
-			if overlay.target_text() != "-500":
+			if overlay.target_text() != "500":
 				failures.append("issue181: target overlay did not show the beaten target")
 			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
 				failures.append("issue176: target overlay is missing its TARGET REACHED title")

@@ -4,11 +4,11 @@ extends Control
 
 ## Intermediate wealth-target payout screen (issues #176, #181).
 ##
-## The beat is deliberately slow and reads left to right in one sentence: the machine
-## TV goes dark, the running score is lifted off the wealth reels at the bottom of the
-## cabinet and flies up into the middle of the TV at three quarters of its width, the
-## beaten target appears underneath and disintegrates, and the score then drains by
-## that amount — the money paid to the casino.
+## The beat is deliberately slow and reads top to bottom in one sentence: the machine
+## TV goes dark, the beaten target grows huge inside it, the running score is lifted
+## off the wealth reels at the bottom of the cabinet and parks just under the TV, the
+## target disintegrates, and the score then drains by that amount — the money paid to
+## the casino. The screen reads title / target / score / what it cost.
 ##
 ## The number is a real WealthOdometer snapshot rather than a Label, so it is visibly
 ## the machine's own readout that moved, and the drain is an actual reel roll. The
@@ -23,19 +23,19 @@ signal sequence_finished
 
 const BLUE_NEON := Color(0.36, 0.74, 1.0)
 const SOFT_WHITE := Color(0.96, 0.98, 1.0)
-const MUTED_BLUE := Color(0.56, 0.66, 0.82)
 const LOSS_RED := Color(0.93, 0.27, 0.27)
-const DIM_ALPHA := 0.72
+const TARGET_NUMBER_COLOR := Color(0.96, 0.98, 1.0)
+# The machine stays visible behind, but far enough back that the lifted score is not
+# competing with the multiplier strip it parks over.
+const DIM_ALPHA := 0.88
 
-# Where the lifted number parks, and how much of the TV it fills. The TV screen is
-# 112x66 at (24, 42); three quarters of that is the issue's brief.
-const TV_CENTER := Vector2(80.0, 72.0)
-const TV_SIZE := Vector2(112.0, 66.0)
-const TV_FILL := 0.75
-const SNAPSHOT_SCALE_MIN := 1.4
-const SNAPSHOT_SCALE_MAX := 3.0
-const TARGET_CENTER := Vector2(80.0, 96.0)
-const TARGET_FONT_SIZE := 14
+# The TV screen is 112x66 at (24, 42). The target owns it — it grows to fill most of
+# it — and the lifted score parks just below, clear of the TV's bottom edge at y108.
+const TARGET_CENTER := Vector2(80.0, 73.0)
+const TARGET_FONT_SIZE := 26
+const TARGET_GROW_FROM := 0.35
+const SCORE_CENTER := Vector2(80.0, 122.0)
+const SCORE_SCALE := 1.6
 const TITLE_START_Y := 12.0
 const TITLE_REST_Y := 18.0
 
@@ -73,7 +73,6 @@ const PHASE_BUTTON_IN := 0.24
 @onready var title_label: Label = %TitleLabel
 @onready var tv_host: Control = %TvHost
 @onready var target_group: Control = %TargetGroup
-@onready var caption_label: Label = %CaptionLabel
 @onready var lost_label: Label = %LostLabel
 @onready var subtitle_label: Label = %SubtitleLabel
 @onready var button_host: Control = %ButtonHost
@@ -127,7 +126,6 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 	bottom_dim.modulate.a = 0.0
 	title_label.modulate.a = 0.0
 	title_label.position.y = TITLE_START_Y
-	caption_label.modulate.a = 0.0
 	lost_label.modulate.a = 0.0
 	subtitle_label.modulate.a = 0.0
 	button_host.modulate.a = 0.0
@@ -151,15 +149,12 @@ func _prepare_snapshot() -> void:
 			_snapshot.get_parent().remove_child(_snapshot)
 		tv_host.add_child(_snapshot)
 	var bounds := _snapshot.visible_digit_bounds()
-	_snapshot_scale = clampf(minf(
-		TV_SIZE.x * TV_FILL / maxf(1.0, bounds.size.x),
-		TV_SIZE.y * TV_FILL / maxf(1.0, bounds.size.y)),
-		SNAPSHOT_SCALE_MIN, SNAPSHOT_SCALE_MAX)
+	_snapshot_scale = SCORE_SCALE
 	# Scale about the digits themselves; the snapshot's own rect is the whole canvas.
 	_snapshot.pivot_offset = bounds.get_center()
 	_snapshot.position = Vector2.ZERO # sits exactly over the machine's live reels
 	_snapshot.scale = Vector2.ONE
-	_snapshot_to = TV_CENTER - bounds.get_center()
+	_snapshot_to = SCORE_CENTER - bounds.get_center()
 
 
 func _place_snapshot_at_tv(t: float) -> void:
@@ -177,7 +172,9 @@ func _build_target_glyphs() -> void:
 		if is_instance_valid(glyph):
 			glyph.queue_free()
 	_target_glyphs.clear()
-	var text := "-%d" % _target
+	# The target itself, unsigned: the minus belongs to the deduction line under the
+	# score, which is what the payout actually took.
+	var text := str(_target)
 	var glyph_width := float(TARGET_FONT_SIZE) * 0.62
 	var total := glyph_width * float(text.length())
 	for i in text.length():
@@ -193,7 +190,7 @@ func _build_target_glyphs() -> void:
 		glyph.add_theme_font_size_override(&"font_size", TARGET_FONT_SIZE)
 		if _font != null:
 			glyph.add_theme_font_override(&"font", _font)
-		glyph.add_theme_color_override(&"font_color", LOSS_RED)
+		glyph.add_theme_color_override(&"font_color", TARGET_NUMBER_COLOR)
 		glyph.add_theme_color_override(&"font_outline_color", Color("#03060c"))
 		glyph.add_theme_constant_override(&"outline_size", 1)
 		target_group.add_child(glyph)
@@ -226,19 +223,17 @@ func _play() -> void:
 	_sequence_tween.parallel().tween_property(title_label, "position:y", TITLE_REST_Y,
 		PHASE_TITLE_IN).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence_tween.tween_interval(PHASE_TITLE_HOLD)
-	# The score leaves the cabinet and grows into the middle of the dead TV.
-	_sequence_tween.tween_callback(digits_lifted.emit)
-	_sequence_tween.tween_method(_place_snapshot_at_tv, 0.0, 1.0, PHASE_LIFT) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_sequence_tween.parallel().tween_property(caption_label, "modulate:a", 1.0,
-		PHASE_LIFT * 0.5).set_delay(PHASE_LIFT * 0.5) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_sequence_tween.tween_interval(PHASE_LIFT_HOLD)
-	# The bill pops in under it...
+	# The target the run just beat grows to fill the dead TV — it is what this screen
+	# is about, so it gets the screen.
 	_sequence_tween.tween_property(target_group, "modulate:a", 1.0, PHASE_TARGET_IN) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence_tween.parallel().tween_property(target_group, "scale", Vector2.ONE,
-		PHASE_TARGET_IN).from(Vector2(0.6, 0.6)) \
+		PHASE_TARGET_IN).from(Vector2(TARGET_GROW_FROM, TARGET_GROW_FROM)) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_sequence_tween.tween_interval(PHASE_LIFT_HOLD)
+	# The score then leaves the cabinet and parks under the TV, below the target.
+	_sequence_tween.tween_callback(digits_lifted.emit)
+	_sequence_tween.tween_method(_place_snapshot_at_tv, 0.0, 1.0, PHASE_LIFT) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence_tween.tween_interval(PHASE_TARGET_HOLD)
 	# ...and disintegrates, with the drain starting while the shards are still in the
@@ -271,7 +266,7 @@ func _shatter_target() -> void:
 		for _s in SHARD_PER_GLYPH:
 			var shard := ColorRect.new()
 			shard.size = Vector2(SHARD_SIZE, SHARD_SIZE)
-			shard.color = LOSS_RED.lerp(Color(1.0, 0.72, 0.62), rng.randf() * 0.5)
+			shard.color = TARGET_NUMBER_COLOR.lerp(BLUE_NEON, rng.randf() * 0.6)
 			shard.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var origin := glyph.position + Vector2(
 				rng.randf_range(0.0, maxf(1.0, glyph.size.x - SHARD_SIZE)),
@@ -339,7 +334,6 @@ func _skip_to_end() -> void:
 	if _snapshot != null and is_instance_valid(_snapshot):
 		_snapshot.set_value(_remaining, false)
 	target_group.modulate.a = 0.0
-	caption_label.modulate.a = 1.0
 	lost_label.text = "-%d" % _target
 	lost_label.modulate.a = 1.0
 	subtitle_label.modulate.a = 1.0
@@ -358,7 +352,7 @@ func _on_sequence_finished() -> void:
 
 
 func _style_text() -> void:
-	for label: Label in [title_label, subtitle_label, caption_label, lost_label]:
+	for label: Label in [title_label, subtitle_label, lost_label]:
 		if _font != null:
 			label.add_theme_font_override(&"font", _font)
 		label.add_theme_color_override(&"font_outline_color", Color("#03060c"))
@@ -367,7 +361,6 @@ func _style_text() -> void:
 	# ghosted second copy of the title (issue #181).
 	title_label.add_theme_color_override(&"font_color", BLUE_NEON)
 	subtitle_label.add_theme_color_override(&"font_color", SOFT_WHITE)
-	caption_label.add_theme_color_override(&"font_color", MUTED_BLUE)
 	lost_label.add_theme_color_override(&"font_color", LOSS_RED)
 
 
