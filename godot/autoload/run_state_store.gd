@@ -1992,7 +1992,8 @@ func _apply_dealer_help_outcome(outcome: Dictionary, power_id: String,
 	if outcome.is_empty() or lastResult == null:
 		return {}
 	_apply_outcome(outcome, abilitiesUsed.duplicate(),
-		(pacteSeed ^ spinCount * 0x165667b1 ^ 0x4445414c) & M32)
+		(pacteSeed ^ spinCount * 0x165667b1 ^ 0x4445414c) & M32,
+		[reel_index] if reel_index >= 0 else [])
 	return _mark_dealer_help(power_id, reel_index, symbol)
 
 ## Adds real free-spin credits. Used by brain triples when the pure spin result
@@ -2108,7 +2109,64 @@ func _passive_lucidity_per_spin() -> int:
 		passive = floori(float(passive) * 0.5 + 0.5)
 	return passive
 
-func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
+## The reels a scored result is actually made of — the symbols the payout is for. Used to
+## tell a power that formed a NEW combination from one that merely left an existing win
+## standing: changing the odd reel out of a pair pays nothing, because the pair on the other
+## two reels is the same pair that already paid.
+func _winning_reel_indices(result: Dictionary) -> Array[int]:
+	var reels: Array = result.get("reels", [])
+	if reels.size() < 3:
+		return []
+	var win := String(result.get("winType", ""))
+	if win == "" or win == "miss":
+		return []
+	# A book stands in for the symbol it resolved to, so the reel holding it is part of the
+	# combination it completed.
+	var resolved := String(result.get("resolvedSymbol", ""))
+	if bool(result.get("bookJoker", false)) and resolved != "":
+		var joined: Array[int] = []
+		for i in 3:
+			if String(reels[i]) == resolved or String(reels[i]) == "book":
+				joined.append(i)
+		return joined
+	if bool(result.get("soloAsPair", false)):
+		var solo := String(result.get("soloAsPairSymbol", ""))
+		for i in 3:
+			if String(reels[i]) == solo:
+				return [i]
+		return []
+	var a := String(reels[0])
+	var b := String(reels[1])
+	var c := String(reels[2])
+	if a == b and b == c:
+		return [0, 1, 2]
+	if a == b:
+		return [0, 1]
+	if b == c:
+		return [1, 2]
+	if a == c:
+		return [0, 2] # Pattern 23
+	return []
+
+
+## Did a power form a combination the run has not already been paid for? True when it
+## touched at least one of the winning reels — a reroll that lands the same pair counts,
+## because that symbol was played again — and false when the win it leaves behind sits
+## entirely on reels the power never touched.
+func _forms_new_combination(after: Dictionary, acted_reels: Array) -> bool:
+	if acted_reels.is_empty():
+		return true # caller did not say what it touched (heart, dealer help without a reel)
+	var win_reels := _winning_reel_indices(after)
+	if win_reels.is_empty():
+		return true # nothing standing; the normal (possibly negative) delta path applies
+	for reel in acted_reels:
+		if win_reels.has(int(reel)):
+			return true
+	return false
+
+
+func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int,
+		acted_reels: Array = []) -> void:
 	var flatline_boost_bonus := 0
 	var flatline_boost_applied := false
 	var win_boost_bonus := 0
@@ -2121,10 +2179,16 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	# a combination the player already won is never taken back, and whatever a power
 	# forms pays on top of it. So the delta is turned back into the new combination's
 	# own value, which is also what the boosts below take their cut of.
-	var win_score := maxi(0, lastPureWinScore + int(outcome.get("scoreDelta", 0)))
-	var win_coins := maxi(0, lastPureWinCoins + int(outcome.get("coinsDelta", 0)))
-	lastPureWinScore = win_score
-	lastPureWinCoins = win_coins
+	# ...but only for a combination the run has not been paid for yet: a power that changes a
+	# reel the win does not use leaves the same win standing, and that pays nothing.
+	var new_combination := _forms_new_combination(outcome, acted_reels)
+	var win_score := 0
+	var win_coins := 0
+	if new_combination:
+		win_score = maxi(0, lastPureWinScore + int(outcome.get("scoreDelta", 0)))
+		win_coins = maxi(0, lastPureWinCoins + int(outcome.get("coinsDelta", 0)))
+		lastPureWinScore = win_score
+		lastPureWinCoins = win_coins
 	outcome = outcome.duplicate(true)
 	outcome["scoreDelta"] = win_score
 	outcome["coinsDelta"] = win_coins
@@ -2185,6 +2249,12 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	else:
 		lr.erase("soloAsPair")
 		lr.erase("soloAsPairSymbol")
+	# The presentation layer reads this to keep its reactions (flatline strikes, triple
+	# bonuses) on new combinations only, exactly like the payout above.
+	if new_combination:
+		lr.erase("combinationReplayed")
+	else:
+		lr["combinationReplayed"] = true
 	lr["scoreEarned"] = maxi(0, int(lastResult["scoreEarned"]) + int(outcome["scoreDelta"]))
 	lr["coinsEarned"] = maxi(0, int(lastResult["coinsEarned"]) + int(outcome["coinsDelta"]))
 	if flatline_boost_applied:
@@ -2230,19 +2300,22 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
 			and outcome_win_type in ["pair", "triple", "jackpot"]:
 		winBoostCombo = mini(9, winBoostCombo + 1)
-	elif winBoostEnabled and outcome_win_type != "heart" and not comboDefeatPending:
+	elif winBoostEnabled and outcome_win_type != "heart" and not comboDefeatPending \
+			and new_combination:
+		# A power that only left an existing win standing neither extends the streak nor
+		# breaks it — nothing was played.
 		winBoostCombo = 0
 	if flatline_boost_applied:
 		flatlineWinBoostArmed = false
 
 func _apply_revealed_power_outcome(outcome: Dictionary, power_id: String,
-		seed: int, neuron_delta: int = 0) -> bool:
+		seed: int, neuron_delta: int = 0, acted_reels: Array = []) -> bool:
 	if outcome.is_empty() or lastResult == null:
 		return false
 	var marked := abilitiesUsed.duplicate()
 	marked.append(power_id)
 	powersUsedThisSpin += 1
-	_apply_outcome(outcome, marked, seed)
+	_apply_outcome(outcome, marked, seed, acted_reels)
 	if neuron_delta != 0:
 		neurons = mini(_neuron_cap(), neurons + neuron_delta)
 	lastPowerFailureReason = ""
@@ -2285,7 +2358,7 @@ func reroll_reel(reel_index: int) -> bool:
 	var marked := abilitiesUsed.duplicate()
 	marked.append("reroll")
 	powersUsedThisSpin += 1
-	_apply_outcome(outcome, marked, seed)
+	_apply_outcome(outcome, marked, seed, [reel_index])
 	_commit()
 	return true
 
@@ -2308,7 +2381,7 @@ func move_reel(reel_index: int, direction: int) -> bool:
 	var marked := abilitiesUsed.duplicate()
 	marked.append("shift")
 	powersUsedThisSpin += 1
-	_apply_outcome(outcome, marked, seed)
+	_apply_outcome(outcome, marked, seed, [reel_index])
 	if lastResult is Dictionary and _is_winning_result(lastResult as Dictionary):
 		_note_card_metric(CardUnlocks.METRIC_SHIFT_WINS)
 	_commit()
@@ -2351,7 +2424,8 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 
 	var seed := _seed(spinCount * 0x165667b1)
 	powersUsedThisSpin += 1
-	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed)
+	# Copy writes into the target reel; the source is only read, so it is not "played".
+	_apply_outcome(outcome, abilitiesUsed.duplicate(), seed, [target_reel])
 	_commit()
 	return true
 
@@ -2398,7 +2472,7 @@ func cheat_symbol(reel_index: int, symbol: String) -> bool:
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
 			Economy.has_solo_as_pair(ownedUpgrades))
 	var cheated := _apply_revealed_power_outcome(outcome, "cheat",
-			_seed(spinCount * 0x165667b1 + reel_index), 0)
+			_seed(spinCount * 0x165667b1 + reel_index), 0, [reel_index])
 	if cheated:
 		_note_card_metric(CardUnlocks.METRIC_CHEATS_USED)
 	return cheated
@@ -2417,7 +2491,8 @@ func swap_symbol(source_reel: int, target_reel: int, source_symbol: String = "")
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
 			source_symbol, Economy.has_solo_as_pair(ownedUpgrades))
 	return _apply_revealed_power_outcome(outcome, "swap",
-			_seed(spinCount * 0x27d4eb2f + source_reel * 7 + target_reel), 0)
+			_seed(spinCount * 0x27d4eb2f + source_reel * 7 + target_reel), 0,
+			[source_reel, target_reel])
 
 func cheat_reel(reel_index: int, symbol: String) -> bool:
 	return cheat_symbol(reel_index, symbol)
@@ -2823,6 +2898,11 @@ func effective_symbol_level(symbol: String) -> int:
 func augment_symbol_level(symbol: String) -> int:
 	return effective_symbol_level(symbol)
 
+## Augment levels bought for `symbol` alone (0 or 1 — see AUGMENT_LEVELS_PER_SYMBOL),
+## as opposed to the effective level the two functions above report.
+func symbol_augment_levels(symbol: String) -> int:
+	return int(symbolAugmentLevels.get(symbol, 0))
+
 ## Purchase the offered augment. `choice` carries the selector result: a symbol id
 ## for aug_symbol_level, "pair"/"triple" for aug_pair_triple. All validation runs
 ## BEFORE any charge, so a cancelled/invalid selection can never spend anything.
@@ -2837,6 +2917,10 @@ func purchase_chip_augment(augment_id: String, choice := "") -> bool:
 			if not Symbols.BASE_SYMBOL_CYCLE.has(choice) or choice == "flatline":
 				return false
 			if augment_symbol_level(choice) >= ChipAugments.SYMBOL_LEVEL_HARD_CAP:
+				return false
+			# One augment level per symbol, ever: a second copy has to be spent on a
+			# different symbol rather than stacking on the same one.
+			if symbol_augment_levels(choice) >= ChipAugments.AUGMENT_LEVELS_PER_SYMBOL:
 				return false
 		"aug_pair_triple":
 			if choice != "pair" and choice != "triple":

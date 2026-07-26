@@ -7,8 +7,8 @@ extends Control
 ## The beat is deliberately slow and reads top to bottom in one sentence: the machine
 ## TV goes dark, the beaten target grows huge inside it, the running score is lifted
 ## off the wealth reels at the bottom of the cabinet and parks just under the TV, the
-## target disintegrates, and the score then drains by that amount — the money paid to
-## the casino. The screen reads title / target / score / what it cost.
+## score drains by that amount — the money paid to the casino, falling out of the target
+## into the reels as it goes — and only then does the spent target disintegrate. The screen reads title / target / score / what it cost.
 ##
 ## The number is a real WealthOdometer snapshot rather than a Label, so it is visibly
 ## the machine's own readout that moved, and the drain is an actual reel roll. The
@@ -29,12 +29,15 @@ const TARGET_NUMBER_COLOR := Color(0.96, 0.98, 1.0)
 # competing with the multiplier strip it parks over.
 const DIM_ALPHA := 0.88
 
-# The TV screen is 112x66 at (24, 42). The target owns it — it grows to fill most of
-# it — and the lifted score parks just below, clear of the TV's bottom edge at y108.
+# The TV screen is 112x66 at (24, 42). The target owns it — it grows to fill most of it —
+# and the lifted score parks well below, leaving the target room to breathe and the drain
+# a visible distance to fall. The score's own block (score / deduction / subtitle / button)
+# keeps its internal spacing: everything under the TV moves together, which is why the
+# scene's y offsets and SCORE_CENTER were shifted by the same 35px (issue #181).
 const TARGET_CENTER := Vector2(80.0, 73.0)
 const TARGET_FONT_SIZE := 26
 const TARGET_GROW_FROM := 0.35
-const SCORE_CENTER := Vector2(80.0, 122.0)
+const SCORE_CENTER := Vector2(80.0, 157.0)
 const SCORE_SCALE := 1.6
 const TITLE_START_Y := 12.0
 const TITLE_REST_Y := 18.0
@@ -53,6 +56,21 @@ const SHARD_GLYPH_FADE := 0.18
 const SHARD_GLYPH_STAGGER := 0.07
 const SHARD_RNG_SEED := 181_0725
 
+# Draining: while the reels roll down, motes fall out of the bottom of the target and
+# into the score, so the number going down is visibly being drained INTO by the target
+# above it. Each mote is in flight for a fraction of the roll and they are launched in
+# order, which makes the stream continuous for the whole drain. Seeded like the shards.
+const DRAIN_MOTES := 26
+const DRAIN_MOTE_SIZE := 2.0
+const DRAIN_MOTE_SPREAD := 30.0 # how wide under the target they fall from
+const DRAIN_MOTE_LANDING_SPREAD := 20.0 # ...and how wide across the score they land
+const DRAIN_MOTE_FLIGHT := 0.34 # share of PHASE_DRAIN one mote spends falling
+const DRAIN_MOTE_SWAY := 4.0
+const DRAIN_RNG_SEED := 181_0726
+# The first motes are already falling when the reels start to roll — the money leaves the
+# target and the score reacts to it, rather than both starting on the same frame.
+const DRAIN_LEAD := 0.20
+
 # One phase per beat; the machine scene reuses PHASE_BLACKOUT so the TV fades out on
 # exactly the same curve this overlay fades in on.
 const PHASE_BLACKOUT := 0.50
@@ -63,12 +81,19 @@ const PHASE_LIFT_HOLD := 0.22
 const PHASE_TARGET_IN := 0.32
 const PHASE_TARGET_HOLD := 0.34
 const PHASE_SHATTER := 0.55
-const PHASE_DRAIN := 0.75
+const PHASE_DRAIN := 1.10
 const PHASE_SETTLE := 0.24
+# How far under the score the deduction line starts, so it reads as coming out of the digits
+# rather than fading in beside them. 18px puts it behind the score's own glyphs, and it takes
+# its own slow beat to crawl clear — long enough to watch the money leave.
+const LOSS_RISE := 18.0
+const LOSS_EMERGE_TIME := 0.75
 const PHASE_BUTTON_IN := 0.24
 
 @onready var top_dim: ColorRect = %TopDim
 @onready var bottom_dim: ColorRect = %BottomDim
+@onready var left_dim: ColorRect = %LeftDim
+@onready var right_dim: ColorRect = %RightDim
 @onready var skip_catcher: Button = %SkipCatcher
 @onready var title_label: Label = %TitleLabel
 @onready var tv_host: Control = %TvHost
@@ -89,12 +114,16 @@ var _snapshot_to := Vector2.ZERO
 var _snapshot_scale := 1.0
 var _target_glyphs: Array[Label] = []
 var _shards: Array[Dictionary] = []
+var _drain_motes: Array[Dictionary] = []
+var _lost_label_rest_y := 0.0 # authored position; the line slides down to it out of the score
 var _sequence_tween: Tween = null
 var _shard_tween: Tween = null
+var _drain_tween: Tween = null
 
 
 func _ready() -> void:
 	_font = Assets.font()
+	_lost_label_rest_y = lost_label.position.y
 	_style_text()
 	_style_button()
 	if not continue_button.pressed.is_connected(_on_continue_pressed):
@@ -122,10 +151,11 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 	_remaining = maxi(0, score - target)
 	continue_button.text = action_text
 	lost_label.text = ""
-	top_dim.modulate.a = 0.0
-	bottom_dim.modulate.a = 0.0
+	for dim: ColorRect in _dims():
+		dim.modulate.a = 0.0
 	title_label.modulate.a = 0.0
 	title_label.position.y = TITLE_START_Y
+	lost_label.position.y = _lost_label_rest_y
 	lost_label.modulate.a = 0.0
 	subtitle_label.modulate.a = 0.0
 	button_host.modulate.a = 0.0
@@ -139,6 +169,13 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 		return
 	_presentation_started = true
 	_play()
+
+
+## The four rects that black the cabinet out around the TV. The band beside the TV needs
+## covering too, or the neon spins tube and power gauge keep glowing at full brightness
+## either side of the payout (issue #181).
+func _dims() -> Array[ColorRect]:
+	return [top_dim, bottom_dim, left_dim, right_dim]
 
 
 func _prepare_snapshot() -> void:
@@ -216,8 +253,9 @@ func _play() -> void:
 	# The TV goes dark first; the machine fades its own blackout over the same window.
 	_sequence_tween.tween_property(top_dim, "modulate:a", DIM_ALPHA, PHASE_BLACKOUT) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	_sequence_tween.parallel().tween_property(bottom_dim, "modulate:a", DIM_ALPHA,
-		PHASE_BLACKOUT).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	for dim: ColorRect in [bottom_dim, left_dim, right_dim]:
+		_sequence_tween.parallel().tween_property(dim, "modulate:a", DIM_ALPHA,
+			PHASE_BLACKOUT).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	_sequence_tween.tween_property(title_label, "modulate:a", 1.0, PHASE_TITLE_IN) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence_tween.parallel().tween_property(title_label, "position:y", TITLE_REST_Y,
@@ -236,15 +274,27 @@ func _play() -> void:
 	_sequence_tween.tween_method(_place_snapshot_at_tv, 0.0, 1.0, PHASE_LIFT) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence_tween.tween_interval(PHASE_TARGET_HOLD)
-	# ...and disintegrates, with the drain starting while the shards are still in the
-	# air so the money leaving and the score dropping read as one event.
-	_sequence_tween.tween_callback(_shatter_target)
-	_sequence_tween.tween_interval(PHASE_SHATTER * 0.55)
+	# The target starts raining into the score, and a beat later the reels answer it and
+	# roll down. The target still hangs there, so the number being taken is on screen for
+	# the whole drain...
+	_sequence_tween.tween_callback(_play_drain_stream)
+	_sequence_tween.tween_interval(DRAIN_LEAD)
 	_sequence_tween.tween_callback(_start_drain)
 	_sequence_tween.tween_interval(PHASE_DRAIN)
+	_sequence_tween.tween_callback(_clear_drain_stream)
+	# ...and only once the reels have settled on the remainder does it disintegrate. The
+	# target must not leave before the money has finished moving (issue #181).
+	_sequence_tween.tween_callback(_shatter_target)
+	_sequence_tween.tween_interval(PHASE_SHATTER)
 	_sequence_tween.tween_callback(_clear_shards)
-	_sequence_tween.tween_callback(func() -> void: lost_label.text = "-%d" % _target)
-	_sequence_tween.tween_property(lost_label, "modulate:a", 1.0, PHASE_SETTLE)
+	# Only once the target is gone does what it cost come OUT of the score: the red line
+	# starts hidden behind the digits and slides down clear of them.
+	_sequence_tween.tween_callback(func() -> void:
+		lost_label.text = "-%d" % _target
+		lost_label.position.y = _lost_label_rest_y - LOSS_RISE)
+	_sequence_tween.tween_property(lost_label, "modulate:a", 1.0, LOSS_EMERGE_TIME)
+	_sequence_tween.parallel().tween_property(lost_label, "position:y",
+		_lost_label_rest_y, LOSS_EMERGE_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence_tween.parallel().tween_property(subtitle_label, "modulate:a", 1.0, PHASE_SETTLE)
 	_sequence_tween.tween_property(button_host, "modulate:a", 1.0, PHASE_BUTTON_IN) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -254,6 +304,68 @@ func _play() -> void:
 func _start_drain() -> void:
 	if _snapshot != null and is_instance_valid(_snapshot):
 		_snapshot.set_value(_remaining, true, PHASE_DRAIN)
+
+
+## The money falling out of the target and into the score: it starts DRAIN_LEAD before the
+## roll and runs to the end of it. Parented to the overlay itself (after the snapshot) so
+## the motes land in front of the digits they are feeding.
+func _play_drain_stream() -> void:
+	_clear_drain_stream()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = DRAIN_RNG_SEED
+	var from_y := TARGET_CENTER.y + float(TARGET_FONT_SIZE) * 0.34
+	var to_y := SCORE_CENTER.y - 5.0
+	# The last mote must still land inside the roll, so the launches share the window
+	# that is left once one flight is subtracted.
+	var launch_window := 1.0 - DRAIN_MOTE_FLIGHT
+	for i in DRAIN_MOTES:
+		var mote := ColorRect.new()
+		mote.size = Vector2(DRAIN_MOTE_SIZE, DRAIN_MOTE_SIZE)
+		mote.color = TARGET_NUMBER_COLOR.lerp(BLUE_NEON, rng.randf() * 0.75)
+		mote.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mote.modulate.a = 0.0
+		add_child(mote)
+		_drain_motes.append({
+			"node": mote,
+			"from": Vector2(TARGET_CENTER.x
+				+ rng.randf_range(-0.5, 0.5) * DRAIN_MOTE_SPREAD, from_y),
+			"to": Vector2(SCORE_CENTER.x
+				+ rng.randf_range(-0.5, 0.5) * DRAIN_MOTE_LANDING_SPREAD, to_y),
+			"sway": rng.randf_range(-DRAIN_MOTE_SWAY, DRAIN_MOTE_SWAY),
+			"launch": float(i) / float(DRAIN_MOTES) * launch_window,
+		})
+	if _drain_tween != null and _drain_tween.is_valid():
+		_drain_tween.kill()
+	_drain_tween = create_tween()
+	_drain_tween.tween_method(_drive_drain_stream, 0.0, 1.0, PHASE_DRAIN + DRAIN_LEAD)
+
+
+func _drive_drain_stream(t: float) -> void:
+	for mote: Dictionary in _drain_motes:
+		var node := mote["node"] as ColorRect
+		if not is_instance_valid(node):
+			continue
+		var flight := (t - float(mote["launch"])) / DRAIN_MOTE_FLIGHT
+		if flight <= 0.0 or flight >= 1.0:
+			node.modulate.a = 0.0
+			continue
+		# Falling money accelerates; the sway keeps the column from reading as a ruler.
+		var from: Vector2 = mote["from"]
+		var to: Vector2 = mote["to"]
+		node.position = from.lerp(to, flight * flight) \
+			+ Vector2(sin(flight * PI) * float(mote["sway"]), 0.0)
+		node.modulate.a = sin(flight * PI)
+
+
+func _clear_drain_stream() -> void:
+	if _drain_tween != null and _drain_tween.is_valid():
+		_drain_tween.kill()
+	_drain_tween = null
+	for mote: Dictionary in _drain_motes:
+		var node := mote["node"] as ColorRect
+		if is_instance_valid(node):
+			node.queue_free()
+	_drain_motes.clear()
 
 
 func _shatter_target() -> void:
@@ -315,7 +427,7 @@ func _clear_shards() -> void:
 
 
 ## Jumps to the settled frame. The payout screen is seen several times a run, so the
-## whole 4.6s beat is skippable — this only fast-forwards the presentation, the state
+## whole 5.5s beat is skippable — this only fast-forwards the presentation, the state
 ## commit still waits for CONTINUE.
 func _skip_to_end() -> void:
 	if _sequence_done:
@@ -325,8 +437,9 @@ func _skip_to_end() -> void:
 	if _shard_tween != null and _shard_tween.is_valid():
 		_shard_tween.kill()
 	_clear_shards()
-	top_dim.modulate.a = DIM_ALPHA
-	bottom_dim.modulate.a = DIM_ALPHA
+	_clear_drain_stream()
+	for dim: ColorRect in _dims():
+		dim.modulate.a = DIM_ALPHA
 	title_label.modulate.a = 1.0
 	title_label.position.y = TITLE_REST_Y
 	digits_lifted.emit()
@@ -335,6 +448,7 @@ func _skip_to_end() -> void:
 		_snapshot.set_value(_remaining, false)
 	target_group.modulate.a = 0.0
 	lost_label.text = "-%d" % _target
+	lost_label.position.y = _lost_label_rest_y
 	lost_label.modulate.a = 1.0
 	subtitle_label.modulate.a = 1.0
 	button_host.modulate.a = 1.0

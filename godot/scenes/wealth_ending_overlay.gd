@@ -25,10 +25,10 @@ const COIN_BOTTOM_HOLD_TIME := 0.14
 const COIN_PILE_SETTLE_TIME := 0.24
 const COIN_FALL_RISE := 4.0
 const COIN_PILE_SETTLE_RISE := 3.0
-# Issue #181: the money fills the bottom two thirds of the screen and stops there,
-# leaving the title and the final score in the clear. Left unclamped the pile builds
-# ~834px tall for a 5000-coin payout and simply runs off the top of the canvas.
-const COIN_PILE_TOP_Y := 107.0
+# Issue #181: the money fills the bottom THIRD of the screen and stops there, leaving the
+# title, the joker and the final score in the clear. Left unclamped the pile builds ~834px
+# tall for a 5000-coin payout and simply runs off the top of the canvas.
+const COIN_PILE_TOP_Y := CANVAS_SIZE.y * 2.0 / 3.0
 # Coins past the ceiling still exist (they are the payout), they just pack into the
 # top of the pile. Releasing them on the normal stagger would keep the flood running
 # for ~30s after the pile stopped growing, so they ride a short tail instead.

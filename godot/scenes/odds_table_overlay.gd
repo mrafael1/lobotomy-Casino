@@ -2,13 +2,15 @@ class_name OddsTableOverlay
 extends Control
 
 ## Dealer odds table (issues #36/#50/#130) — the post-run "what's next?" phase.
-## Issue #130 rebuilt the screen on the authored ODD-TABLE sheets (x6 full-canvas
-## frames): the table background bakes the per-row symbol boxes and token costs,
-## ODD-TABLE_tokens shows the wallet count (digit + chip stack) in the header,
-## ODD-TABLE_levels renders each row's 8-segment level meter, and
-## ODD-TABLE_buttons carries the per-row +/- buttons with pressed frames.
+## The screen is assembled from authored sheets, each a 120x240 document drawn 1:1 with
+## NEAREST and centred on the canvas: ODD-TABLE bakes the per-row symbol boxes, costs.png
+## the token price column, ODD-TABLE_tokens the wallet count in the header,
+## ODD-TABLE_level each row's 8-segment meter, ODD-TABLE_augment_level the 9th segment only
+## the Symbol Level augment can fill, and ODD-TABLE_buttons the per-row +/- with their
+## pressed frames.
 ## Tokens display via the sheet's 0..8 frames: the pool starts at the 4-token
-## budget and is capped at 8 kept or used (RunStateStore.odds_max_tokens).
+## budget and is capped at 8 kept or used (RunStateStore.odds_max_tokens); the last frame
+## is the golden augment token the picker shows instead of a wallet.
 ## Issue #153: each row carries an "i" button under its level meter — holding it
 ## peeks the symbol's live draw chance — and +/- presses pop a transient
 ## percentage-delta bubble so the odds change reads immediately.
@@ -24,51 +26,72 @@ signal symbol_picked(symbol_id: String)
 const SRC_W := 160.0
 const SRC_H := 320.0
 
-# Authored sheets (issue #130): x6 full-canvas frames, 960x1920 each.
+# Authored sheets. Geometry constants are in document px and reach the canvas through
+# CANVAS_FIT (see ART_FRAME_SIZE below).
 const ART_DIR := "odd_tab/"
 const ART_TABLE := "ODD-TABLE.png"
 const ART_BUTTONS := "ODD-TABLE_buttons.png"
-const ART_LEVELS := "ODD-TABLE_levels.png"
+const ART_LEVELS := "ODD-TABLE_level.png"
+# The 9th level segment, split out of the level meter: frame 0 while the symbol can still
+# be raised, frame 2 once it is maxed (frame 1 of the sheet is blank and unused).
+const ART_AUGMENT_LEVEL := "ODD-TABLE_augment_level.png"
+# The token cost column, split out of the table so the augment picker can hide it: a
+# Symbol Level augment charges its own golden token, not the row's price.
+const ART_COSTS := "costs.png"
 const ART_TOKENS := "ODD-TABLE_tokens.png"
-const ART_SCALE := 6.0
-const ART_FRAME_W := 960.0
-const TOKEN_FRAMES := 9  # frame N = N tokens, 0..8
+# The authored document. It has the canvas aspect (120x240 is 160x320 x0.75), and the table
+# is meant to own the screen, so one frame is stretched to the full canvas: every geometry
+# constant below is in document px and reaches the canvas through CANVAS_FIT.
+# The sheets themselves may be exported at any integer multiple of the document (the project
+# convention is x8, like the other scenes' art). _art_export_scale measures that factor per
+# sheet and divides it back out, so a 120x240 and a 960x1920 export land identically.
+const ART_FRAME_SIZE := Vector2(120.0, 240.0)
+const CANVAS_FIT := SRC_W / ART_FRAME_SIZE.x
+# Stretched to the full width the table would reach the bottom edge, leaving the DONE action
+# nowhere to go but on top of the last row. Lifting the whole thing buys that room back out
+# of the canvas' top margin instead (the same trick the pre-rebuild table used). 12px is the
+# most it can rise: the tallest token stack (8 chips) starts at document y9, so anything
+# further clips the chips off the top of the screen.
+const TABLE_LIFT := Vector2(0.0, -12.0)
+const TOKEN_FRAMES := 10 # frames 0..8 = N tokens; frame 9 = the golden augment token
+const TOKEN_GOLDEN_FRAME := 9
+const LEVEL_FRAMES := 9  # frame N = level N, 0..8
+const AUGMENT_LEVEL_FRAME_ADDED := 0 # augment level bought, symbol not at the cap yet
+const AUGMENT_LEVEL_FRAME_NONE := 1  # blank: this symbol has no augment level
+const AUGMENT_LEVEL_FRAME_MAXED := 2 # augment level bought and the symbol is maxed
 
-# Measured opaque bounds of the sheets (image px, frame 0). The authored sheets
-# tighten the pitch after the third row, so keeping these offsets explicit avoids
-# cutting into the syringe, vial, and flatline art.
-const ROW_OFFSETS_IMG := [0.0, 256.0, 512.0, 760.0, 1008.0, 1256.0]
-const BTN_PLUS_IMG := Rect2(656.0, 360.0, 152.0, 80.0)
-const BTN_MINUS_Y_OFFSET_IMG := 88.0
-const LEVEL_ROW_IMG := Rect2(344.0, 408.0, 264.0, 104.0)
-const LEVEL_LAST_ROW_IMG := Rect2(336.0, 1664.0, 264.0, 104.0)
-# Lift the authored table slightly so the final row and the DONE action have
-# breathing room on the compact canvas. The dimmer remains full-screen.
-const TABLE_Y_OFFSET := -8.0
-# Measured outer frame of the authored modal, used to align the DONE action.
-const MODAL_FRAME_RECT := Rect2(8.0, 20.0, 144.0, 299.0)
-const SYMBOL_HIT_SIZE := Vector2(32.0, 32.0)
+# Measured from the art (frame 0). The rows run on an even 32/31px pitch and every row
+# shares one set of rects, offset down the sheet.
+const ROW_OFFSETS := [0.0, 32.0, 64.0, 95.0, 126.0, 157.0]
+const BTN_PLUS_RECT := Rect2(82.0, 45.0, 19.0, 10.0)
+const BTN_MINUS_Y_OFFSET := 11.0
+const LEVEL_ROW_RECT := Rect2(43.0, 51.0, 33.0, 13.0)
+const AUGMENT_LEVEL_ROW_RECT := Rect2(74.0, 51.0, 6.0, 13.0)
+# Symbol box baked into the table art (the row's coloured square): the symbol renders
+# inside it, a little smaller so it clears the outline.
+const SYMBOL_BOX_CENTER := Vector2(28.0, 55.5)
+const SYMBOL_HIT_SIZE := Vector2(24.0, 23.0)
+const ODD_ICON_SIZE := 18.0
 # Issue #153: per-row "i" button under the level meter (hold to peek the live
 # draw chance) plus a transient percentage-delta bubble on +/- presses. The "i"
-# icon is the authored one from the score-table information sheet, sized to the
-# 40 img px gap between the meter and the row's bottom border.
+# icon is the authored one from the score-table information sheet.
 const INFO_ICON_ART := "TABLE/TABLES SCORE_information.png"
 const INFO_ICON_SRC := Rect2(1032.0, 408.0, 56.0, 56.0)
-const INFO_ICON_IMG_SIZE := 36.0
-const INFO_ICON_GAP_IMG := 2.0
-const INFO_HIT_SIZE := Vector2(14.0, 10.0)
-# Delta bubble center (frame-0 image px + row offset): the free patch inside
-# each row panel between the cost digit and the + button.
-const DELTA_ANCHOR_IMG := Vector2(576.0, 380.0)
+# The band between the meter's bottom (document y64) and the row panel's bottom border (y69)
+# is 5px, so the icon is 4px with no gap: it centres at y66 and clears the border. Bigger
+# and it overlaps the row outline. The hit box is wider than the glyph so it stays tappable.
+const INFO_ICON_SIZE := 4.0
+const INFO_ICON_GAP := 0.0
+const INFO_HIT_SIZE := Vector2(10.0, 6.0)
+# Delta bubble centre (art px + row offset): the free patch inside each row panel between
+# the cost digit (x57..61) and the + button (x82..100).
+const DELTA_ANCHOR := Vector2(71.0, 55.0)
 const DELTA_POPUP_RISE := 6.0
 const DELTA_POPUP_TIME := 0.9
-# Symbol box baked into the table art (source px): the selected symbol renders
-# inside it, scaled down slightly so it clears the box outline.
-const SYMBOL_BOX_CENTER := Vector2(37.3, 73.3)
-const ODD_ICON_SIZE := 24.0
+# DONE hangs off the lifted table's bottom frame (document y239), filling the strip the lift
+# opened up at the bottom of the canvas.
 const DONE_BUTTON_SIZE := Vector2(44.0, 12.0)
-const DONE_BUTTON_Y := MODAL_FRAME_RECT.position.y + MODAL_FRAME_RECT.size.y \
-	+ TABLE_Y_OFFSET - DONE_BUTTON_SIZE.y * 0.5 - 10.0
+const DONE_BUTTON_Y := 239.0 * CANVAS_FIT + TABLE_LIFT.y
 
 # These are the opaque row colors in ODD-TABLE.png. Flatline has no colored
 # border, so its waveform red is used for the live percentage.
@@ -93,6 +116,7 @@ var _symbol_icons := {}     # symbol -> Sprite2D
 var _plus_art := {}         # symbol -> Sprite2D (region of the buttons sheet)
 var _minus_art := {}        # symbol -> Sprite2D
 var _level_sprites := {}    # symbol -> Sprite2D (region of the levels sheet)
+var _augment_level_sprites := {} # symbol -> Sprite2D (the 9th, augment-only segment)
 var _info_buttons := {}     # symbol -> Button ("i" under the level meter, #153)
 var _delta_anchors := {}    # symbol -> Vector2 (delta-bubble center, source px)
 var _pct_popup: Control = null
@@ -140,10 +164,30 @@ func _close() -> void:
 	visible = false
 	closed.emit()
 
-## Full-canvas sheet sprite (dealer-scene pattern): scaled so one frame covers
-## the 160x320 canvas exactly.
+## Document px -> canvas px: the single conversion every measured constant goes through.
+func _canvas_pos(doc: Vector2) -> Vector2:
+	return doc * CANVAS_FIT + TABLE_LIFT
+
+
+## How many sheet pixels one authored document pixel occupies — 1 for a native export, 8
+## for the project's x8 convention. Measured from the height so a mixed set of sheets can
+## never be drawn at the wrong size.
+func _art_export_scale(tex: Texture2D) -> float:
+	if tex == null:
+		return 1.0
+	var raw := float(tex.get_height()) / ART_FRAME_SIZE.y
+	var factor := maxf(1.0, round(raw))
+	# A non-integer factor means the sheet is not this document: say so instead of drawing
+	# the table at a silently wrong size.
+	if absf(raw - factor) > 0.01:
+		push_warning("Odds table sheet is %dpx tall, not an integer multiple of the %dpx document — update ART_FRAME_SIZE."
+			% [tex.get_height(), int(ART_FRAME_SIZE.y)])
+	return factor
+
+## Whole-frame sheet sprite, stretched to the full canvas: the export factor cancels out, so
+## a x1 and a x8 sheet of the same document render the same.
 func _sheet_sprite(rel: String, hframes: int, frame: int) -> Sprite2D:
-	var tex := Assets.texture(ART_DIR + rel, true)
+	var tex := Assets.texture(ART_DIR + rel, false)
 	if tex == null:
 		return null
 	var spr := Sprite2D.new()
@@ -151,36 +195,40 @@ func _sheet_sprite(rel: String, hframes: int, frame: int) -> Sprite2D:
 	spr.hframes = hframes
 	spr.frame = frame
 	spr.centered = false
-	spr.position = Vector2(0.0, TABLE_Y_OFFSET)
-	var frame_w := float(tex.get_width()) / float(hframes)
-	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.position = TABLE_LIFT
+	spr.scale = Vector2.ONE * (CANVAS_FIT / _art_export_scale(tex))
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
-## Region sprite cropping `rect_img` (frame-0 image px) out of a sheet; `frame`
-## selects that frame's copy of the same rect. Placed at the source-px position.
-func _region_sprite(rel: String, rect_img: Rect2, frame: int) -> Sprite2D:
-	var tex := Assets.texture(ART_DIR + rel, true)
+## Region sprite cropping `rect` (frame-0 document px) out of a sheet; `frame` selects that
+## frame's copy of the same rect. It lands where that patch of the stretched table sits.
+func _region_sprite(rel: String, rect: Rect2, frame: int) -> Sprite2D:
+	var tex := Assets.texture(ART_DIR + rel, false)
 	if tex == null:
 		return null
+	var art_scale := _art_export_scale(tex)
 	var spr := Sprite2D.new()
 	spr.texture = tex
 	spr.centered = false
 	spr.region_enabled = true
-	spr.region_rect = Rect2(rect_img.position + Vector2(ART_FRAME_W * float(frame), 0.0), rect_img.size)
-	spr.position = rect_img.position / ART_SCALE + Vector2(0.0, TABLE_Y_OFFSET)
-	spr.scale = Vector2.ONE / ART_SCALE
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.set_meta(&"art_scale", art_scale)
+	spr.region_rect = Rect2(
+		(rect.position + Vector2(ART_FRAME_SIZE.x * float(frame), 0.0)) * art_scale,
+		rect.size * art_scale)
+	spr.position = _canvas_pos(rect.position)
+	spr.scale = Vector2.ONE * (CANVAS_FIT / art_scale)
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
-## Points a region sprite at another frame's copy of its rect.
-func _set_region_frame(spr: Sprite2D, base_x_img: float, frame: int) -> void:
+## Points a region sprite at another frame's copy of its rect. `base_x` is in document px.
+func _set_region_frame(spr: Sprite2D, base_x: float, frame: int) -> void:
 	if spr == null:
 		return
+	var art_scale: float = spr.get_meta(&"art_scale", 1.0)
 	var r := spr.region_rect
-	r.position.x = base_x_img + ART_FRAME_W * float(frame)
+	r.position.x = (base_x + ART_FRAME_SIZE.x * float(frame)) * art_scale
 	spr.region_rect = r
 
 func _rebuild() -> void:
@@ -194,6 +242,7 @@ func _rebuild() -> void:
 	_plus_art.clear()
 	_minus_art.clear()
 	_level_sprites.clear()
+	_augment_level_sprites.clear()
 	_info_buttons.clear()
 	_delta_anchors.clear()
 	_delta_popup = null
@@ -205,8 +254,12 @@ func _rebuild() -> void:
 	add_child(dim)
 
 	_sheet_sprite(ART_TABLE, 1, 0)
-	# The augment picker has no chips to spend, so the token wallet stays off.
-	_tokens_sprite = null if _augment_mode else _sheet_sprite(ART_TOKENS, TOKEN_FRAMES, 0)
+	# The augment picker spends no tokens per row, so the cost column steps aside and the
+	# wallet shows the one golden token the augment itself is worth.
+	if not _augment_mode:
+		_sheet_sprite(ART_COSTS, 1, 0)
+	_tokens_sprite = _sheet_sprite(ART_TOKENS, TOKEN_FRAMES,
+		TOKEN_GOLDEN_FRAME if _augment_mode else 0)
 
 	for i in Symbols.BASE_SYMBOL_CYCLE.size():
 		_build_row(String(Symbols.BASE_SYMBOL_CYCLE[i]), i)
@@ -231,22 +284,24 @@ func _rebuild() -> void:
 ## One authored row: the pressable symbol inside the baked box, the level-meter
 ## region, and invisible hit buttons over the baked +/- art.
 func _build_row(symbol_id: String, row: int) -> void:
-	var row_offset_img: float = float(ROW_OFFSETS_IMG[row])
+	var row_offset: float = float(ROW_OFFSETS[row])
 
-	var icon := _add_symbol_icon(symbol_id, SYMBOL_BOX_CENTER + Vector2(0.0,
-		row_offset_img / ART_SCALE + TABLE_Y_OFFSET))
+	var icon := _add_symbol_icon(symbol_id,
+		_canvas_pos(SYMBOL_BOX_CENTER + Vector2(0.0, row_offset)))
 	_symbol_icons[symbol_id] = icon
-	_symbol_buttons[symbol_id] = _build_symbol_button(symbol_id, row_offset_img, icon)
+	_symbol_buttons[symbol_id] = _build_symbol_button(symbol_id, row_offset, icon)
 
-	var level_rect := LEVEL_LAST_ROW_IMG if row == Symbols.BASE_SYMBOL_CYCLE.size() - 1 \
-		else Rect2(LEVEL_ROW_IMG.position + Vector2(0.0, row_offset_img), LEVEL_ROW_IMG.size)
+	var level_rect := Rect2(LEVEL_ROW_RECT.position + Vector2(0.0, row_offset), LEVEL_ROW_RECT.size)
 	_level_sprites[symbol_id] = _region_sprite(ART_LEVELS, level_rect, 0)
+	# The 9th segment rides on its own sheet, immediately right of the meter.
+	_augment_level_sprites[symbol_id] = _region_sprite(ART_AUGMENT_LEVEL,
+		Rect2(AUGMENT_LEVEL_ROW_RECT.position + Vector2(0.0, row_offset),
+			AUGMENT_LEVEL_ROW_RECT.size), AUGMENT_LEVEL_FRAME_NONE)
 	_info_buttons[symbol_id] = _build_info_button(symbol_id, level_rect)
-	_delta_anchors[symbol_id] = (DELTA_ANCHOR_IMG + Vector2(0.0, row_offset_img)) / ART_SCALE \
-		+ Vector2(0.0, TABLE_Y_OFFSET)
+	_delta_anchors[symbol_id] = _canvas_pos(DELTA_ANCHOR + Vector2(0.0, row_offset))
 
-	var plus_rect := Rect2(BTN_PLUS_IMG.position + Vector2(0.0, row_offset_img), BTN_PLUS_IMG.size)
-	var minus_rect := Rect2(plus_rect.position + Vector2(0.0, BTN_MINUS_Y_OFFSET_IMG), plus_rect.size)
+	var plus_rect := Rect2(BTN_PLUS_RECT.position + Vector2(0.0, row_offset), BTN_PLUS_RECT.size)
+	var minus_rect := Rect2(plus_rect.position + Vector2(0.0, BTN_MINUS_Y_OFFSET), plus_rect.size)
 	_plus_art[symbol_id] = _region_sprite(ART_BUTTONS, plus_rect, 0)
 	_minus_art[symbol_id] = _region_sprite(ART_BUTTONS, minus_rect, 0)
 	# The buttons sheet: frame 0 default, frame 1 "+" pressed, frame 2 "-" pressed.
@@ -262,7 +317,8 @@ func _add_symbol_icon(symbol_id: String, center: Vector2) -> Sprite2D:
 	icon.centered = true
 	icon.position = center
 	# Scaled down slightly so the symbol fits cleanly inside the baked box (#130).
-	icon.scale = Vector2.ONE * (ODD_ICON_SIZE / float(maxi(tex.get_width(), tex.get_height())))
+	icon.scale = Vector2.ONE \
+		* (ODD_ICON_SIZE * CANVAS_FIT / float(maxi(tex.get_width(), tex.get_height())))
 	icon.set_meta("rest_scale", icon.scale)
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	icon.z_index = 2
@@ -271,12 +327,11 @@ func _add_symbol_icon(symbol_id: String, center: Vector2) -> Sprite2D:
 
 ## Invisible hit area over a symbol box: squash-and-pop tactile feedback only.
 ## The draw-chance peek moved to the "i" button under the level meter (#153).
-func _build_symbol_button(symbol_id: String, row_offset_img: float, icon: Sprite2D) -> Button:
+func _build_symbol_button(symbol_id: String, row_offset: float, icon: Sprite2D) -> Button:
 	var b := Button.new()
 	b.name = "SymbolButton_%s" % symbol_id
-	b.position = SYMBOL_BOX_CENTER - SYMBOL_HIT_SIZE * 0.5 + Vector2(0.0,
-		row_offset_img / ART_SCALE + TABLE_Y_OFFSET)
-	b.size = SYMBOL_HIT_SIZE
+	b.position = _canvas_pos(SYMBOL_BOX_CENTER - SYMBOL_HIT_SIZE * 0.5 + Vector2(0.0, row_offset))
+	b.size = SYMBOL_HIT_SIZE * CANVAS_FIT
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.z_index = 3
@@ -291,10 +346,9 @@ func _build_symbol_button(symbol_id: String, row_offset_img: float, icon: Sprite
 ## symbol's live draw chance, same peek the score-table info buttons offer.
 ## The icon is cropped from the score-table information sheet and rendered
 ## through the overlay's shared linear+mipmaps filter.
-func _build_info_button(symbol_id: String, level_rect_img: Rect2) -> Button:
-	var center := Vector2(level_rect_img.get_center().x,
-		level_rect_img.end.y + INFO_ICON_GAP_IMG + INFO_ICON_IMG_SIZE * 0.5) / ART_SCALE \
-		+ Vector2(0.0, TABLE_Y_OFFSET)
+func _build_info_button(symbol_id: String, level_rect: Rect2) -> Button:
+	var center := _canvas_pos(Vector2(level_rect.get_center().x,
+		level_rect.end.y + INFO_ICON_GAP + INFO_ICON_SIZE * 0.5))
 	var icon: Sprite2D = null
 	var tex := Assets.texture(INFO_ICON_ART, true)
 	if tex != null:
@@ -305,15 +359,15 @@ func _build_info_button(symbol_id: String, level_rect_img: Rect2) -> Button:
 		icon.texture = atlas
 		icon.centered = true
 		icon.position = center
-		icon.scale = Vector2.ONE * (INFO_ICON_IMG_SIZE / INFO_ICON_SRC.size.x / ART_SCALE)
+		icon.scale = Vector2.ONE * (INFO_ICON_SIZE * CANVAS_FIT / INFO_ICON_SRC.size.x)
 		icon.set_meta("rest_scale", icon.scale)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		icon.z_index = 2
 		add_child(icon)
 	var b := Button.new()
 	b.name = "InfoButton_%s" % symbol_id
-	b.position = center - INFO_HIT_SIZE * 0.5
-	b.size = INFO_HIT_SIZE
+	b.position = center - INFO_HIT_SIZE * CANVAS_FIT * 0.5
+	b.size = INFO_HIT_SIZE * CANVAS_FIT
 	b.focus_mode = Control.FOCUS_ALL
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.z_index = 3
@@ -334,10 +388,10 @@ func _on_info_button_up(icon: Sprite2D) -> void:
 
 ## Invisible hit button over a baked button's art; pressing swaps the art region
 ## to the sheet's pressed frame for tactile feedback.
-func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
+func _hit_button(rect: Rect2, symbol_id: String, is_plus: bool) -> Button:
 	var b := Button.new()
-	b.position = rect_img.position / ART_SCALE + Vector2(0.0, TABLE_Y_OFFSET)
-	b.size = rect_img.size / ART_SCALE
+	b.position = _canvas_pos(rect.position)
+	b.size = rect.size * CANVAS_FIT
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -346,7 +400,7 @@ func _hit_button(rect_img: Rect2, symbol_id: String, is_plus: bool) -> Button:
 		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	var art: Sprite2D = _plus_art[symbol_id] if is_plus else _minus_art[symbol_id]
 	var pressed_frame := 1 if is_plus else 2
-	var base_x := rect_img.position.x
+	var base_x := rect.position.x
 	b.button_down.connect(_set_region_frame.bind(art, base_x, pressed_frame))
 	b.button_up.connect(_set_region_frame.bind(art, base_x, 0))
 	if is_plus:
@@ -539,10 +593,11 @@ func _on_minus_pressed(symbol_id: String) -> void:
 		_show_delta_popup(symbol_id, _symbol_percent(symbol_id) - before)
 
 func _refresh() -> void:
-	if _tokens_sprite != null:
-		# Token wallet on the sheet's 0..8 frames — the pool itself is capped at
-		# odds_max_tokens (8) by the store, so the art can always show it.
-		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 1)
+	# Token wallet on the sheet's 0..8 frames — the pool itself is capped at odds_max_tokens
+	# (8) by the store, so the art can always show it. The augment picker instead holds the
+	# golden token on the last frame: one token, any symbol, one level.
+	if _tokens_sprite != null and not _augment_mode:
+		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 2)
 	for symbol_id in _level_sprites:
 		# Both modes render the EFFECTIVE level — persisted, staged, and augment
 		# levels — because that is what the reels roll on. Augment mode lets "+"
@@ -552,15 +607,26 @@ func _refresh() -> void:
 		var purchase_level := RunStateStore.odds_upgrade_level(String(symbol_id))
 		var spr := _level_sprites[symbol_id] as Sprite2D
 		if spr != null:
-			var base_x := LEVEL_LAST_ROW_IMG.position.x \
-				if String(symbol_id) == String(Symbols.BASE_SYMBOL_CYCLE[Symbols.BASE_SYMBOL_CYCLE.size() - 1]) \
-				else LEVEL_ROW_IMG.position.x
-			_set_region_frame(spr, base_x, clampi(level, 0, 9))
+			# The meter itself now stops at level 8...
+			_set_region_frame(spr, LEVEL_ROW_RECT.position.x, clampi(level, 0, LEVEL_FRAMES - 1))
+		# ...and the 9th segment, which only the Symbol Level augment can fill, sits on its
+		# own sheet: blank until this symbol has its one augment level, then the added
+		# segment, then the maxed one once the symbol is at the hard cap.
+		var augment_levels := RunStateStore.symbol_augment_levels(String(symbol_id))
+		var augment_frame := AUGMENT_LEVEL_FRAME_NONE
+		if augment_levels > 0:
+			augment_frame = AUGMENT_LEVEL_FRAME_MAXED \
+				if level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP else AUGMENT_LEVEL_FRAME_ADDED
+		_set_region_frame(_augment_level_sprites.get(symbol_id) as Sprite2D,
+			AUGMENT_LEVEL_ROW_RECT.position.x, augment_frame)
 		var plus := _plus_buttons.get(symbol_id) as Button
 		if plus != null:
 			if _augment_mode:
+				# One augment level per symbol: a symbol that already spent one is out,
+				# even if it still has room under the hard cap.
 				plus.disabled = String(symbol_id) == "flatline" \
-					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP
+					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP \
+					or augment_levels >= ChipAugments.AUGMENT_LEVELS_PER_SYMBOL
 			else:
 				plus.disabled = purchase_level >= RunStateStore.odds_max_level \
 					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP \

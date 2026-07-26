@@ -11,6 +11,7 @@ extends RefCounted
 
 const DISCOUNT_PER_STACK := 0.10       # each discount copy: -10%, two stack to -20%
 const SYMBOL_LEVEL_HARD_CAP := 9       # augments may push past odds_max_level, to 9
+const AUGMENT_LEVELS_PER_SYMBOL := 1   # ...but only one augment level per symbol, ever
 const PAIR_TRIPLE_MULT := 1.25         # legendary specialist: chosen win type x1.25
 const EXTRA_SPINS_PER_COPY := 3
 const EXPANDED_OFFER_COUNT := 3        # dealer visits generate 3 consumables, not 2
@@ -35,7 +36,7 @@ const LIST := [
 	  "stock": 2, "cost": 40, "effect": "symbolLevel", "hints": ["SYMBOL", "LEVEL"],
 	  "blurb": "ONE SYMBOL +1 LEVEL (MAX 9)", "frame": 2 },
 	{ "id": "aug_extra_spins", "name": "Augment", "rarity": "common",
-	  "stock": 2, "cost": 35, "effect": "extraSpins", "hints": ["SPINS"],
+	  "stock": 1, "cost": 35, "effect": "extraSpins", "hints": ["SPINS"],
 	  "blurb": "+3 SPINS THIS RUN", "frame": 3 },
 	{ "id": "aug_offer_expand", "name": "Augment", "rarity": "rare",
 	  "stock": 1, "cost": 50, "effect": "offerExpand", "hints": ["MORE", "ITEMS"],

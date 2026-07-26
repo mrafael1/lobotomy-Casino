@@ -97,30 +97,40 @@ const SWAP_HINT_DRAG_ALPHA := 0.45 # recedes so it never competes with the drag 
 
 # Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
 # candidate symbol, tapping the symbol commits it.
-const CHEAT_ARROW_SIZE := Vector2(14.0, 8.0)
-const CHEAT_ARROW_GAP := 3.0
+# The arrows themselves are authored into cheat_selection.png. These are the measured
+# pixel bounds of that art relative to the picked reel's hole (x35..52 / y156..165 and
+# y207..216 against hole 33,170 21x30), so the invisible hit buttons land ON the arrows —
+# the old hole+gap guess sat 3px above the top arrow and 4px above the bottom one, which
+# left the lower half of the down arrow dead (issue #181).
+const CHEAT_ARROW_SIZE := Vector2(17.0, 9.0)
+const CHEAT_ARROW_UP_RISE := 14.0 # arrow top above the hole's top edge
+const CHEAT_ARROW_DOWN_DROP := 7.0 # arrow top below the hole's bottom edge
+# Grown a little past the art on every side: 9px of height is a small target on a
+# 160x320 canvas, and the gaps around the arrows are dead space anyway.
+const CHEAT_ARROW_TOUCH_PAD := Vector2(1.5, 2.0)
 const CHEAT_SELECTION_SHEET := "machine new view/cheat_selection.png"
 const CHEAT_SELECTION_FRAMES := 9
 
-# Machine-mounted power button hit rects (source px).
+# Machine-mounted power button hit rects (source px). Every chip is painted 11x11 at y225
+# in its own sheet (POWER_ART_LEFT below), so each rect is that chip grown 1px sideways and
+# a couple of pixels top and bottom. The old rects drifted a pixel either way and reroll's
+# extra width ran into shift's box.
 const POWER_HITS := {
-	"reroll": { "left": 21.0, "top": 223.0, "width": 15.0, "height": 15.0 },
-	"shift": { "left": 36.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"memory": { "left": 49.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"rewind": { "left": 63.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"heart": { "left": 77.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"cheat": { "left": 91.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"swap": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"reroll": { "left": 19.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"shift": { "left": 33.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"memory": { "left": 47.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"rewind": { "left": 61.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"heart": { "left": 75.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"cheat": { "left": 89.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"swap": { "left": 103.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 }
 const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
-# Where each power's chip is actually painted in its own sheet, measured from the art
-# (the x=8 sheets divided down to canvas pixels). The hit boxes above are a pixel or
-# two off the art in places, so offsetting a re-slotted power by hit boxes left it
-# beside the emplacement rather than on it — swap in slot two landed 5px left of where
-# shift sits. Slotting is done art-to-art so a power lands exactly where the power
-# that owns the emplacement is drawn.
+# Where each power's chip is actually painted in its own sheet, measured from the art: 11x11
+# at y225, on one unbroken 14px pitch that the augment sockets pick up again at 64/78/92
+# after the divider. Slotting is done art-to-art rather than hit box to hit box, so a
+# re-slotted power lands exactly where the power that owns the emplacement is drawn.
 const POWER_ART_LEFT := {
-	"reroll": 22.0, "shift": 36.0, "memory": 50.0,
+	"reroll": 20.0, "shift": 34.0, "memory": 48.0,
 	"rewind": 62.0, "heart": 76.0, "cheat": 90.0, "swap": 104.0,
 }
 const LEVER_FRAME_COUNT := 6
@@ -199,8 +209,12 @@ const DEALER_BAR_OVERLAY_3_FRAMES := 10
 # by multiple steps; the warning itself beeps through alpha so it does not
 # reveal a different countdown position before that spin's result is known.
 const DEALER_BAR_PROGRESS_FRAME_TIME := 0.10
-const DEALER_BAR_OVERLAY_BEEP_PERIOD := 0.56
-const DEALER_BAR_OVERLAY_BEEP_TIME := 0.16
+# The warning speeds up as the dealer closes in: a lone first light beeps lazily, and from
+# the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
+# BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
+const DEALER_BAR_OVERLAY_BEEP_PERIOD := 0.9
+const DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD := 1.8
+const DEALER_BAR_OVERLAY_BEEP_TIME := 0.5
 const DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA := 0.18
 const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
 const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
@@ -216,9 +230,11 @@ const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
 const POWER_SHEETS := {
-	"reroll": "machine new view/reroll_final_machine.png",
-	"shift": "machine new view/shift_final_machine.png",
-	"memory": "machine new view/lock_final_machine.png",
+	# Native 480x320 exports: three full-canvas frames (available / selected / disabled)
+	# at 1:1, no upscale.
+	"reroll": "machine new view/reroll.png",
+	"shift": "machine new view/shift.png",
+	"memory": "machine new view/lock.png",
 	"rewind": "machine new view/rewind_power.png",
 	"heart": "machine new view/chip_power.png",
 	"cheat": "machine new view/cheat_power.png",
@@ -253,6 +269,10 @@ const WEALTH_TARGET_FX_Z_INDEX := 140
 # everything the TV draws — boost icons (12), dealer bar (11), augment row (40) — and
 # below the targeting layer (97) and the overlay itself.
 const TV_BLACKOUT_Z_INDEX := 45
+# Flying rewards — the score bursts and the coin/lucidity FX — are the front-most thing
+# the machine itself draws: above the augment row and its popup (40/41), which in turn sit
+# above the cabinet art, and still under the TV blackout so the payout screen buries them.
+const REWARD_FX_Z_INDEX := 42
 const TV_BLACKOUT_COLOR := Color(0.004, 0.008, 0.016, 1.0)
 const TV_BLACKOUT_ALPHA := 0.94 # not opaque: the CRT keeps a faint presence
 const TV_BLACKOUT_SOURCE := &"wealth_target"
@@ -343,6 +363,9 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # Issue #181: the held augments sit on the power bar, continuing the row after the
 # third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
 # and the same 14px pitch, so the whole strip reads as one row of chips.
+const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
+# The sockets draw on top of the cabinet and under the badges that fill them (40).
+const AUGMENT_PLATE_Z_INDEX := 39
 const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
 const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
 const PACTE_AUGMENT_BADGE_PITCH := 14.0
@@ -641,6 +664,9 @@ var _dealer_bar_display_frame: int = 0
 var _dealer_bar_target_frame: int = 0
 var _dealer_bar_progress_time: float = 0.0
 var _dealer_bar_frame_initialized := false
+var _dealer_warning_wanted := 0    # lights the multiplier has earned (gates the beep)
+var _augment_glitch_time := 0.0
+var _augment_glitch_rng := RandomNumberGenerator.new()
 var _dealer_bar_overlay_beep_time := 0.0
 var _dealer_icon: TextureRect = null
 var _combo_loss_2_sprite: Sprite2D = null
@@ -736,6 +762,7 @@ var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
 var _combo_score_pending := -1 # final score held until the COMBO bonus beat lands
 var _power_bar_sprite: Sprite2D = null
+var _augment_plate_sprite: Sprite2D = null # authored augment sockets under the badges
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
 var _power_seen_lucidity := 0    # legacy name: total power points the gauge has accounted for
@@ -845,6 +872,7 @@ func _ready() -> void:
 	_restore_options_overlay_if_requested()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
+	_augment_glitch_rng.seed = 181_0726
 	_build_pacte_augment_badge()
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
@@ -937,11 +965,11 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
 		return "LockPower%d" % frame
-	if rel.ends_with("reroll_final_machine.png"):
+	if rel.ends_with("reroll.png") or rel.ends_with("reroll_final_machine.png"):
 		return "RerollPower"
-	if rel.ends_with("shift_final_machine.png"):
+	if rel.ends_with("shift.png") or rel.ends_with("shift_final_machine.png"):
 		return "ShiftPower"
-	if rel.ends_with("lock_final_machine.png"):
+	if rel.ends_with("lock.png") or rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
 	if rel.ends_with("FREE_SPIN.png"):
 		return "FreeSpinOverlay"
@@ -1213,6 +1241,7 @@ func _build_tv_indicators() -> void:
 		_coin_insert_sprite.visible = false
 	_build_boost_indicators()
 	_build_power_bar()
+	_build_augment_emplacements()
 
 ## Objective readout on the TV (issue #181): the authored TARGET plate with its fill
 ## bar, and the goal number below it. Both are full-canvas sheets, so their placement
@@ -1252,8 +1281,9 @@ func _advance_target_bar_animation(delta: float) -> void:
 func _refresh_target_readout() -> void:
 	if _target_goals_sprite == null and _target_bar_sprite == null:
 		return
-	# A win callout, a power animation or the lit FREE SPIN banner owns the whole TV
-	# while it is up; the objective readout steps aside for it.
+	# A win callout, a power animation or the lit FREE SPIN banner owns the whole TV while
+	# it is up; the objective readout steps aside for all three. The dealer interface is
+	# the one persistent readout that stays up under the banner (_tv_callout_active).
 	var should_show := not _tv_content_muted()
 	if _target_bar_sprite != null:
 		_target_bar_sprite.visible = should_show
@@ -1266,7 +1296,14 @@ func _refresh_target_readout() -> void:
 	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
 	_set_sheet_frame(_target_goals_sprite, index)
 	var target := maxi(1, RunStateStore.current_wealth_target())
-	var progress := clampf(float(RunStateStore.scoreEarned) / float(target), 0.0, 1.0)
+	# The bar tracks the score the odometer is SHOWING, not the score the state already
+	# holds: while the reward deltas are held back (or COMBO's second beat is pending)
+	# the win has not been revealed yet, and a bar that filled early announced the
+	# payout before the number did.
+	var shown_score := int(RunStateStore.scoreEarned)
+	if _hud_delta_hold or _combo_score_pending >= 0:
+		shown_score = _display_lucidity
+	var progress := clampf(float(shown_score) / float(target), 0.0, 1.0)
 	_set_sheet_frame(_target_bar_sprite, clampi(
 		floori(progress * float(TARGET_BAR_FRAME_COUNT - 1)), 0, TARGET_BAR_FRAME_COUNT - 1))
 
@@ -1291,6 +1328,15 @@ func _build_spins_left_label() -> void:
 
 ## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
+## The authored augment sockets on the power bar (x61..104, y223..237) — the divider after
+## the third power emplacement plus the three chip beds the held-augment badges sit in.
+## Full-canvas art, so the placement is baked in; the code only picks the layer it draws
+## on: above the cabinet, below the badges themselves.
+func _build_augment_emplacements() -> void:
+	_augment_plate_sprite = _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, 1)
+	if _augment_plate_sprite != null:
+		_augment_plate_sprite.z_index = AUGMENT_PLATE_Z_INDEX
+
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
 	if tex == null:
@@ -1804,6 +1850,12 @@ func _build_dealer_icon() -> void:
 	_dealer_icon = icon
 	add_child(icon)
 
+## The whole warning stack the multiplier has earned is drawn at once. What changes with it
+## is the BEEP RATE: one light beeps on the slow period, two or more on the fast one, so the
+## machine audibly speeds up as the dealer closes in. `_dealer_warning_wanted` is how many
+## lights the state earned.
+const DEALER_WARNING_FAST_BEEP_LIGHTS := 2
+
 func _refresh_dealer_countdown() -> void:
 	if _dealer_bar_sprite == null:
 		return
@@ -1863,8 +1915,17 @@ func _refresh_dealer_countdown() -> void:
 	# soon as the lever is pulled would leak the next gauge state into the spin.
 	var overlay_ready := not _spinning_anim and not _spin_launch_pending \
 		and not RunStateStore.isSpinning and not _hud_delta_hold
-	var dealer_info_allowed := not _tv_content_muted() \
+	var dealer_info_allowed := not _tv_callout_active() \
 		or RunStateStore.comboDefeatPending
+	# How many lights the state earned — the beep waits for the second one (see
+	# DEALER_WARNING_BEEP_FROM_LIGHTS); the lights themselves all draw immediately.
+	_dealer_warning_wanted = 0
+	if show_overlay_1:
+		_dealer_warning_wanted = 1
+	if show_overlay_2:
+		_dealer_warning_wanted = 2
+	if show_overlay_3:
+		_dealer_warning_wanted = 3
 	var overlay_states: Array = [
 		{ "sprite": _dealer_bar_overlay_1, "visible": show_overlay_1 },
 		{ "sprite": _dealer_bar_overlay_2, "visible": show_overlay_2 },
@@ -1881,7 +1942,7 @@ func _refresh_dealer_countdown() -> void:
 			overlay.modulate.a = 1.0
 		elif not overlay.visible:
 			overlay.modulate.a = 1.0
-	if _tv_content_muted() and not RunStateStore.comboDefeatPending:
+	if _tv_callout_active() and not RunStateStore.comboDefeatPending:
 		_hide_tv_info_layers()
 	elif RunStateStore.comboDefeatPending:
 		# The dealer warning remains readable over the losing-state art, even if
@@ -2394,6 +2455,7 @@ func _process(delta: float) -> void:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
+	_step_augment_glitch(delta)
 	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
@@ -2704,10 +2766,17 @@ func _end_tv_info_pop(source: StringName) -> void:
 ## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
 ## through _tv_info_pop_sources (PAIR/TRIPLE win, power, target blackout), and the
 ## blinking FREE SPIN banner, which owns the screen for as long as it is lit. While
-## either is up, every persistent readout on the TV — the objective, the dealer
-## countdown and his icon, the boost/item icons, the COMBO stage — steps aside.
+## either is up, the boost/item icons and the COMBO stage step aside.
 func _tv_content_muted() -> bool:
 	return not _tv_info_pop_sources.is_empty() or _free_spin_overlay_active
+
+## A full-screen callout — the only owner that clears the TV outright. The FREE SPIN
+## banner is deliberately weaker: it keeps the dealer interface (bar, warning lights,
+## icon) lit beside it, because how close the dealer is stays worth reading while the
+## free spins are being spent. Everything else on the TV, the objective readout included,
+## still steps aside for the banner (issue #181).
+func _tv_callout_active() -> bool:
+	return not _tv_info_pop_sources.is_empty()
 
 ## Re-applies the mute after the set of TV owners changes.
 func _apply_tv_content_mute() -> void:
@@ -2724,6 +2793,10 @@ func _hide_tv_info_layers() -> void:
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = false
 	_hide_boost_indicators()
+	# The dealer interface only clears for a callout — under the banner alone it stays
+	# readable alongside the objective.
+	if not _tv_callout_active():
+		return
 	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
 			_dealer_bar_overlay_3, _dealer_icon]:
 		var info := node as CanvasItem
@@ -2735,12 +2808,14 @@ func _restore_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = _free_spin_overlay_active \
 			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
-	# The callout is gone but the banner is lit: the TV stays its own, and nothing
-	# else comes back until the free spins are spent.
+	# The callout is gone but the banner is lit: the boost icons and the COMBO stage
+	# keep waiting it out, while the dealer interface comes back with the objective.
 	if _free_spin_overlay_active:
-		_hide_tv_info_layers()
-		return
-	_refresh_boost_indicators()
+		_hide_boost_indicators()
+		if _combo_effect_sprite != null:
+			_combo_effect_sprite.visible = false
+	else:
+		_refresh_boost_indicators()
 	_refresh_dealer_countdown()
 	if _dealer_bar_sprite != null:
 		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
@@ -2748,7 +2823,8 @@ func _restore_tv_info_layers() -> void:
 	if _dealer_icon != null:
 		_dealer_icon.visible = _tv_info_pop_restore_dealer_icon_visible \
 			or RunStateStore.comboDefeatPending
-	_refresh_combo_effect()
+	if not _free_spin_overlay_active:
+		_refresh_combo_effect()
 
 ## PAIR/TRIPLE TV callout: the matching win_animation frame beeps (alpha pulse,
 ## combo-loss cadence) CALLOUT_BEEP_COUNT times after the win is identified, then
@@ -3228,6 +3304,9 @@ func _set_display_lucidity(value: int, animated := true, duration_override := 0.
 	_display_lucidity = maxi(0, value)
 	if _wealth_odometer != null:
 		_wealth_odometer.set_value(_display_lucidity, animated, duration_override)
+	# The objective bar reads the shown score, so it moves with the reels rather than
+	# waiting for the next HUD refresh (some release paths update the digits alone).
+	_refresh_target_readout()
 
 func _refresh_jackpot_lamp(use_result := true) -> void:
 	if _jackpot_sprite == null or _jackpot_flashing:
@@ -3280,6 +3359,7 @@ func _build_burst_layer() -> void:
 		add_child(_burst_layer)
 	_burst_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_burst_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_burst_layer.z_index = REWARD_FX_Z_INDEX
 
 func _build_coin_layer() -> void:
 	_coin_layer = _authored_control("CoinLayer")
@@ -3289,6 +3369,7 @@ func _build_coin_layer() -> void:
 		add_child(_coin_layer)
 	_coin_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_coin_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_coin_layer.z_index = REWARD_FX_Z_INDEX
 
 # Sync the "already announced" markers to the current result so returning from the
 # dealer/scores never replays an old burst, and a power then computes its true gain.
@@ -3983,6 +4064,14 @@ func _step_multiplier_fx(delta: float) -> void:
 	if loss_3_active:
 		_combo_loss_3_sprite.frame = (_combo_loss_3_sprite.frame + 1) % COMBO_LOSS_3_FRAMES
 
+## Every lit warning beeps; how fast is what changes. A lone first light beeps on the slow
+## period, and from the second light on it tightens to the fast one, so the machine audibly
+## speeds up as the dealer closes in.
+func _dealer_overlay_beep_period() -> float:
+	return DEALER_BAR_OVERLAY_BEEP_PERIOD \
+		if _dealer_warning_wanted >= DEALER_WARNING_FAST_BEEP_LIGHTS \
+		else DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD
+
 func _step_dealer_overlay_beep(delta: float) -> void:
 	var active := false
 	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
@@ -3998,12 +4087,13 @@ func _step_dealer_overlay_beep(delta: float) -> void:
 				(overlay as Sprite2D).modulate.a = 1.0
 		return
 	_dealer_bar_overlay_beep_time = fmod(
-		_dealer_bar_overlay_beep_time + delta, DEALER_BAR_OVERLAY_BEEP_PERIOD)
+		_dealer_bar_overlay_beep_time + delta, _dealer_overlay_beep_period())
+	# One state change per beep, not a fade: the lights drop to the dim alpha for BEEP_TIME
+	# and snap back for the rest of the period. Interpolating between the two read as a
+	# second, breathing animation on top of the blink.
 	var alpha := 1.0
 	if _dealer_bar_overlay_beep_time < DEALER_BAR_OVERLAY_BEEP_TIME:
-		var pulse := sin(PI * _dealer_bar_overlay_beep_time \
-			/ DEALER_BAR_OVERLAY_BEEP_TIME)
-		alpha = lerpf(DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA, 1.0, pulse)
+		alpha = DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA
 	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
 			_dealer_bar_overlay_3]:
 		if overlay != null and (overlay as Sprite2D).visible:
@@ -4482,13 +4572,14 @@ func _on_cheat_reel_pick(reel_index: int) -> void:
 ## Transparent up/down hit targets flank the mini-reel; the authored
 ## cheat_selection sheet supplies their visible arrows and selected-reel frame.
 func _build_cheat_arrow(hole_rect: Rect2, up: bool) -> void:
-	var arrow_size := CHEAT_ARROW_SIZE
 	var cx := hole_rect.get_center().x
-	var top := hole_rect.position.y - CHEAT_ARROW_GAP - arrow_size.y if up \
-		else hole_rect.end.y + CHEAT_ARROW_GAP
+	var top := hole_rect.position.y - CHEAT_ARROW_UP_RISE if up \
+		else hole_rect.end.y + CHEAT_ARROW_DOWN_DROP
 	var b := _make_hit_button({
-		"left": cx - arrow_size.x * 0.5, "top": top,
-		"width": arrow_size.x, "height": arrow_size.y,
+		"left": cx - CHEAT_ARROW_SIZE.x * 0.5 - CHEAT_ARROW_TOUCH_PAD.x,
+		"top": top - CHEAT_ARROW_TOUCH_PAD.y,
+		"width": CHEAT_ARROW_SIZE.x + CHEAT_ARROW_TOUCH_PAD.x * 2.0,
+		"height": CHEAT_ARROW_SIZE.y + CHEAT_ARROW_TOUCH_PAD.y * 2.0,
 	}, func() -> void: _cycle_cheat_symbol(-1 if up else 1))
 	b.name = "CheatArrowUp" if up else "CheatArrowDown"
 	var selection_state := 2 if up else 1
@@ -6325,38 +6416,57 @@ func _apply_machine_reactions(power_triggered: bool) -> void:
 		return
 	_last_reacted_reels = reels.duplicate()
 	_last_reacted_spin = RunStateStore.spinCount
-	var a := String(reels[0])
 	var win_type := String(lr.get("winType", ""))
+	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a raw
+	# 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal, flatline
+	# strike...). Gating on the scored winType blocks exactly those spins.
 	if win_type != "triple" and win_type != "jackpot":
 		return
-	if bool(lr.get("bookJoker", false)):
-		if bool(lr.get("bookTripleChoice", false)):
-			_show_book_triple_choice(int(lr.get("freeSpinsGranted", 0)), power_triggered)
-		else:
-			_apply_symbol_triple(String(lr.get("resolvedSymbol", "")),
-				int(lr.get("freeSpinsGranted", 0)), power_triggered)
+	# A power that left an existing win standing untouched has not formed anything new, so
+	# its combination must not react a second time either (it did not pay again).
+	if bool(lr.get("combinationReplayed", false)):
 		return
-	var hallucination_pair := Economy.has_hallucination(RunStateStore.ownedUpgrades) \
-		and String(reels[0]) == String(reels[1]) \
-		and String(reels[1]) != String(reels[2])
-	if (_active_hidden_reel_count() > 0 or hallucination_pair) \
-			and String(reels[0]) == String(reels[1]):
-		if String(reels[0]) == "flatline":
-			var count := RunStateStore.register_flatline_result()
-			_show_flatline_result_reaction(count)
-			return
-		_apply_symbol_triple(String(reels[0]), int(lr.get("freeSpinsGranted", 0)), power_triggered)
+	if bool(lr.get("bookJoker", false)) and bool(lr.get("bookTripleChoice", false)):
+		_show_book_triple_choice(int(lr.get("freeSpinsGranted", 0)), power_triggered)
 		return
-	if not (a == String(reels[1]) and a == String(reels[2])):
+	var symbol := _triple_reaction_symbol(lr, reels)
+	if symbol == "":
 		return
-	# Tobacco (issue #53): while a reel is hidden the spin scores as pair/miss, so a
-	# raw 3-of-a-kind must NOT fire its 3x bonus (jackpot spin, powers back, reveal,
-	# flatline strike...). Gating on the scored winType blocks exactly those spins.
-	if a == "flatline":
-		var count := RunStateStore.register_flatline_result()
-		_show_flatline_result_reaction(count)
+	# Every route to a triple ends here — a raw 3-of-a-kind, a book standing in for one, or
+	# a visible pair promoted by Hallucination / a hidden reel — so a flatline triple always
+	# registers its strike no matter which of them formed it.
+	if symbol == "flatline":
+		_show_flatline_result_reaction(RunStateStore.register_flatline_result())
 	else:
-		_apply_symbol_triple(a, int(lr.get("freeSpinsGranted", 0)), power_triggered)
+		_apply_symbol_triple(symbol, int(lr.get("freeSpinsGranted", 0)), power_triggered)
+
+## The symbol a scored triple/jackpot resolved to. The score already decided this IS a
+## triple, so the shape of the reels is only being read to find out which symbol it paid
+## for: the book's resolution when one stood in, otherwise the 3-of-a-kind, otherwise the
+## matching pair — on ANY two reels, because Hallucination promotes reels 2+3 and Pattern 23's
+## reels 1+3 exactly like reels 1+2 (issue #35 follow-up).
+func _triple_reaction_symbol(lr: Dictionary, reels: Array) -> String:
+	if bool(lr.get("bookJoker", false)):
+		return String(lr.get("resolvedSymbol", ""))
+	var a := String(reels[0])
+	var b := String(reels[1])
+	var c := String(reels[2])
+	if a == b and b == c:
+		return a
+	# A hidden reel is out of the scoring, so only the reels that still count can pair up.
+	var visible := maxi(1, 3 - _active_hidden_reel_count())
+	if visible < 3:
+		for i in visible - 1:
+			if String(reels[i]) == String(reels[i + 1]):
+				return String(reels[i])
+		return ""
+	if a == b:
+		return a
+	if b == c:
+		return b
+	if a == c:
+		return a
+	return ""
 
 func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_triggered: bool) -> void:
 	var color := flatline_result_color
@@ -7277,6 +7387,50 @@ func _active_pacte_augment_ids() -> Array[String]:
 			ids.append(id)
 	return ids
 
+## The glitching chip: only the augment whose effect glitches the dealer gets one, keyed off
+## the card's effect rather than its id so a renamed card keeps the treatment.
+const AUGMENT_GLITCH_SLICES := 4
+const AUGMENT_GLITCH_STEP_TIME := 0.09
+const AUGMENT_GLITCH_COLORS: Array[Color] = [
+	Color("#3ee0ff"), Color("#ff3ea5"), Color("#e8ff5a"), Color("#3ee0ff"),
+]
+
+func _augment_glitches(card_id: String) -> bool:
+	var entry := PacteCards.card(card_id)
+	var effect: Dictionary = entry.get("effect", {})
+	return String(effect.get("type", "")) == "glitch_dealer"
+
+func _step_augment_glitch(delta: float) -> void:
+	if _pacte_augment_badges.is_empty():
+		return
+	_augment_glitch_time += delta
+	if _augment_glitch_time < AUGMENT_GLITCH_STEP_TIME:
+		return
+	_augment_glitch_time = 0.0
+	for entry: Dictionary in _pacte_augment_badges:
+		var glitch := entry.get("glitch") as Control
+		if glitch == null or not glitch.visible:
+			continue
+		if not (entry["badge"] as Button).visible:
+			continue
+		_scramble_augment_glitch(glitch)
+
+## One frame of the effect: each slice jumps to a new row, overhangs the chip sideways so the
+## clip cuts it, and takes a fresh alpha. Seeded, so the same frame count always looks the same.
+func _scramble_augment_glitch(host: Control) -> void:
+	for i in host.get_child_count():
+		var slice := host.get_child(i) as ColorRect
+		if slice == null:
+			continue
+		var height := floorf(_augment_glitch_rng.randf_range(1.0, 3.0))
+		slice.position = Vector2(
+			floorf(_augment_glitch_rng.randf_range(-2.0, 2.0)),
+			floorf(_augment_glitch_rng.randf_range(0.0, maxf(1.0, host.size.y - height))))
+		slice.size = Vector2(host.size.x + 4.0, height)
+		var color: Color = AUGMENT_GLITCH_COLORS[i % AUGMENT_GLITCH_COLORS.size()]
+		color.a = _augment_glitch_rng.randf_range(0.4, 1.0)
+		slice.color = color
+
 func _pacte_augment_icon(card_id: String) -> Texture2D:
 	var entry := PacteCards.card(card_id)
 	var sheet := _load_texture(String(entry.get("sheet", "")), true)
@@ -7343,9 +7497,27 @@ func _build_pacte_augment_badge() -> void:
 		count.add_theme_color_override("font_outline_color", Color.BLACK)
 		count.add_theme_constant_override("outline_size", 1)
 		badge.add_child(count)
+		# GLITCH has no authored chip art, so its badge carries the effect itself: a few
+		# neon slices that jump and flicker inside the chip (clipped to it), stepped by
+		# _step_augment_glitch. It draws over the icon, so authored art can arrive later
+		# and keep the effect.
+		var glitch := Control.new()
+		glitch.name = "Glitch"
+		glitch.position = icon.position
+		glitch.size = icon.size
+		glitch.clip_contents = true
+		glitch.visible = false
+		glitch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for _slice_index in AUGMENT_GLITCH_SLICES:
+			var slice := ColorRect.new()
+			slice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			glitch.add_child(slice)
+		badge.add_child(glitch)
 		badge.pressed.connect(_toggle_pacte_augment_popup)
 		add_child(badge)
-		_pacte_augment_badges.append({ "badge": badge, "icon": icon, "count": count })
+		_pacte_augment_badges.append({
+			"badge": badge, "icon": icon, "count": count, "glitch": glitch,
+		})
 	if not _pacte_augment_badges.is_empty():
 		_pacte_augment_badge = _pacte_augment_badges[0]["badge"]
 		_pacte_augment_badge_icon = _pacte_augment_badges[0]["icon"]
@@ -7379,11 +7551,16 @@ func _refresh_pacte_augment_badge() -> void:
 		var overflow := i == shown - 1 and ids.size() > shown
 		count.visible = overflow
 		icon.visible = not overflow
+		var glitch := entry.get("glitch") as Control
 		if overflow:
 			count.text = "+%d" % (ids.size() - shown + 1)
 			icon.texture = null
+			if glitch != null:
+				glitch.visible = false
 		else:
 			icon.texture = _pacte_augment_icon(ids[i])
+			if glitch != null:
+				glitch.visible = _augment_glitches(String(ids[i]))
 
 func _pacte_augment_popup_text() -> String:
 	var lines: Array[String] = []

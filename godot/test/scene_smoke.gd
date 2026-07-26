@@ -1045,11 +1045,13 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 	if overlay._symbol_percent("eye") <= base_percent:
 		failures.append("augment readouts: the odds table quoted the pre-augment draw chance")
 	var meter := overlay._level_sprites.get("eye") as Sprite2D
-	var augmented_frame := int(meter.region_rect.position.x / overlay.ART_FRAME_W) \
+	var augmented_frame := int(meter.region_rect.position.x / (float(overlay.ART_FRAME_SIZE.x) \
+			* float(meter.get_meta(&"art_scale", 1.0)))) \
 		if meter != null else -1
 	run_store.symbolAugmentLevels = {}
 	overlay.refresh_levels()
-	var plain_frame := int(meter.region_rect.position.x / overlay.ART_FRAME_W) \
+	var plain_frame := int(meter.region_rect.position.x / (float(overlay.ART_FRAME_SIZE.x) \
+			* float(meter.get_meta(&"art_scale", 1.0)))) \
 		if meter != null else -1
 	if meter == null or augmented_frame != plain_frame + 2:
 		failures.append("augment readouts: the odds table meter did not show the augment levels")
@@ -1332,9 +1334,16 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
 		"winType": "miss", "isFreeSpin": false, "scoreMultiplier": 1.0,
 	}
+	# Assigning lastResult by hand skips the spin path, which is what normally rebases the
+	# additive payout baseline (run_state_store.gd sets lastPureWinScore from each result).
+	# Without this the boosted pair below is added to whatever the random spins above
+	# happened to win, and the exact-30 assertion flips between 30 and 40 run to run.
+	run_store.lastPureWinScore = 0
+	run_store.lastPureWinCoins = 0
 	run_store.copy_reel(0, 1)
 	if int(run_store.lastResult["scoreEarned"]) != 30 or String(run_store.lastResult["winType"]) != "pair":
-		failures.append("issue92: Tobacco pair boost did not apply to a power-made pair")
+		failures.append("issue92: Tobacco pair boost did not apply to a power-made pair (got %d/%s)"
+			% [int(run_store.lastResult["scoreEarned"]), String(run_store.lastResult["winType"])])
 	run_store.pairBoostSpins = 0 # cleared so later spins in this check score normally
 
 	# Potion (renamed cons_potion, issue #53): restores all powers + potionSpins.
@@ -1898,12 +1907,12 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
 	run_store.prerunOfferIds = null
-	run_store.chipAugmentsPurchased = { "aug_extra_spins": 2 } # must survive the roll
+	run_store.chipAugmentsPurchased = { "aug_extra_spins": 1 } # must survive the roll
 	run_store.pairTripleAugmentChoice = "pair"
 	run_store.symbolAugmentLevels = { "eye": 1 }
 	meta_store.lucidityWallet = 1000
 	run_store.ensure_prerun_offer(7)
-	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 2 \
+	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
 			or String(run_store.pairTripleAugmentChoice) != "pair" \
 			or int((run_store.symbolAugmentLevels as Dictionary).get("eye", 0)) != 1:
 		failures.append("augments: a new cycle must keep the campaign's augments")
@@ -1964,19 +1973,20 @@ func _check_chip_augments(failures: Array) -> void:
 			or int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 0:
 		failures.append("augments: failed purchase charged or consumed stock")
 
-	# Extra Spins: both copies, +3 spins each through the neuron decay model,
-	# subject to the new 18-spin run cap.
+	# Extra Spins: its single copy pays +3 spins through the neuron decay model, subject
+	# to the 18-spin run cap, and a second purchase has no stock to consume.
 	run_store.lucidityCoins = 500
 	run_store.ownedUpgrades = []
 	var decay := maxi(1, Economy.compute_neuron_decay([]))
 	var neurons_before := int(run_store.neurons)
 	run_store.dealerAugmentOfferId = "aug_extra_spins"
 	run_store.purchase_chip_augment("aug_extra_spins")
-	run_store.dealerAugmentOfferId = "aug_extra_spins"
-	run_store.purchase_chip_augment("aug_extra_spins")
-	var expected_extra_spins := mini(EconomyConst.MAX_NEURONS, neurons_before + 6 * decay)
+	var expected_extra_spins := mini(EconomyConst.MAX_NEURONS, neurons_before + 3 * decay)
 	if int(run_store.neurons) != expected_extra_spins:
 		failures.append("augments: Extra Spins should respect the 18-spin cap")
+	run_store.dealerAugmentOfferId = "aug_extra_spins"
+	if run_store.purchase_chip_augment("aug_extra_spins"):
+		failures.append("augments: Extra Spins sold a second copy of a 1-stock augment")
 
 	# Symbol Level: needs a selection, raises the weight, honours the level-9 cap.
 	run_store.symbolAugmentLevels = {}
@@ -1991,30 +2001,42 @@ func _check_chip_augments(failures: Array) -> void:
 	if float((run_store.oddsWeightOverrides as Dictionary).get("eye", 0.0)) \
 			!= float(run_store.probability_increase_per_upgrade):
 		failures.append("augments: symbol augment did not raise the chosen symbol's weight")
-	# Level-9 cap: crossing 8 and 9 each add the max-level reward bonus; a tenth
-	# level is refused without charging. Pick a symbol whose persisted odds level
-	# leaves room, so a real save on this machine can't skew the test.
+	# One augment level per symbol: the copy just spent on "eye" locks eye out, even
+	# though its effective level is nowhere near the hard cap.
+	run_store.chipAugmentsPurchased = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+	run_store.dealerAugmentOfferId = "aug_symbol_level"
+	var coins_before_second := int(run_store.lucidityCoins)
+	if run_store.purchase_chip_augment("aug_symbol_level", "eye"):
+		failures.append("augments: a symbol took a second augment level")
+	if int(run_store.lucidityCoins) != coins_before_second \
+			or int(run_store.symbol_augment_levels("eye")) != 1:
+		failures.append("augments: refused second augment level still charged or stacked")
+
+	# Level-9 cap: the augment level that lands on a maxed-out symbol adds the max-level
+	# reward bonus a second time, and a symbol already at 9 is refused without charging.
+	# Pick a symbol with no augment level yet so a real save on this machine can't skew it.
 	var cap_sym := ""
-	for s in ["vial", "syringe", "pill", "eye", "brain"]:
-		if int(meta_store.odds_upgrade_level(s)) <= 7:
+	for s in ["vial", "syringe", "pill", "brain"]:
+		if int(run_store.symbol_augment_levels(s)) == 0:
 			cap_sym = s
 			break
 	if cap_sym == "":
-		failures.append("augments: no symbol below level 8 available for the cap test")
+		failures.append("augments: no un-augmented symbol available for the cap test")
 	else:
-		var meta_level := int(meta_store.odds_upgrade_level(cap_sym))
-		run_store.symbolAugmentLevels = { cap_sym: 7 - meta_level } # effective level 7
+		# Base level 8 (the odds-phase maximum) + the symbol's one augment level = 9.
+		meta_store.oddsUpgrades = (meta_store.oddsUpgrades as Dictionary).duplicate(true)
+		meta_store.oddsUpgrades[cap_sym] = int(run_store.odds_max_level)
 		run_store.symbolRewardBonuses = {}
-		run_store.chipAugmentsPurchased = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
 		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
 		run_store.dealerAugmentOfferId = "aug_symbol_level"
-		run_store.purchase_chip_augment("aug_symbol_level", cap_sym) # -> level 8
-		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
-		run_store.dealerAugmentOfferId = "aug_symbol_level"
-		run_store.purchase_chip_augment("aug_symbol_level", cap_sym) # -> level 9
+		if not run_store.purchase_chip_augment("aug_symbol_level", cap_sym): # -> level 9
+			failures.append("augments: a maxed symbol refused its one augment level")
 		var cap_bonus := float((run_store.symbolRewardBonuses as Dictionary).get(cap_sym, 0.0))
-		if not is_equal_approx(cap_bonus, 2.0 * float(run_store.odds_max_level_reward_bonus)):
-			failures.append("augments: levels 8 and 9 should each add the max-level reward bonus")
+		if not is_equal_approx(cap_bonus, float(run_store.odds_max_level_reward_bonus)):
+			failures.append("augments: level 9 should add the max-level reward bonus")
+		if int(run_store.effective_symbol_level(cap_sym)) != ChipAugments.SYMBOL_LEVEL_HARD_CAP:
+			failures.append("augments: base 8 plus an augment level should reach the level-9 cap")
 		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
 		run_store.dealerAugmentOfferId = "aug_symbol_level"
 		var coins_at_cap := int(run_store.lucidityCoins)
@@ -2022,6 +2044,7 @@ func _check_chip_augments(failures: Array) -> void:
 			failures.append("augments: symbol pushed past level 9")
 		if int(run_store.lucidityCoins) != coins_at_cap:
 			failures.append("augments: refused level-10 purchase still charged")
+		meta_store.oddsUpgrades = {}
 
 	# Expanded Selection: visits generate three consumables; rerolls keep three.
 	run_store.chipAugmentsPurchased = {}
@@ -2575,13 +2598,18 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if done_button == null:
 		failures.append("issue130: odds-table DONE button is missing")
 	else:
-		var modal_bottom: float = overlay.MODAL_FRAME_RECT.position.y \
-			+ overlay.MODAL_FRAME_RECT.size.y + overlay.TABLE_Y_OFFSET - 10.0
-		var done_center: float = done_button.position.y + done_button.size.y * 0.5
-		if not is_equal_approx(done_center, modal_bottom):
-			failures.append("issue130: DONE button is not centered on the modal edge")
+		# The table is stretched to the full width and lifted, so DONE hangs off its bottom
+		# frame (document y239). Compared against the last ROW (document y223) rather than
+		# the frame itself: Godot snaps control positions to whole pixels, so the button can
+		# sit a pixel above the frame's fractional edge — what must never happen is it
+		# covering a row.
+		var last_row_bottom: float = 223.0 * float(overlay.CANVAS_FIT) + float(overlay.TABLE_LIFT.y)
+		if done_button.position.y < last_row_bottom:
+			failures.append("issue130: DONE button overlaps the last odds row")
+		if done_button.position.y + done_button.size.y > 320.0:
+			failures.append("issue130: DONE button hangs off the bottom of the canvas")
 		# Sized up to read as a real button (follow-up tweak), but still well
-		# inside the 144px-wide modal frame.
+		# inside the modal frame.
 		if done_button.size.x < 40.0 or done_button.size.y < 10.0:
 			failures.append("issue130: DONE button too small to read as a button")
 		if done_button.size.x > 64.0 or done_button.size.y > 16.0:
@@ -2631,12 +2659,16 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	# that icon past the box.
 	var box_icons := 0
 	for child in overlay.get_children():
+		# Geometry is authored in document px, so the box column lands at
+		# SYMBOL_BOX_CENTER scaled by CANVAS_FIT — as does the size the icon must fit in.
 		if child is Sprite2D and (child as Sprite2D).centered \
-				and is_equal_approx((child as Sprite2D).position.x, float(overlay.SYMBOL_BOX_CENTER.x)):
+				and is_equal_approx((child as Sprite2D).position.x,
+					float(overlay.SYMBOL_BOX_CENTER.x) * float(overlay.CANVAS_FIT)
+						+ float(overlay.TABLE_LIFT.x)):
 			var icon := child as Sprite2D
 			var rest_scale: Vector2 = icon.get_meta("rest_scale", icon.scale)
 			var icon_w: float = float(icon.texture.get_width()) * rest_scale.x
-			if icon_w <= float(overlay.ODD_ICON_SIZE) + 0.01:
+			if icon_w <= float(overlay.ODD_ICON_SIZE) * float(overlay.CANVAS_FIT) + 0.01:
 				box_icons += 1
 	if box_icons != 6:
 		failures.append("issue130: expected 6 boxed symbol icons scaled to fit, found %d" % box_icons)
@@ -2652,9 +2684,12 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 		if delta_label == null or not delta_label.text.begins_with("+") \
 				or not delta_label.text.ends_with("%"):
 			failures.append("issue153: + delta bubble should read as +x.x%")
-	# The bought level advances the row's meter to the next sheet frame.
-	if (level_sprites["brain"] as Sprite2D).region_rect.position.x \
-			!= brain_level_x0 + float(overlay.ART_FRAME_W):
+	# The bought level advances the row's meter to the next sheet frame (one frame is the
+	# document width times however the sheet was exported).
+	var brain_meter := level_sprites["brain"] as Sprite2D
+	var brain_frame_step: float = float(overlay.ART_FRAME_SIZE.x) \
+		* float(brain_meter.get_meta(&"art_scale", 1.0))
+	if brain_meter.region_rect.position.x != brain_level_x0 + brain_frame_step:
 		failures.append("issue130: bought level did not advance the meter frame")
 	if int((overlay._tokens_sprite as Sprite2D).frame) != int(run_store.odds_budget) - 4:
 		failures.append("issue130: tokens sheet frame did not track the spend")
@@ -2928,8 +2963,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 			first_coin.position, 0.0, 0.9)
 		if first_coin.modulate.a < 0.89:
 			failures.append("wealth: landed coin faded out instead of staying in the pile")
-	# Issue #181: the money fills the bottom two thirds and stops — no coin is given a
-	# resting place above the ceiling, and none is left flying off the top of the canvas.
+	# Issue #181: the money fills the bottom THIRD and stops — no coin is given a resting
+	# place above the ceiling, and none is left flying off the top of the canvas.
 	if wealth_screen != null:
 		var highest_target: float = wealth_screen.COIN_FLOOD_HEIGHT
 		for target: Vector2 in wealth_screen._coin_targets:
@@ -2937,6 +2972,12 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		if highest_target < wealth_screen.COIN_PILE_TOP_Y - 0.01:
 			failures.append("issue181: the coin pile builds past its ceiling (top y %.1f)"
 				% highest_target)
+		# ...and that ceiling really is the bottom third of the canvas, so the title and the
+		# score above it stay clear of the money.
+		if not is_equal_approx(float(wealth_screen.COIN_PILE_TOP_Y),
+				float(wealth_screen.CANVAS_SIZE.y) * 2.0 / 3.0):
+			failures.append("issue181: the coin pile ceiling is not the bottom third (y %.1f)"
+				% float(wealth_screen.COIN_PILE_TOP_Y))
 		var last_release := 0.0
 		for delay: float in wealth_screen._coin_delays:
 			last_release = maxf(last_release, delay)
@@ -4177,11 +4218,12 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
 
-# The TV has one owner at a time. A PAIR/TRIPLE or power callout owns it while it
-# plays, and the lit FREE SPIN banner owns it for as long as the credit lasts: each
-# hides every persistent readout on the screen — the dealer countdown and his icon,
-# the objective plate, the item/boost icons. A callout outranks the banner, so it
-# hides that too and hands the screen back to it when it closes.
+# A PAIR/TRIPLE or power callout owns the TV outright while it plays: every persistent
+# readout on the screen steps aside — the dealer countdown and his icon, the objective
+# plate, the item/boost icons. The lit FREE SPIN banner is a weaker owner (issue #181): it
+# takes the objective plate and the item/boost icons but leaves the dealer interface lit
+# beside it. A callout outranks the banner, so it hides that too, and when it closes it
+# hands the screen back to the banner and to the dealer strip the banner shares it with.
 func _check_tv_information_priority(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
@@ -4215,15 +4257,18 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	if boost_slot == null or not boost_slot.visible:
 		failures.append("TV callout priority: boost icon did not establish its baseline")
 
-	# A banked free spin lights the banner, and the banner takes the whole screen.
+	# A banked free spin lights the banner. It takes the objective plate and the item
+	# icons, and leaves the dealer interface lit beside it.
 	run_store.freeSpinsRemaining = 1
 	machine._update_hud()
 	if free_spin == null or not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not light")
-	if (dealer_bar != null and dealer_bar.visible) or (dealer_icon != null and dealer_icon.visible) \
-			or (target_bar != null and target_bar.visible) \
-			or (boost_slot != null and boost_slot.visible):
-		failures.append("TV callout priority: FREE SPIN did not hide persistent TV information")
+	if (boost_slot != null and boost_slot.visible) \
+			or (target_bar != null and target_bar.visible):
+		failures.append("TV callout priority: FREE SPIN did not hide the objective/item icons")
+	if (dealer_bar != null and not dealer_bar.visible) \
+			or (dealer_icon != null and not dealer_icon.visible):
+		failures.append("TV callout priority: FREE SPIN hid the dealer interface")
 
 	machine._play_win_animation("pair", 20)
 	if machine._win_anim_sprite == null or not machine._win_anim_sprite.visible:
@@ -4239,14 +4284,17 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 			or (target_bar != null and target_bar.visible) \
 			or (boost_slot != null and boost_slot.visible):
 		failures.append("TV callout priority: HUD refresh overrode the PAIR priority")
-	# Closing the callout hands the screen back to the banner, not to the readouts.
+	# Closing the callout hands the screen back to the banner and to the dealer strip it
+	# shares it with; the objective plate and the item icons keep waiting the banner out.
 	machine._stop_win_animation()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
-	if (dealer_bar != null and dealer_bar.visible) or (dealer_icon != null and dealer_icon.visible) \
-			or (target_bar != null and target_bar.visible) \
-			or (boost_slot != null and boost_slot.visible):
-		failures.append("TV callout priority: PAIR handed the TV back over the FREE SPIN banner")
+	if (boost_slot != null and boost_slot.visible) \
+			or (target_bar != null and target_bar.visible):
+		failures.append("TV callout priority: PAIR restored the objective/item icons under the banner")
+	if (dealer_bar != null and not dealer_bar.visible) \
+			or (dealer_icon != null and not dealer_icon.visible):
+		failures.append("TV callout priority: dealer interface lost after PAIR under the banner")
 
 	# Power callouts share the same priority, and overlapping callouts keep it held
 	# until the last owner closes.
@@ -4406,9 +4454,10 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		failures.append("issue155: Glitch 2 did not show all three dealer warning overlays")
 	run_store.glitchDealerStepActive = false
 	run_store.betMultiplier = 1
-	# The active overlays pulse without changing the frame selected by countdown
-	# progress, so the warning beeps but never spoils a different state.
+	# The lit stack pulses without changing the frame selected by countdown progress, so the
+	# warning beeps but never spoils a different state.
 	if dealer_overlay_1 != null:
+		machine._refresh_dealer_countdown()
 		dealer_overlay_1.modulate.a = 1.0
 		machine._dealer_bar_overlay_beep_time = 0.0
 		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME) * 0.25)
@@ -4417,6 +4466,27 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME))
 		if dealer_overlay_1.modulate.a < 0.99:
 			failures.append("issue155: dealer warning overlay did not return to full alpha")
+		# ...and a lone first light beeps too, just on the slower period: the cadence, not the
+		# beep itself, is what tightens as the dealer closes in.
+		run_store.betMultiplier = 3
+		machine._refresh_dealer_countdown()
+		dealer_overlay_1.modulate.a = 1.0
+		machine._dealer_bar_overlay_beep_time = 0.0
+		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME) * 0.25)
+		if dealer_overlay_1.modulate.a >= 0.99:
+			failures.append("issue155: the x3 warning did not beep on its single light")
+		if not is_equal_approx(float(machine._dealer_overlay_beep_period()),
+				float(machine.DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD)):
+			failures.append("issue155: one light should beep on the slow period")
+		run_store.betMultiplier = 2
+		machine._refresh_dealer_countdown()
+		if not is_equal_approx(float(machine._dealer_overlay_beep_period()),
+				float(machine.DEALER_BAR_OVERLAY_BEEP_PERIOD)):
+			failures.append("issue155: the second light should tighten the beep cadence")
+		if float(machine.DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD) \
+				<= float(machine.DEALER_BAR_OVERLAY_BEEP_PERIOD):
+			failures.append("issue155: the slow warning period is not slower than the fast one")
+		run_store.betMultiplier = 1
 	# A pending x2 loss falls to the x1 warning state, so it keeps the full
 	# cumulative stack. Pending x1 stays at x1 and must do the same.
 	run_store.comboDefeatPending = true
@@ -6145,6 +6215,68 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	if int(run_store.freeSpinsRemaining) != 0:
 		failures.append("issue35: brains triple double-granted on a natural spin")
 
+	# Every route to a flatline triple registers a strike, not just a raw 3-of-a-kind:
+	# Hallucination promoting a visible flatline pair on EITHER pair of reels, and a book
+	# standing in for the flatlines it completes. Flatline pays 0, so the joker only resolves
+	# to it when the board has nothing else to become — which is exactly these boards.
+	machine.fatal_flatline_count = 99 # no instant death part way through the routes
+	var flatline_routes: Array[Dictionary] = [
+		{ "reels": ["flatline", "flatline", "flatline"], "why": "a raw flatline triple" },
+		{ "reels": ["flatline", "flatline", "eye"], "why": "a hallucinated pair on reels 1+2" },
+		{ "reels": ["eye", "flatline", "flatline"], "why": "a hallucinated pair on reels 2+3" },
+		{ "reels": ["flatline", "book", "book"], "book": "flatline",
+			"why": "books resolving to the only symbol on the board" },
+		{ "reels": ["flatline", "flatline", "book"], "book": "flatline",
+			"why": "two flatlines and a book" },
+	]
+	for i in flatline_routes.size():
+		var route: Dictionary = flatline_routes[i]
+		run_store.flatlineResultCount = 0
+		run_store.spinCount = 30 + i
+		var route_result := { "reels": route["reels"], "freeSpinsGranted": 0, "winType": "triple" }
+		if route.has("book"):
+			route_result["bookJoker"] = true
+			route_result["resolvedSymbol"] = String(route["book"])
+		run_store.lastResult = route_result
+		machine._last_reacted_reels = []
+		machine._last_reacted_spin = -1
+		machine._apply_machine_reactions(false)
+		if int(run_store.flatlineResultCount) != 1:
+			failures.append("issue35: %s did not register a flatline strike" % String(route["why"]))
+	# The same reaction runs for power-made reels, so a power that forms the flatline pair
+	# strikes too...
+	run_store.flatlineResultCount = 0
+	run_store.spinCount = 38
+	run_store.lastResult = { "reels": ["flatline", "flatline", "eye"], "freeSpinsGranted": 0,
+		"winType": "triple" }
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(true)
+	if int(run_store.flatlineResultCount) != 1:
+		failures.append("issue35: a power-made flatline pair did not register a strike")
+	# ...but a power that only left an existing win standing must not strike again.
+	run_store.flatlineResultCount = 0
+	run_store.spinCount = 39
+	run_store.lastResult = { "reels": ["flatline", "flatline", "eye"], "freeSpinsGranted": 0,
+		"winType": "triple", "combinationReplayed": true }
+	machine._last_reacted_reels = []
+	machine._last_reacted_spin = -1
+	machine._apply_machine_reactions(true)
+	if int(run_store.flatlineResultCount) != 0:
+		failures.append("issue35: a replayed combination struck the flatline counter again")
+
+	# The scoring side of those boards: with Hallucination and Learning up, each really does
+	# resolve to a flatline triple (which is what makes the reactions above fire in play).
+	for reels: Array in [["flatline", "flatline", "eye"], ["eye", "flatline", "flatline"],
+			["flatline", "book", "book"], ["flatline", "flatline", "book"]]:
+		var scored: Dictionary = Evaluate.score_reels(reels, 1.0, false, false, true,
+			1.0, 0, true, 1.0, {}, false)
+		var scored_symbol := String(scored.get("resolvedSymbol", "")) \
+			if bool(scored.get("bookJoker", false)) else "flatline"
+		if String(scored["winType"]) != "triple" or scored_symbol != "flatline":
+			failures.append("issue35: %s scored as %s/%s, not a flatline triple"
+				% [str(reels), String(scored["winType"]), scored_symbol])
+
 	# Three flatline results accumulate and route to the instant-death fatal path.
 	run_store.flatlineResultCount = 0
 	machine.fatal_flatline_count = 3
@@ -6176,6 +6308,8 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
+	_check_new_combination_payout(run_store, failures)
+
 	# Restore mutated state.
 	run_store.lastResult = prev_last
 	run_store.spinCount = prev_spin
@@ -6186,6 +6320,54 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	run_store.runConsumables = prev_cons
 	run_store.lastUsedConsumableId = prev_lastused
 	run_store.runPhase = prev_phase
+
+## A power pays for the combination it FORMS, never for one that was already paid: changing
+## the odd reel out of a pair pays nothing, completing the triple pays the triple, and
+## replaying a reel the pair itself sits on pays the pair again (that symbol was played
+## again). Driven through Cheat because it picks the symbol outright, so each case is exact.
+func _check_new_combination_payout(run_store: Node, failures: Array) -> void:
+	var eye_pair := int(Payouts.PAIR_SCORE["eye"])
+	var eye_triple := int(Payouts.TRIPLE_SCORE["eye"])
+	var cases: Array[Dictionary] = [
+		{ "reel": 2, "symbol": "vial", "gain": 0,
+			"why": "changing the odd reel out of a pair paid the old pair again" },
+		{ "reel": 2, "symbol": "eye", "gain": eye_triple,
+			"why": "completing the triple did not pay it" },
+		{ "reel": 0, "symbol": "eye", "gain": eye_pair,
+			"why": "replaying a reel of the pair did not pay the pair again" },
+	]
+	for case: Dictionary in cases:
+		run_store.runPhase = "running"
+		run_store.isSpinning = false
+		run_store.ownedPowerIds = ["cheat"]
+		run_store.abilitiesUsed = []
+		run_store.powersUsedThisSpin = 0
+		run_store.augmentedTier = ""
+		run_store.ownedUpgrades = []
+		run_store.winBoostEnabled = false
+		run_store.flatlineWinBoostArmed = false
+		run_store.pairBoostSpins = 0
+		run_store.scoreEarned = eye_pair
+		run_store.lastPureWinScore = eye_pair
+		run_store.lastPureWinCoins = eye_pair
+		run_store.lastResult = {
+			"reels": ["eye", "eye", "pill"], "scoreEarned": eye_pair, "coinsEarned": eye_pair,
+			"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isJackpot": false,
+			"winType": "pair", "isFreeSpin": false, "scoreMultiplier": 1.0,
+		}
+		if not run_store.cheat_symbol(int(case["reel"]), String(case["symbol"])):
+			failures.append("new combinations: Cheat was refused setting up %s" % String(case["why"]))
+			continue
+		var expected := eye_pair + int(case["gain"])
+		if int(run_store.scoreEarned) != expected:
+			failures.append("new combinations: %s (score %d, expected %d)"
+				% [String(case["why"]), int(run_store.scoreEarned), expected])
+		var replayed := bool((run_store.lastResult as Dictionary).get("combinationReplayed", false))
+		if replayed != (int(case["gain"]) == 0):
+			failures.append("new combinations: combinationReplayed was %s for %s"
+				% [str(replayed), String(case["why"])])
+	run_store.ownedPowerIds = []
+	run_store.abilitiesUsed = []
 
 # Augmented Run (issue #111): unlock persistence and the four suit modifiers.
 func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
@@ -7748,6 +7930,31 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	machine._set_cheat_selection_state(2)
 	if machine._cheat_selection_sprite != null and machine._cheat_selection_sprite.frame != 5:
 		failures.append("pacte powers: Cheat top-arrow frame was not selected")
+	# The arrows are authored into cheat_selection.png; their pixels sit at y156..165 (up)
+	# and y207..216 (down) around the picked reel's hole, x = hole centre ±8.5. The
+	# invisible hit buttons have to cover that art completely — the bottom one used to stop
+	# 5px short of the arrow's tip (issue #181) — and must stay off the confirm button that
+	# owns the hole itself.
+	var cheat_hole: Dictionary = machine.REEL_HOLES[1]
+	var cheat_hole_rect := Rect2(float(cheat_hole["left"]), float(cheat_hole["top"]),
+		float(cheat_hole["width"]), float(cheat_hole["height"]))
+	var cheat_arrow_art := {
+		"CheatArrowUp": Rect2(67.0, 156.0, 17.0, 9.0),
+		"CheatArrowDown": Rect2(67.0, 207.0, 17.0, 9.0),
+	}
+	for arrow_name: String in cheat_arrow_art:
+		var arrow := machine._targeting_layer.get_node_or_null(arrow_name) as Control
+		if arrow == null:
+			failures.append("pacte powers: Cheat %s hit target is missing" % arrow_name)
+			continue
+		var hit := Rect2(arrow.position, arrow.size)
+		var art: Rect2 = cheat_arrow_art[arrow_name]
+		if not hit.encloses(art):
+			failures.append("pacte powers: Cheat %s hitbox %s misses its arrow art %s"
+				% [arrow_name, str(hit), str(art)])
+		if hit.intersects(cheat_hole_rect):
+			failures.append("pacte powers: Cheat %s hitbox overlaps the confirm hole"
+				% arrow_name)
 	machine._clear_targeting()
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
 	if not run_store.cheat_symbol(1, "brain") \

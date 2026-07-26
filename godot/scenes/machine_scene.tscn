@@ -8,9 +8,9 @@
 [ext_resource type="Texture2D" uid="uid://pqc0qfbcf28q" path="res://assets/images/machine new view/neon_machine_lever.png" id="10_lever"]
 [ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
 [ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
-[ext_resource type="Texture2D" uid="uid://bugvu3ivgsp1m" path="res://assets/images/machine new view/reroll_final_machine.png" id="13_reroll"]
-[ext_resource type="Texture2D" uid="uid://dllrucw0rl5oc" path="res://assets/images/machine new view/shift_final_machine.png" id="14_shift"]
-[ext_resource type="Texture2D" uid="uid://6kxesj6e2w3x" path="res://assets/images/machine new view/lock_final_machine.png" id="15_memory"]
+[ext_resource type="Texture2D" uid="uid://5d82xhalvby2" path="res://assets/images/machine new view/reroll.png" id="13_reroll"]
+[ext_resource type="Texture2D" uid="uid://tu8s2wsur4er" path="res://assets/images/machine new view/shift.png" id="14_shift"]
+[ext_resource type="Texture2D" uid="uid://puf0p7s6t7ms" path="res://assets/images/machine new view/lock.png" id="15_memory"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
 [ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="17_vp1vd"]
 [ext_resource type="Texture2D" uid="uid://d28yxo0yalrku" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
@@ -188,21 +188,18 @@ theme_override_font_sizes/font_size = 7
 horizontal_alignment = 1
 
 [node name="RerollPower" type="Sprite2D" parent="." unique_id=545151871]
-scale = Vector2(0.125, 0.125)
 texture = ExtResource("13_reroll")
 centered = false
 hframes = 3
 frame = 2
 
 [node name="ShiftPower" type="Sprite2D" parent="." unique_id=478848931]
-scale = Vector2(0.125, 0.125)
 texture = ExtResource("14_shift")
 centered = false
 hframes = 3
 frame = 2
 
 [node name="MemoryPower" type="Sprite2D" parent="." unique_id=788471702]
-scale = Vector2(0.125, 0.125)
 texture = ExtResource("15_memory")
 centered = false
 hframes = 3
