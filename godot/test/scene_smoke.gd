@@ -4430,8 +4430,9 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	var icon_size: float = machine.BOOST_ICON_SIZE
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
 	# Measured art extents of the TV's other occupants (see the constants' comment).
-	var goal_rect := Rect2(69.0, 91.0, 13.0, 5.0)
-	var fill_bar_rect := Rect2(41.0, 99.0, 70.0, 5.0)
+	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
+	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
+	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
 	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
 		var rect := Rect2(slot_pos, Vector2(icon_size, icon_size))
 		if rect.position.x < tv_left or rect.end.x > machine.TV_STATUS_RIGHT \

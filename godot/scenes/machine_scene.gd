@@ -1331,11 +1331,12 @@ const BOOST_ICON_GAP := 3.0
 # Issue #181: fixed authored slots for the item icons, filled right to left. Every
 # other thing that owns the TV is measured art, and between them the only clean band
 # left is y81..93: the dealer bar runs to y77 with its icon to y80, the goal number
-# starts at y91 (x69..81) and the fill bar at y99. That leaves two 12px slots clear of
-# all of it; further simultaneous boosts fold into a "+N" on the last one. The old
-# layout was a right-aligned row that grew leftwards and pushed its sixth icon onto
-# the left bezel, outside the TV, with nothing clipping it.
-const BOOST_SLOT_POSITIONS: Array[Vector2] = [Vector2(97.0, 81.0), Vector2(82.0, 81.0)]
+# occupies x66..83 at y86..90 and the fill bar starts at y94. That leaves two 12px
+# slots to the right of the goal number and clear of all of it; further simultaneous
+# boosts fold into a "+N" on the last one. The old layout was a right-aligned row that
+# grew leftwards and pushed its sixth icon onto the left bezel, outside the TV, with
+# nothing clipping it.
+const BOOST_SLOT_POSITIONS: Array[Vector2] = [Vector2(97.0, 81.0), Vector2(84.0, 81.0)]
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 # Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
