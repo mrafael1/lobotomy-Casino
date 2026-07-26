@@ -249,6 +249,25 @@ static func check_issue176(out: Array) -> void:
 	if Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50) != 30:
 		_fail(out, "issue176 adrenaline threshold",
 			Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50), 30)
+	# Hallucination promotes a visible pair to a triple wherever it landed. The reels
+	# 2+3 pair used to stay a pair, so the card silently did nothing half the time.
+	for hallucinated_reels in [["eye", "eye", "brain"], ["brain", "eye", "eye"]]:
+		var hallucinated := Evaluate.score_reels(hallucinated_reels, 1.0, true,
+			false, false, 1.0, 0, true)
+		if String(hallucinated["winType"]) != "triple" or int(hallucinated["scoreEarned"]) != 50:
+			_fail(out, "issue181 hallucination pair %s" % str(hallucinated_reels),
+				hallucinated, "triple / 50")
+	# It promotes what already pays; it does not invent a payout. Reels 1+3 only
+	# qualify once Pattern 23 is what makes that combination score at all.
+	var split_pair := Evaluate.score_reels(["eye", "brain", "eye"], 1.0, true,
+		false, false, 1.0, 0, true)
+	if String(split_pair["winType"]) != "miss":
+		_fail(out, "issue181 hallucination invented a 1+3 payout", split_pair, "miss")
+	var split_pattern23 := Evaluate.score_reels(["eye", "brain", "eye"], 1.0, true,
+		true, false, 1.0, 0, true)
+	if String(split_pattern23["winType"]) != "triple":
+		_fail(out, "issue181 hallucination + pattern 23 on reels 1+3",
+			split_pattern23, "triple")
 
 
 static func check_pacte_deck_and_powers(out: Array) -> void:

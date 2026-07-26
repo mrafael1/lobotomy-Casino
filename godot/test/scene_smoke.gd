@@ -2950,6 +2950,40 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
 	if String(run_store.runPhase) != "running":
 		failures.append("issue176: next round did not enter the machine")
+	# Issue #181: the overflow is the change, and only the change. Beating 100 with 152
+	# leaves 52 in the next run.
+	run_store.reset_run_state()
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 0
+	run_store.scoreEarned = 152
+	run_store.begin_wealth_target()
+	var overflow: Dictionary = run_store.complete_wealth_target()
+	if int(overflow.get("remaining", -1)) != 52:
+		failures.append("issue181: paying target 100 out of 152 did not leave 52")
+	run_store.begin_target_round()
+	run_store.start_new_run([], {}, false)
+	if int(run_store.scoreEarned) != 52:
+		failures.append("issue181: the next run did not start on the overflow alone (%d)"
+			% int(run_store.scoreEarned))
+	# A claim that never reached its CONTINUE (scene left, app closed) is settled by the
+	# round rollover instead of being dropped — dropping it handed over the whole score
+	# and left the target unadvanced, so it could be beaten twice.
+	run_store.reset_run_state()
+	meta_store.campaignNeuronsLeft = 3
+	run_store.runPhase = "running"
+	run_store.wealthTargetIndex = 0
+	run_store.scoreEarned = 152
+	run_store.begin_wealth_target()
+	run_store.begin_target_round()
+	run_store.start_new_run([], {}, false)
+	if int(run_store.scoreEarned) != 52:
+		failures.append("issue181: an unpaid target claim carried the whole score (%d)"
+			% int(run_store.scoreEarned))
+	if int(run_store.wealthTargetIndex) != 1:
+		failures.append("issue181: an unpaid target claim left the target unadvanced")
+	if run_store.wealthTargetPending:
+		failures.append("issue181: the settled claim is still pending")
 	# A flatline with campaign health left resumes the campaign at the target it died
 	# on: the money is gone, but the player does not replay targets already beaten.
 	run_store.reset_run_state()

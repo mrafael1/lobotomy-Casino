@@ -119,11 +119,22 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		return _score_triple(a, lucidity_multiplier, allow_free_spin_grant,
 			reward_scale, symbol_reward_bonuses)
 
-	# Hallucination keeps the third reel visible, but the original first-two
-	# visible-pair scoring effect remains active without treating that reel as hidden.
-	if visible_pair_as_triple and a == b:
-		return _score_triple(a, lucidity_multiplier, allow_free_spin_grant,
-			reward_scale, symbol_reward_bonuses)
+	# Hallucination keeps the third reel visible and promotes a visible pair to a
+	# triple. Every pair that would have paid counts, wherever it landed — the reels
+	# 2+3 pair is exactly as visible as the 1+2 one, and a power that forms either is
+	# no different from a spin that lands it. It does not invent a payout: reels 1+3
+	# only qualify while Pattern 23 is what makes that combination pay at all.
+	if visible_pair_as_triple:
+		var hallucinated := ""
+		if a == b:
+			hallucinated = a
+		elif b == c:
+			hallucinated = b
+		elif pattern23_triple and a == c:
+			hallucinated = a
+		if hallucinated != "":
+			return _score_triple(hallucinated, lucidity_multiplier, allow_free_spin_grant,
+				reward_scale, symbol_reward_bonuses)
 
 	if pattern23_triple:
 		var match_sym := ""

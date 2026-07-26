@@ -1232,9 +1232,16 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	campaignNeuronPending = consume_campaign_neuron
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
-	# A target round keeps the change: complete_wealth_target() already paid the
-	# beaten target out of the score, and the payout screen shows that remainder as
-	# the money the player walks away with. A flatline keeps nothing.
+	# A claim that was made but never paid must be settled before the round rolls over,
+	# not dropped by the reset below: dropping it handed the player the whole score
+	# instead of the change and left the target unadvanced, so the same target could be
+	# beaten again. Reaching here with one outstanding means the payout screen never
+	# got its CONTINUE (the scene was left, the app was closed).
+	if continuing_round:
+		_settle_pending_wealth_target()
+	# A target round keeps the change: the beaten target has been paid out of the score
+	# and the payout screen shows that remainder as the money the player walks away
+	# with. A flatline keeps nothing.
 	scoreEarned = scoreEarned if continuing_round else 0
 	lucidityCoins = 0
 	# The advanced target survives a round continuation, and a flatline continuation
@@ -1431,6 +1438,17 @@ func begin_wealth_target() -> Dictionary:
 ## Pays an intermediate target out of the running score. The final target is
 ## intentionally not deducted: it belongs to the full-score Wealth ending.
 func complete_wealth_target() -> Dictionary:
+	var settled := _settle_pending_wealth_target()
+	if settled.is_empty():
+		return {}
+	_commit()
+	return settled
+
+
+## The payout itself, without the commit — the money changing hands. Shared with
+## start_new_run so an outstanding claim is always settled exactly once, whether the
+## player pressed CONTINUE or the round rolled over without them.
+func _settle_pending_wealth_target() -> Dictionary:
 	if not wealthTargetPending:
 		return {}
 	var target := wealthTargetPendingValue if wealthTargetPendingValue > 0 \
@@ -1445,7 +1463,6 @@ func complete_wealth_target() -> Dictionary:
 			lastResult = updated_result
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
-	_commit()
 	return {
 		"target": target,
 		"final": final_target,
