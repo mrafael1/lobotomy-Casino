@@ -31,6 +31,14 @@ func _run() -> void:
 	run_store.selectedAugmentCardIds = [
 		"augment_reward_1", "augment_book", "augment_smart_saving", "augment_passive_gain",
 	]
+	# Powers that are NOT the ones owning emplacements 1-3, so the shot also shows
+	# whether a re-slotted chip lands on its emplacement.
+	run_store.ownedPowerIds = ["swap", "heart", "cheat"]
+	run_store.abilitiesUsed = []
+	run_store.lastResult = {
+		"reels": ["brain", "eye", "pill"], "winType": "miss",
+		"scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0, "isFreeSpin": false,
+	}
 	var scene := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(scene)
 	for i in 10:

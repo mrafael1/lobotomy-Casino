@@ -36,16 +36,19 @@ const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # below a centered box and its digits carry a lopsided side bearing (verified
 # against rendered pixels; same trick as the wealth goal rects).
 const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
-# Objective readout on the TV (issue #181). Two authored full-canvas sheets: the
-# TARGET plate with its fill bar (art at x60..91, y84..94) and the goal number below
-# it (y98..102). The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
+# Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
+# number (art y91..95), the fill bar under it (y99..103), and a two-frame shimmer that
+# loops over the bar. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
 # entry, so its frame index is the target index; the bar's twelve frames are the fill
-# steps. They replace the old TARGET word + red digit labels drawn into the bottom
-# wealth bar, which the new art supersedes.
+# steps. They replace the TARGET word + red digit labels that used to be drawn into
+# the bottom wealth bar.
 const TARGET_BAR_SHEET := "machine new view/target_bar.png"
 const TARGET_BAR_FRAME_COUNT := 12
 const TARGET_GOALS_SHEET := "machine new view/target_goals.png"
 const TARGET_GOALS_FRAME_COUNT := 8
+const TARGET_BAR_ANIM_SHEET := "machine new view/target_bar_animation.png"
+const TARGET_BAR_ANIM_FRAME_COUNT := 2
+const TARGET_BAR_ANIM_FRAME_TIME := 0.42
 const TARGET_TV_Z_INDEX := 8 # above the cabinet and callout sheets, below the icons
 # Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
 # the lever animation starts.
@@ -110,10 +113,16 @@ const POWER_HITS := {
 	"swap": { "left": 105.0, "top": 223.0, "width": 13.0, "height": 15.0 },
 }
 const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
-# Per-emplacement pixel nudge applied to whichever power occupies each of the three
-# visible slots. The authored sheets place the middle chip a few pixels too far to
-# the right against the machine art, so slot two sits 4px left of its sheet origin.
-const POWER_SLOT_NUDGE_X: Array[float] = [0.0, -4.0, 0.0]
+# Where each power's chip is actually painted in its own sheet, measured from the art
+# (the x=8 sheets divided down to canvas pixels). The hit boxes above are a pixel or
+# two off the art in places, so offsetting a re-slotted power by hit boxes left it
+# beside the emplacement rather than on it — swap in slot two landed 5px left of where
+# shift sits. Slotting is done art-to-art so a power lands exactly where the power
+# that owns the emplacement is drawn.
+const POWER_ART_LEFT := {
+	"reroll": 22.0, "shift": 36.0, "memory": 50.0,
+	"rewind": 62.0, "heart": 76.0, "cheat": 90.0, "swap": 104.0,
+}
 const LEVER_FRAME_COUNT := 6
 const LEVER_FRAME_TIME := 0.042
 const LEVER_HOLD_TIME := 0.055
@@ -331,14 +340,14 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
 # Pressing it opens the current card(s) and effects.
-# Issue #181: the held augments read as a row along the TV's bottom-left with bigger
-# icons. x34 keeps the row a comfortable margin inside the TV, and three 11px badges
-# end at x66 — one pixel clear of the TARGET goal number, which starts at x67.
-const PACTE_AUGMENT_BADGE_POS := Vector2(34.0, 96.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(11.0, 11.0)
-const PACTE_AUGMENT_BADGE_PITCH := 11.0
+# Issue #181: the held augments sit on the power bar, continuing the row after the
+# third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
+# and the same 14px pitch, so the whole strip reads as one row of chips.
+const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
+const PACTE_AUGMENT_BADGE_PITCH := 14.0
 const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 9.0
+const PACTE_AUGMENT_ICON_SIZE := 10.0
 const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
@@ -390,6 +399,10 @@ const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
 const WEALTH_COIN_ORIGIN := Vector2(74.0, 252.0)
 const POWER_COIN_SIZE := 8.0
+const POWER_COIN_ASSET := "ui/power_coin.png"
+# The jackpot pays in the machine's own currency, so its spray is lucidity coins —
+# the same coin the dealer and upgrade screens count credits in — not power chips.
+const LUCIDITY_COIN_ASSET := "ui/coin.png"
 const POWER_COIN_FLIGHT_TIME := 0.64
 const POWER_COIN_POP_SHEET := "machine new view/power coin animation.png"
 const POWER_COIN_POP_FRAMES := 4
@@ -639,6 +652,8 @@ var _free_spin_overlay_active := false
 var _wealth_odometer: WealthOdometer = null
 var _target_bar_sprite: Sprite2D = null
 var _target_goals_sprite: Sprite2D = null
+var _target_bar_anim_sprite: Sprite2D = null
+var _target_bar_anim_time := 0.0
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
 var _tv_blackout_rect: ColorRect = null
@@ -1209,7 +1224,26 @@ func _build_target_readout() -> void:
 	_target_goals_sprite = _build_full_canvas_sheet(TARGET_GOALS_SHEET, TARGET_GOALS_FRAME_COUNT)
 	if _target_goals_sprite != null:
 		_target_goals_sprite.z_index = TARGET_TV_Z_INDEX
+	# The shimmer plays underneath the bar, so the authored fill always reads on top
+	# of it rather than being animated over.
+	_target_bar_anim_sprite = _build_full_canvas_sheet(
+		TARGET_BAR_ANIM_SHEET, TARGET_BAR_ANIM_FRAME_COUNT)
+	if _target_bar_anim_sprite != null:
+		_target_bar_anim_sprite.z_index = TARGET_TV_Z_INDEX - 1
 	_refresh_target_readout()
+
+
+## Two-frame loop over the fill bar. Driven from _process rather than a tween so it
+## survives the tween sweeps that clear the run's transient effects.
+func _advance_target_bar_animation(delta: float) -> void:
+	if _target_bar_anim_sprite == null or not _target_bar_anim_sprite.visible:
+		return
+	_target_bar_anim_time += delta
+	if _target_bar_anim_time < TARGET_BAR_ANIM_FRAME_TIME:
+		return
+	_target_bar_anim_time = fmod(_target_bar_anim_time, TARGET_BAR_ANIM_FRAME_TIME)
+	_set_sheet_frame(_target_bar_anim_sprite,
+		(_target_bar_anim_sprite.frame + 1) % TARGET_BAR_ANIM_FRAME_COUNT)
 
 ## The goal frames are authored one per WEALTH_TARGETS entry, so the frame index IS the
 ## target index. The bar fills with progress toward the CURRENT target and therefore
@@ -1225,6 +1259,8 @@ func _refresh_target_readout() -> void:
 		_target_bar_sprite.visible = should_show
 	if _target_goals_sprite != null:
 		_target_goals_sprite.visible = should_show
+	if _target_bar_anim_sprite != null:
+		_target_bar_anim_sprite.visible = should_show
 	if not should_show:
 		return
 	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
@@ -1292,15 +1328,14 @@ func _build_power_bar() -> void:
 ## bezel. Built once; refreshed each HUD update.
 const BOOST_ICON_SIZE := 12.0
 const BOOST_ICON_GAP := 3.0
-# Issue #181: the item icons live in a fixed column down the TV's right edge. The
-# slots are authored rather than derived so they stay clear of everything else that
-# owns the screen — the dealer icon (x100..114, y59..80), the dealer bar art above it,
-# and the TARGET plate (x60..91). That free corner is x92..108 by y82..108, which is
-# exactly two 12px slots; further simultaneous boosts fold into a "+N" on the last.
-# The old layout was a right-aligned row that grew leftwards and pushed its sixth icon
-# onto the left bezel, outside the TV, with nothing clipping it.
-const BOOST_COLUMN_X := 96.0
-const BOOST_COLUMN_SLOT_Y: Array[float] = [82.0, 95.0]
+# Issue #181: fixed authored slots for the item icons, filled right to left. Every
+# other thing that owns the TV is measured art, and between them the only clean band
+# left is y81..93: the dealer bar runs to y77 with its icon to y80, the goal number
+# starts at y91 (x69..81) and the fill bar at y99. That leaves two 12px slots clear of
+# all of it; further simultaneous boosts fold into a "+N" on the last one. The old
+# layout was a right-aligned row that grew leftwards and pushed its sixth icon onto
+# the left bezel, outside the TV, with nothing clipping it.
+const BOOST_SLOT_POSITIONS: Array[Vector2] = [Vector2(97.0, 81.0), Vector2(82.0, 81.0)]
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 # Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
@@ -1386,7 +1421,7 @@ func _boost_is_active(boost: Dictionary) -> bool:
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	var column_capacity := mini(BOOST_COLUMN_SLOT_Y.size(), _boost_indicator_slots.size())
+	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
 	var active_total := 0
 	for boost in DURATION_BOOSTS:
 		if _boost_is_active(boost):
@@ -1408,7 +1443,7 @@ func _refresh_boost_indicators() -> void:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
 		var slot: Control = s["slot"]
-		slot.position = Vector2(BOOST_COLUMN_X, BOOST_COLUMN_SLOT_Y[col])
+		slot.position = BOOST_SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
 		cn.text = str(maxi(0, remaining))
@@ -2350,6 +2385,7 @@ func _process(delta: float) -> void:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
+	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
 	_try_start_power_coin_flow()
@@ -3710,9 +3746,15 @@ func _snap_power_bar() -> void:
 		RunStateStore.commit_power_restore(String(power_id))
 
 func _make_power_coin(pos: Vector2) -> Sprite2D:
+	return _make_flying_coin(pos, POWER_COIN_ASSET)
+
+## Shared builder for the coins that fly around the cabinet. `asset` picks which
+## currency is in flight: the power chip that restores a power, or the lucidity coin
+## the machine actually pays out.
+func _make_flying_coin(pos: Vector2, asset: String) -> Sprite2D:
 	if _coin_layer == null:
 		return null
-	var tex := _load_texture("ui/power_coin.png", true)
+	var tex := _load_texture(asset, true)
 	if tex == null:
 		return null
 	var coin := Sprite2D.new()
@@ -3726,9 +3768,10 @@ func _make_power_coin(pos: Vector2) -> Sprite2D:
 	_coin_layer.add_child(coin)
 	return coin
 
-## Casino-TV payout spray (issue #181): coins erupt out of the cash tray mouth and arc
-## up through the cabinet while the wealth reels roll. Purely decorative — no coin
-## corresponds to a Lucidity unit. Returns how long the spray runs so the caller can
+## Casino-TV payout spray (issue #181): lucidity coins erupt out of the cash tray
+## mouth and arc up through the cabinet while the wealth reels roll. Purely decorative
+## — no coin corresponds to a Lucidity unit, it just pays in the machine's own
+## currency rather than power chips. Returns how long the spray runs so the caller can
 ## keep the sequence locked until the money has finished landing.
 func _spawn_jackpot_coin_fountain() -> float:
 	# Back-to-back jackpots (a rescore, a power) must not stack two tweens.
@@ -3743,7 +3786,7 @@ func _spawn_jackpot_coin_fountain() -> float:
 	for i in JACKPOT_COIN_COUNT:
 		var origin := tray + Vector2(
 			rng.randf_range(-JACKPOT_COIN_ORIGIN_JITTER, JACKPOT_COIN_ORIGIN_JITTER), 0.0)
-		var coin := _make_power_coin(origin)
+		var coin := _make_flying_coin(origin, LUCIDITY_COIN_ASSET)
 		if coin == null:
 			break
 		_jackpot_coins.append(coin)
@@ -4171,14 +4214,14 @@ func _apply_power_slot(power_id: String, slot_index: int) -> void:
 	var source: Dictionary = POWER_HITS[power_id]
 	var target_id := POWER_IDS[slot_index]
 	var target: Dictionary = POWER_HITS[target_id]
-	var nudge_x := POWER_SLOT_NUDGE_X[slot_index]
 	var button: Button = _power_buttons[power_id]
-	button.position = Vector2(float(target["left"]) + nudge_x, target["top"])
+	button.position = Vector2(target["left"], target["top"])
 	button.size = Vector2(maxf(float(target["width"]), 11.0), float(target["height"]))
 	var sprite: Sprite2D = _power_sprites[power_id]
 	if sprite != null:
+		# Art to art, not hit box to hit box: the chip lands exactly on the emplacement.
 		sprite.position = Vector2(
-			float(target["left"]) - float(source["left"]) + nudge_x,
+			float(POWER_ART_LEFT[target_id]) - float(POWER_ART_LEFT[power_id]),
 			float(target["top"]) - float(source["top"]))
 
 func _short_name(consumable_id: String) -> String:
@@ -7231,8 +7274,11 @@ func _refresh_pacte_augment_badge() -> void:
 	if _pacte_augment_badges.is_empty():
 		return
 	var ids := _active_pacte_augment_ids()
-	var should_show := not ids.is_empty() and _tv_info_pop_sources.is_empty()
-	if not should_show:
+	# The row lives on the power bar now, not on the TV, so a TV callout no longer
+	# hides it — only the description popup steps aside for one.
+	if not _tv_info_pop_sources.is_empty():
+		_hide_pacte_augment_popup()
+	if ids.is_empty():
 		for entry: Dictionary in _pacte_augment_badges:
 			(entry["badge"] as Button).visible = false
 		_hide_pacte_augment_popup()

@@ -4334,25 +4334,29 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
-	# Issue #181: stacking is vertical down the TV's right edge — same column (x),
-	# second icon BELOW the first, and every slot clear of the TV bounds and of the
-	# dealer icon's band.
+	# Issue #181: the slots fill right to left and every one of them has to stay clear
+	# of the TV bounds, the dealer icon, and the authored TARGET art below.
 	var p0: Vector2 = (slots[0]["slot"] as Control).position
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
-	if not is_equal_approx(p0.x, p1.x) or not (p1.y > p0.y):
-		failures.append("issue181: boost icons did not stack vertically (%s vs %s)" % [p0, p1])
+	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
+		failures.append("issue181: boost icons did not fill right to left (%s vs %s)" % [p0, p1])
 	var tv_left := float(machine.TV_SCREEN["left"])
 	var tv_top := float(machine.TV_SCREEN["top"])
 	var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
 	var icon_size: float = machine.BOOST_ICON_SIZE
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
-	for slot_y: float in machine.BOOST_COLUMN_SLOT_Y:
-		var rect := Rect2(Vector2(machine.BOOST_COLUMN_X, slot_y), Vector2(icon_size, icon_size))
+	# Measured art extents of the TV's other occupants (see the constants' comment).
+	var goal_rect := Rect2(69.0, 91.0, 13.0, 5.0)
+	var fill_bar_rect := Rect2(41.0, 99.0, 70.0, 5.0)
+	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
+		var rect := Rect2(slot_pos, Vector2(icon_size, icon_size))
 		if rect.position.x < tv_left or rect.end.x > machine.TV_STATUS_RIGHT \
 				or rect.position.y < tv_top or rect.end.y > tv_bottom:
 			failures.append("issue181: boost slot %s falls outside the TV" % rect)
 		if rect.intersects(dealer_rect):
 			failures.append("issue181: boost slot %s collides with the dealer icon" % rect)
+		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):
+			failures.append("issue181: boost slot %s collides with the TARGET art" % rect)
 	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slot 0 is
 	# the Energy Drink no-decay rush (pure upside → "+" only); slot 1 is the Cocktail
 	# (rarity bonus with a live pair/triple tax → mixed, both "+" and "-").
@@ -6976,25 +6980,20 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if pacte_badge.position != machine.PACTE_AUGMENT_BADGE_POS \
 				or pacte_badge.size != machine.PACTE_AUGMENT_BADGE_SIZE:
 			failures.append("pacte: augment badge geometry changed unexpectedly")
-		var tv_left := float(machine.TV_SCREEN["left"])
-		var tv_top := float(machine.TV_SCREEN["top"])
-		var tv_right := tv_left + float(machine.TV_SCREEN["width"])
-		var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
-		if pacte_badge.position.x < tv_left + 10.0 \
-				or pacte_badge.position.x + pacte_badge.size.x > tv_right:
-			failures.append("pacte: augment badge is not at least 10px inside the TV on X")
-		if pacte_badge.position.y < tv_top \
-				or pacte_badge.position.y + pacte_badge.size.y > tv_bottom:
-			failures.append("pacte: augment badge is outside the TV vertically")
-		# Issue #181: the augments read as a row, and it has to stop before the TARGET
-		# goal number that sits in the middle of the TV's bottom band (x67..84).
+		# Issue #181: the augments continue the power bar rather than sitting on the TV —
+		# same baseline as the three emplacements, same pitch, starting after the third.
 		if machine._pacte_augment_badges.size() != machine.PACTE_AUGMENT_BADGE_MAX:
 			failures.append("issue181: the augment row was not built to its full width")
+		var third_slot: Dictionary = machine.POWER_HITS[machine.POWER_IDS[2]]
+		if not is_equal_approx(machine.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
+			failures.append("issue181: the augment row is not on the power bar baseline")
+		if machine.PACTE_AUGMENT_BADGE_POS.x <= float(machine.POWER_ART_LEFT[machine.POWER_IDS[2]]):
+			failures.append("issue181: the augment row does not start after the third power")
 		var augment_row_end: float = machine.PACTE_AUGMENT_BADGE_POS.x \
 			+ float(machine.PACTE_AUGMENT_BADGE_MAX - 1) * machine.PACTE_AUGMENT_BADGE_PITCH \
 			+ machine.PACTE_AUGMENT_BADGE_SIZE.x
-		if augment_row_end > 67.0:
-			failures.append("issue181: the augment row runs into the TARGET goal number (ends %.1f)"
+		if augment_row_end > 160.0:
+			failures.append("issue181: the augment row runs off the canvas (ends %.1f)"
 				% augment_row_end)
 		if machine.PACTE_AUGMENT_ICON_SIZE < 8.0:
 			failures.append("issue181: the augment icons were not enlarged")
@@ -7140,12 +7139,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		var target_hit: Dictionary = machine.POWER_HITS[target_id]
 		var ordered_button := machine._power_buttons.get(ordered_id) as Button
 		var ordered_sprite := machine._power_sprites.get(ordered_id) as Sprite2D
-		# Each emplacement carries its own pixel nudge against the machine art, and it
-		# applies to whichever power lands there.
-		var nudge_x: float = machine.POWER_SLOT_NUDGE_X[slot_index]
-		var expected_position := Vector2(float(target_hit["left"]) + nudge_x, float(target_hit["top"]))
+		# The chip lands on the emplacement's art, not beside it: the offset is measured
+		# art to art, so a re-slotted power sits exactly where the power that owns the
+		# emplacement is drawn.
+		var expected_position := Vector2(float(target_hit["left"]), float(target_hit["top"]))
 		var expected_offset := Vector2(
-			float(target_hit["left"]) - float(source_hit["left"]) + nudge_x,
+			float(machine.POWER_ART_LEFT[target_id]) - float(machine.POWER_ART_LEFT[ordered_id]),
 			float(target_hit["top"]) - float(source_hit["top"]))
 		if ordered_button == null or not ordered_button.visible \
 				or ordered_button.position != expected_position:
