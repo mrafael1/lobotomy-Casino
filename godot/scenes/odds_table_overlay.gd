@@ -122,6 +122,14 @@ func open_augment_picker() -> void:
 	_rebuild()
 	visible = true
 
+## Re-reads the live levels. The dealer calls this after a Symbol Level augment so
+## an odds table still on screen shows the level it just paid for.
+func refresh_levels() -> void:
+	if _level_sprites.is_empty():
+		return
+	_hide_pct_popup()
+	_refresh()
+
 func _close() -> void:
 	# Closing finalizes: staged purchases become permanent, leftover tokens are
 	# banked for the next odds menu, and the screen locks until the next run.
@@ -489,20 +497,22 @@ func _percent_color(symbol_id: String) -> Color:
 	var color: Variant = SYMBOL_PERCENT_COLORS.get(symbol_id, percent_color)
 	return color if color is Color else percent_color
 
-## A symbol's current draw chance (percent) with all persisted + staged levels
-## applied — the same additive weight layering Evaluate._build_weights uses for
-## the reel roll, minus run-only modifiers (book/brain boosts). The machine
-## scene's score table duplicates this math (autoloads are unreachable from
-## static funcs, so it can't be shared as a static helper).
+## A symbol's current draw chance (percent) with every level that the reels
+## actually roll on applied — persisted, staged this phase, and bought as a Symbol
+## Level augment — the same additive weight layering Evaluate._build_weights uses,
+## minus run-only modifiers (book/brain boosts). Both modes read the same level:
+## an augment is live from the moment it is bought, so the odds phase must not
+## keep quoting the pre-augment chance. The machine scene's score table duplicates
+## this math (autoloads are unreachable from static funcs, so it can't be shared
+## as a static helper).
 func _symbol_percent(symbol_id: String) -> float:
 	var total := 0.0
 	var weight := 0.0
 	for sym in Symbols.BASE_SYMBOL_CYCLE:
 		var s := String(sym)
-		var level := RunStateStore.augment_symbol_level(s) if _augment_mode \
-			else RunStateStore.odds_upgrade_level(s)
 		var w := float(int(Symbols.WEIGHT[s])
-			+ level * RunStateStore.probability_increase_per_upgrade)
+			+ RunStateStore.effective_symbol_level(s)
+				* RunStateStore.probability_increase_per_upgrade)
 		total += w
 		if s == symbol_id:
 			weight = w
@@ -534,10 +544,12 @@ func _refresh() -> void:
 		# odds_max_tokens (8) by the store, so the art can always show it.
 		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 1)
 	for symbol_id in _level_sprites:
-		# Augment mode shows the EFFECTIVE level (persisted + augment levels) and
-		# lets "+" push past odds_max_level, up to the level-9 hard cap.
-		var level := RunStateStore.augment_symbol_level(String(symbol_id)) if _augment_mode \
-			else RunStateStore.odds_upgrade_level(String(symbol_id))
+		# Both modes render the EFFECTIVE level — persisted, staged, and augment
+		# levels — because that is what the reels roll on. Augment mode lets "+"
+		# push past odds_max_level, up to the level-9 hard cap; the odds phase buys
+		# only the permanent track, so its "+" gates on that level alone.
+		var level := RunStateStore.effective_symbol_level(String(symbol_id))
+		var purchase_level := RunStateStore.odds_upgrade_level(String(symbol_id))
 		var spr := _level_sprites[symbol_id] as Sprite2D
 		if spr != null:
 			var base_x := LEVEL_LAST_ROW_IMG.position.x \
@@ -550,7 +562,8 @@ func _refresh() -> void:
 				plus.disabled = String(symbol_id) == "flatline" \
 					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP
 			else:
-				plus.disabled = level >= RunStateStore.odds_max_level \
+				plus.disabled = purchase_level >= RunStateStore.odds_max_level \
+					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP \
 					or RunStateStore.odds_token_cost(String(symbol_id)) > RunStateStore.oddsTokensRemaining
 			_dim_button_art(_plus_art.get(symbol_id) as Sprite2D, plus.disabled)
 		var minus := _minus_buttons.get(symbol_id) as Button

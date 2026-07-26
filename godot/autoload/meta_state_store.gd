@@ -700,26 +700,31 @@ func mark_tutorial_seen(save_immediately := true) -> void:
 
 func save_state() -> void:
 	_flush_playtime()
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if f == null:
-		push_error("Could not open save for write: " + SAVE_PATH)
-		return
-	f.store_string(JSON.stringify(_as_dict()))
-	f.close()
+	SaveIO.write_text(SAVE_PATH, JSON.stringify(_as_dict()))
 
 func load_state() -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
-		return # fresh install — keep canonical v2 defaults
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if f == null:
-		return
-	var txt := f.get_as_text()
-	f.close()
+	# A truncated or non-object primary falls through to the backup copy rather than
+	# silently starting the player over on a fresh campaign.
+	var txt := SaveIO.read_text(SAVE_PATH, _save_text_is_readable)
+	if txt.is_empty():
+		return # fresh install (or nothing usable) — keep canonical defaults
 	var parsed: Variant = JSON.parse_string(txt)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_error("Corrupt save (not an object); keeping defaults.")
 		return
 	_apply(_migrate(parsed))
+
+func _save_text_is_readable(text: String) -> bool:
+	return typeof(JSON.parse_string(text)) == TYPE_DICTIONARY
+
+## Playtime accumulated since the last write, and anything else banked in memory,
+## would otherwise die with the process. The close request (and the mobile
+## background/pause notifications) is the last chance to flush it to disk.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST \
+			or what == NOTIFICATION_WM_GO_BACK_REQUEST \
+			or what == NOTIFICATION_APPLICATION_PAUSED:
+		save_state()
 
 # Migration seam mirroring the save migration seam. Ships empty: v2 is the
 # only shape known to have shipped, so no speculative v1->v2 migration is written.

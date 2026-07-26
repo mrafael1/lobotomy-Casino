@@ -57,6 +57,8 @@ func _run() -> void:
 	_check_target_readout_181(machine, run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
 	_check_water_wealth_169(machine, run_store, meta_store, failures)
+	_check_off_spin_target_proc(machine, run_store, meta_store, failures)
+	_check_augment_level_readouts(machine, run_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
 	await _check_upgrades_scene(failures)
 	_check_smart_save_retention(failures)
@@ -939,6 +941,120 @@ func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
+
+## Reaching an intermediate target is a score fact, not a spin outcome: an item (or a
+## power that rescores the reveal) that pushes the score over the line must pop the
+## payout screen right there. A dealer queued for that same moment stands down — the
+## round he belonged to is over, and the between-run dealer waits on the other side.
+func _check_off_spin_target_proc(machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.campaignNeuronsLeft = 5
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 6
+	run_store.wealthTargetIndex = 0 # first ladder target
+	var target: int = run_store.current_wealth_target()
+	run_store.scoreEarned = target - 1
+	run_store.lucidityCoins = 20
+	run_store.runConsumables = { "item_water": 1 }
+	run_store.lastResult = {
+		"scoreEarned": target - 1, "coinsEarned": target - 1, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._set_sequence_lock(false)
+	machine._set_display_lucidity(target - 1, false)
+	machine._on_stash_pressed(0)
+	if not bool(machine._wealth_target_transition_active):
+		failures.append("off-spin target: an item beating the target did not pop the payout screen")
+	if machine._dealer_overlay != null or machine._dealer_offer_popup != null:
+		failures.append("off-spin target: the dealer walked in over the beaten target")
+
+	# A dealer queued for that same moment stands down rather than opening over (or
+	# after) the payout screen — the round he belonged to is over.
+	run_store.dealerIncoming = true
+	run_store.dealerOfferIds = ["item_water"]
+	machine._pending_dealer_offer = false
+	machine._present_dealer_or_defer()
+	if machine._dealer_overlay != null or machine._dealer_offer_popup != null:
+		failures.append("off-spin target: a queued dealer opened during the payout")
+	if bool(machine._pending_dealer_offer):
+		failures.append("off-spin target: the dealer stayed queued behind the beaten target")
+	machine._pending_dealer_offer = true
+	machine._maybe_present_pending_dealer()
+	if machine._dealer_overlay != null or machine._dealer_offer_popup != null:
+		failures.append("off-spin target: a deferred dealer slipped in over the beaten target")
+	machine._stop_wealth_target_transition()
+	machine._wealth_target_transition_active = false
+
+	# The stand-down is the target's doing, not a blanket block: with no target due the
+	# same queued dealer opens normally.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 6
+	run_store.scoreEarned = 0
+	run_store.dealerIncoming = true
+	run_store.dealerOfferIds = ["item_water"]
+	machine._pending_dealer_offer = false
+	machine._present_dealer_or_defer()
+	if machine._dealer_overlay == null and machine._dealer_offer_popup == null \
+			and not bool(machine._pending_dealer_offer):
+		failures.append("off-spin target: the dealer stopped coming without a target to pay")
+	machine._close_dealer(false)
+	machine._pending_dealer_offer = false
+
+	# A power that rescores the reveal past the line pops it the same way — the player
+	# never has to pull the lever again just to be told the target was already beaten.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 6
+	run_store.wealthTargetIndex = 0
+	run_store.scoreEarned = run_store.current_wealth_target() + 25
+	run_store.lastResult = {
+		"scoreEarned": run_store.scoreEarned, "coinsEarned": 0, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	machine._set_sequence_lock(false)
+	if not bool(machine._proc_wealth_target()):
+		failures.append("off-spin target: a power-made score did not proc the target")
+	machine._stop_wealth_target_transition()
+	machine._wealth_target_transition_active = false
+	machine._set_sequence_lock(false)
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+
+## A Symbol Level augment is a live weight the moment it is bought, so every readout
+## that quotes a level or a draw chance — the odds table meter, its "i" peek, the
+## machine's score table — has to include it.
+func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	var base_level: int = run_store.effective_symbol_level("eye")
+	var base_percent: float = machine._symbol_draw_percent("eye")
+	run_store.symbolAugmentLevels = { "eye": 2 }
+	if run_store.effective_symbol_level("eye") != base_level + 2:
+		failures.append("augment readouts: the effective symbol level ignored the augment")
+	if machine._symbol_draw_percent("eye") <= base_percent:
+		failures.append("augment readouts: the score table quoted the pre-augment draw chance")
+
+	# Kept untyped: naming OddsTableOverlay here would compile that script (and its
+	# Assets autoload lookups) before the autoloads exist.
+	var overlay: Node = (load("res://scenes/odds_table_overlay.tscn") as PackedScene).instantiate()
+	get_root().add_child(overlay)
+	overlay._rebuild()
+	if overlay._symbol_percent("eye") <= base_percent:
+		failures.append("augment readouts: the odds table quoted the pre-augment draw chance")
+	var meter := overlay._level_sprites.get("eye") as Sprite2D
+	var augmented_frame := int(meter.region_rect.position.x / overlay.ART_FRAME_W) \
+		if meter != null else -1
+	run_store.symbolAugmentLevels = {}
+	overlay.refresh_levels()
+	var plain_frame := int(meter.region_rect.position.x / overlay.ART_FRAME_W) \
+		if meter != null else -1
+	if meter == null or augmented_frame != plain_frame + 2:
+		failures.append("augment readouts: the odds table meter did not show the augment levels")
+	overlay.queue_free()
+	run_store.reset_run_state()
 
 func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures: Array) -> void:
 	var expected := {
@@ -4061,16 +4177,20 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
 
-# Transient TV callouts temporarily own the information area so the FREE SPIN
-# banner and dealer countdown cannot visually overwrite PAIR/TRIPLE or power pops.
+# The TV has one owner at a time. A PAIR/TRIPLE or power callout owns it while it
+# plays, and the lit FREE SPIN banner owns it for as long as the credit lasts: each
+# hides every persistent readout on the screen — the dealer countdown and his icon,
+# the objective plate, the item/boost icons. A callout outranks the banner, so it
+# hides that too and hands the screen back to it when it closes.
 func _check_tv_information_priority(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.runPhase = "running"
 	run_store.neurons = 10
-	run_store.freeSpinsRemaining = 1
+	run_store.freeSpinsRemaining = 0
 	run_store.dealerCountdown = 5
 	run_store.betMultiplier = 3
+	run_store.cocktailBoostSpins = 3 # one active boost, so a TV item icon is up
 	machine._hud_delta_hold = false
 	machine._spinning_anim = false
 	machine._spin_launch_pending = false
@@ -4082,28 +4202,51 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	var free_spin := machine._free_spin_sprite as CanvasItem
 	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
 	var dealer_icon := machine._dealer_icon as CanvasItem
-	if free_spin == null or not free_spin.visible:
-		failures.append("TV callout priority: FREE SPIN banner did not establish its baseline")
+	var target_bar := machine._target_bar_sprite as CanvasItem
+	var boost_slot: CanvasItem = null
+	if not machine._boost_indicator_slots.is_empty():
+		boost_slot = (machine._boost_indicator_slots[0] as Dictionary)["slot"] as CanvasItem
+	if free_spin != null and free_spin.visible:
+		failures.append("TV callout priority: FREE SPIN banner showed without a credit")
 	if dealer_bar == null or not dealer_bar.visible or dealer_icon == null or not dealer_icon.visible:
 		failures.append("TV callout priority: dealer information did not establish its baseline")
+	if target_bar == null or not target_bar.visible:
+		failures.append("TV callout priority: objective readout did not establish its baseline")
+	if boost_slot == null or not boost_slot.visible:
+		failures.append("TV callout priority: boost icon did not establish its baseline")
+
+	# A banked free spin lights the banner, and the banner takes the whole screen.
+	run_store.freeSpinsRemaining = 1
+	machine._update_hud()
+	if free_spin == null or not free_spin.visible:
+		failures.append("TV callout priority: FREE SPIN banner did not light")
+	if (dealer_bar != null and dealer_bar.visible) or (dealer_icon != null and dealer_icon.visible) \
+			or (target_bar != null and target_bar.visible) \
+			or (boost_slot != null and boost_slot.visible):
+		failures.append("TV callout priority: FREE SPIN did not hide persistent TV information")
 
 	machine._play_win_animation("pair", 20)
 	if machine._win_anim_sprite == null or not machine._win_anim_sprite.visible:
 		failures.append("TV callout priority: PAIR callout did not show")
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible) \
-			or (dealer_icon != null and dealer_icon.visible):
+			or (dealer_icon != null and dealer_icon.visible) \
+			or (target_bar != null and target_bar.visible) \
+			or (boost_slot != null and boost_slot.visible):
 		failures.append("TV callout priority: PAIR did not hide persistent TV information")
 	machine._refresh_tv_indicators()
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible) \
-			or (dealer_icon != null and dealer_icon.visible):
+			or (dealer_icon != null and dealer_icon.visible) \
+			or (target_bar != null and target_bar.visible) \
+			or (boost_slot != null and boost_slot.visible):
 		failures.append("TV callout priority: HUD refresh overrode the PAIR priority")
+	# Closing the callout hands the screen back to the banner, not to the readouts.
 	machine._stop_win_animation()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
-	if dealer_bar != null and not dealer_bar.visible:
-		failures.append("TV callout priority: dealer bar did not restore after PAIR")
-	if dealer_icon != null and not dealer_icon.visible:
-		failures.append("TV callout priority: dealer icon did not restore after PAIR")
+	if (dealer_bar != null and dealer_bar.visible) or (dealer_icon != null and dealer_icon.visible) \
+			or (target_bar != null and target_bar.visible) \
+			or (boost_slot != null and boost_slot.visible):
+		failures.append("TV callout priority: PAIR handed the TV back over the FREE SPIN banner")
 
 	# Power callouts share the same priority, and overlapping callouts keep it held
 	# until the last owner closes.
@@ -4128,10 +4271,21 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	machine._stop_power_animation()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after overlapping pops")
-	if dealer_bar != null and not dealer_bar.visible:
-		failures.append("TV callout priority: dealer bar did not restore after overlapping pops")
 	if not machine._tv_info_pop_sources.is_empty():
 		failures.append("TV callout priority: stale callout owner remained active")
+
+	# Spending the last credit puts the banner out and every readout comes back.
+	run_store.freeSpinsRemaining = 0
+	machine._update_hud()
+	if free_spin != null and free_spin.visible:
+		failures.append("TV callout priority: banner outlived its credit")
+	if dealer_bar == null or not dealer_bar.visible or dealer_icon == null or not dealer_icon.visible:
+		failures.append("TV callout priority: dealer information did not restore after FREE SPIN")
+	if target_bar == null or not target_bar.visible:
+		failures.append("TV callout priority: objective readout did not restore after FREE SPIN")
+	if boost_slot == null or not boost_slot.visible:
+		failures.append("TV callout priority: boost icon did not restore after FREE SPIN")
+	run_store.cocktailBoostSpins = 0
 	run_store.reset_run_state()
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
@@ -6268,6 +6422,93 @@ func _check_run_persistence_111(run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):
 		failures.append("persistence: reset left a stale run snapshot behind")
+	_check_save_durability(run_store, meta_store, failures)
+
+## Saves must survive a bad write. Both files are written atomically through SaveIO —
+## a temp file that only replaces the real one once it is completely on disk — and the
+## previous good copy is kept as a backup that a corrupt primary falls back to. A run
+## snapshot from a newer schema, and a field whose type changed between builds, are
+## rejected rather than half-applied over the live state.
+func _check_save_durability(run_store: Node, meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+
+	# Atomic write: nothing is left behind, and the previous copy is kept as a backup.
+	SaveIO.remove(run_store.RUN_SAVE_PATH)
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 321
+	run_store._commit()
+	run_store.scoreEarned = 654
+	run_store._commit()
+	if FileAccess.file_exists(run_store.RUN_SAVE_PATH + SaveIO.TMP_SUFFIX):
+		failures.append("save durability: a temp file survived a committed write")
+	if not FileAccess.file_exists(run_store.RUN_SAVE_PATH + SaveIO.BACKUP_SUFFIX):
+		failures.append("save durability: the previous run snapshot was not backed up")
+
+	# A truncated primary falls back to the backup instead of losing the session.
+	var truncated := FileAccess.open(run_store.RUN_SAVE_PATH, FileAccess.WRITE)
+	if truncated != null:
+		truncated.store_string("{ \"runPhase\": \"runn")
+		truncated.close()
+	run_store.runPhase = "idle"
+	run_store.scoreEarned = 0
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "running" or int(run_store.scoreEarned) != 321:
+		failures.append("save durability: a truncated run snapshot did not fall back to its backup")
+
+	# A snapshot from a newer schema is refused outright, and an unusable file is
+	# dropped so it cannot fail every launch from here on.
+	SaveIO.remove(run_store.RUN_SAVE_PATH)
+	var future := FileAccess.open(run_store.RUN_SAVE_PATH, FileAccess.WRITE)
+	if future != null:
+		future.store_string(var_to_str({
+			"schemaVersion": int(run_store.RUN_SAVE_SCHEMA_VERSION) + 1,
+			"runPhase": "running", "scoreEarned": 999,
+		}))
+		future.close()
+	run_store.runPhase = "idle"
+	run_store.scoreEarned = 0
+	run_store.load_run_state()
+	if String(run_store.runPhase) == "running" or int(run_store.scoreEarned) == 999:
+		failures.append("save durability: a newer-schema snapshot was applied anyway")
+	if FileAccess.file_exists(run_store.RUN_SAVE_PATH):
+		failures.append("save durability: an unusable run snapshot was left on disk")
+
+	# A field whose type changed keeps its reset default rather than aborting the load.
+	SaveIO.remove(run_store.RUN_SAVE_PATH)
+	var mistyped := FileAccess.open(run_store.RUN_SAVE_PATH, FileAccess.WRITE)
+	if mistyped != null:
+		mistyped.store_string(var_to_str({
+			"schemaVersion": int(run_store.RUN_SAVE_SCHEMA_VERSION),
+			"runPhase": "running", "scoreEarned": "not a number", "neurons": 7,
+		}))
+		mistyped.close()
+	run_store.runPhase = "idle"
+	run_store.scoreEarned = 0
+	run_store.neurons = 0
+	run_store.load_run_state()
+	if String(run_store.runPhase) != "running" or int(run_store.neurons) != 7:
+		failures.append("save durability: one mistyped field aborted the whole restore")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("save durability: a mistyped field was forced onto its property")
+
+	# The meta save recovers from a truncated primary the same way.
+	meta_store.lucidityWallet = 4242
+	meta_store.save_state()
+	meta_store.lucidityWallet = 7
+	meta_store.save_state() # the 4242 copy becomes the backup
+	var broken := FileAccess.open(meta_store.SAVE_PATH, FileAccess.WRITE)
+	if broken != null:
+		broken.store_string("{ \"lucidityWallet\":")
+		broken.close()
+	meta_store.lucidityWallet = 0
+	meta_store.load_state()
+	if int(meta_store.lucidityWallet) != 4242:
+		failures.append("save durability: a truncated meta save did not fall back to its backup")
+
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 # Issue #151: a save written after the final neuron drain but before the post-spin
 # ending check must resolve to an ending when the machine scene is rebuilt.

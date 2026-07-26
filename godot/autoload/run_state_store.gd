@@ -397,29 +397,53 @@ func _save_run_state() -> void:
 	if Engine.is_editor_hint():
 		return
 	if not has_resume_state():
-		# No live or resumable post-run session: a stale file must not offer CONTINUE.
-		if FileAccess.file_exists(RUN_SAVE_PATH):
-			DirAccess.remove_absolute(RUN_SAVE_PATH)
+		# No live or resumable post-run session: a stale file (or a stale backup of
+		# one) must not offer CONTINUE.
+		SaveIO.remove(RUN_SAVE_PATH)
 		return
 	var out := { "schemaVersion": RUN_SAVE_SCHEMA_VERSION }
 	for prop in _run_state_properties():
 		out[prop] = get(prop)
-	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.WRITE)
-	if f != null:
-		f.store_string(var_to_str(out))
+	SaveIO.write_text(RUN_SAVE_PATH, var_to_str(out))
+
+## A snapshot is worth loading only when it parses into a dictionary AND was written by
+## a schema this build understands. A file from a newer build is rejected rather than
+## half-applied over the current state.
+func _run_snapshot_is_readable(text: String) -> bool:
+	var data: Variant = str_to_var(text)
+	if not (data is Dictionary):
+		return false
+	return int((data as Dictionary).get("schemaVersion", RUN_SAVE_SCHEMA_VERSION)) \
+		<= RUN_SAVE_SCHEMA_VERSION
+
+## Whether `value` can stand in for a property currently holding `current`. A field
+## whose type changed between builds must not be forced onto the property: set() would
+## reject it and leave the run half-restored, so keeping the reset default is the
+## recoverable outcome. Variant fields (lastResult, dealerOfferIds, …) sit at null
+## between uses and accept anything.
+func _restorable(current: Variant, value: Variant) -> bool:
+	if current == null or value == null:
+		return true
+	var current_type := typeof(current)
+	var value_type := typeof(value)
+	if current_type == value_type:
+		return true
+	# Numbers interchange cleanly (a float snapshot into an int counter); nothing else does.
+	return (current_type == TYPE_INT or current_type == TYPE_FLOAT) \
+		and (value_type == TYPE_INT or value_type == TYPE_FLOAT)
 
 ## Restores a live run snapshot, if one exists. Unknown keys (removed fields)
 ## are skipped; missing keys (new fields) keep their reset defaults.
 func load_run_state() -> void:
-	if Engine.is_editor_hint() or not FileAccess.file_exists(RUN_SAVE_PATH):
+	if Engine.is_editor_hint():
 		return
-	var f := FileAccess.open(RUN_SAVE_PATH, FileAccess.READ)
-	if f == null:
+	# An unreadable primary falls through to the backup copy; when neither is usable the
+	# file is dropped so a corrupt snapshot cannot fail every launch from now on.
+	var text := SaveIO.read_text(RUN_SAVE_PATH, _run_snapshot_is_readable)
+	if text.is_empty():
+		SaveIO.remove(RUN_SAVE_PATH)
 		return
-	var data: Variant = str_to_var(f.get_as_text())
-	if not (data is Dictionary):
-		return
-	var saved := data as Dictionary
+	var saved := str_to_var(text) as Dictionary
 	var saved_phase := String(saved.get("runPhase", ""))
 	var saved_flatline := saved_phase == "over" \
 		and str(saved.get("lastEnding", "")) == "flatline" \
@@ -430,11 +454,15 @@ func load_run_state() -> void:
 	if saved_phase != "running" and saved_phase != "pre_run" \
 			and saved_phase != "pacte_initial" and saved_phase != "pacte_threshold" \
 			and not saved_flatline and not saved_target_break:
-		DirAccess.remove_absolute(RUN_SAVE_PATH)
+		SaveIO.remove(RUN_SAVE_PATH)
 		return
 	for prop in _run_state_properties():
-		if saved.has(prop):
-			set(prop, saved[prop])
+		if not saved.has(prop):
+			continue
+		var value: Variant = saved[prop]
+		if not _restorable(get(prop), value):
+			continue
+		set(prop, value)
 	# Older live-run saves did not track which of the two campaign Pacte visits
 	# had already been completed. The selected card history is enough to recover
 	# that count without changing the visible run state.
@@ -2783,10 +2811,17 @@ func consumable_price(consumable_id: String) -> int:
 	return ChipAugments.discounted_price(int(cmap[consumable_id]["shopCost"]),
 		int(chipAugmentsPurchased.get("aug_consumable_discount", 0)))
 
-## Effective symbol level = persisted odds level + this cycle's augment levels.
-## Augments may push past odds_max_level, up to the hard cap of 9.
+## The level every readout must show: the persisted permanent level, the levels
+## staged in an open odds phase, and this campaign's Symbol Level augments.
+## Augments fold into oddsWeightOverrides the moment they are bought, so a table
+## that leaves them out shows a level — and a draw chance — the reels no longer
+## roll on. Augments may push past odds_max_level, up to the hard cap of 9.
+func effective_symbol_level(symbol: String) -> int:
+	return odds_upgrade_level(symbol) + int(symbolAugmentLevels.get(symbol, 0))
+
+## Same level, under the name the augment picker and its purchase validation use.
 func augment_symbol_level(symbol: String) -> int:
-	return int(MetaStateStore.odds_upgrade_level(symbol)) + int(symbolAugmentLevels.get(symbol, 0))
+	return effective_symbol_level(symbol)
 
 ## Purchase the offered augment. `choice` carries the selector result: a symbol id
 ## for aug_symbol_level, "pair"/"triple" for aug_pair_triple. All validation runs
