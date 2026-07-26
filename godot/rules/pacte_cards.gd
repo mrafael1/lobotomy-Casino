@@ -42,7 +42,7 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_smart_saving", "name": "SMART SAVING",
-		"description": "KEEP 20% OF LUCIDITY INSTEAD OF 10% ON FLATLINE.", "pool": "augment",
+		"description": "KEEP 50% OF LUCIDITY INSTEAD OF 10% ON FLATLINE.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		# The authored saving glyph has one transparent pixel of visual balance on
 		# its left edge; include it in the crop so the glyph sits one pixel right,

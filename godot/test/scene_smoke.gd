@@ -1027,12 +1027,20 @@ func _check_off_spin_target_proc(machine: Node, run_store: Node, meta_store: Nod
 ## A Symbol Level augment is a live weight the moment it is bought, so every readout
 ## that quotes a level or a draw chance — the odds table meter, its "i" peek, the
 ## machine's score table — has to include it.
+## Which frame of its sheet an odds-table region sprite is showing. One frame is the
+## document width times whatever factor the sheet was exported at.
+func _odds_sheet_frame(overlay: Node, sprite: Sprite2D) -> int:
+	if sprite == null:
+		return -1
+	return int(sprite.region_rect.position.x / (float(overlay.ART_FRAME_SIZE.x) \
+		* float(sprite.get_meta(&"art_scale", 1.0))))
+
 func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	var base_level: int = run_store.effective_symbol_level("eye")
 	var base_percent: float = machine._symbol_draw_percent("eye")
-	run_store.symbolAugmentLevels = { "eye": 2 }
-	if run_store.effective_symbol_level("eye") != base_level + 2:
+	run_store.symbolAugmentLevels = { "eye": 1 } # one per symbol is the cap
+	if run_store.effective_symbol_level("eye") != base_level + 1:
 		failures.append("augment readouts: the effective symbol level ignored the augment")
 	if machine._symbol_draw_percent("eye") <= base_percent:
 		failures.append("augment readouts: the score table quoted the pre-augment draw chance")
@@ -1044,17 +1052,51 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 	overlay._rebuild()
 	if overlay._symbol_percent("eye") <= base_percent:
 		failures.append("augment readouts: the odds table quoted the pre-augment draw chance")
+	# The Symbol Level picker stages like the odds phase: "+" marks a symbol and lights its
+	# special segment, "-" takes it back, and only the action button commits — pressing "+"
+	# must not close the table or charge anything on its own.
+	var picker: Node = (load("res://scenes/odds_table_overlay.tscn") as PackedScene).instantiate()
+	get_root().add_child(picker)
+	picker.open_augment_picker()
+	var picked := []
+	picker.symbol_picked.connect(func(symbol_id: String) -> void: picked.append(symbol_id))
+	picker._on_plus_pressed("pill")
+	if not bool(picker.visible) or not picked.is_empty():
+		failures.append("augment picker: + committed the pick instead of staging it")
+	if String(picker._augment_pick) != "pill":
+		failures.append("augment picker: + did not stage the symbol")
+	var pill_augment := picker._augment_level_sprites.get("pill") as Sprite2D
+	var pill_meter := picker._level_sprites.get("pill") as Sprite2D
+	if _odds_sheet_frame(picker, pill_augment) != int(picker.AUGMENT_LEVEL_FRAME_ADDED):
+		failures.append("augment picker: the staged pick did not light the special segment")
+	# ...and the level bar itself never counts an augment level.
+	if _odds_sheet_frame(picker, pill_meter) != int(run_store.odds_upgrade_level("pill")):
+		failures.append("augment picker: the level bar moved for an augment level")
+	picker._on_minus_pressed("pill")
+	if String(picker._augment_pick) != "":
+		failures.append("augment picker: - did not take the staged pick back")
+	picker._on_plus_pressed("vial")
+	picker._close()
+	if picked.size() != 1 or String(picked[0]) != "vial":
+		failures.append("augment picker: the action button did not commit the staged pick")
+	picker.queue_free()
+
+	# An augment level belongs to the special 9th segment, never to the level bar: with the
+	# augment on, the bar sits exactly where it sits without it, and the segment is what
+	# changes.
 	var meter := overlay._level_sprites.get("eye") as Sprite2D
-	var augmented_frame := int(meter.region_rect.position.x / (float(overlay.ART_FRAME_SIZE.x) \
-			* float(meter.get_meta(&"art_scale", 1.0)))) \
-		if meter != null else -1
+	var eye_segment := overlay._augment_level_sprites.get("eye") as Sprite2D
+	var augmented_frame := _odds_sheet_frame(overlay, meter)
+	var augmented_segment := _odds_sheet_frame(overlay, eye_segment)
 	run_store.symbolAugmentLevels = {}
 	overlay.refresh_levels()
-	var plain_frame := int(meter.region_rect.position.x / (float(overlay.ART_FRAME_SIZE.x) \
-			* float(meter.get_meta(&"art_scale", 1.0)))) \
-		if meter != null else -1
-	if meter == null or augmented_frame != plain_frame + 2:
-		failures.append("augment readouts: the odds table meter did not show the augment levels")
+	var plain_frame := _odds_sheet_frame(overlay, meter)
+	var plain_segment := _odds_sheet_frame(overlay, eye_segment)
+	if meter == null or augmented_frame != plain_frame:
+		failures.append("augment readouts: the level bar moved for an augment level")
+	if eye_segment == null or augmented_segment != int(overlay.AUGMENT_LEVEL_FRAME_ADDED) \
+			or plain_segment != int(overlay.AUGMENT_LEVEL_FRAME_NONE):
+		failures.append("augment readouts: the augment level did not light the special segment")
 	overlay.queue_free()
 	run_store.reset_run_state()
 
@@ -1624,8 +1666,11 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 			failures.append("issue55: machine button art is not a 2-frame sheet")
 		if machine_art.position != Vector2.ZERO:
 			failures.append("issue55: machine art lost its dealer-canvas-relative position")
-		if start_button.position.x < 100.0:
-			failures.append("issue55: machine hit button is not over the top-right art")
+		# The hit area is the button's own art rect, wherever the sheet puts it — the art
+		# moved when it was re-exported unscaled, and the two must move together.
+		if start_button.position != dealer.MACHINE_BUTTON_RECT.position \
+				or start_button.size != dealer.MACHINE_BUTTON_RECT.size:
+			failures.append("issue55: machine hit button is not on its art rect")
 		start_button.button_down.emit()
 		if machine_art.frame != 1:
 			failures.append("issue55: machine press did not switch to the pressed frame")
@@ -1704,8 +1749,16 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 	for art_name in ["MachineButtonArt", "RerollButtonArt"]:
 		var art := dealer.get_node_or_null(art_name) as Sprite2D
 		if art == null or art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
-				or art.hframes != 2 or art.scale != Vector2(0.125, 0.125):
-			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame 8x sheet" % art_name)
+				or art.hframes != 2 or art.texture == null:
+			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
+			continue
+		# The sheets are exported at whatever scale suits the artist (the machine button is
+		# native now, the reroll one is still x8), so what is asserted is the result: one
+		# frame fitted across the whole canvas.
+		var button_frame_w := float(art.texture.get_width()) * 0.5
+		if not is_equal_approx(art.scale.x, 160.0 / button_frame_w) \
+				or not is_equal_approx(art.scale.y, 320.0 / float(art.texture.get_height())):
+			failures.append("dealer shop: %s frame is not fitted to the canvas" % art_name)
 
 # Issue #117 (repriced): the dealer-scene painting rerolls the current offer for
 # an escalating Lucidity price (5, 10, 15, …) in BOTH dealer phases. Covers the
@@ -2704,6 +2757,30 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 	if not run_store.oddsPhaseCompleted:
 		failures.append("issue36: overlay close did not finalize the phase")
 	overlay.queue_free()
+	run_store.reset_run_state()
+
+	# A card earned on the run's last spin is celebrated AFTER the odds table, not over it:
+	# the machine holds it through the target-reached hand-off, and the dealer hosts the
+	# queue so the first quiet moment is the one after the table closes. Instantiating these
+	# scenes touches run state, so this runs last and resets afterwards.
+	var post_run_dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(post_run_dealer)
+	if post_run_dealer._unlock_popup == null:
+		failures.append("issue52: the dealer does not host the unlock queue")
+	if post_run_dealer._odds_overlay != null and is_instance_valid(post_run_dealer._odds_overlay):
+		post_run_dealer._odds_overlay.visible = true
+		if post_run_dealer._can_present_card_unlock():
+			failures.append("issue52: an unlock could take the screen over the odds table")
+		post_run_dealer._odds_overlay.visible = false
+		if not post_run_dealer._can_present_card_unlock():
+			failures.append("issue52: the dealer never lets the unlock queue drain")
+	post_run_dealer.queue_free()
+	var handoff_machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(handoff_machine)
+	handoff_machine._target_round_handoff = true
+	if handoff_machine._can_present_card_unlock():
+		failures.append("issue52: an unlock could interrupt the target-round hand-off")
+	handoff_machine.queue_free()
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -4716,6 +4793,23 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	if not (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue76: Cigarette hidden reel should stay visible at count 0")
 	machine._clear_boost_zero_linger()
+	run_store.pairBoostHiddenReels = 0
+	machine._refresh_consumable_fx()
+	# Tunnel Vision takes the third reel out of the scoring for the whole run, so the reel is
+	# covered even with no consumable running — silently, without Tobacco's smoke.
+	var prev_upgrades: Array = (run_store.ownedUpgrades as Array).duplicate()
+	run_store.ownedUpgrades = ["pacte_tunnel_vision"]
+	machine._refresh_consumable_fx()
+	if not (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue181: Tunnel Vision did not hide the third reel")
+	if machine._tobacco_smoke.size() > 2 \
+			and bool((machine._tobacco_smoke[2] as CPUParticles2D).emitting):
+		failures.append("issue181: Tunnel Vision should blind the reel without smoking it")
+	run_store.ownedUpgrades = prev_upgrades
+	machine._refresh_consumable_fx()
+	if (machine._tobacco_covers[2] as ColorRect).visible:
+		failures.append("issue181: the third reel stayed covered without Tunnel Vision")
+	machine._clear_boost_zero_linger()
 	if (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue76: Cigarette hidden reel did not clear on next lever press")
 	run_store.pairBoostHiddenReels = 0
@@ -4777,6 +4871,24 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		pop.queue_free()
 	if machine.WEALTH_COIN_ORIGIN == machine._cash_tray_pos():
 		failures.append("issue76: wealth power coins still start in the cash tray")
+	# The flight must begin where the pop's last frame leaves the coin, or the coin jumps at
+	# the hand-off. Measured off the sheet so a re-exported animation is caught here.
+	var pop_sheet := Image.load_from_file(
+		"res://assets/images/machine new view/power coin animation.png")
+	if pop_sheet != null:
+		var pop_frame_w: int = pop_sheet.get_width() / 4
+		var lo := Vector2i(999999, 999999)
+		var hi := Vector2i(-1, -1)
+		for y in pop_sheet.get_height():
+			for x in pop_frame_w:
+				if pop_sheet.get_pixel(3 * pop_frame_w + x, y).a <= 0.02:
+					continue
+				lo.x = mini(lo.x, x); lo.y = mini(lo.y, y)
+				hi.x = maxi(hi.x, x); hi.y = maxi(hi.y, y)
+		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5)
+		if hi.x >= 0 and machine.WEALTH_COIN_ORIGIN.distance_to(pop_end) > 1.01:
+			failures.append("issue76: power coin flight starts at %s but the pop ends at %s"
+				% [str(machine.WEALTH_COIN_ORIGIN), str(pop_end)])
 
 	# Frame for a banked-score value.
 	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
@@ -5902,8 +6014,8 @@ func _check_smart_save_retention(failures: Array) -> void:
 		"history": { "runsPlayed": 0, "bestScoreRun": 0 },
 	}
 	var banked := Endings.bank_run_to_meta(run, meta, "flatline", 1700000000000)
-	if int(banked["lucidityWallet"]) != 40:
-		failures.append("upgrades: Smart Save did not retain 20% of run lucidity")
+	if int(banked["lucidityWallet"]) != 100:
+		failures.append("upgrades: Smart Save did not retain 50% of run lucidity")
 
 func _check_issue27_machine_stash_drag(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.runPhase = "running"
@@ -6294,6 +6406,11 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 	var meta_before: Dictionary = meta_store._as_dict()
 	# The fatal title only shows when the campaign is truly out of neurons.
 	meta_store.campaignNeuronsLeft = 0
+	# In play the ending waits for the FLATLINE reaction to finish (a real timer); this check
+	# asserts the ending itself, so it takes the zero-delay path.
+	if machine.fatal_flatline_reaction_delay <= 0.0:
+		failures.append("issue35: the fatal flatline should hold for its reaction by default")
+	machine.fatal_flatline_reaction_delay = 0.0
 	if not machine._check_flatline_instant_death():
 		failures.append("issue35: fatal flatline count did not trigger instant death")
 	if machine._overlay == null:
@@ -7492,6 +7609,24 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		# same baseline as the three emplacements, same pitch, starting after the third.
 		if machine._pacte_augment_badges.size() != machine.PACTE_AUGMENT_BADGE_MAX:
 			failures.append("issue181: the augment row was not built to its full width")
+		# The sockets plate offers exactly one bed per badge on show: frame N = N+1 sockets,
+		# and nothing at all with no augments held.
+		var plate := machine._augment_plate_sprite as Sprite2D
+		var held_augments: Array = machine._active_pacte_augment_ids()
+		var expected_sockets: int = mini(held_augments.size(), machine.PACTE_AUGMENT_BADGE_MAX)
+		if plate == null or plate.hframes != machine.AUGMENT_PLATE_FRAMES:
+			failures.append("issue181: the augment sockets plate is not a %d-frame sheet"
+				% int(machine.AUGMENT_PLATE_FRAMES))
+		elif not plate.visible or plate.frame != expected_sockets - 1:
+			failures.append("issue181: the sockets plate shows %d beds for %d augments"
+				% [plate.frame + 1, expected_sockets])
+		var kept_augments: Array = (run_store.selectedAugmentCardIds as Array).duplicate()
+		run_store.selectedAugmentCardIds = []
+		machine._refresh_pacte_augment_badge()
+		if plate != null and plate.visible:
+			failures.append("issue181: the sockets plate stayed up with no augments held")
+		run_store.selectedAugmentCardIds = kept_augments
+		machine._refresh_pacte_augment_badge()
 		var third_slot: Dictionary = machine.POWER_HITS[machine.POWER_IDS[2]]
 		if not is_equal_approx(machine.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
 			failures.append("issue181: the augment row is not on the power bar baseline")
@@ -7846,9 +7981,29 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			or machine._targeting_layer.name != "SwapSymbolDragLayer":
 		failures.append("pacte powers: Swap did not arm its drag layer")
 	if machine._swap_shake_tween == null or not (machine._swap_shake_tween as Tween).is_valid():
-		failures.append("pacte powers: Swap targeting did not start the symbol shake")
-	if machine._swap_shake_sprites.size() != 9:
-		failures.append("pacte powers: Swap did not shake all centre and adjacent symbols")
+		failures.append("pacte powers: Swap targeting did not start the reel shake")
+	# The reel is the thing that moves: each one shakes its reel art, its three strip symbols
+	# and its slot frame together on its own phase, so the reel reads as loose and the symbols
+	# look stuck to it rather than jiggling inside a still reel.
+	if machine._swap_shake_nodes.size() != 15:
+		failures.append("pacte powers: Swap should shake three reels' art, symbols and frames, got %d nodes"
+			% machine._swap_shake_nodes.size())
+	elif machine._swap_shake_reel.size() != machine._swap_shake_nodes.size():
+		failures.append("pacte powers: Swap shake lost track of which reel a node belongs to")
+	else:
+		machine._set_swap_shake_step(0)
+		var reel_offsets := {}
+		for i in machine._swap_shake_nodes.size():
+			var node_offset: Vector2 = machine._swap_shake_nodes[i].position \
+				- machine._swap_shake_base[i]
+			var reel: int = machine._swap_shake_reel[i]
+			if reel_offsets.has(reel) and reel_offsets[reel] != node_offset:
+				failures.append("pacte powers: reel %d did not shake as one piece" % reel)
+			reel_offsets[reel] = node_offset
+		if reel_offsets.size() == 3 and reel_offsets[0] == reel_offsets[1] \
+				and reel_offsets[1] == reel_offsets[2]:
+			failures.append("pacte powers: the three reels shake in lockstep instead of staggered")
+		machine._set_swap_shake_step(0)
 	if machine._targeting_layer != null:
 		for reel_index in 3:
 			if machine._targeting_layer.get_node_or_null("SwapRubbleHint%d" % reel_index) == null \
@@ -7860,14 +8015,15 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		if source_button == null:
 			failures.append("pacte powers: Swap source button is missing")
 		else:
-			# The visible strip above the hole is a valid source, not just decoration.
+			# Swap grabs the REEL: a press on the strip above the hole still picks up the
+			# reel's own landed symbol, never the adjacent one under the finger.
 			var top_press := source_button.get_global_transform_with_canvas() * Vector2(12.0, 4.0)
 			machine._begin_swap_drag(0, source_button, top_press)
-			if machine._swap_source_slot != 0 \
-					or machine._swap_source_symbol != String(machine._reel_neighbours("brain")["top"]) \
+			if machine._swap_source_slot != machine.SWAP_CENTRE_SLOT \
+					or machine._swap_source_symbol != "brain" \
 					or machine._swap_drag_ghost == null \
 					or not bool(machine._swap_drag_ghost.visible):
-				failures.append("pacte powers: Swap could not pick an adjacent symbol immediately")
+				failures.append("pacte powers: Swap did not pick up the whole reel")
 			if machine._swap_invalid_target_overlay == null \
 					or not bool(machine._swap_invalid_target_overlay.visible):
 				failures.append("pacte powers: Swap did not mark the source reel as a disabled destination")
@@ -7894,8 +8050,15 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			if machine._swap_invalid_target_overlay != null \
 					and machine._swap_invalid_target_overlay.modulate.a > 0.01:
 				failures.append("issue181: Swap kept the red cross up over a legal destination")
-			if machine._targeting_layer.get_node_or_null("SwapInstruction") == null:
-				failures.append("issue181: Swap is missing its instruction line")
+			# The cues carry the whole message now — Swap has no instruction line.
+			if machine._targeting_layer.get_node_or_null("SwapInstruction") != null:
+				failures.append("issue181: Swap still draws an instruction line")
+			# The green cue sits on the reel exactly like the red one, not off its bottom.
+			if machine._swap_valid_target_overlay != null \
+					and machine._swap_invalid_target_overlay != null \
+					and not is_equal_approx(machine._swap_valid_target_overlay.position.y,
+						machine._swap_invalid_target_overlay.position.y):
+				failures.append("issue181: Swap's green and red cues sit at different heights")
 			machine._update_swap_drag(Vector2(43.5, 185.0))
 			var top_drag_start: Vector2 = machine._swap_drag_ghost.position \
 					if machine._swap_drag_ghost != null else Vector2.ZERO

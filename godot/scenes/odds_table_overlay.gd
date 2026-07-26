@@ -125,6 +125,10 @@ var _delta_popup: Control = null
 # no token wallet, "+" as the pick action (up to the level-9 hard cap), and no
 # odds-phase transaction — the dealer commits the purchase on symbol_picked.
 var _augment_mode := false
+## Augment mode only: the symbol currently marked to receive the level. Nothing is charged
+## until the action button confirms it, so this is the picker's staged state.
+var _augment_pick := ""
+var _done_button: Button = null
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -157,10 +161,18 @@ func refresh_levels() -> void:
 func _close() -> void:
 	# Closing finalizes: staged purchases become permanent, leftover tokens are
 	# banked for the next odds menu, and the screen locks until the next run.
-	# Augment mode stages nothing, so its close is a plain cancel.
 	_hide_pct_popup()
-	if not _augment_mode:
-		RunStateStore.finalize_odds_phase()
+	if _augment_mode:
+		# The picker's action button confirms the staged pick, exactly like DONE commits the
+		# odds phase; with nothing staged it is still a plain cancel. The dealer charges and
+		# applies the level on symbol_picked, so that path must not also emit `closed`.
+		visible = false
+		if _augment_pick != "":
+			symbol_picked.emit(_augment_pick)
+			return
+		closed.emit()
+		return
+	RunStateStore.finalize_odds_phase()
 	visible = false
 	closed.emit()
 
@@ -246,6 +258,7 @@ func _rebuild() -> void:
 	_info_buttons.clear()
 	_delta_anchors.clear()
 	_delta_popup = null
+	_done_button = null # freed with the children above; rebuilt at the end of this pass
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.0, 0.0, 0.0, 0.78)
@@ -265,7 +278,8 @@ func _rebuild() -> void:
 		_build_row(String(Symbols.BASE_SYMBOL_CYCLE[i]), i)
 
 	var done := Button.new()
-	done.text = "CANCEL" if _augment_mode else "DONE"
+	_done_button = done
+	done.text = _action_button_text()
 	done.position = Vector2((SRC_W - DONE_BUTTON_SIZE.x) * 0.5, DONE_BUTTON_Y)
 	done.z_index = 4
 	done.add_theme_font_size_override("font_size", 5)
@@ -574,12 +588,11 @@ func _symbol_percent(symbol_id: String) -> float:
 
 func _on_plus_pressed(symbol_id: String) -> void:
 	if _augment_mode:
-		# The pick is the whole transaction — the dealer scene charges and
-		# applies the level, so the table hands off without emitting `closed`
-		# (that path means cancel).
-		_hide_pct_popup()
-		visible = false
-		symbol_picked.emit(symbol_id)
+		# Staged, not committed: the picker behaves like the odds phase — "+" marks the
+		# symbol, "-" takes it back, and the action button confirms. Only one symbol can
+		# hold the golden token, so picking another moves the mark.
+		_augment_pick = symbol_id
+		_refresh()
 		return
 	var before := _symbol_percent(symbol_id)
 	if RunStateStore.buy_odds_upgrade(symbol_id):
@@ -587,34 +600,48 @@ func _on_plus_pressed(symbol_id: String) -> void:
 		_show_delta_popup(symbol_id, _symbol_percent(symbol_id) - before)
 
 func _on_minus_pressed(symbol_id: String) -> void:
+	if _augment_mode:
+		if _augment_pick == symbol_id:
+			_augment_pick = ""
+			_refresh()
+		return
 	var before := _symbol_percent(symbol_id)
 	if RunStateStore.undo_odds_upgrade(symbol_id):
 		_refresh()
 		_show_delta_popup(symbol_id, _symbol_percent(symbol_id) - before)
 
+## DONE commits: the odds phase's staged purchases, or the picker's staged symbol. With
+## nothing staged the picker's button is still the way out, so it reads CANCEL.
+func _action_button_text() -> String:
+	if not _augment_mode:
+		return "DONE"
+	return "DONE" if _augment_pick != "" else "CANCEL"
+
 func _refresh() -> void:
+	if _done_button != null and is_instance_valid(_done_button):
+		_done_button.text = _action_button_text()
 	# Token wallet on the sheet's 0..8 frames — the pool itself is capped at odds_max_tokens
 	# (8) by the store, so the art can always show it. The augment picker instead holds the
 	# golden token on the last frame: one token, any symbol, one level.
 	if _tokens_sprite != null and not _augment_mode:
 		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 2)
 	for symbol_id in _level_sprites:
-		# Both modes render the EFFECTIVE level — persisted, staged, and augment
-		# levels — because that is what the reels roll on. Augment mode lets "+"
-		# push past odds_max_level, up to the level-9 hard cap; the odds phase buys
-		# only the permanent track, so its "+" gates on that level alone.
+		# `level` is what the reels actually roll on (persisted + staged + augment); the METER
+		# only ever draws the bought track, because an augment level is not a bar segment —
+		# it is the special 9th one on its own sheet below.
 		var level := RunStateStore.effective_symbol_level(String(symbol_id))
 		var purchase_level := RunStateStore.odds_upgrade_level(String(symbol_id))
 		var spr := _level_sprites[symbol_id] as Sprite2D
 		if spr != null:
-			# The meter itself now stops at level 8...
-			_set_region_frame(spr, LEVEL_ROW_RECT.position.x, clampi(level, 0, LEVEL_FRAMES - 1))
-		# ...and the 9th segment, which only the Symbol Level augment can fill, sits on its
-		# own sheet: blank until this symbol has its one augment level, then the added
+			_set_region_frame(spr, LEVEL_ROW_RECT.position.x,
+				clampi(purchase_level, 0, LEVEL_FRAMES - 1))
+		# The 9th segment, which only the Symbol Level augment can fill: blank until this
+		# symbol has its augment level (or the picker has one staged on it), then the added
 		# segment, then the maxed one once the symbol is at the hard cap.
 		var augment_levels := RunStateStore.symbol_augment_levels(String(symbol_id))
+		var staged := _augment_mode and _augment_pick == String(symbol_id)
 		var augment_frame := AUGMENT_LEVEL_FRAME_NONE
-		if augment_levels > 0:
+		if augment_levels > 0 or staged:
 			augment_frame = AUGMENT_LEVEL_FRAME_MAXED \
 				if level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP else AUGMENT_LEVEL_FRAME_ADDED
 		_set_region_frame(_augment_level_sprites.get(symbol_id) as Sprite2D,
@@ -632,6 +659,13 @@ func _refresh() -> void:
 					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP \
 					or RunStateStore.odds_token_cost(String(symbol_id)) > RunStateStore.oddsTokensRemaining
 			_dim_button_art(_plus_art.get(symbol_id) as Sprite2D, plus.disabled)
+		# The picker's "-" takes the staged mark back off this symbol.
+		if _augment_mode:
+			var picker_minus := _minus_buttons.get(symbol_id) as Button
+			if picker_minus != null:
+				picker_minus.disabled = _augment_pick != String(symbol_id)
+				_dim_button_art(_minus_art.get(symbol_id) as Sprite2D, picker_minus.disabled)
+			continue
 		var minus := _minus_buttons.get(symbol_id) as Button
 		if minus != null:
 			minus.disabled = _augment_mode \

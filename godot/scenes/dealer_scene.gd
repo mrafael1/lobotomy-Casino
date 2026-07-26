@@ -66,10 +66,13 @@ const COIN_ASSET := "ui/coin.png"
 # they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_base_x8.png"
-const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON_x8.png"
-# Opaque bounds of each button's art (source px, measured with pngjs) — the
-# invisible hit buttons cover exactly these rects.
-const MACHINE_BUTTON_RECT := Rect2(129.0, 9.0, 19.0, 31.0)
+# Unscaled export: _full_canvas_sprite reads the scale off the texture, so a native sheet
+# needs no code change beyond the name. The art also moved, hence the new rect.
+const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON.png"
+# Opaque bounds of each button's art (source px, measured off the sheet) — the invisible hit
+# buttons cover exactly these rects. The machine button's own rect is the cabinet icon
+# (x88..106, y13..43), not the "MACHINE" caption above it.
+const MACHINE_BUTTON_RECT := Rect2(88.0, 13.0, 19.0, 31.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
 const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_reroll_BUTTON_x8.png"
@@ -143,6 +146,7 @@ var _reroll_glow_tween: Tween = null         # lab-style light while the reroll 
 var _reroll_price_row: Control = null        # escalating reroll price tag
 var _reroll_price_label: Label = null
 var _augment_picker: Control = null          # symbol / pair-triple selector modal
+var _unlock_popup: UnlockCardPopup = null    # cards earned last run, shown after the odds table
 var _start_confirm_modal: Control = null     # issue #84: machine-button misclick guard
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
@@ -181,6 +185,10 @@ func _ready() -> void:
 	if _post_run:
 		_setup_odds_phase()
 	if not Engine.is_editor_hint():
+		# A card earned on the run's last spin waits for this scene rather than flashing over
+		# the target-reached screen on the way out (issue #52): it is celebrated once the odds
+		# table is done with, which is the first quiet moment the player gets.
+		_unlock_popup = UnlockCardPopup.attach_to(self, _can_present_card_unlock)
 		if not MetaStateStore.meta_changed.is_connected(_refresh_campaign_label):
 			MetaStateStore.meta_changed.connect(_refresh_campaign_label)
 		if _pre_run and not MetaStateStore.meta_changed.is_connected(_refresh_credits):
@@ -352,6 +360,25 @@ func _setup_odds_phase() -> void:
 
 func _on_odds_overlay_closed() -> void:
 	_dealer_react()
+	_maybe_present_card_unlocks()
+
+## The unlock popup takes the whole scene, so it waits for the odds table and any other
+## overlay to be gone. The queue survives scenes, so nothing is lost by waiting.
+func _can_present_card_unlock() -> bool:
+	if _odds_overlay != null and is_instance_valid(_odds_overlay) and _odds_overlay.visible:
+		return false
+	if _augment_picker != null and is_instance_valid(_augment_picker):
+		return false
+	if _options_overlay != null and is_instance_valid(_options_overlay) and _options_overlay.visible:
+		return false
+	return true
+
+func _maybe_present_card_unlocks() -> void:
+	if _unlock_popup == null or not is_instance_valid(_unlock_popup):
+		return
+	if _unlock_popup.visible:
+		return
+	_unlock_popup.present_next()
 
 func _icon_tex(id: String) -> Texture2D:
 	if ChipAugments.map().has(id):

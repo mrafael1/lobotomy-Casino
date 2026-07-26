@@ -44,7 +44,7 @@ const POSITIVE_UPGRADES := [
 	{ "id": "pos_learning", "name": "Learning", "category": "positive", "cost": 120,
 	  "effect": { "type": "bookSymbol", "weight": 7 } },
 	{ "id": "pos_smart_save", "name": "Smart Save", "category": "positive", "cost": 30,
-	  "effect": { "type": "smartSaveRetention", "kept": 0.20 } },
+	  "effect": { "type": "smartSaveRetention", "kept": 0.50 } },
 ]
 
 # These definitions are resolved by Economy so Pacte can re-apply a selected

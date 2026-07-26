@@ -75,7 +75,8 @@ static func run_all() -> Array:
 	var smart_meta := meta.duplicate(true)
 	smart_meta["ownedPermanents"] = [EconomyConst.SMART_SAVE_UPGRADE_ID]
 	var smart_banked := Endings.bank_run_to_meta(bank_run, smart_meta, "flatline", 1700000000000)
-	_check(out, int(smart_banked["lucidityWallet"]) == 40, "Smart Save banks 20% of run Lucidity (200 -> 40)")
+	# Smart Save was raised from 20% to 50% of the run's Lucidity (design change, issue #181).
+	_check(out, int(smart_banked["lucidityWallet"]) == 100, "Smart Save banks 50% of run Lucidity (200 -> 100)")
 
 	# 8) A locked reel keeps its symbol through a forced all-symbol spin (issue
 	# #112: Pill flatline must not overwrite a lock into a close call).

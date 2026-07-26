@@ -34,6 +34,7 @@ window/size/viewport_height=320
 window/size/window_width_override=400
 window/size/window_height_override=800
 window/stretch/mode="canvas_items"
+window/stretch/scale_mode="integer"
 window/handheld/orientation="portrait"
 
 [editor_plugins]
@@ -43,6 +44,10 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+; Everything outside the 160x320 canvas — the letterbox the integer stretch leaves — is
+; painted the dealer bar's own dark purple (#242234, the dominant colour of its backdrop)
+; instead of the default grey, so the bars read as part of the room.
+environment/defaults/default_clear_color=Color(0.141, 0.133, 0.204, 1)
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true

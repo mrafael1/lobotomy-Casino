@@ -88,12 +88,10 @@ const SWAP_INVALID_BORDER := Color(1.0, 0.22, 0.28, 0.95)
 const SWAP_CROSS_COLOR := Color(1.0, 0.30, 0.34, 0.95)
 const SWAP_CROSS_THICKNESS := 1.0
 const SWAP_CROSS_ANGLE_DEG := 38.0
-const SWAP_HINT_RECT := Rect2(12.0, 152.0, 136.0, 12.0)
-const SWAP_HINT_ARMED_TEXT := "DRAG A SYMBOL ONTO ANOTHER REEL"
-const SWAP_HINT_DRAG_TEXT := "DROP IT ON A DIFFERENT REEL"
-const SWAP_HINT_COLOR := Color(1.0, 0.86, 0.5)
-const SWAP_HINT_FADE_TIME := 0.18
-const SWAP_HINT_DRAG_ALPHA := 0.45 # recedes so it never competes with the drag ghost
+const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever takes centre
+# Swap talks about whole reels, so its cues cover the whole visible reel: the hole plus the
+# strip symbols above and below it, not just the centre window.
+const SWAP_REEL_HALF_HEIGHT := STRIP_OFFSET + STRIP_CENTER_H * 0.5
 
 # Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
 # candidate symbol, tapping the symbol commits it.
@@ -364,6 +362,7 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
 # and the same 14px pitch, so the whole strip reads as one row of chips.
 const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
+const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
 const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
@@ -420,7 +419,10 @@ const JACKPOT_COIN_FADE_START := 0.74
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
-const WEALTH_COIN_ORIGIN := Vector2(74.0, 252.0)
+# Where the coin pop hands the coin over to the flight: the centre of the pop sheet's LAST
+# frame (x70..77, y241..249), so the flying coin appears exactly where the animation left it
+# instead of teleporting. The art moved up 3px in its latest export and this followed it.
+const WEALTH_COIN_ORIGIN := Vector2(74.0, 245.5)
 const POWER_COIN_SIZE := 8.0
 const POWER_COIN_ASSET := "ui/power_coin.png"
 # The jackpot pays in the machine's own currency, so its spray is lucidity coins —
@@ -537,6 +539,9 @@ var _pending_deferred_neg: Dictionary = {}
 @export_group("Machine Reactions")
 @export var fatal_flatline_count: int = 3
 @export_range(0.1, 3.0, 0.1) var reaction_flash_time: float = 0.7
+## How long the fatal FLATLINE reaction plays before the ending screen replaces it. Covers
+## the whole line-sweep tween (reaction_flash_time x 1.1) plus a moment to read the 3/3.
+@export_range(0.0, 4.0, 0.1) var fatal_flatline_reaction_delay: float = 1.3
 @export var flatline_result_color: Color = Color(0.93, 0.27, 0.27)
 @export_group("Triple Overlays", "triple_")
 @export var triple_brain_color: Color = Color(1.0, 0.84, 0.0)    # gold
@@ -628,6 +633,8 @@ var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
 var _reel_covers: Array = []   # per-reel bg patch shown when a reel stops (masks its blur)
+var _reel_backing_sprite: Sprite2D = null # the shared reel art all three covers copy
+var _swap_shake_cover_state: Array[bool] = [] # cover visibility to restore after a shake
 var _overlay: Control = null
 var _dealer_overlay: Control = null
 var _dealer_offer_popup: Control = null
@@ -682,6 +689,9 @@ var _target_bar_anim_sprite: Sprite2D = null
 var _target_bar_anim_time := 0.0
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
+## Set once CONTINUE on the target screen starts the hand-off to the between-run flow: the
+## machine is on its way out, so nothing new may take the screen here.
+var _target_round_handoff := false
 var _tv_blackout_rect: ColorRect = null
 var _tv_blackout_tween: Tween = null
 var _unlock_popup: UnlockCardPopup = null
@@ -731,13 +741,12 @@ var _swap_drag_button: Button = null
 var _swap_drag_ghost: Sprite2D = null
 var _swap_drag_press := Vector2.ZERO
 var _swap_drag_offset := Vector2.ZERO
-var _swap_shake_tween: Tween = null      # revealed symbols shake while Swap is armed
-var _swap_shake_sprites: Array[Sprite2D] = []
+var _swap_shake_tween: Tween = null      # the reels shake while Swap is armed
+var _swap_shake_nodes: Array[CanvasItem] = [] # symbols + slot frames, grouped by reel
 var _swap_shake_base: Array[Vector2] = []
+var _swap_shake_reel: Array[int] = []    # which reel each shaken node belongs to
 var _swap_slot_hints: Array[Panel] = []
 var _swap_slot_pulse_tween: Tween = null
-var _swap_instruction_label: Label = null
-var _swap_instruction_tween: Tween = null
 var _swap_invalid_target_overlay: Panel = null
 var _swap_valid_target_overlay: Panel = null
 var _swap_target_feedback_reel := -1
@@ -852,7 +861,8 @@ func _ready() -> void:
 	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
 	# spin button.
 	_build_neon_background()
-	_build_full_canvas_sprite("machine new view/reel_final_machine.png")
+	_reel_backing_sprite = _build_full_canvas_sprite(
+		"machine new view/reel_final_machine.png")
 	_build_reel_animation_art()
 	_build_reel_covers()
 	_build_reels()
@@ -993,19 +1003,29 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "DealerBarOverlay3"
 	return ""
 
+## Which authored node a region crop belongs to. Matched with a small tolerance rather than
+## exactly: the reel covers crop a little wider than the hole to take in the whole authored
+## patch, and an exact match would miss the scene node and build a loose sprite on top of
+## everything instead of slotting in under the symbols.
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
 	if rel.ends_with("reel_final_machine.png"):
 		for i in REEL_HOLES.size():
-			if float(rect["left"]) == float(REEL_HOLES[i]["left"]) and float(rect["top"]) == float(REEL_HOLES[i]["top"]):
+			if absf(float(rect["left"]) - float(REEL_HOLES[i]["left"])) <= 2.0 \
+					and absf(float(rect["top"]) - float(REEL_HOLES[i]["top"])) <= 4.0:
 				return "ReelCover%d" % i
 	return ""
 
+## A full-canvas sprite covers the whole 160x320 canvas, so its scale is entirely decided by
+## how the sheet was exported. That is read from the texture EVERY time, including for
+## authored nodes: the scene's 0.125 was written for the old x8 reel sheet and would draw a
+## native export at an eighth of its size. NEAREST throughout, so an integer factor stays
+## pixel-exact.
 func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transform := true) -> void:
 	spr.texture = tex
 	spr.centered = false
 	if apply_transform:
 		spr.position = Vector2.ZERO
-		spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
+	spr.scale = Vector2(SRC_W / float(tex.get_width()), SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
@@ -1061,7 +1081,7 @@ func _build_neon_background() -> void:
 	# after (= above) them; force the backdrop to the very back of the tree.
 	move_child(spr, 0)
 
-func _build_full_canvas_sprite(rel: String) -> void:
+func _build_full_canvas_sprite(rel: String) -> Sprite2D:
 	var tex := _load_texture(rel, true)
 	if tex == null:
 		# Only the cabinet gets a visible fallback so the scene isn't blank.
@@ -1071,7 +1091,7 @@ func _build_full_canvas_sprite(rel: String) -> void:
 			fallback.color = Color(0.06, 0.05, 0.08)
 			fallback.size = Vector2(SRC_W, SRC_H)
 			add_child(fallback)
-		return
+		return null
 	var name := _full_canvas_name(rel)
 	var spr := _authored_sprite(name) if name != "" else null
 	var authored := spr != null
@@ -1081,6 +1101,7 @@ func _build_full_canvas_sprite(rel: String) -> void:
 			spr.name = name
 		add_child(spr)
 	_configure_full_canvas_sprite(spr, tex, not authored)
+	return spr
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
@@ -1129,17 +1150,20 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 		add_child(spr)
 	spr.texture = tex
 	spr.centered = false
-	if not authored:
-		spr.position = Vector2(rect["left"], rect["top"])
+	# How many sheet pixels one source pixel is, measured from the sheet instead of assumed:
+	# ASSET_SCALE only ever described the legacy x8 exports, and a sheet that goes native
+	# (reel_final_machine.png did) would be cropped far outside its own bounds and draw
+	# nothing at all.
+	var art_scale := maxf(1.0, float(tex.get_height()) / SRC_H)
+	spr.position = Vector2(rect["left"], rect["top"])
 	spr.region_enabled = true
 	spr.region_rect = Rect2(
-		rect["left"] * ASSET_SCALE,
-		rect["top"] * ASSET_SCALE,
-		rect["width"] * ASSET_SCALE,
-		rect["height"] * ASSET_SCALE
+		float(rect["left"]) * art_scale,
+		float(rect["top"]) * art_scale,
+		float(rect["width"]) * art_scale,
+		float(rect["height"]) * art_scale
 	)
-	if not authored:
-		spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
+	spr.scale = Vector2(1.0 / art_scale, 1.0 / art_scale)
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	return spr
 
@@ -1328,14 +1352,16 @@ func _build_spins_left_label() -> void:
 
 ## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
-## The authored augment sockets on the power bar (x61..104, y223..237) — the divider after
-## the third power emplacement plus the three chip beds the held-augment badges sit in.
-## Full-canvas art, so the placement is baked in; the code only picks the layer it draws
-## on: above the cabinet, below the badges themselves.
+## The authored augment sockets on the power bar — the divider after the third power
+## emplacement plus one chip bed per held augment. Three frames: frame N shows N+1 sockets,
+## so the row only ever offers as many beds as the run has augments to put in them (nothing
+## at all with none). Full-canvas art, so placement is baked in; the code picks the frame and
+## the layer it draws on: above the cabinet, below the badges themselves.
 func _build_augment_emplacements() -> void:
-	_augment_plate_sprite = _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, 1)
+	_augment_plate_sprite = _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AUGMENT_PLATE_FRAMES)
 	if _augment_plate_sprite != null:
 		_augment_plate_sprite.z_index = AUGMENT_PLATE_Z_INDEX
+		_augment_plate_sprite.visible = false
 
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
@@ -1704,9 +1730,18 @@ func _make_or_bind_hit_button(name: String, rect: Dictionary, cb: Callable) -> B
 # Per-reel reel-background patches, drawn above the spin-blur sheet and below the
 # symbols. Showing one masks the blur in that hole, so a reel goes static the moment
 # its symbol lands — independent per-reel stops over the single full-canvas sheet.
+## Per-reel copies of the reel art. The crop is the hole grown a little, because the authored
+## patch runs from y169 to y202 — a pixel above the hole and two below — and Swap shakes these
+## copies in place of the shared backing, which would otherwise leave those rows behind.
 func _build_reel_covers() -> void:
 	for i in 3:
-		var cover := _build_region_sprite("machine new view/reel_final_machine.png", REEL_HOLES[i])
+		var hole: Dictionary = REEL_HOLES[i]
+		var cover := _build_region_sprite("machine new view/reel_final_machine.png", {
+			"left": float(hole["left"]) - 1.0,
+			"top": float(hole["top"]) - 3.0,
+			"width": float(hole["width"]) + 2.0,
+			"height": float(hole["height"]) + 6.0,
+		})
 		if cover != null:
 			cover.visible = false
 		_reel_covers.append(cover)
@@ -2300,6 +2335,11 @@ func _end_tv_blackout() -> void:
 func _finish_wealth_target_transition() -> void:
 	if not _wealth_target_transition_active:
 		return
+	# The run is leaving for the between-run flow. A card earned on the same spin must not
+	# squeeze in during the hand-off — the store commits below emit state_changed, and the
+	# unlock gate would otherwise open for those few frames and beat the scene change. It is
+	# presented after the odds table instead, by the dealer (issue #52 / #176).
+	_target_round_handoff = true
 	var completed := RunStateStore.complete_wealth_target()
 	if completed.is_empty():
 		_stop_wealth_target_transition()
@@ -3116,7 +3156,8 @@ func _update_hud() -> void:
 ## short. The wealth ending is the extreme case — its card is celebrated only once
 ## the player has left that screen (the menu drains the same queue).
 func _can_present_card_unlock() -> bool:
-	return not RunStateStore.isSpinning \
+	return not _target_round_handoff \
+		and not RunStateStore.isSpinning \
 		and not _spinning_anim \
 		and not _spin_launch_pending \
 		and not _reroll_anim_active \
@@ -4653,46 +4694,96 @@ func _arm_swap_source() -> void:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 		button.gui_input.connect(_on_swap_symbol_gui_input.bind(i, button))
 		_targeting_layer.add_child(button)
-	# Issue #181: one cue per idea. The slot frames breathe (these are the places that
-	# take part), the symbols shake (these are the things you can grab), and a line of
-	# text says what to do. The old whole-layer opacity flash is gone — it pulsed the
-	# buttons, the hints and the drag ghost together and read as an error state.
+	# Issue #181: one cue per idea, and no words. The reel frames breathe (these are the
+	# places that take part) and the reels shake (these are the things you can grab); the
+	# instruction line the power used to carry is gone.
 	_start_swap_slot_pulse()
 	_start_swap_symbol_shake()
-	_show_swap_instruction(SWAP_HINT_ARMED_TEXT, 1.0)
 
-## While Swap is armed the revealed symbols shake in place — the cue that they can
-## be grabbed and dropped onto another reel, including an adjacent one.
+## While Swap is armed each REEL shakes as one piece: the reel's own art moves and its
+## symbols ride along, stuck to it, rather than the symbols jiggling in a still reel. The
+## reels run on staggered phases so they read as three loose reels rather than one juddering
+## screen.
 func _start_swap_symbol_shake() -> void:
 	_stop_swap_symbol_shake()
-	_swap_shake_sprites.clear()
+	_swap_shake_nodes.clear()
 	_swap_shake_base.clear()
+	_swap_shake_reel.clear()
+	# The shared backing draws the same three patches the covers do, so a cover moving over it
+	# is invisible — nothing appears to shake but the symbols. Hand the reel art to the covers
+	# for the duration: backing off, every cover on, and each cover free to move with its reel.
+	if _reel_backing_sprite != null:
+		_reel_backing_sprite.visible = false
+	_swap_shake_cover_state.clear()
 	for i in _reel_sprites.size():
+		# The reel asset first — this is the thing that shakes.
+		if i < _reel_covers.size():
+			var cover := _reel_covers[i] as Sprite2D
+			if cover != null:
+				_swap_shake_cover_state.append(cover.visible)
+				cover.visible = true
+				_swap_shake_nodes.append(cover)
+				_swap_shake_base.append(cover.position)
+				_swap_shake_reel.append(i)
 		for sprite in [_reel_top_sprites[i], _reel_sprites[i], _reel_bottom_sprites[i]]:
 			var symbol_sprite := sprite as Sprite2D
 			if symbol_sprite == null:
 				continue
-			_swap_shake_sprites.append(symbol_sprite)
+			_swap_shake_nodes.append(symbol_sprite)
 			_swap_shake_base.append(symbol_sprite.position)
-	# A slow 1px orbit rather than a jitter: the symbols should look loose in their
-	# slots, not broken (issue #181).
+			_swap_shake_reel.append(i)
+		if i < _swap_slot_hints.size():
+			var frame := _swap_slot_hints[i] as Control
+			if frame != null:
+				_swap_shake_nodes.append(frame)
+				_swap_shake_base.append(frame.position)
+				_swap_shake_reel.append(i)
+	# A slow 1px orbit rather than a jitter: the reels should look loose in the cabinet,
+	# not broken (issue #181).
 	_swap_shake_tween = create_tween().set_loops()
-	for offset in SWAP_SHAKE_OFFSETS:
-		_swap_shake_tween.tween_callback(_set_swap_shake_offset.bind(offset))
+	for step in SWAP_SHAKE_OFFSETS.size():
+		_swap_shake_tween.tween_callback(_set_swap_shake_step.bind(step))
 		_swap_shake_tween.tween_interval(SWAP_SHAKE_STEP)
 
-func _set_swap_shake_offset(offset: Vector2) -> void:
-	for i in mini(_swap_shake_sprites.size(), _swap_shake_base.size()):
-		_swap_shake_sprites[i].position = _swap_shake_base[i] + offset
+## `step` walks the orbit; each reel is offset along it by its own index, which is what
+## staggers them.
+func _set_swap_shake_step(step: int) -> void:
+	var steps := SWAP_SHAKE_OFFSETS.size()
+	for i in mini(_swap_shake_nodes.size(), _swap_shake_base.size()):
+		var node := _swap_shake_nodes[i] as Node2D
+		var offset: Vector2 = SWAP_SHAKE_OFFSETS[posmod(step + _swap_shake_reel[i], steps)]
+		if node != null:
+			node.position = _swap_shake_base[i] + offset
+			continue
+		var control := _swap_shake_nodes[i] as Control
+		if control != null:
+			control.position = _swap_shake_base[i] + offset
 
 func _stop_swap_symbol_shake() -> void:
 	if _swap_shake_tween != null and _swap_shake_tween.is_valid():
 		_swap_shake_tween.kill()
 	_swap_shake_tween = null
+	# Give the reel art back to the shared backing and restore each cover's own state.
+	if not _swap_shake_cover_state.is_empty():
+		if _reel_backing_sprite != null:
+			_reel_backing_sprite.visible = true
+		for i in mini(_swap_shake_cover_state.size(), _reel_covers.size()):
+			var cover := _reel_covers[i] as Sprite2D
+			if cover != null:
+				cover.visible = _swap_shake_cover_state[i]
+		_swap_shake_cover_state.clear()
 	if not _swap_shake_base.is_empty():
-		_set_swap_shake_offset(Vector2.ZERO)
+		for i in mini(_swap_shake_nodes.size(), _swap_shake_base.size()):
+			var node := _swap_shake_nodes[i] as Node2D
+			if node != null:
+				node.position = _swap_shake_base[i]
+				continue
+			var control := _swap_shake_nodes[i] as Control
+			if control != null:
+				control.position = _swap_shake_base[i]
 		_swap_shake_base.clear()
-		_swap_shake_sprites.clear()
+		_swap_shake_nodes.clear()
+		_swap_shake_reel.clear()
 
 ## Marks one reel hole as a slot that takes part in the swap: a thin amber frame with
 ## corner ticks. Replaces the old brown wash and three hand-placed shard rectangles,
@@ -4701,11 +4792,11 @@ func _stop_swap_symbol_shake() -> void:
 func _build_swap_slot_hint(reel_index: int) -> void:
 	if _targeting_layer == null or reel_index < 0 or reel_index >= REEL_HOLES.size():
 		return
-	var hole: Dictionary = REEL_HOLES[reel_index]
+	var column := _swap_reel_rect(reel_index)
 	var frame := Panel.new()
 	frame.name = "SwapRubbleHint%d" % reel_index
-	frame.position = Vector2(float(hole["left"]), float(hole["top"]))
-	frame.size = Vector2(float(hole["width"]), float(hole["height"]))
+	frame.position = column.position
+	frame.size = column.size
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.z_index = -1
 	var style := StyleBoxFlat.new()
@@ -4743,49 +4834,14 @@ func _start_swap_slot_pulse() -> void:
 		_swap_slot_pulse_tween.chain()
 
 
+## Stops the breathing only. The hint list belongs to the targeting layer that owns the
+## frames and is cleared with it — clearing it here made _start_swap_slot_pulse (which stops
+## before it starts) find an empty list and return, so the frames never pulsed at all.
 func _stop_swap_slot_pulse() -> void:
 	if _swap_slot_pulse_tween != null and _swap_slot_pulse_tween.is_valid():
 		_swap_slot_pulse_tween.kill()
 	_swap_slot_pulse_tween = null
-	_swap_slot_hints.clear()
 
-
-## The one line of text Swap has ever had. It lives on the targeting layer so it dies
-## with it, and sits above the reel holes so the drag never covers it.
-func _show_swap_instruction(text: String, alpha: float) -> void:
-	if _targeting_layer == null:
-		return
-	if _swap_instruction_label == null or not is_instance_valid(_swap_instruction_label):
-		var label := Label.new()
-		label.name = "SwapInstruction"
-		label.position = SWAP_HINT_RECT.position
-		label.size = SWAP_HINT_RECT.size
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 7)
-		if _font != null:
-			label.add_theme_font_override("font", _font)
-		label.add_theme_color_override("font_color", SWAP_HINT_COLOR)
-		label.add_theme_color_override("font_outline_color", Color.BLACK)
-		label.add_theme_constant_override("outline_size", 1)
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		label.z_index = 2
-		label.modulate.a = 0.0
-		_targeting_layer.add_child(label)
-		_swap_instruction_label = label
-	_swap_instruction_label.text = text
-	if _swap_instruction_tween != null and _swap_instruction_tween.is_valid():
-		_swap_instruction_tween.kill()
-	_swap_instruction_tween = create_tween()
-	_swap_instruction_tween.tween_property(_swap_instruction_label, "modulate:a", alpha,
-		SWAP_HINT_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-
-func _stop_swap_instruction() -> void:
-	if _swap_instruction_tween != null and _swap_instruction_tween.is_valid():
-		_swap_instruction_tween.kill()
-	_swap_instruction_tween = null
-	_swap_instruction_label = null
 
 func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -4799,24 +4855,6 @@ func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Butto
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
-
-func _swap_symbol_slot_at(reel_index: int, global_position: Vector2) -> int:
-	if reel_index < 0 or reel_index >= _reel_sprites.size():
-		return 1
-	var local_y := to_local(global_position).y
-	var slot_y := [
-		_reel_top_sprites[reel_index].position.y,
-		_reel_sprites[reel_index].position.y,
-		_reel_bottom_sprites[reel_index].position.y,
-	]
-	var selected := 1
-	var distance := INF
-	for slot in slot_y.size():
-		var candidate_distance := absf(local_y - float(slot_y[slot]))
-		if candidate_distance < distance:
-			distance = candidate_distance
-			selected = slot
-	return selected
 
 func _swap_symbol_at(reel_index: int, slot: int) -> String:
 	var result: Variant = RunStateStore.lastResult
@@ -4840,7 +4878,10 @@ func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2)
 	var reels: Array = result["reels"] as Array
 	if reel_index < 0 or reel_index >= reels.size():
 		return
-	var source_slot := _swap_symbol_slot_at(reel_index, global_position)
+	# Swap takes whole reels: wherever on the reel the drag starts, what is picked up is the
+	# reel itself, represented by the symbol it landed on. The adjacent strip symbols are
+	# scenery again, not grabbable.
+	var source_slot := SWAP_CENTRE_SLOT
 	var source_symbol := _swap_symbol_at(reel_index, source_slot)
 	if source_symbol == "":
 		return
@@ -4874,8 +4915,6 @@ func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2)
 	_swap_drag_ghost.visible = true
 	_targeting_layer.add_child(_swap_drag_ghost)
 	_swap_drag_button.modulate.a = 0.35
-	# The symbol is in hand now — the instruction recedes so it never competes with it.
-	_show_swap_instruction(SWAP_HINT_DRAG_TEXT, SWAP_HINT_DRAG_ALPHA)
 
 ## Builds both destination cues for a Swap drag: a green frame that follows whichever
 ## legal reel the pointer is over, and a red cross on the source reel. Both start
@@ -4911,13 +4950,21 @@ func _build_swap_invalid_target_feedback(reel_index: int) -> void:
 	_swap_valid_target_overlay = valid
 	_swap_target_feedback_reel = reel_index
 
+## The full reel a Swap cue covers: the hole's column, grown to take in the strip symbols
+## above and below, because what the power moves is the reel and not the window.
+func _swap_reel_rect(reel_index: int) -> Rect2:
+	var hole: Dictionary = REEL_HOLES[reel_index]
+	var centre_y: float = float(REEL_WINDOW["top"]) + float(REEL_WINDOW["height"]) * 0.5
+	return Rect2(float(hole["left"]), centre_y - SWAP_REEL_HALF_HEIGHT,
+		float(hole["width"]), SWAP_REEL_HALF_HEIGHT * 2.0)
+
 func _make_swap_target_panel(node_name: String, reel_index: int, fill: Color,
 		border: Color) -> Panel:
-	var hole: Dictionary = REEL_HOLES[reel_index]
+	var column := _swap_reel_rect(reel_index)
 	var overlay := Panel.new()
 	overlay.name = node_name
-	overlay.position = Vector2(float(hole["left"]) + 2.0, float(hole["top"]) + 2.0)
-	overlay.size = Vector2(float(hole["width"]) - 4.0, float(hole["height"]) - 4.0)
+	overlay.position = column.position + Vector2(2.0, 2.0)
+	overlay.size = column.size - Vector2(4.0, 4.0)
 	overlay.z_index = 1
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
@@ -4942,9 +4989,11 @@ func _update_swap_target_feedback(target_reel: int) -> void:
 	var legal := target_reel >= 0 and target_reel < REEL_HOLES.size() and not invalid
 	_swap_valid_target_overlay.visible = legal
 	if legal:
-		var hole: Dictionary = REEL_HOLES[target_reel]
-		_swap_valid_target_overlay.position = Vector2(
-			float(hole["left"]) + 2.0, float(hole["top"]) + 2.0)
+		# Same rect the panel was built with (_make_swap_target_panel), so the green cue sits
+		# on the reel exactly like the red one — following the hole alone left it hanging off
+		# the bottom once the cues grew to cover the whole reel.
+		_swap_valid_target_overlay.position = _swap_reel_rect(target_reel).position \
+			+ Vector2(2.0, 2.0)
 
 func _update_swap_drag(global_position: Vector2) -> void:
 	if not _swap_drag_active or _swap_drag_button == null:
@@ -4981,9 +5030,6 @@ func _cancel_swap_drag_gesture() -> void:
 	if _swap_valid_target_overlay != null and is_instance_valid(_swap_valid_target_overlay):
 		_swap_valid_target_overlay.queue_free()
 	_swap_valid_target_overlay = null
-	# Back to the armed state: the instruction returns to full strength.
-	if _swap_instruction_label != null and is_instance_valid(_swap_instruction_label):
-		_show_swap_instruction(SWAP_HINT_ARMED_TEXT, 1.0)
 	_swap_target_feedback_reel = -1
 	_swap_drag_press = Vector2.ZERO
 	_swap_drag_offset = Vector2.ZERO
@@ -5018,8 +5064,9 @@ func _swap_target_at(global_position: Vector2) -> int:
 func _on_swap_destination_pick(destination: int, source_override: int = -1,
 		source_symbol_override: String = "") -> void:
 	var source := _swap_source if source_override < 0 else source_override
-	var source_symbol := _swap_source_symbol if source_symbol_override == "" \
-		else source_symbol_override
+	# Reel for reel: the store swaps the two reels' own symbols, so no override is passed
+	# unless a caller (the dealer's help) explicitly names one.
+	var source_symbol := source_symbol_override
 	var was_pending := RunStateStore.comboDefeatPending
 	_clear_targeting()
 	if not RunStateStore.swap_symbol(source, destination, source_symbol):
@@ -5255,12 +5302,10 @@ func _clear_targeting() -> void:
 	_stop_swap_slot_pulse()
 	_stop_swap_symbol_shake()
 	_cancel_swap_drag_gesture()
-	# The instruction is a child of the targeting layer, so freeing the layer frees it;
-	# only its tween and the cached reference need clearing here.
-	_stop_swap_instruction()
 	if _targeting_layer != null:
 		_targeting_layer.queue_free()
 		_targeting_layer = null
+	_swap_slot_hints.clear() # the frames were children of the layer just freed
 	_cheat_preview_sprite = null # freed with the targeting layer
 	if _cheat_selection_sprite != null:
 		_cheat_selection_sprite.visible = false
@@ -6181,18 +6226,30 @@ func _refresh_tobacco_fx() -> void:
 	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
 		or _boost_zero_linger.has("pairBoostSpins")
 	var active := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
-	var hidden := 0
-	if active:
-		hidden = clampi(RunStateStore.pairBoostHiddenReels, 0, 2)
+	# Every reel the scoring ignores is covered, whatever took it away: Tobacco's smoke for
+	# its two spins, or Tunnel Vision for the whole run. Only Tobacco actually smokes —
+	# Tunnel Vision blinds the reel silently (issue #181).
+	var hidden := _blind_reel_count()
 	for i in 3:
 		var smoked: bool = i >= 3 - hidden
 		if i < _tobacco_covers.size():
 			(_tobacco_covers[i] as ColorRect).visible = smoked
 		if i < _tobacco_smoke.size():
 			var smoke := _tobacco_smoke[i] as CPUParticles2D
-			var emits_smoke := smoked and tobacco_active
+			var emits_smoke := smoked and active
 			smoke.visible = emits_smoke
 			smoke.emitting = emits_smoke
+
+## Reels currently out of the scoring, read from live state rather than the last result so a
+## run that owns Tunnel Vision is blind from its first frame, before any spin has landed.
+## Tobacco keeps its reel covered through the zero-count linger, like its icon.
+func _blind_reel_count() -> int:
+	var hidden := _active_hidden_reel_count() # whatever the last scored result used
+	if Economy.has_tunnel_vision(RunStateStore.ownedUpgrades):
+		hidden = maxi(hidden, 1)
+	if RunStateStore.pairBoostSpins > 0 or _boost_zero_linger.has("pairBoostSpins"):
+		hidden = maxi(hidden, clampi(RunStateStore.pairBoostHiddenReels, 0, 2))
+	return clampi(hidden, 0, 2)
 
 func _refresh_energy_fx() -> void:
 	if _energy_edges == null:
@@ -6210,12 +6267,13 @@ func _refresh_energy_fx() -> void:
 		_energy_pulse_tween = create_tween().set_loops()
 		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 1.0, energy_pulse_time * 0.5)
 		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 0.35, energy_pulse_time * 0.5)
-	# Fade the spins bar & count out while the drink runs; fade back on end.
-	var target_a := 0.0 if active else 1.0
+	# The drink used to fade the spins tube out for its duration. It stays up now — the
+	# rush is told by the edges alone, and hiding the tube took away the one readout the
+	# player still needs while it runs. Any fade left mid-flight is returned here.
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for node in _spins_bar_nodes():
-		tw.tween_property(node, "modulate:a", target_a, energy_fade_time)
+		tw.tween_property(node, "modulate:a", 1.0, energy_fade_time)
 
 func _spins_bar_nodes() -> Array:
 	var nodes: Array = []
@@ -6669,8 +6727,21 @@ func _check_flatline_instant_death() -> bool:
 		"scoreEarned": RunStateStore.scoreEarned,
 		"lucidityCoins": RunStateStore.lucidityCoins,
 	}
-	_show_ending("flatline", run)
+	# The killing strike gets to play: the FLATLINE line-sweep and its 3/3 count run to the
+	# end before the ending screen takes over, instead of being cut off the frame they land.
+	# The machine is locked meanwhile so nothing can be pressed during the beat.
+	if fatal_flatline_reaction_delay <= 0.0:
+		_show_ending("flatline", run)
+		return true
+	_set_sequence_lock(true)
+	_show_fatal_flatline_ending(run)
 	return true
+
+func _show_fatal_flatline_ending(run: Dictionary) -> void:
+	await get_tree().create_timer(fatal_flatline_reaction_delay).timeout
+	if not is_inside_tree() or _overlay != null:
+		return
+	_show_ending("flatline", run)
 
 func _show_flatline_result_reaction(count: int) -> void:
 	var host := Control.new()
@@ -7535,9 +7606,15 @@ func _refresh_pacte_augment_badge() -> void:
 	if ids.is_empty():
 		for entry: Dictionary in _pacte_augment_badges:
 			(entry["badge"] as Button).visible = false
+		if _augment_plate_sprite != null:
+			_augment_plate_sprite.visible = false # no augments, no sockets
 		_hide_pacte_augment_popup()
 		return
 	var shown := mini(ids.size(), _pacte_augment_badges.size())
+	# One socket per badge on show, so the plate never offers an empty bed.
+	if _augment_plate_sprite != null:
+		_augment_plate_sprite.visible = true
+		_set_sheet_frame(_augment_plate_sprite, clampi(shown - 1, 0, AUGMENT_PLATE_FRAMES - 1))
 	for i in _pacte_augment_badges.size():
 		var entry: Dictionary = _pacte_augment_badges[i]
 		var badge: Button = entry["badge"]
