@@ -114,6 +114,11 @@ var lastComboMultiplier := 1 # gauge value the last spin ran at (power-rescue ba
 var comboDefeatPending := false # loss awaiting a power-rescue decision
 var pendingComboMultiplier := 1 # gauge value held while the rescue window is open
 var lastEffectiveBet := 1 # display only (score-burst colour); not gameplay/parity
+# What the reels currently on screen are worth on their own, before any store-level
+# boost. Abilities report a rescore difference; this is what turns that back into the
+# new combination's own value so each one can pay on top of the last (issue #181).
+var lastPureWinScore := 0
+var lastPureWinCoins := 0
 var dealerCount := 0
 var dealerLastSpinCount := 0
 var dealerCountdown := 12 # issue #155: steps until the dealer (start value re-applied per run)
@@ -487,6 +492,10 @@ func _capture_rewind_snapshot() -> Dictionary:
 		"betMultiplier": betMultiplier,
 		"lastComboMultiplier": lastComboMultiplier,
 		"lastEffectiveBet": lastEffectiveBet,
+		# The additive payout baseline belongs to the reels being restored, or a power
+		# used after a rewind would pay off the rewound spin's combination.
+		"lastPureWinScore": lastPureWinScore,
+		"lastPureWinCoins": lastPureWinCoins,
 		"spinCount": spinCount,
 		"winBoostCombo": winBoostCombo,
 		"dealerHelpSpinCount": dealerHelpSpinCount,
@@ -521,6 +530,8 @@ func _restore_rewind_snapshot(snapshot: Dictionary) -> void:
 	betMultiplier = int(snapshot.get("betMultiplier", betMultiplier))
 	lastComboMultiplier = int(snapshot.get("lastComboMultiplier", lastComboMultiplier))
 	lastEffectiveBet = int(snapshot.get("lastEffectiveBet", lastEffectiveBet))
+	lastPureWinScore = int(snapshot.get("lastPureWinScore", lastPureWinScore))
+	lastPureWinCoins = int(snapshot.get("lastPureWinCoins", lastPureWinCoins))
 	spinCount = int(snapshot.get("spinCount", spinCount))
 	winBoostCombo = int(snapshot.get("winBoostCombo", winBoostCombo))
 	dealerHelpSpinCount = int(snapshot.get("dealerHelpSpinCount", dealerHelpSpinCount))
@@ -868,6 +879,11 @@ func spin(compulsive := false) -> Variant:
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	isSpinning = true
 	lastResult = final_result
+	# Baseline for the additive power payouts below: what the reels as spun are worth
+	# on their own, before any store-level boost. Powers reshape these reels, and each
+	# combination they form pays on top rather than replacing this one.
+	lastPureWinScore = maxi(0, int(result["scoreEarned"]))
+	lastPureWinCoins = maxi(0, int(result["coinsEarned"]))
 	_track_spin_card_progress(final_result)
 	if int(final_result.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
@@ -1029,6 +1045,8 @@ func reset_run_state() -> void:
 	nextSpinLucidityMultiplier = 1.0
 	isSpinning = false
 	lastResult = null
+	lastPureWinScore = 0
+	lastPureWinCoins = 0
 	lockedReels = [false, false, false]
 	lockedReelSpins = [0, 0, 0]
 	runConsumables = {}
@@ -1258,6 +1276,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	nextSpinLucidityMultiplier = 1.0
 	isSpinning = false
 	lastResult = null
+	lastPureWinScore = 0
+	lastPureWinCoins = 0
 	lockedReels = [false, false, false]
 	lockedReelSpins = [0, 0, 0]
 	# The Pacte flow replaces the pre-run shop. Legacy dealer callers still pass
@@ -2068,12 +2088,22 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var win_boost_combo := 0
 	var win_boost_applied := false
 	var outcome_win_type := String(outcome.get("winType", ""))
-	if flatlineWinBoostArmed and int(outcome.get("scoreDelta", 0)) > 0 \
+	# Abilities report the difference between the reels before and after, because a
+	# rescore replaces one combination with another. The run pays additively instead:
+	# a combination the player already won is never taken back, and whatever a power
+	# forms pays on top of it. So the delta is turned back into the new combination's
+	# own value, which is also what the boosts below take their cut of.
+	var win_score := maxi(0, lastPureWinScore + int(outcome.get("scoreDelta", 0)))
+	var win_coins := maxi(0, lastPureWinCoins + int(outcome.get("coinsDelta", 0)))
+	lastPureWinScore = win_score
+	lastPureWinCoins = win_coins
+	outcome = outcome.duplicate(true)
+	outcome["scoreDelta"] = win_score
+	outcome["coinsDelta"] = win_coins
+	if flatlineWinBoostArmed and win_score > 0 \
 			and outcome_win_type in ["pair", "triple", "jackpot"]:
-		flatline_boost_bonus = int(outcome["scoreDelta"]) \
-			* (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
+		flatline_boost_bonus = win_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		flatline_boost_applied = true
-		outcome = outcome.duplicate(true)
 		outcome["scoreDelta"] = int(outcome["scoreDelta"]) + flatline_boost_bonus
 		outcome["coinsDelta"] = int(outcome["coinsDelta"]) + flatline_boost_bonus
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
@@ -2085,7 +2115,6 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 			* WIN_BOOST_RATES[boost_step] + 0.5)
 		win_boost_applied = true
 		if win_boost_bonus > 0:
-			outcome = outcome.duplicate(true)
 			outcome["scoreDelta"] = int(outcome["scoreDelta"]) + win_boost_bonus
 			outcome["coinsDelta"] = int(outcome["coinsDelta"]) + win_boost_bonus
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed,
@@ -2095,7 +2124,9 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int) -> void:
 	var free_after := mini(freeSpinsRemaining + int(outcome["freeSpinsGranted"]),
 		maxi(freeSpinsRemaining, maxFreeSpins))
 	abilitiesUsed = plan["abilitiesUsed"]
-	scoreEarned = maxi(0, scoreEarned + int(outcome["scoreDelta"]))
+	# Additive and never negative: the score cannot go down because a power reshaped
+	# the reels into something worth less than what was already won.
+	scoreEarned = maxi(0, scoreEarned + maxi(0, int(outcome["scoreDelta"])))
 	lucidityCoins = int(plan["lucidityCoins"])
 	pendingPowerRestores.append_array(plan["restores"])
 	_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())

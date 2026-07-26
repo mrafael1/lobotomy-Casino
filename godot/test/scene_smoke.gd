@@ -52,6 +52,7 @@ func _run() -> void:
 	_check_flatline_action_text(machine, meta_store, failures)
 	_check_global_options_layout(failures)
 	_check_water_lucidity_gain(run_store, failures)
+	_check_additive_power_payout_181(run_store, failures)
 	_check_jackpot_payout_181(machine, run_store, failures)
 	_check_target_readout_181(machine, run_store, failures)
 	await _check_machine_water_feedback(machine, run_store, failures)
@@ -615,6 +616,64 @@ func _check_settings_icon(button: TextureButton, scene_name: String, failures: A
 	if button.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("options: %s setting icon is not nearest-neighbor filtered" % scene_name)
 
+## Issue #181: a power's combination pays on top of what the spin already won, and the
+## score can never go down because a power reshaped the reels into something smaller.
+func _check_additive_power_payout_181(run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 10
+	# The spin landed a pair worth 10; that is the baseline the powers build on.
+	var spun := Evaluate.score_reels(["eye", "eye", "pill"], 1.0, false)
+	var pair_score := int(spun["scoreEarned"])
+	if pair_score <= 0:
+		failures.append("issue181: the additive-payout fixture did not land a paying pair")
+		return
+	run_store.scoreEarned = pair_score
+	run_store.lastPureWinScore = pair_score
+	run_store.lastPureWinCoins = int(spun["coinsEarned"])
+	run_store.lastResult = {
+		"reels": ["eye", "eye", "pill"], "winType": "pair", "isJackpot": false,
+		"scoreEarned": pair_score, "coinsEarned": pair_score,
+		"freeSpinsGranted": 0, "freeSpinsAfter": 0, "isFreeSpin": false,
+	}
+	# A power turns it into a triple: the triple's own value is added on top.
+	var triple := Evaluate.score_reels(["eye", "eye", "eye"], 1.0, false)
+	var triple_score := int(triple["scoreEarned"])
+	run_store._apply_outcome({
+		"reels": ["eye", "eye", "eye"], "winType": "triple", "isJackpot": false,
+		"scoreDelta": triple_score - pair_score, "coinsDelta": triple_score - pair_score,
+		"freeSpinsGranted": 0,
+	}, [], 1)
+	if int(run_store.scoreEarned) != pair_score + triple_score:
+		failures.append("issue181: a power's win did not pay on top of the spin's (%d, want %d)"
+			% [int(run_store.scoreEarned), pair_score + triple_score])
+	# A second power drops back to a smaller pair: it still pays its own value, and
+	# nothing that was already won is taken away.
+	var before_smaller := int(run_store.scoreEarned)
+	var smaller := Evaluate.score_reels(["vial", "vial", "eye"], 1.0, false)
+	var smaller_score := int(smaller["scoreEarned"])
+	run_store._apply_outcome({
+		"reels": ["vial", "vial", "eye"], "winType": "pair", "isJackpot": false,
+		"scoreDelta": smaller_score - triple_score, "coinsDelta": smaller_score - triple_score,
+		"freeSpinsGranted": 0,
+	}, [], 2)
+	if int(run_store.scoreEarned) < before_smaller:
+		failures.append("issue181: a smaller power result took score away (%d -> %d)"
+			% [before_smaller, int(run_store.scoreEarned)])
+	if int(run_store.scoreEarned) != before_smaller + smaller_score:
+		failures.append("issue181: the smaller power win did not pay its own value (%d, want %d)"
+			% [int(run_store.scoreEarned), before_smaller + smaller_score])
+	# A power that leaves no winning combination pays nothing and takes nothing.
+	var before_miss := int(run_store.scoreEarned)
+	run_store._apply_outcome({
+		"reels": ["brain", "eye", "pill"], "winType": "miss", "isJackpot": false,
+		"scoreDelta": -smaller_score, "coinsDelta": -smaller_score, "freeSpinsGranted": 0,
+	}, [], 3)
+	if int(run_store.scoreEarned) != before_miss:
+		failures.append("issue181: a missed power result moved the score (%d -> %d)"
+			% [before_miss, int(run_store.scoreEarned)])
+	run_store.reset_run_state()
+
 func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)
 	var previous_spinning := bool(run_store.isSpinning)
@@ -738,6 +797,31 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	if machine._target_bar_sprite.hframes != machine.TARGET_BAR_FRAME_COUNT \
 			or machine._target_goals_sprite.hframes != machine.TARGET_GOALS_FRAME_COUNT:
 		failures.append("issue181: the TARGET sheets were sliced into the wrong frame count")
+	# The shimmer is re-authored from time to time; catch a sheet whose real frame count
+	# has drifted from the constant rather than letting it play sliced-up frames.
+	var shimmer: Sprite2D = machine._target_bar_anim_sprite
+	if shimmer == null:
+		failures.append("issue181: the TARGET bar shimmer is missing")
+	else:
+		if shimmer.hframes != machine.TARGET_BAR_ANIM_FRAME_COUNT:
+			failures.append("issue181: the shimmer sheet was sliced into the wrong frame count")
+		if shimmer.texture != null:
+			var sheet_frames := int(round(
+				float(shimmer.texture.get_width()) / float(machine.SRC_W)))
+			if sheet_frames != machine.TARGET_BAR_ANIM_FRAME_COUNT:
+				failures.append("issue181: the shimmer sheet holds %d frames, the code expects %d"
+					% [sheet_frames, int(machine.TARGET_BAR_ANIM_FRAME_COUNT)])
+		if shimmer.z_index >= machine._target_bar_sprite.z_index:
+			failures.append("issue181: the shimmer should play under the fill bar")
+		# It has to actually advance, and wrap rather than run off the sheet.
+		var first_frame := shimmer.frame
+		for _step in machine.TARGET_BAR_ANIM_FRAME_COUNT:
+			machine._advance_target_bar_animation(machine.TARGET_BAR_ANIM_FRAME_TIME)
+		if shimmer.frame != first_frame:
+			failures.append("issue181: the shimmer did not loop back around")
+		machine._advance_target_bar_animation(machine.TARGET_BAR_ANIM_FRAME_TIME)
+		if shimmer.frame == first_frame:
+			failures.append("issue181: the shimmer is not advancing")
 	if machine._target_goals_sprite.hframes != EconomyConst.WEALTH_TARGETS.size():
 		failures.append("issue181: the goal sheet does not carry one frame per wealth target")
 

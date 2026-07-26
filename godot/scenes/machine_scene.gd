@@ -37,8 +37,8 @@ const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # against rendered pixels; same trick as the wealth goal rects).
 const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
-# number (art y91..95), the fill bar under it (y99..103), and a two-frame shimmer that
-# loops over the bar. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
+# number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
+# y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
 # entry, so its frame index is the target index; the bar's twelve frames are the fill
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
@@ -47,8 +47,8 @@ const TARGET_BAR_FRAME_COUNT := 12
 const TARGET_GOALS_SHEET := "machine new view/target_goals.png"
 const TARGET_GOALS_FRAME_COUNT := 8
 const TARGET_BAR_ANIM_SHEET := "machine new view/target_bar_animation.png"
-const TARGET_BAR_ANIM_FRAME_COUNT := 2
-const TARGET_BAR_ANIM_FRAME_TIME := 0.42
+const TARGET_BAR_ANIM_FRAME_COUNT := 6
+const TARGET_BAR_ANIM_FRAME_TIME := 0.12
 const TARGET_TV_Z_INDEX := 8 # above the cabinet and callout sheets, below the icons
 # Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
 # the lever animation starts.
