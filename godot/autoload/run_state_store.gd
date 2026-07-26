@@ -1233,16 +1233,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	# A claim that was made but never paid must be settled before the round rolls over,
-	# not dropped by the reset below: dropping it handed the player the whole score
-	# instead of the change and left the target unadvanced, so the same target could be
-	# beaten again. Reaching here with one outstanding means the payout screen never
-	# got its CONTINUE (the scene was left, the app was closed).
+	# not dropped by the reset below: dropping it left the overflow unbanked and the
+	# target unadvanced, so the same target could be beaten again. Reaching here with
+	# one outstanding means the payout screen never got its CONTINUE (the scene was
+	# left, the app was closed).
 	if continuing_round:
 		_settle_pending_wealth_target()
-	# A target round keeps the change: the beaten target has been paid out of the score
-	# and the payout screen shows that remainder as the money the player walks away
-	# with. A flatline keeps nothing.
-	scoreEarned = scoreEarned if continuing_round else 0
+	# Every run starts from zero. What a run made over its target was banked to the
+	# wallet when the target was settled, so there is nothing to carry.
+	scoreEarned = 0
 	lucidityCoins = 0
 	# The advanced target survives a round continuation, and a flatline continuation
 	# resumes the campaign where it died rather than sending the player back to the
@@ -1448,24 +1447,36 @@ func complete_wealth_target() -> Dictionary:
 ## The payout itself, without the commit — the money changing hands. Shared with
 ## start_new_run so an outstanding claim is always settled exactly once, whether the
 ## player pressed CONTINUE or the round rolled over without them.
+##
+## What the run made over the target is banked to the persistent wallet in full and
+## the run's score returns to zero: the overflow is winnings the player walks away
+## with, not a head start on the next target. Banking happens here rather than at the
+## next start_new_run because the dealer on the other side of the break spends that
+## wallet, and he opens before the next run begins.
 func _settle_pending_wealth_target() -> Dictionary:
 	if not wealthTargetPending:
 		return {}
 	var target := wealthTargetPendingValue if wealthTargetPendingValue > 0 \
 		else current_wealth_target()
 	var final_target := target >= EconomyConst.WEALTH_SCORE_THRESHOLD
+	var banked := 0
 	if not final_target:
-		scoreEarned = maxi(0, scoreEarned - target)
+		banked = maxi(0, scoreEarned - target)
+		scoreEarned = 0
 		wealthTargetIndex = mini(wealthTargetIndex + 1, EconomyConst.WEALTH_TARGETS.size() - 1)
 		if lastResult is Dictionary:
 			var updated_result: Dictionary = (lastResult as Dictionary).duplicate(true)
 			updated_result["scoreEarned"] = scoreEarned
 			lastResult = updated_result
+		var meta := _meta_store()
+		if meta != null:
+			meta.bank_wealth_target_overflow(banked)
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
 	return {
 		"target": target,
 		"final": final_target,
+		"banked": banked,
 		"remaining": scoreEarned,
 	}
 

@@ -420,6 +420,19 @@ func set_reward_amp_symbol(symbol: String) -> void:
 	meta_changed.emit()
 	save_state()
 
+## Banks what a run made over its wealth target. Unlike the end-of-run bank this is
+## paid in full and immediately: the money is the player's the moment the target is
+## settled, and the dealer waiting on the other side of the break spends this wallet.
+## Deliberately separate from bank_run_to_meta, whose kept-fraction math is parity
+## locked and is about a run that has ended.
+func bank_wealth_target_overflow(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	lucidityWallet += amount
+	meta_changed.emit()
+	save_state()
+	return amount
+
 # Generic wallet spend (pre-run shop reroll etc.). Returns false without side
 # effects when the wallet can't cover it.
 func spend_lucidity(amount: int) -> bool:

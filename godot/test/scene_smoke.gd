@@ -2868,11 +2868,15 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			failures.append("issue181: the machine never got its wealth digits back")
 		machine._wealth_target_transition_active = false
 		machine._set_sequence_lock(false)
+	var wallet_before_payout := int(meta_store.lucidityWallet)
 	var payout: Dictionary = run_store.complete_wealth_target()
-	if int(payout.get("remaining", -1)) != 150 \
-			or int(run_store.scoreEarned) != 150 \
+	# Issue #181: the 150 made over the 500 target is banked to the wallet in full and
+	# the run's score returns to zero.
+	if int(payout.get("banked", -1)) != 150 \
+			or int(meta_store.lucidityWallet) != wallet_before_payout + 150 \
+			or int(run_store.scoreEarned) != 0 \
 			or int(run_store.wealthTargetIndex) != 3:
-		failures.append("issue176: 500 target did not leave the 150 score remainder")
+		failures.append("issue181: 500 target did not bank the 150 overflow")
 	if not run_store.arm_pacte_for_wealth_target(500):
 		failures.append("issue176: first 500 target did not arm Pacte")
 	# Once the first visit is consumed, the same 500 milestone cannot arm it again,
@@ -2936,8 +2940,8 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: target break wrongly spent a campaign neuron")
 	if not run_store.start_new_run([], {}):
 		failures.append("issue176: could not start the next target round")
-	if int(run_store.scoreEarned) != 150:
-		failures.append("issue176: next round did not keep the money left after the target")
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue181: next round did not start from zero")
 	if int(run_store.wealthTargetIndex) != 3:
 		failures.append("issue176: next round lost the advanced target")
 	if run_store.roundContinuationPending:
@@ -2950,36 +2954,49 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
 	if String(run_store.runPhase) != "running":
 		failures.append("issue176: next round did not enter the machine")
-	# Issue #181: the overflow is the change, and only the change. Beating 100 with 152
-	# leaves 52 in the next run.
+	# Issue #181: beating target 100 with 152 banks the 52 overflow to the wallet in
+	# full, and the next run starts from zero.
 	run_store.reset_run_state()
 	meta_store.campaignNeuronsLeft = 3
+	meta_store.lucidityWallet = 400
 	run_store.runPhase = "running"
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 152
 	run_store.begin_wealth_target()
 	var overflow: Dictionary = run_store.complete_wealth_target()
-	if int(overflow.get("remaining", -1)) != 52:
-		failures.append("issue181: paying target 100 out of 152 did not leave 52")
+	if int(overflow.get("banked", -1)) != 52:
+		failures.append("issue181: paying target 100 out of 152 did not bank 52")
+	if int(meta_store.lucidityWallet) != 452:
+		failures.append("issue181: the overflow never reached the wallet (%d)"
+			% int(meta_store.lucidityWallet))
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue181: the run kept its score after banking the overflow")
+	# The break's dealer is a pre-run shop, so he spends the wallet the overflow just
+	# landed in — banking has to happen at the payout, not at the next run's start.
 	run_store.begin_target_round()
+	if String(run_store.runPhase) == "running":
+		failures.append("issue181: the target break did not leave the machine")
 	run_store.start_new_run([], {}, false)
-	if int(run_store.scoreEarned) != 52:
-		failures.append("issue181: the next run did not start on the overflow alone (%d)"
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue181: the next run did not start from zero (%d)"
 			% int(run_store.scoreEarned))
 	# A claim that never reached its CONTINUE (scene left, app closed) is settled by the
-	# round rollover instead of being dropped — dropping it handed over the whole score
-	# and left the target unadvanced, so it could be beaten twice.
+	# round rollover instead of being dropped — dropping it left the overflow unbanked
+	# and the target unadvanced, so it could be beaten twice.
 	run_store.reset_run_state()
 	meta_store.campaignNeuronsLeft = 3
+	meta_store.lucidityWallet = 400
 	run_store.runPhase = "running"
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 152
 	run_store.begin_wealth_target()
 	run_store.begin_target_round()
 	run_store.start_new_run([], {}, false)
-	if int(run_store.scoreEarned) != 52:
-		failures.append("issue181: an unpaid target claim carried the whole score (%d)"
-			% int(run_store.scoreEarned))
+	if int(meta_store.lucidityWallet) != 452:
+		failures.append("issue181: an unpaid target claim lost the overflow (%d)"
+			% int(meta_store.lucidityWallet))
+	if int(run_store.scoreEarned) != 0:
+		failures.append("issue181: an unpaid target claim carried a score into the next run")
 	if int(run_store.wealthTargetIndex) != 1:
 		failures.append("issue181: an unpaid target claim left the target unadvanced")
 	if run_store.wealthTargetPending:
