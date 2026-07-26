@@ -2954,6 +2954,29 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		failures.append("issue176: starting the next round wrongly spent a campaign neuron")
 	if String(run_store.runPhase) != "running":
 		failures.append("issue176: next round did not enter the machine")
+	# Issue #181: a consumable that was used does not come back. The meta stash is a
+	# purchase order and it was delivered when the run started, so the between-round
+	# dealer must not re-deliver it; and spending the last charge drops the entry
+	# instead of carrying an empty stack into the next round.
+	run_store.reset_run_state()
+	meta_store.campaignNeuronsLeft = 3
+	meta_store.pendingConsumables = { "cons_tea": 1 }
+	run_store.start_new_run([], meta_store.get_pending_consumables(), false)
+	if int(run_store.runConsumables.get("cons_tea", 0)) != 1:
+		failures.append("issue181: the purchased consumable was not delivered")
+	if not meta_store.pendingConsumables.is_empty():
+		failures.append("issue181: the meta stash was not cleared once delivered")
+	run_store.runPhase = "running"
+	run_store.lastResult = { "reels": ["eye", "pill", "vial"], "isFreeSpin": false }
+	if not run_store.use_consumable("cons_tea"):
+		failures.append("issue181: the delivered consumable could not be used")
+	if run_store.runConsumables.has("cons_tea"):
+		failures.append("issue181: a spent consumable left an empty stack behind")
+	run_store.wealthTargetIndex = 3
+	run_store.begin_target_round()
+	run_store.start_new_run([], meta_store.get_pending_consumables(), false)
+	if run_store.runConsumables.has("cons_tea"):
+		failures.append("issue181: a used consumable came back after the target break")
 	# Issue #181: beating target 100 with 152 banks the 52 overflow to the wallet in
 	# full, and the next run starts from zero.
 	run_store.reset_run_state()

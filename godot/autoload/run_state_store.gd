@@ -1270,9 +1270,12 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 		runConsumables = _merge_run_consumables(kept_consumables, pending_consumables)
 	else:
 		runConsumables = pending_consumables.duplicate(true)
-	if open_pacte and not MetaStateStore.pendingConsumables.is_empty():
-		# Old saves may still contain a pre-run stash. Pacte starts clean and the
-		# stale wallet purchase must not survive into a future run.
+	# The meta stash is a purchase order, and it has just been delivered into the run.
+	# It used to be cleared only when a run banked, which no target break does — so the
+	# between-round dealer re-delivered the same purchase every round and a consumable
+	# the player had already used came back. Clearing it here means one purchase, one
+	# delivery, whichever flow started the run.
+	if not MetaStateStore.pendingConsumables.is_empty():
 		MetaStateStore.pendingConsumables = {}
 		MetaStateStore.save_state()
 	abilitiesUsed = []
@@ -2382,7 +2385,13 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 	lastUsedConsumableId = consumable_id  # syringe-triple recovery target (issue #35)
 	_note_card_metric(CardUnlocks.METRIC_CONSUMABLES_USED)
 	runConsumables = runConsumables.duplicate(true)
-	runConsumables[consumable_id] = charges - 1
+	# Spending the last charge drops the entry rather than leaving a zero behind, the
+	# same way discarding does. A spent stack is gone, not an empty slot that rides
+	# along into the next round's stash.
+	if charges <= 1:
+		runConsumables.erase(consumable_id)
+	else:
+		runConsumables[consumable_id] = charges - 1
 
 	if in_run != null:
 		var e: Dictionary = in_run["effect"]
