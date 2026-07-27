@@ -59,6 +59,7 @@ func _run() -> void:
 	_check_water_wealth_169(machine, run_store, meta_store, failures)
 	_check_off_spin_target_proc(machine, run_store, meta_store, failures)
 	_check_augment_level_readouts(machine, run_store, failures)
+	_check_reserve_glow_132(machine, run_store, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
 	await _check_upgrades_scene(failures)
 	_check_smart_save_retention(failures)
@@ -566,6 +567,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	_check_dealer_tip_132(failures)
 	_check_emergency_reserve_132(failures)
 	_check_symbol_level_picker_132(failures)
+	_check_pair_triple_picker_bounds_132(failures)
 	_check_augment_feedback_map_132(failures)
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
@@ -2140,6 +2142,74 @@ func _check_symbol_level_picker_132(failures: Array) -> void:
 	if String(overlay._augment_pick) != "":
 		failures.append("issue132: cancelling left the pick staged")
 	overlay.queue_free()
+
+## The Pair/Triple picker is modal and swallows input, so its buttons landing outside the
+## canvas was a hard lock, not a cosmetic slip (issue #132). Centred anchors made Godot
+## read `position` as an offset FROM the centre and threw the panel to (92, 285) with its
+## buttons at y=327, below the 320px bottom edge.
+func _check_pair_triple_picker_bounds_132(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var shop: Node = (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	shop._open_pair_triple_picker("aug_pair_triple")
+	var picker: Node = shop.get_node_or_null("AugmentPicker")
+	var panel := picker.get_node_or_null("PairTriplePanel") as Control if picker != null else null
+	if panel == null:
+		failures.append("issue132: the pair/triple picker did not build its panel")
+		shop.queue_free()
+		return
+	var canvas := Rect2(0.0, 0.0, shop.CANVAS_W, shop.CANVAS_H)
+	if not canvas.encloses(Rect2(panel.position, panel.size)):
+		failures.append("issue132: the picker panel %s escapes the %s canvas"
+			% [str(Rect2(panel.position, panel.size)), str(canvas.size)])
+	# The buttons are the part that must be reachable — check each one, not just the panel.
+	var row := panel.get_node_or_null("Buttons") as Control
+	if row == null:
+		failures.append("issue132: the picker has no button row")
+	else:
+		for child in row.get_children():
+			var button := child as Control
+			if button == null:
+				continue
+			var rect := Rect2(button.global_position, button.size)
+			if not canvas.encloses(rect):
+				failures.append("issue132: picker button %s at %s is off-screen"
+					% [button.name, str(rect)])
+	run_store.dealerAugmentOfferId = ""
+	shop.queue_free()
+
+## An armed Emergency Reserve glows the health tube's bottom chip, and stops the moment it
+## is spent (issue #132).
+func _check_reserve_glow_132(machine: Node, run_store: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_used := bool(meta_store.emergencyReserveUsed)
+	var prev_phase := String(run_store.runPhase)
+	var glow: Sprite2D = machine._reserve_glow_sprite
+	if glow == null:
+		failures.append("issue132: the machine built no reserve glow")
+	else:
+		run_store.runPhase = "running"
+		meta_store.chipAugmentsPurchased = { "aug_emergency_reserve": 1 }
+		meta_store.emergencyReserveUsed = false
+		machine._refresh_reserve_glow()
+		if not glow.visible:
+			failures.append("issue132: an armed reserve did not light the bottom chip")
+		# It must sit ON the chip, not near it: the region is borrowed from the sheet's
+		# own "one spin left" frame so the two can never drift apart.
+		if not glow.region_enabled \
+				or not is_equal_approx(glow.position.x, machine.HEALTH_BOTTOM_CHIP_RECT.position.x) \
+				or not is_equal_approx(glow.position.y, machine.HEALTH_BOTTOM_CHIP_RECT.position.y):
+			failures.append("issue132: the reserve glow is not registered on the bottom chip (%s)"
+				% str(glow.position))
+		meta_store.emergencyReserveUsed = true
+		machine._refresh_reserve_glow()
+		if glow.visible:
+			failures.append("issue132: a spent reserve kept glowing")
+	meta_store.chipAugmentsPurchased = prev_augs
+	meta_store.emergencyReserveUsed = prev_used
+	run_store.runPhase = prev_phase
+	machine._refresh_reserve_glow()
 
 ## Every augment must name feedback that a scene can actually route (issue #132), and a
 ## missing visual target must be survivable — the data says WHERE, the scene decides IF.

@@ -27,6 +27,16 @@ const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
 # Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
 # N spins remaining — frame 0 = empty/no spins, frame 18 = 18+ spins.
 const HEALTH_BAR_FRAME_COUNT := 19
+# The tube's bottom chip — the last spin the run has — measured off health_bar.png as the
+# pixels that differ between frame 0 (empty) and frame 1 (one spin). An armed Emergency
+# Reserve glows exactly that chip: the reserve IS one more spin waiting under the last
+# one, so it reads where the player already looks for spins rather than as a new badge.
+const HEALTH_BOTTOM_CHIP_RECT := Rect2(4.0, 98.0, 13.0, 7.0)
+const HEALTH_BAR_FRAME_W := 160.0 # full-canvas sheet: one frame is the whole canvas
+const RESERVE_GLOW_COLOR := Color(0.55, 1.0, 0.85)
+const RESERVE_GLOW_MIN_ALPHA := 0.22
+const RESERVE_GLOW_MAX_ALPHA := 0.72
+const RESERVE_GLOW_PERIOD := 1.1
 const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
 const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
@@ -724,6 +734,8 @@ var _tv_blackout_rect: ColorRect = null
 var _tv_blackout_tween: Tween = null
 var _unlock_popup: UnlockCardPopup = null
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
+var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
+var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
 var _win_anim_tween: Tween = null
@@ -1293,6 +1305,7 @@ func _build_tv_indicators() -> void:
 	_build_target_readout()
 	_health_bar_sprite = _build_full_canvas_sheet(
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
+	_build_reserve_glow()
 	_build_spins_left_label()
 	_coin_insert_sprite = _build_full_canvas_sheet(
 		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
@@ -1428,6 +1441,51 @@ func _build_power_bar() -> void:
 	# the ability itself was already restored by plan_gain at spin time).
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
+
+## A soft pulse on the tube's bottom chip while the Emergency Reserve is armed (issue
+## #132). Rather than invent a badge, this re-draws the authored chip pixels themselves —
+## a region of frame 1 of the tube sheet, laid exactly over where that chip already sits —
+## so the glow can never drift out of register with the art it is highlighting.
+func _build_reserve_glow() -> void:
+	var tex := _load_texture("machine new view/health_bar.png", true)
+	if tex == null:
+		return
+	_reserve_glow_sprite = Sprite2D.new()
+	_reserve_glow_sprite.name = "ReserveGlow"
+	_reserve_glow_sprite.texture = tex
+	_reserve_glow_sprite.centered = false
+	_reserve_glow_sprite.region_enabled = true
+	# Frame 1 is "one spin left", so its copy of the chip is the lit one to borrow.
+	_reserve_glow_sprite.region_rect = Rect2(
+		HEALTH_BAR_FRAME_W + HEALTH_BOTTOM_CHIP_RECT.position.x,
+		HEALTH_BOTTOM_CHIP_RECT.position.y,
+		HEALTH_BOTTOM_CHIP_RECT.size.x, HEALTH_BOTTOM_CHIP_RECT.size.y)
+	_reserve_glow_sprite.position = HEALTH_BOTTOM_CHIP_RECT.position
+	_reserve_glow_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	_reserve_glow_sprite.z_index = 3 # over the tube, under the HUD overlays
+	_reserve_glow_sprite.visible = false
+	add_child(_reserve_glow_sprite)
+
+## Armed → a slow breathing glow; spent or unowned → nothing at all.
+func _refresh_reserve_glow() -> void:
+	if _reserve_glow_sprite == null:
+		return
+	var armed := RunStateStore.runPhase == "running" \
+		and RunStateStore.emergency_reserve_armed()
+	if armed == _reserve_glow_sprite.visible:
+		return # already in the right state; never restart the pulse mid-breath
+	_reserve_glow_sprite.visible = armed
+	if _reserve_glow_tween != null and _reserve_glow_tween.is_valid():
+		_reserve_glow_tween.kill()
+	_reserve_glow_tween = null
+	if not armed:
+		return
+	_reserve_glow_sprite.modulate = Color(RESERVE_GLOW_COLOR, RESERVE_GLOW_MIN_ALPHA)
+	_reserve_glow_tween = create_tween().set_loops()
+	_reserve_glow_tween.tween_property(_reserve_glow_sprite, "modulate:a",
+		RESERVE_GLOW_MAX_ALPHA, RESERVE_GLOW_PERIOD).set_trans(Tween.TRANS_SINE)
+	_reserve_glow_tween.tween_property(_reserve_glow_sprite, "modulate:a",
+		RESERVE_GLOW_MIN_ALPHA, RESERVE_GLOW_PERIOD).set_trans(Tween.TRANS_SINE)
 
 ## The restore light sitting beside the gauge (issue #181). Full-canvas art, so the
 ## placement is baked in and the code only picks the frame. The glow copy sits on top on
@@ -4503,6 +4561,7 @@ func _stash_slots() -> Array:
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 	_refresh_restore_cap()
+	_refresh_reserve_glow()
 
 	var combo_pending := RunStateStore.comboDefeatPending
 	var can_confirm_combo_loss := combo_pending and RunStateStore.runPhase == "running" \
@@ -7290,6 +7349,11 @@ func _clear_wealth_presentation_fx() -> void:
 		_nudge_tween.kill()
 		_nudge_tween = null
 	_stop_restore_flash() # never leave a chip overdriven or a glow painted on the gauge
+	if _reserve_glow_tween != null and _reserve_glow_tween.is_valid():
+		_reserve_glow_tween.kill()
+	_reserve_glow_tween = null
+	if _reserve_glow_sprite != null and is_instance_valid(_reserve_glow_sprite):
+		_reserve_glow_sprite.visible = false
 	_clear_close_call_heartbeat()
 	position = Vector2.ZERO
 
