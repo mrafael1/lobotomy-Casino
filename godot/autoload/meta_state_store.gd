@@ -51,6 +51,20 @@ var cardUnlockProgress: Dictionary = {}
 # unlock earned in the last seconds of a session is still celebrated next launch.
 var pendingCardUnlocks: Array = []
 
+# Chip Augments are CAMPAIGN state, not run state (issue #132). They used to live on
+# RunStateStore, where opening a Pacte wiped them mid-campaign — a chip bought at the
+# first dealer could vanish before it ever paid for itself. They now last until the
+# campaign itself ends, on a wealth ending or a game over, and _clear_campaign_augments()
+# is the single place that takes them away.
+var chipAugmentsPurchased: Dictionary = {}  # augment id -> copies bought this campaign
+var symbolAugmentLevels: Dictionary = {}    # symbol -> +levels bought via aug_symbol_level
+var pairTripleAugmentChoice: String = ""    # "" | "pair" | "triple" (locked once chosen)
+var extraSpinsGranted: int = 0              # aug_extra_spins copies already paid out
+# Emergency Reserve fires once per CAMPAIGN, not once per run: the augment's own scope is
+# the campaign, so re-arming every run (and every target round break) would have sold one
+# rescue and delivered several.
+var emergencyReserveUsed: bool = false
+
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 
@@ -110,6 +124,11 @@ func _as_dict() -> Dictionary:
 		"unlockedPowerCardIds": unlockedPowerCardIds.duplicate(),
 		"pendingCardUnlocks": pendingCardUnlocks.duplicate(true),
 		"cardUnlockProgress": cardUnlockProgress.duplicate(true),
+		"chipAugmentsPurchased": chipAugmentsPurchased.duplicate(true),
+		"symbolAugmentLevels": symbolAugmentLevels.duplicate(true),
+		"pairTripleAugmentChoice": pairTripleAugmentChoice,
+		"extraSpinsGranted": extraSpinsGranted,
+		"emergencyReserveUsed": emergencyReserveUsed,
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -152,6 +171,11 @@ func _apply(meta: Dictionary) -> void:
 			if not owned.has(card_id):
 				owned.append(card_id)
 	pendingCardUnlocks = _normalise_pending_card_unlocks(meta.get("pendingCardUnlocks", []))
+	chipAugmentsPurchased = (meta.get("chipAugmentsPurchased", {}) as Dictionary).duplicate(true)
+	symbolAugmentLevels = (meta.get("symbolAugmentLevels", {}) as Dictionary).duplicate(true)
+	pairTripleAugmentChoice = String(meta.get("pairTripleAugmentChoice", ""))
+	extraSpinsGranted = maxi(0, int(meta.get("extraSpinsGranted", 0)))
+	emergencyReserveUsed = bool(meta.get("emergencyReserveUsed", false))
 	meta_changed.emit()
 
 func _normalise_card_progress(value: Variant) -> Dictionary:
@@ -493,6 +517,7 @@ func mark_ending_reached(ending: String) -> void:
 		wealthEndingReached = true
 		campaignActive = false
 		campaignFailed = false
+		_clear_campaign_augments() # the campaign is over: the chips go with it
 		# Win counter (issue #142): the win is counted for the active tier the
 		# moment the goal is reached. Banking can't own this — the wealth bank
 		# waits for Start Again (a quit there never banks), and a wealth
@@ -524,6 +549,7 @@ func mark_ending_reached(ending: String) -> void:
 		campaignFailed = true
 		campaignNeuronsLeft = 0
 		lucidityWallet = 0
+		_clear_campaign_augments() # the campaign is over: the chips go with it
 	meta_changed.emit()
 	save_state()
 
@@ -657,11 +683,23 @@ func mark_campaign_failed(save_immediately := true) -> void:
 	campaignFailed = true
 	campaignNeuronsLeft = 0
 	pendingConsumables = {}
+	_clear_campaign_augments() # the campaign is over: the chips go with it
 	meta_changed.emit()
 	if save_immediately:
 		save_state()
 
+## The only place Chip Augments are taken away. Called when the campaign ends (wealth or
+## game over) and when a fresh one starts, so the buff spans exactly one campaign — a
+## Pacte, a flatline continuation or a target round break all leave it standing.
+func _clear_campaign_augments() -> void:
+	chipAugmentsPurchased = {}
+	symbolAugmentLevels = {}
+	pairTripleAugmentChoice = ""
+	extraSpinsGranted = 0
+	emergencyReserveUsed = false
+
 func start_new_campaign(save_immediately := true) -> void:
+	_clear_campaign_augments()
 	lucidityWallet = 0
 	ownedPermanents = []
 	corruptionEverUsed = false
@@ -798,6 +836,19 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["oddsTokensBanked"] = 0
 	if not current.has("rewardAmpSymbol"):
 		current["rewardAmpSymbol"] = ""
+	# Issue #132: Chip Augments moved off the run save onto the campaign. A save from
+	# before the move has no keys here; starting the campaign's chips empty is the
+	# recoverable outcome (the run save that held them is not consulted for meta state).
+	if not current.has("chipAugmentsPurchased"):
+		current["chipAugmentsPurchased"] = {}
+	if not current.has("symbolAugmentLevels"):
+		current["symbolAugmentLevels"] = {}
+	if not current.has("pairTripleAugmentChoice"):
+		current["pairTripleAugmentChoice"] = ""
+	if not current.has("extraSpinsGranted"):
+		current["extraSpinsGranted"] = 0
+	if not current.has("emergencyReserveUsed"):
+		current["emergencyReserveUsed"] = false
 	# Issue #52 gates the deck. Saves written before v6 hold either nothing or the
 	# whole catalog (the pre-#52 default), so their unlock lists are rebuilt from
 	# the new rules: the default roster plus whatever their existing history has

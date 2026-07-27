@@ -472,6 +472,12 @@ const RESTORE_FLASH_CHIP_TINT := Color(2.2, 2.7, 2.6)
 const RESTORE_FLASH_GLOW_TINT := Color(2.4, 2.8, 2.8)
 const RESTORE_FLASH_NUDGE := 0.45
 
+# Dealer-purchase payoffs that land back here (issue #132). Same overdriven-flash idiom
+# as the restore feedback, so a bought chip announces itself in the machine's own voice.
+const SCENE_FEEDBACK_TINT := Color(2.0, 2.4, 2.3)
+const SCENE_FEEDBACK_FADE := 0.5
+const SCENE_FEEDBACK_LABEL_COLOR := Color(0.42, 1.0, 0.95)
+
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
@@ -908,6 +914,7 @@ func _ready() -> void:
 	_build_options_controls()
 	_build_augmented_badge()
 	_restore_options_overlay_if_requested()
+	_play_pending_scene_feedback()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_augment_glitch_rng.seed = 181_0726
@@ -1956,7 +1963,10 @@ func _refresh_dealer_countdown() -> void:
 	if _dealer_bar_sprite == null:
 		return
 	var remaining := maxi(0, int(RunStateStore.dealerCountdown))
-	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_reset_value()))
+	# The FULL cycle, not the reset value: Dealer's Tip resets to 10 of 12, and the bar
+	# has to show that as 2/12 filled. Measuring against the reset value instead would
+	# redraw the same empty bar on a shorter scale and hide the head start entirely.
+	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_cycle_length()))
 	var elapsed := clampi(cycle_start - remaining, 0, cycle_start)
 	var progress_frame := clampi(roundi(float(elapsed) * float(DEALER_BAR_FRAME_COUNT - 1)
 		/ float(cycle_start)), 0, DEALER_BAR_FRAME_COUNT - 1)
@@ -2097,6 +2107,48 @@ func _restore_options_overlay_if_requested() -> void:
 		return
 	if SceneNav.consume_restore_options(String(scene_file_path)):
 		_options_overlay.call_deferred("show_overlay")
+
+## Collects the notes the dealer left for this scene (issue #132): a chip bought at the
+## counter whose payoff lives on the machine — Extra Spins filling the tube, the Tip
+## shortening the dealer's walk, the Reserve arming. Purely cosmetic: every target is
+## checked and a missing one skips its effect, so feedback can never block a run.
+func _play_pending_scene_feedback() -> void:
+	if Engine.is_editor_hint():
+		return
+	for note: Dictionary in SceneNav.take_pending_feedback():
+		var fb := ChipAugments.feedback_for(String((note.get("data", {}) as Dictionary).get("augment", "")))
+		var label := String(fb.get("label", ""))
+		match String(note.get("id", "")):
+			"spins":
+				_pulse_spins_readout(label)
+			"dealer_bar":
+				_pulse_dealer_bar(label)
+
+## The spins tube/count flashes and the label pops beside it — what Extra Spins and the
+## armed Reserve both pay out in.
+func _pulse_spins_readout(label: String) -> void:
+	var target: CanvasItem = _spins_left_label
+	if target == null or not is_instance_valid(target):
+		return
+	target.modulate = SCENE_FEEDBACK_TINT
+	var tw := create_tween()
+	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
+		.set_trans(Tween.TRANS_SINE)
+	if label != "":
+		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 0)
+
+## The dealer bar flashes on its new head start, so the Tip's 2/12 is seen being bought.
+func _pulse_dealer_bar(label: String) -> void:
+	_refresh_dealer_countdown() # the head start applies from this reset onward
+	var target: CanvasItem = _dealer_bar_sprite
+	if target == null or not is_instance_valid(target):
+		return
+	target.modulate = SCENE_FEEDBACK_TINT
+	var tw := create_tween()
+	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
+		.set_trans(Tween.TRANS_SINE)
+	if label != "":
+		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 2)
 
 func _set_score_button_locked(locked: bool) -> void:
 	if _score_button == null:

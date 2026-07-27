@@ -563,6 +563,10 @@ func _check_global_options_layout(failures: Array) -> void:
 	dealer.queue_free()
 	_check_painting_reroll_117(failures)
 	_check_chip_augments(failures)
+	_check_dealer_tip_132(failures)
+	_check_emergency_reserve_132(failures)
+	_check_symbol_level_picker_132(failures)
+	_check_augment_feedback_map_132(failures)
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(machine)
@@ -1074,10 +1078,13 @@ func _odds_sheet_frame(overlay: Node, sprite: Sprite2D) -> int:
 		* float(sprite.get_meta(&"art_scale", 1.0))))
 
 func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Array) -> void:
+	# Symbol augment levels are campaign state (issue #132), so they are read off the
+	# meta store here rather than the run store.
+	var meta_store: Node = get_root().get_node("MetaStateStore")
 	run_store.reset_run_state()
 	var base_level: int = run_store.effective_symbol_level("eye")
 	var base_percent: float = machine._symbol_draw_percent("eye")
-	run_store.symbolAugmentLevels = { "eye": 1 } # one per symbol is the cap
+	meta_store.symbolAugmentLevels = { "eye": 1 } # one per symbol is the cap
 	if run_store.effective_symbol_level("eye") != base_level + 1:
 		failures.append("augment readouts: the effective symbol level ignored the augment")
 	if machine._symbol_draw_percent("eye") <= base_percent:
@@ -1126,7 +1133,7 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 	var eye_segment := overlay._augment_level_sprites.get("eye") as Sprite2D
 	var augmented_frame := _odds_sheet_frame(overlay, meter)
 	var augmented_segment := _odds_sheet_frame(overlay, eye_segment)
-	run_store.symbolAugmentLevels = {}
+	meta_store.symbolAugmentLevels = {}
 	overlay.refresh_levels()
 	var plain_frame := _odds_sheet_frame(overlay, meter)
 	var plain_segment := _odds_sheet_frame(overlay, eye_segment)
@@ -1974,6 +1981,197 @@ func _check_painting_reroll_117(failures: Array) -> void:
 # reroll isolation, stock limits + pool exhaustion, discount stacking + rounding,
 # symbol levels (selection, cancellation, level-9 cap), Extra Spins, expanded
 # three-item offers, pair/triple choices, run-start persistence and cycle reset.
+## Dealer's Tip (issue #132): the countdown starts part-way along instead of empty, and
+## the BAR keeps its full 12-step scale so the head start is visible as 2/12.
+func _check_dealer_tip_132(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = ""
+
+	meta_store.chipAugmentsPurchased = {}
+	var plain_length := int(run_store.dealer_countdown_cycle_length())
+	var plain_reset := int(run_store.dealer_countdown_reset_value())
+	if plain_reset != plain_length or int(run_store.dealer_tip_head_start()) != 0:
+		failures.append("issue132: without the Tip the countdown should reset to the full cycle (%d vs %d)"
+			% [plain_reset, plain_length])
+
+	meta_store.chipAugmentsPurchased = { "aug_dealer_tip": 1 }
+	if int(run_store.dealer_tip_head_start()) != ChipAugments.DEALER_TIP_HEAD_START:
+		failures.append("issue132: the Tip did not grant its head start")
+	# The scale must NOT shrink with the reset value: 10 of 12, not 0 of 10. Measuring
+	# progress against the reset value would hide the head start completely.
+	if int(run_store.dealer_countdown_cycle_length()) != plain_length:
+		failures.append("issue132: the Tip shortened the countdown scale, hiding its own head start")
+	var tipped := int(run_store.dealer_countdown_reset_value())
+	if tipped != plain_length - ChipAugments.DEALER_TIP_HEAD_START:
+		failures.append("issue132: tipped reset should be %d, got %d"
+			% [plain_length - ChipAugments.DEALER_TIP_HEAD_START, tipped])
+	# A resolved visit is what applies it — the countdown already running is untouched.
+	run_store.dealerCountdown = 7
+	run_store.decline_dealer_offer()
+	if int(run_store.dealerCountdown) != tipped:
+		failures.append("issue132: a resolved visit did not reset onto the tipped value (%d)"
+			% int(run_store.dealerCountdown))
+
+	meta_store.chipAugmentsPurchased = prev_augs
+	run_store.augmentedTier = prev_tier
+	# decline_dealer_offer commits, which can leave a RESUMABLE run on disk for the next
+	# launch of this suite. Reset back to a non-resumable state so the save is cleared.
+	run_store.reset_run_state()
+
+## Emergency Reserve (issue #132): one paid spin back when the run is out of them, once
+## per campaign, and never for a losing state it does not own.
+func _check_emergency_reserve_132(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_used := bool(meta_store.emergencyReserveUsed)
+	var prev_extra_granted := int(meta_store.extraSpinsGranted)
+
+	meta_store.chipAugmentsPurchased = {}
+	meta_store.emergencyReserveUsed = false
+	if run_store.emergency_reserve_armed():
+		failures.append("issue132: the reserve armed without the chip being owned")
+	meta_store.chipAugmentsPurchased = { "aug_emergency_reserve": 1 }
+	if not run_store.emergency_reserve_armed():
+		failures.append("issue132: owning the chip did not arm the reserve")
+
+	# Nothing left to play: the reserve pays exactly one paid spin back.
+	var decay := maxi(1, Economy.compute_neuron_decay(run_store.ownedUpgrades))
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	var serial_before := int(run_store.emergencyReserveSerial)
+	if not run_store._try_emergency_reserve(true):
+		failures.append("issue132: the reserve did not fire on an exhausted paid spin")
+	if int(run_store.neurons) != ChipAugments.EMERGENCY_RESERVE_SPINS * decay:
+		failures.append("issue132: the reserve restored %d neurons, expected one spin's worth (%d)"
+			% [int(run_store.neurons), ChipAugments.EMERGENCY_RESERVE_SPINS * decay])
+	if int(run_store.emergencyReserveSerial) == serial_before:
+		failures.append("issue132: the reserve did not signal the machine to animate")
+	if not bool(meta_store.emergencyReserveUsed):
+		failures.append("issue132: the reserve was not marked spent")
+
+	# Once per campaign: a second exhaustion gets nothing, even in a brand new run.
+	run_store.neurons = 0
+	if run_store._try_emergency_reserve(true):
+		failures.append("issue132: the reserve fired twice in one campaign")
+	# A fresh run must not re-arm it. Detached store on purpose: start_new_run leaves a
+	# RESUMABLE run behind, and persisting that on the shared store would make the next
+	# launch of this suite resume a run and fail checks that expect a menu.
+	var fresh_run: Node = (load("res://autoload/run_state_store.gd") as GDScript).new()
+	fresh_run.start_new_run([], {}, false)
+	fresh_run.neurons = 0
+	fresh_run.freeSpinsRemaining = 0
+	if fresh_run._try_emergency_reserve(true):
+		failures.append("issue132: a fresh run re-armed a reserve already spent this campaign")
+	fresh_run.free()
+
+	# Exclusions: a free spin is not a paid one, and spins still in hand are not
+	# exhaustion — the reserve is the LAST resort, not a top-up.
+	meta_store.emergencyReserveUsed = false
+	run_store.neurons = 0
+	run_store.freeSpinsRemaining = 0
+	if run_store._try_emergency_reserve(false):
+		failures.append("issue132: the reserve fired on a free spin")
+	run_store.freeSpinsRemaining = 2
+	if run_store._try_emergency_reserve(true):
+		failures.append("issue132: the reserve fired with free spins still banked")
+	run_store.freeSpinsRemaining = 0
+	run_store.neurons = 5
+	if run_store._try_emergency_reserve(true):
+		failures.append("issue132: the reserve fired with spins still left")
+
+	meta_store.chipAugmentsPurchased = prev_augs
+	meta_store.emergencyReserveUsed = prev_used
+	meta_store.extraSpinsGranted = prev_extra_granted
+	# Firing the reserve persists the spent flag on purpose, so the restore has to reach
+	# the disk too — otherwise the next run of this suite loads a save carrying a chip
+	# this test invented, and unrelated augment checks fail on it.
+	meta_store.save_state()
+	# Same reason as the Tip check: leave no resumable run behind for the next launch.
+	run_store.reset_run_state()
+
+## Symbol Level picker (issue #132): staging a pick spends the golden token on the spot
+## and closes every "+", leaving only the picked symbol's "-" to take it back.
+func _check_symbol_level_picker_132(failures: Array) -> void:
+	var overlay: Node = (load("res://scenes/odds_table_overlay.tscn") as PackedScene).instantiate()
+	get_root().add_child(overlay)
+	overlay.open_augment_picker()
+	var token: Sprite2D = overlay._tokens_sprite
+	if token == null or overlay._plus_buttons.is_empty():
+		failures.append("issue132: the augment picker did not build its table")
+		overlay.queue_free()
+		return
+	# Before any pick: the golden token is held and eligible "+" are live.
+	if int(token.frame) != overlay.TOKEN_GOLDEN_FRAME:
+		failures.append("issue132: the picker did not start holding the golden token")
+	var eligible: Array[String] = []
+	for symbol_id in overlay._plus_buttons:
+		if not (overlay._plus_buttons[symbol_id] as Button).disabled:
+			eligible.append(String(symbol_id))
+	if eligible.size() < 2:
+		failures.append("issue132: the picker needs at least two eligible symbols to test")
+		overlay.queue_free()
+		return
+	var picked := eligible[0]
+	var other := eligible[1]
+	overlay._on_plus_pressed(picked)
+	if int(token.frame) != overlay.TOKEN_SPENT_FRAME:
+		failures.append("issue132: staging a pick did not spend the golden token (frame %d)"
+			% int(token.frame))
+	if not (overlay._plus_buttons[picked] as Button).disabled:
+		failures.append("issue132: the picked symbol's + stayed live")
+	if not (overlay._plus_buttons[other] as Button).disabled:
+		failures.append("issue132: another symbol's + stayed live after the token was spent")
+	if (overlay._minus_buttons[picked] as Button).disabled:
+		failures.append("issue132: the picked symbol's - should cancel the pick")
+	if not (overlay._minus_buttons[other] as Button).disabled:
+		failures.append("issue132: an unpicked symbol's - should stay dead")
+	# Cancelling hands the token back and reopens every eligible "+".
+	overlay._on_minus_pressed(picked)
+	if int(token.frame) != overlay.TOKEN_GOLDEN_FRAME:
+		failures.append("issue132: cancelling did not hand the golden token back")
+	for symbol_id in eligible:
+		if (overlay._plus_buttons[symbol_id] as Button).disabled:
+			failures.append("issue132: cancelling left %s's + disabled" % symbol_id)
+			break
+	if String(overlay._augment_pick) != "":
+		failures.append("issue132: cancelling left the pick staged")
+	overlay.queue_free()
+
+## Every augment must name feedback that a scene can actually route (issue #132), and a
+## missing visual target must be survivable — the data says WHERE, the scene decides IF.
+func _check_augment_feedback_map_132(failures: Array) -> void:
+	var routed := ["spins", "dealer_bar", "offer_prices", "augment_price",
+		"odds_row", "offer_slot", "message"]
+	for augment_id in ChipAugments.ids():
+		var fb := ChipAugments.feedback_for(String(augment_id))
+		if fb.is_empty():
+			failures.append("issue132: %s has no purchase feedback authored" % augment_id)
+			continue
+		var scene := String(fb.get("scene", ""))
+		if scene != "dealer" and scene != "machine":
+			failures.append("issue132: %s routes feedback to an unknown scene '%s'"
+				% [augment_id, scene])
+		if not routed.has(String(fb.get("target", ""))):
+			failures.append("issue132: %s points at an unhandled target '%s'"
+				% [augment_id, String(fb.get("target", ""))])
+	# An unknown augment yields nothing rather than exploding.
+	if not ChipAugments.feedback_for("aug_does_not_exist").is_empty():
+		failures.append("issue132: an unknown augment invented feedback")
+	# The icon sheet may not hold every chip's frame yet: the frame must clamp to what
+	# the art can draw instead of slicing past the end of the texture.
+	var assets: Node = get_root().get_node("Assets")
+	var sheet: Texture2D = assets.texture(ChipAugments.ICON_SHEET)
+	var frames := ChipAugments.icon_frames(sheet)
+	for augment_id in ChipAugments.ids():
+		var frame := ChipAugments.icon_frame(String(augment_id), frames)
+		if frame < 0 or frame >= frames:
+			failures.append("issue132: %s asks for icon frame %d of %d"
+				% [augment_id, frame, frames])
+
 func _check_chip_augments(failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
@@ -1984,10 +2182,13 @@ func _check_chip_augments(failures: Array) -> void:
 	var prev_prerun: Variant = run_store.prerunOfferIds
 	var prev_coins := int(run_store.lucidityCoins)
 	var prev_wallet := int(meta_store.lucidityWallet)
-	var prev_augs: Dictionary = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
 	var prev_aug_offer := String(run_store.dealerAugmentOfferId)
-	var prev_sym: Dictionary = (run_store.symbolAugmentLevels as Dictionary).duplicate(true)
-	var prev_pt := String(run_store.pairTripleAugmentChoice)
+	var prev_sym: Dictionary = (meta_store.symbolAugmentLevels as Dictionary).duplicate(true)
+	var prev_pt := String(meta_store.pairTripleAugmentChoice)
+	# Campaign state since issue #132, so it PERSISTS: leaving it bumped would carry into
+	# the next launch of this suite instead of dying with the run.
+	var prev_extra_granted := int(meta_store.extraSpinsGranted)
 	var prev_weights: Dictionary = (run_store.oddsWeightOverrides as Dictionary).duplicate(true)
 	var prev_bonuses: Dictionary = (run_store.symbolRewardBonuses as Dictionary).duplicate(true)
 	var prev_neurons := int(run_store.neurons)
@@ -1999,14 +2200,14 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
 	run_store.prerunOfferIds = null
-	run_store.chipAugmentsPurchased = { "aug_extra_spins": 1 } # must survive the roll
-	run_store.pairTripleAugmentChoice = "pair"
-	run_store.symbolAugmentLevels = { "eye": 1 }
+	meta_store.chipAugmentsPurchased = { "aug_extra_spins": 1 } # must survive the roll
+	meta_store.pairTripleAugmentChoice = "pair"
+	meta_store.symbolAugmentLevels = { "eye": 1 }
 	meta_store.lucidityWallet = 1000
 	run_store.ensure_prerun_offer(7)
-	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
-			or String(run_store.pairTripleAugmentChoice) != "pair" \
-			or int((run_store.symbolAugmentLevels as Dictionary).get("eye", 0)) != 1:
+	if int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
+			or String(meta_store.pairTripleAugmentChoice) != "pair" \
+			or int((meta_store.symbolAugmentLevels as Dictionary).get("eye", 0)) != 1:
 		failures.append("augments: a new cycle must keep the campaign's augments")
 	var offer_id := String(run_store.dealerAugmentOfferId)
 	if offer_id == "" or not ChipAugments.ids().has(offer_id):
@@ -2025,7 +2226,7 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: in-run reroll changed the augment offer")
 
 	# Discount stacking + project rounding (floor(x + 0.5)).
-	run_store.chipAugmentsPurchased = {}
+	meta_store.chipAugmentsPurchased = {}
 	if int(run_store.consumable_price("cons_cigarette")) != 20:
 		failures.append("augments: undiscounted consumable price wrong")
 	run_store.dealerAugmentOfferId = "aug_consumable_discount"
@@ -2035,7 +2236,7 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.purchase_chip_augment("aug_consumable_discount")
 	if int(run_store.consumable_price("cons_cigarette")) != 16:
 		failures.append("augments: two consumable discounts should stack 20 -> 16")
-	if int((run_store.chipAugmentsPurchased as Dictionary).get("aug_consumable_discount", 0)) != 2:
+	if int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_consumable_discount", 0)) != 2:
 		failures.append("augments: consumable discount stock not tracked")
 	run_store.dealerAugmentOfferId = "aug_chip_discount"
 	run_store.purchase_chip_augment("aug_chip_discount")
@@ -2053,7 +2254,7 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: purchase exceeded the stock limit")
 	if int(run_store.lucidityCoins) != coins_hold:
 		failures.append("augments: refused over-stock purchase still charged")
-	if ChipAugments.eligible_ids(run_store.chipAugmentsPurchased).has("aug_chip_discount"):
+	if ChipAugments.eligible_ids(meta_store.chipAugmentsPurchased).has("aug_chip_discount"):
 		failures.append("augments: maxed augment still in the eligible pool")
 
 	# Insufficient funds: nothing charged, no stock consumed.
@@ -2062,7 +2263,7 @@ func _check_chip_augments(failures: Array) -> void:
 	if run_store.purchase_chip_augment("aug_extra_spins"):
 		failures.append("augments: purchase succeeded without funds")
 	if int(run_store.lucidityCoins) != 1 \
-			or int((run_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 0:
+			or int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 0:
 		failures.append("augments: failed purchase charged or consumed stock")
 
 	# Extra Spins: its single copy pays +3 spins through the neuron decay model, subject
@@ -2081,7 +2282,7 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: Extra Spins sold a second copy of a 1-stock augment")
 
 	# Symbol Level: needs a selection, raises the weight, honours the level-9 cap.
-	run_store.symbolAugmentLevels = {}
+	meta_store.symbolAugmentLevels = {}
 	run_store.oddsWeightOverrides = {}
 	run_store.symbolRewardBonuses = {}
 	run_store.dealerAugmentOfferId = "aug_symbol_level"
@@ -2095,8 +2296,8 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: symbol augment did not raise the chosen symbol's weight")
 	# One augment level per symbol: the copy just spent on "eye" locks eye out, even
 	# though its effective level is nowhere near the hard cap.
-	run_store.chipAugmentsPurchased = (run_store.chipAugmentsPurchased as Dictionary).duplicate(true)
-	run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+	meta_store.chipAugmentsPurchased = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	meta_store.chipAugmentsPurchased["aug_symbol_level"] = 0
 	run_store.dealerAugmentOfferId = "aug_symbol_level"
 	var coins_before_second := int(run_store.lucidityCoins)
 	if run_store.purchase_chip_augment("aug_symbol_level", "eye"):
@@ -2120,7 +2321,7 @@ func _check_chip_augments(failures: Array) -> void:
 		meta_store.oddsUpgrades = (meta_store.oddsUpgrades as Dictionary).duplicate(true)
 		meta_store.oddsUpgrades[cap_sym] = int(run_store.odds_max_level)
 		run_store.symbolRewardBonuses = {}
-		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+		meta_store.chipAugmentsPurchased["aug_symbol_level"] = 0
 		run_store.dealerAugmentOfferId = "aug_symbol_level"
 		if not run_store.purchase_chip_augment("aug_symbol_level", cap_sym): # -> level 9
 			failures.append("augments: a maxed symbol refused its one augment level")
@@ -2129,7 +2330,7 @@ func _check_chip_augments(failures: Array) -> void:
 			failures.append("augments: level 9 should add the max-level reward bonus")
 		if int(run_store.effective_symbol_level(cap_sym)) != ChipAugments.SYMBOL_LEVEL_HARD_CAP:
 			failures.append("augments: base 8 plus an augment level should reach the level-9 cap")
-		run_store.chipAugmentsPurchased["aug_symbol_level"] = 0
+		meta_store.chipAugmentsPurchased["aug_symbol_level"] = 0
 		run_store.dealerAugmentOfferId = "aug_symbol_level"
 		var coins_at_cap := int(run_store.lucidityCoins)
 		if run_store.purchase_chip_augment("aug_symbol_level", cap_sym):
@@ -2139,7 +2340,7 @@ func _check_chip_augments(failures: Array) -> void:
 		meta_store.oddsUpgrades = {}
 
 	# Expanded Selection: visits generate three consumables; rerolls keep three.
-	run_store.chipAugmentsPurchased = {}
+	meta_store.chipAugmentsPurchased = {}
 	run_store.dealerAugmentOfferId = "aug_offer_expand"
 	run_store.purchase_chip_augment("aug_offer_expand")
 	if int(run_store.dealer_offer_count()) != 3:
@@ -2160,13 +2361,13 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: specialist accepted an invalid choice")
 	run_store.dealerAugmentOfferId = "aug_pair_triple"
 	run_store.purchase_chip_augment("aug_pair_triple", "triple")
-	if String(run_store.pairTripleAugmentChoice) != "triple":
+	if String(meta_store.pairTripleAugmentChoice) != "triple":
 		failures.append("augments: specialist triple choice not stored")
-	run_store.pairTripleAugmentChoice = ""
-	run_store.chipAugmentsPurchased = {}
+	meta_store.pairTripleAugmentChoice = ""
+	meta_store.chipAugmentsPurchased = {}
 	run_store.dealerAugmentOfferId = "aug_pair_triple"
 	run_store.purchase_chip_augment("aug_pair_triple", "pair")
-	if String(run_store.pairTripleAugmentChoice) != "pair":
+	if String(meta_store.pairTripleAugmentChoice) != "pair":
 		failures.append("augments: specialist pair choice not stored")
 	if ChipAugments.specialist_bonus(100, "triple", "triple") != 25 \
 			or ChipAugments.specialist_bonus(100, "pair", "triple") != 0 \
@@ -2177,13 +2378,13 @@ func _check_chip_augments(failures: Array) -> void:
 	var maxed := {}
 	for a in ChipAugments.LIST:
 		maxed[String(a["id"])] = int(a["stock"])
-	run_store.chipAugmentsPurchased = maxed
+	meta_store.chipAugmentsPurchased = maxed
 	if String(run_store._roll_augment_offer(5)) != "":
 		failures.append("augments: exhausted pool still rolled an offer")
 	# One eligible augment left => the roll must offer exactly that one.
 	var one_left: Dictionary = maxed.duplicate(true)
 	one_left["aug_pair_triple"] = 0
-	run_store.chipAugmentsPurchased = one_left
+	meta_store.chipAugmentsPurchased = one_left
 	if String(run_store._roll_augment_offer(5)) != "aug_pair_triple":
 		failures.append("augments: sole eligible augment was not offered")
 
@@ -2194,9 +2395,9 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.dealerPending = false
 	run_store.dealerOfferIds = null
 	run_store.prerunOfferIds = null
-	run_store.chipAugmentsPurchased = {}
-	run_store.symbolAugmentLevels = {}
-	run_store.pairTripleAugmentChoice = ""
+	meta_store.chipAugmentsPurchased = {}
+	meta_store.symbolAugmentLevels = {}
+	meta_store.pairTripleAugmentChoice = ""
 	meta_store.lucidityWallet = 100
 	var shop := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(shop)
@@ -2255,7 +2456,7 @@ func _check_chip_augments(failures: Array) -> void:
 			failures.append("augments: symbol selector did not open")
 		shop._close_augment_picker()
 		if int(meta_store.lucidityWallet) != 100 \
-				or not (run_store.chipAugmentsPurchased as Dictionary).is_empty():
+				or not (meta_store.chipAugmentsPurchased as Dictionary).is_empty():
 			failures.append("augments: cancelled selector charged or consumed stock")
 		# Drag-to-dealer purchase: wallet pays, the offer and its icon are consumed.
 		run_store.dealerAugmentOfferId = "aug_extra_spins"
@@ -2276,15 +2477,17 @@ func _check_chip_augments(failures: Array) -> void:
 			failures.append("augments: consumed augment icon still on the counter")
 	shop.queue_free()
 
-	# Run start folds pre-run purchases in; a full reset clears everything. Uses a
-	# detached store so the ambient smoke-test state survives.
+	# Run start folds pre-run purchases in. Issue #132: the chips are CAMPAIGN state, so
+	# neither a new run, a Pacte, nor a full run reset may confiscate them — only the
+	# campaign ending does. Uses a detached store so the ambient smoke state survives.
 	var fresh: Node = (load("res://autoload/run_state_store.gd") as GDScript).new()
-	fresh.chipAugmentsPurchased = { "aug_extra_spins": 1 }
-	fresh.symbolAugmentLevels = { "eye": 1 }
-	fresh.pairTripleAugmentChoice = "pair"
+	meta_store.chipAugmentsPurchased = { "aug_extra_spins": 1 }
+	meta_store.symbolAugmentLevels = { "eye": 1 }
+	meta_store.pairTripleAugmentChoice = "pair"
+	meta_store.extraSpinsGranted = 0
 	fresh.start_new_run([], {}, false)
-	if int((fresh.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
-			or String(fresh.pairTripleAugmentChoice) != "pair":
+	if int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
+			or String(meta_store.pairTripleAugmentChoice) != "pair":
 		failures.append("augments: run start dropped pre-run purchases")
 	if int(fresh.neurons) != int(fresh.startingNeurons) + 3 * maxi(1, Economy.compute_neuron_decay([])):
 		failures.append("augments: run start did not fold in pre-run Extra Spins")
@@ -2294,11 +2497,31 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: run start did not fold in pre-run symbol levels")
 	if String(fresh.dealerAugmentOfferId) != "":
 		failures.append("augments: run start left the shop augment offer open")
+	# A Pacte run used to wipe the chips mid-campaign — the bug issue #132 is about.
+	fresh.runPhase = "over"
+	fresh.start_new_run([], {}, false, -1, true)
+	if int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
+			or String(meta_store.pairTripleAugmentChoice) != "pair" \
+			or int((meta_store.symbolAugmentLevels as Dictionary).get("eye", 0)) != 1:
+		failures.append("issue132: a Pacte run confiscated the campaign's chip augments")
 	fresh.reset_run_state()
-	if not (fresh.chipAugmentsPurchased as Dictionary).is_empty() \
-			or not (fresh.symbolAugmentLevels as Dictionary).is_empty() \
-			or String(fresh.pairTripleAugmentChoice) != "":
-		failures.append("augments: full reset did not clear augment state")
+	if int((meta_store.chipAugmentsPurchased as Dictionary).get("aug_extra_spins", 0)) != 1 \
+			or String(meta_store.pairTripleAugmentChoice) != "pair":
+		failures.append("issue132: a run reset confiscated the campaign's chip augments")
+	# Only the campaign ending takes them away. Ending the campaign rewrites shared meta
+	# state, so this snapshots and restores it — otherwise every later check inherits a
+	# failed campaign.
+	var campaign_before: Dictionary = meta_store._as_dict()
+	meta_store.emergencyReserveUsed = true
+	meta_store.mark_campaign_failed(false)
+	var cleared := (meta_store.chipAugmentsPurchased as Dictionary).is_empty() \
+		and (meta_store.symbolAugmentLevels as Dictionary).is_empty() \
+		and String(meta_store.pairTripleAugmentChoice) == "" \
+		and int(meta_store.extraSpinsGranted) == 0 \
+		and not bool(meta_store.emergencyReserveUsed)
+	meta_store._apply(campaign_before)
+	if not cleared:
+		failures.append("issue132: the campaign ending did not clear the chip augments")
 	fresh.free()
 
 	run_store.runPhase = prev_phase
@@ -2307,10 +2530,11 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.dealerRerollCount = prev_reroll_count
 	run_store.prerunOfferIds = prev_prerun
 	run_store.lucidityCoins = prev_coins
-	run_store.chipAugmentsPurchased = prev_augs
+	meta_store.chipAugmentsPurchased = prev_augs
 	run_store.dealerAugmentOfferId = prev_aug_offer
-	run_store.symbolAugmentLevels = prev_sym
-	run_store.pairTripleAugmentChoice = prev_pt
+	meta_store.symbolAugmentLevels = prev_sym
+	meta_store.pairTripleAugmentChoice = prev_pt
+	meta_store.extraSpinsGranted = prev_extra_granted
 	run_store.oddsWeightOverrides = prev_weights
 	run_store.symbolRewardBonuses = prev_bonuses
 	run_store.neurons = prev_neurons

@@ -63,6 +63,7 @@ func go_to_menu(menu_scene: String = DEFAULT_MENU_SCENE) -> void:
 func clear() -> void:
 	_back_stack.clear()
 	_restore_options_scene = ""
+	_pending_feedback.clear()
 
 func peek_back_scene() -> String:
 	return "" if _back_stack.is_empty() else String(_back_stack.back().get("scene", ""))
@@ -77,3 +78,29 @@ func consume_restore_options(scene_path: String) -> bool:
 		return false
 	_restore_options_scene = ""
 	return true
+
+# ── Pending scene feedback (issue #132) ────────────────────────────────────────────
+# Some purchases pay off on a screen the player is not looking at: buying Extra Spins at
+# the dealer has to animate the machine's spin tube, which only exists after the dealer
+# closes. The buyer leaves a note here and the target scene reads it once on entry.
+#
+# This is PRESENTATION state and deliberately lives nowhere near a save: a note that is
+# never collected (the player quits at the dealer) must evaporate, not resurface next
+# session and replay an animation for a purchase made an hour ago. Gameplay state that
+# has to survive — emergencyReserveUsed, the purchased chips — is on MetaStateStore.
+var _pending_feedback: Array[Dictionary] = []
+
+## Leaves a note for whichever scene handles `id` next. Extra calls stack in order.
+func queue_feedback(id: String, data: Dictionary = {}) -> void:
+	if id.is_empty():
+		return
+	_pending_feedback.append({ "id": id, "data": data.duplicate(true) })
+
+## Takes every queued note and empties the queue — a note is delivered at most once.
+func take_pending_feedback() -> Array[Dictionary]:
+	var out := _pending_feedback.duplicate()
+	_pending_feedback.clear()
+	return out
+
+func has_pending_feedback() -> bool:
+	return not _pending_feedback.is_empty()

@@ -89,6 +89,9 @@ var freeSpinsRemaining := 0
 ## Presentation event counter: unlike the banked count, this still changes when a
 ## free-spin grant replaces a free spin that was consumed in the same result.
 var freeSpinGrantSerial := 0
+## Same idea for the Emergency Reserve: the machine animates on a CHANGE, so the rescue
+## reads even though the spin count it restores is only ever one.
+var emergencyReserveSerial := 0
 var maxFreeSpins := EconomyConst.BASE_MAX_FREE_SPINS
 var lucidityMultiplier := EconomyConst.BASE_LUCIDITY_MULTIPLIER
 var nextSpinLucidityMultiplier := 1.0
@@ -137,14 +140,11 @@ var dealerRerollCount := 0
 var prerunOfferIds: Variant = null
 ## Chip Augments: one dedicated dealer offer per visit, separate from the normal
 ## items/consumables and untouched by the painting reroll. Purchased bonuses
-## persist for the whole campaign (flatline continuations included); they clear
-## only when a fresh Pacte run starts or on a full reset. All fields have
-## safe defaults, so older saves/sessions simply start with no augments.
-var chipAugmentsPurchased := {}       # augment id -> copies bought this campaign
+## persist for the whole campaign (flatline continuations, Pactes and target round
+## breaks included) and now live on MetaStateStore, which owns campaign scope — only
+## the campaign ending takes them away. What stays here is the CURRENT VISIT's offer,
+## which is run state: it opens and closes with the dealer.
 var dealerAugmentOfferId := ""        # current visit's dedicated offer ("" = none)
-var symbolAugmentLevels := {}         # symbol -> +levels bought via aug_symbol_level
-var pairTripleAugmentChoice := ""     # "" | "pair" | "triple" (locked once chosen)
-var extraSpinsGranted := 0            # aug_extra_spins copies already paid out
 var brainBoostSpins := 0
 var forcedRandomBetSpins := 0
 var guaranteedWinSpins := 0
@@ -832,7 +832,7 @@ func spin(compulsive := false) -> Variant:
 	# Pair/Triple Specialist (Chip Augment): the chosen win type pays x1.25. Rides on
 	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
 	var specialist_bonus := ChipAugments.specialist_bonus(
-		base_score, String(result["winType"]), pairTripleAugmentChoice)
+		base_score, String(result["winType"]), MetaStateStore.pairTripleAugmentChoice)
 	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
 	# 200 and no longer grants its free spin. Apply it after the other score boosts
 	# so the whole jackpot payout remains proportional.
@@ -918,6 +918,10 @@ func spin(compulsive := false) -> Variant:
 	freeSpinsRemaining = maxi(int(final_result["freeSpinsAfter"]), freeSpinsRemaining) \
 		if is_compulsive else int(final_result["freeSpinsAfter"])
 	isFreeSpin = bool(final_result["isFreeSpin"])
+	# Checked here, after the spin's OWN restores (potion spins above, the free-spin
+	# tally just settled): the reserve is the last resort, so anything the spin itself
+	# gave back is counted first and leaves it untouched.
+	_try_emergency_reserve(not is_free)
 	isSpinning = true
 	lastResult = final_result
 	# Baseline for the additive power payouts below: what the reels as spun are worth
@@ -1103,17 +1107,16 @@ func reset_run_state() -> void:
 	lastEffectiveBet = 1
 	dealerCount = 0
 	dealerLastSpinCount = 0
-	dealerCountdown = dealer_countdown_start
+	dealerCountdown = dealer_countdown_reset_value() # honours Dealer's Tip (issue #132)
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
 	dealerRerollCount = 0
 	prerunOfferIds = null
-	chipAugmentsPurchased = {}
+	# Only the visit's offer is run state. The purchased chips belong to the campaign
+	# (MetaStateStore) and outlive any number of runs inside it — resetting a run must
+	# not confiscate them (issue #132).
 	dealerAugmentOfferId = ""
-	symbolAugmentLevels = {}
-	pairTripleAugmentChoice = ""
-	extraSpinsGranted = 0
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -1395,8 +1398,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	dealerRerollCount = 0
 	prerunOfferIds = null # new run => the next pre-run shop rolls a fresh offer
 	dealerAugmentOfferId = "" # the shop's augment offer closes with the shop
-	# chipAugmentsPurchased / symbolAugmentLevels / pairTripleAugmentChoice survive:
-	# pre-run purchases are FOR this run; the overlay below applies them.
+	# Chip Augments survive every new run, Pacte included: they are campaign state now
+	# (issue #132). Pre-run purchases are FOR this run and the overlay below applies them.
 	brainBoostSpins = 0
 	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
@@ -1435,11 +1438,6 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	oddsPhaseCompleted = false
 	oddsWeightOverrides = _odds_overrides_from_meta()
 	symbolRewardBonuses = _symbol_reward_bonuses_from_meta(ownedUpgrades)
-	if open_pacte:
-		chipAugmentsPurchased = {}
-		symbolAugmentLevels = {}
-		pairTripleAugmentChoice = ""
-		extraSpinsGranted = 0
 	_apply_chip_augment_run_overlay()
 	pendingPowerRestores = []
 	pacteSeed = seed_override if seed_override >= 0 else _seed(PACTE_INITIAL_DRAW_SEED)
@@ -2029,6 +2027,31 @@ func grant_free_spins(count: int) -> void:
 	freeSpinsRemaining += count
 	freeSpinGrantSerial += 1
 	_commit()
+
+## Whether the campaign still holds its one rescue: the chip is owned and unspent. The
+## augment is campaign-scoped, so this does NOT re-arm on a new run, a Pacte or a Wealth
+## target round break — one purchase buys exactly one save.
+func emergency_reserve_armed() -> bool:
+	return int(MetaStateStore.chipAugmentsPurchased.get("aug_emergency_reserve", 0)) > 0 \
+		and not MetaStateStore.emergencyReserveUsed
+
+## Emergency Reserve (issue #132). A PAID spin that leaves the run with nothing left to
+## play — no neurons and no free spins — gets exactly one paid spin back. Resource
+## exhaustion only: a flatline strike kills the run through flatlineResultCount and a
+## combo loss through comboDefeatPending, neither of which is read here, so neither can
+## spend the reserve. Returns whether it fired; the caller owns the commit.
+func _try_emergency_reserve(paid_spin: bool) -> bool:
+	if not paid_spin or neurons > 0 or freeSpinsRemaining > 0:
+		return false
+	if not emergency_reserve_armed():
+		return false
+	MetaStateStore.emergencyReserveUsed = true
+	MetaStateStore.save_state() # losing this flag would hand out a second free rescue
+	var decay := maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
+	neurons = mini(_neuron_cap(),
+		neurons + ChipAugments.EMERGENCY_RESERVE_SPINS * decay)
+	emergencyReserveSerial += 1 # the machine animates on a change, like free-spin grants
+	return true
 
 ## Restores normal spins-left budget by replenishing neurons.
 func restore_spins(count: int) -> void:
@@ -2777,8 +2800,23 @@ func _symbol_reward_bonuses_from_meta(owned: Array) -> Dictionary:
 
 ## Issue #155: what the countdown resets to once an offer resolves. The augmented
 ## club modifier keeps its "dealer visits halved" intent by doubling the wait.
+## The countdown's full length — what the dealer bar measures its progress against. The
+## Tip must NOT shorten this: the whole point is that the player sees the bar start at
+## 2/12 rather than at 0/10, which only reads as a head start if the scale stays put.
+func dealer_countdown_cycle_length() -> int:
+	return maxi(1, dealer_countdown_start * (2 if augmented_modifier_active(4) else 1))
+
+## What a resolved visit resets the countdown TO. Dealer's Tip takes its head start off
+## the top, so the very next cycle begins part-way along instead of empty.
 func dealer_countdown_reset_value() -> int:
-	return dealer_countdown_start * (2 if augmented_modifier_active(4) else 1)
+	var length := dealer_countdown_cycle_length()
+	return clampi(length - dealer_tip_head_start(), 1, length)
+
+## Countdown units the Tip skips at every reset (0 without the augment).
+func dealer_tip_head_start() -> int:
+	if int(MetaStateStore.chipAugmentsPurchased.get("aug_dealer_tip", 0)) <= 0:
+		return 0
+	return ChipAugments.DEALER_TIP_HEAD_START
 
 ## Issue #155: the dealer runs on the fixed countdown — no randomness. The pure
 ## Dealer trigger module (65%/35% safeties, proc rolls) stays parity-pinned but is
@@ -2911,14 +2949,14 @@ func reroll_prerun_offer(seed_override := -1) -> bool:
 
 ## Items/consumables generated per dealer visit: 2, or 3 with Expanded Selection.
 func dealer_offer_count() -> int:
-	if int(chipAugmentsPurchased.get("aug_offer_expand", 0)) > 0:
+	if int(MetaStateStore.chipAugmentsPurchased.get("aug_offer_expand", 0)) > 0:
 		return ChipAugments.EXPANDED_OFFER_COUNT
 	return 2
 
 ## One random eligible augment (stock left) for a fresh visit; "" when the pool
 ## is exhausted.
 func _roll_augment_offer(seed_val: int) -> String:
-	var pool := ChipAugments.eligible_ids(chipAugmentsPurchased)
+	var pool := ChipAugments.eligible_ids(MetaStateStore.chipAugmentsPurchased)
 	if pool.is_empty():
 		return ""
 	var rng := LobRNG.new(seed_val & M32)
@@ -2930,7 +2968,7 @@ func chip_augment_price(augment_id: String) -> int:
 	if entry == null:
 		return 0
 	return ChipAugments.discounted_price(int(entry["cost"]),
-		int(chipAugmentsPurchased.get("aug_chip_discount", 0)))
+		int(MetaStateStore.chipAugmentsPurchased.get("aug_chip_discount", 0)))
 
 ## Consumable Discount applies to the (pre-run) consumable shop prices.
 func consumable_price(consumable_id: String) -> int:
@@ -2938,7 +2976,7 @@ func consumable_price(consumable_id: String) -> int:
 	if not cmap.has(consumable_id):
 		return 0
 	return ChipAugments.discounted_price(int(cmap[consumable_id]["shopCost"]),
-		int(chipAugmentsPurchased.get("aug_consumable_discount", 0)))
+		int(MetaStateStore.chipAugmentsPurchased.get("aug_consumable_discount", 0)))
 
 ## The level every readout must show: the persisted permanent level, the levels
 ## staged in an open odds phase, and this campaign's Symbol Level augments.
@@ -2946,7 +2984,7 @@ func consumable_price(consumable_id: String) -> int:
 ## that leaves them out shows a level — and a draw chance — the reels no longer
 ## roll on. Augments may push past odds_max_level, up to the hard cap of 9.
 func effective_symbol_level(symbol: String) -> int:
-	return odds_upgrade_level(symbol) + int(symbolAugmentLevels.get(symbol, 0))
+	return odds_upgrade_level(symbol) + int(MetaStateStore.symbolAugmentLevels.get(symbol, 0))
 
 ## Same level, under the name the augment picker and its purchase validation use.
 func augment_symbol_level(symbol: String) -> int:
@@ -2955,7 +2993,7 @@ func augment_symbol_level(symbol: String) -> int:
 ## Augment levels bought for `symbol` alone (0 or 1 — see AUGMENT_LEVELS_PER_SYMBOL),
 ## as opposed to the effective level the two functions above report.
 func symbol_augment_levels(symbol: String) -> int:
-	return int(symbolAugmentLevels.get(symbol, 0))
+	return int(MetaStateStore.symbolAugmentLevels.get(symbol, 0))
 
 ## Purchase the offered augment. `choice` carries the selector result: a symbol id
 ## for aug_symbol_level, "pair"/"triple" for aug_pair_triple. All validation runs
@@ -2964,7 +3002,7 @@ func symbol_augment_levels(symbol: String) -> int:
 func purchase_chip_augment(augment_id: String, choice := "") -> bool:
 	if augment_id == "" or dealerAugmentOfferId != augment_id:
 		return false
-	if ChipAugments.stock_left(augment_id, chipAugmentsPurchased) <= 0:
+	if ChipAugments.stock_left(augment_id, MetaStateStore.chipAugmentsPurchased) <= 0:
 		return false
 	match augment_id:
 		"aug_symbol_level":
@@ -2986,8 +3024,8 @@ func purchase_chip_augment(augment_id: String, choice := "") -> bool:
 		lucidityCoins -= price
 	elif not MetaStateStore.spend_lucidity(price):
 		return false
-	chipAugmentsPurchased = chipAugmentsPurchased.duplicate(true)
-	chipAugmentsPurchased[augment_id] = int(chipAugmentsPurchased.get(augment_id, 0)) + 1
+	MetaStateStore.chipAugmentsPurchased = MetaStateStore.chipAugmentsPurchased.duplicate(true)
+	MetaStateStore.chipAugmentsPurchased[augment_id] = int(MetaStateStore.chipAugmentsPurchased.get(augment_id, 0)) + 1
 	match augment_id:
 		"aug_symbol_level":
 			_apply_symbol_augment(choice)
@@ -2998,11 +3036,11 @@ func purchase_chip_augment(augment_id: String, choice := "") -> bool:
 				neurons = mini(_neuron_cap(), neurons \
 					+ ChipAugments.EXTRA_SPINS_PER_COPY \
 					* maxi(1, Economy.compute_neuron_decay(ownedUpgrades)))
-				extraSpinsGranted += 1 # already paid; the run-start overlay skips it
+				MetaStateStore.extraSpinsGranted += 1 # already paid; the run-start overlay skips it
 		"aug_offer_expand":
 			_expand_current_offer()
 		"aug_pair_triple":
-			pairTripleAugmentChoice = choice # locked — cannot be changed afterwards
+			MetaStateStore.pairTripleAugmentChoice = choice # locked — cannot be changed afterwards
 	dealerAugmentOfferId = "" # one dedicated offer per visit; it is now consumed
 	_commit()
 	return true
@@ -3031,8 +3069,8 @@ func _extended_offer(current: Array, pool: Array, seed_val: int, target: int) ->
 ## augment-only level 9 (the "additional scaling" for level-9 symbols).
 func _apply_symbol_augment(symbol: String) -> void:
 	var new_level := augment_symbol_level(symbol) + 1
-	symbolAugmentLevels = symbolAugmentLevels.duplicate(true)
-	symbolAugmentLevels[symbol] = int(symbolAugmentLevels.get(symbol, 0)) + 1
+	MetaStateStore.symbolAugmentLevels = MetaStateStore.symbolAugmentLevels.duplicate(true)
+	MetaStateStore.symbolAugmentLevels[symbol] = int(MetaStateStore.symbolAugmentLevels.get(symbol, 0)) + 1
 	if runPhase != "running":
 		return # pre-run: folded into the run overlay at start_new_run
 	oddsWeightOverrides = oddsWeightOverrides.duplicate(true)
@@ -3046,8 +3084,8 @@ func _apply_symbol_augment(symbol: String) -> void:
 ## Folds pre-run augment purchases into a freshly started run: symbol levels into
 ## the derived weight/reward tables, Extra Spins into the starting spin budget.
 func _apply_chip_augment_run_overlay() -> void:
-	for symbol in symbolAugmentLevels:
-		var added := int(symbolAugmentLevels[symbol])
+	for symbol in MetaStateStore.symbolAugmentLevels:
+		var added := int(MetaStateStore.symbolAugmentLevels[symbol])
 		if added <= 0:
 			continue
 		oddsWeightOverrides[String(symbol)] = float(oddsWeightOverrides.get(String(symbol), 0.0)) \
@@ -3059,12 +3097,12 @@ func _apply_chip_augment_run_overlay() -> void:
 					+ odds_max_level_reward_bonus
 	# Augments persist for the whole campaign, so only copies not yet paid out
 	# grant spins here — a flatline continuation must not re-grant old copies.
-	var spin_copies := int(chipAugmentsPurchased.get("aug_extra_spins", 0)) - extraSpinsGranted
+	var spin_copies := int(MetaStateStore.chipAugmentsPurchased.get("aug_extra_spins", 0)) - MetaStateStore.extraSpinsGranted
 	if spin_copies > 0:
 		var bonus := spin_copies * ChipAugments.EXTRA_SPINS_PER_COPY \
 			* maxi(1, Economy.compute_neuron_decay(ownedUpgrades))
 		neurons = mini(_neuron_cap(), neurons + bonus)
-		extraSpinsGranted += spin_copies
+		MetaStateStore.extraSpinsGranted += spin_copies
 
 func decline_dealer_offer() -> void:
 	dealerPending = false
