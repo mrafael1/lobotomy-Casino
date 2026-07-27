@@ -17,16 +17,16 @@ const ARROWS_REL := "SCORES/SCORES_arrows.png"
 const TIERS: Array[String] = ["classic", "heart", "diamond", "spade", "club", "joker"]
 const FRAME_W := 160.0
 const FRAME_H := 320.0
-# The joker icon is wider, so the arrows sheet carries a second, wider pair.
-const JOKER_ARROW_FRAME := 1
 
 # The symbol + arrows are authored centered under the win counter row; the pop
 # bounce pivots on the symbol's centre so it scales in place.
 const SYMBOL_PIVOT := Vector2(76.5, 156.0)
-# Frame-local crops around each arrow (wide enough for both arrow frames), so
-# each side squashes independently on press like the start-menu selector.
-const ARROW_LEFT_CROP := Rect2(50.0, 144.0, 27.0, 24.0)
-const ARROW_RIGHT_CROP := Rect2(77.0, 144.0, 27.0, 24.0)
+# Tight crops around each authored arrow, so each side squashes on its own centre
+# when pressed (start-menu selector feel). The arrows sheet is a single 160x320
+# canvas — it used to carry a second, wider pair for the joker tier, but the
+# re-export dropped it and one pair now serves every tier.
+const ARROW_LEFT_CROP := Rect2(44.0, 149.0, 9.0, 15.0)
+const ARROW_RIGHT_CROP := Rect2(101.0, 149.0, 9.0, 15.0)
 const CLOSE_BUTTON_RECT := Rect2(52.0, 290.0, 56.0, 14.0)
 
 const STAT_COLOR := Color(0.94, 0.96, 0.86)
@@ -74,8 +74,10 @@ func _build() -> void:
 	_symbol_rect.pivot_offset = SYMBOL_PIVOT
 	_arrow_left = _arrow_art(ARROW_LEFT_CROP)
 	_arrow_right = _arrow_art(ARROW_RIGHT_CROP)
-	_arrow_hit_button("TierPrevButton", Rect2(48.0, 142.0, 28.0, 26.0), -1, _arrow_left)
-	_arrow_hit_button("TierNextButton", Rect2(76.0, 142.0, 30.0, 26.0), 1, _arrow_right)
+	# Tap targets are padded well past the 9x15 arrows they cover — the art is far
+	# too small to hit reliably on a 160px-wide phone canvas.
+	_arrow_hit_button("TierPrevButton", Rect2(38.0, 145.0, 21.0, 23.0), -1, _arrow_left)
+	_arrow_hit_button("TierNextButton", Rect2(95.0, 145.0, 21.0, 23.0), 1, _arrow_right)
 	_refresh_tier()
 
 	# ENDINGS: achieved flag on the row, then the authored dot rows carry the
@@ -150,11 +152,6 @@ func _set_frame(tr: TextureRect, frame: int) -> void:
 	if tr != null and tr.texture is AtlasTexture:
 		(tr.texture as AtlasTexture).region = Rect2(float(frame) * FRAME_W, 0.0, FRAME_W, FRAME_H)
 
-func _set_arrow_frame(tr: TextureRect, crop: Rect2, frame: int) -> void:
-	if tr != null and tr.texture is AtlasTexture:
-		(tr.texture as AtlasTexture).region = \
-			Rect2(Vector2(float(frame) * FRAME_W + crop.position.x, crop.position.y), crop.size)
-
 # Invisible click area over authored art (the X plate).
 func _hit_button(node_name: String, rect: Rect2, cb: Callable) -> Button:
 	var b := Button.new()
@@ -222,10 +219,8 @@ func _bounce_symbol() -> void:
 
 func _refresh_tier() -> void:
 	var tier := TIERS[_tier_idx]
+	# Only the suit symbol changes per tier now; the arrows are one authored pair.
 	_set_frame(_symbol_rect, _tier_idx)
-	var arrow_frame := JOKER_ARROW_FRAME if tier == "joker" else 0
-	_set_arrow_frame(_arrow_left, ARROW_LEFT_CROP, arrow_frame)
-	_set_arrow_frame(_arrow_right, ARROW_RIGHT_CROP, arrow_frame)
 	if _win_counter_label != null:
 		_win_counter_label.text = "%d" % \
 			(0 if Engine.is_editor_hint() else MetaStateStore.tier_wins(tier))

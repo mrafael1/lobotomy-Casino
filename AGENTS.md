@@ -10,9 +10,11 @@ or the current session's base branch.
 
 ### Branch Naming
 
-- Bug fixes: `Codex/fix-<short-description>`
-- New features: `Codex/feat-<short-description>`
-- Tweaks / balance / polish: `Codex/tweak-<short-description>`
+do not add Claude/codex in front of branch
+
+- Bug fixes: `fix-<short-description>`
+- New features: `feat-<short-description>`
+- Tweaks / balance / polish: `tweak-<short-description>`
 
 ### Rules
 
