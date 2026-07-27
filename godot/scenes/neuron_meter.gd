@@ -13,6 +13,11 @@ extends Control
 
 const IDLE_FRAME_COUNT := 34
 const DEATH_FRAME_COUNT := 3
+# The idle sheet is one signal travelling through the three neurons. As neurons die the
+# signal has less of that path left to run, so the loop stops short: the whole sheet while
+# all three are alive, up to frame 28 with one lost, up to frame 15 with two. It still
+# loops — the pulse simply turns back sooner.
+const IDLE_LAST_FRAME_BY_LOSS: Array[int] = [IDLE_FRAME_COUNT - 1, 28, 15]
 const IDLE_FRAME_TIME := 0.08
 const COUNT_LABEL_HEIGHT := 8.0
 const COUNT_LABEL_OVERLAP := 6.0
@@ -127,7 +132,14 @@ func _build_count_label(frame_w: float, frame_h: float) -> void:
 func _advance_idle_frame() -> void:
 	if _sprite == null:
 		return
-	_sprite.frame = (_sprite.frame + 1) % maxi(1, frame_count)
+	var last := _idle_last_frame()
+	_sprite.frame = 0 if _sprite.frame >= last else _sprite.frame + 1
+
+## Where the signal turns back, given how many neurons the campaign has lost.
+func _idle_last_frame() -> int:
+	var last := maxi(1, frame_count) - 1
+	var lost := clampi(_neurons_lost(), 0, IDLE_LAST_FRAME_BY_LOSS.size() - 1)
+	return clampi(IDLE_LAST_FRAME_BY_LOSS[lost], 0, last)
 
 func refresh() -> void:
 	_refresh_count()
