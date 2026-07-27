@@ -175,11 +175,17 @@ static func _win_rank(win_type: String) -> int:
 			return 1
 	return 0
 
+## book_reward_scale is Learning's price for the joker and is charged ONLY to the wins the
+## joker actually makes: a spin with no book on its reels pays in full, so owning Learning
+## never taxes a win the book had nothing to do with. It multiplies the general
+## reward_scale inside the joker branch below, so the two stack the same way they did when
+## the book cut was folded into reward_scale upstream.
 static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spin_grant: bool,
 		pattern23_triple: bool = false, learning_active: bool = false,
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
-		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false) -> Dictionary:
+		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false,
+		book_reward_scale: float = 1.0) -> Dictionary:
 	var has_book := false
 	for reel_value in reels:
 		if String(reel_value) == "book":
@@ -189,6 +195,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 		return _score_reels_without_book(reels, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
 			reward_scale, symbol_reward_bonuses, solo_as_pair)
+	var book_scale := reward_scale * book_reward_scale
 
 	var candidates: Array[String] = []
 	for candidate_reel in reels:
@@ -205,7 +212,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 			resolved.append(candidate if String(resolved_reel) == "book" else String(resolved_reel))
 		var scored := _score_reels_without_book(resolved, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
-			reward_scale, symbol_reward_bonuses, solo_as_pair)
+			book_scale, symbol_reward_bonuses, solo_as_pair)
 		scored["bookJoker"] = true
 		scored["resolvedSymbol"] = candidate
 		if reels.count("book") == reels.size() and candidate == "eye":
@@ -244,6 +251,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var hidden_reel_count := int(input.get("hiddenReelCount", 0))
 	var visible_pair_as_triple := bool(input.get("visiblePairAsTriple", false))
 	var reward_scale := float(input.get("rewardScale", 1.0))
+	var book_reward_scale := float(input.get("bookRewardScale", 1.0))
 	var symbol_reward_bonuses: Dictionary = input.get("symbolRewardBonuses", {})
 	var solo_as_pair := bool(input.get("soloAsPair", false))
 	var guarantee_symbol_id: Variant = input.get("guaranteeSymbolId", null)
@@ -260,7 +268,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	if guaranteed_win:
 		var temp := score_reels(reels, 1.0, false, pattern23, learning, pair_score_mult,
 			hidden_reel_count, visible_pair_as_triple, reward_scale, symbol_reward_bonuses,
-			solo_as_pair)
+			solo_as_pair, book_reward_scale)
 		if temp["winType"] == "miss":
 			reels = [reels[0], reels[0], reels[2]]
 
@@ -309,7 +317,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var neurons_after := neurons if is_free_spin else maxi(0, neurons - neuron_decay)
 	var score := score_reels(reels, lucidity_multiplier, not is_free_spin, pattern23, learning,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses, solo_as_pair)
+		symbol_reward_bonuses, solo_as_pair, book_reward_scale)
 
 	var free_spins_after: int
 	if is_free_spin:

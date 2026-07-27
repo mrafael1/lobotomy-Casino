@@ -40,9 +40,9 @@ const POSITIVE_UPGRADES := [
 	{ "id": "pos_passive_lucidity", "name": "Passive Cognition", "category": "positive", "cost": 200,
 	  "effect": { "type": "passiveLucidityPerSpin", "amount": 5 } },
 	{ "id": "pos_enlightenment", "name": "Hallucination", "category": "positive", "cost": 120,
-	  "effect": { "type": "hallucination", "rewardScale": 0.70 } },
+	  "effect": { "type": "hallucination", "rewardScale": 0.30 } },
 	{ "id": "pos_learning", "name": "Learning", "category": "positive", "cost": 120,
-	  "effect": { "type": "bookSymbol", "weight": 7 } },
+	  "effect": { "type": "bookSymbol", "weight": 7, "rewardScale": 0.70 } },
 	{ "id": "pos_smart_save", "name": "Smart Save", "category": "positive", "cost": 30,
 	  "effect": { "type": "smartSaveRetention", "kept": 0.50 } },
 ]

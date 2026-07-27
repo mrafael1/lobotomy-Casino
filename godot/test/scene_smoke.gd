@@ -96,6 +96,7 @@ func _run() -> void:
 	_check_tv_information_priority(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
 	await _check_power_bar_76(machine, run_store, failures)
+	_check_restore_cap_181(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
 	_check_score_table_51(machine, failures)
 	await _check_spin_gain_fx_66(machine, run_store, failures)
@@ -294,6 +295,46 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	if String(hallucination["winType"]) != "triple" or int(hallucination["scoreEarned"]) != 35:
 		failures.append("issue92: hallucination should score visible pair as 70%% triple: %s" % str(hallucination))
 
+	# The tuned maluses, not just the mechanism: the checks above hand Evaluate a literal
+	# scale, so without these a retune of the upgrade tables goes unnoticed. Hallucination
+	# cuts rewards to 30%, Learning pays for the Book joker with 70%.
+	if not is_equal_approx(Economy.compute_hallucination_reward_scale(["pos_enlightenment"]), 0.30):
+		failures.append("balance: Hallucination should cut rewards to 30%% (got %.2f)"
+			% Economy.compute_hallucination_reward_scale(["pos_enlightenment"]))
+	if not is_equal_approx(Economy.compute_book_reward_scale(["pos_learning"]), 0.70):
+		failures.append("balance: Learning should cut book wins to 70%% (got %.2f)"
+			% Economy.compute_book_reward_scale(["pos_learning"]))
+	# Learning's cut is charged to book wins only, so it must NOT ride the general scale
+	# — owning it can no longer tax a spin that never saw a book.
+	var scale_owned: Array = run_store.ownedUpgrades.duplicate()
+	run_store.ownedUpgrades = ["pos_enlightenment", "pos_learning"]
+	if not is_equal_approx(run_store._active_reward_scale(), 0.30):
+		failures.append("balance: Learning leaked into the general reward scale (got %.3f)"
+			% run_store._active_reward_scale())
+	if not is_equal_approx(run_store._book_reward_scale(), 0.70):
+		failures.append("balance: Learning's book-win cut went missing (got %.3f)"
+			% run_store._book_reward_scale())
+	run_store.ownedUpgrades = scale_owned
+
+	# The rule itself: with Learning owned, a win with no book on the reels pays in full,
+	# and a win the book completed pays the 30% less. Same reels either way apart from the
+	# book, so the discount is the only difference between the two payouts.
+	var bookless := Evaluate.score_reels(["eye", "eye", "eye"], 1.0, true,
+		false, true, 1.0, 0, false, 1.0, {}, false, 0.70)
+	var full_triple := Evaluate.score_reels(["eye", "eye", "eye"], 1.0, true,
+		false, false, 1.0, 0, false, 1.0)
+	if int(bookless["scoreEarned"]) != int(full_triple["scoreEarned"]):
+		failures.append("book malus: a bookless win was taxed by Learning (%d, expected %d)"
+			% [int(bookless["scoreEarned"]), int(full_triple["scoreEarned"])])
+	var book_win := Evaluate.score_reels(["eye", "eye", "book"], 1.0, true,
+		false, true, 1.0, 0, false, 1.0, {}, false, 0.70)
+	if not bool(book_win.get("bookJoker", false)):
+		failures.append("book malus: the book should have completed the eye triple: %s" % str(book_win))
+	var want_book := int(round(float(int(full_triple["scoreEarned"])) * 0.70))
+	if int(book_win["scoreEarned"]) != want_book:
+		failures.append("book malus: a book win should pay 70%% (%d, expected %d)"
+			% [int(book_win["scoreEarned"]), want_book])
+
 	var amped_pair := Evaluate.score_reels(["eye", "eye", "pill"], 1.0, true,
 		false, false, 1.0, 0, false, 1.0, { "eye": 0.40 })
 	if int(amped_pair["scoreEarned"]) != 14:
@@ -325,7 +366,6 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	var previous_pair_spins := int(run_store.pairBoostSpins)
 	var previous_pair_hidden := int(run_store.pairBoostHiddenReels)
 	var previous_cocktail := int(run_store.cocktailBoostSpins)
-	var previous_penalty := float(run_store.cocktailPairTriplePenalty)
 	run_store.runPhase = "running"
 	run_store.ownedUpgrades = ["pos_enlightenment"]
 	run_store.neurons = 10
@@ -333,7 +373,6 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	run_store.lockedReels = [true, true, true]
 	run_store.lastResult = { "reels": ["eye", "eye", "brain"] }
 	run_store.cocktailBoostSpins = 1
-	run_store.cocktailPairTriplePenalty = 0.0
 	var cocktail_result: Variant = run_store.spin(false)
 	if cocktail_result == null or int((cocktail_result as Dictionary).get("cocktailBonus", -1)) != 16:
 		failures.append("issue174: hallucination cocktail bonus should include the visible third reel: %s" % str(cocktail_result))
@@ -393,7 +432,6 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	run_store.pairBoostSpins = previous_pair_spins
 	run_store.pairBoostHiddenReels = previous_pair_hidden
 	run_store.cocktailBoostSpins = previous_cocktail
-	run_store.cocktailPairTriplePenalty = previous_penalty
 
 func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	var previous_first_launch := bool(meta_store.is_first_launch)
@@ -1451,12 +1489,13 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	else:
 		if int(cocktail_spin.get("cocktailBonus", 0)) != 36:
 			failures.append("issue92: Cocktail bonus should use 1-6 rarity scaled by x3")
-		if int(cocktail_spin.get("cocktailPenalty", 0)) != 5:
-			failures.append("issue92: Cocktail pair/triple penalty should be 15%% rounded")
-		if int(cocktail_spin["scoreEarned"]) != 61 or int(cocktail_spin["coinsEarned"]) != 61:
+		# The Cocktail is pure upside now: a paying spin keeps the whole rarity bonus and
+		# is never taxed for having won. The old 15% cut would have made this 61.
+		if cocktail_spin.has("cocktailPenalty"):
+			failures.append("issue92: Cocktail still charged a pair/triple tax: %s" % str(cocktail_spin))
+		if int(cocktail_spin["scoreEarned"]) != 66 or int(cocktail_spin["coinsEarned"]) != 66:
 			failures.append("issue92: Cocktail final score/coins wrong: %s" % str(cocktail_spin))
 	run_store.cocktailBoostSpins = 0
-	run_store.cocktailPairTriplePenalty = 0.0
 	run_store.lockedReels = [false, false, false]
 	run_store.freeSpinsRemaining = 0
 	run_store.compulsiveSpinSkips = 0
@@ -3141,11 +3180,56 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
+## Passive gain is score like any other, so a losing spin can beat a Wealth target with it
+## alone. That spin also arms the combo-defeat warning, and the lever press that confirms
+## the loss is the moment the payout has to appear — it must NOT also start a fresh spin
+## underneath the overlay, which is what a dropped sequence lock used to allow.
+func _check_passive_gain_target_176(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.ownedUpgrades = ["pacte_passive_gain"] # +10 Lucidity every spin
+	run_store.neurons = 20
+	run_store.wealthTargetIndex = 0                  # first target = 100
+	run_store.scoreEarned = 95                       # 95 + 10 passive clears it
+	run_store.lastResult = { "reels": ["eye", "vial", "pill"] }
+	run_store.lockedReels = [true, true, true]       # pinned miss: the reels pay nothing
+	run_store.lockedReelSpins = [5, 5, 5]
+	run_store.isSpinning = false
+	run_store.comboDefeatPending = false
+	var spun: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if spun == null or int((spun as Dictionary).get("scoreEarned", -1)) != 0:
+		failures.append("issue176: the passive-gain fixture should be a scoreless miss: %s" % str(spun))
+	if int(run_store.scoreEarned) != 105:
+		failures.append("issue176: passive gain did not reach the run score (%d, expected 105)"
+			% int(run_store.scoreEarned))
+	if not machine._wealth_target_due_now():
+		failures.append("issue176: a target beaten by passive gain alone was not due")
+	if not run_store.comboDefeatPending:
+		failures.append("issue176: the losing fixture spin should arm the combo warning")
+	var spins_before := int(run_store.spinCount)
+	machine._do_spin() # the lever press that confirms the loss
+	if not machine._wealth_target_transition_active:
+		failures.append("issue176: confirming the loss did not proc the target payout")
+	if int(run_store.spinCount) != spins_before:
+		failures.append("issue176: the target payout was buried under a fresh spin (%d -> %d)"
+			% [spins_before, int(run_store.spinCount)])
+	machine._stop_wealth_target_transition()
+	machine._wealth_target_transition_active = false
+	machine._set_sequence_lock(false)
+	machine._post_spin_sequence_active = false
+	run_store.wealthTargetPending = false
+	run_store.wealthTargetPendingValue = 0
+	run_store.lockedReels = [false, false, false]
+	run_store.ownedUpgrades = []
+	run_store.reset_run_state()
+
 func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: Node,
 		failures: Array) -> void:
 	# The target payout is a run-local sequence. Exercise the 500 milestone, its
 	# centered presentation, the score remainder, and the shared Pacte visit gate.
 	var meta_before: Dictionary = meta_store._as_dict()
+	_check_passive_gain_target_176(machine, run_store, failures)
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
 	run_store.neurons = 10
@@ -3174,8 +3258,34 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			# the snapshot says it has lifted them.
 			if machine._tv_blackout_rect == null or not machine._tv_blackout_rect.visible:
 				failures.append("issue181: the payout screen did not shut the TV down")
+			# Issue #184: the 150 made over the target is billed before it banks. The
+			# receipt shows one row per charge and the reels settle on what survives,
+			# so the screen and the wallet cannot disagree.
+			var bill: Dictionary = EconomyConst.overflow_bill(150, 500)
+			var net_overflow := int(bill["net"])
+			if net_overflow >= 150 or net_overflow <= 0:
+				failures.append("issue184: the overflow bill did not take a share of 150 (%d)"
+					% net_overflow)
 			overlay._skip_to_end()
-			if overlay._snapshot.get_value() != 150:
+			# The receipt is the target paid plus one row per charge, in that order.
+			var rows: Array[String] = overlay.bill_text()
+			var want_rows := EconomyConst.OVERFLOW_TAX_LINES.size() + 1
+			if rows.size() != want_rows:
+				failures.append("issue184: the payout screen printed %d bill rows, want %d"
+					% [rows.size(), want_rows])
+			# Read off the instance, not the class: naming the class here would make this
+			# suite compile-depend on the overlay script, which is loaded before the
+			# autoloads it needs exist.
+			elif rows[0] != "%s -500" % String(overlay.TARGET_PAID_LABEL):
+				failures.append("issue184: the target is not the head of the receipt (%s)"
+					% rows[0])
+			if overlay.net_banked() != net_overflow:
+				failures.append("issue184: the receipt's net (%d) is not what banks (%d)"
+					% [overlay.net_banked(), net_overflow])
+			if overlay.net_label.text.find(str(net_overflow)) < 0:
+				failures.append("issue184: the banked line does not show the net (%s)"
+					% overlay.net_label.text)
+			if overlay._snapshot.get_value() != net_overflow:
 				failures.append("issue181: skipping the payout did not settle on the remainder")
 			if machine._wealth_odometer.get_node("Reel3").visible:
 				failures.append("issue181: the machine kept drawing the digits it handed over")
@@ -3188,13 +3298,23 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 		machine._set_sequence_lock(false)
 	var wallet_before_payout := int(meta_store.lucidityWallet)
 	var payout: Dictionary = run_store.complete_wealth_target()
-	# Issue #181: the 150 made over the 500 target is banked to the wallet in full and
-	# the run's score returns to zero.
-	if int(payout.get("banked", -1)) != 150 \
-			or int(meta_store.lucidityWallet) != wallet_before_payout + 150 \
+	# Issue #184: the 150 made over the 500 target reaches the wallet minus the casino's
+	# bill, and the run's score returns to zero either way.
+	var expected_net := EconomyConst.overflow_after_tax(150, 500)
+	if int(payout.get("overflow", -1)) != 150 \
+			or int(payout.get("banked", -1)) != expected_net \
+			or int(meta_store.lucidityWallet) != wallet_before_payout + expected_net \
 			or int(run_store.scoreEarned) != 0 \
 			or int(run_store.wealthTargetIndex) != 3:
 		failures.append("issue181: 500 target did not bank the 150 overflow")
+	# The rows the player was shown must add up to exactly what changed hands.
+	var settled_bill: Dictionary = payout.get("bill", {})
+	var row_total := 0
+	for line: Dictionary in settled_bill.get("lines", []) as Array:
+		row_total += int(line["amount"])
+	if row_total + expected_net != 150:
+		failures.append("issue184: the bill rows (%d) plus the net (%d) are not the overflow"
+			% [row_total, expected_net])
 	if not run_store.arm_pacte_for_wealth_target(500):
 		failures.append("issue176: first 500 target did not arm Pacte")
 	# Once the first visit is consumed, the same 500 milestone cannot arm it again,
@@ -3295,19 +3415,20 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	run_store.start_new_run([], meta_store.get_pending_consumables(), false)
 	if run_store.runConsumables.has("cons_tea"):
 		failures.append("issue181: a used consumable came back after the target break")
-	# Issue #181: beating target 100 with 152 banks the 52 overflow to the wallet in
-	# full, and the next run starts from zero.
+	# Issue #181/#184: beating target 100 with 152 banks the 52 overflow to the wallet
+	# minus the casino's bill, and the next run starts from zero.
 	run_store.reset_run_state()
 	meta_store.campaignNeuronsLeft = 3
 	meta_store.lucidityWallet = 400
 	run_store.runPhase = "running"
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 152
+	var net_52 := EconomyConst.overflow_after_tax(52, 100)
 	run_store.begin_wealth_target()
 	var overflow: Dictionary = run_store.complete_wealth_target()
-	if int(overflow.get("banked", -1)) != 52:
+	if int(overflow.get("banked", -1)) != net_52:
 		failures.append("issue181: paying target 100 out of 152 did not bank 52")
-	if int(meta_store.lucidityWallet) != 452:
+	if int(meta_store.lucidityWallet) != 400 + net_52:
 		failures.append("issue181: the overflow never reached the wallet (%d)"
 			% int(meta_store.lucidityWallet))
 	if int(run_store.scoreEarned) != 0:
@@ -3333,7 +3454,7 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	run_store.begin_wealth_target()
 	run_store.begin_target_round()
 	run_store.start_new_run([], {}, false)
-	if int(meta_store.lucidityWallet) != 452:
+	if int(meta_store.lucidityWallet) != 400 + net_52:
 		failures.append("issue181: an unpaid target claim lost the overflow (%d)"
 			% int(meta_store.lucidityWallet))
 	if int(run_store.scoreEarned) != 0:
@@ -4743,13 +4864,26 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			failures.append("issue181: boost slot %s collides with the dealer icon" % rect)
 		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):
 			failures.append("issue181: boost slot %s collides with the TARGET art" % rect)
-	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slot 0 is
-	# the Energy Drink no-decay rush (pure upside → "+" only); slot 1 is the Cocktail
-	# (rarity bonus with a live pair/triple tax → mixed, both "+" and "-").
+	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slots 0 and 1
+	# are the Energy Drink no-decay rush and the Cocktail — both pure upside now that the
+	# Cocktail's pair/triple tax is gone, so both show "+" only.
 	if not (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
 		failures.append("issue113: pure-positive boost should show only the + mark")
-	if not (slots[1]["pos_mark"] as Label).visible or not (slots[1]["neg_mark"] as Label).visible:
-		failures.append("issue113: mixed Cocktail boost should show both + and - marks")
+	if not (slots[1]["pos_mark"] as Label).visible or (slots[1]["neg_mark"] as Label).visible:
+		failures.append("issue113: the Cocktail should be pure upside (+ mark only)")
+	# Tobacco still carries a live cost (3x pairs bought with a hidden reel), so it is the
+	# mixed case: both marks at once. Shown alone — there are only two slots, and a third
+	# simultaneous boost folds into a "+N" instead of getting its own badge.
+	run_store.cocktailBoostSpins = 0
+	run_store.decaySkips = 0
+	run_store.pairBoostSpins = 4
+	machine._refresh_boost_indicators()
+	if not (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
+		failures.append("issue113: mixed Tobacco boost should show both + and - marks")
+	run_store.pairBoostSpins = 0
+	run_store.cocktailBoostSpins = 2
+	run_store.decaySkips = 3
+	machine._refresh_boost_indicators()
 	# A pure downside (Serum's blur tail) shows only the "-" mark.
 	run_store.cocktailBoostSpins = 0
 	run_store.decaySkips = 0
@@ -5060,6 +5194,124 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		failures.append("issue76: bar-driven restore did not bring the spent ability back")
 	machine._power_coins_in_flight = 0
 	machine._power_batch_running = false
+
+	run_store.reset_run_state()
+
+# Per-spin restore cap (issue #181): a spin may hand back at most
+# EconomyConst.POWER_RESTORE_CHARGE_MAX charges, one spent per restored power and one
+# given back per spin, so the sustained rate is one restore per spin.
+func _check_restore_cap_181(machine: Node, run_store: Node, failures: Array) -> void:
+	var cap: int = EconomyConst.POWER_RESTORE_CHARGE_MAX
+
+	# The planner stops at the cap and leaves the surplus abilities spent. Three
+	# thresholds crossed, three powers down, but only `cap` come back.
+	var spent_three: Array = ["reroll", "shift", "memory"]
+	var capped: Dictionary = Lucidity.plan_gain(0, 150, spent_three, 12345,
+		EconomyConst.LUCIDITY_COINS_PER_RESTORE, cap)
+	if (capped["restores"] as Array).size() != cap:
+		failures.append("issue181: capped plan returned %d restores, expected %d"
+			% [(capped["restores"] as Array).size(), cap])
+	if (capped["abilitiesUsed"] as Array).size() != spent_three.size() - cap:
+		failures.append("issue181: capped plan freed the wrong number of abilities (%s)"
+			% str(capped["abilitiesUsed"]))
+	# The uncapped default is what the parity vectors pin — it must be untouched.
+	var uncapped: Dictionary = Lucidity.plan_gain(0, 150, spent_three, 12345)
+	if (uncapped["restores"] as Array).size() != 3:
+		failures.append("issue181: the default (uncapped) plan lost a restore (%d of 3)"
+			% (uncapped["restores"] as Array).size())
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	if int(run_store.restore_budget_left()) != cap:
+		failures.append("issue181: a fresh run should start with the full restore budget")
+
+	# The scenario: with the charges spent, the gauge must not complete. A spent power is
+	# available and the gain is enormous, and it still holds one frame short of full —
+	# the same shape as having nothing restorable at all.
+	run_store.powerRestoreCharges = 0
+	run_store.abilitiesUsed = ["reroll", "shift"]
+	run_store.pendingPowerRestores = []
+	run_store.scoreEarned = 0
+	run_store.lucidityCoins = 200
+	machine._power_bar_score = 0
+	machine._power_seen_lucidity = 0
+	var blocked: Dictionary = machine._compute_power_plan()
+	for stepd in (blocked["steps"] as Array):
+		if bool(stepd["restore"]):
+			failures.append("issue181: the gauge restored a power with no charge left")
+			break
+	if int(blocked["score"]) != EconomyConst.LUCIDITY_COINS_PER_RESTORE - machine._power_bar_step():
+		failures.append("issue181: a capped gauge did not hold at 4/5 (score %d)"
+			% int(blocked["score"]))
+
+	# The bar-driven restore refuses too, and leaves the spent power spent.
+	if String(run_store.bar_restore_power(99)) != "":
+		failures.append("issue181: bar_restore_power handed a power back with no charge")
+	if (run_store.abilitiesUsed as Array).size() != 2:
+		failures.append("issue181: a refused bar restore still emptied abilitiesUsed")
+
+	# The light reads the charges: one frame per charge still banked, dark when spent.
+	if machine._restore_cap_sprite == null:
+		failures.append("issue181: the restore cap art is missing")
+	elif int(machine.RESTORE_CAP_FRAMES) != cap + 1:
+		failures.append("issue181: the cap art has %d frames but the pool holds %d charges"
+			% [int(machine.RESTORE_CAP_FRAMES), cap])
+	else:
+		for charges in range(cap + 1):
+			run_store.powerRestoreCharges = charges
+			machine._refresh_restore_cap()
+			var want := cap - charges # 0 charges spent = frame 0, fully spent = last frame
+			if int(machine._restore_cap_sprite.frame) != want:
+				failures.append("issue181: %d charge(s) banked lit frame %d, expected %d"
+					% [charges, int(machine._restore_cap_sprite.frame), want])
+
+	# The light must stay lit for a restore that is owed but not yet delivered, or it goes
+	# dark seconds before the power returns and the two stop reading as one event.
+	# plan_gain already took the power out of abilitiesUsed when it charged the light, so a
+	# pending restore is a power the store considers back but the machine has not shown yet.
+	run_store.powerRestoreCharges = 0
+	run_store.abilitiesUsed = ["shift"]
+	run_store.pendingPowerRestores = ["reroll"]
+	if int(machine._shown_restore_charges()) != 1:
+		failures.append("issue181: the light went dark while a restore was still owed (%d)"
+			% int(machine._shown_restore_charges()))
+	# Delivering it takes the light out on the same beat, and the flash announces both.
+	machine._power_seen_lucidity = 0
+	machine._resolve_bar_restore()
+	if int(machine._shown_restore_charges()) != 0:
+		failures.append("issue181: delivering the restore did not take the light out")
+	if not run_store.pendingPowerRestores.is_empty():
+		failures.append("issue181: the restore did not actually commit (%s)"
+			% str(run_store.pendingPowerRestores))
+	machine._stop_restore_flash()
+	var flashed_chip: Sprite2D = machine._power_sprites.get("reroll") as Sprite2D
+	if flashed_chip != null and flashed_chip.modulate != Color.WHITE:
+		failures.append("issue181: the restore flash left the chip overdriven (%s)"
+			% str(flashed_chip.modulate))
+	if machine._restore_cap_glow != null and machine._restore_cap_glow.visible:
+		failures.append("issue181: the restore glow was left painted on the gauge")
+
+	# A spin gives back exactly one charge — not the whole pool. Nothing is spent, so the
+	# spin's own plan restores nothing and cannot muddy the count.
+	run_store.abilitiesUsed = []
+	run_store.pendingPowerRestores = []
+	run_store.neurons = 10
+	run_store.isSpinning = false
+	run_store.comboDefeatPending = false
+	run_store.powerRestoreCharges = 0
+	run_store.spin()
+	if int(run_store.restore_budget_left()) != EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN:
+		failures.append("issue181: a spin from empty should bank exactly %d charge, got %d"
+			% [EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN, int(run_store.restore_budget_left())])
+
+	# Recharging never runs past the cap, however long the player goes without restoring.
+	run_store.isSpinning = false
+	run_store.comboDefeatPending = false
+	run_store.powerRestoreCharges = cap
+	run_store.spin()
+	if int(run_store.restore_budget_left()) != cap:
+		failures.append("issue181: recharge overflowed the charge cap (%d of %d)"
+			% [int(run_store.restore_budget_left()), cap])
 
 	run_store.reset_run_state()
 

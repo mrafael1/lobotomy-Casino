@@ -92,8 +92,8 @@ const LOCKED_SLOT_DESCRIPTION := "Unlocks with future achievements."
 const DESCRIPTIONS := {
 	"perm_shift": "Shift one reel symbol up \n or down during a run.",
 	"corr_pattern_23": "Two matching symbols in slots 2 and 3 count as a triple.",
-	"pos_learning": "Adds the Book symbol to the reels.",
-	"pos_enlightenment": "Removes one reel. Visible pairs count as triples, but rewards are cut by 30%.",
+	"pos_learning": "Adds the Book symbol to the reels, but wins it completes are cut by 30%.",
+	"pos_enlightenment": "Removes one reel. Visible pairs count as triples, but rewards are cut by 70%.",
 	"perm_memory": "Lock a reel before spinning.",
 	"corr_reward_amp_1": "Choose one symbol and increase its rewards.\n[color=#183A8C]tier I[/color].",
 	"corr_reward_amp_2": "Increase the chosen symbol's rewards.\n[color=#FBBF24]tier II[/color].",

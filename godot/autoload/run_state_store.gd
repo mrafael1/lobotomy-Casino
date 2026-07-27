@@ -151,7 +151,6 @@ var guaranteedWinSpins := 0
 var blockPowersSpins := 0
 var hideNeuronsSpins := 0
 var cocktailBoostSpins := 0
-var cocktailPairTriplePenalty := 0.0
 var compulsiveSpinSkips := 0
 var pendingCompulsiveSpinSkips := 0
 var decaySkips := 0
@@ -225,6 +224,12 @@ var roundContinuationPending := false
 var pacteTargetRoundVisit := false
 var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
+## Restore charges left (0 .. EconomyConst.POWER_RESTORE_CHARGE_MAX). Every score-driven
+## restore spends one — plan_gain crossings and the gauge's own completion — and each spin
+## launched gives one back, so a run can restore one power per spin on average and at most
+## two on any single spin. A consumable that hands a power back is an item effect and
+## spends nothing here.
+var powerRestoreCharges := EconomyConst.POWER_RESTORE_CHARGE_MAX
 
 # Pacte run snapshot. Offers and temporary selections are saved so leaving the
 # scene or restarting the game never silently discards a reserved run.
@@ -540,6 +545,7 @@ func _capture_rewind_snapshot() -> Dictionary:
 		# only refunds powers added after this snapshot, i.e. on the rewound spin.
 		"abilitiesUsed": abilitiesUsed.duplicate(),
 		"powersUsedThisSpin": powersUsedThisSpin,
+		"powerRestoreCharges": powerRestoreCharges,
 		"pendingPowerRestores": pendingPowerRestores.duplicate(),
 	}
 
@@ -573,6 +579,8 @@ func _restore_rewind_snapshot(snapshot: Dictionary) -> void:
 	pacteAfterFlatlinePending = bool(snapshot.get("pacteAfterFlatlinePending", pacteAfterFlatlinePending))
 	heartPowerArmed = bool(snapshot.get("heartPowerArmed", heartPowerArmed))
 	powersUsedThisSpin = int(snapshot.get("powersUsedThisSpin", 0))
+	powerRestoreCharges = int(snapshot.get("powerRestoreCharges",
+		EconomyConst.POWER_RESTORE_CHARGE_MAX))
 	pendingPowerRestores = (snapshot.get("pendingPowerRestores", pendingPowerRestores) as Array).duplicate()
 	isSpinning = false
 
@@ -668,6 +676,11 @@ func spin(compulsive := false) -> Variant:
 	var is_free: bool = (not is_compulsive) and (freeSpinsRemaining > 0 or heart_spin_armed)
 	if (not is_free) and neurons < 1:
 		return null
+
+	# One restore charge back for the spin. This spin's own payout and every power the
+	# player then plays on these reels draw from the same pool, so a pair that gives one
+	# power back can only be followed by another restore if a charge was banked.
+	_recharge_restores()
 
 	var seed := _seed(spinCount * 0x9e3779b9)
 	var rng := LobRNG.new(seed)
@@ -776,26 +789,27 @@ func spin(compulsive := false) -> Variant:
 			"hiddenReelCount": hidden_reel_count,
 			"visiblePairAsTriple": hallucination_active,
 			"rewardScale": _active_reward_scale(),
+			"bookRewardScale": _book_reward_scale(),
 			"soloAsPair": Economy.has_solo_as_pair(ownedUpgrades),
 			"symbolRewardBonuses": symbolRewardBonuses,
 			"weightOverrides": oddsWeightOverrides,
 		})
 
+	# The Cocktail is pure upside: rarity points on every visible reel, no tax. It used to
+	# charge 15% of a pair/triple back, which made the item read as a trap on exactly the
+	# spins it was supposed to reward.
 	var cocktail_bonus := 0
-	var cocktail_penalty := 0
 	if cocktailBoostSpins > 0:
 		var rarity_total := 0
 		var visible_count := maxi(1, (result["reels"] as Array).size() - hidden_reel_count)
 		for i in visible_count:
 			rarity_total += int(COCKTAIL_RARITY_POINTS.get(String((result["reels"] as Array)[i]), 0))
 		cocktail_bonus = floori(float(rarity_total) * float(result["scoreMultiplier"]) + 0.5)
-		if String(result["winType"]) in ["pair", "triple"] and cocktailPairTriplePenalty > 0.0:
-			cocktail_penalty = floori(float(result["scoreEarned"]) * cocktailPairTriplePenalty + 0.5)
 	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
 	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
 	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
 	# 0-score flatline wins never spend the charge — it waits for a real win.
-	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus - cocktail_penalty)
+	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus)
 	var flatline_boost := 0
 	var flatline_boost_applied := false
 	if flatlineWinBoostArmed and base_score > 0 \
@@ -829,7 +843,7 @@ func spin(compulsive := false) -> Variant:
 	var augmented_jackpot_cut := int(augmented_jackpot["cut"])
 	var passive_lucidity := _passive_lucidity_per_spin()
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0 or cocktail_penalty > 0 or flatline_boost_applied \
+	if cocktail_bonus > 0 or flatline_boost_applied \
 			or win_boost_applied or specialist_bonus > 0 or hidden_reel_count > 0 \
 			or augmented_jackpot_cut > 0 or passive_lucidity > 0:
 		final_result = result.duplicate(true)
@@ -840,8 +854,6 @@ func spin(compulsive := false) -> Variant:
 		if cocktail_bonus > 0:
 			final_result["cocktailApplied"] = true
 			final_result["cocktailBonus"] = cocktail_bonus
-		if cocktail_penalty > 0:
-			final_result["cocktailPenalty"] = cocktail_penalty
 		if flatline_boost_applied:
 			final_result["flatlineBoostApplied"] = true
 			final_result["flatlineBoostBonus"] = flatline_boost
@@ -867,7 +879,7 @@ func spin(compulsive := false) -> Variant:
 	# active power-restore threshold brings it back.
 	var lucidity_gain := int(final_result["scoreEarned"]) + passive_lucidity
 	var plan := Lucidity.plan_gain(lucidityCoins, lucidity_gain, abilitiesUsed, seed,
-		effective_coins_per_power_restore())
+		effective_coins_per_power_restore(), restore_budget_left())
 
 	var was_energy_last: bool = stasis and decaySkips == 1
 
@@ -896,6 +908,7 @@ func spin(compulsive := false) -> Variant:
 	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
+	_spend_restore_budget((plan["restores"] as Array).size())
 	_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 	if potion_restored_power != "":
 		pendingPowerRestores.append(potion_restored_power)
@@ -1107,7 +1120,6 @@ func reset_run_state() -> void:
 	blockPowersSpins = 0
 	hideNeuronsSpins = 0
 	cocktailBoostSpins = 0
-	cocktailPairTriplePenalty = 0.0
 	compulsiveSpinSkips = 0
 	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
@@ -1148,6 +1160,7 @@ func reset_run_state() -> void:
 	campaignNeuronPending = false
 	augmentedTier = ""
 	powersUsedThisSpin = 0
+	powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
 	pacteSeed = 0
 	pacteOfferAugmentIds = null
 	pacteOfferPowerIds = null
@@ -1330,6 +1343,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# augmentedTier survives: the menu sets it before the pre-run dealer shop, and
 	# it applies to the run this call starts (issue #111).
 	powersUsedThisSpin = 0
+	powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
 	ownedUpgrades = owned_permanents.duplicate()
 	selectedAugmentCardIds = kept_augment_cards
 	selectedPowerCardIds = kept_power_cards
@@ -1389,7 +1403,6 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	blockPowersSpins = 0
 	hideNeuronsSpins = 0
 	cocktailBoostSpins = 0
-	cocktailPairTriplePenalty = 0.0
 	compulsiveSpinSkips = 0
 	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
@@ -1499,11 +1512,13 @@ func complete_wealth_target() -> Dictionary:
 ## start_new_run so an outstanding claim is always settled exactly once, whether the
 ## player pressed CONTINUE or the round rolled over without them.
 ##
-## What the run made over the target is banked to the persistent wallet in full and
-## the run's score returns to zero: the overflow is winnings the player walks away
-## with, not a head start on the next target. Banking happens here rather than at the
-## next start_new_run because the dealer on the other side of the break spends that
-## wallet, and he opens before the next run begins.
+## What the run made over the target is winnings the player walks away with, not a head
+## start on the next target — so the run's score returns to zero and the overflow goes to
+## the persistent wallet, minus what the casino bills for it (EconomyConst.overflow_bill).
+## The bill exists because the overflow used to bank 1:1 and uncapped, which let a single
+## jackpot (a flat 200) clear the 100 goal and hand over 200+ credits on one machine run.
+## Banking happens here rather than at the next start_new_run because the dealer on the
+## other side of the break spends that wallet, and he opens before the next run begins.
 func _settle_pending_wealth_target() -> Dictionary:
 	if not wealthTargetPending:
 		return {}
@@ -1511,8 +1526,12 @@ func _settle_pending_wealth_target() -> Dictionary:
 		else current_wealth_target()
 	var final_target := target >= EconomyConst.WEALTH_SCORE_THRESHOLD
 	var banked := 0
+	var overflow := 0
+	var bill := {}
 	if not final_target:
-		banked = maxi(0, scoreEarned - target)
+		overflow = maxi(0, scoreEarned - target)
+		bill = EconomyConst.overflow_bill(overflow, target)
+		banked = int(bill["net"])
 		scoreEarned = 0
 		wealthTargetIndex = mini(wealthTargetIndex + 1, EconomyConst.WEALTH_TARGETS.size() - 1)
 		if lastResult is Dictionary:
@@ -1527,7 +1546,10 @@ func _settle_pending_wealth_target() -> Dictionary:
 	return {
 		"target": target,
 		"final": final_target,
+		# What the run cleared the target by, and what survived the bill into the wallet.
+		"overflow": overflow,
 		"banked": banked,
+		"bill": bill,
 		"remaining": scoreEarned,
 	}
 
@@ -1802,7 +1824,8 @@ func _dealer_help_rescore(reels: Array, reel_index: int, symbol: String) -> Dict
 		not bool(lastResult.get("isFreeSpin", false)),
 		_pair_score_multiplier(pair_boost_active),
 		_active_hidden_reel_count(pair_boost_active), Economy.has_hallucination(ownedUpgrades),
-		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
+		_book_reward_scale())
 
 func _dealer_help_cheat(reels: Array) -> Dictionary:
 	var symbols: Array[String] = []
@@ -1847,7 +1870,8 @@ func _dealer_help_shift(reels: Array) -> Dictionary:
 				not bool(lastResult.get("isFreeSpin", false)),
 				_pair_score_multiplier(pairBoostSpins > 0),
 				_active_hidden_reel_count(pairBoostSpins > 0), Economy.has_hallucination(ownedUpgrades),
-				_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+				_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
+				_book_reward_scale())
 			var rank := _dealer_help_rank(outcome)
 			if rank > best_rank:
 				best = outcome
@@ -1895,7 +1919,8 @@ func _dealer_help_reroll(reels: Array) -> Dictionary:
 		not bool(lastResult.get("isFreeSpin", false)),
 		_pair_score_multiplier(pairBoostSpins > 0),
 		_active_hidden_reel_count(pairBoostSpins > 0), Economy.has_hallucination(ownedUpgrades),
-		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
+		_book_reward_scale())
 	return { "outcome": reroll_outcome, "reel": best_reel, "symbol": best_symbol }
 
 func _dealer_help_lock(reels: Array, rng: LobRNG) -> Dictionary:
@@ -2052,7 +2077,27 @@ func recover_last_consumable(max_slots: int) -> bool:
 # Public: delegate to the parity-verified pure planner (run action surface).
 func plan_lucidity_gain(prev_coins: int, gain: int, abilities: Array, seed: int) -> Dictionary:
 	return Lucidity.plan_gain(prev_coins, gain, abilities, seed,
-		effective_coins_per_power_restore())
+		effective_coins_per_power_restore(), restore_budget_left())
+
+## How many more powers the score economy may bring back right now. The power gauge reads
+## this too: with no charge left it stops one frame short of full instead of completing,
+## the same as having no spent power to give back.
+func restore_budget_left() -> int:
+	return clampi(powerRestoreCharges, 0, EconomyConst.POWER_RESTORE_CHARGE_MAX)
+
+## Spend charges on score-driven restores. Called with the size of a plan's restore list,
+## so a plan that gave nothing back costs nothing.
+func _spend_restore_budget(count: int) -> void:
+	if count <= 0:
+		return
+	powerRestoreCharges = maxi(0, restore_budget_left() - count)
+
+## One charge back per spin launched (never past the cap): the restore economy refills
+## with play rather than resetting whole, so a spin cannot repeat the previous spin's
+## double restore.
+func _recharge_restores() -> void:
+	powerRestoreCharges = mini(EconomyConst.POWER_RESTORE_CHARGE_MAX,
+		restore_budget_left() + EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN)
 
 func commit_power_restore(power_id: String) -> void:
 	var idx := pendingPowerRestores.find(power_id)
@@ -2064,15 +2109,16 @@ func commit_power_restore(power_id: String) -> void:
 ## Bar-driven restore (issue #76 follow-up): when the power gauge fills and no plan_gain
 ## restore is queued, it restores one spent ability directly — random pick removed from
 ## abilitiesUsed so its button re-enables. Same selection shape as Lucidity.plan_gain.
-## Returns the restored id ("" if nothing is spent).
+## Returns the restored id ("" if nothing is spent, or the per-spin cap is used up).
 func bar_restore_power(seed: int) -> String:
-	if abilitiesUsed.is_empty():
+	if abilitiesUsed.is_empty() or restore_budget_left() <= 0:
 		return ""
 	var rng := LobRNG.new(seed & M32)
 	var idx := mini(abilitiesUsed.size() - 1, floori(rng.next() * abilitiesUsed.size()))
 	var id := String(abilitiesUsed[idx])
 	abilitiesUsed = abilitiesUsed.duplicate()
 	abilitiesUsed.remove_at(idx)
+	_spend_restore_budget(1)
 	_commit()
 	return id
 
@@ -2096,6 +2142,12 @@ func _active_reward_scale() -> float:
 	if augmented_modifier_active(4):
 		scale *= 0.5
 	return scale
+
+## Learning's cut is NOT part of the general scale: it is charged only to wins the Book
+## joker actually made, so a spin that never saw a book pays in full. The scorer applies
+## it on top of _active_reward_scale inside its joker branch.
+func _book_reward_scale() -> float:
+	return Economy.compute_book_reward_scale(ownedUpgrades)
 
 func _pair_score_multiplier(pair_boost_active: bool) -> float:
 	var multiplier := Economy.compute_pair_score_multiplier(ownedUpgrades)
@@ -2210,7 +2262,7 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int,
 			outcome["scoreDelta"] = int(outcome["scoreDelta"]) + win_boost_bonus
 			outcome["coinsDelta"] = int(outcome["coinsDelta"]) + win_boost_bonus
 	var plan := Lucidity.plan_gain(lucidityCoins, int(outcome["coinsDelta"]), marked_used, seed,
-		effective_coins_per_power_restore())
+		effective_coins_per_power_restore(), restore_budget_left())
 	# The cap only tops up, it never cuts: banked spins above maxFreeSpins
 	# (vial/tea rewards, issue #66) survive power use.
 	var free_after := mini(freeSpinsRemaining + int(outcome["freeSpinsGranted"]),
@@ -2221,6 +2273,7 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int,
 	scoreEarned = maxi(0, scoreEarned + maxi(0, int(outcome["scoreDelta"])))
 	lucidityCoins = int(plan["lucidityCoins"])
 	pendingPowerRestores.append_array(plan["restores"])
+	_spend_restore_budget((plan["restores"] as Array).size())
 	_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 	var lr: Dictionary = (lastResult as Dictionary).duplicate(true)
 	lr["reels"] = outcome["reels"]
@@ -2354,7 +2407,7 @@ func reroll_reel(reel_index: int) -> bool:
 		candidates, Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
 	var marked := abilitiesUsed.duplicate()
 	marked.append("reroll")
 	powersUsedThisSpin += 1
@@ -2376,7 +2429,7 @@ func move_reel(reel_index: int, direction: int) -> bool:
 		Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
 	var seed := _seed(spinCount * 0x27d4eb2f + reel_index)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("shift")
@@ -2420,7 +2473,7 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 		Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades))
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
 
 	var seed := _seed(spinCount * 0x165667b1)
 	powersUsedThisSpin += 1
@@ -2470,7 +2523,7 @@ func cheat_symbol(reel_index: int, symbol: String) -> bool:
 			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
 			_pair_score_multiplier(pair_boost_active), hidden_reel_count,
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
-			Economy.has_solo_as_pair(ownedUpgrades))
+			Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
 	var cheated := _apply_revealed_power_outcome(outcome, "cheat",
 			_seed(spinCount * 0x165667b1 + reel_index), 0, [reel_index])
 	if cheated:
@@ -2489,7 +2542,7 @@ func swap_symbol(source_reel: int, target_reel: int, source_symbol: String = "")
 			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
 			_pair_score_multiplier(pair_boost_active), hidden_reel_count,
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
-			source_symbol, Economy.has_solo_as_pair(ownedUpgrades))
+			source_symbol, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
 	return _apply_revealed_power_outcome(outcome, "swap",
 			_seed(spinCount * 0x27d4eb2f + source_reel * 7 + target_reel), 0,
 			[source_reel, target_reel])
@@ -2548,10 +2601,12 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				betMultiplier = 2
 			"addLucidity":
 				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed,
-					_seed(spinCount * 0x2545f491), effective_coins_per_power_restore())
+					_seed(spinCount * 0x2545f491), effective_coins_per_power_restore(),
+					restore_budget_left())
 				lucidityCoins = int(plan["lucidityCoins"])
 				abilitiesUsed = plan["abilitiesUsed"]
 				pendingPowerRestores.append_array(plan["restores"])
+				_spend_restore_budget((plan["restores"] as Array).size())
 				_note_card_metric(CardUnlocks.METRIC_POWER_RESTORES, (plan["restores"] as Array).size())
 				# Water is a direct score event as well as a Lucidity refresh. Keep the
 				# current result's running score in sync so a same-spin power only pops
@@ -2559,7 +2614,6 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				_apply_direct_score_gain(int(e["amount"]))
 			"cocktailBoost":
 				cocktailBoostSpins += int(e["spins"])
-				cocktailPairTriplePenalty = float(e.get("pairTriplePenalty", 0.0))
 			"forceFlatlinesThenTriple":
 				# Red Pill: force flatlines for flatSpins, then a guaranteed triple.
 				forceFlatlineSpins += int(e["flatSpins"])

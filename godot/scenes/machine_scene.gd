@@ -436,8 +436,9 @@ const POWER_COIN_POP_FRAME_TIME := 0.06
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
 # six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
 # flies from the wealth odometer to the bar every 10 power points and advances one frame;
-# at the full frame it spawns a coin from the bar top that flies to the random restorable
-# power. Each bank coin first plays the authored four-frame pop sheet.
+# at the full frame the gauge resets and a random restorable power comes back — the
+# button re-enabling is the feedback, no coin walks back out to it. Each bank coin first
+# plays the authored four-frame pop sheet.
 # The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
 # coins = 10/step.
 const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
@@ -445,10 +446,31 @@ const POWER_BAR_HFRAMES := 6
 const POWER_BAR_VFRAMES := 1
 const POWER_BAR_FRAMES := 6
 const POWER_BAR_CENTER := Vector2(137.0, 84.0) # coin-to-bar landing point (gauge middle)
-const POWER_BAR_TOP := Vector2(137.0, 62.0)     # where the restore coin spawns when full
 const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
 # With no restorable power the gauge stops one frame short of full so it never fake-fills.
 const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
+
+# The restore charge read out as a light beside the gauge (issue #181). Native
+# full-canvas sheet, one frame per banked charge: frame 0 lit, frame 1 dark. With the
+# light out the gauge can still bank points but never completes — it holds at 4/5 until
+# the next spin puts the light back.
+const RESTORE_CAP_SHEET := "machine new view/restore_cap.png"
+const RESTORE_CAP_FRAMES := 2
+
+# Power restored (issue #181). The coin that used to fly the gauge -> button carried the
+# causality: it SHOWED the light paying for the power. Without it the light just switched
+# off and the button quietly re-enabled, two unrelated-looking events. The replacement is
+# simultaneity plus a shared colour: on the very frame the power lands, the light's last
+# glow blows out and fades from the gauge while the chip flashes the same cyan and pulses.
+# No object travels, so it costs ~0.3s instead of a full coin flight.
+const RESTORE_FLASH_GLOW_TIME := 0.26   # the spent light's glow fading out of the gauge
+const RESTORE_FLASH_PULSE_TIME := 0.09  # one half-pulse on the restored chip
+const RESTORE_FLASH_PULSES := 2
+# Blown-out cyan: >1 channels overdrive the chip's own art rather than tinting it a new
+# colour, so it reads as the same power lighting up, not a different sprite.
+const RESTORE_FLASH_CHIP_TINT := Color(2.2, 2.7, 2.6)
+const RESTORE_FLASH_GLOW_TINT := Color(2.4, 2.8, 2.8)
+const RESTORE_FLASH_NUDGE := 0.45
 
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
@@ -468,15 +490,15 @@ const ITEM_ICONS := {
 # so the player can see WHICH boost is active and for HOW MANY more spins. Ordered by how
 # it stacks top-down in the corner.
 # Polarity (issue #113): "negative" marks a pure downside, "mixed" a boost whose
-# benefit carries a live cost (Cocktail's 15% pair/triple tax, Tobacco's hidden
-# reel). Unmarked entries are pure upside. The badges surface this as +/- corner
-# glyphs so polarity never rides on the count colour alone.
+# benefit carries a live cost (Tobacco's hidden reel). Unmarked entries are pure
+# upside — the Cocktail joined them when its pair/triple tax was dropped. The badges
+# surface this as +/- corner glyphs so polarity never rides on the count colour alone.
 const DURATION_BOOSTS := [
 	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
 	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
 		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
-	{ "counter": "cocktailBoostSpins", "id": "item_cocktail", "mixed": true }, # rarity bonus - pair/triple tax
+	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" },                # rarity bonus, no cost
 	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true },   # 3x pairs - hidden reel
 	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
 ]
@@ -505,7 +527,7 @@ const DURATION_BOOSTS := [
 	"item_water": { "pos": "+40 SCORE & LUCIDITY", "neg": "" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
-	"item_cocktail": { "pos": "RARITY BONUS", "neg": "15% PAIR/TRIPLE TAX" },
+	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
@@ -771,6 +793,10 @@ var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
 var _combo_score_pending := -1 # final score held until the COMBO bonus beat lands
 var _power_bar_sprite: Sprite2D = null
+var _restore_cap_sprite: Sprite2D = null # per-spin restore budget lights beside the gauge
+var _restore_cap_glow: Sprite2D = null   # the lit frame, flashed and faded when a charge is spent
+var _restore_flash_tweens: Array[Tween] = []
+var _restore_flash_chip: Sprite2D = null # chip currently pulsing, so it can be reset
 var _augment_plate_sprite: Sprite2D = null # authored augment sockets under the badges
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
@@ -858,8 +884,10 @@ func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
+	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
 	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
-	# spin button.
+	# spin button. The authored node order in the .tscn is what fixes this — these
+	# sprites all share z_index 0, so the scene tree IS the layer stack.
 	_build_neon_background()
 	_reel_backing_sprite = _build_full_canvas_sprite(
 		"machine new view/reel_final_machine.png")
@@ -1265,6 +1293,7 @@ func _build_tv_indicators() -> void:
 		_coin_insert_sprite.visible = false
 	_build_boost_indicators()
 	_build_power_bar()
+	_build_restore_cap()
 	_build_augment_emplacements()
 
 ## Objective readout on the TV (issue #181): the authored TARGET plate with its fill
@@ -1392,6 +1421,38 @@ func _build_power_bar() -> void:
 	# the ability itself was already restored by plan_gain at spin time).
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
+
+## The restore light sitting beside the gauge (issue #181). Full-canvas art, so the
+## placement is baked in and the code only picks the frame. The glow copy sits on top on
+## the LIT frame and is normally invisible — flashing and fading it is how a spent charge
+## reads as discharging into the power, without needing a second authored asset.
+func _build_restore_cap() -> void:
+	_restore_cap_sprite = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES)
+	_restore_cap_glow = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES, 0)
+	if _restore_cap_glow != null:
+		_restore_cap_glow.visible = false
+		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_refresh_restore_cap()
+
+## The light is lit while a restore charge is banked, so the player can read what the
+## economy still owes them before committing a power rather than discovering it on a gauge
+## that refuses to fill. The next spin puts it back.
+##
+## A charge is DEBITED at spin resolution but the power only comes back when the gauge
+## finishes filling, so reading the store's charge count directly would snap the light off
+## seconds before the power returned — two halves of one event, too far apart to connect.
+## Restores still owed (pendingPowerRestores) therefore count as lit: the light holds until
+## the moment its power lands, and both resolve on the same frame.
+func _shown_restore_charges() -> int:
+	var owed := RunStateStore.pendingPowerRestores.size()
+	return clampi(RunStateStore.restore_budget_left() + owed,
+		0, EconomyConst.POWER_RESTORE_CHARGE_MAX)
+
+func _refresh_restore_cap() -> void:
+	if _restore_cap_sprite == null:
+		return
+	var spent := EconomyConst.POWER_RESTORE_CHARGE_MAX - _shown_restore_charges()
+	_set_sheet_frame(_restore_cap_sprite, clampi(spent, 0, RESTORE_CAP_FRAMES - 1))
 
 ## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
 ## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
@@ -2287,7 +2348,10 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 		snapshot = WealthOdometer.make_snapshot(score)
 	_begin_tv_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
-	overlay.present(score, target, snapshot)
+	# The final target is not paid out of the score and banks nothing, so it shows no
+	# receipt — the Wealth ending takes the whole score from here.
+	overlay.present(score, target, snapshot, "CONTINUE",
+		bool(info.get("final", false)))
 	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
 
@@ -2646,7 +2710,14 @@ func _run_post_reveal_sequence() -> void:
 func _finish_post_spin_sequence() -> void:
 	if _check_ending():
 		_post_spin_sequence_active = false
-		_set_sequence_lock(false)
+		# A wealth-target payout owns the screen AND the sequence lock until its CONTINUE
+		# resumes the run — _start_wealth_target_transition took that lock a moment ago and
+		# releasing it here would undo it. That mattered most on a losing spin whose passive
+		# gain beat the target: one lever press confirms the combo loss, procs the target,
+		# and then — with the lock dropped — started a fresh spin straight under the
+		# overlay, so the payout screen never got to be read (issue #176).
+		if not _wealth_target_transition_active:
+			_set_sequence_lock(false)
 		return
 	# Issue #96: a pending compulsion must fully resolve BEFORE the dealer pops.
 	# The dealer stays queued in the store (dealerIncoming) and presents again on
@@ -3699,15 +3770,18 @@ func _compute_power_plan() -> Dictionary:
 	var score := _power_bar_score
 	var out: Array = []
 	# Lucidity.plan_gain (and Potion's direct restore) already removed these powers from
-	# abilitiesUsed. Emit their visual restore coins before planning this gain, and start
+	# abilitiesUsed. Fill the gauge for each of them before planning this gain, and start
 	# the point fill from the reset gauge. They must not also count as bar-driven restores.
 	var pending_restores := RunStateStore.pendingPowerRestores.size()
 	for _restore_index in pending_restores:
 		out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
 	if pending_restores > 0:
 		score = 0
-	# Only powers still in abilitiesUsed are available for a later bar-completion restore.
-	var avail := RunStateStore.abilitiesUsed.size()
+	# Only powers still in abilitiesUsed are available for a later bar-completion restore,
+	# and only while a restore charge is banked (issue #181 soft cap). A spent charge
+	# reads exactly like an empty pool of powers: the gauge stops at 4/5 rather than
+	# completing into a restore it is not allowed to hand out.
+	var avail := mini(RunStateStore.abilitiesUsed.size(), RunStateStore.restore_budget_left())
 	var g := gain
 	while g > 0:
 		var to_next := step - (score % step)
@@ -3834,31 +3908,88 @@ func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
 func _apply_power_bank_step(stepd: Dictionary) -> void:
 	_set_power_bar_frame(int(stepd["frame"]))
 	if bool(stepd["restore"]):
-		_spawn_restore_coin() # full frame already set; commit + fly bar->power, reset to 0
+		_resolve_bar_restore() # full frame already set; commit the restore, reset to 0
 
 ## Gauge just filled with a restore available. Commit the restore NOW (guaranteed once —
-## commit is idempotent and the ability was already restored by plan_gain), reset the gauge
-## for the next cycle, and fly a coin from the bar to the power as pure feedback.
-func _spawn_restore_coin() -> void:
+## commit is idempotent and the ability was already restored by plan_gain) and reset the
+## gauge for the next cycle. The power button re-enabling on the commit is the whole
+## feedback: the bank coin that filled the gauge already carried the eye to it, so a
+## second coin walking back out to the button only delayed the state it announced.
+func _resolve_bar_restore() -> void:
 	_set_power_bar_frame(0)
 	# Consume a plan_gain restore if one is queued; otherwise the gauge itself brings a
 	# spent power back (guaranteed once — both paths remove the id from their source).
+	var lit_before := _shown_restore_charges()
 	var power_id := ""
 	if not RunStateStore.pendingPowerRestores.is_empty():
 		power_id = String(RunStateStore.pendingPowerRestores[0])
 		RunStateStore.commit_power_restore(power_id)
 	else:
-		power_id = RunStateStore.bar_restore_power(RunStateStore._seed(_power_seen_lucidity * 0x9e3779b9))
+		power_id = RunStateStore.bar_restore_power(
+			RunStateStore._seed(_power_seen_lucidity * 0x9e3779b9))
 	if power_id == "":
 		return
-	var coin := _make_power_coin(POWER_BAR_TOP)
-	if coin == null:
+	# Only announce a light going out if one actually did — Tea's restores are item
+	# effects and cost no charge, so they must not fake a discharge.
+	_play_restore_flash(power_id, _shown_restore_charges() < lit_before)
+
+## The restore's whole feedback (issue #181): the spent light blows out and fades from the
+## gauge on the same frame the chip flashes back on, both in the machine's cyan. Nothing
+## travels between them — the simultaneity IS the causal link the old coin used to draw.
+func _play_restore_flash(power_id: String, light_spent: bool) -> void:
+	_stop_restore_flash()
+	var chip: Sprite2D = _power_sprites.get(power_id) as Sprite2D
+	if chip == null and not light_spent:
 		return
-	_power_coins_in_flight += 1 # keep the sequence active until it lands
-	var target := _power_center(power_id)
-	var tw := create_tween()
-	tw.tween_method(_drive_power_coin.bind(coin, POWER_BAR_TOP, target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
-	tw.tween_callback(_on_restore_coin_arrived.bind(coin))
+	# Two independent tweens started on the same frame, rather than one sequenced tween:
+	# the glow and the chip MUST begin together — that simultaneity is the whole effect.
+	if light_spent and _restore_cap_glow != null:
+		# The light is already on its dark frame (the commit above stepped it), so this
+		# glow reads as the charge leaving, not as the light still being on.
+		_restore_cap_glow.visible = true
+		_restore_cap_glow.modulate = RESTORE_FLASH_GLOW_TINT
+		var glow_tween := create_tween()
+		glow_tween.tween_property(_restore_cap_glow, "modulate",
+			Color(1.0, 1.0, 1.0, 0.0), RESTORE_FLASH_GLOW_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		glow_tween.tween_callback(_hide_restore_glow)
+		_restore_flash_tweens.append(glow_tween)
+	if chip != null:
+		_restore_flash_chip = chip
+		chip.modulate = RESTORE_FLASH_CHIP_TINT
+		# Pulse down/up a couple of times before settling, so the chip reads as powering
+		# up rather than simply having been redrawn in a brighter colour.
+		var chip_tween := create_tween()
+		chip_tween.tween_property(chip, "modulate", Color.WHITE,
+			RESTORE_FLASH_PULSE_TIME).set_trans(Tween.TRANS_SINE)
+		for _pulse in RESTORE_FLASH_PULSES:
+			chip_tween.tween_property(chip, "modulate", RESTORE_FLASH_CHIP_TINT,
+				RESTORE_FLASH_PULSE_TIME).set_trans(Tween.TRANS_SINE)
+			chip_tween.tween_property(chip, "modulate", Color.WHITE,
+				RESTORE_FLASH_PULSE_TIME).set_trans(Tween.TRANS_SINE)
+		chip_tween.tween_callback(_finish_restore_chip)
+		_restore_flash_tweens.append(chip_tween)
+	if light_spent:
+		_nudge(RESTORE_FLASH_NUDGE)
+
+func _hide_restore_glow() -> void:
+	if _restore_cap_glow != null:
+		_restore_cap_glow.visible = false
+		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
+
+func _finish_restore_chip() -> void:
+	if _restore_flash_chip != null and is_instance_valid(_restore_flash_chip):
+		_restore_flash_chip.modulate = Color.WHITE
+	_restore_flash_chip = null
+
+## Teardown / run reset: never leave a chip stuck overdriven or a glow painted on the gauge.
+func _stop_restore_flash() -> void:
+	for tween in _restore_flash_tweens:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_restore_flash_tweens.clear()
+	_hide_restore_glow()
+	_finish_restore_chip()
 
 func _on_restore_coin_arrived(coin: Node) -> void:
 	if is_instance_valid(coin):
@@ -4319,6 +4450,7 @@ func _stash_slots() -> Array:
 
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
+	_refresh_restore_cap()
 
 	var combo_pending := RunStateStore.comboDefeatPending
 	var can_confirm_combo_loss := combo_pending and RunStateStore.runPhase == "running" \
@@ -4334,9 +4466,9 @@ func _refresh_controls() -> void:
 		var used: Array = RunStateStore.abilitiesUsed
 		var owned: Array = RunStateStore.power_loadout()
 		var visible_power_order := _visible_power_order(owned)
-		# A restored power stays in its unavailable state until the restore coin
-		# lands on the button (commit_power_restore fires the refresh), so the
-		# unlock animation always plays before the button reads as usable (issue #54).
+		# A restored power stays in its unavailable state until its restore is committed
+		# (commit_power_restore fires the refresh) — when the gauge fills for a bar
+		# restore, or when Tea's coin lands on the button for a direct one (issue #54).
 		var pending: Array = RunStateStore.pendingPowerRestores
 		var rescue_ids := RunStateStore.pending_combo_power_ids()
 		for id in POWER_IDS:
@@ -7105,6 +7237,7 @@ func _clear_wealth_presentation_fx() -> void:
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
 		_nudge_tween = null
+	_stop_restore_flash() # never leave a chip overdriven or a glow painted on the gauge
 	_clear_close_call_heartbeat()
 	position = Vector2.ZERO
 

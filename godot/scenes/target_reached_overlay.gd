@@ -10,6 +10,12 @@ extends Control
 ## score drains by that amount — the money paid to the casino, falling out of the target
 ## into the reels as it goes — and only then does the spent target disintegrate. The screen reads title / target / score / what it cost.
 ##
+## Everything the payout costs is then itemised as one receipt under the score: the target
+## itself heads the list, and the casino's charges (EconomyConst.overflow_bill) are stamped
+## under it one at a time with the reels rolling down beneath each, so the player watches
+## the overflow being billed away rather than finding a smaller number in the wallet later.
+## The gold line under the rule is what actually banks.
+##
 ## The number is a real WealthOdometer snapshot rather than a Label, so it is visibly
 ## the machine's own readout that moved, and the drain is an actual reel roll. The
 ## machine scene owns the blackout behind it and hides the live reels the moment this
@@ -24,6 +30,10 @@ signal sequence_finished
 const BLUE_NEON := Color(0.36, 0.74, 1.0)
 const SOFT_WHITE := Color(0.96, 0.98, 1.0)
 const LOSS_RED := Color(0.93, 0.27, 0.27)
+# What survives the bill and reaches the wallet. Gold rather than the screen's blue: it
+# is the one number on here the player keeps.
+const CREDIT_GOLD := Color(1.0, 0.83, 0.36)
+const BILL_LABEL_COLOR := Color(0.72, 0.76, 0.82)
 const TARGET_NUMBER_COLOR := Color(0.96, 0.98, 1.0)
 # The machine stays visible behind, but far enough back that the lifted score is not
 # competing with the multiplier strip it parks over.
@@ -86,9 +96,31 @@ const PHASE_SETTLE := 0.24
 # How far under the score the deduction line starts, so it reads as coming out of the digits
 # rather than fading in beside them. 18px puts it behind the score's own glyphs, and it takes
 # its own slow beat to crawl clear — long enough to watch the money leave.
-const LOSS_RISE := 18.0
-const LOSS_EMERGE_TIME := 0.75
 const PHASE_BUTTON_IN := 0.24
+
+# The receipt under the score: the target paid, then one row per
+# EconomyConst.OVERFLOW_TAX_LINES entry — charge and its rate on the left, what it took
+# on the right. The target heads the list without a rate: it is a flat debt, not a cut.
+const TARGET_PAID_LABEL := "TARGET PAID"
+const BILL_ROW_FIRST_Y := 180.0
+const BILL_ROW_STEP := 10.0
+const BILL_ROW_HEIGHT := 9.0
+const BILL_LABEL_X := 22.0
+const BILL_LABEL_WIDTH := 86.0
+const BILL_AMOUNT_X := 108.0
+const BILL_AMOUNT_WIDTH := 30.0
+const BILL_FONT_SIZE := 7
+# Each row slides in from the right as it is stamped, like a line being printed.
+const BILL_ROW_SLIDE := 9.0
+# One charge lands and the reels answer it inside the same beat, so the number going
+# down is unmistakably that row's doing. The gap is the pause before the next charge.
+const PHASE_BILL_ROW := 0.42
+const PHASE_BILL_ROW_GAP := 0.12
+# The target line is the headline debt and gets a slower beat than the charges under it.
+const PHASE_BILL_TARGET := 0.60
+const PHASE_BILL_NET := 0.40
+# The rule is drawn left to right under the charges before the total lands.
+const PHASE_BILL_RULE := 0.22
 
 @onready var top_dim: ColorRect = %TopDim
 @onready var bottom_dim: ColorRect = %BottomDim
@@ -98,7 +130,11 @@ const PHASE_BUTTON_IN := 0.24
 @onready var title_label: Label = %TitleLabel
 @onready var tv_host: Control = %TvHost
 @onready var target_group: Control = %TargetGroup
-@onready var lost_label: Label = %LostLabel
+@onready var bill_group: Control = %BillGroup
+# The rule under the last charge: what makes the gold line read as a receipt total
+# rather than one more row.
+@onready var bill_rule: ColorRect = %BillRule
+@onready var net_label: Label = %NetLabel
 @onready var subtitle_label: Label = %SubtitleLabel
 @onready var button_host: Control = %ButtonHost
 @onready var continue_button: Button = %ContinueButton
@@ -107,6 +143,10 @@ var _font: FontFile = null
 var _score := 0
 var _target := 0
 var _remaining := 0
+var _net := 0
+var _final_target := false
+var _bill_lines: Array[Dictionary] = []
+var _bill_rows: Array[Dictionary] = []
 var _presentation_started := false
 var _sequence_done := false
 var _snapshot: WealthOdometer = null
@@ -115,7 +155,6 @@ var _snapshot_scale := 1.0
 var _target_glyphs: Array[Label] = []
 var _shards: Array[Dictionary] = []
 var _drain_motes: Array[Dictionary] = []
-var _lost_label_rest_y := 0.0 # authored position; the line slides down to it out of the score
 var _sequence_tween: Tween = null
 var _shard_tween: Tween = null
 var _drain_tween: Tween = null
@@ -123,7 +162,6 @@ var _drain_tween: Tween = null
 
 func _ready() -> void:
 	_font = Assets.font()
-	_lost_label_rest_y = lost_label.position.y
 	_style_text()
 	_style_button()
 	if not continue_button.pressed.is_connected(_on_continue_pressed):
@@ -136,7 +174,15 @@ func _ready() -> void:
 		_score = 650
 		_target = 500
 		_remaining = 150
-		lost_label.text = "-%d" % _target
+		var preview := EconomyConst.overflow_bill(_remaining, _target)
+		_bill_lines.clear()
+		_bill_lines.append({"key": "target", "label": TARGET_PAID_LABEL,
+			"amount": _target, "roll": false})
+		for line: Dictionary in preview["lines"] as Array:
+			_bill_lines.append(line)
+		_net = int(preview["net"])
+		_build_bill_rows()
+		_settle_bill_rows()
 		return
 
 
@@ -144,19 +190,43 @@ func _ready() -> void:
 ## detached copy of the machine's wealth reels this overlay flies; the caller builds it
 ## before hiding the live ones. A caller that has no machine to lift from (the debug
 ## shot) may omit it and the overlay makes its own.
+##
+## `final_target` is the last rung of the ladder, which is not paid out of the score at
+## all — it belongs to the Wealth ending — so nothing is billed and no receipt is shown.
 func present(score: int, target: int, snapshot: WealthOdometer = null,
-		action_text: String = "CONTINUE") -> void:
+		action_text: String = "CONTINUE", final_target: bool = false) -> void:
 	_score = score
 	_target = target
 	_remaining = maxi(0, score - target)
+	_final_target = final_target
+	# The bill is derived here rather than passed in: the store settles it from the same
+	# EconomyConst helper on CONTINUE, so recomputing cannot drift from what is banked.
+	var bill := EconomyConst.overflow_bill(_remaining, _target) if not final_target else {}
+	# The target heads the receipt whatever else happens — it explains the drain the
+	# player just watched. It carries no rate and does not roll the reels again: the
+	# drain phase already took it off them.
+	_bill_lines.clear()
+	_bill_lines.append({
+		"key": "target",
+		"label": TARGET_PAID_LABEL,
+		"amount": _target,
+		"roll": false,
+	})
+	if not bill.is_empty() and _remaining > 0:
+		for line: Dictionary in bill["lines"] as Array:
+			var row := (line as Dictionary).duplicate()
+			row["roll"] = true
+			_bill_lines.append(row)
+	_net = int(bill.get("net", _remaining)) if _has_tax_rows() else _remaining
 	continue_button.text = action_text
-	lost_label.text = ""
+	net_label.text = ""
+	net_label.modulate.a = 0.0
+	bill_rule.modulate.a = 0.0
+	_build_bill_rows()
 	for dim: ColorRect in _dims():
 		dim.modulate.a = 0.0
 	title_label.modulate.a = 0.0
 	title_label.position.y = TITLE_START_Y
-	lost_label.position.y = _lost_label_rest_y
-	lost_label.modulate.a = 0.0
 	subtitle_label.modulate.a = 0.0
 	button_host.modulate.a = 0.0
 	target_group.modulate.a = 0.0
@@ -244,6 +314,105 @@ func target_text() -> String:
 	return text
 
 
+## One receipt row per charge, built invisible up front so the bill is readable state
+## rather than something that only exists mid-tween. Each row is a label/amount pair
+## tracked together, since they slide and fade as one line.
+func _build_bill_rows() -> void:
+	for row: Dictionary in _bill_rows:
+		for key: String in ["label", "amount"]:
+			var node := row[key] as Label
+			if is_instance_valid(node):
+				node.queue_free()
+	_bill_rows.clear()
+	for i in _bill_lines.size():
+		var line: Dictionary = _bill_lines[i]
+		var rest_y := BILL_ROW_FIRST_Y + float(i) * BILL_ROW_STEP
+		# The rate is on the charge, not the amount: the player should read WHY the
+		# number on the right is that big before they read the number. A row with no
+		# rate (the target itself) is a flat debt and shows its name alone.
+		var text := String(line["label"])
+		if line.has("rate"):
+			text += " %d%%" % roundi(float(line["rate"]) * 100.0)
+		var label := _make_bill_label(text,
+			BILL_LABEL_X, rest_y, BILL_LABEL_WIDTH, HORIZONTAL_ALIGNMENT_LEFT,
+			BILL_LABEL_COLOR)
+		var amount := _make_bill_label("-%d" % int(line["amount"]),
+			BILL_AMOUNT_X, rest_y, BILL_AMOUNT_WIDTH, HORIZONTAL_ALIGNMENT_RIGHT,
+			LOSS_RED)
+		_bill_rows.append({"label": label, "amount": amount, "rest_y": rest_y})
+
+
+func _make_bill_label(text: String, x: float, y: float, width: float,
+		alignment: HorizontalAlignment, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.position = Vector2(x, y)
+	label.size = Vector2(width, BILL_ROW_HEIGHT)
+	label.horizontal_alignment = alignment
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.modulate.a = 0.0
+	label.add_theme_font_size_override(&"font_size", BILL_FONT_SIZE)
+	if _font != null:
+		label.add_theme_font_override(&"font", _font)
+	label.add_theme_color_override(&"font_color", color)
+	label.add_theme_color_override(&"font_outline_color", Color("#03060c"))
+	label.add_theme_constant_override(&"outline_size", 1)
+	bill_group.add_child(label)
+	return label
+
+
+## Current text of the receipt, row by row, for callers and the scene smoke.
+func bill_text() -> Array[String]:
+	var rows: Array[String] = []
+	for row: Dictionary in _bill_rows:
+		var label := row["label"] as Label
+		var amount := row["amount"] as Label
+		if is_instance_valid(label) and is_instance_valid(amount):
+			rows.append("%s %s" % [label.text, amount.text])
+	return rows
+
+
+## What the payout screen says reaches the wallet.
+func net_banked() -> int:
+	return _net
+
+
+## Stamps one receipt line, rolling the reels down under it in the same beat when that
+## line is what takes the money (`roll`). The target line does not roll: the drain phase
+## already showed it leaving.
+func _tween_bill_row(tween: Tween, index: int, value_after: int, roll: bool,
+		duration: float) -> void:
+	if index < 0 or index >= _bill_rows.size():
+		return
+	var row: Dictionary = _bill_rows[index]
+	var nodes: Array[Label] = []
+	for key: String in ["label", "amount"]:
+		var node := row[key] as Label
+		if is_instance_valid(node):
+			nodes.append(node)
+	if nodes.is_empty():
+		return
+	# The reels start rolling on the frame the charge lands, not after it has finished
+	# arriving — the row and the drop are one event.
+	if roll:
+		tween.tween_callback(func() -> void:
+			if _snapshot != null and is_instance_valid(_snapshot):
+				_snapshot.set_value(value_after, true, duration))
+	var leading := true
+	for node: Label in nodes:
+		# Read the authored rest position and drive .from() off it: the row must land
+		# where _build_bill_rows put it, whatever order the tweeners are built in.
+		var rest_x := node.position.x
+		var fade := tween.tween_property(node, "modulate:a", 1.0, duration) if leading \
+			else tween.parallel().tween_property(node, "modulate:a", 1.0, duration)
+		fade.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(node, "position:x", rest_x, duration) \
+			.from(rest_x + BILL_ROW_SLIDE).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		leading = false
+	tween.tween_interval(PHASE_BILL_ROW_GAP)
+
+
 func _play() -> void:
 	target_group.pivot_offset = TARGET_CENTER
 	# Built sequentially; parallel() attaches a tweener to the beat before it. Do not
@@ -287,16 +456,29 @@ func _play() -> void:
 	_sequence_tween.tween_callback(_shatter_target)
 	_sequence_tween.tween_interval(PHASE_SHATTER)
 	_sequence_tween.tween_callback(_clear_shards)
-	# Only once the target is gone does what it cost come OUT of the score: the red line
-	# starts hidden behind the digits and slides down clear of them.
-	_sequence_tween.tween_callback(func() -> void:
-		lost_label.text = "-%d" % _target
-		lost_label.position.y = _lost_label_rest_y - LOSS_RISE)
-	_sequence_tween.tween_property(lost_label, "modulate:a", 1.0, LOSS_EMERGE_TIME)
-	_sequence_tween.parallel().tween_property(lost_label, "position:y",
-		_lost_label_rest_y, LOSS_EMERGE_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_sequence_tween.parallel().tween_property(subtitle_label, "modulate:a", 1.0, PHASE_SETTLE)
-	_sequence_tween.tween_property(button_host, "modulate:a", 1.0, PHASE_BUTTON_IN) \
+	# Only once the target is gone is the bill written up. It reads as one receipt: the
+	# target that was just paid heads the list, then the casino itemises the leftovers,
+	# each charge stamped and taken off the reels in turn — so the overflow is watched
+	# being billed down to what actually banks. The gold line is the only number kept.
+	var running := _remaining
+	for i in _bill_rows.size():
+		var line: Dictionary = _bill_lines[i]
+		var rolls := bool(line.get("roll", true))
+		if rolls:
+			running -= int(line["amount"])
+		_tween_bill_row(_sequence_tween, i, running, rolls,
+			PHASE_BILL_TARGET if i == 0 else PHASE_BILL_ROW)
+	if _has_tax_rows():
+		_sequence_tween.tween_callback(func() -> void: net_label.text = _net_text())
+		# Pivot stays at the rect's origin, so scaling x draws the rule out of its left end.
+		_sequence_tween.tween_property(bill_rule, "modulate:a", 1.0, PHASE_BILL_RULE)
+		_sequence_tween.parallel().tween_property(bill_rule, "scale:x", 1.0, PHASE_BILL_RULE) \
+			.from(0.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_sequence_tween.tween_property(net_label, "modulate:a", 1.0, PHASE_BILL_NET) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	# The receipt is complete; the line about it and the way out arrive together.
+	_sequence_tween.tween_property(subtitle_label, "modulate:a", 1.0, PHASE_SETTLE)
+	_sequence_tween.parallel().tween_property(button_host, "modulate:a", 1.0, PHASE_BUTTON_IN) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_sequence_tween.tween_callback(_on_sequence_finished)
 
@@ -444,15 +626,41 @@ func _skip_to_end() -> void:
 	title_label.position.y = TITLE_REST_Y
 	digits_lifted.emit()
 	_place_snapshot_at_tv(1.0)
+	# The settled frame is the END of the bill, not the middle of it: the reels rest on
+	# what banked. Without a bill (the final target) _net IS the remainder.
 	if _snapshot != null and is_instance_valid(_snapshot):
-		_snapshot.set_value(_remaining, false)
+		_snapshot.set_value(_net, false)
 	target_group.modulate.a = 0.0
-	lost_label.text = "-%d" % _target
-	lost_label.position.y = _lost_label_rest_y
-	lost_label.modulate.a = 1.0
+	_settle_bill_rows()
 	subtitle_label.modulate.a = 1.0
 	button_host.modulate.a = 1.0
 	_on_sequence_finished()
+
+
+## Whether the casino charged anything on top of the target. The final target heads a
+## receipt of one line and banks nothing, so it gets no rule and no total.
+func _has_tax_rows() -> bool:
+	return _bill_lines.size() > 1
+
+
+## What the payout screen banks, as the player reads it.
+func _net_text() -> String:
+	return "+%d CREDITS" % _net
+
+
+## Jumps the receipt to its finished state — every row printed, net line up.
+func _settle_bill_rows() -> void:
+	for row: Dictionary in _bill_rows:
+		for key: String in ["label", "amount"]:
+			var node := row[key] as Label
+			if is_instance_valid(node):
+				node.modulate.a = 1.0
+	if not _has_tax_rows():
+		return
+	bill_rule.scale.x = 1.0
+	bill_rule.modulate.a = 1.0
+	net_label.text = _net_text()
+	net_label.modulate.a = 1.0
 
 
 func _on_sequence_finished() -> void:
@@ -466,16 +674,16 @@ func _on_sequence_finished() -> void:
 
 
 func _style_text() -> void:
-	for label: Label in [title_label, subtitle_label, lost_label]:
+	for label: Label in [title_label, subtitle_label, net_label]:
 		if _font != null:
 			label.add_theme_font_override(&"font", _font)
 		label.add_theme_color_override(&"font_outline_color", Color("#03060c"))
 		label.add_theme_constant_override(&"outline_size", 1)
+	net_label.add_theme_color_override(&"font_color", CREDIT_GOLD)
 	# Flat neon, no glow shadow: a same-hue 1px shadow under a 1px outline read as a
 	# ghosted second copy of the title (issue #181).
 	title_label.add_theme_color_override(&"font_color", BLUE_NEON)
 	subtitle_label.add_theme_color_override(&"font_color", SOFT_WHITE)
-	lost_label.add_theme_color_override(&"font_color", LOSS_RED)
 
 
 func _style_button() -> void:

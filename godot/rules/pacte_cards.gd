@@ -28,14 +28,14 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_book", "name": "BOOK",
-		"description": "LEARNING ADDS BOOKS TO THE REELS.", "pool": "augment",
+		"description": "LEARNING ADDS BOOKS TO THE REELS; BOOK WINS -30%.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(9.0, 201.0, 22.0, 27.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pos_learning" },
 	},
 	{
 		"id": "augment_hallucination", "name": "HALLUCINATION",
-		"description": "VISIBLE PAIRS COUNT AS TRIPLES; REWARDS -30%.", "pool": "augment",
+		"description": "VISIBLE PAIRS COUNT AS TRIPLES; REWARDS -70%.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(5.0, 262.0, 30.0, 28.0),
 		"effect": { "type": "owned_upgrade", "upgrade_id": "pos_enlightenment" },

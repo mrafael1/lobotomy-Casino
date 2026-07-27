@@ -45,9 +45,9 @@ const DRAG_SLOP := 4.0
 # in_run_dealer_offer.gd — the two scenes own separate pools (issue #31).
 @export_group("Vague Item Hints")
 @export var item_hints: Dictionary = {
-	"cons_cigarette": { "pos": "PAIRS", "neg": "BLIND" },
-	"cons_white_powder": { "pos": "COPY", "neg": "HIDDEN" },
-	"cons_focus": { "pos": "FOCUS", "neg": "HIDE" },
+	"cons_cigarette": { "pos": "PAIRS", "neg": "HIDE" },
+	"cons_white_powder": { "pos": "COPY", "neg": "BLIND" },
+	"cons_focus": { "pos": "FOCUS", "neg": "FOCUS" },
 	"cons_potion": { "pos": "POWERS", "neg": "RANDOM" },
 	"cons_tea": { "pos": "RESTORE", "neg": "NONE" },
 }

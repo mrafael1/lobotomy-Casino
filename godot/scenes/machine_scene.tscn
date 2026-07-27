@@ -110,6 +110,11 @@ position = Vector2(107.5, 199)
 [node name="Reel2Center" type="Sprite2D" parent="." unique_id=325200504]
 position = Vector2(107.5, 185)
 
+[node name="Lever" type="Sprite2D" parent="." unique_id=1583962497]
+texture = ExtResource("10_lever")
+centered = false
+hframes = 6
+
 [node name="Cabinet" type="Sprite2D" parent="." unique_id=1998976856]
 texture = ExtResource("4_cabinet")
 centered = false
@@ -117,11 +122,6 @@ centered = false
 [node name="Multiplier" type="Sprite2D" parent="." unique_id=1960969618]
 scale = Vector2(1, 1)
 texture = ExtResource("9_multiplier")
-centered = false
-hframes = 6
-
-[node name="Lever" type="Sprite2D" parent="." unique_id=1583962497]
-texture = ExtResource("10_lever")
 centered = false
 hframes = 6
 

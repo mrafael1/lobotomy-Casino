@@ -24,7 +24,7 @@ func _run() -> void:
 	for i in 8:
 		await process_frame
 	get_root().get_texture().get_image().save_png(OS.get_environment("SHOT_PATH"))
-	scene._cycle_tier(5) # joker: wide arrow pair
+	scene._cycle_tier(5) # joker: widest suit symbol, same authored arrow pair
 	for i in 4:
 		await process_frame
 	get_root().get_texture().get_image().save_png(OS.get_environment("SHOT_PATH_JOKER"))

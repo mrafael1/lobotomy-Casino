@@ -63,6 +63,19 @@ static func compute_hallucination_reward_scale(owned: Array) -> float:
 			scale *= float(u["effect"].get("rewardScale", 1.0))
 	return scale
 
+## Learning pays for the Book joker the same way Hallucination pays for its promoted
+## pair: a flat cut on every reward while it is owned. Defaults to 1.0 so a bookSymbol
+## effect without a rewardScale stays free.
+static func compute_book_reward_scale(owned: Array) -> float:
+	var m := _map()
+	var scale := 1.0
+	for id in owned:
+		var u: Variant = m.get(id, null)
+		if u != null and u["effect"]["type"] == "bookSymbol":
+			scale *= float(u["effect"].get("rewardScale", 1.0))
+	return scale
+
+
 static func compute_tunnel_vision_reward_scale(owned: Array) -> float:
 	var m := _map()
 	var scale := 1.0
