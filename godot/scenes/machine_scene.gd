@@ -1610,8 +1610,15 @@ const BOOST_COUNT_WIDTH := 7.0
 # is tall and narrow and uses half), so the number appeared to sit on top of one item and
 # well clear of the next. Anchoring to the corner makes the number's position identical
 # across the row and lets each icon differ underneath it.
-const BOOST_COUNT_OFFSET := 6.0       # bottom-right corner of the 14px badge
-const BOOST_SLOT_WIDTH := BOOST_COUNT_OFFSET + BOOST_COUNT_WIDTH   # 13: icon + its corner
+#
+# It sits ON the icon rather than beside it: the number belongs to that item, and a number
+# floating in the gap between two icons reads as ambiguous about which one it counts. Its
+# right edge overhangs the icon's by BOOST_COUNT_OVERHANG px so the digit still has a clean
+# edge to sit against, but the rest of it overlaps the art's bottom-right — the black
+# outline on the label is what keeps it legible over the icon underneath.
+const BOOST_COUNT_OVERHANG := 1.0     # px the number's right edge clears the icon's
+const BOOST_COUNT_OFFSET := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG - BOOST_COUNT_WIDTH  # 2
+const BOOST_SLOT_WIDTH := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG   # 9: icon + the overhang
 # Per-item nudge for art that still reads badly under the shared anchor — the icons do not
 # share a silhouette, so a few need a pixel either way. Keyed by item id, in badge px.
 const BOOST_COUNT_NUDGE := {}
@@ -1767,10 +1774,10 @@ func _refresh_boost_indicators() -> void:
 		cn.text = str(maxi(0, remaining))
 		cn.add_theme_color_override("font_color",
 			BOOST_NEGATIVE_COUNT_COLOR if _boost_phase_is_negative(boost) else BOOST_COUNT_COLOR)
-		# Pinned to the badge's bottom-right corner — the same coordinates on every item,
+		# Pinned over the icon's bottom-right corner — the same coordinates on every item,
 		# so the row reads as one repeated shape rather than the number chasing each
-		# icon's silhouette. Right-aligned into that corner, bottom-aligned to the icon,
-		# plus whatever per-item nudge the art needs.
+		# icon's silhouette, and overlapping the art so the count is visibly attached to
+		# the item it belongs to. Plus whatever per-item nudge the art needs.
 		var mh := cn.get_minimum_size().y
 		var nudge: Vector2 = BOOST_COUNT_NUDGE.get(String(boost.get("id", "")), Vector2.ZERO)
 		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
