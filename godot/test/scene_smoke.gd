@@ -4907,6 +4907,8 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
 	var dealer_icon := machine._dealer_icon as CanvasItem
 	var target_bar := machine._target_bar_sprite as CanvasItem
+	var target_goals := machine._target_goals_sprite as CanvasItem
+	var target_bar_anim := machine._target_bar_anim_sprite as CanvasItem
 	var boost_slot: CanvasItem = null
 	if not machine._boost_indicator_slots.is_empty():
 		boost_slot = (machine._boost_indicator_slots[0] as Dictionary)["slot"] as CanvasItem
@@ -4919,20 +4921,26 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	if boost_slot == null or not boost_slot.visible:
 		failures.append("TV callout priority: boost icon did not establish its baseline")
 
-	# A banked free spin lights the banner. It takes the objective plate, and leaves the
-	# dealer interface lit beside it. Issue #185: the item icons stay lit too — the
-	# banner drops to its lowered frame to clear the badge row instead of blanking it,
-	# so what is running is still readable while the free spins are spent.
+	# A banked free spin lights the banner. Issue #185: it is a narrow owner now — it takes
+	# only the goal NUMBER, whose band its own text runs into, and leaves the dealer
+	# interface, the item icons and the fill bar (with its shimmer still stepping) lit
+	# beside it. Progress toward the target is what the free spins are being spent on.
 	run_store.freeSpinsRemaining = 1
 	machine._update_hud()
 	if free_spin == null or not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not light")
-	if target_bar != null and target_bar.visible:
-		failures.append("TV callout priority: FREE SPIN did not hide the objective readout")
+	if target_goals != null and target_goals.visible:
+		failures.append("issue185: FREE SPIN should hide the goal number")
+	if target_bar == null or not target_bar.visible:
+		failures.append("issue185: FREE SPIN should keep the target bar lit")
+	if target_bar_anim == null or not target_bar_anim.visible:
+		failures.append("issue185: FREE SPIN should keep the target bar animation running")
 	if boost_slot == null or not boost_slot.visible:
 		failures.append("issue185: FREE SPIN should keep the item icons lit beside it")
-	if free_spin != null and int((free_spin as Sprite2D).frame) != machine.FREE_SPIN_FRAME_LOWERED:
-		failures.append("issue185: FREE SPIN should drop to its lowered frame for the item icons")
+	# One authored placement: the banner text sits at y84..89, in the band the goal number
+	# just vacated, so it clears the fill bar at y94..98 instead of being clipped by it.
+	if machine.FREE_SPIN_FRAMES != 1:
+		failures.append("issue185: the FREE SPIN banner should be a single authored frame")
 	if (dealer_bar != null and not dealer_bar.visible) \
 			or (dealer_icon != null and not dealer_icon.visible):
 		failures.append("TV callout priority: FREE SPIN hid the dealer interface")
@@ -4951,13 +4959,16 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 			or (target_bar != null and target_bar.visible) \
 			or (boost_slot != null and boost_slot.visible):
 		failures.append("TV callout priority: HUD refresh overrode the PAIR priority")
-	# Closing the callout hands the screen back to the banner, to the dealer strip and to
-	# the item icons it shares it with; the objective plate keeps waiting the banner out.
+	# Closing the callout hands the screen back to the banner and to everything that
+	# shares it with: the dealer strip, the item icons and the fill bar. Only the goal
+	# number keeps waiting the banner out.
 	machine._stop_win_animation()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
-	if target_bar != null and target_bar.visible:
-		failures.append("TV callout priority: PAIR restored the objective readout under the banner")
+	if target_goals != null and target_goals.visible:
+		failures.append("issue185: PAIR restored the goal number under the banner")
+	if target_bar != null and not target_bar.visible:
+		failures.append("issue185: the target bar did not come back with the banner after PAIR")
 	if boost_slot != null and not boost_slot.visible:
 		failures.append("issue185: item icons did not come back with the banner after PAIR")
 	if (dealer_bar != null and not dealer_bar.visible) \
@@ -5253,7 +5264,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum chosen-symbol boost icon did not show")
-	elif (slots[0]["count"] as Label).text != "3":
+	elif (slots[0]["count"] as Label).text != "+3":
 		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5269,7 +5280,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum zero-count handoff icon did not show")
-	elif (slots[0]["count"] as Label).text != "0":
+	elif (slots[0]["count"] as Label).text != "+0":
 		failures.append("issue92: Serum zero-count handoff icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5283,7 +5294,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._clear_boost_zero_linger()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum negative boost icon did not show after zero handoff")
-	elif (slots[0]["count"] as Label).text != "2":
+	elif (slots[0]["count"] as Label).text != "-2":
 		failures.append("issue92: Serum negative boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5300,47 +5311,66 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue76: active boost did not show an icon")
-	elif (slots[0]["count"] as Label).text != "2":
+	elif (slots[0]["count"] as Label).text != "+2":
 		failures.append("issue76: boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 
 	# Two boosts: they stack in DURATION_BOOSTS order (energy no-decay first).
 	run_store.decaySkips = 3
 	machine._refresh_boost_indicators()
-	if (slots[0]["count"] as Label).text != "3" or (slots[1]["count"] as Label).text != "2":
+	if (slots[0]["count"] as Label).text != "+3" or (slots[1]["count"] as Label).text != "+2":
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
-	# Issue #181: the slots fill right to left and every one of them has to stay clear
-	# of the TV bounds, the dealer icon, and the authored TARGET art below.
+	# Issue #185 follow-up: the row moved below the fill bar and fills LEFT to right, one
+	# slot per possible item instead of two with an overflow. Every slot — icon plus the
+	# count beside it — has to stay inside the strip that was measured clear (y99..107,
+	# x30..121) and off the TV's other authored art.
 	var p0: Vector2 = (slots[0]["slot"] as Control).position
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
-	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
-		failures.append("issue181: boost icons did not fill right to left (%s vs %s)" % [p0, p1])
+	if not is_equal_approx(p0.y, p1.y) or not (p0.x < p1.x):
+		failures.append("issue185: boost icons did not fill left to right (%s vs %s)" % [p0, p1])
+	if machine.BOOST_SLOT_POSITIONS.size() < 5:
+		failures.append("issue185: the badge row should hold more than the old two items (%d)"
+			% machine.BOOST_SLOT_POSITIONS.size())
 	var tv_left := float(machine.TV_SCREEN["left"])
 	var tv_top := float(machine.TV_SCREEN["top"])
 	var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
 	var icon_size: float = machine.BOOST_ICON_SIZE
+	# Source item art is 32x32, so the badge must divide 32 exactly or the nearest-
+	# neighbour reduction drops source pixels unevenly and the icon reads as mush.
+	if not is_equal_approx(fmod(32.0, icon_size), 0.0):
+		failures.append("issue185: badge size %d is not an exact division of the 32px source art"
+			% int(icon_size))
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
 	# Measured art extents of the TV's other occupants (see the constants' comment).
 	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
 	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
 	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
+	# The clear strip measured out of the authored cabinet art, below the fill bar.
+	var clear_strip := Rect2(30.0, 99.0, 92.0, 9.0)
+	var slot_width: float = icon_size + 1.0 + float(machine.BOOST_COUNT_WIDTH)
 	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
-		var rect := Rect2(slot_pos, Vector2(icon_size, icon_size))
-		if rect.position.x < tv_left or rect.end.x > machine.TV_STATUS_RIGHT \
-				or rect.position.y < tv_top or rect.end.y > tv_bottom:
-			failures.append("issue181: boost slot %s falls outside the TV" % rect)
+		var rect := Rect2(slot_pos, Vector2(slot_width, icon_size))
+		if rect.position.x < tv_left or rect.position.y < tv_top or rect.end.y > tv_bottom:
+			failures.append("issue185: boost slot %s falls outside the TV" % rect)
+		if not clear_strip.encloses(rect):
+			failures.append("issue185: boost slot %s leaves the clear strip %s"
+				% [rect, clear_strip])
 		if rect.intersects(dealer_rect):
-			failures.append("issue181: boost slot %s collides with the dealer icon" % rect)
+			failures.append("issue185: boost slot %s collides with the dealer icon" % rect)
 		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):
-			failures.append("issue181: boost slot %s collides with the TARGET art" % rect)
-	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slots 0 and 1
-	# are the Energy Drink no-decay rush and the Cocktail — both pure upside now that the
-	# Cocktail's pair/triple tax is gone, so both show "+" only.
-	if not (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: pure-positive boost should show only the + mark")
-	if not (slots[1]["pos_mark"] as Label).visible or (slots[1]["neg_mark"] as Label).visible:
-		failures.append("issue113: the Cocktail should be pure upside (+ mark only)")
+			failures.append("issue185: boost slot %s collides with the TARGET art" % rect)
+	# Issue #113 asked for polarity as a SHAPE, never the count colour alone. On the 8px
+	# badge the corner glyphs landed on the art, so the sign moved onto the count itself:
+	# "+N" helping, "-N" hurting, "±N" when the item carries both.
+	if not (slots[0]["count"] as Label).text.begins_with("+"):
+		failures.append("issue113: a pure-positive boost should sign its count '+' (got '%s')"
+			% (slots[0]["count"] as Label).text)
+	if not (slots[1]["count"] as Label).text.begins_with("+"):
+		failures.append("issue113: the Cocktail should be pure upside (got '%s')"
+			% (slots[1]["count"] as Label).text)
+	if (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
+		failures.append("issue185: the old corner glyphs should be retired, not drawn on the art")
 	# Tobacco still carries a live cost (3x pairs bought with a hidden reel), so it is the
 	# mixed case: both marks at once. Shown alone — there are only two slots, and a third
 	# simultaneous boost folds into a "+N" instead of getting its own badge.
@@ -5348,8 +5378,9 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	run_store.decaySkips = 0
 	run_store.pairBoostSpins = 4
 	machine._refresh_boost_indicators()
-	if not (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: mixed Tobacco boost should show both + and - marks")
+	if not (slots[0]["count"] as Label).text.begins_with("±"):
+		failures.append("issue113: mixed Tobacco should sign its count '±' (got '%s')"
+			% (slots[0]["count"] as Label).text)
 	run_store.pairBoostSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
@@ -5359,8 +5390,9 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	run_store.decaySkips = 0
 	run_store.blurReelsSpins = 2
 	machine._refresh_boost_indicators()
-	if (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: pure-negative boost should show only the - mark")
+	if not (slots[0]["count"] as Label).text.begins_with("-"):
+		failures.append("issue113: a pure-negative boost should sign its count '-' (got '%s')"
+			% (slots[0]["count"] as Label).text)
 	run_store.blurReelsSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
@@ -5381,7 +5413,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	run_store.cocktailBoostSpins = 0
 	machine._apply_expiring_boost_linger(expiring)
 	machine._refresh_boost_indicators()
-	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "0":
+	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "+0":
 		failures.append("issue76: final boost spin should linger as count 0")
 	machine._clear_boost_zero_linger()
 	if (slots[0]["slot"] as Control).visible:
@@ -5479,16 +5511,16 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 	var slot := slots[0]["slot"] as Control
 	if not slot.visible:
 		failures.append("issue185: the Red Pill badge did not show")
-	elif (slots[0]["count"] as Label).text != "2":
+	elif (slots[0]["count"] as Label).text != "±2":
 		failures.append("issue185: the Red Pill badge should count both phases, got '%s'"
 			% (slots[0]["count"] as Label).text)
 	var icon := (slots[0]["icon"] as TextureRect).texture
 	if icon == null or not String(icon.resource_path).ends_with("items/pill.png"):
 		failures.append("issue185: the Red Pill badge did not use the pill icon")
-	# Both an upside and a live cost, so both polarity glyphs.
-	if not (slots[0]["pos_mark"] as Label).visible \
-			or not (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue185: the Red Pill is mixed and should show both +/- marks")
+	# Both an upside and a live cost, which the signed count carries as "±".
+	if not (slots[0]["count"] as Label).text.begins_with("±"):
+		failures.append("issue185: the Red Pill is mixed and should sign its count '±' (got '%s')"
+			% (slots[0]["count"] as Label).text)
 
 	# The flatline is spent; the promised triple is still owed. ONE badge, now at 1 —
 	# not a second badge appearing as the first disappears.
@@ -5496,7 +5528,7 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 	machine._refresh_boost_indicators()
 	if not slot.visible:
 		failures.append("issue185: the Red Pill badge vanished between its two phases")
-	elif (slots[0]["count"] as Label).text != "1":
+	elif (slots[0]["count"] as Label).text != "±1":
 		failures.append("issue185: the Red Pill badge should read 1 after the flatline, got '%s'"
 			% (slots[0]["count"] as Label).text)
 	if slots.size() > 1 and (slots[1]["slot"] as Control).visible:

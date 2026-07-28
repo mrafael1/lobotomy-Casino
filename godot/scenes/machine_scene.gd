@@ -163,7 +163,7 @@ const MULTIPLIER_FRAME_COUNT := 6
 const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
 const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
 const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
-const FREE_SPIN_SHEET := "machine new view/FREE_SPIN.png"
+const FREE_SPIN_SHEET := "machine new view/free_spin.png"
 const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
 const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
@@ -173,15 +173,13 @@ const MULT_FX_FRAME_TIME := 0.09
 # stepped at the same cadence as the regular multiplier effects.
 const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
-# Two authored placements of the FREE SPINS banner (issue #185). Frame 0 sits at its
-# usual height (text y90..95); frame 1 drops it 4px (y94..99) so it clears the item
-# badge row at y81..93 entirely. The banner used to blank the badges outright, which
-# meant taking a free spin hid every running item for as long as the spins lasted —
-# exactly when knowing what is still ticking matters most. Now the badges stay lit and
-# the banner steps down to make room, choosing its frame from whether any are showing.
-const FREE_SPIN_FRAMES := 2
-const FREE_SPIN_FRAME_DEFAULT := 0
-const FREE_SPIN_FRAME_LOWERED := 1
+# One authored placement again (issue #185 follow-up). The banner briefly carried a
+# second, lowered frame for when the item badges still sat in the y81..93 band and it had
+# to duck under them. Moving that row below the target bar retired the problem, and the
+# banner's own text moved UP to y84..89 instead — into the band the goal number vacates
+# while free spins are lit — so it now clears the fill bar at y94..98 outright and the
+# bar can keep running underneath it.
+const FREE_SPIN_FRAMES := 1
 # Water's on-use pour: an authored full-canvas sheet (3 x 160x320), played once.
 const WATER_SHEET := "machine new view/water.png"
 const WATER_SHEET_FRAMES := 3
@@ -1077,7 +1075,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel.ends_with("lock.png") or rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
-	if rel.ends_with("FREE_SPIN.png"):
+	if rel.to_lower().ends_with("free_spin.png"):
 		return "FreeSpinOverlay"
 	if rel.ends_with("win_animation.png"):
 		return "WinCallout"
@@ -1403,16 +1401,21 @@ func _advance_target_bar_animation(delta: float) -> void:
 func _refresh_target_readout() -> void:
 	if _target_goals_sprite == null and _target_bar_sprite == null:
 		return
-	# A win callout, a power animation or the lit FREE SPIN banner owns the whole TV while
-	# it is up; the objective readout steps aside for all three. The dealer interface is
-	# the one persistent readout that stays up under the banner (_tv_callout_active).
-	var should_show := not _tv_content_muted()
+	# A win callout or a power animation owns the whole TV while it is up, and the whole
+	# objective readout steps aside. The lit FREE SPIN banner is weaker: it takes only the
+	# goal NUMBER, whose y86..90 the banner text runs into, and leaves the fill bar and its
+	# shimmer running underneath (issue #185 follow-up). Progress toward the target is
+	# exactly what free spins are being spent on, so blanking it during them hid the one
+	# readout the player was watching.
+	var callout := _tv_callout_active()
+	var should_show := not callout
+	var goal_number_show := not _tv_content_muted()
 	if _target_bar_sprite != null:
 		_target_bar_sprite.visible = should_show
-	if _target_goals_sprite != null:
-		_target_goals_sprite.visible = should_show
 	if _target_bar_anim_sprite != null:
 		_target_bar_anim_sprite.visible = should_show
+	if _target_goals_sprite != null:
+		_target_goals_sprite.visible = goal_number_show
 	if not should_show:
 		return
 	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
@@ -1568,22 +1571,34 @@ func _refresh_restore_cap() -> void:
 	var spent := EconomyConst.POWER_RESTORE_CHARGE_MAX - _shown_restore_charges()
 	_set_sheet_frame(_restore_cap_sprite, clampi(spent, 0, RESTORE_CAP_FRAMES - 1))
 
-## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
-## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
-## corner says how many spins are left. Active boosts stack HORIZONTALLY, growing left
-## from the corner. Anchored to the TV status column so the row clears the red
-## bezel. Built once; refreshed each HUD update.
-const BOOST_ICON_SIZE := 12.0
-const BOOST_ICON_GAP := 3.0
-# Issue #181: fixed authored slots for the item icons, filled right to left. Every
-# other thing that owns the TV is measured art, and between them the only clean band
-# left is y81..93: the dealer bar runs to y77 with its icon to y80, the goal number
-# occupies x66..83 at y86..90 and the fill bar starts at y94. That leaves two 12px
-# slots to the right of the goal number and clear of all of it; further simultaneous
-# boosts fold into a "+N" on the last one. The old layout was a right-aligned row that
-# grew leftwards and pushed its sixth icon onto the left bezel, outside the TV, with
-# nothing clipping it.
-const BOOST_SLOT_POSITIONS: Array[Vector2] = [Vector2(97.0, 81.0), Vector2(84.0, 81.0)]
+## Pooled duration icons on the TV (issue #76): one slot per possible boost, hidden
+## until active. The icon says WHICH boost, a badge on its bottom-right corner says how
+## many spins are left. Built once; refreshed each HUD update.
+##
+## The row moved UNDER the target bar and shrank to 8px (issue #185 follow-up). It used
+## to be two 12px slots wedged into the y81..93 band beside the goal number — the only
+## gap the other TV art left — which capped the machine at two visible items and folded
+## everything past that into a "+N", so a run with four items running showed two of them.
+## The strip below the fill bar is the one genuinely wide space on the screen: measured
+## clear from y99..107 and x30..121, with nothing else authored into it.
+##
+## 8px is also a CLEANER downscale than 12 was, not a compromise: the source icons are
+## 32x32, so 12px meant a fractional 32/12 = 2.67 nearest-neighbour reduction that
+## dropped source pixels unevenly, while 8px is exactly 32/4 — every fourth pixel, all
+## the way across. The row is left-aligned to the fill bar above it (x41) so the two
+## read as one block.
+const BOOST_ICON_SIZE := 8.0
+const BOOST_ICON_GAP := 1.0
+const BOOST_COUNT_WIDTH := 7.0        # room for a sign plus one digit beside the icon
+const BOOST_ROW_LEFT := 32.0          # left edge of the measured clear strip, +2 margin
+const BOOST_ROW_TOP := 100.0          # 1px under the bar (y94..98), 8px clear above y107
+const BOOST_SLOT_PITCH := 17.0        # 8px icon + 1px + 7px count + 1px between slots
+const BOOST_SLOT_COUNT := 5
+const BOOST_SLOT_POSITIONS: Array[Vector2] = [
+	Vector2(32.0, 100.0), Vector2(49.0, 100.0), Vector2(66.0, 100.0),
+	Vector2(83.0, 100.0), Vector2(100.0, 100.0),
+]
+const BOOST_BADGE_FONT_SIZE := 5      # count + polarity glyphs, sized for the 8px badge
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 # Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
@@ -1624,7 +1639,9 @@ func _build_boost_indicators() -> void:
 		var count := Label.new()
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		count.add_theme_font_size_override("font_size", 7)
+		# Font 5 on the 8px badge, matching the augment chips' own count (issue #185
+		# follow-up); the old 7 was sized for a 12px icon and would swallow this one.
+		count.add_theme_font_size_override("font_size", BOOST_BADGE_FONT_SIZE)
 		if _font != null:
 			count.add_theme_font_override("font", _font)
 		count.add_theme_color_override("font_color", BOOST_COUNT_COLOR)
@@ -1650,17 +1667,18 @@ func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Colo
 	mark.text = glyph
 	mark.horizontal_alignment = alignment
 	mark.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	mark.add_theme_font_size_override("font_size", 7)
+	mark.add_theme_font_size_override("font_size", BOOST_BADGE_FONT_SIZE)
 	if _font != null:
 		mark.add_theme_font_override("font", _font)
 	mark.add_theme_color_override("font_color", color)
 	mark.add_theme_color_override("font_outline_color", Color.BLACK)
 	mark.add_theme_constant_override("outline_size", 1)
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Pinned to the icon's top edge, nudged 3px up so the sign reads as a corner badge
-	# instead of covering the art. The box height comes from the font's real min height
-	# on refresh — asking for it here, before the node is in the tree, can return zero.
-	mark.position = Vector2(0.0, -3.0)
+	# Pinned INSIDE the icon's top edge. It used to hang 3px above, which worked in the
+	# old y81..93 band but would now reach up into the target bar at y94..98. The box
+	# height comes from the font's real min height on refresh — asking for it here,
+	# before the node is in the tree, can return zero.
+	mark.position = Vector2.ZERO
 	mark.visible = false
 	return mark
 
@@ -1691,11 +1709,10 @@ func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
 	# The item icons step aside for a full-screen callout, and only for that (issue #185).
-	# The FREE SPIN banner no longer blanks them: it drops to its lowered frame instead,
-	# so what is running stays readable through the free spins.
+	# The FREE SPIN banner no longer blanks them — the row sits below the target bar now,
+	# well clear of the banner, so what is running stays readable through the free spins.
 	if _tv_callout_active():
 		_hide_boost_indicators()
-		_refresh_free_spin_frame()
 		return
 	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
 	var active_total := 0
@@ -1723,21 +1740,27 @@ func _refresh_boost_indicators() -> void:
 		slot.position = BOOST_SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
-		cn.text = str(maxi(0, remaining))
-		cn.add_theme_color_override(
-			"font_color",
-			BOOST_NEGATIVE_COUNT_COLOR if bool(boost.get("negative", false)) else BOOST_COUNT_COLOR)
-		# Issue #113: polarity is a sign glyph, not just the count colour — "+" for
-		# a helping boost, "-" for a hurting one, both when the boost is mixed.
 		var is_negative := bool(boost.get("negative", false))
 		var is_mixed := bool(boost.get("mixed", false))
-		(s["pos_mark"] as Label).visible = not is_negative or is_mixed
-		(s["neg_mark"] as Label).visible = is_negative or is_mixed
-		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
-		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
+		# Issue #113 asked that polarity ride a SHAPE, never the count colour alone. It
+		# used to be two glyphs pinned to the badge's top corners, which the 8px badge no
+		# longer has room for — they landed on the art. The sign moves onto the count
+		# instead: "+3", "-2", "±4" for a boost that carries both. Same shape-carried
+		# meaning, no pixels spent, and the number it qualifies is right there.
+		var sign_prefix := "±" if is_mixed else ("-" if is_negative else "+")
+		cn.text = "%s%d" % [sign_prefix, maxi(0, remaining)]
+		cn.add_theme_color_override("font_color",
+			BOOST_NEGATIVE_COUNT_COLOR if is_negative else BOOST_COUNT_COLOR)
+		(s["pos_mark"] as Label).visible = false
+		(s["neg_mark"] as Label).visible = false
+		# The caption sits BESIDE the icon, not on it. Overlaying was survivable on the old
+		# 12px badge, where a single digit tucked into a corner; on an 8px one a signed
+		# count covers the art it is labelling. Side by side, both stay readable and the
+		# slot simply costs a few more pixels of a row that has them to spare.
 		var mh := cn.get_minimum_size().y
-		cn.size = Vector2(BOOST_ICON_SIZE, mh)
-		cn.position = Vector2(0.0, BOOST_ICON_SIZE - mh)
+		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
+		cn.position = Vector2(BOOST_ICON_SIZE + 1.0, BOOST_ICON_SIZE - mh)
 		# The polarity glyphs share the count's font metrics, which are only reliable
 		# once the label is in the tree — sizing them at build time can yield a zero-high
 		# box and clip the sign.
@@ -1752,15 +1775,6 @@ func _refresh_boost_indicators() -> void:
 		var overflow: Label = _boost_indicator_slots[col - 1]["count"]
 		overflow.text = "+%d" % (active_total - col + 1)
 	_hide_boost_indicators(col)
-	_refresh_free_spin_frame()
-
-## The banner drops to its lowered frame exactly while an item badge is on screen, so
-## the two never overlap; with the row empty it returns to its authored height.
-func _refresh_free_spin_frame() -> void:
-	if _free_spin_sprite == null:
-		return
-	_set_sheet_frame(_free_spin_sprite,
-		FREE_SPIN_FRAME_LOWERED if _boost_indicators_showing() else FREE_SPIN_FRAME_DEFAULT)
 
 func _boost_indicators_showing() -> bool:
 	for entry: Dictionary in _boost_indicator_slots:

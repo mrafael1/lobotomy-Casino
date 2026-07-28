@@ -131,16 +131,18 @@ Resources and currencies:
   active, its authored COMBO x1..x9 indicator stays mounted in the machine TV at
   the current streak. The base payout lands first, then the COMBO indicator shakes
   and sends out its separate bonus amount. Any transient TV callout temporarily
-  hides COMBO, the FREE SPIN banner, the active-item icons, and dealer countdown
-  information so the pop remains readable; those indicators return when the callout
-  ends.
-- Active multi-spin items show as small duration icons on the TV, each with a
-  spins-remaining count and +/- polarity glyphs; two authored slots fill right to
-  left and further simultaneous items fold into a "+N" on the last one. Only a
-  full-screen callout clears them — the FREE SPIN banner shares the screen instead.
-  The Red Pill gets one icon spanning both of its phases (the forced flatline, then
-  the guaranteed triple), counting the whole two-spin effect down rather than
-  handing off between two badges.
+  hides COMBO, the FREE SPIN banner, the active-item icons, the whole target
+  readout, and dealer countdown information so the pop remains readable; those
+  indicators return when the callout ends.
+- Active multi-spin items show as small 8px duration icons in a row under the
+  target bar, filling left to right, each with its spins-remaining count beside it.
+  The count carries the item's polarity as a sign — "+N" pure upside, "-N" pure
+  downside, "±N" when the item's benefit has a live cost — so polarity never rides
+  on colour alone. Five slots, enough that simultaneous items no longer collapse
+  into an overflow badge. Only a full-screen callout clears the row; the FREE SPIN
+  banner shares the screen with it. The Red Pill gets one icon spanning both of its
+  phases (the forced flatline, then the guaranteed triple), counting the whole
+  two-spin effect down rather than handing off between two badges.
 - Tapping an item icon pops that item's name and what it is currently doing, over
   the TV, for about a second before it fades on its own. The popup never blocks
   input and draws above the banner, the dealer countdown and the losing-state
@@ -306,9 +308,10 @@ Resources and currencies:
 
 - Free spins never cost run spins. The bank caps at 1 (3 when upgraded); a jackpot
   grants 1. The FREE SPIN banner covers banked credits and Energy Drink's
-  protected spins. The banner has two authored placements: it drops to its lowered
-  frame while any active-item icon is on the TV, so the two share the screen, and
-  returns to its normal height when the badge row is empty.
+  protected spins. While it is lit it takes only the target GOAL NUMBER, whose band
+  its own text occupies; the fill bar keeps running underneath it with its shimmer,
+  because progress toward the target is exactly what the free spins are being spent
+  on. The dealer interface and the active-item icons stay lit beside it too.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
   authored overlay with a beeping pulse; the x3 state shows a steady 9-frame
   diminished-fire sheet (never both, and the normal gauge effects are suppressed
