@@ -240,14 +240,19 @@ func _restore_saved_selection() -> void:
 	# started, the ritual presents a clean table while the earlier picks keep
 	# their effects in the active run. Only this visit's staged augment returns.
 	var saved_augment := String(RunStateStore.pacteSelectedAugmentId)
-	if saved_augment != "":
-		_chosen_augment_id = saved_augment
-		_show_chosen_card(saved_augment, "augment")
+	var augment_offer := _offer_array(RunStateStore.pacteOfferAugmentIds)
+	# Diamond (issue #111) suppresses the threshold visit's augment offer entirely, so
+	# there is no augment stage to run: the ritual is the power row alone, and the
+	# augment emplacement stays hidden rather than presenting an empty table.
+	if saved_augment != "" or augment_offer.is_empty():
+		if saved_augment != "":
+			_chosen_augment_id = saved_augment
+			_show_chosen_card(saved_augment, "augment")
 		_pool_kind = "power"
 		_set_emplacement(POWER_EMPLACEMENT_ASSET)
 		_show_pool(_pool_kind, _offer_array(RunStateStore.pacteOfferPowerIds))
 	else:
-		_show_pool("augment", _offer_array(RunStateStore.pacteOfferAugmentIds))
+		_show_pool("augment", augment_offer)
 
 func _offer_array(value: Variant) -> Array[String]:
 	var result: Array[String] = []

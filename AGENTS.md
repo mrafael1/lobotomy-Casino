@@ -370,10 +370,13 @@ Resources and currencies:
   - Cheat power — win a run.
   - Rewind power — recover 20 spent spins.
   - Swap power — turn 10 spins into a win with Shift.
-- **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu:
-  heart (jackpot pays 100, no free spin), spade (end-of-run Lucidity kept is
-  halved), diamond (two power uses per spin), club (dealer wait doubled, spin
-  rewards halved), joker (all four at once).
+- **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu,
+  one per axis: heart/health (a paid spin costs 2 health, the last chip still
+  costs 1), spade/power tempo (a restore charge refills only every other spin),
+  diamond/choice (two power uses per spin, and the threshold Pacte deals no
+  augment), club/economy (shop prices +50% and a HOUSE ANGER row on every target
+  payout — the dealer reroll price is deliberately untouched), joker (all four at
+  once). Free, compulsive and Energy-Drink spins are exempt from heart's cost.
 
 ### Scenes and lifecycle
 

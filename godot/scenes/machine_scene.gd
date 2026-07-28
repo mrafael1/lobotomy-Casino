@@ -485,6 +485,21 @@ const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
 const RESTORE_CAP_SHEET := "machine new view/restore_cap.png"
 const RESTORE_CAP_FRAMES := 2
 
+# Augmented spade (issue #111) makes a spent charge take two spins to come back, so the
+# two pips under the light are a countdown rather than a state: BOTH DARK while a charge
+# is banked (a lit light has nothing to count down to), then one pip per spin waited, the
+# second landing on the same spin the light returns. Anchoring them to the player's own
+# spend is what makes the wait plannable instead of arbitrary.
+# The light itself is authored at x142..152, y58..68 of the full canvas; the pips sit in
+# the clear strip directly beneath it.
+const RESTORE_SPADE_WAITING_TINT := Color(0.45, 0.62, 1.0)
+const RESTORE_CYCLE_PIP_RECTS: Array[Rect2] = [
+	Rect2(143.0, 71.0, 3.0, 2.0),
+	Rect2(148.0, 71.0, 3.0, 2.0),
+]
+const RESTORE_CYCLE_PIP_ON := Color(1.0, 0.86, 0.2)
+const RESTORE_CYCLE_PIP_OFF := Color(0.24, 0.26, 0.34)
+
 # Power restored (issue #181). The coin that used to fly the gauge -> button carried the
 # causality: it SHOWED the light paying for the power. Without it the light just switched
 # off and the button quietly re-enabled, two unrelated-looking events. The replacement is
@@ -872,6 +887,7 @@ var _combo_score_pending := -1 # final score held until the COMBO bonus beat lan
 var _power_bar_sprite: Sprite2D = null
 var _restore_cap_sprite: Sprite2D = null # per-spin restore budget lights beside the gauge
 var _restore_cap_glow: Sprite2D = null   # the lit frame, flashed and faded when a charge is spent
+var _restore_cycle_pips: Array[ColorRect] = [] # spade only: which half of the restore cycle is next
 var _restore_flash_tweens: Array[Tween] = []
 var _restore_flash_chip: Sprite2D = null # chip currently pulsing, so it can be reset
 var _augment_plate_sprite: Sprite2D = null # authored augment sockets under the badges
@@ -1563,7 +1579,30 @@ func _build_restore_cap() -> void:
 	if _restore_cap_glow != null:
 		_restore_cap_glow.visible = false
 		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_build_restore_cycle_pips()
 	_refresh_restore_cap()
+
+## The spade cycle read-out. Built only for a spade/joker run: every other suit refills
+## the charge every spin, where a cycle indicator would say nothing.
+func _build_restore_cycle_pips() -> void:
+	# Free the old nodes before dropping the references: clearing the array alone orphans
+	# live children, so a rebuild would stack a fresh set of pips on top of the last one.
+	for old: ColorRect in _restore_cycle_pips:
+		if is_instance_valid(old):
+			old.queue_free()
+	_restore_cycle_pips.clear()
+	if not RunStateStore.augmented_modifier_active(2):
+		return
+	for rect: Rect2 in RESTORE_CYCLE_PIP_RECTS.slice(0,
+			EconomyConst.SPADE_RESTORE_CYCLE_SPINS):
+		var pip := ColorRect.new()
+		pip.name = "RestoreCyclePip%d" % _restore_cycle_pips.size()
+		pip.position = rect.position
+		pip.size = rect.size
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pip.z_index = 30
+		add_child(pip)
+		_restore_cycle_pips.append(pip)
 
 ## The light is lit while a restore charge is banked, so the player can read what the
 ## economy still owes them before committing a power rather than discovering it on a gauge
@@ -1584,6 +1623,23 @@ func _refresh_restore_cap() -> void:
 		return
 	var spent := EconomyConst.POWER_RESTORE_CHARGE_MAX - _shown_restore_charges()
 	_set_sheet_frame(_restore_cap_sprite, clampi(spent, 0, RESTORE_CAP_FRAMES - 1))
+	# On a spade run a dark light is a wait, not just an empty budget — tint it so the
+	# two read differently at a glance, and let the pips say how much longer.
+	var waiting: bool = spent > 0 and RunStateStore.augmented_modifier_active(2)
+	_restore_cap_sprite.modulate = RESTORE_SPADE_WAITING_TINT if waiting else Color.WHITE
+	_refresh_restore_cycle_pips()
+
+func _refresh_restore_cycle_pips() -> void:
+	if _restore_cycle_pips.is_empty():
+		return
+	# Pips fill left to right as the wait elapses, and are all dark while a charge is
+	# banked: restore_cycle_progress() is 0 in exactly that case.
+	var lit := RunStateStore.restore_cycle_progress()
+	for i in _restore_cycle_pips.size():
+		var pip := _restore_cycle_pips[i]
+		if not is_instance_valid(pip):
+			continue
+		pip.color = RESTORE_CYCLE_PIP_ON if i < lit else RESTORE_CYCLE_PIP_OFF
 
 ## Pooled duration icons on the TV (issue #76): one slot per possible boost, hidden
 ## until active. The icon says WHICH boost, a badge on its bottom-right corner says how
@@ -5930,9 +5986,6 @@ func _show_score_table() -> void:
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
 		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-		# Augmented heart modifier (issue #111): the table shows the halved jackpot.
-		if symbol_id == "brain" and RunStateStore.augmented_modifier_active(1):
-			triple_base = Payouts.JACKPOT_SCORE / 2
 		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
 		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
@@ -6286,9 +6339,6 @@ func _reward_bonus_text(bonus: float) -> String:
 func _triple_effect_text(symbol_id: String) -> String:
 	match symbol_id:
 		"brain":
-			# Augmented heart modifier (issue #111): no free spin, jackpot halved.
-			if RunStateStore.augmented_modifier_active(1):
-				return "JACKPOT %d, NO SPIN" % (Payouts.JACKPOT_SCORE / 2)
 			return "JACKPOT +%d SPIN" % triple_brain_free_spins
 		"eye":
 			return "REVEALS A REEL"
@@ -7112,17 +7162,12 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 		"brain":
 			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
 			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
-			# Augmented heart modifier (issue #111): the jackpot grants no free spin.
-			if RunStateStore.augmented_modifier_active(1):
-				color = triple_brain_color
-				label = "JACKPOT"
-			else:
-				if free_spins_granted <= 0:
-					RunStateStore.grant_free_spins(triple_brain_free_spins)
-					_play_spin_gain_fx(_current_display_spins_left() - spins_before,
-						_reel_window_center())
-				color = triple_brain_color
-				label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
+			if free_spins_granted <= 0:
+				RunStateStore.grant_free_spins(triple_brain_free_spins)
+				_play_spin_gain_fx(_current_display_spins_left() - spins_before,
+					_reel_window_center())
+			color = triple_brain_color
+			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
 		"eye":
 			# The player picks the reel to reveal (issue follow-up): the reel-selection
 			# UI arms and the chosen reel's NEXT spin result pops up when it lands.
@@ -7941,10 +7986,7 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 func _end_run_lucidity_kept_fraction() -> float:
 	# Asks the store rather than reading ownedPermanents directly, so a Pacte-granted
 	# SMART SAVING counts here exactly as it does in the bank.
-	var frac := MetaStateStore.effective_lucidity_kept_fraction()
-	# Augmented spade modifier (issue #111): end-of-run gain kept is halved.
-	# Mirrors MetaStateStore.bank_run so the "% kept" countdown matches the bank.
-	return frac * 0.5 if RunStateStore.augmented_modifier_active(2) else frac
+	return MetaStateStore.effective_lucidity_kept_fraction()
 
 # ── Augmented Run badge (issue #111) ─────────────────────────────────────────────────
 # The active suit stays visible during the run; holding it peeks at the list of
@@ -7988,13 +8030,17 @@ func _build_augmented_badge() -> void:
 func _augmented_restrictions_text() -> String:
 	var lines: Array[String] = []
 	if RunStateStore.augmented_modifier_active(1):
-		lines.append("JACKPOT %d, NO FREE SPIN" % (Payouts.JACKPOT_SCORE / 2))
+		lines.append("SPINS COST 2 HEALTH")
 	if RunStateStore.augmented_modifier_active(2):
-		lines.append("END-OF-RUN GAIN HALVED")
+		lines.append("POWER RESTORES EVERY 2 SPINS")
 	if RunStateStore.augmented_modifier_active(3):
 		lines.append("MAX 2 POWERS PER SPIN")
+		lines.append("NO AUGMENT AT THE 2ND PACTE")
 	if RunStateStore.augmented_modifier_active(4):
-		lines.append("DEALER + REWARDS HALVED")
+		lines.append("PRICES +%d%%" % roundi(
+			(RunStateStore.AUGMENTED_CLUB_PRICE_MULTIPLIER - 1.0) * 100.0))
+		lines.append("HOUSE ANGER TAX +%d%%" % roundi(
+			EconomyConst.OVERFLOW_ANGER_RATE * 100.0))
 	return "\n".join(lines)
 
 func _show_augmented_popup(button: Button) -> void:

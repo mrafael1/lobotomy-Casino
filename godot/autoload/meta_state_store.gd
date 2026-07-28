@@ -371,8 +371,7 @@ func _normalise_pending_card_unlocks(value: Variant) -> Array:
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
 
-## The share of run Lucidity the player actually keeps, BEFORE the augmented spade
-## halving (callers apply that themselves so the machine's countdown and the bank agree).
+## The share of run Lucidity the player actually keeps.
 ##
 ## Smart Saving has two doors: the shop sells it as a permanent, and the Pacte offers it
 ## as the SMART SAVING augment card. The card grants pos_smart_save into the RUN's
@@ -393,16 +392,10 @@ func bank_run(run: Dictionary, ending: String) -> void:
 	_flush_playtime()
 	var prev_history: Dictionary = history.duplicate(true)
 	var next := Endings.bank_run_to_meta(run, _as_dict(), ending, _now_ms())
-	# Endings banks off the meta permanents alone, and the augmented spade modifier
-	# (issue #111) halves whatever fraction applies. Both corrections land here so the
-	# parity-locked banking math in Endings stays untouched. The run store is looked up
-	# at runtime: save_checks compiles this script outside the autoload context, where
-	# the RunStateStore identifier doesn't resolve.
-	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	# Endings banks off the meta permanents alone, so a Pacte-granted SMART SAVING is
+	# corrected here rather than in the parity-locked banking math itself.
 	var banked_frac := Endings.lucidity_kept_fraction(_as_dict())
 	var owed_frac := effective_lucidity_kept_fraction()
-	if run_store != null and run_store.augmented_modifier_active(2):
-		owed_frac *= 0.5
 	if not is_equal_approx(owed_frac, banked_frac):
 		var coins := float(run["lucidityCoins"])
 		var banked_kept := 0 if ending == "game_over" else floori(coins * banked_frac)

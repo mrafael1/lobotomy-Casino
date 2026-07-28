@@ -73,10 +73,10 @@ const ART_YELLOW := Color(1.0, 0.86, 0.36)
 # has been reached. Cycling picks one suit modifier (joker = all four).
 const AUGMENTED_DESCRIPTIONS := {
 	"": "NO AUGMENT",
-	"heart": "JACKPOT 100, NO FREE SPIN",
-	"spade": "END-OF-RUN GAIN HALVED",
-	"diamond": "MAX 2 POWERS PER SPIN",
-	"club": "DEALER + REWARDS HALVED",
+	"heart": "SPINS COST 2 HEALTH",
+	"spade": "POWER RESTORES EVERY 2 SPINS",
+	"diamond": "MAX 2 POWERS, NO 2ND AUGMENT",
+	"club": "PRICES +50%, HOUSE TAX +15%",
 	"joker": "ALL FOUR MODIFIERS",
 }
 

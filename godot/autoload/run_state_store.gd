@@ -66,10 +66,10 @@ const JOKER_DEALER_HELP_POWERS: Array[String] = ["cheat", "shift", "reroll", "me
 # ── Augmented Run (issue #111) ─────────────────────────────────────────────────────
 # Post-wealth difficulty mode picked on the start menu: one suit selects a single
 # modifier; the joker activates all four at once.
-#   heart   (1): jackpot pays 100 instead of 200 and grants no free spin
-#   spade   (2): end-of-run lucidity kept is halved (10% -> 5%)
-#   diamond (3): only two powers may be used per spin
-#   club    (4): dealer visits and spin rewards are halved
+#   heart   (1): a paid spin costs 2 health instead of 1 (the last chip still costs 1)
+#   spade   (2): a power restore charge refills only every other spin
+#   diamond (3): two powers per spin, and the threshold Pacte deals no augment
+#   club    (4): shop prices +50% and a HOUSE ANGER row on every target payout
 const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
 # Selector cycle in the authored frame order of start_menu_augmented symbols.png
 # (frame index = position here): no augment, heart, diamond, spade, club, joker.
@@ -231,6 +231,14 @@ var pendingPowerRestores: Array = []
 ## spends nothing here.
 var powerRestoreCharges := EconomyConst.POWER_RESTORE_CHARGE_MAX
 
+## Augmented spade (issue #111): spins counted since the charge was last spent. The
+## cycle is anchored to the PLAYER'S spend, not to global spin parity — a countdown the
+## player starts is one they can plan around, where a parity gate just makes alternate
+## spins feel arbitrary. 0 while a charge is banked, then 1, then 2 (which is the spin
+## that hands the charge back). The machine reads it straight as the two pips under the
+## restore light.
+var powerRestoreProgress := 0
+
 # Pacte run snapshot. Offers and temporary selections are saved so leaving the
 # scene or restarting the game never silently discards a reserved run.
 var pacteSeed := 0
@@ -363,21 +371,34 @@ func augmented_modifier_active(modifier: int) -> bool:
 func _augmented_powers_blocked() -> bool:
 	return augmented_modifier_active(3) and powersUsedThisSpin >= 2
 
-## Heart modifier: how much of a jackpot's evaluated score is cut (200 -> 100 at
-## base; halving the whole score keeps reward bonuses/scales proportional).
-func _augmented_jackpot_cut(score: int, win_type: String) -> int:
-	if not augmented_modifier_active(1) or win_type != "jackpot":
-		return 0
-	return score - roundi(float(score) * 0.5)
+## Club modifier: the casino is angry, so everything costs more. The markup rides the
+## two price chokepoints (chip_augment_price / consumable_price) and the target payout's
+## HOUSE ANGER row — never dealer_reroll_price(), which stays at its normal escalating
+## cost. Applied BEFORE the Chip Augment discounts, so the two -10% chips still bite
+## (x1.5 x 0.8 = x1.2 at two stacks) and become the run's natural counterplay.
+const AUGMENTED_CLUB_PRICE_MULTIPLIER := 1.5
 
-## Applies Heart to the complete post-evaluate score, including any Flatline or
-## specialist bonuses that were added after the base evaluation.
-func _apply_augmented_jackpot(score: int, win_type: String) -> Dictionary:
-	var cut := _augmented_jackpot_cut(score, win_type)
-	return {
-		"score": maxi(0, score - cut),
-		"cut": cut,
-	}
+func augmented_price_multiplier() -> float:
+	return AUGMENTED_CLUB_PRICE_MULTIPLIER if augmented_modifier_active(4) else 1.0
+
+## The club charge on a beaten target's overflow, or 0.0 when no club run is armed.
+func augmented_anger_tax_rate() -> float:
+	return EconomyConst.OVERFLOW_ANGER_RATE if augmented_modifier_active(4) else 0.0
+
+## Diamond modifier: the threshold Pacte deals a power only — no second augment for
+## the run. The offer is an explicit EMPTY array rather than a shorter draw, because
+## PacteCards.draw() already returns a short list when too few cards are unlocked;
+## a two-card augment row would read as "keep unlocking", not as the modifier biting.
+func augmented_pacte_augment_suppressed() -> bool:
+	return augmented_modifier_active(3)
+
+## Heart modifier: what one paid spin costs in health. Doubling the decay halves the
+## run's length proportionally, which bites a long run as hard as a short one — the
+## old "jackpot pays half" only ever touched one rare result. Spins the run never
+## charges for (free, compulsive, Energy Drink) are exempt: the caller's
+## `stasis or sedative or is_free` guard zeroes the cost before this is consulted.
+func _augmented_health_cost_multiplier() -> int:
+	return 2 if augmented_modifier_active(1) else 1
 
 func _ready() -> void:
 	load_run_state()
@@ -546,6 +567,7 @@ func _capture_rewind_snapshot() -> Dictionary:
 		"abilitiesUsed": abilitiesUsed.duplicate(),
 		"powersUsedThisSpin": powersUsedThisSpin,
 		"powerRestoreCharges": powerRestoreCharges,
+		"powerRestoreProgress": powerRestoreProgress,
 		"pendingPowerRestores": pendingPowerRestores.duplicate(),
 	}
 
@@ -581,6 +603,7 @@ func _restore_rewind_snapshot(snapshot: Dictionary) -> void:
 	powersUsedThisSpin = int(snapshot.get("powersUsedThisSpin", 0))
 	powerRestoreCharges = int(snapshot.get("powerRestoreCharges",
 		EconomyConst.POWER_RESTORE_CHARGE_MAX))
+	powerRestoreProgress = int(snapshot.get("powerRestoreProgress", 0))
 	pendingPowerRestores = (snapshot.get("pendingPowerRestores", pendingPowerRestores) as Array).duplicate()
 	isSpinning = false
 
@@ -698,7 +721,11 @@ func spin(compulsive := false) -> Variant:
 	if (forcedRandomBetSpins > 0 or is_compulsive) and eff_bet == 3:
 		eff_bet = 2 # Energy Drink dulls the frenzy: x3 runs as x2 for its duration
 
-	var base_decay := Economy.compute_neuron_decay(ownedUpgrades)
+	# Augmented heart modifier (issue #111): a paid spin costs two health instead of
+	# one. The mini() below is what makes the last chip cost a single point rather
+	# than refusing the spin — the run gets to play its final health, then ends.
+	var base_decay := Economy.compute_neuron_decay(ownedUpgrades) \
+		* _augmented_health_cost_multiplier()
 	var decay_amt := 0 if (stasis or sedative or is_free) else mini(base_decay, neurons)
 
 	var brain_bonus := Economy.compute_brain_weight_bonus(ownedUpgrades)
@@ -832,19 +859,12 @@ func spin(compulsive := false) -> Variant:
 	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), MetaStateStore.pairTripleAugmentChoice)
-	# Augmented heart modifier (issue #111): the brain jackpot pays 100 instead of
-	# 200 and no longer grants its free spin. Apply it after the other score boosts
-	# so the whole jackpot payout remains proportional.
-	var complete_score := base_score + flatline_boost + win_boost_bonus + specialist_bonus
-	var augmented_jackpot: Dictionary = _apply_augmented_jackpot(
-		complete_score, String(result["winType"]))
-	var final_score := int(augmented_jackpot["score"])
-	var augmented_jackpot_cut := int(augmented_jackpot["cut"])
+	var final_score := base_score + flatline_boost + win_boost_bonus + specialist_bonus
 	var passive_lucidity := _passive_lucidity_per_spin()
 	var final_result: Dictionary = result
 	if cocktail_bonus > 0 or flatline_boost_applied \
 			or win_boost_applied or specialist_bonus > 0 or hidden_reel_count > 0 \
-			or augmented_jackpot_cut > 0 or passive_lucidity > 0:
+			or passive_lucidity > 0:
 		final_result = result.duplicate(true)
 		final_result["scoreEarned"] = final_score
 		final_result["coinsEarned"] = final_score
@@ -864,13 +884,6 @@ func spin(compulsive := false) -> Variant:
 			final_result["winBoostBaseScore"] = maxi(0, final_score - win_boost_bonus)
 		if specialist_bonus > 0:
 			final_result["specialistBonus"] = specialist_bonus
-		if augmented_jackpot_cut > 0:
-			# Evaluate only adds freeSpinsGranted on non-free spins; undo exactly that.
-			if not bool(final_result["isFreeSpin"]):
-				final_result["freeSpinsAfter"] = maxi(0,
-					int(final_result["freeSpinsAfter"]) - int(final_result["freeSpinsGranted"]))
-			final_result["freeSpinsGranted"] = 0
-			final_result["augmentedJackpotCut"] = augmented_jackpot_cut
 		if passive_lucidity > 0:
 			final_result["passiveLucidity"] = passive_lucidity
 
@@ -1163,6 +1176,7 @@ func reset_run_state() -> void:
 	augmentedTier = ""
 	powersUsedThisSpin = 0
 	powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
+	powerRestoreProgress = 0
 	pacteSeed = 0
 	pacteOfferAugmentIds = null
 	pacteOfferPowerIds = null
@@ -1346,6 +1360,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# it applies to the run this call starts (issue #111).
 	powersUsedThisSpin = 0
 	powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
+	powerRestoreProgress = 0
 	ownedUpgrades = owned_permanents.duplicate()
 	selectedAugmentCardIds = kept_augment_cards
 	selectedPowerCardIds = kept_power_cards
@@ -1527,7 +1542,7 @@ func _settle_pending_wealth_target() -> Dictionary:
 	var bill := {}
 	if not final_target:
 		overflow = maxi(0, scoreEarned - target)
-		bill = EconomyConst.overflow_bill(overflow, target)
+		bill = EconomyConst.overflow_bill(overflow, target, augmented_anger_tax_rate())
 		banked = int(bill["net"])
 		scoreEarned = 0
 		wealthTargetIndex = mini(wealthTargetIndex + 1, EconomyConst.WEALTH_TARGETS.size() - 1)
@@ -1637,18 +1652,25 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	var augment_card_id := augment_id if augment_id != "" else pacteSelectedAugmentId
 	var power_card_id := power_id if power_id != "" else pacteSelectedPowerId
 	power_card_id = PacteCards.normalise_card_id(power_card_id)
-	if augment_card_id == "" or power_card_id == "":
+	# Diamond (issue #111) deals no augment at the threshold visit, so an empty
+	# augment is legitimate exactly when the offer itself is empty. Everywhere else
+	# a blank augment is still a caller bug and still refused.
+	var augment_offer := _pacte_offer_array(pacteOfferAugmentIds)
+	var augment_skipped := augment_card_id == "" and augment_offer.is_empty()
+	if (augment_card_id == "" and not augment_skipped) or power_card_id == "":
 		return false
-	if not _pacte_offer_array(pacteOfferAugmentIds).has(augment_card_id) \
-			or not _pacte_offer_array(pacteOfferPowerIds).has(power_card_id):
+	if not augment_skipped and not augment_offer.has(augment_card_id):
+		return false
+	if not _pacte_offer_array(pacteOfferPowerIds).has(power_card_id):
 		return false
 	if selectedAugmentCardIds.has(augment_card_id) or selectedPowerCardIds.has(power_card_id):
 		return false
-	if not _apply_pacte_augment(augment_card_id):
+	if not augment_skipped and not _apply_pacte_augment(augment_card_id):
 		return false
 	var runtime_power_id := PacteCards.power_id(power_card_id)
-	selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
-	selectedAugmentCardIds.append(augment_card_id)
+	if not augment_skipped:
+		selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
+		selectedAugmentCardIds.append(augment_card_id)
 	selectedPowerCardIds = selectedPowerCardIds.duplicate()
 	selectedPowerCardIds.append(power_card_id)
 	ownedPowerIds = ownedPowerIds.duplicate()
@@ -1670,7 +1692,12 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	return true
 
 func stage_pacte_power_selection(card_id: String) -> bool:
-	if not pacte_active() or pacteSelectedAugmentId == "":
+	# A staged augment is the normal precondition — the power row only opens once the
+	# augment is chosen. Diamond's suppressed offer is the one case with no augment to
+	# stage, so the power row is the whole ritual and gates on the empty offer instead.
+	if not pacte_active():
+		return false
+	if pacteSelectedAugmentId == "" and not _pacte_offer_array(pacteOfferAugmentIds).is_empty():
 		return false
 	var normalised := PacteCards.normalise_card_id(card_id)
 	if not _pacte_offer_array(pacteOfferPowerIds).has(normalised) \
@@ -1691,8 +1718,10 @@ func open_threshold_pacte() -> bool:
 	if runPhase == "running" and dealerIncoming:
 		reveal_dealer()
 	var draw_seed := (pacteSeed ^ PACTE_THRESHOLD_DRAW_SEED ^ (spinCount * 0x9e3779b9)) & M32
-	pacteOfferAugmentIds = PacteCards.draw("augment", draw_seed,
-		MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
+	var suppressed_augment: Array[String] = []
+	pacteOfferAugmentIds = suppressed_augment if augmented_pacte_augment_suppressed() \
+		else PacteCards.draw("augment", draw_seed,
+			MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
 	pacteOfferPowerIds = PacteCards.draw("power", draw_seed ^ 0x9e3779b9,
 		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
 	pacteSelectedAugmentId = ""
@@ -1710,8 +1739,12 @@ func skip_pacte_with_defaults() -> bool:
 		return false
 	var augment_offers := _pacte_offer_array(pacteOfferAugmentIds)
 	var power_offers := _pacte_offer_array(pacteOfferPowerIds)
-	if augment_offers.is_empty() or power_offers.is_empty():
+	if power_offers.is_empty():
 		return false
+	# An empty augment offer is diamond's suppressed threshold visit (issue #111),
+	# not a broken draw: take the power alone rather than refusing the whole ritual.
+	if augment_offers.is_empty():
+		return complete_pacte_selection("", power_offers[0])
 	return complete_pacte_selection(augment_offers[0], power_offers[0])
 
 ## Opens the full dealer scene after the threshold Pacte visit. This uses the same
@@ -2113,13 +2146,42 @@ func _spend_restore_budget(count: int) -> void:
 	if count <= 0:
 		return
 	powerRestoreCharges = maxi(0, restore_budget_left() - count)
+	# The spade cycle starts the moment the light goes out, so the pips read empty on
+	# the spin the power actually came back rather than already part-way along.
+	powerRestoreProgress = 0
 
 ## One charge back per spin launched (never past the cap): the restore economy refills
 ## with play rather than resetting whole, so a spin cannot repeat the previous spin's
 ## double restore.
+##
+## Augmented spade modifier (issue #111) halves that throughput: the charge takes
+## EconomyConst.SPADE_RESTORE_CYCLE_SPINS spins to come back, counted from the spend rather than from
+## global spin parity, so the wait is something the player started and can plan around.
+## It is a spin counter rather than a smaller POWER_RESTORE_RECHARGE_PER_SPIN because the
+## cap is 1 and a fractional charge has nowhere to live.
 func _recharge_restores() -> void:
-	powerRestoreCharges = mini(EconomyConst.POWER_RESTORE_CHARGE_MAX,
-		restore_budget_left() + EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN)
+	if not augmented_modifier_active(2):
+		powerRestoreProgress = 0
+		powerRestoreCharges = mini(EconomyConst.POWER_RESTORE_CHARGE_MAX,
+			restore_budget_left() + EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN)
+		return
+	if restore_budget_left() >= EconomyConst.POWER_RESTORE_CHARGE_MAX:
+		# Nothing owed: the pips stay dark so a full light never shows a countdown.
+		powerRestoreProgress = 0
+		return
+	powerRestoreProgress = mini(EconomyConst.SPADE_RESTORE_CYCLE_SPINS, powerRestoreProgress + 1)
+	if powerRestoreProgress >= EconomyConst.SPADE_RESTORE_CYCLE_SPINS:
+		# The charge lands on the same spin the last pip lights, so the player sees the
+		# countdown complete and the light come back as one event.
+		powerRestoreCharges = mini(EconomyConst.POWER_RESTORE_CHARGE_MAX,
+			restore_budget_left() + EconomyConst.POWER_RESTORE_RECHARGE_PER_SPIN)
+
+## How many pips under the restore light are lit: 0 while a charge is banked, then one
+## per spin waited. Only ever non-zero on a spade/joker run.
+func restore_cycle_progress() -> int:
+	if not augmented_modifier_active(2):
+		return 0
+	return clampi(powerRestoreProgress, 0, EconomyConst.SPADE_RESTORE_CYCLE_SPINS)
 
 func commit_power_restore(power_id: String) -> void:
 	var idx := pendingPowerRestores.find(power_id)
@@ -2158,11 +2220,7 @@ func _active_hidden_reel_count(pair_boost_active: bool) -> int:
 	return clampi(hidden, 0, 2)
 
 func _active_reward_scale() -> float:
-	var scale := Economy.compute_tunnel_vision_reward_scale(ownedUpgrades)
-	# Augmented club modifier (issue #111): all spin rewards/gains are halved.
-	if augmented_modifier_active(4):
-		scale *= 0.5
-	return scale
+	return Economy.compute_tunnel_vision_reward_scale(ownedUpgrades)
 
 ## Learning's cut is NOT part of the general scale: it is charged only to wins the Book
 ## joker actually made, so a spin that never saw a book pays in full. The scorer applies
@@ -2184,10 +2242,7 @@ func _pair_score_multiplier(pair_boost_active: bool) -> float:
 	return multiplier
 
 func _passive_lucidity_per_spin() -> int:
-	var passive := Economy.compute_passive_lucidity(ownedUpgrades)
-	if augmented_modifier_active(4):
-		passive = floori(float(passive) * 0.5 + 0.5)
-	return passive
+	return Economy.compute_passive_lucidity(ownedUpgrades)
 
 ## The reels a scored result is actually made of — the symbols the payout is for. Used to
 ## tell a power that formed a NEW combination from one that merely left an existing win
@@ -2810,13 +2865,11 @@ func _symbol_reward_bonuses_from_meta(owned: Array) -> Dictionary:
 			out[symbol_id] = float(out.get(symbol_id, 0.0)) + odds_max_level_reward_bonus
 	return out
 
-## Issue #155: what the countdown resets to once an offer resolves. The augmented
-## club modifier keeps its "dealer visits halved" intent by doubling the wait.
 ## The countdown's full length — what the dealer bar measures its progress against. The
 ## Tip must NOT shorten this: the whole point is that the player sees the bar start at
 ## 2/12 rather than at 0/10, which only reads as a head start if the scale stays put.
 func dealer_countdown_cycle_length() -> int:
-	return maxi(1, dealer_countdown_start * (2 if augmented_modifier_active(4) else 1))
+	return maxi(1, dealer_countdown_start)
 
 ## What a resolved visit resets the countdown TO. Dealer's Tip takes its head start off
 ## the top, so the very next cycle begins part-way along instead of empty.
@@ -2979,7 +3032,7 @@ func chip_augment_price(augment_id: String) -> int:
 	var entry: Variant = ChipAugments.map().get(augment_id, null)
 	if entry == null:
 		return 0
-	return ChipAugments.discounted_price(int(entry["cost"]),
+	return ChipAugments.discounted_price(_augmented_marked_up(int(entry["cost"])),
 		int(MetaStateStore.chipAugmentsPurchased.get("aug_chip_discount", 0)))
 
 ## Consumable Discount applies to the (pre-run) consumable shop prices.
@@ -2987,8 +3040,18 @@ func consumable_price(consumable_id: String) -> int:
 	var cmap := Consumables.map()
 	if not cmap.has(consumable_id):
 		return 0
-	return ChipAugments.discounted_price(int(cmap[consumable_id]["shopCost"]),
+	return ChipAugments.discounted_price(
+		_augmented_marked_up(int(cmap[consumable_id]["shopCost"])),
 		int(MetaStateStore.chipAugmentsPurchased.get("aug_consumable_discount", 0)))
+
+## A base cost after the club markup, on the project rounding rule. Every price the
+## dealer shows and charges runs through the two functions above, so buying, selling
+## back and the displayed number can never disagree about what a club run costs.
+func _augmented_marked_up(base_cost: int) -> int:
+	var multiplier := augmented_price_multiplier()
+	if is_equal_approx(multiplier, 1.0):
+		return base_cost
+	return floori(float(base_cost) * multiplier + 0.5)
 
 ## The level every readout must show: the persisted permanent level, the levels
 ## staged in an open odds phase, and this campaign's Symbol Level augments.

@@ -5077,33 +5077,35 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
 		if dealer_bar == null or dealer_bar.frame != int(intermediate_frame):
 			failures.append("issue155: two-step dealer bar transition skipped frame %d" % int(intermediate_frame))
-	# PR #169: Club/Joker doubles the countdown, but the authored bar still spans
-	# all 13 frames across the complete 24-step cycle.
-	var previous_augmented_tier := String(run_store.augmentedTier)
-	run_store.augmentedTier = "club"
+	# PR #169: the authored bar spans all 13 frames across the COMPLETE cycle, whatever
+	# its length. Club used to be what made the cycle longer (issue #111 redesign moved
+	# it onto prices), so the coverage now drives dealer_countdown_start directly — the
+	# one knob that still changes the cycle the bar has to scale itself against.
+	var previous_countdown_start := int(run_store.dealer_countdown_start)
+	run_store.dealer_countdown_start = 24
 	run_store.dealerCountdown = 24
 	machine._refresh_dealer_countdown()
 	if dealer_bar == null or dealer_bar.frame != 0:
-		failures.append("pr169: Club dealer bar did not reset to frame 0 at countdown 24")
+		failures.append("pr169: dealer bar did not reset to frame 0 at a 24-step countdown")
 	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
 	if int(machine._dealer_bar_target_frame) != 6:
-		failures.append("pr169: Club dealer bar midpoint was not frame 6")
+		failures.append("pr169: 24-step dealer bar midpoint was not frame 6")
 	for _step in 6:
 		machine._step_dealer_bar_progress(
 			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
 	if dealer_bar == null or dealer_bar.frame != 6:
-		failures.append("pr169: Club dealer bar did not reach frame 6 at countdown 12")
+		failures.append("pr169: 24-step dealer bar did not reach frame 6 at countdown 12")
 	run_store.dealerCountdown = 0
 	machine._refresh_dealer_countdown()
 	if int(machine._dealer_bar_target_frame) != 12:
-		failures.append("pr169: Club dealer bar did not target frame 12 at countdown 0")
+		failures.append("pr169: 24-step dealer bar did not target frame 12 at countdown 0")
 	for _step in 6:
 		machine._step_dealer_bar_progress(
 			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
 	if dealer_bar == null or dealer_bar.frame != 12:
-		failures.append("pr169: Club dealer bar did not reach its final frame")
-	run_store.augmentedTier = previous_augmented_tier
+		failures.append("pr169: 24-step dealer bar did not reach its final frame")
+	run_store.dealer_countdown_start = previous_countdown_start
 	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
 	run_store.betMultiplier = 3
@@ -7680,63 +7682,143 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 	run_store.powersUsedThisSpin = 1
 	if run_store.lastResult != null and not run_store._can_use_ability():
 		failures.append("issue111: diamond blocked the second power of a spin")
+	# Diamond: the threshold Pacte deals a power only, and completing it with no
+	# augment is legitimate rather than refused.
+	if not run_store.augmented_pacte_augment_suppressed():
+		failures.append("issue111: diamond did not suppress the threshold augment offer")
+	run_store.augmentedTier = ""
+	if run_store.augmented_pacte_augment_suppressed():
+		failures.append("issue111: a classic run suppressed the threshold augment offer")
 
-	# Club: dealer visits and spin rewards are halved. With the issue #155 fixed
-	# countdown, "half the visits" means the reset value doubles (12 -> 24).
+	# Club: prices are marked up and a HOUSE ANGER row joins the target bill. The
+	# effects it used to have — halved rewards, halved passive gain, doubled dealer
+	# wait — are gone, so those must now read identically to a classic run.
 	run_store.augmentedTier = ""
 	var base_reset: int = run_store.dealer_countdown_reset_value()
 	var base_scale: float = run_store._active_reward_scale()
+	var base_passive: int = run_store._passive_lucidity_per_spin()
+	var base_chip_price: int = run_store.chip_augment_price("aug_extra_spins")
+	var base_item_price: int = run_store.consumable_price("cons_potion")
+	var base_reroll: int = run_store.dealer_reroll_price()
 	run_store.augmentedTier = "club"
-	if int(run_store.dealer_countdown_reset_value()) != base_reset * 2:
-		failures.append("issue111: club did not double the dealer countdown reset")
-	if not is_equal_approx(run_store._active_reward_scale(), base_scale * 0.5):
-		failures.append("issue111: club did not halve the spin reward scale")
+	if int(run_store.dealer_countdown_reset_value()) != base_reset:
+		failures.append("issue111: club still changes the dealer countdown reset")
+	if not is_equal_approx(run_store._active_reward_scale(), base_scale):
+		failures.append("issue111: club still scales the spin reward")
+	if int(run_store._passive_lucidity_per_spin()) != base_passive:
+		failures.append("issue111: club still scales the passive lucidity gain")
+	if int(run_store.dealer_reroll_price()) != base_reroll:
+		failures.append("issue111: club must leave the dealer reroll price alone")
+	var want_chip := floori(float(base_chip_price) * 1.5 + 0.5)
+	var want_item := floori(float(base_item_price) * 1.5 + 0.5)
+	if int(run_store.chip_augment_price("aug_extra_spins")) != want_chip:
+		failures.append("issue111: club chip price %d, expected %d" \
+			% [int(run_store.chip_augment_price("aug_extra_spins")), want_chip])
+	if int(run_store.consumable_price("cons_potion")) != want_item:
+		failures.append("issue111: club item price %d, expected %d" \
+			% [int(run_store.consumable_price("cons_potion")), want_item])
+	if not is_equal_approx(run_store.augmented_anger_tax_rate(), EconomyConst.OVERFLOW_ANGER_RATE):
+		failures.append("issue111: club did not arm the house anger tax")
+	var club_bill: Dictionary = EconomyConst.overflow_bill(150, 500,
+		run_store.augmented_anger_tax_rate())
+	var club_rows: Array = club_bill["lines"] as Array
+	if club_rows.size() != EconomyConst.OVERFLOW_TAX_LINES.size() + 1:
+		failures.append("issue111: club bill has %d rows, expected one more than classic" \
+			% club_rows.size())
+	elif String((club_rows[club_rows.size() - 1] as Dictionary)["label"]) \
+			!= String(EconomyConst.OVERFLOW_ANGER_LINE["label"]):
+		failures.append("issue111: the club bill's last row is not HOUSE ANGER")
+	if int(club_bill["net"]) >= int(EconomyConst.overflow_bill(150, 500)["net"]):
+		failures.append("issue111: the house anger row took nothing off the overflow")
+	# The angriest bill must still leave the player something: an overflow that banks
+	# zero teaches them to stop overshooting, which flattens the whole target economy.
+	if int(EconomyConst.overflow_bill(5000, 500, EconomyConst.OVERFLOW_ANGER_RATE)["net"]) <= 0:
+		failures.append("issue111: the top club band confiscates the whole overflow")
+	# The anger row is the last one on the receipt and carries its own key, which is what
+	# the payout screen colours red. The rendered row itself is covered by the payout
+	# screen's own check rather than by standing another live overlay up here.
+	var anger_row: Dictionary = club_rows[club_rows.size() - 1] as Dictionary
+	if String(anger_row.get("key", "")) != String(EconomyConst.OVERFLOW_ANGER_LINE["key"]):
+		failures.append("issue111: the club bill's last row does not carry the anger key")
+	run_store.augmentedTier = ""
+	if not is_equal_approx(run_store.augmented_anger_tax_rate(), 0.0):
+		failures.append("issue111: a classic run armed the house anger tax")
+	if int(run_store.consumable_price("cons_potion")) != base_item_price:
+		failures.append("issue111: the club markup outlived the club run")
 
-	# Spade: the banked end-of-run gain is halved (10% -> 5%).
+	# Spade: a spent charge takes two spins to come back, counted from the spend, and the
+	# pips under the light track that wait — dark whenever a charge is banked.
+	run_store.augmentedTier = "spade"
+	run_store.powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
+	run_store.powerRestoreProgress = 0
+	run_store._recharge_restores()
+	if int(run_store.restore_cycle_progress()) != 0:
+		failures.append("issue111: spade counted down while a restore charge was banked")
+	# Spending it starts the cycle from zero: the light goes out with both pips dark.
+	run_store._spend_restore_budget(1)
+	if int(run_store.restore_budget_left()) != 0 or int(run_store.restore_cycle_progress()) != 0:
+		failures.append("issue111: spending a charge did not reset the spade cycle")
+	run_store._recharge_restores()
+	if int(run_store.restore_cycle_progress()) != 1:
+		failures.append("issue111: the first spade wait spin did not light one pip")
+	if int(run_store.restore_budget_left()) != 0:
+		failures.append("issue111: spade handed the charge back after a single spin")
+	run_store._recharge_restores()
+	if int(run_store.restore_cycle_progress()) != EconomyConst.SPADE_RESTORE_CYCLE_SPINS:
+		failures.append("issue111: the second spade wait spin did not light both pips")
+	if int(run_store.restore_budget_left()) != EconomyConst.POWER_RESTORE_CHARGE_MAX:
+		failures.append("issue111: spade never handed the restore charge back")
+	# Banked again, so the countdown clears rather than sticking at full.
+	run_store._recharge_restores()
+	if int(run_store.restore_cycle_progress()) != 0:
+		failures.append("issue111: the spade pips stayed lit under a banked charge")
+	# A classic run refills every spin and never shows a countdown.
+	run_store.augmentedTier = ""
+	run_store.powerRestoreCharges = 0
+	run_store._recharge_restores()
+	if int(run_store.restore_budget_left()) != EconomyConst.POWER_RESTORE_CHARGE_MAX:
+		failures.append("issue111: a classic spin did not refill the restore charge")
+	if int(run_store.restore_cycle_progress()) != 0:
+		failures.append("issue111: a classic run showed a restore countdown")
 	run_store.augmentedTier = "spade"
 	meta_store.ownedPermanents = []
 	meta_store.lucidityWallet = 0
 	meta_store.bank_run({ "lucidityCoins": 200, "scoreEarned": 0, "neurons": 1 }, "flatline")
-	if int(meta_store.lucidityWallet) != 10:
-		failures.append("issue111: spade banked %d of 200, expected 5%% = 10" % int(meta_store.lucidityWallet))
-	if not is_equal_approx(machine._end_run_lucidity_kept_fraction(), 0.05):
-		failures.append("issue111: machine kept-fraction display does not match the spade bank")
+	if int(meta_store.lucidityWallet) != 20:
+		failures.append("issue111: spade banked %d of 200, expected the classic 10%% = 20" \
+			% int(meta_store.lucidityWallet))
+	if not is_equal_approx(machine._end_run_lucidity_kept_fraction(), 0.10):
+		failures.append("issue111: the machine still shows spade a halved kept fraction")
 
-	# Heart: the machine no longer tops up a brain-triple free spin.
+	# Heart: a paid spin costs two health, the last chip costs one, and the spins the
+	# run never charges for stay free. The brain jackpot is untouched again.
 	run_store.augmentedTier = "heart"
+	if int(run_store._augmented_health_cost_multiplier()) != 2:
+		failures.append("issue111: heart did not double the health cost of a spin")
+	run_store.augmentedTier = ""
+	if int(run_store._augmented_health_cost_multiplier()) != 1:
+		failures.append("issue111: a classic spin cost more than one health")
+	run_store.augmentedTier = "heart"
+	var heart_decay: int = Economy.compute_neuron_decay(run_store.ownedUpgrades) \
+		* run_store._augmented_health_cost_multiplier()
+	if mini(heart_decay, 4) != 2:
+		failures.append("issue111: heart charged %d health with room to spare" % mini(heart_decay, 4))
+	if mini(heart_decay, 1) != 1:
+		failures.append("issue111: heart did not discount the run's last health chip")
 	var spins_before := int(run_store.freeSpinsRemaining)
 	machine._apply_symbol_triple("brain", 0, false)
-	if int(run_store.freeSpinsRemaining) != spins_before:
-		failures.append("issue111: heart brain triple still granted a free spin")
-	# Heart: the TABLES popup shows the halved jackpot value.
+	if int(run_store.freeSpinsRemaining) <= spins_before:
+		failures.append("issue111: heart still suppresses the brain triple's free spin")
 	machine._close_score_table()
 	machine._show_score_table()
 	if machine._score_overlay == null:
 		failures.append("issue111: score table failed to open for the heart check")
 	else:
 		var table_texts := _overlay_label_texts(machine._score_overlay)
-		if not table_texts.has("+100"):
-			failures.append("issue111: score table does not show the heart jackpot (+100)")
-		if table_texts.has("+200"):
-			failures.append("issue111: score table still shows the classic jackpot (+200)")
+		if not table_texts.has("+200"):
+			failures.append("issue111: heart no longer pays the full jackpot in the score table")
 	machine._close_score_table()
-	# Heart: the jackpot's evaluated score is halved (200 -> 100), classic isn't.
-	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 100:
-		failures.append("issue111: heart did not cut the jackpot score to 100")
-	if int(run_store._augmented_jackpot_cut(200, "triple")) != 0:
-		failures.append("issue111: heart cut a non-jackpot win")
-	# Heart applies after the Flatline boost: a 200-point jackpot doubled to 400
-	# still pays 200, rather than subtracting only the original 100-point cut.
-	var jackpot_base_score := 200
-	var flatline_jackpot_boost := jackpot_base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
-	var adjusted_jackpot: Dictionary = run_store._apply_augmented_jackpot(
-		jackpot_base_score + flatline_jackpot_boost, "jackpot")
-	if int(adjusted_jackpot["score"]) != jackpot_base_score \
-			or int(adjusted_jackpot["cut"]) != jackpot_base_score:
-		failures.append("issue111: heart did not halve the boosted jackpot payout")
 	run_store.augmentedTier = ""
-	if int(run_store._augmented_jackpot_cut(200, "jackpot")) != 0:
-		failures.append("issue111: classic runs must not cut the jackpot")
 
 	# The tier survives start_new_run (menu -> pre-run shop -> run handoff).
 	run_store.runPhase = "idle"
@@ -8103,7 +8185,7 @@ func _check_augmented_menu_111(run_store: Node, meta_store: Node, failures: Arra
 			failures.append("issue111: cycling right did not select heart")
 		if symbols.frame != 1:
 			failures.append("issue111: heart selection should show symbols frame 1")
-		if desc.text != "JACKPOT 100, NO FREE SPIN":
+		if desc.text != String(menu.AUGMENTED_DESCRIPTIONS["heart"]):
 			failures.append("issue111: heart description not communicated before start")
 		if start.text != "AUGMENTED RUN":
 			failures.append("issue111: start button did not switch to AUGMENTED RUN")
@@ -8485,19 +8567,18 @@ func _check_ending_cleanup_161(machine: Node, run_store: Node, failures: Array) 
 	run_store.dealerPending = prev_pending
 	run_store.dealerOfferIds = prev_offers
 
-## New-run balance: 15 starting spins, dealer countdown 12 (Club modifier 24).
+## New-run balance: 15 starting spins, dealer countdown 12 under every suit — the
+## issue #111 redesign took Club off the dealer axis and put it on prices.
 func _check_new_run_balance_161(run_store: Node, failures: Array) -> void:
 	if int(EconomyConst.STARTING_NEURONS) != 15:
 		failures.append("pr161: fresh runs should start with 15 spins")
 	if int(run_store.dealer_countdown_start) != 12:
 		failures.append("pr161: dealer countdown should start at 12")
 	var prev_tier := String(run_store.augmentedTier)
-	run_store.augmentedTier = ""
-	if int(run_store.dealer_countdown_reset_value()) != 12:
-		failures.append("pr161: dealer countdown should reset to 12")
-	run_store.augmentedTier = "club"
-	if int(run_store.dealer_countdown_reset_value()) != 24:
-		failures.append("pr161: Club modifier should reset the dealer countdown to 24")
+	for tier in ["", "club", "joker"]:
+		run_store.augmentedTier = tier
+		if int(run_store.dealer_countdown_reset_value()) != 12:
+			failures.append("pr161: dealer countdown should reset to 12 on tier '%s'" % String(tier))
 	run_store.augmentedTier = prev_tier
 
 ## Pacte card ritual smoke coverage: native art, staged/saveable selections, the
