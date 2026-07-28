@@ -241,8 +241,35 @@ Resources and currencies:
   Chip Augment; offers can be rerolled for escalating run Lucidity. Taking or
   refusing the visit both reset the countdown.
 - Chip Augments: consumable/chip discounts, permanent symbol-level pushes, +3
-  spins per copy, expanded offers, and the legendary pair/triple specialist
-  (chosen win type pays x1.25).
+  spins per copy, expanded offers, the legendary pair/triple specialist (chosen
+  win type pays x1.25), Dealer's Tip and Emergency Reserve.
+- Chip Augments are CAMPAIGN state and live on MetaStateStore, not the run: they
+  survive new runs, Pactes, flatline continuations and Wealth target round
+  breaks, and are cleared only when the campaign itself ends (wealth ending or
+  game over). `_clear_campaign_augments()` is the single place that removes them.
+- Symbol Level picker: the odds table opens holding one golden token. Tapping a
+  row's "+" stages the pick and spends the token on the spot — the wallet drops
+  to zero and EVERY "+" closes, the picked symbol's included. Only that symbol's
+  "-" stays live, and using it hands the token back and reopens every eligible
+  "+". DONE commits the staged pick; with nothing staged the button reads CANCEL.
+  One augment level per symbol, ever, up to the level-9 hard cap.
+- Dealer's Tip: the dealer countdown never starts empty again. Every reset begins
+  2 steps in, so the bar reads 2/12 instead of 0/12 and the dealer comes round
+  sooner. The countdown's SCALE is unchanged — `dealer_countdown_cycle_length()`
+  (12) drives the bar, `dealer_countdown_reset_value()` (10) is what a resolved
+  visit resets to. Applies from the next reset; the running countdown is not
+  touched.
+- Emergency Reserve: one paid spin back when a paid spin leaves the run with no
+  neurons and no free spins. Resource exhaustion only — a flatline strike, a
+  combo-loss confirmation, or a spin that already restored spins never spends it,
+  because the check runs after the spin's own restores and reads neither. Fires
+  once per CAMPAIGN (`MetaStateStore.emergencyReserveUsed`), so it does not
+  re-arm on a new run or a target round break.
+- Purchase feedback is data-driven: `ChipAugments.FEEDBACK` maps each effect to a
+  scene ("dealer" or "machine") and a target. Payoffs that only exist back at the
+  machine are queued through `SceneNav.queue_feedback()` and collected once on
+  entry. That queue is presentation state and is never saved; a missing visual
+  target skips its effect silently and never affects gameplay.
 - The dealer scene is used for in-run visits and the post-Wealth odds phase; a
   fresh run no longer opens a pre-run consumable shop.
 - Sequencing: the visit waits behind reel/reroll animation, the power-coin

@@ -25,8 +25,20 @@ const REEL_HOLES := [
 ]
 const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
 # Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
-# N spins remaining — frame 0 = empty/no spins, frame 18 = 18+ spins.
-const HEALTH_BAR_FRAME_COUNT := 19
+# N spins remaining — frame 0 = empty/no spins, frame 19 = 19+ spins. The sheet
+# grew a chip (19 frames -> 20) and EconomyConst.MAX_NEURONS rose with it, so the
+# top of the tube is reachable rather than authored-but-dead.
+const HEALTH_BAR_FRAME_COUNT := 20
+# The tube's bottom chip — the last spin the run has — measured off health_bar.png as the
+# pixels that differ between frame 0 (empty) and frame 1 (one spin). An armed Emergency
+# Reserve glows exactly that chip: the reserve IS one more spin waiting under the last
+# one, so it reads where the player already looks for spins rather than as a new badge.
+const HEALTH_BOTTOM_CHIP_RECT := Rect2(4.0, 98.0, 13.0, 7.0)
+const HEALTH_BAR_FRAME_W := 160.0 # full-canvas sheet: one frame is the whole canvas
+const RESERVE_GLOW_COLOR := Color(0.55, 1.0, 0.85)
+const RESERVE_GLOW_MIN_ALPHA := 0.22
+const RESERVE_GLOW_MAX_ALPHA := 0.72
+const RESERVE_GLOW_PERIOD := 1.1
 const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
 const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
@@ -203,6 +215,11 @@ const DEALER_BAR_OVERLAY_3_SHEET := "machine new view/dealer_bar_overlay_3.png"
 const DEALER_BAR_OVERLAY_1_FRAMES := 12
 const DEALER_BAR_OVERLAY_2_FRAMES := 11
 const DEALER_BAR_OVERLAY_3_FRAMES := 10
+# Dealer's Tip (issue #132) starts every countdown DEALER_TIP_HEAD_START steps along, and
+# this single native full-canvas frame recolours exactly those first steps so the head
+# start is visible on the bar instead of only in the arithmetic. Shown while the augment
+# is owned: each reset comes back onto the tipped value, so those steps are never unlit.
+const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
 # The bar walks through each authored progress frame when one spin advances it
 # by multiple steps; the warning itself beeps through alpha so it does not
 # reveal a different countdown position before that spin's result is known.
@@ -472,6 +489,12 @@ const RESTORE_FLASH_CHIP_TINT := Color(2.2, 2.7, 2.6)
 const RESTORE_FLASH_GLOW_TINT := Color(2.4, 2.8, 2.8)
 const RESTORE_FLASH_NUDGE := 0.45
 
+# Dealer-purchase payoffs that land back here (issue #132). Same overdriven-flash idiom
+# as the restore feedback, so a bought chip announces itself in the machine's own voice.
+const SCENE_FEEDBACK_TINT := Color(2.0, 2.4, 2.3)
+const SCENE_FEEDBACK_FADE := 0.5
+const SCENE_FEEDBACK_LABEL_COLOR := Color(0.42, 1.0, 0.95)
+
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
@@ -689,6 +712,7 @@ var _dealer_bar_sprite: Sprite2D = null
 var _dealer_bar_overlay_1: Sprite2D = null
 var _dealer_bar_overlay_2: Sprite2D = null
 var _dealer_bar_overlay_3: Sprite2D = null
+var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
 var _dealer_bar_display_frame: int = 0
 var _dealer_bar_target_frame: int = 0
 var _dealer_bar_progress_time: float = 0.0
@@ -718,6 +742,8 @@ var _tv_blackout_rect: ColorRect = null
 var _tv_blackout_tween: Tween = null
 var _unlock_popup: UnlockCardPopup = null
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
+var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
+var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _win_anim_sprite: Sprite2D = null
 var _win_anim_tween: Tween = null
@@ -908,6 +934,7 @@ func _ready() -> void:
 	_build_options_controls()
 	_build_augmented_badge()
 	_restore_options_overlay_if_requested()
+	_play_pending_scene_feedback()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_augment_glitch_rng.seed = 181_0726
@@ -1286,6 +1313,7 @@ func _build_tv_indicators() -> void:
 	_build_target_readout()
 	_health_bar_sprite = _build_full_canvas_sheet(
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
+	_build_reserve_glow()
 	_build_spins_left_label()
 	_coin_insert_sprite = _build_full_canvas_sheet(
 		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
@@ -1421,6 +1449,51 @@ func _build_power_bar() -> void:
 	# the ability itself was already restored by plan_gain at spin time).
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
+
+## A soft pulse on the tube's bottom chip while the Emergency Reserve is armed (issue
+## #132). Rather than invent a badge, this re-draws the authored chip pixels themselves —
+## a region of frame 1 of the tube sheet, laid exactly over where that chip already sits —
+## so the glow can never drift out of register with the art it is highlighting.
+func _build_reserve_glow() -> void:
+	var tex := _load_texture("machine new view/health_bar.png", true)
+	if tex == null:
+		return
+	_reserve_glow_sprite = Sprite2D.new()
+	_reserve_glow_sprite.name = "ReserveGlow"
+	_reserve_glow_sprite.texture = tex
+	_reserve_glow_sprite.centered = false
+	_reserve_glow_sprite.region_enabled = true
+	# Frame 1 is "one spin left", so its copy of the chip is the lit one to borrow.
+	_reserve_glow_sprite.region_rect = Rect2(
+		HEALTH_BAR_FRAME_W + HEALTH_BOTTOM_CHIP_RECT.position.x,
+		HEALTH_BOTTOM_CHIP_RECT.position.y,
+		HEALTH_BOTTOM_CHIP_RECT.size.x, HEALTH_BOTTOM_CHIP_RECT.size.y)
+	_reserve_glow_sprite.position = HEALTH_BOTTOM_CHIP_RECT.position
+	_reserve_glow_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	_reserve_glow_sprite.z_index = 3 # over the tube, under the HUD overlays
+	_reserve_glow_sprite.visible = false
+	add_child(_reserve_glow_sprite)
+
+## Armed → a slow breathing glow; spent or unowned → nothing at all.
+func _refresh_reserve_glow() -> void:
+	if _reserve_glow_sprite == null:
+		return
+	var armed := RunStateStore.runPhase == "running" \
+		and RunStateStore.emergency_reserve_armed()
+	if armed == _reserve_glow_sprite.visible:
+		return # already in the right state; never restart the pulse mid-breath
+	_reserve_glow_sprite.visible = armed
+	if _reserve_glow_tween != null and _reserve_glow_tween.is_valid():
+		_reserve_glow_tween.kill()
+	_reserve_glow_tween = null
+	if not armed:
+		return
+	_reserve_glow_sprite.modulate = Color(RESERVE_GLOW_COLOR, RESERVE_GLOW_MIN_ALPHA)
+	_reserve_glow_tween = create_tween().set_loops()
+	_reserve_glow_tween.tween_property(_reserve_glow_sprite, "modulate:a",
+		RESERVE_GLOW_MAX_ALPHA, RESERVE_GLOW_PERIOD).set_trans(Tween.TRANS_SINE)
+	_reserve_glow_tween.tween_property(_reserve_glow_sprite, "modulate:a",
+		RESERVE_GLOW_MIN_ALPHA, RESERVE_GLOW_PERIOD).set_trans(Tween.TRANS_SINE)
 
 ## The restore light sitting beside the gauge (issue #181). Full-canvas art, so the
 ## placement is baked in and the code only picks the frame. The glow copy sits on top on
@@ -1664,6 +1737,7 @@ func _build_machine_control_art() -> void:
 		DEALER_BAR_OVERLAY_2_SHEET, DEALER_BAR_OVERLAY_2_FRAMES)
 	_dealer_bar_overlay_3 = _build_full_canvas_sheet(
 		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
+	_build_dealer_tip_steps()
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
@@ -1952,11 +2026,43 @@ func _build_dealer_icon() -> void:
 ## lights the state earned.
 const DEALER_WARNING_FAST_BEEP_LIGHTS := 2
 
+## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own
+## visibility is driven from four unrelated places (the callout mute, the losing-state
+## re-show, _restore_tv_info_layers, and the ending's name-based sweep in
+## _set_tv_progress_bars_visible), and a sibling would have to be remembered in every one
+## of them. As a child it simply never draws when the bar doesn't. Both are native 1:1
+## full-canvas art at the origin, so the child needs no transform of its own.
+func _build_dealer_tip_steps() -> void:
+	if _dealer_bar_sprite == null:
+		return
+	var tex := _load_texture(DEALER_TIP_STEPS_SHEET, true)
+	if tex == null:
+		return
+	_dealer_tip_steps = Sprite2D.new()
+	_dealer_tip_steps.name = "DealerTipSteps"
+	_dealer_tip_steps.texture = tex
+	_dealer_tip_steps.centered = false
+	_dealer_tip_steps.position = Vector2.ZERO
+	_dealer_tip_steps.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	_dealer_tip_steps.visible = false
+	# Above the bar it recolours, below the warning lights that beep over everything.
+	_dealer_bar_sprite.add_child(_dealer_tip_steps)
+
+## Owned → the tipped steps wear their own colour; not owned → the bar is untouched.
+func _refresh_dealer_tip_steps() -> void:
+	if _dealer_tip_steps == null:
+		return
+	_dealer_tip_steps.visible = int(RunStateStore.dealer_tip_head_start()) > 0
+
 func _refresh_dealer_countdown() -> void:
+	_refresh_dealer_tip_steps()
 	if _dealer_bar_sprite == null:
 		return
 	var remaining := maxi(0, int(RunStateStore.dealerCountdown))
-	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_reset_value()))
+	# The FULL cycle, not the reset value: Dealer's Tip resets to 10 of 12, and the bar
+	# has to show that as 2/12 filled. Measuring against the reset value instead would
+	# redraw the same empty bar on a shorter scale and hide the head start entirely.
+	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_cycle_length()))
 	var elapsed := clampi(cycle_start - remaining, 0, cycle_start)
 	var progress_frame := clampi(roundi(float(elapsed) * float(DEALER_BAR_FRAME_COUNT - 1)
 		/ float(cycle_start)), 0, DEALER_BAR_FRAME_COUNT - 1)
@@ -2097,6 +2203,48 @@ func _restore_options_overlay_if_requested() -> void:
 		return
 	if SceneNav.consume_restore_options(String(scene_file_path)):
 		_options_overlay.call_deferred("show_overlay")
+
+## Collects the notes the dealer left for this scene (issue #132): a chip bought at the
+## counter whose payoff lives on the machine — Extra Spins filling the tube, the Tip
+## shortening the dealer's walk, the Reserve arming. Purely cosmetic: every target is
+## checked and a missing one skips its effect, so feedback can never block a run.
+func _play_pending_scene_feedback() -> void:
+	if Engine.is_editor_hint():
+		return
+	for note: Dictionary in SceneNav.take_pending_feedback():
+		var fb := ChipAugments.feedback_for(String((note.get("data", {}) as Dictionary).get("augment", "")))
+		var label := String(fb.get("label", ""))
+		match String(note.get("id", "")):
+			"spins":
+				_pulse_spins_readout(label)
+			"dealer_bar":
+				_pulse_dealer_bar(label)
+
+## The spins tube/count flashes and the label pops beside it — what Extra Spins and the
+## armed Reserve both pay out in.
+func _pulse_spins_readout(label: String) -> void:
+	var target: CanvasItem = _spins_left_label
+	if target == null or not is_instance_valid(target):
+		return
+	target.modulate = SCENE_FEEDBACK_TINT
+	var tw := create_tween()
+	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
+		.set_trans(Tween.TRANS_SINE)
+	if label != "":
+		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 0)
+
+## The dealer bar flashes on its new head start, so the Tip's 2/12 is seen being bought.
+func _pulse_dealer_bar(label: String) -> void:
+	_refresh_dealer_countdown() # the head start applies from this reset onward
+	var target: CanvasItem = _dealer_bar_sprite
+	if target == null or not is_instance_valid(target):
+		return
+	target.modulate = SCENE_FEEDBACK_TINT
+	var tw := create_tween()
+	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
+		.set_trans(Tween.TRANS_SINE)
+	if label != "":
+		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 2)
 
 func _set_score_button_locked(locked: bool) -> void:
 	if _score_button == null:
@@ -2298,6 +2446,10 @@ func _resolve_interrupted_spin() -> void:
 	_refresh_jackpot_lamp()
 	_apply_machine_reactions(false) # flatline-result / triple reactions the player earned
 	if _check_flatline_instant_death():
+		return
+	# A spin that beats the target and warns of a loss in the same breath pays first —
+	# the warning would otherwise return past the ending check and bury the payout.
+	if _proc_wealth_target():
 		return
 	if RunStateStore.comboDefeatPending:
 		if not _discard_moot_combo_defeat():
@@ -2693,6 +2845,11 @@ func _run_post_reveal_sequence() -> void:
 		await get_tree().create_timer(reward_time - pop_lead).timeout
 	# Instant death from stacked flatline results takes precedence (issue #35).
 	if _check_flatline_instant_death():
+		_post_spin_sequence_active = false
+		return
+	# Same precedence as the reveal tail: a beaten target is paid before the warning can
+	# return past _finish_post_spin_sequence and its ending check.
+	if _proc_wealth_target():
 		_post_spin_sequence_active = false
 		return
 	if RunStateStore.comboDefeatPending:
@@ -3359,7 +3516,7 @@ func _refresh_tv_indicators() -> void:
 		_set_sheet_frame(_health_bar_sprite,
 			clampi(spins_left, 0, HEALTH_BAR_FRAME_COUNT - 1))
 	# The numeric readout under the tube follows the same budget (spends, gains,
-	# protections all land here via _update_hud), capped at 18 spins.
+	# protections all land here via _update_hud), capped at MAX_NEURONS spins.
 	if _spins_left_label != null:
 		_spins_left_label.visible = true
 		_spins_left_label.text = str(spins_left)
@@ -4451,6 +4608,7 @@ func _stash_slots() -> Array:
 func _refresh_controls() -> void:
 	_refresh_multiplier_controls()
 	_refresh_restore_cap()
+	_refresh_reserve_glow()
 
 	var combo_pending := RunStateStore.comboDefeatPending
 	var can_confirm_combo_loss := combo_pending and RunStateStore.runPhase == "running" \
@@ -6986,13 +7144,22 @@ func _wealth_target_due_now() -> bool:
 ## move the score — the spin tail, a consumable, a power rescore — so the player never
 ## has to pull the lever again just to be told the target was already beaten.
 ## Returns true when the transition took the screen.
+## A beaten target outranks a pending combo defeat. The rescue window exists to let the
+## player buy their way out before the confirming spin, and beating the target IS the way
+## out: the round ends on the payout, so the loss resolves into it (the multiplier still
+## steps down) rather than holding the screen for a spin nobody has to take.
 func _proc_wealth_target() -> bool:
-	if _wealth_target_transition_active or RunStateStore.comboDefeatPending:
+	if _wealth_target_transition_active:
 		return false
 	if not _wealth_target_due_now():
 		return false
 	var target_info := RunStateStore.begin_wealth_target()
-	return not target_info.is_empty() and _start_wealth_target_transition(target_info)
+	if target_info.is_empty():
+		return false
+	if RunStateStore.comboDefeatPending:
+		RunStateStore.resolve_pending_combo_defeat(false)
+		_close_pending_combo_defeat()
+	return _start_wealth_target_transition(target_info)
 
 ## Score gained outside the spin sequence (item / power). Pops the target payout the
 ## moment it is earned; returns true when something took the screen and the caller
@@ -7003,10 +7170,12 @@ func _settle_off_spin_score_change() -> bool:
 	return _check_ending()
 
 func _check_ending() -> bool:
-	if RunStateStore.comboDefeatPending:
-		return false
+	# The target is settled even while a loss warning is up (see _proc_wealth_target);
+	# only the ending itself waits for the confirming spin.
 	if _proc_wealth_target():
 		return true
+	if RunStateStore.comboDefeatPending:
+		return false
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
@@ -7238,6 +7407,11 @@ func _clear_wealth_presentation_fx() -> void:
 		_nudge_tween.kill()
 		_nudge_tween = null
 	_stop_restore_flash() # never leave a chip overdriven or a glow painted on the gauge
+	if _reserve_glow_tween != null and _reserve_glow_tween.is_valid():
+		_reserve_glow_tween.kill()
+	_reserve_glow_tween = null
+	if _reserve_glow_sprite != null and is_instance_valid(_reserve_glow_sprite):
+		_reserve_glow_sprite.visible = false
 	_clear_close_call_heartbeat()
 	position = Vector2.ZERO
 
@@ -7384,7 +7558,7 @@ func _build_flatline_countdown(run: Dictionary,
 	_flatline_countdown_elapsed = 0.0
 	_flatline_countdown_active = _flatline_kept < _flatline_total
 
-	# Retained-percent line only ("10% kept", or "20% kept" with Smart Saving);
+	# Retained-percent line only ("10% kept", or "50% kept" with Smart Saving);
 	# the draining number below it is the whole story.
 	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
 	if flatline_screen != null:
@@ -7472,9 +7646,9 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 		_hide_tv_info_layers()
 
 func _end_run_lucidity_kept_fraction() -> float:
-	var frac := EconomyConst.SMART_SAVE_LUCIDITY_KEPT \
-		if MetaStateStore.ownedPermanents.has(EconomyConst.SMART_SAVE_UPGRADE_ID) \
-		else EconomyConst.END_OF_RUN_LUCIDITY_KEPT
+	# Asks the store rather than reading ownedPermanents directly, so a Pacte-granted
+	# SMART SAVING counts here exactly as it does in the bank.
+	var frac := MetaStateStore.effective_lucidity_kept_fraction()
 	# Augmented spade modifier (issue #111): end-of-run gain kept is halved.
 	# Mirrors MetaStateStore.bank_run so the "% kept" countdown matches the bank.
 	return frac * 0.5 if RunStateStore.augmented_modifier_active(2) else frac

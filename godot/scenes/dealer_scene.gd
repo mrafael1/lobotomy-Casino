@@ -108,6 +108,11 @@ const LAB_GLOW_PERIOD := 0.85
 # Issue #84: confirm before the machine button starts the run (misclick guard).
 const CANVAS_W := 160.0
 const CANVAS_H := 320.0
+# A three-button picker row has to fit the canvas: 3 x 42 + 2 x 4 = 134, inside the
+# 136 the panel gets. The default 44-wide confirm button would total 144 and push its
+# outer buttons past the edge.
+const PICKER_BUTTON_SIZE := Vector2(42.0, 18.0)
+const PICKER_BUTTON_GAP := 4
 
 # Pre-run pool only (Consumables.LIST) — see item_hints note (issue #31).
 const ITEM_ICONS := {
@@ -409,9 +414,9 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	var hframes := 1
 	if kind == "augment":
 		var entry: Variant = ChipAugments.map().get(id, null)
-		hframes = ChipAugments.ICON_HFRAMES
+		hframes = ChipAugments.icon_frames(tex)
 		spr.hframes = hframes
-		spr.frame = int(entry.get("frame", 0)) if entry != null else 0
+		spr.frame = ChipAugments.icon_frame(id, hframes) if entry != null else 0
 	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(size_px / frame_w, size_px / float(tex.get_height()))
@@ -908,6 +913,128 @@ func _commit_augment_purchase(id: String, choice: String) -> void:
 	# a table still open behind the offer must not keep the pre-purchase meter.
 	if _odds_overlay != null and is_instance_valid(_odds_overlay):
 		_odds_overlay.refresh_levels()
+	_play_augment_feedback(id, choice)
+
+## Shows what the chip just bought. Entirely data-driven (ChipAugments.FEEDBACK): this
+## reads WHERE the payoff lives and plays it, or leaves a note for the machine when the
+## thing to animate is not on this screen. Nothing here may affect gameplay — a missing
+## visual target is a skipped animation, never a failed purchase.
+func _play_augment_feedback(id: String, choice: String) -> void:
+	var fb := ChipAugments.feedback_for(id)
+	if fb.is_empty():
+		return
+	if String(fb.get("scene", "")) == "machine":
+		var data := { "augment": id }
+		if choice != "":
+			data["choice"] = choice
+		SceneNav.queue_feedback(String(fb.get("target", "")), data)
+		return
+	match String(fb.get("target", "")):
+		"offer_prices":
+			_pulse_offer_prices(String(fb.get("label", "")))
+		"augment_price":
+			_pulse_augment_price(String(fb.get("label", "")))
+		"odds_row":
+			_highlight_odds_row(choice)
+		"offer_slot":
+			_pulse_new_offer_slot()
+		"message":
+			_pulse_message(String(fb.get("label", "")))
+
+## Every price tag on the counter flashes and drifts toward the dealer: the discount is
+## the counter itself getting cheaper, so the counter is what moves.
+func _pulse_offer_prices(label: String) -> void:
+	var tags: Array[Control] = []
+	for slot in _offer_slots:
+		var tag := (slot as Control).get_node_or_null("PriceTag") as Control
+		if tag != null and tag.visible:
+			tags.append(tag)
+	if tags.is_empty():
+		return # nothing priced on the counter: skip, never fail
+	for tag in tags:
+		_drift_toward_dealer(tag)
+	if label != "":
+		_pop_feedback_label(label, tags[0].global_position)
+
+## The augment's own price tag, for the chip discount.
+func _pulse_augment_price(label: String) -> void:
+	var aug_id := _augment_offer_id()
+	var slot: Control = _offer_slots_by_id.get(aug_id) as Control if aug_id != "" else null
+	if slot == null and not _offer_slots.is_empty():
+		slot = _offer_slots[_offer_slots.size() - 1] as Control
+	if slot == null:
+		return
+	var tag := slot.get_node_or_null("PriceTag") as Control
+	if tag == null or not tag.visible:
+		return
+	_drift_toward_dealer(tag)
+	if label != "":
+		_pop_feedback_label(label, tag.global_position)
+
+## The odds table is the payoff for a Symbol Level buy, so the bought row pulses in it.
+## Only possible while a table is actually on screen — otherwise silently skipped.
+func _highlight_odds_row(symbol_id: String) -> void:
+	if symbol_id == "":
+		return
+	var overlay: Node = _odds_overlay if _odds_overlay != null and is_instance_valid(_odds_overlay) else null
+	if overlay == null or not overlay.has_method("highlight_symbol_row"):
+		return
+	overlay.highlight_symbol_row(symbol_id)
+
+## Expanded Selection: the slot that just appeared pops in rather than blinking into being.
+func _pulse_new_offer_slot() -> void:
+	var ids := _offer_ids()
+	if ids.is_empty() or ids.size() > _offer_slots.size():
+		return
+	var slot: Control = _offer_slots[ids.size() - 1] as Control
+	if slot == null:
+		return
+	slot.pivot_offset = slot.size * 0.5
+	slot.scale = Vector2(0.4, 0.4)
+	var tw := create_tween()
+	tw.tween_property(slot, "scale", Vector2.ONE, 0.28) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+## The specialist has nothing on the counter to point at — its confirmation is the
+## dealer's own message strip, so the label pops over that.
+func _pulse_message(label: String) -> void:
+	if _message == null or label == "":
+		return
+	_pop_feedback_label(label, _message.global_position)
+
+## Short drift of a price tag toward the dealer, then back: "this went his way".
+func _drift_toward_dealer(node: Control) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	var home := node.position
+	var tw := create_tween()
+	tw.tween_property(node, "position", home + Vector2(0.0, -5.0), 0.16) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "position", home, 0.2) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+## Transient label that rises and fades. Purely cosmetic and self-freeing.
+func _pop_feedback_label(text: String, at_global: Vector2) -> void:
+	var label := Label.new()
+	label.set_meta("_dealer_dynamic", true)
+	label.text = text
+	label.z_index = 200
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 8)
+	label.add_theme_color_override("font_color", NEON_CYAN)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	var font := Assets.font()
+	if font != null:
+		label.add_theme_font_override("font", font)
+	add_child(label)
+	label.global_position = at_global
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(label, "global_position",
+		at_global + Vector2(0.0, -12.0), 0.7).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(label, "modulate:a", 0.0, 0.7).set_trans(Tween.TRANS_SINE)
+	tw.chain().tween_callback(label.queue_free)
 
 ## Symbol Level opens the odds table itself (no token wallet): the player reads
 ## the live levels and taps a row's "+" to put the +1 there — up to level 9.
@@ -931,23 +1058,38 @@ func _open_pair_triple_picker(id: String) -> void:
 	panel.name = "PairTriplePanel"
 	panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_theme_constant_override("separation", 6)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.size = Vector2(CANVAS_W - 24.0, 70.0)
-	panel.position = Vector2(12.0, (CANVAS_H - panel.size.y) * 0.5)
+	# Placement happens AFTER the panel is in the tree, and with TOP_LEFT anchors. The old
+	# code set position/size while the panel was still parentless and anchored CENTER:
+	# add_child then re-resolved those centred offsets against the real 160x320 parent and
+	# shifted the panel by the parent's centre, landing it at (92, 285) with its buttons
+	# at y=327 — below the bottom edge, unreachable, while the modal dim kept swallowing
+	# every click. That was a hard lock on buying this chip.
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_augment_picker.add_child(panel)
 	panel.add_child(_confirm_label("Prompt", "SPECIALISE IN?", 9, Color(0.85, 0.95, 1.0)))
 	panel.add_child(_confirm_label("Sub", "THE CHOICE IS FINAL.", 6, Color(0.9, 0.78, 0.64)))
 	var row := HBoxContainer.new()
 	row.name = "Buttons"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("separation", PICKER_BUTTON_GAP)
 	panel.add_child(row)
 	row.add_child(_confirm_button("PairButton", "PAIR", NEON_CYAN,
-		Callable(self, "_commit_augment_purchase").bind(id, "pair")))
+		Callable(self, "_commit_augment_purchase").bind(id, "pair"), PICKER_BUTTON_SIZE))
 	row.add_child(_confirm_button("TripleButton", "TRIPLE", NEON_CYAN,
-		Callable(self, "_commit_augment_purchase").bind(id, "triple")))
+		Callable(self, "_commit_augment_purchase").bind(id, "triple"), PICKER_BUTTON_SIZE))
 	row.add_child(_confirm_button("CancelButton", "CANCEL", NEON_PINK,
-		Callable(self, "_close_augment_picker")))
+		Callable(self, "_close_augment_picker"), PICKER_BUTTON_SIZE))
+	_centre_picker_panel(panel)
+
+## Centres a picker panel inside the canvas using the size it ACTUALLY ends up with — a
+## container's minimum size wins over anything assigned before its children exist, so the
+## width has to be measured after they are added, never assumed.
+func _centre_picker_panel(panel: Control) -> void:
+	if panel == null:
+		return
+	var wanted := panel.get_combined_minimum_size()
+	panel.size = Vector2(maxf(wanted.x, CANVAS_W - 24.0), maxf(wanted.y, 70.0))
+	panel.position = ((Vector2(CANVAS_W, CANVAS_H) - panel.size) * 0.5).floor()
 
 # Full-canvas dim root shared by both selectors (modal: swallows input behind it).
 func _augment_picker_root() -> Control:
@@ -1079,11 +1221,12 @@ func _confirm_label(node_name: String, text: String, size: int, color: Color) ->
 		l.add_theme_font_override("font", _font)
 	return l
 
-func _confirm_button(node_name: String, text: String, border_color: Color, cb: Callable) -> Button:
+func _confirm_button(node_name: String, text: String, border_color: Color, cb: Callable,
+		min_size := Vector2(44.0, 18.0)) -> Button:
 	var b := Button.new()
 	b.name = node_name
 	b.text = text
-	b.custom_minimum_size = Vector2(44.0, 18.0)
+	b.custom_minimum_size = min_size
 	Assets.small_neon_button_style(b, border_color, 7)
 	Assets.start_menu_button_press_feedback(b)
 	b.pressed.connect(cb)

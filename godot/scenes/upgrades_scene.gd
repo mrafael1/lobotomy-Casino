@@ -98,7 +98,7 @@ const DESCRIPTIONS := {
 	"corr_reward_amp_1": "Choose one symbol and increase its rewards.\n[color=#183A8C]tier I[/color].",
 	"corr_reward_amp_2": "Increase the chosen symbol's rewards.\n[color=#FBBF24]tier II[/color].",
 	"corr_reward_amp_3": "Increase the chosen symbol's rewards.\n[color=#D62828]tier III[/color].",
-	"pos_smart_save": "Retain 20% of run lucidity on reset instead of 10%.",
+	"pos_smart_save": "Retain 50% of run lucidity on reset instead of 10%.",
 }
 
 @export var animate_in_editor: bool = true:

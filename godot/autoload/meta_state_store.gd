@@ -51,6 +51,20 @@ var cardUnlockProgress: Dictionary = {}
 # unlock earned in the last seconds of a session is still celebrated next launch.
 var pendingCardUnlocks: Array = []
 
+# Chip Augments are CAMPAIGN state, not run state (issue #132). They used to live on
+# RunStateStore, where opening a Pacte wiped them mid-campaign — a chip bought at the
+# first dealer could vanish before it ever paid for itself. They now last until the
+# campaign itself ends, on a wealth ending or a game over, and _clear_campaign_augments()
+# is the single place that takes them away.
+var chipAugmentsPurchased: Dictionary = {}  # augment id -> copies bought this campaign
+var symbolAugmentLevels: Dictionary = {}    # symbol -> +levels bought via aug_symbol_level
+var pairTripleAugmentChoice: String = ""    # "" | "pair" | "triple" (locked once chosen)
+var extraSpinsGranted: int = 0              # aug_extra_spins copies already paid out
+# Emergency Reserve fires once per CAMPAIGN, not once per run: the augment's own scope is
+# the campaign, so re-arming every run (and every target round break) would have sold one
+# rescue and delivered several.
+var emergencyReserveUsed: bool = false
+
 @export_group("Run Balance")
 @export var max_consumable_slots: int = Consumables.MAX_CONSUMABLE_SLOTS
 
@@ -110,6 +124,11 @@ func _as_dict() -> Dictionary:
 		"unlockedPowerCardIds": unlockedPowerCardIds.duplicate(),
 		"pendingCardUnlocks": pendingCardUnlocks.duplicate(true),
 		"cardUnlockProgress": cardUnlockProgress.duplicate(true),
+		"chipAugmentsPurchased": chipAugmentsPurchased.duplicate(true),
+		"symbolAugmentLevels": symbolAugmentLevels.duplicate(true),
+		"pairTripleAugmentChoice": pairTripleAugmentChoice,
+		"extraSpinsGranted": extraSpinsGranted,
+		"emergencyReserveUsed": emergencyReserveUsed,
 	}
 
 func _apply(meta: Dictionary) -> void:
@@ -152,6 +171,11 @@ func _apply(meta: Dictionary) -> void:
 			if not owned.has(card_id):
 				owned.append(card_id)
 	pendingCardUnlocks = _normalise_pending_card_unlocks(meta.get("pendingCardUnlocks", []))
+	chipAugmentsPurchased = (meta.get("chipAugmentsPurchased", {}) as Dictionary).duplicate(true)
+	symbolAugmentLevels = (meta.get("symbolAugmentLevels", {}) as Dictionary).duplicate(true)
+	pairTripleAugmentChoice = String(meta.get("pairTripleAugmentChoice", ""))
+	extraSpinsGranted = maxi(0, int(meta.get("extraSpinsGranted", 0)))
+	emergencyReserveUsed = bool(meta.get("emergencyReserveUsed", false))
 	meta_changed.emit()
 
 func _normalise_card_progress(value: Variant) -> Dictionary:
@@ -347,21 +371,43 @@ func _normalise_pending_card_unlocks(value: Variant) -> Array:
 
 # ── action API (mirrors metaState.ts) ────────────────────────────────────────────
 
+## The share of run Lucidity the player actually keeps, BEFORE the augmented spade
+## halving (callers apply that themselves so the machine's countdown and the bank agree).
+##
+## Smart Saving has two doors: the shop sells it as a permanent, and the Pacte offers it
+## as the SMART SAVING augment card. The card grants pos_smart_save into the RUN's
+## ownedUpgrades and never touches ownedPermanents, which is all Endings can see — so the
+## card's whole promise ("KEEP 50% OF LUCIDITY INSTEAD OF 10% ON FLATLINE") was silently
+## banked at 10%. Either door counts here.
+func effective_lucidity_kept_fraction() -> float:
+	var frac := Endings.lucidity_kept_fraction(_as_dict())
+	if frac >= EconomyConst.SMART_SAVE_LUCIDITY_KEPT:
+		return frac
+	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	if run_store != null \
+			and (run_store.ownedUpgrades as Array).has(EconomyConst.SMART_SAVE_UPGRADE_ID):
+		return EconomyConst.SMART_SAVE_LUCIDITY_KEPT
+	return frac
+
 func bank_run(run: Dictionary, ending: String) -> void:
 	_flush_playtime()
 	var prev_history: Dictionary = history.duplicate(true)
 	var next := Endings.bank_run_to_meta(run, _as_dict(), ending, _now_ms())
-	# Augmented spade modifier (issue #111): the end-of-run gain kept is halved
-	# (10% -> 5%, or 20% -> 10% with Smart Saving). Adjusted here so the
-	# parity-locked banking math in Endings stays untouched. The run store is
-	# looked up at runtime: save_checks compiles this script outside the
-	# autoload context, where the RunStateStore identifier doesn't resolve.
+	# Endings banks off the meta permanents alone, and the augmented spade modifier
+	# (issue #111) halves whatever fraction applies. Both corrections land here so the
+	# parity-locked banking math in Endings stays untouched. The run store is looked up
+	# at runtime: save_checks compiles this script outside the autoload context, where
+	# the RunStateStore identifier doesn't resolve.
 	var run_store: Node = get_node_or_null(^"/root/RunStateStore") if is_inside_tree() else null
+	var banked_frac := Endings.lucidity_kept_fraction(_as_dict())
+	var owed_frac := effective_lucidity_kept_fraction()
 	if run_store != null and run_store.augmented_modifier_active(2):
-		var frac := Endings.lucidity_kept_fraction(_as_dict())
-		var kept_full := floori(float(run["lucidityCoins"]) * frac)
-		var kept_capped := floori(float(run["lucidityCoins"]) * frac * 0.5)
-		next["lucidityWallet"] = int(next["lucidityWallet"]) - (kept_full - kept_capped)
+		owed_frac *= 0.5
+	if not is_equal_approx(owed_frac, banked_frac):
+		var coins := float(run["lucidityCoins"])
+		var banked_kept := 0 if ending == "game_over" else floori(coins * banked_frac)
+		var owed_kept := 0 if ending == "game_over" else floori(coins * owed_frac)
+		next["lucidityWallet"] = int(next["lucidityWallet"]) + (owed_kept - banked_kept)
 	# Score-table history (issue #142): the parity-locked banking math rebuilds
 	# the history dict from only the keys it owns, so the tracking-only fields
 	# (playtime, per-tier counters, ending playtimes) are re-merged here.
@@ -511,6 +557,12 @@ func mark_ending_reached(ending: String) -> void:
 			var wealth_playtime := total_playtime_ms()
 			history = history.duplicate(true)
 			history["wealthEndingPlaytimeMs"] = wealth_playtime
+		# Last, once every ending consumer above has recorded what it needs. The tier
+		# itself lives on RunStateStore so clearing early was harmless in practice, but
+		# the accounting reads first and the campaign teardown follows it — not the
+		# other way round, where a future consumer of campaign augment state would
+		# silently read an already-emptied campaign.
+		_clear_campaign_augments() # the campaign is over: the chips go with it
 	elif ending == "exit":
 		if not history.has("exitEndingReachedAt"):
 			history = history.duplicate(true)
@@ -524,6 +576,7 @@ func mark_ending_reached(ending: String) -> void:
 		campaignFailed = true
 		campaignNeuronsLeft = 0
 		lucidityWallet = 0
+		_clear_campaign_augments() # the campaign is over: the chips go with it
 	meta_changed.emit()
 	save_state()
 
@@ -657,11 +710,23 @@ func mark_campaign_failed(save_immediately := true) -> void:
 	campaignFailed = true
 	campaignNeuronsLeft = 0
 	pendingConsumables = {}
+	_clear_campaign_augments() # the campaign is over: the chips go with it
 	meta_changed.emit()
 	if save_immediately:
 		save_state()
 
+## The only place Chip Augments are taken away. Called when the campaign ends (wealth or
+## game over) and when a fresh one starts, so the buff spans exactly one campaign — a
+## Pacte, a flatline continuation or a target round break all leave it standing.
+func _clear_campaign_augments() -> void:
+	chipAugmentsPurchased = {}
+	symbolAugmentLevels = {}
+	pairTripleAugmentChoice = ""
+	extraSpinsGranted = 0
+	emergencyReserveUsed = false
+
 func start_new_campaign(save_immediately := true) -> void:
+	_clear_campaign_augments()
 	lucidityWallet = 0
 	ownedPermanents = []
 	corruptionEverUsed = false
@@ -798,6 +863,19 @@ func _migrate(record: Dictionary) -> Dictionary:
 		current["oddsTokensBanked"] = 0
 	if not current.has("rewardAmpSymbol"):
 		current["rewardAmpSymbol"] = ""
+	# Issue #132: Chip Augments moved off the run save onto the campaign. A save from
+	# before the move has no keys here; starting the campaign's chips empty is the
+	# recoverable outcome (the run save that held them is not consulted for meta state).
+	if not current.has("chipAugmentsPurchased"):
+		current["chipAugmentsPurchased"] = {}
+	if not current.has("symbolAugmentLevels"):
+		current["symbolAugmentLevels"] = {}
+	if not current.has("pairTripleAugmentChoice"):
+		current["pairTripleAugmentChoice"] = ""
+	if not current.has("extraSpinsGranted"):
+		current["extraSpinsGranted"] = 0
+	if not current.has("emergencyReserveUsed"):
+		current["emergencyReserveUsed"] = false
 	# Issue #52 gates the deck. Saves written before v6 hold either nothing or the
 	# whole catalog (the pre-#52 default), so their unlock lists are rebuilt from
 	# the new rules: the default roster plus whatever their existing history has

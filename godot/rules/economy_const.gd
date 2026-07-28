@@ -5,14 +5,16 @@ extends RefCounted
 ## elsewhere — only here.
 
 # One spin currency: 1 neuron = 1 spin (issue #85). STARTING_NEURONS is the
-# intended base run length, and the run never holds more than 18 normal spins.
+# intended base run length, and the run never holds more than 19 normal spins.
+# The cap is what the authored health tube can draw: health_bar.png carries one
+# frame per spin count (0..MAX_NEURONS), so the two move together.
 const STARTING_NEURONS := 15
 const NEURON_DECAY_PER_SPIN := 1
 const MIN_NEURONS_TO_SPIN := 1
-const MAX_NEURONS := 18
+const MAX_NEURONS := 19
 # Kept as a named compatibility constant for callers that distinguish the
-# post-Wealth continuation, although the current machine also caps it at 18.
-const MAX_NEURONS_ACT2 := 18
+# post-Wealth continuation, although the current machine also caps it at 19.
+const MAX_NEURONS_ACT2 := 19
 const MIN_NEURON_DECAY := 1
 
 const BASE_MAX_FREE_SPINS := 1

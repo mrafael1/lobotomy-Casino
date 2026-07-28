@@ -55,6 +55,11 @@ const CANVAS_FIT := SRC_W / ART_FRAME_SIZE.x
 const TABLE_LIFT := Vector2(0.0, -12.0)
 const TOKEN_FRAMES := 10 # frames 0..8 = N tokens; frame 9 = the golden augment token
 const TOKEN_GOLDEN_FRAME := 9
+const TOKEN_SPENT_FRAME := 0 # the picker's golden token, staged onto a symbol
+# Bought-row flash (issue #132): overdriven so it reads on the table's own colours.
+const ROW_HIGHLIGHT_TINT := Color(2.0, 2.4, 1.6)
+const ROW_HIGHLIGHT_HOLD := 0.18
+const ROW_HIGHLIGHT_FADE := 0.45
 const LEVEL_FRAMES := 9  # frame N = level N, 0..8
 const AUGMENT_LEVEL_FRAME_ADDED := 0 # augment level bought, symbol not at the cap yet
 const AUGMENT_LEVEL_FRAME_NONE := 1  # blank: this symbol has no augment level
@@ -149,6 +154,25 @@ func open_augment_picker() -> void:
 	_augment_mode = true
 	_rebuild()
 	visible = true
+
+## Flashes one symbol's row (issue #132): the payoff for a Symbol Level buy is a line in
+## this table, so the purchase points at it instead of leaving the player to spot the
+## changed meter. Cosmetic and guarded — an unknown symbol or a table that has not built
+## its rows yet simply does nothing.
+func highlight_symbol_row(symbol_id: String) -> void:
+	var targets: Array[Sprite2D] = []
+	for source in [_level_sprites, _augment_level_sprites, _symbol_icons]:
+		var spr := (source as Dictionary).get(symbol_id) as Sprite2D
+		if spr != null and is_instance_valid(spr):
+			targets.append(spr)
+	if targets.is_empty():
+		return
+	for spr in targets:
+		spr.modulate = ROW_HIGHLIGHT_TINT
+		var tw := create_tween()
+		tw.tween_interval(ROW_HIGHLIGHT_HOLD)
+		tw.tween_property(spr, "modulate", Color.WHITE, ROW_HIGHLIGHT_FADE) \
+			.set_trans(Tween.TRANS_SINE)
 
 ## Re-reads the live levels. The dealer calls this after a Symbol Level augment so
 ## an odds table still on screen shows the level it just paid for.
@@ -589,8 +613,9 @@ func _symbol_percent(symbol_id: String) -> float:
 func _on_plus_pressed(symbol_id: String) -> void:
 	if _augment_mode:
 		# Staged, not committed: the picker behaves like the odds phase — "+" marks the
-		# symbol, "-" takes it back, and the action button confirms. Only one symbol can
-		# hold the golden token, so picking another moves the mark.
+		# symbol, "-" takes it back, and the action button confirms. The token is spent
+		# the moment it is staged, so _refresh closes every "+" behind this one; changing
+		# your mind goes through "-" rather than a second "+".
 		_augment_pick = symbol_id
 		_refresh()
 		return
@@ -623,8 +648,15 @@ func _refresh() -> void:
 	# Token wallet on the sheet's 0..8 frames — the pool itself is capped at odds_max_tokens
 	# (8) by the store, so the art can always show it. The augment picker instead holds the
 	# golden token on the last frame: one token, any symbol, one level.
-	if _tokens_sprite != null and not _augment_mode:
-		_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 2)
+	if _tokens_sprite != null:
+		if _augment_mode:
+			# The picker holds exactly one golden token. Staging a pick spends it on the
+			# spot — the wallet drops to zero — so the player can see WHAT the "+" cost
+			# before confirming, and taking the pick back hands it straight back.
+			_tokens_sprite.frame = TOKEN_SPENT_FRAME if _augment_pick != "" \
+				else TOKEN_GOLDEN_FRAME
+		else:
+			_tokens_sprite.frame = clampi(RunStateStore.oddsTokensRemaining, 0, TOKEN_FRAMES - 2)
 	for symbol_id in _level_sprites:
 		# `level` is what the reels actually roll on (persisted + staged + augment); the METER
 		# only ever draws the bought track, because an augment level is not a bar segment —
@@ -650,8 +682,12 @@ func _refresh() -> void:
 		if plus != null:
 			if _augment_mode:
 				# One augment level per symbol: a symbol that already spent one is out,
-				# even if it still has room under the hard cap.
-				plus.disabled = String(symbol_id) == "flatline" \
+				# even if it still has room under the hard cap. And once the golden token
+				# is staged there is nothing left to spend, so EVERY "+" closes — the
+				# picked symbol's included. Moving the pick means taking it back with "-"
+				# first, which is the only enabled control left and cannot be misread.
+				plus.disabled = _augment_pick != "" \
+					or String(symbol_id) == "flatline" \
 					or level >= ChipAugments.SYMBOL_LEVEL_HARD_CAP \
 					or augment_levels >= ChipAugments.AUGMENT_LEVELS_PER_SYMBOL
 			else:
