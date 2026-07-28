@@ -3889,6 +3889,22 @@ func _active_hidden_reel_count() -> int:
 func _visible_reel_count() -> int:
 	return maxi(1, 3 - _active_hidden_reel_count())
 
+## How many reels a power may touch, counting from reel 0 — blinded reels are always the
+## last ones, the same slice the scoring keeps.
+##
+## A power spent on a blinded reel does nothing the machine will ever read: Tunnel Vision
+## and Tobacco cut those reels out of the scoring, so rerolling, shifting, cheating or
+## copying into one changes a symbol nobody scores. The reel is also physically covered,
+## so the player cannot even see what they changed. Powers are the scarcest resource in a
+## run, and the picker used to happily let one be burnt on a dead reel; it now stops
+## offering them, and every entry point that takes a reel index refuses one anyway (the
+## dealer's help can name a reel without going through a picker).
+func _power_reel_count() -> int:
+	return maxi(1, 3 - _blind_reel_count())
+
+func _reel_is_dead(reel_index: int) -> bool:
+	return reel_index < 0 or reel_index >= _power_reel_count()
+
 # The lone unpaired reel of a pair (-1 if none).
 func _solo_reel(reels: Array) -> int:
 	var a := String(reels[0]); var b := String(reels[1]); var c := String(reels[2])
@@ -5077,6 +5093,8 @@ func _arm_cheat_targets() -> void:
 ## up/down arrows step the candidate symbol along the pool, tapping the symbol
 ## itself commits it, tapping anywhere else cancels.
 func _on_cheat_reel_pick(reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	_cheat_reel = reel_index
 	_clear_targeting()
 	_targeting_power_id = "cheat"
@@ -5190,7 +5208,9 @@ func _arm_swap_source() -> void:
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	_swap_slot_hints.clear()
-	for i in 3:
+	# A blinded reel is neither grabbable nor droppable: no hint, no drag button, and
+	# _swap_target_at() will not return it.
+	for i in _power_reel_count():
 		_build_swap_slot_hint(i)
 		var hole: Dictionary = REEL_HOLES[i]
 		var button := Button.new()
@@ -5226,16 +5246,24 @@ func _start_swap_symbol_shake() -> void:
 	if _reel_backing_sprite != null:
 		_reel_backing_sprite.visible = false
 	_swap_shake_cover_state.clear()
+	# Only the reels Swap can actually take part in move — a blinded reel is not grabbable,
+	# so shaking it would advertise a target the drag refuses. Its cover is still switched
+	# on, because the shared backing goes off for every reel and the cover is what draws
+	# the art in its place; it simply stays still.
 	for i in _reel_sprites.size():
+		var live: bool = not _reel_is_dead(i)
 		# The reel asset first — this is the thing that shakes.
 		if i < _reel_covers.size():
 			var cover := _reel_covers[i] as Sprite2D
 			if cover != null:
 				_swap_shake_cover_state.append(cover.visible)
 				cover.visible = true
-				_swap_shake_nodes.append(cover)
-				_swap_shake_base.append(cover.position)
-				_swap_shake_reel.append(i)
+				if live:
+					_swap_shake_nodes.append(cover)
+					_swap_shake_base.append(cover.position)
+					_swap_shake_reel.append(i)
+		if not live:
+			continue
 		for sprite in [_reel_top_sprites[i], _reel_sprites[i], _reel_bottom_sprites[i]]:
 			var symbol_sprite := sprite as Sprite2D
 			if symbol_sprite == null:
@@ -5564,7 +5592,7 @@ func _targeting_local_position(global_position: Vector2) -> Vector2:
 
 func _swap_target_at(global_position: Vector2) -> int:
 	var local_position := to_local(global_position)
-	for i in REEL_HOLES.size():
+	for i in mini(REEL_HOLES.size(), _power_reel_count()):
 		var hole: Dictionary = REEL_HOLES[i]
 		var rect := Rect2(float(hole["left"]), float(hole["top"]),
 			float(hole["width"]), float(hole["height"])).grow(4.0)
@@ -5575,6 +5603,8 @@ func _swap_target_at(global_position: Vector2) -> int:
 func _on_swap_destination_pick(destination: int, source_override: int = -1,
 		source_symbol_override: String = "") -> void:
 	var source := _swap_source if source_override < 0 else source_override
+	if _reel_is_dead(source) or _reel_is_dead(destination):
+		return
 	# Reel for reel: the store swaps the two reels' own symbols, so no override is passed
 	# unless a caller (the dealer's help) explicitly names one.
 	var source_symbol := source_symbol_override
@@ -5617,7 +5647,8 @@ func _flash_power_rubble() -> void:
 	tw.tween_property(_rubble_overlay, "modulate:a", 0.0, 0.18)
 	tw.finished.connect(_rubble_overlay.queue_free)
 
-# Builds a per-reel picker overlay; each reel button calls cb(reel_index).
+# Builds a per-reel picker overlay; each reel button calls cb(reel_index). Blinded reels
+# get no button — see _power_reel_count().
 func _arm_reel_picker(cb: Callable) -> void:
 	_clear_targeting()
 	_targeting_layer = Control.new()
@@ -5627,7 +5658,7 @@ func _arm_reel_picker(cb: Callable) -> void:
 	add_child(_targeting_layer)
 	var selection := _build_control_grid_sheet_on(_targeting_layer, "machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	var cy := REEL_WINDOW["top"]
-	for i in 3:
+	for i in _power_reel_count():
 		var reel := i
 		var b := _make_hit_button({
 			"left": REEL_CELL_CENTERS[reel] - 12.0,
@@ -5647,7 +5678,7 @@ func _arm_shift_targets() -> void:
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	var arrows := _build_control_grid_sheet_on(_targeting_layer, "machine new view/shift_power.png", SHIFT_POWER_COLUMNS, SHIFT_POWER_ROWS)
-	for i in 3:
+	for i in _power_reel_count():   # no arrows on a blinded reel
 		for dir_key in ["up", "down"]:
 			var hit: Dictionary = SHIFT_ARROW_HITS[i][dir_key]
 			var direction := 1 if dir_key == "up" else -1
@@ -5658,6 +5689,8 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
@@ -5742,6 +5775,8 @@ func _step_reroll(delta: float) -> void:
 		_play_reward_sequence(rerolled, true) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
@@ -6568,6 +6603,8 @@ func _begin_white_powder() -> void:
 func _on_copy_pick(reel_index: int) -> void:
 	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
+	if _reel_is_dead(reel_index):
+		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
 		_arm_reel_picker(func(target_index: int) -> void: _on_copy_pick(target_index))
@@ -7188,6 +7225,8 @@ func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
 
 func _on_eye_reveal_pick(reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	_clear_targeting()
 	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
 	if symbol == "":
