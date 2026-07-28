@@ -173,6 +173,19 @@ const MULT_FX_FRAME_TIME := 0.09
 # stepped at the same cadence as the regular multiplier effects.
 const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
+# Two authored placements of the FREE SPINS banner (issue #185). Frame 0 sits at its
+# usual height (text y90..95); frame 1 drops it 4px (y94..99) so it clears the item
+# badge row at y81..93 entirely. The banner used to blank the badges outright, which
+# meant taking a free spin hid every running item for as long as the spins lasted —
+# exactly when knowing what is still ticking matters most. Now the badges stay lit and
+# the banner steps down to make room, choosing its frame from whether any are showing.
+const FREE_SPIN_FRAMES := 2
+const FREE_SPIN_FRAME_DEFAULT := 0
+const FREE_SPIN_FRAME_LOWERED := 1
+# Water's on-use pour: an authored full-canvas sheet (3 x 160x320), played once.
+const WATER_SHEET := "machine new view/water.png"
+const WATER_SHEET_FRAMES := 3
+const WATER_FX_Z_INDEX := 30      # over the cabinet and the TV, under the overlays
 const COMBO_LOSS_BEEP_FADE_TIME := 0.1
 const COMBO_LOSS_BEEP_PAUSE := 0.42
 # Authored TV callout sheets (full-canvas x1 frames): the win sheet flashes
@@ -516,14 +529,29 @@ const ITEM_ICONS := {
 # benefit carries a live cost (Tobacco's hidden reel). Unmarked entries are pure
 # upside — the Cocktail joined them when its pair/triple tax was dropped. The badges
 # surface this as +/- corner glyphs so polarity never rides on the count colour alone.
+# `addCounters` (issue #185) sums further counters into the SAME badge, for an item whose
+# effect runs in phases: the Red Pill's forced flatline and the guaranteed triple that
+# follows it are one two-spin item, not two items, so it gets one icon counting down 2, 1.
+# `title`/`desc` are what the badge says when tapped (issue #185) — the description
+# describes the RUNNING effect, which is what the player tapped the icon to find out.
 const DURATION_BOOSTS := [
-	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
-	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
+	{ "counter": "decaySkips", "id": "item_energy_drink",     # no-decay rush
+		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH." },
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId",
+		"title": "SERUM", "desc": "THIS SYMBOL IS GUARANTEED TO APPEAR." },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
-		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
-	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" },                # rarity bonus, no cost
-	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true },   # 3x pairs - hidden reel
-	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
+		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins",
+		"title": "SERUM", "desc": "THE ADJACENT SYMBOLS STAY BLURRED." },
+	{ "counter": "cocktailBoostSpins", "id": "item_cocktail", # rarity bonus, no cost
+		"title": "COCKTAIL", "desc": "EVERY VISIBLE REEL PAYS RARITY POINTS, WIN OR MISS." },
+	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true,   # 3x pairs - hidden reel
+		"title": "TOBACCO", "desc": "PAIRS PAY 3X. ONE REEL IS HIDDEN FROM SCORING." },
+	{ "counter": "potionSpins", "id": "cons_potion",
+		"title": "POTION", "desc": "A RANDOM EFFECT ROLLS EVERY SPIN." },
+	# The Red Pill: one badge over both phases (forced flatline, then the promised triple).
+	{ "counter": "forceFlatlineSpins", "addCounters": ["guaranteedTripleSpins"],
+		"id": "item_pill", "mixed": true,
+		"title": "RED PILL", "desc": "A FORCED FLATLINE FIRST, THEN A GUARANTEED TRIPLE." },
 ]
 
 @export_group("Run Balance")
@@ -637,6 +665,12 @@ var _pending_deferred_neg: Dictionary = {}
 @export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
 @export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
+@export_subgroup("Water", "water_")
+## Water used to land as a bare number with nothing behind it. It now plays the authored
+## three-frame sheet over the machine (issue #185) — a short pour, not a loop: the item
+## is instantaneous, so the feedback ends with it rather than lingering as a duration.
+@export var water_fx_enabled: bool = true
+@export_range(0.04, 0.5, 0.01) var water_frame_time: float = 0.11
 @export_subgroup("Tea", "tea_")
 ## Sakura-petal tranquility layer when Tea is used: a light cross-screen wind.
 @export var tea_fx_enabled: bool = true
@@ -695,6 +729,11 @@ var _pacte_augment_badge: Button = null # first slot; anchors the popup
 var _pacte_augment_badge_icon: TextureRect = null
 var _pacte_augment_count: Label = null
 var _pacte_augment_popup: Control = null
+# Tap-an-item-badge description (issue #185). Lifetime is a plain countdown stepped from
+# _process rather than a tween, so the tween sweeps that clear the run's transient
+# effects can never strand it on screen.
+var _item_info_popup: Control = null
+var _item_info_popup_time := 0.0
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -893,6 +932,8 @@ var _energy_edges: Control = null          # burning-edges frame (Energy Drink)
 var _energy_pulse_tween: Tween = null
 var _energy_fx_active := false
 var _cocktail_shake_tween: Tween = null
+var _water_fx_sprite: Sprite2D = null
+var _water_fx_tween: Tween = null
 var _potion_jump_tween: Tween = null
 var _close_call_heartbeat_tween: Tween = null
 var _white_powder_distortion_tween: Tween = null
@@ -1553,11 +1594,20 @@ const BOOST_MARK_NEG_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
-		var slot := Control.new()
+		# A Button, not a bare Control (issue #185): tapping a badge is how you find out
+		# what the icon means. Flat and untextured, so it stays the authored art with a
+		# hit box on it. Its children keep MOUSE_FILTER_IGNORE so the whole 12px badge
+		# is the target — there is nothing else to hit at that size.
+		var slot := Button.new()
 		slot.name = "BoostIndicator%d" % i
-		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.flat = true
+		slot.text = ""
+		slot.focus_mode = Control.FOCUS_NONE
+		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		slot.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
 		slot.z_index = 12
 		slot.visible = false
+		slot.pressed.connect(_on_boost_indicator_pressed.bind(i))
 		add_child(slot)
 		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
 		var icon := TextureRect.new()
@@ -1590,6 +1640,9 @@ func _build_boost_indicators() -> void:
 		_boost_indicator_slots.append({
 			"slot": slot, "icon": icon, "count": count,
 			"pos_mark": pos_mark, "neg_mark": neg_mark,
+			# Which boost this pooled slot is currently showing — the row is packed, so
+			# slot index is not boost index and a tap has to look it up here.
+			"boost": {},
 		})
 
 func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Color) -> Label:
@@ -1612,6 +1665,15 @@ func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Colo
 	return mark
 
 
+## Spins left on a boost. Normally one counter; a phased item (the Red Pill) sums the
+## counters of every phase, so its badge counts the whole effect down rather than
+## restarting at each hand-off (issue #185).
+func _boost_remaining(boost: Dictionary) -> int:
+	var total := int(RunStateStore.get(String(boost["counter"])))
+	for extra in boost.get("addCounters", []):
+		total += int(RunStateStore.get(String(extra)))
+	return total
+
 ## Whether a boost currently owns a slot: either it has spins left, or it just expired
 ## and is lingering on zero for one refresh.
 func _boost_is_active(boost: Dictionary) -> bool:
@@ -1619,7 +1681,7 @@ func _boost_is_active(boost: Dictionary) -> bool:
 	var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
 	if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
 		return false
-	return int(RunStateStore.get(counter)) > 0 or _boost_zero_linger.has(counter)
+	return _boost_remaining(boost) > 0 or _boost_zero_linger.has(counter)
 
 ## Shows one icon per active multi-spin boost, stacked down the TV's right edge, each
 ## with a spins-remaining badge. A boost whose icon is missing is skipped rather than
@@ -1628,10 +1690,12 @@ func _boost_is_active(boost: Dictionary) -> bool:
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	# The item icons live on the TV, so they step aside for whatever owns it — a
-	# PAIR/TRIPLE or power callout, or the lit FREE SPIN banner.
-	if _tv_content_muted():
+	# The item icons step aside for a full-screen callout, and only for that (issue #185).
+	# The FREE SPIN banner no longer blanks them: it drops to its lowered frame instead,
+	# so what is running stays readable through the free spins.
+	if _tv_callout_active():
 		_hide_boost_indicators()
+		_refresh_free_spin_frame()
 		return
 	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
 	var active_total := 0
@@ -1641,7 +1705,7 @@ func _refresh_boost_indicators() -> void:
 	var col := 0
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
-		var remaining := int(RunStateStore.get(counter))
+		var remaining := _boost_remaining(boost)
 		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
 		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
 		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
@@ -1655,6 +1719,7 @@ func _refresh_boost_indicators() -> void:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
 		var slot: Control = s["slot"]
+		s["boost"] = boost
 		slot.position = BOOST_SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
@@ -1687,6 +1752,21 @@ func _refresh_boost_indicators() -> void:
 		var overflow: Label = _boost_indicator_slots[col - 1]["count"]
 		overflow.text = "+%d" % (active_total - col + 1)
 	_hide_boost_indicators(col)
+	_refresh_free_spin_frame()
+
+## The banner drops to its lowered frame exactly while an item badge is on screen, so
+## the two never overlap; with the row empty it returns to its authored height.
+func _refresh_free_spin_frame() -> void:
+	if _free_spin_sprite == null:
+		return
+	_set_sheet_frame(_free_spin_sprite,
+		FREE_SPIN_FRAME_LOWERED if _boost_indicators_showing() else FREE_SPIN_FRAME_DEFAULT)
+
+func _boost_indicators_showing() -> bool:
+	for entry: Dictionary in _boost_indicator_slots:
+		if (entry["slot"] as Control).visible:
+			return true
+	return false
 
 ## Blanks the boost slots from `first` onwards. Dropping the texture matters: a slot
 ## re-shown before its icon is resolved would otherwise flash the previous boost's art.
@@ -1695,12 +1775,15 @@ func _hide_boost_indicators(first := 0) -> void:
 		var hidden: Dictionary = _boost_indicator_slots[i]
 		(hidden["slot"] as Control).visible = false
 		(hidden["icon"] as TextureRect).texture = null
+		# Forget what the slot was showing along with the art: a tap that raced a
+		# hide must not describe a boost that has already run out.
+		hidden["boost"] = {}
 
 func _capture_expiring_boost_counters() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
-		if int(RunStateStore.get(counter)) == 1:
+		if _boost_remaining(boost) == 1:
 			var snapshot: Dictionary = { "counter": counter }
 			var symbol_field := String(boost.get("symbolField", ""))
 			if symbol_field != "":
@@ -1723,6 +1806,111 @@ func _clear_boost_zero_linger() -> void:
 	_refresh_boost_indicators()
 	_refresh_consumable_fx()
 
+# ── tap-an-item-badge description (issue #185) ────────────────────────────────────
+# A 12px icon can say WHICH item is running and for how long, but not what it does.
+# Tapping one pops its name and effect over the TV for about a second and then gets out
+# of the way on its own — long enough to read, short enough that it never becomes another
+# thing occupying a screen four other systems are already competing for.
+const ITEM_INFO_POPUP_HOLD := 1.0     # seconds fully lit before it starts leaving
+const ITEM_INFO_POPUP_FADE := 0.18
+const ITEM_INFO_POPUP_SIZE := Vector2(104.0, 30.0)
+const ITEM_INFO_POPUP_Z_INDEX := 42   # over the banner, the callouts and the dealer strip
+const ITEM_INFO_POPUP_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+func _on_boost_indicator_pressed(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _boost_indicator_slots.size():
+		return
+	var entry: Dictionary = _boost_indicator_slots[slot_index]
+	if not (entry["slot"] as Control).visible:
+		return
+	_show_item_info_popup(entry["boost"] as Dictionary, (entry["slot"] as Control).position)
+
+## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
+## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
+func _item_info_popup_text(boost: Dictionary) -> String:
+	var title := String(boost.get("title", ""))
+	if title == "":
+		title = _item_display_name(String(boost.get("id", "")))
+	var desc := String(boost.get("desc", ""))
+	var symbol_field := String(boost.get("symbolField", ""))
+	if symbol_field != "":
+		var symbol_id := String(RunStateStore.get(symbol_field))
+		if symbol_id != "":
+			desc = "%s: %s" % [symbol_id.to_upper(), desc]
+	if desc == "":
+		return title
+	return "%s\n%s" % [title, desc]
+
+func _show_item_info_popup(boost: Dictionary, anchor: Vector2) -> void:
+	_hide_item_info_popup()
+	if boost.is_empty():
+		return
+	var text := _item_info_popup_text(boost)
+	if text == "":
+		return
+	var popup := Control.new()
+	popup.name = "ItemInfoPopup"
+	popup.z_index = ITEM_INFO_POPUP_Z_INDEX
+	# Purely informational, and it sits over live controls — it must never eat a tap.
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = ITEM_INFO_POPUP_BG
+	bg_style.border_color = NEON_CYAN
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.size = ITEM_INFO_POPUP_SIZE
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", bg_style)
+	popup.add_child(bg)
+	var label := Label.new()
+	label.name = "Text"
+	label.position = Vector2(4.0, 3.0)
+	label.size = ITEM_INFO_POPUP_SIZE - Vector2(8.0, 6.0)
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	# Above the badge that was tapped, right-aligned to it, then clamped into the TV so a
+	# badge near either bezel still shows the whole box.
+	var pos := anchor + Vector2(
+		BOOST_ICON_SIZE - ITEM_INFO_POPUP_SIZE.x, -ITEM_INFO_POPUP_SIZE.y - 2.0)
+	pos.x = clampf(pos.x, float(TV_SCREEN["left"]) + 1.0,
+		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - ITEM_INFO_POPUP_SIZE.x - 1.0)
+	pos.y = clampf(pos.y, float(TV_SCREEN["top"]) + 1.0,
+		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - ITEM_INFO_POPUP_SIZE.y - 1.0)
+	popup.position = pos.round()
+	_item_info_popup = popup
+	_item_info_popup_time = 0.0
+	add_child(popup)
+
+## Ages the popup out on its own. Fades over the last moments rather than vanishing, so
+## a description leaving does not read as a glitch on a screen full of blinking things.
+func _step_item_info_popup(delta: float) -> void:
+	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	_item_info_popup_time += delta
+	var fading := _item_info_popup_time - ITEM_INFO_POPUP_HOLD
+	if fading >= ITEM_INFO_POPUP_FADE:
+		_hide_item_info_popup()
+		return
+	if fading > 0.0:
+		_item_info_popup.modulate.a = clampf(1.0 - fading / ITEM_INFO_POPUP_FADE, 0.0, 1.0)
+
+func _hide_item_info_popup() -> void:
+	if _item_info_popup != null and is_instance_valid(_item_info_popup):
+		_item_info_popup.queue_free()
+	_item_info_popup = null
+	_item_info_popup_time = 0.0
+
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
 	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
@@ -1738,7 +1926,7 @@ func _build_machine_control_art() -> void:
 	_dealer_bar_overlay_3 = _build_full_canvas_sheet(
 		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
 	_build_dealer_tip_steps()
-	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
+	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, FREE_SPIN_FRAMES)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
 	_win_anim_sprite = _build_full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
@@ -2715,6 +2903,7 @@ func _process(delta: float) -> void:
 	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
+	_step_item_info_popup(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
 		return
@@ -3034,7 +3223,8 @@ func _end_tv_info_pop(source: StringName) -> void:
 ## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
 ## through _tv_info_pop_sources (PAIR/TRIPLE win, power, target blackout), and the
 ## blinking FREE SPIN banner, which owns the screen for as long as it is lit. While
-## either is up, the boost/item icons and the COMBO stage step aside.
+## either is up, the objective readout and the COMBO stage step aside. The item badges
+## are the exception: only a callout clears them (issue #185).
 func _tv_content_muted() -> bool:
 	return not _tv_info_pop_sources.is_empty() or _free_spin_overlay_active
 
@@ -3055,16 +3245,19 @@ func _apply_tv_content_mute() -> void:
 
 func _hide_tv_info_layers() -> void:
 	# The FREE SPIN banner is an owner in its own right, so it hides only for a
-	# callout — never for its own mute.
+	# callout — never for its own mute. The item badges follow the same rule now
+	# (issue #185): a callout clears them, the banner beside them does not.
 	if _free_spin_sprite != null and not _tv_info_pop_sources.is_empty():
 		_free_spin_sprite.visible = false
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = false
-	_hide_boost_indicators()
-	# The dealer interface only clears for a callout — under the banner alone it stays
-	# readable alongside the objective.
 	if not _tv_callout_active():
+		_refresh_boost_indicators()
 		return
+	_hide_item_info_popup()
+	_hide_boost_indicators()
+	# Past this point a callout owns the TV, so the dealer interface clears with
+	# everything else; under the banner alone it stayed readable and returned above.
 	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
 			_dealer_bar_overlay_3, _dealer_icon]:
 		var info := node as CanvasItem
@@ -3076,14 +3269,12 @@ func _restore_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = _free_spin_overlay_active \
 			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
-	# The callout is gone but the banner is lit: the boost icons and the COMBO stage
-	# keep waiting it out, while the dealer interface comes back with the objective.
-	if _free_spin_overlay_active:
-		_hide_boost_indicators()
-		if _combo_effect_sprite != null:
-			_combo_effect_sprite.visible = false
-	else:
-		_refresh_boost_indicators()
+	# The callout is gone but the banner is lit: the COMBO stage keeps waiting it out,
+	# while the dealer interface comes back with the objective. The item badges come back
+	# too (issue #185) — the banner drops a frame for them rather than blanking them.
+	_refresh_boost_indicators()
+	if _free_spin_overlay_active and _combo_effect_sprite != null:
+		_combo_effect_sprite.visible = false
 	_refresh_dealer_countdown()
 	if _dealer_bar_sprite != null:
 		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
@@ -6581,6 +6772,34 @@ func _play_use_fx(id: String) -> void:
 		_play_cocktail_shake()
 	elif id == "cons_tea" and tea_fx_enabled:
 		_play_tea_sakura_fx()
+	elif id == "item_water" and water_fx_enabled:
+		_play_water_animation()
+
+## The authored WATER_SHEET_FRAMES-frame pour, stepped once and then cleared. Built on
+## first use rather than at startup: most runs never see a Water, and an unused
+## full-canvas sheet is the kind of thing that quietly costs a frame on a phone.
+func _play_water_animation() -> void:
+	if _water_fx_sprite == null or not is_instance_valid(_water_fx_sprite):
+		_water_fx_sprite = _build_full_canvas_sheet(WATER_SHEET, WATER_SHEET_FRAMES)
+		if _water_fx_sprite == null:
+			return
+		_water_fx_sprite.name = "WaterFx"
+		_water_fx_sprite.z_index = WATER_FX_Z_INDEX
+	if _water_fx_tween != null and _water_fx_tween.is_valid():
+		_water_fx_tween.kill()
+	_water_fx_sprite.modulate.a = 1.0
+	_water_fx_sprite.visible = true
+	_set_sheet_frame(_water_fx_sprite, 0)
+	_water_fx_tween = create_tween()
+	for frame in range(1, WATER_SHEET_FRAMES):
+		_water_fx_tween.tween_interval(water_frame_time)
+		_water_fx_tween.tween_callback(_set_sheet_frame.bind(_water_fx_sprite, frame))
+	_water_fx_tween.tween_interval(water_frame_time)
+	_water_fx_tween.tween_callback(_hide_water_animation)
+
+func _hide_water_animation() -> void:
+	if _water_fx_sprite != null and is_instance_valid(_water_fx_sprite):
+		_water_fx_sprite.visible = false
 
 func _play_cocktail_shake() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
@@ -7364,6 +7583,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_close_score_table()
 	_hide_augmented_popup()
 	_hide_pacte_augment_popup()
+	_hide_item_info_popup()
 	_close_serum_picker()
 	_close_book_choice_overlay()
 	if _dealer_overlay != null:
@@ -7400,6 +7620,10 @@ func _clear_wealth_presentation_fx() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
 		_cocktail_shake_tween.kill()
 	_cocktail_shake_tween = null
+	if _water_fx_tween != null and _water_fx_tween.is_valid():
+		_water_fx_tween.kill()
+	_water_fx_tween = null
+	_hide_water_animation()
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
 		_potion_jump_tween.kill()
 	_potion_jump_tween = null

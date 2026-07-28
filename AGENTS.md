@@ -131,8 +131,20 @@ Resources and currencies:
   active, its authored COMBO x1..x9 indicator stays mounted in the machine TV at
   the current streak. The base payout lands first, then the COMBO indicator shakes
   and sends out its separate bonus amount. Any transient TV callout temporarily
-  hides COMBO, the FREE SPIN banner, and dealer countdown information so the pop
-  remains readable; those indicators return when the callout ends.
+  hides COMBO, the FREE SPIN banner, the active-item icons, and dealer countdown
+  information so the pop remains readable; those indicators return when the callout
+  ends.
+- Active multi-spin items show as small duration icons on the TV, each with a
+  spins-remaining count and +/- polarity glyphs; two authored slots fill right to
+  left and further simultaneous items fold into a "+N" on the last one. Only a
+  full-screen callout clears them — the FREE SPIN banner shares the screen instead.
+  The Red Pill gets one icon spanning both of its phases (the forced flatline, then
+  the guaranteed triple), counting the whole two-spin effect down rather than
+  handing off between two badges.
+- Tapping an item icon pops that item's name and what it is currently doing, over
+  the TV, for about a second before it fades on its own. The popup never blocks
+  input and draws above the banner, the dealer countdown and the losing-state
+  overlays; a callout taking the TV dismisses it.
 - A Heart triple uses the authored TRIPLE music and the vial-style reaction flash
   even though it pays no score: its tier shows a little "+1", "+2", or "+3"
   fly-in while recovering the matching run spins.
@@ -174,7 +186,10 @@ Resources and currencies:
   used as its own destination.
 - **Pattern Recognition** — its five authored icon frames animate on the Pacte card.
 - **Hallucination** — keeps all three reels visible; a visible pair is scored as its
-  corresponding triple while the authored reward scale applies. It does not hide or
+  corresponding triple, and THAT payout — only that one — is cut to 30%. Natural
+  triples the reels made on their own (the syringe triple included), ordinary pairs,
+  and Book joker wins all pay in full while it is owned; the cut is charged to the
+  promotion, the same way Learning charges its cut to book wins. It does not hide or
   cover the third reel.
 - **Tunnel Vision** — hides the third reel and increases rewards by 50%.
 - **How to Cheat** — a solo visible symbol counts as a pair; all pair payouts use
@@ -217,8 +232,18 @@ Resources and currencies:
   the initial Pacte handoff starts with no consumables and the stash limit is 2.
 - Dealer-only run items (offered mid-run): Energy Drink,
   Cocktail, Water, Red Pill.
+- Items are TAKEN and USED in two different places. The dealer's visit overlay is
+  where an offer is selected (tapping an item arms TAKE with it) and taken into the
+  run stash; the machine's own bottom-right stash is where a held item is spent, by
+  tapping its slot. Taking is not using — an item sits in the stash until the player
+  spends it, and the stash holds 2.
 - Water grants +40 run Lucidity AND +40 score: drinking it rolls the wealth
-  odometer up immediately and its points feed the power gauge like any score.
+  odometer up immediately and its points feed the power gauge like any score. Using
+  it plays a short authored three-frame pour over the machine.
+- The Cocktail pays rarity points for every VISIBLE reel (flatline 1 … brain/book 6,
+  scaled by the frenzy multiplier) and is blind to what the reels did: misses, pairs
+  and triples all collect the same total for the same symbols. A reel hidden from
+  scoring pays nothing.
 - Several items and Lab upgrades are tagged "corrupt"; corruption use is tracked
   campaign-wide (`corruptionEverUsed`) and gates rules-level exit eligibility.
 
@@ -281,7 +306,9 @@ Resources and currencies:
 
 - Free spins never cost run spins. The bank caps at 1 (3 when upgraded); a jackpot
   grants 1. The FREE SPIN banner covers banked credits and Energy Drink's
-  protected spins.
+  protected spins. The banner has two authored placements: it drops to its lowered
+  frame while any active-item icon is on the TV, so the two share the screen, and
+  returns to its normal height when the badge row is empty.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
   authored overlay with a beeping pulse; the x3 state shows a steady 9-frame
   diminished-fire sheet (never both, and the normal gauge effects are suppressed

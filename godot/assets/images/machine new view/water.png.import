@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cq65rvximlsja"
-path="res://.godot/imported/FREE_SPIN.png-98e9fb15d91c71d33797b324d9478e5b.ctex"
+uid="uid://bif747gat7728"
+path="res://.godot/imported/water.png-e518fcabaec0ab0a4620140c072bea56.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/machine new view/FREE_SPIN.png"
-dest_files=["res://.godot/imported/FREE_SPIN.png-98e9fb15d91c71d33797b324d9478e5b.ctex"]
+source_file="res://assets/images/machine new view/water.png"
+dest_files=["res://.godot/imported/water.png-e518fcabaec0ab0a4620140c072bea56.ctex"]
 
 [params]
 

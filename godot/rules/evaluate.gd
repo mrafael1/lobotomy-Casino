@@ -87,10 +87,16 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		allow_free_spin_grant: bool, pattern23_triple: bool,
 		pair_score_mult: float, hidden_reel_count: int, visible_pair_as_triple: bool,
 		reward_scale: float, symbol_reward_bonuses: Dictionary,
-		solo_as_pair: bool) -> Dictionary:
+		solo_as_pair: bool, hallucination_reward_scale: float = 1.0) -> Dictionary:
 	var a := String(reels[0])
 	var b := String(reels[1])
 	var c := String(reels[2])
+	# Hallucination's cut is charged ONLY to the triples it invents, exactly like
+	# Learning's book scale — a promoted pair pays a triple's price, and everything the
+	# reels earned on their own (natural triples, the syringe triple included, pairs,
+	# jokers) pays in full. It used to ride in reward_scale, which taxed every reward
+	# the run ever made just for owning the card.
+	var promoted_scale := reward_scale * hallucination_reward_scale
 
 	if hidden_reel_count > 0:
 		var visible: Array = reels.slice(0, maxi(1, reels.size() - hidden_reel_count))
@@ -102,7 +108,7 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		if vmatch != "":
 			if visible_pair_as_triple:
 				return _score_triple(vmatch, lucidity_multiplier, allow_free_spin_grant,
-					reward_scale, symbol_reward_bonuses)
+					promoted_scale, symbol_reward_bonuses)
 			return _score_pair(vmatch, lucidity_multiplier, pair_score_mult,
 				reward_scale, symbol_reward_bonuses)
 		if solo_as_pair:
@@ -124,6 +130,8 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 	# 2+3 pair is exactly as visible as the 1+2 one, and a power that forms either is
 	# no different from a spin that lands it. It does not invent a payout: reels 1+3
 	# only qualify while Pattern 23 is what makes that combination pay at all.
+	# Only THIS payout pays the card's cut: the natural triple above already returned
+	# at the full reward scale.
 	if visible_pair_as_triple:
 		var hallucinated := ""
 		if a == b:
@@ -133,8 +141,10 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		elif pattern23_triple and a == c:
 			hallucinated = a
 		if hallucinated != "":
-			return _score_triple(hallucinated, lucidity_multiplier, allow_free_spin_grant,
-				reward_scale, symbol_reward_bonuses)
+			var promoted := _score_triple(hallucinated, lucidity_multiplier,
+				allow_free_spin_grant, promoted_scale, symbol_reward_bonuses)
+			promoted["hallucinatedTriple"] = true
+			return promoted
 
 	if pattern23_triple:
 		var match_sym := ""
@@ -185,7 +195,8 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 		pair_score_mult: float = 1.0, hidden_reel_count: int = 0,
 		visible_pair_as_triple: bool = false, reward_scale: float = 1.0,
 		symbol_reward_bonuses: Dictionary = {}, solo_as_pair: bool = false,
-		book_reward_scale: float = 1.0) -> Dictionary:
+		book_reward_scale: float = 1.0,
+		hallucination_reward_scale: float = 1.0) -> Dictionary:
 	var has_book := false
 	for reel_value in reels:
 		if String(reel_value) == "book":
@@ -194,7 +205,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 	if not learning_active or not has_book:
 		return _score_reels_without_book(reels, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
-			reward_scale, symbol_reward_bonuses, solo_as_pair)
+			reward_scale, symbol_reward_bonuses, solo_as_pair, hallucination_reward_scale)
 	var book_scale := reward_scale * book_reward_scale
 
 	var candidates: Array[String] = []
@@ -212,7 +223,7 @@ static func score_reels(reels: Array, lucidity_multiplier: float, allow_free_spi
 			resolved.append(candidate if String(resolved_reel) == "book" else String(resolved_reel))
 		var scored := _score_reels_without_book(resolved, lucidity_multiplier, allow_free_spin_grant,
 			pattern23_triple, pair_score_mult, hidden_reel_count, visible_pair_as_triple,
-			book_scale, symbol_reward_bonuses, solo_as_pair)
+			book_scale, symbol_reward_bonuses, solo_as_pair, hallucination_reward_scale)
 		scored["bookJoker"] = true
 		scored["resolvedSymbol"] = candidate
 		if reels.count("book") == reels.size() and candidate == "eye":
@@ -252,6 +263,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var visible_pair_as_triple := bool(input.get("visiblePairAsTriple", false))
 	var reward_scale := float(input.get("rewardScale", 1.0))
 	var book_reward_scale := float(input.get("bookRewardScale", 1.0))
+	var hallucination_reward_scale := float(input.get("hallucinationRewardScale", 1.0))
 	var symbol_reward_bonuses: Dictionary = input.get("symbolRewardBonuses", {})
 	var solo_as_pair := bool(input.get("soloAsPair", false))
 	var guarantee_symbol_id: Variant = input.get("guaranteeSymbolId", null)
@@ -268,7 +280,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	if guaranteed_win:
 		var temp := score_reels(reels, 1.0, false, pattern23, learning, pair_score_mult,
 			hidden_reel_count, visible_pair_as_triple, reward_scale, symbol_reward_bonuses,
-			solo_as_pair, book_reward_scale)
+			solo_as_pair, book_reward_scale, hallucination_reward_scale)
 		if temp["winType"] == "miss":
 			reels = [reels[0], reels[0], reels[2]]
 
@@ -317,7 +329,7 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	var neurons_after := neurons if is_free_spin else maxi(0, neurons - neuron_decay)
 	var score := score_reels(reels, lucidity_multiplier, not is_free_spin, pattern23, learning,
 		pair_score_mult, hidden_reel_count, visible_pair_as_triple, reward_scale,
-		symbol_reward_bonuses, solo_as_pair, book_reward_scale)
+		symbol_reward_bonuses, solo_as_pair, book_reward_scale, hallucination_reward_scale)
 
 	var free_spins_after: int
 	if is_free_spin:
@@ -346,4 +358,8 @@ static func evaluate(input: Dictionary) -> Dictionary:
 	if score.has("soloAsPair"):
 		out["soloAsPair"] = true
 		out["soloAsPairSymbol"] = String(score.get("soloAsPairSymbol", ""))
+	# Marks the triple as one Hallucination invented, so the machine can tell it apart
+	# from a natural one — only the promoted payout carries the card's cut.
+	if score.has("hallucinatedTriple"):
+		out["hallucinatedTriple"] = true
 	return out
