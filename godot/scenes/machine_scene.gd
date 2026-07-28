@@ -1614,12 +1614,15 @@ const BOOST_SLOT_WIDTH := BOOST_COUNT_OFFSET + BOOST_COUNT_WIDTH   # 14: icon + 
 # over (y107 already narrows to x39..112). Measuring "anything dark" instead caught the
 # cabinet grey and pushed the row about 5px past the bezel, off the TV entirely.
 const BOOST_ROW_LEFT := 39.0
-const BOOST_ROW_TOP := 99.0
+# y100 puts the row on the screen's last eight rows, y100..107. The bottom row is where
+# the screen curves in to x39..112, which is what fixes the row's width: the five 14px
+# slots at a 15px pitch land exactly x39..112, flush inside the corner.
+const BOOST_ROW_TOP := 100.0
 const BOOST_SLOT_PITCH := 15.0        # 14px of slot + 1px between slots
 const BOOST_SLOT_COUNT := 5
 const BOOST_SLOT_POSITIONS: Array[Vector2] = [
-	Vector2(39.0, 99.0), Vector2(54.0, 99.0), Vector2(69.0, 99.0),
-	Vector2(84.0, 99.0), Vector2(99.0, 99.0),
+	Vector2(39.0, 100.0), Vector2(54.0, 100.0), Vector2(69.0, 100.0),
+	Vector2(84.0, 100.0), Vector2(99.0, 100.0),
 ]
 const BOOST_BADGE_FONT_SIZE := 5      # the turn count, sized for the 8px badge
 # Polarity is the count's colour (issue #185): the project's established positive/negative

@@ -5349,8 +5349,9 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	# The TV's own SCREEN below the fill bar, measured off the rendered cabinet as the
 	# near-black region rather than "anything dark" — the surrounding cabinet grey reads
 	# dark too, and counting it as screen is what let the row run past the bezel and off
-	# the TV. The screen holds x37..114 across y99..106; y107 already curves in to x39..112.
-	var screen_strip := Rect2(37.0, 99.0, 78.0, 8.0)
+	# the TV. Measured: y99..104 hold x36..115, y105..106 x37..114, y107 x39..112. The row
+	# occupies y100..107, so the corner row is the binding constraint: x39..112.
+	var screen_strip := Rect2(39.0, 100.0, 74.0, 8.0)
 	var slot_width: float = machine.BOOST_SLOT_WIDTH
 	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
 		var rect := Rect2(slot_pos, Vector2(slot_width, icon_size))
