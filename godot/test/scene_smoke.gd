@@ -60,6 +60,7 @@ func _run() -> void:
 	_check_off_spin_target_proc(machine, run_store, meta_store, failures)
 	_check_augment_level_readouts(machine, run_store, failures)
 	_check_reserve_glow_132(machine, run_store, failures)
+	_check_dealer_tip_steps_132(machine, failures)
 	await _check_machine_consumable_feedback(machine, run_store, failures)
 	await _check_upgrades_scene(failures)
 	_check_smart_save_retention(failures)
@@ -569,6 +570,7 @@ func _check_global_options_layout(failures: Array) -> void:
 	_check_symbol_level_picker_132(failures)
 	_check_pair_triple_picker_bounds_132(failures)
 	_check_augment_feedback_map_132(failures)
+	_check_wealth_ending_augment_teardown_132(failures)
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(machine)
@@ -608,13 +610,19 @@ func _check_global_options_layout(failures: Array) -> void:
 		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
 		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
 			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
-	# The spins readout left the TV: it is now the native 19-frame tube sheet
+	# The spins readout left the TV: it is now the native 20-frame tube sheet
 	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
 	# plays while a spin launches.
 	if machine.get_node_or_null("HealthLabel") != null:
 		failures.append("machine: HealthLabel spins counter should be removed from the TV")
-	if health_bar == null or health_bar.hframes != 19:
-		failures.append("machine: HealthBar spins tube is not a 19-frame sheet")
+	if health_bar == null or health_bar.hframes != 20:
+		failures.append("machine: HealthBar spins tube is not a 20-frame sheet")
+	# The tube must be able to draw every spin the economy can hand out: one frame per
+	# count from empty to the cap. A sheet that falls behind a raised cap silently
+	# clamps the top of the tube instead of failing.
+	if health_bar != null and health_bar.hframes != EconomyConst.MAX_NEURONS + 1:
+		failures.append("machine: the tube's %d frames cannot draw a %d-spin cap"
+			% [int(health_bar.hframes), EconomyConst.MAX_NEURONS])
 	if health_coin == null or health_coin.hframes != 4 or health_coin.visible:
 		failures.append("machine: HealthCoin drop sheet is missing or visible at rest")
 	machine.queue_free()
@@ -1064,6 +1072,60 @@ func _check_off_spin_target_proc(machine: Node, run_store: Node, meta_store: Nod
 	machine._stop_wealth_target_transition()
 	machine._wealth_target_transition_active = false
 	machine._set_sequence_lock(false)
+
+	# A queued dealer must not swallow the item. The stash reads enabled while he walks
+	# in, so refusing the use there made the tap a silent no-op and the target went unpaid.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 6
+	run_store.wealthTargetIndex = 0
+	target = run_store.current_wealth_target()
+	run_store.scoreEarned = target - 1
+	run_store.lucidityCoins = 20
+	run_store.runConsumables = { "item_water": 1 }
+	run_store.lastResult = {
+		"scoreEarned": target - 1, "coinsEarned": target - 1, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	run_store.dealerPending = true
+	machine._set_sequence_lock(false)
+	machine._set_display_lucidity(target - 1, false)
+	machine._on_stash_pressed(0)
+	if int(run_store.runConsumables.get("item_water", 0)) != 0:
+		failures.append("off-spin target: a queued dealer silently refused the item")
+	if not bool(machine._wealth_target_transition_active):
+		failures.append("off-spin target: an item used with a dealer queued did not pay the target")
+	machine._stop_wealth_target_transition()
+	machine._wealth_target_transition_active = false
+	machine._set_sequence_lock(false)
+
+	# A beaten target outranks a pending combo defeat: the payout ends the round, so the
+	# loss resolves into it instead of holding the screen for a confirming spin.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.neurons = 6
+	run_store.wealthTargetIndex = 0
+	target = run_store.current_wealth_target()
+	run_store.scoreEarned = target - 1
+	run_store.lucidityCoins = 20
+	run_store.runConsumables = { "item_water": 1 }
+	run_store.lastResult = {
+		"scoreEarned": target - 1, "coinsEarned": target - 1, "winType": "pair",
+		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
+	}
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 3
+	machine._set_display_lucidity(target - 1, false)
+	machine._show_pending_combo_defeat()
+	machine._on_stash_pressed(0)
+	if not bool(machine._wealth_target_transition_active):
+		failures.append("off-spin target: a beaten target stayed buried under the losing state")
+	if bool(run_store.comboDefeatPending) or machine._pending_combo_overlay != null:
+		failures.append("off-spin target: the losing state survived the target payout")
+	machine._stop_wealth_target_transition()
+	machine._wealth_target_transition_active = false
+	machine._set_sequence_lock(false)
+
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -2202,6 +2264,19 @@ func _check_reserve_glow_132(machine: Node, run_store: Node, failures: Array) ->
 				or not is_equal_approx(glow.position.y, machine.HEALTH_BOTTOM_CHIP_RECT.position.y):
 			failures.append("issue132: the reserve glow is not registered on the bottom chip (%s)"
 				% str(glow.position))
+		# The borrowed region has to be frame 1 of the sheet as it is authored TODAY. A
+		# re-export that adds or drops a frame changes the frame width, which would slide
+		# the glow onto a neighbouring frame while every position check still passed.
+		var tube: Sprite2D = machine._health_bar_sprite
+		if tube != null and tube.texture != null and int(tube.hframes) > 0:
+			var frame_w := float(tube.texture.get_width()) / float(tube.hframes)
+			if not is_equal_approx(frame_w, machine.HEALTH_BAR_FRAME_W):
+				failures.append("issue132: the tube's real frame width is %.1f, not HEALTH_BAR_FRAME_W %.1f"
+					% [frame_w, machine.HEALTH_BAR_FRAME_W])
+			var want_x: float = frame_w + machine.HEALTH_BOTTOM_CHIP_RECT.position.x
+			if not is_equal_approx(glow.region_rect.position.x, want_x):
+				failures.append("issue132: the glow borrows x=%.1f, but frame 1's chip is at x=%.1f"
+					% [glow.region_rect.position.x, want_x])
 		meta_store.emergencyReserveUsed = true
 		machine._refresh_reserve_glow()
 		if glow.visible:
@@ -2210,6 +2285,45 @@ func _check_reserve_glow_132(machine: Node, run_store: Node, failures: Array) ->
 	meta_store.emergencyReserveUsed = prev_used
 	run_store.runPhase = prev_phase
 	machine._refresh_reserve_glow()
+
+## The Tip's head start is drawn on the bar's first steps while the augment is owned
+## (issue #132). The marker is a CHILD of the bar so it can never outlive it on screen —
+## the bar is hidden from four unrelated places, and a sibling would have to be
+## remembered in all of them.
+func _check_dealer_tip_steps_132(machine: Node, failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var marker: Sprite2D = machine._dealer_tip_steps
+	var bar: Sprite2D = machine._dealer_bar_sprite
+	if marker == null:
+		failures.append("issue132: the machine built no Dealer's Tip step marker")
+	elif bar == null or marker.get_parent() != bar:
+		failures.append("issue132: the Tip marker is not parented to the dealer bar")
+	else:
+		var prev_bar_visible := bar.visible
+		bar.visible = true
+
+		meta_store.chipAugmentsPurchased = {}
+		machine._refresh_dealer_tip_steps()
+		if marker.visible:
+			failures.append("issue132: the Tip marker showed without the augment")
+
+		meta_store.chipAugmentsPurchased = { "aug_dealer_tip": 1 }
+		machine._refresh_dealer_tip_steps()
+		if not marker.visible:
+			failures.append("issue132: owning the Tip did not mark its head start on the bar")
+
+		# The whole point of the parenting: a hidden bar takes the marker with it, without
+		# the marker's own flag being touched.
+		bar.visible = false
+		if marker.is_visible_in_tree():
+			failures.append("issue132: the Tip marker still drew with the dealer bar hidden")
+		if not marker.visible:
+			failures.append("issue132: hiding the bar cleared the Tip marker's own state")
+		bar.visible = prev_bar_visible
+
+	meta_store.chipAugmentsPurchased = prev_augs
+	machine._refresh_dealer_tip_steps()
 
 ## Every augment must name feedback that a scene can actually route (issue #132), and a
 ## missing visual target must be survivable — the data says WHERE, the scene decides IF.
@@ -2241,6 +2355,50 @@ func _check_augment_feedback_map_132(failures: Array) -> void:
 		if frame < 0 or frame >= frames:
 			failures.append("issue132: %s asks for icon frame %d of %d"
 				% [augment_id, frame, frames])
+
+## A wealth ending is where the campaign is torn down, so every consumer that reports on
+## the finished campaign has to read BEFORE the chips are taken away. The win is recorded
+## against the tier the run was actually played at, and only then does the campaign state
+## go — clearing first would leave a later consumer reading an already-emptied campaign.
+func _check_wealth_ending_augment_teardown_132(failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	var prev_tier := String(run_store.augmentedTier)
+
+	run_store.augmentedTier = "heart"
+	meta_store.history = {}
+	meta_store.endingsReached = []
+	meta_store.wealthEndingReached = false
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	meta_store.chipAugmentsPurchased = { "aug_dealer_tip": 1, "aug_emergency_reserve": 1 }
+	meta_store.symbolAugmentLevels = { "eye": 2 }
+	meta_store.pairTripleAugmentChoice = "pair"
+	meta_store.extraSpinsGranted = 3
+	meta_store.emergencyReserveUsed = true
+
+	meta_store.mark_ending_reached("wealth")
+
+	# The win landed on the played tier, not on "classic" or a tier the teardown mangled.
+	if int(meta_store.tier_wins("heart")) != 1:
+		failures.append("issue132: a wealth ending did not record the win on the active tier (heart=%d)"
+			% int(meta_store.tier_wins("heart")))
+	if int(meta_store.tier_wins("classic")) != 0:
+		failures.append("issue132: a wealth ending credited the win to classic")
+	# ... and the campaign teardown still happened, after the accounting.
+	if not (meta_store.chipAugmentsPurchased as Dictionary).is_empty() \
+			or not (meta_store.symbolAugmentLevels as Dictionary).is_empty() \
+			or String(meta_store.pairTripleAugmentChoice) != "" \
+			or int(meta_store.extraSpinsGranted) != 0 \
+			or bool(meta_store.emergencyReserveUsed):
+		failures.append("issue132: a wealth ending left campaign augments standing")
+	if bool(meta_store.campaignActive):
+		failures.append("issue132: a wealth ending left the campaign active")
+
+	run_store.augmentedTier = prev_tier
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _check_chip_augments(failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
@@ -2337,7 +2495,7 @@ func _check_chip_augments(failures: Array) -> void:
 		failures.append("augments: failed purchase charged or consumed stock")
 
 	# Extra Spins: its single copy pays +3 spins through the neuron decay model, subject
-	# to the 18-spin run cap, and a second purchase has no stock to consume.
+	# to the MAX_NEURONS run cap, and a second purchase has no stock to consume.
 	run_store.lucidityCoins = 500
 	run_store.ownedUpgrades = []
 	var decay := maxi(1, Economy.compute_neuron_decay([]))
@@ -2346,7 +2504,8 @@ func _check_chip_augments(failures: Array) -> void:
 	run_store.purchase_chip_augment("aug_extra_spins")
 	var expected_extra_spins := mini(EconomyConst.MAX_NEURONS, neurons_before + 3 * decay)
 	if int(run_store.neurons) != expected_extra_spins:
-		failures.append("augments: Extra Spins should respect the 18-spin cap")
+		failures.append("augments: Extra Spins should respect the %d-spin cap"
+			% EconomyConst.MAX_NEURONS)
 	run_store.dealerAugmentOfferId = "aug_extra_spins"
 	if run_store.purchase_chip_augment("aug_extra_spins"):
 		failures.append("augments: Extra Spins sold a second copy of a 1-stock augment")
@@ -4360,7 +4519,7 @@ func _check_frenzy_gauge_155(run_store: Node, failures: Array) -> void:
 		if int(run_store.betMultiplier) != expected:
 			failures.append("issue155: gauge expected x%d after a win, got x%d" % [expected, int(run_store.betMultiplier)])
 	# The decay no longer scales with the gauge: three spins consume three of the
-	# capped 18-spin pool.
+	# capped MAX_NEURONS pool.
 	if int(run_store.neurons) != EconomyConst.MAX_NEURONS - 3:
 		failures.append("issue155: frenzy spins should decay 1 neuron each, got %d left" % int(run_store.neurons))
 
@@ -5732,7 +5891,7 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	run_store.reset_run_state()
 
 # Issue #85/#80/#75: with a single 1:1 spin currency SPINS LEFT is the capped neuron
-# pool (plus banked free spins). The readout turns dark red at the 18-spin maximum.
+# pool (plus banked free spins). The readout turns dark red at the MAX_NEURONS maximum.
 func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
@@ -5748,27 +5907,32 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 
 	var before := int(machine._display_spins_left())
 	if before != EconomyConst.MAX_NEURONS:
-		failures.append("issue85: SPINS LEFT should cap at 18, got %d" % before)
-	# The tube and number both show their full state at 18.
+		failures.append("issue85: SPINS LEFT should cap at %d, got %d"
+			% [EconomyConst.MAX_NEURONS, before])
+	# The tube and number both show their full state at the cap: the top frame of the
+	# sheet is the cap itself, so a raised cap must reach real authored art.
 	var tube := machine._health_bar_sprite as Sprite2D
-	if tube != null and int(tube.frame) != 18:
-		failures.append("issue85: spins tube should show its full frame at 18 spins")
+	if tube != null and int(tube.frame) != EconomyConst.MAX_NEURONS:
+		failures.append("issue85: spins tube showed frame %d at the %d-spin cap"
+			% [int(tube.frame), EconomyConst.MAX_NEURONS])
 	if machine._spins_left_label == null \
 			or machine._spins_left_label.get_theme_color("font_color") != machine.SPINS_LEFT_MAX_COLOR:
 		failures.append("issue85: max SPINS LEFT number did not turn dark red")
 
-	# A +3 vial restore fills a 15-spin pool to the 18-spin cap.
+	# A +3 vial restore adds its three spins to a starting pool, never past the cap.
 	run_store.neurons = EconomyConst.STARTING_NEURONS
 	machine._update_hud()
 	var restore_before := int(machine._display_spins_left())
 	machine._apply_symbol_triple("vial", 0, false)
 	await create_timer(1.3).timeout # let the +3 fly-in land
 	var after := int(machine._display_spins_left())
-	if after != EconomyConst.MAX_NEURONS or after - restore_before != 3:
-		failures.append("issue80: +3 vial restore did not land at the 18-spin cap")
+	var restore_expected := mini(EconomyConst.MAX_NEURONS, restore_before + 3)
+	if after != restore_expected:
+		failures.append("issue80: +3 vial restore landed at %d, expected %d"
+			% [after, restore_expected])
 
 	# Directly oversized/legacy state is clamped visually and by the store's next
-	# committed result; it can never display more than 18 spins.
+	# committed result; it can never display more than the cap.
 	run_store.neurons = 100
 	run_store.freeSpinsRemaining = 0
 	run_store.spinCount = 500
@@ -5776,7 +5940,8 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	machine._update_hud()
 	var capped := int(machine._display_spins_left())
 	if capped != EconomyConst.MAX_NEURONS:
-		failures.append("issue75: SPINS LEFT exceeded the 18-spin cap (read %d)" % capped)
+		failures.append("issue75: SPINS LEFT exceeded the %d-spin cap (read %d)"
+			% [EconomyConst.MAX_NEURONS, capped])
 
 	machine._pending_spin_gain = 0
 	run_store.reset_run_state()
@@ -6562,6 +6727,46 @@ func _check_smart_save_retention(failures: Array) -> void:
 	var banked := Endings.bank_run_to_meta(run, meta, "flatline", 1700000000000)
 	if int(banked["lucidityWallet"]) != 100:
 		failures.append("upgrades: Smart Save did not retain 50% of run lucidity")
+
+	# Smart Saving's OTHER door: the Pacte augment card grants pos_smart_save into the
+	# run's ownedUpgrades, never into ownedPermanents. Endings only reads the permanents,
+	# so the card used to bank at the plain 10% while promising 50% on its face.
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	var prev_upgrades: Array = (run_store.ownedUpgrades as Array).duplicate()
+	var prev_tier := String(run_store.augmentedTier)
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.augmentedTier = ""
+	run_store.ownedUpgrades = []
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	if not run_store._apply_pacte_augment("augment_smart_saving"):
+		failures.append("pacte: the SMART SAVING augment card did not apply")
+	if not is_equal_approx(meta_store.effective_lucidity_kept_fraction(),
+			EconomyConst.SMART_SAVE_LUCIDITY_KEPT):
+		failures.append("pacte: a card-granted Smart Saving did not raise the kept fraction")
+	meta_store.bank_run({ "lucidityCoins": 200, "scoreEarned": 0, "neurons": 0 }, "flatline")
+	if int(meta_store.lucidityWallet) != 100:
+		failures.append("pacte: card-granted Smart Saving banked %d of 200, expected 100"
+			% int(meta_store.lucidityWallet))
+
+	# Without the card the same run banks the plain 10% — the fix must not hand the
+	# raised fraction to every run.
+	run_store.ownedUpgrades = []
+	meta_store.lucidityWallet = 0
+	meta_store.bank_run({ "lucidityCoins": 200, "scoreEarned": 0, "neurons": 0 }, "flatline")
+	if int(meta_store.lucidityWallet) != 20:
+		failures.append("pacte: a run without Smart Saving banked %d of 200, expected 20"
+			% int(meta_store.lucidityWallet))
+
+	run_store.ownedUpgrades = prev_upgrades
+	run_store.augmentedTier = prev_tier
+	run_store.reset_run_state()
+	meta_store._apply(meta_before)
+	meta_store.save_state()
 
 func _check_issue27_machine_stash_drag(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.runPhase = "running"

@@ -654,7 +654,7 @@ func spin(compulsive := false) -> Variant:
 	if runPhase != "running" or isSpinning:
 		return null
 	# Normalize legacy or externally restored state before charging this spin. The
-	# machine never spends from a pool above the current 18-spin cap.
+	# machine never spends from a pool above the current MAX_NEURONS cap.
 	_clamp_neurons()
 	# The gameplay scene normally resolves this through the pending UI. A direct
 	# caller that requests another spin has implicitly declined the rescue instead
@@ -2581,8 +2581,10 @@ func cheat_reel(reel_index: int, symbol: String) -> bool:
 func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 	if not _can_use_consumable():
 		return false
-	if dealerIncoming or dealerPending:
-		return false
+	# A queued or walking-in dealer used to refuse every consumable here while the stash
+	# still read enabled, so the tap was a silent no-op — worst of all for an item that
+	# would have beaten the Wealth target on the spot. The dealer is a presentation
+	# event, not a lock: he already stands down for a beaten target, so the item lands.
 	var cmap := Consumables.map()
 	var imap := InRunItems.map()
 	var consumable: Variant = cmap.get(consumable_id, null)
