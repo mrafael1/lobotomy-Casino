@@ -5346,16 +5346,19 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
 	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
 	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
-	# The clear strip measured out of the authored cabinet art, below the fill bar.
-	var clear_strip := Rect2(30.0, 99.0, 92.0, 9.0)
-	var slot_width: float = icon_size + 1.0 + float(machine.BOOST_COUNT_WIDTH)
+	# The TV's own SCREEN below the fill bar, measured off the rendered cabinet as the
+	# near-black region rather than "anything dark" — the surrounding cabinet grey reads
+	# dark too, and counting it as screen is what let the row run past the bezel and off
+	# the TV. The screen holds x37..114 across y99..106; y107 already curves in to x39..112.
+	var screen_strip := Rect2(37.0, 99.0, 78.0, 8.0)
+	var slot_width: float = machine.BOOST_SLOT_WIDTH
 	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
 		var rect := Rect2(slot_pos, Vector2(slot_width, icon_size))
 		if rect.position.x < tv_left or rect.position.y < tv_top or rect.end.y > tv_bottom:
 			failures.append("issue185: boost slot %s falls outside the TV" % rect)
-		if not clear_strip.encloses(rect):
-			failures.append("issue185: boost slot %s leaves the clear strip %s"
-				% [rect, clear_strip])
+		if not screen_strip.encloses(rect):
+			failures.append("issue185: boost slot %s leaves the TV screen %s"
+				% [rect, screen_strip])
 		if rect.intersects(dealer_rect):
 			failures.append("issue185: boost slot %s collides with the dealer icon" % rect)
 		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):

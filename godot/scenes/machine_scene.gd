@@ -1590,13 +1590,22 @@ func _refresh_restore_cap() -> void:
 const BOOST_ICON_SIZE := 8.0
 const BOOST_ICON_GAP := 1.0
 const BOOST_COUNT_WIDTH := 7.0        # room for a sign plus one digit beside the icon
-const BOOST_ROW_LEFT := 32.0          # left edge of the measured clear strip, +2 margin
-const BOOST_ROW_TOP := 100.0          # 1px under the bar (y94..98), 8px clear above y107
-const BOOST_SLOT_PITCH := 17.0        # 8px icon + 1px + 7px count + 1px between slots
+# How far the count sits from the slot origin. Deliberately INSIDE the 8px icon box: the
+# icon art is aspect-centred in that box and rarely fills it edge to edge, so measuring
+# the gap from the box drifted the number a few px away from the symbol it labels.
+const BOOST_COUNT_OFFSET := 7.0
+const BOOST_SLOT_WIDTH := BOOST_COUNT_OFFSET + BOOST_COUNT_WIDTH   # 14: icon + its count
+# The row is bounded by the TV's own SCREEN, not by the cabinet around it: the near-black
+# screen runs x37..114 across y99..106 before the bezel and the curved bottom corners take
+# over (y107 already narrows to x39..112). Measuring "anything dark" instead caught the
+# cabinet grey and pushed the row about 5px past the bezel, off the TV entirely.
+const BOOST_ROW_LEFT := 39.0
+const BOOST_ROW_TOP := 99.0
+const BOOST_SLOT_PITCH := 15.0        # 14px of slot + 1px between slots
 const BOOST_SLOT_COUNT := 5
 const BOOST_SLOT_POSITIONS: Array[Vector2] = [
-	Vector2(32.0, 100.0), Vector2(49.0, 100.0), Vector2(66.0, 100.0),
-	Vector2(83.0, 100.0), Vector2(100.0, 100.0),
+	Vector2(39.0, 99.0), Vector2(54.0, 99.0), Vector2(69.0, 99.0),
+	Vector2(84.0, 99.0), Vector2(99.0, 99.0),
 ]
 const BOOST_BADGE_FONT_SIZE := 5      # count + polarity glyphs, sized for the 8px badge
 const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
@@ -1760,7 +1769,7 @@ func _refresh_boost_indicators() -> void:
 		var mh := cn.get_minimum_size().y
 		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
-		cn.position = Vector2(BOOST_ICON_SIZE + 1.0, BOOST_ICON_SIZE - mh)
+		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh)
 		# The polarity glyphs share the count's font metrics, which are only reliable
 		# once the label is in the tree — sizing them at build time can yield a zero-high
 		# box and clip the sign.
