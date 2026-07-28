@@ -131,8 +131,25 @@ Resources and currencies:
   active, its authored COMBO x1..x9 indicator stays mounted in the machine TV at
   the current streak. The base payout lands first, then the COMBO indicator shakes
   and sends out its separate bonus amount. Any transient TV callout temporarily
-  hides COMBO, the FREE SPIN banner, and dealer countdown information so the pop
-  remains readable; those indicators return when the callout ends.
+  hides COMBO, the FREE SPIN banner, the active-item icons, the whole target
+  readout, and dealer countdown information so the pop remains readable; those
+  indicators return when the callout ends.
+- Active multi-spin items show as small 8px duration icons in a row under the
+  target bar, filling left to right, each with the number of turns it has left
+  beside it. That number is coloured by what the item is doing right now: green
+  while it is helping, red while it is costing. Five slots, enough that
+  simultaneous items no longer collapse into an overflow badge. Only a full-screen
+  callout clears the row; the FREE SPIN banner shares the screen with it.
+- An item whose effect runs in phases keeps ONE badge for the whole thing, counting
+  the entire effect down while the colour tracks the phase currently running. The
+  Red Pill counts 2, 1 turning red (the forced flatline it makes you take) then
+  green (the triple it owes you); the Energy Drink counts 3, 2, 1 turning green
+  (protected spins) then red at 1 (the compulsory spin it queued). Cocktail,
+  Potion and Tobacco are green throughout; Serum's blur tail is red.
+- Tapping an item icon pops that item's name and what it is currently doing, over
+  the TV, for about a second before it fades on its own. The popup never blocks
+  input and draws above the banner, the dealer countdown and the losing-state
+  overlays; a callout taking the TV dismisses it.
 - A Heart triple uses the authored TRIPLE music and the vial-style reaction flash
   even though it pays no score: its tier shows a little "+1", "+2", or "+3"
   fly-in while recovering the matching run spins.
@@ -174,7 +191,10 @@ Resources and currencies:
   used as its own destination.
 - **Pattern Recognition** — its five authored icon frames animate on the Pacte card.
 - **Hallucination** — keeps all three reels visible; a visible pair is scored as its
-  corresponding triple while the authored reward scale applies. It does not hide or
+  corresponding triple, and THAT payout — only that one — is cut to 30%. Natural
+  triples the reels made on their own (the syringe triple included), ordinary pairs,
+  and Book joker wins all pay in full while it is owned; the cut is charged to the
+  promotion, the same way Learning charges its cut to book wins. It does not hide or
   cover the third reel.
 - **Tunnel Vision** — hides the third reel and increases rewards by 50%.
 - **How to Cheat** — a solo visible symbol counts as a pair; all pair payouts use
@@ -217,8 +237,18 @@ Resources and currencies:
   the initial Pacte handoff starts with no consumables and the stash limit is 2.
 - Dealer-only run items (offered mid-run): Energy Drink,
   Cocktail, Water, Red Pill.
+- Items are TAKEN and USED in two different places. The dealer's visit overlay is
+  where an offer is selected (tapping an item arms TAKE with it) and taken into the
+  run stash; the machine's own bottom-right stash is where a held item is spent, by
+  tapping its slot. Taking is not using — an item sits in the stash until the player
+  spends it, and the stash holds 2.
 - Water grants +40 run Lucidity AND +40 score: drinking it rolls the wealth
-  odometer up immediately and its points feed the power gauge like any score.
+  odometer up immediately and its points feed the power gauge like any score. Using
+  it plays a short authored three-frame pour over the machine.
+- The Cocktail pays rarity points for every VISIBLE reel (flatline 1 … brain/book 6,
+  scaled by the frenzy multiplier) and is blind to what the reels did: misses, pairs
+  and triples all collect the same total for the same symbols. A reel hidden from
+  scoring pays nothing.
 - Several items and Lab upgrades are tagged "corrupt"; corruption use is tracked
   campaign-wide (`corruptionEverUsed`) and gates rules-level exit eligibility.
 
@@ -281,7 +311,10 @@ Resources and currencies:
 
 - Free spins never cost run spins. The bank caps at 1 (3 when upgraded); a jackpot
   grants 1. The FREE SPIN banner covers banked credits and Energy Drink's
-  protected spins.
+  protected spins. While it is lit it takes only the target GOAL NUMBER, whose band
+  its own text occupies; the fill bar keeps running underneath it with its shimmer,
+  because progress toward the target is exactly what the free spins are being spent
+  on. The dealer interface and the active-item icons stay lit beside it too.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
   authored overlay with a beeping pulse; the x3 state shows a steady 9-frame
   diminished-fire sheet (never both, and the normal gauge effects are suppressed

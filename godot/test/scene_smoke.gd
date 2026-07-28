@@ -97,6 +97,11 @@ func _run() -> void:
 	_check_compulsion_multiplier_76(machine, run_store, failures)
 	_check_tv_information_priority(machine, run_store, failures)
 	_check_boost_duration_icons_76(machine, run_store, failures)
+	_check_red_pill_tv_badge_185(machine, run_store, failures)
+	_check_item_badge_popup_185(machine, run_store, failures)
+	_check_water_animation_185(machine, run_store, failures)
+	_check_dealer_item_usage_flow_185(machine, run_store, failures)
+	_check_hallucination_machine_reaction_185(machine, run_store, failures)
 	await _check_power_bar_76(machine, run_store, failures)
 	_check_restore_cap_181(machine, run_store, failures)
 	await _check_eye_reveal(machine, failures)
@@ -292,30 +297,36 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 	if String(joker_eye["winType"]) != "triple" or String(joker_eye.get("resolvedSymbol", "")) != "eye":
 		failures.append("issue92: book should complete the highest near symbol triple: %s" % str(joker_eye))
 
+	# Hallucination's cut travels in its OWN slot now (issue #185), not in reward_scale:
+	# a promoted pair pays a triple discounted to 30%.
 	var hallucination := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
-		false, false, 1.0, 0, true, 0.70)
+		false, false, 1.0, 0, true, 1.0, {}, false, 1.0, 0.70)
 	if String(hallucination["winType"]) != "triple" or int(hallucination["scoreEarned"]) != 35:
 		failures.append("issue92: hallucination should score visible pair as 70%% triple: %s" % str(hallucination))
 
 	# The tuned maluses, not just the mechanism: the checks above hand Evaluate a literal
 	# scale, so without these a retune of the upgrade tables goes unnoticed. Hallucination
-	# cuts rewards to 30%, Learning pays for the Book joker with 70%.
+	# cuts its promoted triples to 30%, Learning pays for the Book joker with 70%.
 	if not is_equal_approx(Economy.compute_hallucination_reward_scale(["pos_enlightenment"]), 0.30):
 		failures.append("balance: Hallucination should cut rewards to 30%% (got %.2f)"
 			% Economy.compute_hallucination_reward_scale(["pos_enlightenment"]))
 	if not is_equal_approx(Economy.compute_book_reward_scale(["pos_learning"]), 0.70):
 		failures.append("balance: Learning should cut book wins to 70%% (got %.2f)"
 			% Economy.compute_book_reward_scale(["pos_learning"]))
-	# Learning's cut is charged to book wins only, so it must NOT ride the general scale
-	# — owning it can no longer tax a spin that never saw a book.
+	# Neither cut may ride the general scale (issue #185). Learning is charged to book
+	# wins only; Hallucination is charged to the triples it promotes only. Owning either
+	# can no longer tax a spin it had nothing to do with.
 	var scale_owned: Array = run_store.ownedUpgrades.duplicate()
 	run_store.ownedUpgrades = ["pos_enlightenment", "pos_learning"]
-	if not is_equal_approx(run_store._active_reward_scale(), 0.30):
-		failures.append("balance: Learning leaked into the general reward scale (got %.3f)"
+	if not is_equal_approx(run_store._active_reward_scale(), 1.0):
+		failures.append("balance: a targeted malus leaked into the general reward scale (got %.3f)"
 			% run_store._active_reward_scale())
 	if not is_equal_approx(run_store._book_reward_scale(), 0.70):
 		failures.append("balance: Learning's book-win cut went missing (got %.3f)"
 			% run_store._book_reward_scale())
+	if not is_equal_approx(run_store._hallucination_reward_scale(), 0.30):
+		failures.append("issue185: Hallucination's promoted-triple cut went missing (got %.3f)"
+			% run_store._hallucination_reward_scale())
 	run_store.ownedUpgrades = scale_owned
 
 	# The rule itself: with Learning owned, a win with no book on the reels pays in full,
@@ -4896,6 +4907,8 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
 	var dealer_icon := machine._dealer_icon as CanvasItem
 	var target_bar := machine._target_bar_sprite as CanvasItem
+	var target_goals := machine._target_goals_sprite as CanvasItem
+	var target_bar_anim := machine._target_bar_anim_sprite as CanvasItem
 	var boost_slot: CanvasItem = null
 	if not machine._boost_indicator_slots.is_empty():
 		boost_slot = (machine._boost_indicator_slots[0] as Dictionary)["slot"] as CanvasItem
@@ -4908,15 +4921,26 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	if boost_slot == null or not boost_slot.visible:
 		failures.append("TV callout priority: boost icon did not establish its baseline")
 
-	# A banked free spin lights the banner. It takes the objective plate and the item
-	# icons, and leaves the dealer interface lit beside it.
+	# A banked free spin lights the banner. Issue #185: it is a narrow owner now — it takes
+	# only the goal NUMBER, whose band its own text runs into, and leaves the dealer
+	# interface, the item icons and the fill bar (with its shimmer still stepping) lit
+	# beside it. Progress toward the target is what the free spins are being spent on.
 	run_store.freeSpinsRemaining = 1
 	machine._update_hud()
 	if free_spin == null or not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not light")
-	if (boost_slot != null and boost_slot.visible) \
-			or (target_bar != null and target_bar.visible):
-		failures.append("TV callout priority: FREE SPIN did not hide the objective/item icons")
+	if target_goals != null and target_goals.visible:
+		failures.append("issue185: FREE SPIN should hide the goal number")
+	if target_bar == null or not target_bar.visible:
+		failures.append("issue185: FREE SPIN should keep the target bar lit")
+	if target_bar_anim == null or not target_bar_anim.visible:
+		failures.append("issue185: FREE SPIN should keep the target bar animation running")
+	if boost_slot == null or not boost_slot.visible:
+		failures.append("issue185: FREE SPIN should keep the item icons lit beside it")
+	# One authored placement: the banner text sits at y84..89, in the band the goal number
+	# just vacated, so it clears the fill bar at y94..98 instead of being clipped by it.
+	if machine.FREE_SPIN_FRAMES != 1:
+		failures.append("issue185: the FREE SPIN banner should be a single authored frame")
 	if (dealer_bar != null and not dealer_bar.visible) \
 			or (dealer_icon != null and not dealer_icon.visible):
 		failures.append("TV callout priority: FREE SPIN hid the dealer interface")
@@ -4935,14 +4959,18 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 			or (target_bar != null and target_bar.visible) \
 			or (boost_slot != null and boost_slot.visible):
 		failures.append("TV callout priority: HUD refresh overrode the PAIR priority")
-	# Closing the callout hands the screen back to the banner and to the dealer strip it
-	# shares it with; the objective plate and the item icons keep waiting the banner out.
+	# Closing the callout hands the screen back to the banner and to everything that
+	# shares it with: the dealer strip, the item icons and the fill bar. Only the goal
+	# number keeps waiting the banner out.
 	machine._stop_win_animation()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
-	if (boost_slot != null and boost_slot.visible) \
-			or (target_bar != null and target_bar.visible):
-		failures.append("TV callout priority: PAIR restored the objective/item icons under the banner")
+	if target_goals != null and target_goals.visible:
+		failures.append("issue185: PAIR restored the goal number under the banner")
+	if target_bar != null and not target_bar.visible:
+		failures.append("issue185: the target bar did not come back with the banner after PAIR")
+	if boost_slot != null and not boost_slot.visible:
+		failures.append("issue185: item icons did not come back with the banner after PAIR")
 	if (dealer_bar != null and not dealer_bar.visible) \
 			or (dealer_icon != null and not dealer_icon.visible):
 		failures.append("TV callout priority: dealer interface lost after PAIR under the banner")
@@ -5293,57 +5321,79 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
-	# Issue #181: the slots fill right to left and every one of them has to stay clear
-	# of the TV bounds, the dealer icon, and the authored TARGET art below.
+	# Issue #185 follow-up: the row moved below the fill bar and fills LEFT to right, one
+	# slot per possible item instead of two with an overflow. Every slot — icon plus the
+	# count beside it — has to stay inside the strip that was measured clear (y99..107,
+	# x30..121) and off the TV's other authored art.
 	var p0: Vector2 = (slots[0]["slot"] as Control).position
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
-	if not is_equal_approx(p0.y, p1.y) or not (p1.x < p0.x):
-		failures.append("issue181: boost icons did not fill right to left (%s vs %s)" % [p0, p1])
+	if not is_equal_approx(p0.y, p1.y) or not (p0.x < p1.x):
+		failures.append("issue185: boost icons did not fill left to right (%s vs %s)" % [p0, p1])
+	if machine.BOOST_SLOT_POSITIONS.size() < 5:
+		failures.append("issue185: the badge row should hold more than the old two items (%d)"
+			% machine.BOOST_SLOT_POSITIONS.size())
 	var tv_left := float(machine.TV_SCREEN["left"])
 	var tv_top := float(machine.TV_SCREEN["top"])
 	var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
 	var icon_size: float = machine.BOOST_ICON_SIZE
+	# Source item art is 32x32, so the badge must divide 32 exactly or the nearest-
+	# neighbour reduction drops source pixels unevenly and the icon reads as mush.
+	if not is_equal_approx(fmod(32.0, icon_size), 0.0):
+		failures.append("issue185: badge size %d is not an exact division of the 32px source art"
+			% int(icon_size))
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
 	# Measured art extents of the TV's other occupants (see the constants' comment).
 	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
 	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
 	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
+	# The TV's own SCREEN below the fill bar, measured off the rendered cabinet as the
+	# near-black region rather than "anything dark" — the surrounding cabinet grey reads
+	# dark too, and counting it as screen is what let the row run past the bezel and off
+	# the TV. Measured: y99..104 hold x36..115, y105..106 x37..114, y107 x39..112. The row
+	# occupies y100..107, so the corner row is the binding constraint: x39..112.
+	var screen_strip := Rect2(39.0, 100.0, 74.0, 8.0)
+	var slot_width: float = machine.BOOST_SLOT_WIDTH
 	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
-		var rect := Rect2(slot_pos, Vector2(icon_size, icon_size))
-		if rect.position.x < tv_left or rect.end.x > machine.TV_STATUS_RIGHT \
-				or rect.position.y < tv_top or rect.end.y > tv_bottom:
-			failures.append("issue181: boost slot %s falls outside the TV" % rect)
+		var rect := Rect2(slot_pos, Vector2(slot_width, icon_size))
+		if rect.position.x < tv_left or rect.position.y < tv_top or rect.end.y > tv_bottom:
+			failures.append("issue185: boost slot %s falls outside the TV" % rect)
+		if not screen_strip.encloses(rect):
+			failures.append("issue185: boost slot %s leaves the TV screen %s"
+				% [rect, screen_strip])
 		if rect.intersects(dealer_rect):
-			failures.append("issue181: boost slot %s collides with the dealer icon" % rect)
+			failures.append("issue185: boost slot %s collides with the dealer icon" % rect)
 		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):
-			failures.append("issue181: boost slot %s collides with the TARGET art" % rect)
-	# Issue #113: polarity rides a sign glyph, not the count colour alone. Slots 0 and 1
-	# are the Energy Drink no-decay rush and the Cocktail — both pure upside now that the
-	# Cocktail's pair/triple tax is gone, so both show "+" only.
-	if not (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: pure-positive boost should show only the + mark")
-	if not (slots[1]["pos_mark"] as Label).visible or (slots[1]["neg_mark"] as Label).visible:
-		failures.append("issue113: the Cocktail should be pure upside (+ mark only)")
-	# Tobacco still carries a live cost (3x pairs bought with a hidden reel), so it is the
-	# mixed case: both marks at once. Shown alone — there are only two slots, and a third
-	# simultaneous boost folds into a "+N" instead of getting its own badge.
+			failures.append("issue185: boost slot %s collides with the TARGET art" % rect)
+	# Issue #185: the count is a bare turn number and its COLOUR carries polarity — green
+	# while the item is helping, red while it is costing. The badge is 8px and the sign
+	# glyphs that used to carry this crowded the art at that size.
+	var green: Color = machine.BOOST_COUNT_COLOR
+	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	for i in 2:
+		var badge_text: String = (slots[i]["count"] as Label).text
+		if not badge_text.is_valid_int():
+			failures.append("issue185: the count should be a bare number, got '%s'" % badge_text)
+	if (slots[1]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Cocktail is pure upside and should count in green")
+	# Tobacco buys 3x pairs with a hidden reel; the boost itself is what the player
+	# spent on, so it counts green like the other upsides.
 	run_store.cocktailBoostSpins = 0
 	run_store.decaySkips = 0
 	run_store.pairBoostSpins = 4
 	machine._refresh_boost_indicators()
-	if not (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: mixed Tobacco boost should show both + and - marks")
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: Tobacco should count in green")
 	run_store.pairBoostSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
 	machine._refresh_boost_indicators()
-	# A pure downside (Serum's blur tail) shows only the "-" mark.
+	# A pure downside (Serum's blur tail) counts in red.
 	run_store.cocktailBoostSpins = 0
 	run_store.decaySkips = 0
 	run_store.blurReelsSpins = 2
 	machine._refresh_boost_indicators()
-	if (slots[0]["pos_mark"] as Label).visible or not (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue113: pure-negative boost should show only the - mark")
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: a pure-downside boost should count in red")
 	run_store.blurReelsSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
@@ -5435,6 +5485,354 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			failures.append("issue92: Potion popup did not use requested effect color")
 		if popup != null:
 			popup.queue_free()
+
+	run_store.reset_run_state()
+
+## Issue #185: the Red Pill runs in two phases — a forced flatline, then the triple it
+## promised — and had no TV badge at all, so the most dramatic item in the game ran
+## invisibly. It gets ONE badge over both phases, counting the whole effect down.
+func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	var slots: Array = machine._boost_indicator_slots
+	if slots.is_empty():
+		failures.append("issue185: boost indicator slots were not built")
+		return
+	var pill_boost := {}
+	for boost: Dictionary in machine.DURATION_BOOSTS:
+		if String(boost.get("id", "")) == "item_pill":
+			pill_boost = boost
+	if pill_boost.is_empty():
+		failures.append("issue185: the Red Pill has no TV duration badge")
+		return
+
+	# Fresh out of the bottle: both phases pending, so the badge reads 2.
+	run_store.forceFlatlineSpins = 1
+	run_store.guaranteedTripleSpins = 1
+	machine._refresh_boost_indicators()
+	var slot := slots[0]["slot"] as Control
+	if not slot.visible:
+		failures.append("issue185: the Red Pill badge did not show")
+	elif (slots[0]["count"] as Label).text != "2":
+		failures.append("issue185: the Red Pill badge should count both phases, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	var icon := (slots[0]["icon"] as TextureRect).texture
+	if icon == null or not String(icon.resource_path).ends_with("items/pill.png"):
+		failures.append("issue185: the Red Pill badge did not use the pill icon")
+	# Phase one is the forced flatline it makes you take, so the count is RED.
+	var green: Color = machine.BOOST_COUNT_COLOR
+	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: the Red Pill's forced-flatline phase should count in red")
+
+	# The flatline is spent; the promised triple is still owed. ONE badge, now at 1 —
+	# not a second badge appearing as the first disappears — and it turns GREEN, because
+	# what the item is doing has changed from costing to paying.
+	run_store.forceFlatlineSpins = 0
+	machine._refresh_boost_indicators()
+	if not slot.visible:
+		failures.append("issue185: the Red Pill badge vanished between its two phases")
+	elif (slots[0]["count"] as Label).text != "1":
+		failures.append("issue185: the Red Pill badge should read 1 after the flatline, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Red Pill should turn green for its guaranteed triple")
+	if slots.size() > 1 and (slots[1]["slot"] as Control).visible:
+		failures.append("issue185: the Red Pill should occupy one badge, not one per phase")
+
+	# Both phases spent: gone.
+	run_store.guaranteedTripleSpins = 0
+	machine._clear_boost_zero_linger()
+	machine._refresh_boost_indicators()
+	if slot.visible:
+		failures.append("issue185: the Red Pill badge outlived both its phases")
+
+	# The Energy Drink runs the other way round: protected spins first, then the
+	# compulsory one it queued. 3 green, then red once only the bill is left.
+	run_store.reset_run_state()
+	run_store.decaySkips = 2
+	run_store.pendingCompulsiveSpinSkips = 1
+	machine._refresh_boost_indicators()
+	if (slots[0]["count"] as Label).text != "3":
+		failures.append("issue185: the Energy Drink should count its rush AND its forced spin, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Energy Drink's protected spins should count in green")
+	run_store.decaySkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.compulsiveSpinSkips = 1
+	machine._refresh_boost_indicators()
+	if (slots[0]["count"] as Label).text != "1":
+		failures.append("issue185: the Energy Drink should read 1 for its forced spin, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: the Energy Drink should turn red for its forced spin")
+	run_store.reset_run_state()
+
+## Issue #185: a 12px icon cannot say what an item DOES. Tapping one pops its name and
+## effect over the TV and the popup ages out on its own, without ever blocking input or
+## outliving a callout that needs the screen.
+func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	var slots: Array = machine._boost_indicator_slots
+	if slots.is_empty():
+		failures.append("issue185: boost indicator slots were not built")
+		return
+	# Every badge must be able to describe itself, or tapping it is a dead end.
+	for boost: Dictionary in machine.DURATION_BOOSTS:
+		if String(boost.get("title", "")) == "" or String(boost.get("desc", "")) == "":
+			failures.append("issue185: boost badge %s has no name/description to pop"
+				% String(boost.get("counter", "?")))
+
+	run_store.cocktailBoostSpins = 2
+	machine._refresh_boost_indicators()
+	var slot := slots[0]["slot"] as Control
+	if not (slot is Button):
+		failures.append("issue185: the item badge is not a clickable control")
+		return
+	if slot.mouse_filter == Control.MOUSE_FILTER_IGNORE:
+		failures.append("issue185: the item badge cannot receive a tap")
+
+	machine._on_boost_indicator_pressed(0)
+	var popup := machine._item_info_popup as Control
+	if popup == null:
+		failures.append("issue185: tapping an item badge popped nothing")
+	else:
+		var text_label := popup.find_child("Text", true, false) as Label
+		if text_label == null or not text_label.text.contains("COCKTAIL"):
+			failures.append("issue185: the popup did not name the item: '%s'"
+				% ("" if text_label == null else text_label.text))
+		elif text_label.text.length() <= String("COCKTAIL").length():
+			failures.append("issue185: the popup named the item but did not describe it")
+		if popup.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("issue185: the popup must not eat taps meant for the machine")
+		# It sits over the banner, the callouts and the dealer strip, or it is unreadable.
+		if int(popup.z_index) <= 12:
+			failures.append("issue185: the popup draws under the TV indicators")
+		var tv_rect := Rect2(
+			Vector2(machine.TV_SCREEN["left"], machine.TV_SCREEN["top"]),
+			Vector2(machine.TV_SCREEN["width"], machine.TV_SCREEN["height"]))
+		var popup_rect := Rect2(popup.position, machine.ITEM_INFO_POPUP_SIZE)
+		if not tv_rect.encloses(popup_rect):
+			failures.append("issue185: the popup %s spills outside the TV %s"
+				% [popup_rect, tv_rect])
+
+	# It leaves by itself in about a second — no second tap needed, nothing to dismiss.
+	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD * 0.5)
+	if machine._item_info_popup == null:
+		failures.append("issue185: the popup vanished before it could be read")
+	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD + machine.ITEM_INFO_POPUP_FADE)
+	if machine._item_info_popup != null:
+		failures.append("issue185: the popup outstayed its ~1s welcome")
+
+	# A callout needs the whole screen: the popup gets out of the way with the badges.
+	machine._on_boost_indicator_pressed(0)
+	machine._play_win_animation("pair", 20)
+	if machine._item_info_popup != null:
+		failures.append("issue185: the popup survived a PAIR callout taking the TV")
+	machine._stop_win_animation()
+
+	# A hidden badge describes nothing — a tap racing the boost running out must not pop
+	# the item that just expired.
+	run_store.cocktailBoostSpins = 0
+	machine._clear_boost_zero_linger()
+	machine._refresh_boost_indicators()
+	machine._on_boost_indicator_pressed(0)
+	if machine._item_info_popup != null:
+		failures.append("issue185: an expired badge still popped a description")
+	machine._hide_item_info_popup()
+	run_store.reset_run_state()
+
+## Issue #185: the same fix as the evaluator checks, but driven through the real store
+## path a power takes, because that is where the leak was actually felt — every rescore
+## in the run handed Hallucination's cut to Evaluate as the general reward scale.
+## The syringe triple the issue names is the case: built for real, it pays in full.
+func _check_hallucination_machine_reaction_185(machine: Node, run_store: Node,
+		failures: Array) -> void:
+	var syringe_triple := int(Payouts.TRIPLE_SCORE["syringe"])
+	var eye_pair := int(Payouts.PAIR_SCORE["eye"])
+
+	# A natural triple, completed by CHEAT, with Hallucination owned. The promoted pair
+	# it replaced was discounted, so the delta is the full triple minus that discount —
+	# and the triple itself must never be cut.
+	for owned: Array in [["pos_enlightenment"], []] as Array[Array]:
+		run_store.reset_run_state()
+		run_store.runPhase = "running"
+		run_store.isSpinning = false
+		run_store.ownedPowerIds = ["cheat"]
+		run_store.abilitiesUsed = []
+		run_store.powersUsedThisSpin = 0
+		run_store.augmentedTier = ""
+		run_store.ownedUpgrades = owned
+		run_store.winBoostEnabled = false
+		run_store.flatlineWinBoostArmed = false
+		var opening := int(Evaluate.score_reels(["syringe", "syringe", "vial"], 1.0, true,
+			false, false, 1.0, 0, not owned.is_empty(), 1.0, {}, false, 1.0,
+			run_store._hallucination_reward_scale())["scoreEarned"])
+		run_store.scoreEarned = opening
+		run_store.lastPureWinScore = opening
+		run_store.lastPureWinCoins = opening
+		run_store.lastResult = {
+			"reels": ["syringe", "syringe", "vial"], "scoreEarned": opening,
+			"coinsEarned": opening, "freeSpinsGranted": 0, "freeSpinsAfter": 0,
+			"isJackpot": false, "winType": "triple" if not owned.is_empty() else "pair",
+			"isFreeSpin": false, "scoreMultiplier": 1.0,
+		}
+		var label := "with Hallucination" if not owned.is_empty() else "without it"
+		if not run_store.cheat_symbol(2, "syringe"):
+			failures.append("issue185: Cheat was refused building the syringe triple %s" % label)
+			continue
+		var result: Dictionary = run_store.lastResult
+		# A new combination pays its own full value on top of the score already banked
+		# (issue #181), so the GAIN is the triple — and it is the same number whether or
+		# not Hallucination is owned. Only the opening pair differs, because that one was
+		# a promotion and did pay the cut.
+		var gain := int(run_store.scoreEarned) - opening
+		if gain != syringe_triple:
+			failures.append("issue185: the natural syringe triple paid %d %s, expected the full %d"
+				% [gain, label, syringe_triple])
+		if String(result.get("winType", "")) != "triple":
+			failures.append("issue185: the syringe triple did not register as a triple %s" % label)
+		if bool(result.get("hallucinatedTriple", false)):
+			failures.append("issue185: a natural syringe triple was marked as promoted %s" % label)
+
+	# The promoted pair itself still pays the card's 70% cut — the fix narrows where the
+	# malus lands, it does not remove it.
+	run_store.reset_run_state()
+	run_store.ownedUpgrades = ["pos_enlightenment"]
+	var promoted := Evaluate.score_reels(["eye", "eye", "vial"], 1.0, true,
+		false, false, 1.0, 0, true, run_store._active_reward_scale(), {}, false, 1.0,
+		run_store._hallucination_reward_scale())
+	var full_eye_triple := int(Payouts.TRIPLE_SCORE["eye"])
+	if String(promoted["winType"]) != "triple":
+		failures.append("issue185: Hallucination stopped promoting a visible pair")
+	elif int(promoted["scoreEarned"]) >= full_eye_triple:
+		failures.append("issue185: the promoted triple paid %d, the undiscounted %d"
+			% [int(promoted["scoreEarned"]), full_eye_triple])
+	elif int(promoted["scoreEarned"]) <= eye_pair:
+		failures.append("issue185: the promoted triple paid %d, no better than the pair %d"
+			% [int(promoted["scoreEarned"]), eye_pair])
+
+	# The general scale is where the leak lived: nothing but Tunnel Vision and the club
+	# modifier may ride it.
+	if not is_equal_approx(run_store._active_reward_scale(), 1.0):
+		failures.append("issue185: owning Hallucination still taxes the general reward scale (%.3f)"
+			% run_store._active_reward_scale())
+	run_store.ownedUpgrades = []
+	run_store.ownedPowerIds = []
+	run_store.abilitiesUsed = []
+	run_store.reset_run_state()
+
+## Issue #185: Water used to land as a bare number. It now plays the authored 3-frame
+## pour, which must live in godot/assets and clear itself when the run tears down.
+func _check_water_animation_185(machine: Node, run_store: Node, failures: Array) -> void:
+	var sheet := "res://assets/images/%s" % machine.WATER_SHEET
+	if not ResourceLoader.exists(sheet):
+		failures.append("issue185: the Water animation sheet is missing from godot/assets (%s)"
+			% sheet)
+		return
+	var tex := load(sheet) as Texture2D
+	if tex == null:
+		failures.append("issue185: the Water sheet did not load as a texture")
+		return
+	# A full-canvas sheet: WATER_SHEET_FRAMES frames of the 160x320 virtual canvas.
+	var frames: int = machine.WATER_SHEET_FRAMES
+	if frames != 3:
+		failures.append("issue185: the Water animation should be 3 frames, declared %d" % frames)
+	if tex.get_width() != int(machine.SRC_W) * frames or tex.get_height() != int(machine.SRC_H):
+		failures.append("issue185: the Water sheet is %dx%d, expected %dx%d for %d full-canvas frames"
+			% [tex.get_width(), tex.get_height(), int(machine.SRC_W) * frames,
+				int(machine.SRC_H), frames])
+
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	machine._play_water_animation()
+	var sprite := machine._water_fx_sprite as Sprite2D
+	if sprite == null:
+		failures.append("issue185: using Water built no animation")
+	else:
+		if not sprite.visible:
+			failures.append("issue185: the Water animation did not start")
+		if sprite.hframes != frames:
+			failures.append("issue185: the Water sprite sliced %d frames, expected %d"
+				% [sprite.hframes, frames])
+		if sprite.frame != 0:
+			failures.append("issue185: the Water animation did not start on its first frame")
+		# It is a one-shot, not a duration: it must not become another thing left running.
+		machine._hide_water_animation()
+		if sprite.visible:
+			failures.append("issue185: the Water animation would not clear")
+	run_store.reset_run_state()
+
+## Issue #185: the complete item journey — the dealer offers it, TAKE puts it in the run
+## stash, and the machine's own stash is where it is spent. The two halves were never
+## covered end to end, so nothing caught a break between them.
+func _check_dealer_item_usage_flow_185(machine: Node, run_store: Node, failures: Array) -> void:
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.neurons = 10
+	run_store.lucidityCoins = 0
+	run_store.runConsumables = {}
+	run_store.dealerPending = true
+	run_store.dealerIncoming = true
+	run_store.dealerOfferIds = ["item_water", "item_cocktail"]
+	machine._set_sequence_lock(false)
+	machine._update_hud()
+	machine._show_dealer_offers()
+
+	var popup = machine._dealer_offer_popup
+	if popup == null:
+		failures.append("issue185: the dealer offer overlay did not open")
+		return
+	# 1) The offer is SELECTED in the overlay: tapping arms TAKE with that item and
+	# nothing is taken yet.
+	popup._on_look_pressed()   # reveal the items; TAKE starts disabled
+	popup._select_offer("item_cocktail")
+	if String(popup._selected_offer_id) != "item_cocktail":
+		failures.append("issue185: tapping an offer did not select it")
+	if not run_store.runConsumables.is_empty():
+		failures.append("issue185: selecting an offer took it without confirming")
+
+	# 2) TAKE is what actually takes it, into the run stash.
+	machine._dealer_take("item_cocktail")
+	if int(run_store.runConsumables.get("item_cocktail", 0)) != 1:
+		failures.append("issue185: TAKE did not put the item in the run stash (%s)"
+			% str(run_store.runConsumables))
+	if run_store.dealerPending:
+		failures.append("issue185: taking an offer left the dealer visit unresolved")
+	machine._close_dealer()
+
+	# 3) The machine's stash is where it now lives, and where it is spent.
+	machine._update_hud()
+	var slots: Array = machine._stash_slots()
+	if not slots.has("item_cocktail"):
+		failures.append("issue185: the taken item never reached the machine stash (%s)"
+			% str(slots))
+		run_store.reset_run_state()
+		return
+	var slot_index := slots.find("item_cocktail")
+	var stash_icons: Array = machine._stash_icons
+	if slot_index < stash_icons.size():
+		var stash_icon := stash_icons[slot_index] as TextureRect
+		if stash_icon == null or stash_icon.texture == null:
+			failures.append("issue185: the stash slot holding the item drew nothing")
+
+	# 4) Using it from the stash spends the copy and starts the effect.
+	if int(run_store.cocktailBoostSpins) != 0:
+		failures.append("issue185: the Cocktail was already running before it was used")
+	machine._on_stash_pressed(slot_index)
+	if int(run_store.cocktailBoostSpins) <= 0:
+		failures.append("issue185: using the item from the stash did not start its effect")
+	if int(run_store.runConsumables.get("item_cocktail", 0)) != 0:
+		failures.append("issue185: using the item did not spend the stash copy (%s)"
+			% str(run_store.runConsumables))
+	if machine._stash_slots().has("item_cocktail"):
+		failures.append("issue185: the spent item is still in the machine stash")
+	# 5) ...and the running effect is what the TV badge is now showing.
+	machine._refresh_boost_indicators()
+	if not machine._boost_indicators_showing():
+		failures.append("issue185: the item was used but no TV badge reported it running")
 
 	run_store.reset_run_state()
 

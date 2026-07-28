@@ -163,7 +163,7 @@ const MULTIPLIER_FRAME_COUNT := 6
 const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
 const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
 const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
-const FREE_SPIN_SHEET := "machine new view/FREE_SPIN.png"
+const FREE_SPIN_SHEET := "machine new view/free_spin.png"
 const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
 const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
@@ -173,6 +173,17 @@ const MULT_FX_FRAME_TIME := 0.09
 # stepped at the same cadence as the regular multiplier effects.
 const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
+# One authored placement again (issue #185 follow-up). The banner briefly carried a
+# second, lowered frame for when the item badges still sat in the y81..93 band and it had
+# to duck under them. Moving that row below the target bar retired the problem, and the
+# banner's own text moved UP to y84..89 instead — into the band the goal number vacates
+# while free spins are lit — so it now clears the fill bar at y94..98 outright and the
+# bar can keep running underneath it.
+const FREE_SPIN_FRAMES := 1
+# Water's on-use pour: an authored full-canvas sheet (3 x 160x320), played once.
+const WATER_SHEET := "machine new view/water.png"
+const WATER_SHEET_FRAMES := 3
+const WATER_FX_Z_INDEX := 30      # over the cabinet and the TV, under the overlays
 const COMBO_LOSS_BEEP_FADE_TIME := 0.1
 const COMBO_LOSS_BEEP_PAUSE := 0.42
 # Authored TV callout sheets (full-canvas x1 frames): the win sheet flashes
@@ -516,14 +527,43 @@ const ITEM_ICONS := {
 # benefit carries a live cost (Tobacco's hidden reel). Unmarked entries are pure
 # upside — the Cocktail joined them when its pair/triple tax was dropped. The badges
 # surface this as +/- corner glyphs so polarity never rides on the count colour alone.
+# `phases` (issue #185) is what an item does over time, in order. An item whose effect
+# changes character partway through is still ONE badge: the count is the whole effect's
+# remaining spins, and the COLOUR is whichever phase is running right now — so the Red
+# Pill counts 2, 1 while turning from red (the forced flatline it makes you take) to
+# green (the triple it owes you), and the Energy Drink counts 3, 2, 1 while turning from
+# green (protected spins) to red (the compulsory spin at the end). Without phases the
+# entry is single-phase on `counter` alone.
+# `title`/`desc` are what the badge says when tapped (issue #185) — the description
+# describes the RUNNING effect, which is what the player tapped the icon to find out.
 const DURATION_BOOSTS := [
-	{ "counter": "decaySkips", "id": "item_energy_drink" },   # no-decay rush
-	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId" },
+	# The rush is the upside; the compulsory spin it queues is the bill, and the badge
+	# turns red for it before it lands rather than after.
+	{ "counter": "decaySkips", "id": "item_energy_drink",
+		"phases": [
+			{ "counter": "decaySkips" },
+			{ "counter": "pendingCompulsiveSpinSkips", "negative": true },
+			{ "counter": "compulsiveSpinSkips", "negative": true },
+		],
+		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH, THEN ONE FORCED SPIN." },
+	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId",
+		"title": "SERUM", "desc": "THIS SYMBOL IS GUARANTEED TO APPEAR." },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
-		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins" },
-	{ "counter": "cocktailBoostSpins", "id": "item_cocktail" },                # rarity bonus, no cost
-	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true },   # 3x pairs - hidden reel
-	{ "counter": "potionSpins", "id": "cons_potion" },         # per-spin random effect
+		"negative": true, "suppressWhenZeroCounter": "guaranteeSymbolSpins",
+		"title": "SERUM", "desc": "THE ADJACENT SYMBOLS STAY BLURRED." },
+	{ "counter": "cocktailBoostSpins", "id": "item_cocktail", # rarity bonus, no cost
+		"title": "COCKTAIL", "desc": "EVERY VISIBLE REEL PAYS RARITY POINTS, WIN OR MISS." },
+	{ "counter": "pairBoostSpins", "id": "cons_cigarette",   # 3x pairs - hidden reel
+		"title": "TOBACCO", "desc": "PAIRS PAY 3X. ONE REEL IS HIDDEN FROM SCORING." },
+	{ "counter": "potionSpins", "id": "cons_potion",
+		"title": "POTION", "desc": "A RANDOM EFFECT ROLLS EVERY SPIN." },
+	# The Red Pill: the forced flatline is the cost, the triple after it is the payoff.
+	{ "counter": "forceFlatlineSpins", "id": "item_pill",
+		"phases": [
+			{ "counter": "forceFlatlineSpins", "negative": true },
+			{ "counter": "guaranteedTripleSpins" },
+		],
+		"title": "RED PILL", "desc": "A FORCED FLATLINE FIRST, THEN A GUARANTEED TRIPLE." },
 ]
 
 @export_group("Run Balance")
@@ -637,6 +677,12 @@ var _pending_deferred_neg: Dictionary = {}
 @export_range(0.4, 4.0, 0.1) var potion_popup_time: float = 1.4
 @export var potion_popup_color: Color = Color(0.72, 1.0, 0.65)
 @export var potion_popup_negative_color: Color = Color(0.94, 0.27, 0.27)
+@export_subgroup("Water", "water_")
+## Water used to land as a bare number with nothing behind it. It now plays the authored
+## three-frame sheet over the machine (issue #185) — a short pour, not a loop: the item
+## is instantaneous, so the feedback ends with it rather than lingering as a duration.
+@export var water_fx_enabled: bool = true
+@export_range(0.04, 0.5, 0.01) var water_frame_time: float = 0.11
 @export_subgroup("Tea", "tea_")
 ## Sakura-petal tranquility layer when Tea is used: a light cross-screen wind.
 @export var tea_fx_enabled: bool = true
@@ -695,6 +741,11 @@ var _pacte_augment_badge: Button = null # first slot; anchors the popup
 var _pacte_augment_badge_icon: TextureRect = null
 var _pacte_augment_count: Label = null
 var _pacte_augment_popup: Control = null
+# Tap-an-item-badge description (issue #185). Lifetime is a plain countdown stepped from
+# _process rather than a tween, so the tween sweeps that clear the run's transient
+# effects can never strand it on screen.
+var _item_info_popup: Control = null
+var _item_info_popup_time := 0.0
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -893,6 +944,8 @@ var _energy_edges: Control = null          # burning-edges frame (Energy Drink)
 var _energy_pulse_tween: Tween = null
 var _energy_fx_active := false
 var _cocktail_shake_tween: Tween = null
+var _water_fx_sprite: Sprite2D = null
+var _water_fx_tween: Tween = null
 var _potion_jump_tween: Tween = null
 var _close_call_heartbeat_tween: Tween = null
 var _white_powder_distortion_tween: Tween = null
@@ -1036,7 +1089,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel.ends_with("lock.png") or rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
-	if rel.ends_with("FREE_SPIN.png"):
+	if rel.to_lower().ends_with("free_spin.png"):
 		return "FreeSpinOverlay"
 	if rel.ends_with("win_animation.png"):
 		return "WinCallout"
@@ -1362,16 +1415,21 @@ func _advance_target_bar_animation(delta: float) -> void:
 func _refresh_target_readout() -> void:
 	if _target_goals_sprite == null and _target_bar_sprite == null:
 		return
-	# A win callout, a power animation or the lit FREE SPIN banner owns the whole TV while
-	# it is up; the objective readout steps aside for all three. The dealer interface is
-	# the one persistent readout that stays up under the banner (_tv_callout_active).
-	var should_show := not _tv_content_muted()
+	# A win callout or a power animation owns the whole TV while it is up, and the whole
+	# objective readout steps aside. The lit FREE SPIN banner is weaker: it takes only the
+	# goal NUMBER, whose y86..90 the banner text runs into, and leaves the fill bar and its
+	# shimmer running underneath (issue #185 follow-up). Progress toward the target is
+	# exactly what free spins are being spent on, so blanking it during them hid the one
+	# readout the player was watching.
+	var callout := _tv_callout_active()
+	var should_show := not callout
+	var goal_number_show := not _tv_content_muted()
 	if _target_bar_sprite != null:
 		_target_bar_sprite.visible = should_show
-	if _target_goals_sprite != null:
-		_target_goals_sprite.visible = should_show
 	if _target_bar_anim_sprite != null:
 		_target_bar_anim_sprite.visible = should_show
+	if _target_goals_sprite != null:
+		_target_goals_sprite.visible = goal_number_show
 	if not should_show:
 		return
 	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
@@ -1527,37 +1585,77 @@ func _refresh_restore_cap() -> void:
 	var spent := EconomyConst.POWER_RESTORE_CHARGE_MAX - _shown_restore_charges()
 	_set_sheet_frame(_restore_cap_sprite, clampi(spent, 0, RESTORE_CAP_FRAMES - 1))
 
-## Pooled duration icons inside the TV's top-right (issue #76): one slot per possible
-## boost, hidden until active. The icon says WHICH boost, a badge on its bottom-right
-## corner says how many spins are left. Active boosts stack HORIZONTALLY, growing left
-## from the corner. Anchored to the TV status column so the row clears the red
-## bezel. Built once; refreshed each HUD update.
-const BOOST_ICON_SIZE := 12.0
-const BOOST_ICON_GAP := 3.0
-# Issue #181: fixed authored slots for the item icons, filled right to left. Every
-# other thing that owns the TV is measured art, and between them the only clean band
-# left is y81..93: the dealer bar runs to y77 with its icon to y80, the goal number
-# occupies x66..83 at y86..90 and the fill bar starts at y94. That leaves two 12px
-# slots to the right of the goal number and clear of all of it; further simultaneous
-# boosts fold into a "+N" on the last one. The old layout was a right-aligned row that
-# grew leftwards and pushed its sixth icon onto the left bezel, outside the TV, with
-# nothing clipping it.
-const BOOST_SLOT_POSITIONS: Array[Vector2] = [Vector2(97.0, 81.0), Vector2(84.0, 81.0)]
-const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
+## Pooled duration icons on the TV (issue #76): one slot per possible boost, hidden
+## until active. The icon says WHICH boost, a badge on its bottom-right corner says how
+## many spins are left. Built once; refreshed each HUD update.
+##
+## The row moved UNDER the target bar and shrank to 8px (issue #185 follow-up). It used
+## to be two 12px slots wedged into the y81..93 band beside the goal number — the only
+## gap the other TV art left — which capped the machine at two visible items and folded
+## everything past that into a "+N", so a run with four items running showed two of them.
+## The strip below the fill bar is the one genuinely wide space on the screen: measured
+## clear from y99..107 and x30..121, with nothing else authored into it.
+##
+## 8px is also a CLEANER downscale than 12 was, not a compromise: the source icons are
+## 32x32, so 12px meant a fractional 32/12 = 2.67 nearest-neighbour reduction that
+## dropped source pixels unevenly, while 8px is exactly 32/4 — every fourth pixel, all
+## the way across. The row is left-aligned to the fill bar above it (x41) so the two
+## read as one block.
+const BOOST_ICON_SIZE := 8.0
+const BOOST_COUNT_WIDTH := 7.0
+# The count is pinned to the badge's bottom-right CORNER, the same place on every item.
+# It used to sit beside the icon at a fixed offset, which only looked consistent if the
+# art did: the icons are aspect-centred in their 8px box and fill wildly different amounts
+# of it (the cigarette is a wide horizontal object and runs the full width, the drink can
+# is tall and narrow and uses half), so the number appeared to sit on top of one item and
+# well clear of the next. Anchoring to the corner makes the number's position identical
+# across the row and lets each icon differ underneath it.
+#
+# It sits ON the icon rather than beside it: the number belongs to that item, and a number
+# floating in the gap between two icons reads as ambiguous about which one it counts. Its
+# right edge overhangs the icon's by BOOST_COUNT_OVERHANG px so the digit still has a clean
+# edge to sit against, but the rest of it overlaps the art's bottom-right — the black
+# outline on the label is what keeps it legible over the icon underneath.
+const BOOST_COUNT_OVERHANG := 1.0     # px the number's right edge clears the icon's
+const BOOST_COUNT_OFFSET := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG - BOOST_COUNT_WIDTH  # 2
+const BOOST_SLOT_WIDTH := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG   # 9: icon + the overhang
+# Per-item nudge for art that still reads badly under the shared anchor — the icons do not
+# share a silhouette, so a few need a pixel either way. Keyed by item id, in badge px.
+const BOOST_COUNT_NUDGE := {}
+# The row is bounded by the TV's own SCREEN, not by the cabinet around it: the near-black
+# screen runs x37..114 across y99..106 before the bezel and the curved bottom corners take
+# over (y107 already narrows to x39..112). Measuring "anything dark" instead caught the
+# cabinet grey and pushed the row about 5px past the bezel, off the TV entirely.
+# The row sits on the screen's last eight rows, y100..107. Its bottom row is where the
+# screen curves in to x39..112, and that corner is what fixes the row's width: five
+# BOOST_SLOT_WIDTH slots at a 15px pitch from x39 land flush inside it. These positions
+# are the layout — nothing derives them, so there is one place to change.
+const BOOST_SLOT_POSITIONS: Array[Vector2] = [
+	Vector2(39.0, 100.0), Vector2(54.0, 100.0), Vector2(69.0, 100.0),
+	Vector2(84.0, 100.0), Vector2(99.0, 100.0),
+]
+const BOOST_BADGE_FONT_SIZE := 5      # the turn count, sized for the 8px badge
+# Polarity is the count's colour (issue #185): the project's established positive/negative
+# pair, the same green and red the potion popup and the on-use hints already speak in.
+const BOOST_COUNT_COLOR := Color(0.72, 1.0, 0.65)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
-# Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
-# top-right when it hurts, both on a mixed boost. Sign shape carries the meaning,
-# colour (HintLabel's shared green/red) only reinforces it — never colour alone.
-const BOOST_MARK_POS_COLOR := Color(0.13, 0.77, 0.37)
-const BOOST_MARK_NEG_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
-		var slot := Control.new()
+		# A Button, not a bare Control (issue #185): tapping a badge is how you find out
+		# what the icon means. Flat and untextured, so it stays the authored art with a
+		# hit box on it. Its children keep MOUSE_FILTER_IGNORE so the whole 12px badge
+		# is the target — there is nothing else to hit at that size.
+		var slot := Button.new()
 		slot.name = "BoostIndicator%d" % i
-		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.flat = true
+		slot.text = ""
+		slot.focus_mode = Control.FOCUS_NONE
+		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		slot.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
 		slot.z_index = 12
 		slot.visible = false
+		slot.pressed.connect(_on_boost_indicator_pressed.bind(i))
 		add_child(slot)
 		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
 		var icon := TextureRect.new()
@@ -1574,7 +1672,9 @@ func _build_boost_indicators() -> void:
 		var count := Label.new()
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		count.add_theme_font_size_override("font_size", 7)
+		# Font 5 on the 8px badge, matching the augment chips' own count (issue #185
+		# follow-up); the old 7 was sized for a 12px icon and would swallow this one.
+		count.add_theme_font_size_override("font_size", BOOST_BADGE_FONT_SIZE)
 		if _font != null:
 			count.add_theme_font_override("font", _font)
 		count.add_theme_color_override("font_color", BOOST_COUNT_COLOR)
@@ -1582,35 +1682,41 @@ func _build_boost_indicators() -> void:
 		count.add_theme_constant_override("outline_size", 1)
 		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(count)
-		# Polarity glyphs (issue #113): "+" pinned top-left, "-" pinned top-right.
-		var pos_mark := _make_boost_mark("+", HORIZONTAL_ALIGNMENT_LEFT, BOOST_MARK_POS_COLOR)
-		slot.add_child(pos_mark)
-		var neg_mark := _make_boost_mark("-", HORIZONTAL_ALIGNMENT_RIGHT, BOOST_MARK_NEG_COLOR)
-		slot.add_child(neg_mark)
 		_boost_indicator_slots.append({
 			"slot": slot, "icon": icon, "count": count,
-			"pos_mark": pos_mark, "neg_mark": neg_mark,
+			# Which boost this pooled slot is currently showing — the row is packed, so
+			# slot index is not boost index and a tap has to look it up here.
+			"boost": {},
 		})
 
-func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Color) -> Label:
-	var mark := Label.new()
-	mark.text = glyph
-	mark.horizontal_alignment = alignment
-	mark.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	mark.add_theme_font_size_override("font_size", 7)
-	if _font != null:
-		mark.add_theme_font_override("font", _font)
-	mark.add_theme_color_override("font_color", color)
-	mark.add_theme_color_override("font_outline_color", Color.BLACK)
-	mark.add_theme_constant_override("outline_size", 1)
-	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Pinned to the icon's top edge, nudged 3px up so the sign reads as a corner badge
-	# instead of covering the art. The box height comes from the font's real min height
-	# on refresh — asking for it here, before the node is in the tree, can return zero.
-	mark.position = Vector2(0.0, -3.0)
-	mark.visible = false
-	return mark
+## The phases an item runs through, in order. A single-phase item is described by its own
+## `counter` and `negative` flag, so every entry can be read the same way.
+func _boost_phases(boost: Dictionary) -> Array:
+	var phases: Array = boost.get("phases", [])
+	if not phases.is_empty():
+		return phases
+	return [{ "counter": String(boost["counter"]),
+		"negative": bool(boost.get("negative", false)) }]
 
+## Spins left on a boost: the whole effect, summed across its phases, so a phased item
+## counts down continuously instead of restarting at each hand-off (issue #185).
+func _boost_remaining(boost: Dictionary) -> int:
+	var total := 0
+	for phase: Dictionary in _boost_phases(boost):
+		total += int(RunStateStore.get(String(phase["counter"])))
+	return total
+
+## Whether what the item is doing RIGHT NOW is a downside — the first phase with spins
+## still on it. This is what colours the count, so an item that turns sour (or sweet)
+## partway through says so as it happens rather than averaging the two.
+func _boost_phase_is_negative(boost: Dictionary) -> bool:
+	var phases := _boost_phases(boost)
+	for phase: Dictionary in phases:
+		if int(RunStateStore.get(String(phase["counter"]))) > 0:
+			return bool(phase.get("negative", false))
+	# Nothing left running (the badge is lingering on zero): keep the last phase's colour
+	# rather than snapping back to the first one's as it goes out.
+	return bool((phases[phases.size() - 1] as Dictionary).get("negative", false))
 
 ## Whether a boost currently owns a slot: either it has spins left, or it just expired
 ## and is lingering on zero for one refresh.
@@ -1619,7 +1725,7 @@ func _boost_is_active(boost: Dictionary) -> bool:
 	var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
 	if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
 		return false
-	return int(RunStateStore.get(counter)) > 0 or _boost_zero_linger.has(counter)
+	return _boost_remaining(boost) > 0 or _boost_zero_linger.has(counter)
 
 ## Shows one icon per active multi-spin boost, stacked down the TV's right edge, each
 ## with a spins-remaining badge. A boost whose icon is missing is skipped rather than
@@ -1628,9 +1734,10 @@ func _boost_is_active(boost: Dictionary) -> bool:
 func _refresh_boost_indicators() -> void:
 	if _boost_indicator_slots.is_empty():
 		return
-	# The item icons live on the TV, so they step aside for whatever owns it — a
-	# PAIR/TRIPLE or power callout, or the lit FREE SPIN banner.
-	if _tv_content_muted():
+	# The item icons step aside for a full-screen callout, and only for that (issue #185).
+	# The FREE SPIN banner no longer blanks them — the row sits below the target bar now,
+	# well clear of the banner, so what is running stays readable through the free spins.
+	if _tv_callout_active():
 		_hide_boost_indicators()
 		return
 	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
@@ -1641,7 +1748,7 @@ func _refresh_boost_indicators() -> void:
 	var col := 0
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
-		var remaining := int(RunStateStore.get(counter))
+		var remaining := _boost_remaining(boost)
 		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
 		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
 		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
@@ -1655,30 +1762,27 @@ func _refresh_boost_indicators() -> void:
 			continue
 		var s: Dictionary = _boost_indicator_slots[col]
 		var slot: Control = s["slot"]
+		s["boost"] = boost
 		slot.position = BOOST_SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
+		# Just the number of turns left, coloured by what the item is doing right now:
+		# green while it is helping, red while it is costing. The badge is 8px and the
+		# sign glyphs that used to carry polarity crowded the art at that size, so the
+		# count carries it instead — and because the colour tracks the live phase, a
+		# phased item announces the turn as it happens.
 		cn.text = str(maxi(0, remaining))
-		cn.add_theme_color_override(
-			"font_color",
-			BOOST_NEGATIVE_COUNT_COLOR if bool(boost.get("negative", false)) else BOOST_COUNT_COLOR)
-		# Issue #113: polarity is a sign glyph, not just the count colour — "+" for
-		# a helping boost, "-" for a hurting one, both when the boost is mixed.
-		var is_negative := bool(boost.get("negative", false))
-		var is_mixed := bool(boost.get("mixed", false))
-		(s["pos_mark"] as Label).visible = not is_negative or is_mixed
-		(s["neg_mark"] as Label).visible = is_negative or is_mixed
-		# Pin the digit's bottom-right to the icon's bottom-right corner using the label's
-		# real (font-driven) min height, so it sits flush in the corner (issue #76 review).
+		cn.add_theme_color_override("font_color",
+			BOOST_NEGATIVE_COUNT_COLOR if _boost_phase_is_negative(boost) else BOOST_COUNT_COLOR)
+		# Pinned over the icon's bottom-right corner — the same coordinates on every item,
+		# so the row reads as one repeated shape rather than the number chasing each
+		# icon's silhouette, and overlapping the art so the count is visibly attached to
+		# the item it belongs to. Plus whatever per-item nudge the art needs.
 		var mh := cn.get_minimum_size().y
-		cn.size = Vector2(BOOST_ICON_SIZE, mh)
-		cn.position = Vector2(0.0, BOOST_ICON_SIZE - mh)
-		# The polarity glyphs share the count's font metrics, which are only reliable
-		# once the label is in the tree — sizing them at build time can yield a zero-high
-		# box and clip the sign.
-		for mark_key in ["pos_mark", "neg_mark"]:
-			var mark: Label = s[mark_key]
-			mark.size = Vector2(BOOST_ICON_SIZE, mark.get_minimum_size().y)
+		var nudge: Vector2 = BOOST_COUNT_NUDGE.get(String(boost.get("id", "")), Vector2.ZERO)
+		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
+		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh) + nudge
 		slot.visible = true
 		col += 1
 	# More boosts than slots: the last one carries how many are not shown, so the player
@@ -1688,6 +1792,12 @@ func _refresh_boost_indicators() -> void:
 		overflow.text = "+%d" % (active_total - col + 1)
 	_hide_boost_indicators(col)
 
+func _boost_indicators_showing() -> bool:
+	for entry: Dictionary in _boost_indicator_slots:
+		if (entry["slot"] as Control).visible:
+			return true
+	return false
+
 ## Blanks the boost slots from `first` onwards. Dropping the texture matters: a slot
 ## re-shown before its icon is resolved would otherwise flash the previous boost's art.
 func _hide_boost_indicators(first := 0) -> void:
@@ -1695,12 +1805,15 @@ func _hide_boost_indicators(first := 0) -> void:
 		var hidden: Dictionary = _boost_indicator_slots[i]
 		(hidden["slot"] as Control).visible = false
 		(hidden["icon"] as TextureRect).texture = null
+		# Forget what the slot was showing along with the art: a tap that raced a
+		# hide must not describe a boost that has already run out.
+		hidden["boost"] = {}
 
 func _capture_expiring_boost_counters() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for boost in DURATION_BOOSTS:
 		var counter := String(boost["counter"])
-		if int(RunStateStore.get(counter)) == 1:
+		if _boost_remaining(boost) == 1:
 			var snapshot: Dictionary = { "counter": counter }
 			var symbol_field := String(boost.get("symbolField", ""))
 			if symbol_field != "":
@@ -1723,6 +1836,111 @@ func _clear_boost_zero_linger() -> void:
 	_refresh_boost_indicators()
 	_refresh_consumable_fx()
 
+# ── tap-an-item-badge description (issue #185) ────────────────────────────────────
+# A 12px icon can say WHICH item is running and for how long, but not what it does.
+# Tapping one pops its name and effect over the TV for about a second and then gets out
+# of the way on its own — long enough to read, short enough that it never becomes another
+# thing occupying a screen four other systems are already competing for.
+const ITEM_INFO_POPUP_HOLD := 1.0     # seconds fully lit before it starts leaving
+const ITEM_INFO_POPUP_FADE := 0.18
+const ITEM_INFO_POPUP_SIZE := Vector2(104.0, 30.0)
+const ITEM_INFO_POPUP_Z_INDEX := 42   # over the banner, the callouts and the dealer strip
+const ITEM_INFO_POPUP_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+func _on_boost_indicator_pressed(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _boost_indicator_slots.size():
+		return
+	var entry: Dictionary = _boost_indicator_slots[slot_index]
+	if not (entry["slot"] as Control).visible:
+		return
+	_show_item_info_popup(entry["boost"] as Dictionary, (entry["slot"] as Control).position)
+
+## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
+## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
+func _item_info_popup_text(boost: Dictionary) -> String:
+	var title := String(boost.get("title", ""))
+	if title == "":
+		title = _item_display_name(String(boost.get("id", "")))
+	var desc := String(boost.get("desc", ""))
+	var symbol_field := String(boost.get("symbolField", ""))
+	if symbol_field != "":
+		var symbol_id := String(RunStateStore.get(symbol_field))
+		if symbol_id != "":
+			desc = "%s: %s" % [symbol_id.to_upper(), desc]
+	if desc == "":
+		return title
+	return "%s\n%s" % [title, desc]
+
+func _show_item_info_popup(boost: Dictionary, anchor: Vector2) -> void:
+	_hide_item_info_popup()
+	if boost.is_empty():
+		return
+	var text := _item_info_popup_text(boost)
+	if text == "":
+		return
+	var popup := Control.new()
+	popup.name = "ItemInfoPopup"
+	popup.z_index = ITEM_INFO_POPUP_Z_INDEX
+	# Purely informational, and it sits over live controls — it must never eat a tap.
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = ITEM_INFO_POPUP_BG
+	bg_style.border_color = NEON_CYAN
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.size = ITEM_INFO_POPUP_SIZE
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", bg_style)
+	popup.add_child(bg)
+	var label := Label.new()
+	label.name = "Text"
+	label.position = Vector2(4.0, 3.0)
+	label.size = ITEM_INFO_POPUP_SIZE - Vector2(8.0, 6.0)
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	# Above the badge that was tapped, right-aligned to it, then clamped into the TV so a
+	# badge near either bezel still shows the whole box.
+	var pos := anchor + Vector2(
+		BOOST_ICON_SIZE - ITEM_INFO_POPUP_SIZE.x, -ITEM_INFO_POPUP_SIZE.y - 2.0)
+	pos.x = clampf(pos.x, float(TV_SCREEN["left"]) + 1.0,
+		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - ITEM_INFO_POPUP_SIZE.x - 1.0)
+	pos.y = clampf(pos.y, float(TV_SCREEN["top"]) + 1.0,
+		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - ITEM_INFO_POPUP_SIZE.y - 1.0)
+	popup.position = pos.round()
+	_item_info_popup = popup
+	_item_info_popup_time = 0.0
+	add_child(popup)
+
+## Ages the popup out on its own. Fades over the last moments rather than vanishing, so
+## a description leaving does not read as a glitch on a screen full of blinking things.
+func _step_item_info_popup(delta: float) -> void:
+	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	_item_info_popup_time += delta
+	var fading := _item_info_popup_time - ITEM_INFO_POPUP_HOLD
+	if fading >= ITEM_INFO_POPUP_FADE:
+		_hide_item_info_popup()
+		return
+	if fading > 0.0:
+		_item_info_popup.modulate.a = clampf(1.0 - fading / ITEM_INFO_POPUP_FADE, 0.0, 1.0)
+
+func _hide_item_info_popup() -> void:
+	if _item_info_popup != null and is_instance_valid(_item_info_popup):
+		_item_info_popup.queue_free()
+	_item_info_popup = null
+	_item_info_popup_time = 0.0
+
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
 	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
@@ -1738,7 +1956,7 @@ func _build_machine_control_art() -> void:
 	_dealer_bar_overlay_3 = _build_full_canvas_sheet(
 		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
 	_build_dealer_tip_steps()
-	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, 1)
+	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, FREE_SPIN_FRAMES)
 	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
 	_win_anim_sprite = _build_full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
@@ -2715,6 +2933,7 @@ func _process(delta: float) -> void:
 	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
+	_step_item_info_popup(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
 		return
@@ -3034,7 +3253,8 @@ func _end_tv_info_pop(source: StringName) -> void:
 ## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
 ## through _tv_info_pop_sources (PAIR/TRIPLE win, power, target blackout), and the
 ## blinking FREE SPIN banner, which owns the screen for as long as it is lit. While
-## either is up, the boost/item icons and the COMBO stage step aside.
+## either is up, the objective readout and the COMBO stage step aside. The item badges
+## are the exception: only a callout clears them (issue #185).
 func _tv_content_muted() -> bool:
 	return not _tv_info_pop_sources.is_empty() or _free_spin_overlay_active
 
@@ -3055,16 +3275,19 @@ func _apply_tv_content_mute() -> void:
 
 func _hide_tv_info_layers() -> void:
 	# The FREE SPIN banner is an owner in its own right, so it hides only for a
-	# callout — never for its own mute.
+	# callout — never for its own mute. The item badges follow the same rule now
+	# (issue #185): a callout clears them, the banner beside them does not.
 	if _free_spin_sprite != null and not _tv_info_pop_sources.is_empty():
 		_free_spin_sprite.visible = false
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = false
-	_hide_boost_indicators()
-	# The dealer interface only clears for a callout — under the banner alone it stays
-	# readable alongside the objective.
 	if not _tv_callout_active():
+		_refresh_boost_indicators()
 		return
+	_hide_item_info_popup()
+	_hide_boost_indicators()
+	# Past this point a callout owns the TV, so the dealer interface clears with
+	# everything else; under the banner alone it stayed readable and returned above.
 	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
 			_dealer_bar_overlay_3, _dealer_icon]:
 		var info := node as CanvasItem
@@ -3076,14 +3299,12 @@ func _restore_tv_info_layers() -> void:
 	if _free_spin_sprite != null:
 		_free_spin_sprite.visible = _free_spin_overlay_active \
 			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
-	# The callout is gone but the banner is lit: the boost icons and the COMBO stage
-	# keep waiting it out, while the dealer interface comes back with the objective.
-	if _free_spin_overlay_active:
-		_hide_boost_indicators()
-		if _combo_effect_sprite != null:
-			_combo_effect_sprite.visible = false
-	else:
-		_refresh_boost_indicators()
+	# The callout is gone but the banner is lit: the COMBO stage keeps waiting it out,
+	# while the dealer interface comes back with the objective. The item badges come back
+	# too (issue #185) — the banner drops a frame for them rather than blanking them.
+	_refresh_boost_indicators()
+	if _free_spin_overlay_active and _combo_effect_sprite != null:
+		_combo_effect_sprite.visible = false
 	_refresh_dealer_countdown()
 	if _dealer_bar_sprite != null:
 		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
@@ -3667,6 +3888,22 @@ func _active_hidden_reel_count() -> int:
 
 func _visible_reel_count() -> int:
 	return maxi(1, 3 - _active_hidden_reel_count())
+
+## How many reels a power may touch, counting from reel 0 — blinded reels are always the
+## last ones, the same slice the scoring keeps.
+##
+## A power spent on a blinded reel does nothing the machine will ever read: Tunnel Vision
+## and Tobacco cut those reels out of the scoring, so rerolling, shifting, cheating or
+## copying into one changes a symbol nobody scores. The reel is also physically covered,
+## so the player cannot even see what they changed. Powers are the scarcest resource in a
+## run, and the picker used to happily let one be burnt on a dead reel; it now stops
+## offering them, and every entry point that takes a reel index refuses one anyway (the
+## dealer's help can name a reel without going through a picker).
+func _power_reel_count() -> int:
+	return maxi(1, 3 - _blind_reel_count())
+
+func _reel_is_dead(reel_index: int) -> bool:
+	return reel_index < 0 or reel_index >= _power_reel_count()
 
 # The lone unpaired reel of a pair (-1 if none).
 func _solo_reel(reels: Array) -> int:
@@ -4856,6 +5093,8 @@ func _arm_cheat_targets() -> void:
 ## up/down arrows step the candidate symbol along the pool, tapping the symbol
 ## itself commits it, tapping anywhere else cancels.
 func _on_cheat_reel_pick(reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	_cheat_reel = reel_index
 	_clear_targeting()
 	_targeting_power_id = "cheat"
@@ -4969,7 +5208,9 @@ func _arm_swap_source() -> void:
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	_swap_slot_hints.clear()
-	for i in 3:
+	# A blinded reel is neither grabbable nor droppable: no hint, no drag button, and
+	# _swap_target_at() will not return it.
+	for i in _power_reel_count():
 		_build_swap_slot_hint(i)
 		var hole: Dictionary = REEL_HOLES[i]
 		var button := Button.new()
@@ -5005,16 +5246,24 @@ func _start_swap_symbol_shake() -> void:
 	if _reel_backing_sprite != null:
 		_reel_backing_sprite.visible = false
 	_swap_shake_cover_state.clear()
+	# Only the reels Swap can actually take part in move — a blinded reel is not grabbable,
+	# so shaking it would advertise a target the drag refuses. Its cover is still switched
+	# on, because the shared backing goes off for every reel and the cover is what draws
+	# the art in its place; it simply stays still.
 	for i in _reel_sprites.size():
+		var live: bool = not _reel_is_dead(i)
 		# The reel asset first — this is the thing that shakes.
 		if i < _reel_covers.size():
 			var cover := _reel_covers[i] as Sprite2D
 			if cover != null:
 				_swap_shake_cover_state.append(cover.visible)
 				cover.visible = true
-				_swap_shake_nodes.append(cover)
-				_swap_shake_base.append(cover.position)
-				_swap_shake_reel.append(i)
+				if live:
+					_swap_shake_nodes.append(cover)
+					_swap_shake_base.append(cover.position)
+					_swap_shake_reel.append(i)
+		if not live:
+			continue
 		for sprite in [_reel_top_sprites[i], _reel_sprites[i], _reel_bottom_sprites[i]]:
 			var symbol_sprite := sprite as Sprite2D
 			if symbol_sprite == null:
@@ -5343,7 +5592,7 @@ func _targeting_local_position(global_position: Vector2) -> Vector2:
 
 func _swap_target_at(global_position: Vector2) -> int:
 	var local_position := to_local(global_position)
-	for i in REEL_HOLES.size():
+	for i in mini(REEL_HOLES.size(), _power_reel_count()):
 		var hole: Dictionary = REEL_HOLES[i]
 		var rect := Rect2(float(hole["left"]), float(hole["top"]),
 			float(hole["width"]), float(hole["height"])).grow(4.0)
@@ -5354,6 +5603,8 @@ func _swap_target_at(global_position: Vector2) -> int:
 func _on_swap_destination_pick(destination: int, source_override: int = -1,
 		source_symbol_override: String = "") -> void:
 	var source := _swap_source if source_override < 0 else source_override
+	if _reel_is_dead(source) or _reel_is_dead(destination):
+		return
 	# Reel for reel: the store swaps the two reels' own symbols, so no override is passed
 	# unless a caller (the dealer's help) explicitly names one.
 	var source_symbol := source_symbol_override
@@ -5396,7 +5647,8 @@ func _flash_power_rubble() -> void:
 	tw.tween_property(_rubble_overlay, "modulate:a", 0.0, 0.18)
 	tw.finished.connect(_rubble_overlay.queue_free)
 
-# Builds a per-reel picker overlay; each reel button calls cb(reel_index).
+# Builds a per-reel picker overlay; each reel button calls cb(reel_index). Blinded reels
+# get no button — see _power_reel_count().
 func _arm_reel_picker(cb: Callable) -> void:
 	_clear_targeting()
 	_targeting_layer = Control.new()
@@ -5406,7 +5658,7 @@ func _arm_reel_picker(cb: Callable) -> void:
 	add_child(_targeting_layer)
 	var selection := _build_control_grid_sheet_on(_targeting_layer, "machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	var cy := REEL_WINDOW["top"]
-	for i in 3:
+	for i in _power_reel_count():
 		var reel := i
 		var b := _make_hit_button({
 			"left": REEL_CELL_CENTERS[reel] - 12.0,
@@ -5426,7 +5678,7 @@ func _arm_shift_targets() -> void:
 	_targeting_layer.z_index = 97
 	add_child(_targeting_layer)
 	var arrows := _build_control_grid_sheet_on(_targeting_layer, "machine new view/shift_power.png", SHIFT_POWER_COLUMNS, SHIFT_POWER_ROWS)
-	for i in 3:
+	for i in _power_reel_count():   # no arrows on a blinded reel
 		for dir_key in ["up", "down"]:
 			var hit: Dictionary = SHIFT_ARROW_HITS[i][dir_key]
 			var direction := 1 if dir_key == "up" else -1
@@ -5437,6 +5689,8 @@ func _arm_shift_targets() -> void:
 			_targeting_layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
@@ -5521,6 +5775,8 @@ func _step_reroll(delta: float) -> void:
 		_play_reward_sequence(rerolled, true) # reroll burst pops from the rerolled reel
 
 func _apply_shift(reel_index: int, direction: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	var combo_pending := RunStateStore.comboDefeatPending
 	if (_sequence_lock_active and not combo_pending) or _spin_launch_pending:
 		return
@@ -6347,6 +6603,8 @@ func _begin_white_powder() -> void:
 func _on_copy_pick(reel_index: int) -> void:
 	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
+	if _reel_is_dead(reel_index):
+		return
 	if _copy_source < 0:
 		_copy_source = reel_index # source chosen; re-arm to pick the target
 		_arm_reel_picker(func(target_index: int) -> void: _on_copy_pick(target_index))
@@ -6581,6 +6839,34 @@ func _play_use_fx(id: String) -> void:
 		_play_cocktail_shake()
 	elif id == "cons_tea" and tea_fx_enabled:
 		_play_tea_sakura_fx()
+	elif id == "item_water" and water_fx_enabled:
+		_play_water_animation()
+
+## The authored WATER_SHEET_FRAMES-frame pour, stepped once and then cleared. Built on
+## first use rather than at startup: most runs never see a Water, and an unused
+## full-canvas sheet is the kind of thing that quietly costs a frame on a phone.
+func _play_water_animation() -> void:
+	if _water_fx_sprite == null or not is_instance_valid(_water_fx_sprite):
+		_water_fx_sprite = _build_full_canvas_sheet(WATER_SHEET, WATER_SHEET_FRAMES)
+		if _water_fx_sprite == null:
+			return
+		_water_fx_sprite.name = "WaterFx"
+		_water_fx_sprite.z_index = WATER_FX_Z_INDEX
+	if _water_fx_tween != null and _water_fx_tween.is_valid():
+		_water_fx_tween.kill()
+	_water_fx_sprite.modulate.a = 1.0
+	_water_fx_sprite.visible = true
+	_set_sheet_frame(_water_fx_sprite, 0)
+	_water_fx_tween = create_tween()
+	for frame in range(1, WATER_SHEET_FRAMES):
+		_water_fx_tween.tween_interval(water_frame_time)
+		_water_fx_tween.tween_callback(_set_sheet_frame.bind(_water_fx_sprite, frame))
+	_water_fx_tween.tween_interval(water_frame_time)
+	_water_fx_tween.tween_callback(_hide_water_animation)
+
+func _hide_water_animation() -> void:
+	if _water_fx_sprite != null and is_instance_valid(_water_fx_sprite):
+		_water_fx_sprite.visible = false
 
 func _play_cocktail_shake() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
@@ -6939,6 +7225,8 @@ func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
 
 func _on_eye_reveal_pick(reel_index: int) -> void:
+	if _reel_is_dead(reel_index):
+		return
 	_clear_targeting()
 	var symbol := RunStateStore.reveal_next_reel_symbol(reel_index)
 	if symbol == "":
@@ -7364,6 +7652,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_close_score_table()
 	_hide_augmented_popup()
 	_hide_pacte_augment_popup()
+	_hide_item_info_popup()
 	_close_serum_picker()
 	_close_book_choice_overlay()
 	if _dealer_overlay != null:
@@ -7400,6 +7689,10 @@ func _clear_wealth_presentation_fx() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
 		_cocktail_shake_tween.kill()
 	_cocktail_shake_tween = null
+	if _water_fx_tween != null and _water_fx_tween.is_valid():
+		_water_fx_tween.kill()
+	_water_fx_tween = null
+	_hide_water_animation()
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
 		_potion_jump_tween.kill()
 	_potion_jump_tween = null

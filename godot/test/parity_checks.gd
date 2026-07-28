@@ -270,6 +270,128 @@ static func check_issue176(out: Array) -> void:
 			split_pattern23, "triple")
 
 
+## Issue #185: the Cocktail pays rarity points for every VISIBLE reel and is blind to what
+## the reels did. A pair or a triple must never be the one result that loses the bonus —
+## that was the old 15% pair/triple tax, and it made the item a trap on exactly the spins
+## it was sold to reward.
+static func check_cocktail_bonus(out: Array) -> void:
+	# flatline 1, vial 2, syringe 3, pill 4, eye 5, brain 6, book 6.
+	var cases := [
+		# A miss collects: the bonus was never conditional on winning.
+		{ "reels": ["eye", "vial", "flatline"], "hidden": 0, "mult": 1.0, "want": 8,
+		  "label": "miss" },
+		# The same three symbols pay the same whether or not two of them matched.
+		{ "reels": ["eye", "eye", "vial"], "hidden": 0, "mult": 1.0, "want": 12,
+		  "label": "pair" },
+		{ "reels": ["eye", "eye", "eye"], "hidden": 0, "mult": 1.0, "want": 15,
+		  "label": "triple" },
+		{ "reels": ["brain", "brain", "brain"], "hidden": 0, "mult": 1.0, "want": 18,
+		  "label": "jackpot" },
+		# Tobacco's hidden reel is not visible, so it pays nothing — the slice matches
+		# the one evaluate() scores with.
+		{ "reels": ["eye", "eye", "brain"], "hidden": 1, "mult": 1.0, "want": 10,
+		  "label": "hidden reel" },
+		{ "reels": ["brain", "eye", "brain"], "hidden": 2, "mult": 1.0, "want": 6,
+		  "label": "two hidden reels" },
+		# The frenzy multiplier scales the bonus, rounding floor(x + 0.5): 12 x 2 = 24,
+		# and 15 x 1.5 = 22.5 -> 23.
+		{ "reels": ["eye", "eye", "vial"], "hidden": 0, "mult": 2.0, "want": 24,
+		  "label": "pair at x2" },
+		{ "reels": ["eye", "eye", "eye"], "hidden": 0, "mult": 1.5, "want": 23,
+		  "label": "triple at x1.5 rounds up" },
+		{ "reels": ["eye", "eye", "eye"], "hidden": 0, "mult": 3.0, "want": 45,
+		  "label": "triple at x3" },
+	]
+	for case in cases:
+		var got := InRunItems.cocktail_bonus(
+			(case["reels"] as Array), int(case["hidden"]), float(case["mult"]))
+		if got != int(case["want"]):
+			_fail(out, "issue185 cocktail bonus (%s) %s" % [case["label"], str(case["reels"])],
+				got, case["want"])
+	# The invariant behind the cases: the SAME three symbols pay the same however they
+	# land. [eye, eye, vial] is a pair and [eye, vial, eye] is a miss (reels 1+3 do not
+	# pay without Pattern 23), and the Cocktail owes both the identical rarity total.
+	var as_pair := InRunItems.cocktail_bonus(["eye", "eye", "vial"], 0, 1.0)
+	var as_miss := InRunItems.cocktail_bonus(["eye", "vial", "eye"], 0, 1.0)
+	if as_pair != as_miss:
+		_fail(out, "issue185 cocktail paid a pair differently from the same symbols missing",
+			as_pair, as_miss)
+
+## Issue #185: Hallucination charges its 70% cut to the triples it INVENTS and to nothing
+## else. It used to ride the general reward scale, so owning the card quietly taxed every
+## natural triple (the syringe triple included), every pair and every joker win.
+static func check_hallucination_scope(out: Array) -> void:
+	const CUT := 0.30
+	# A natural triple pays in full, whatever Hallucination is doing. Syringe is the case
+	# called out in the issue; brain and eye cover the jackpot and the top triple.
+	for symbol in ["syringe", "brain", "eye", "vial", "pill"]:
+		var natural := Evaluate.score_reels([symbol, symbol, symbol], 1.0, true,
+			false, false, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+		var untouched := Evaluate.score_reels([symbol, symbol, symbol], 1.0, true,
+			false, false, 1.0, 0, false, 1.0)
+		if int(natural["scoreEarned"]) != int(untouched["scoreEarned"]):
+			_fail(out, "issue185 natural %s triple taxed by Hallucination" % symbol,
+				natural["scoreEarned"], untouched["scoreEarned"])
+		if bool(natural.get("hallucinatedTriple", false)):
+			_fail(out, "issue185 natural %s triple marked as hallucinated" % symbol,
+				natural, "not promoted")
+	# A promoted pair pays a triple discounted to 30%: eye triple 50 -> 15.
+	var promoted := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	if String(promoted["winType"]) != "triple" or int(promoted["scoreEarned"]) != 15 \
+			or not bool(promoted.get("hallucinatedTriple", false)):
+		_fail(out, "issue185 promoted pair payout", promoted, "triple / 15 / marked")
+	# The 2+3 pair is promoted and taxed exactly like the 1+2 one.
+	var promoted_23 := Evaluate.score_reels(["brain", "eye", "eye"], 1.0, true,
+		false, false, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	if int(promoted_23["scoreEarned"]) != 15:
+		_fail(out, "issue185 promoted 2+3 pair payout", promoted_23, "15")
+	# A pair Hallucination did NOT promote — flatline pairs pay 0 and stay a miss — and,
+	# more to the point, an ordinary pair while the card is owned pays its full pair
+	# price: only the promotion branch pays.
+	var plain_pair := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 0, false, 1.0, {}, false, 1.0, CUT)
+	if String(plain_pair["winType"]) != "pair" or int(plain_pair["scoreEarned"]) != 10:
+		_fail(out, "issue185 unpromoted pair taxed", plain_pair, "pair / 10")
+	# Hidden reels: the visible pair Tobacco leaves is still a promotion, so it pays the
+	# cut; the visible pair WITHOUT the card keeps its full pair price.
+	var hidden_promoted := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, true, 1.0, {}, false, 1.0, CUT)
+	if String(hidden_promoted["winType"]) != "triple" or int(hidden_promoted["scoreEarned"]) != 15:
+		_fail(out, "issue185 hidden-reel promotion payout", hidden_promoted, "triple / 15")
+	var hidden_plain := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, false, 1.0, {}, false, 1.0, CUT)
+	if int(hidden_plain["scoreEarned"]) != 10:
+		_fail(out, "issue185 hidden-reel pair taxed", hidden_plain, "10")
+	# A miss is a miss: no cut, nothing to cut.
+	var miss := Evaluate.score_reels(["eye", "vial", "brain"], 1.0, true,
+		false, false, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	if String(miss["winType"]) != "miss" or int(miss["scoreEarned"]) != 0:
+		_fail(out, "issue185 hallucination miss", miss, "miss / 0")
+	# Powers form pairs too. A CHEAT that completes the pair Hallucination promotes is
+	# paid the discounted triple and marked; one that lands a natural triple is not.
+	var cheat_promoted := Abilities.apply_cheat(["eye", "brain", "vial"], 1, "eye", 1.0,
+		false, false, true, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	if String(cheat_promoted["winType"]) != "triple" \
+			or not bool(cheat_promoted.get("hallucinatedTriple", false)):
+		_fail(out, "issue185 power-formed promotion", cheat_promoted, "triple / marked")
+	var cheat_natural := Abilities.apply_cheat(["syringe", "syringe", "vial"], 2, "syringe",
+		1.0, false, false, true, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	var natural_syringe := Evaluate.score_reels(["syringe", "syringe", "syringe"], 1.0, true,
+		false, false, 1.0, 0, false, 1.0)
+	if bool(cheat_natural.get("hallucinatedTriple", false)):
+		_fail(out, "issue185 power-formed natural triple marked as promoted",
+			cheat_natural, "not promoted")
+	# The syringe triple the issue names: the power builds it for real, so it pays in
+	# full even though the promoted pair it replaced would have been cut.
+	var promoted_syringe_pair := Evaluate.score_reels(["syringe", "syringe", "vial"], 1.0,
+		true, false, false, 1.0, 0, true, 1.0, {}, false, 1.0, CUT)
+	if int(cheat_natural["scoreDelta"]) \
+			!= int(natural_syringe["scoreEarned"]) - int(promoted_syringe_pair["scoreEarned"]):
+		_fail(out, "issue185 natural syringe triple paid the promotion cut",
+			cheat_natural["scoreDelta"],
+			int(natural_syringe["scoreEarned"]) - int(promoted_syringe_pair["scoreEarned"]))
+
 static func check_pacte_deck_and_powers(out: Array) -> void:
 	var augment_unlocks: Array[String] = PacteCards.augment_ids()
 	var power_unlocks: Array[String] = PacteCards.power_draw_ids()
@@ -337,5 +459,7 @@ static func run_all() -> Array:
 	check_lucidity(out)
 	check_endings(out)
 	check_issue176(out)
+	check_cocktail_bonus(out)
+	check_hallucination_scope(out)
 	check_pacte_deck_and_powers(out)
 	return out

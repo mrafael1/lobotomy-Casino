@@ -169,9 +169,9 @@ var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatl
 var hideResultSpins := 0         # White Powder: hide the next spin's result
 
 const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
-const COCKTAIL_RARITY_POINTS := {
-	"flatline": 1, "vial": 2, "syringe": 3, "pill": 4, "eye": 5, "brain": 6, "book": 6,
-}
+# Kept as an alias so the machine's per-reel Cocktail bursts read the same table the
+# scorer does; the table itself lives with the item now (issue #185).
+const COCKTAIL_RARITY_POINTS := InRunItems.COCKTAIL_RARITY_POINTS
 
 # Machine-reaction state (issue #35). Additive run-flow fields updated by the
 # machine's post-reveal reactions AFTER the parity-pinned spin()/power results —
@@ -790,21 +790,20 @@ func spin(compulsive := false) -> Variant:
 			"visiblePairAsTriple": hallucination_active,
 			"rewardScale": _active_reward_scale(),
 			"bookRewardScale": _book_reward_scale(),
+			"hallucinationRewardScale": _hallucination_reward_scale(),
 			"soloAsPair": Economy.has_solo_as_pair(ownedUpgrades),
 			"symbolRewardBonuses": symbolRewardBonuses,
 			"weightOverrides": oddsWeightOverrides,
 		})
 
-	# The Cocktail is pure upside: rarity points on every visible reel, no tax. It used to
+	# The Cocktail is pure upside: rarity points on every visible reel, no tax and no
+	# win-type gate — pairs and triples collect exactly like a miss does. It used to
 	# charge 15% of a pair/triple back, which made the item read as a trap on exactly the
-	# spins it was supposed to reward.
+	# spins it was supposed to reward. The maths lives in InRunItems so parity can pin it.
 	var cocktail_bonus := 0
 	if cocktailBoostSpins > 0:
-		var rarity_total := 0
-		var visible_count := maxi(1, (result["reels"] as Array).size() - hidden_reel_count)
-		for i in visible_count:
-			rarity_total += int(COCKTAIL_RARITY_POINTS.get(String((result["reels"] as Array)[i]), 0))
-		cocktail_bonus = floori(float(rarity_total) * float(result["scoreMultiplier"]) + 0.5)
+		cocktail_bonus = InRunItems.cocktail_bonus(result["reels"] as Array,
+			hidden_reel_count, float(result["scoreMultiplier"]))
 	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
 	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
 	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
@@ -1823,7 +1822,7 @@ func _dealer_help_rescore(reels: Array, reel_index: int, symbol: String) -> Dict
 		_pair_score_multiplier(pair_boost_active),
 		_active_hidden_reel_count(pair_boost_active), Economy.has_hallucination(ownedUpgrades),
 		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
-		_book_reward_scale())
+		_book_reward_scale(), _hallucination_reward_scale())
 
 func _dealer_help_cheat(reels: Array) -> Dictionary:
 	var symbols: Array[String] = []
@@ -1869,7 +1868,7 @@ func _dealer_help_shift(reels: Array) -> Dictionary:
 				_pair_score_multiplier(pairBoostSpins > 0),
 				_active_hidden_reel_count(pairBoostSpins > 0), Economy.has_hallucination(ownedUpgrades),
 				_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
-				_book_reward_scale())
+				_book_reward_scale(), _hallucination_reward_scale())
 			var rank := _dealer_help_rank(outcome)
 			if rank > best_rank:
 				best = outcome
@@ -1918,7 +1917,7 @@ func _dealer_help_reroll(reels: Array) -> Dictionary:
 		_pair_score_multiplier(pairBoostSpins > 0),
 		_active_hidden_reel_count(pairBoostSpins > 0), Economy.has_hallucination(ownedUpgrades),
 		_active_reward_scale(), symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades),
-		_book_reward_scale())
+		_book_reward_scale(), _hallucination_reward_scale())
 	return { "outcome": reroll_outcome, "reel": best_reel, "symbol": best_symbol }
 
 func _dealer_help_lock(reels: Array, rng: LobRNG) -> Dictionary:
@@ -2159,8 +2158,7 @@ func _active_hidden_reel_count(pair_boost_active: bool) -> int:
 	return clampi(hidden, 0, 2)
 
 func _active_reward_scale() -> float:
-	var scale := Economy.compute_hallucination_reward_scale(ownedUpgrades) \
-		* Economy.compute_tunnel_vision_reward_scale(ownedUpgrades)
+	var scale := Economy.compute_tunnel_vision_reward_scale(ownedUpgrades)
 	# Augmented club modifier (issue #111): all spin rewards/gains are halved.
 	if augmented_modifier_active(4):
 		scale *= 0.5
@@ -2171,6 +2169,13 @@ func _active_reward_scale() -> float:
 ## it on top of _active_reward_scale inside its joker branch.
 func _book_reward_scale() -> float:
 	return Economy.compute_book_reward_scale(ownedUpgrades)
+
+## Hallucination's cut is charged the same way (issue #185): only to the triples the
+## card itself promotes a visible pair into. It was in _active_reward_scale, which
+## taxed natural triples — the syringe triple included — pairs, and every other reward
+## the run made, so owning the card was a flat -70% on everything it never touched.
+func _hallucination_reward_scale() -> float:
+	return Economy.compute_hallucination_reward_scale(ownedUpgrades)
 
 func _pair_score_multiplier(pair_boost_active: bool) -> float:
 	var multiplier := Economy.compute_pair_score_multiplier(ownedUpgrades)
@@ -2430,7 +2435,8 @@ func reroll_reel(reel_index: int) -> bool:
 		candidates, Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale(),
+		_hallucination_reward_scale())
 	var marked := abilitiesUsed.duplicate()
 	marked.append("reroll")
 	powersUsedThisSpin += 1
@@ -2452,7 +2458,8 @@ func move_reel(reel_index: int, direction: int) -> bool:
 		Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale(),
+		_hallucination_reward_scale())
 	var seed := _seed(spinCount * 0x27d4eb2f + reel_index)
 	var marked := abilitiesUsed.duplicate()
 	marked.append("shift")
@@ -2496,7 +2503,8 @@ func copy_reel(source_reel: int, target_reel: int) -> bool:
 		Economy.has_pattern23_triple(ownedUpgrades), book_w > 0, not bool(lastResult["isFreeSpin"]),
 		_pair_score_multiplier(pair_boost_active),
 		hidden_reel_count, Economy.has_hallucination(ownedUpgrades), _active_reward_scale(),
-		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
+		symbolRewardBonuses, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale(),
+		_hallucination_reward_scale())
 
 	var seed := _seed(spinCount * 0x165667b1)
 	powersUsedThisSpin += 1
@@ -2546,7 +2554,8 @@ func cheat_symbol(reel_index: int, symbol: String) -> bool:
 			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
 			_pair_score_multiplier(pair_boost_active), hidden_reel_count,
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
-			Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
+			Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale(),
+			_hallucination_reward_scale())
 	var cheated := _apply_revealed_power_outcome(outcome, "cheat",
 			_seed(spinCount * 0x165667b1 + reel_index), 0, [reel_index])
 	if cheated:
@@ -2565,7 +2574,8 @@ func swap_symbol(source_reel: int, target_reel: int, source_symbol: String = "")
 			Economy.compute_book_weight(ownedUpgrades) > 0, not bool(lastResult["isFreeSpin"]),
 			_pair_score_multiplier(pair_boost_active), hidden_reel_count,
 			Economy.has_hallucination(ownedUpgrades), _active_reward_scale(), symbolRewardBonuses,
-			source_symbol, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale())
+			source_symbol, Economy.has_solo_as_pair(ownedUpgrades), _book_reward_scale(),
+			_hallucination_reward_scale())
 	return _apply_revealed_power_outcome(outcome, "swap",
 			_seed(spinCount * 0x27d4eb2f + source_reel * 7 + target_reel), 0,
 			[source_reel, target_reel])
