@@ -135,14 +135,17 @@ Resources and currencies:
   readout, and dealer countdown information so the pop remains readable; those
   indicators return when the callout ends.
 - Active multi-spin items show as small 8px duration icons in a row under the
-  target bar, filling left to right, each with its spins-remaining count beside it.
-  The count carries the item's polarity as a sign — "+N" pure upside, "-N" pure
-  downside, "±N" when the item's benefit has a live cost — so polarity never rides
-  on colour alone. Five slots, enough that simultaneous items no longer collapse
-  into an overflow badge. Only a full-screen callout clears the row; the FREE SPIN
-  banner shares the screen with it. The Red Pill gets one icon spanning both of its
-  phases (the forced flatline, then the guaranteed triple), counting the whole
-  two-spin effect down rather than handing off between two badges.
+  target bar, filling left to right, each with the number of turns it has left
+  beside it. That number is coloured by what the item is doing right now: green
+  while it is helping, red while it is costing. Five slots, enough that
+  simultaneous items no longer collapse into an overflow badge. Only a full-screen
+  callout clears the row; the FREE SPIN banner shares the screen with it.
+- An item whose effect runs in phases keeps ONE badge for the whole thing, counting
+  the entire effect down while the colour tracks the phase currently running. The
+  Red Pill counts 2, 1 turning red (the forced flatline it makes you take) then
+  green (the triple it owes you); the Energy Drink counts 3, 2, 1 turning green
+  (protected spins) then red at 1 (the compulsory spin it queued). Cocktail,
+  Potion and Tobacco are green throughout; Serum's blur tail is red.
 - Tapping an item icon pops that item's name and what it is currently doing, over
   the TV, for about a second before it fades on its own. The popup never blocks
   input and draws above the banner, the dealer countdown and the losing-state

@@ -527,14 +527,25 @@ const ITEM_ICONS := {
 # benefit carries a live cost (Tobacco's hidden reel). Unmarked entries are pure
 # upside — the Cocktail joined them when its pair/triple tax was dropped. The badges
 # surface this as +/- corner glyphs so polarity never rides on the count colour alone.
-# `addCounters` (issue #185) sums further counters into the SAME badge, for an item whose
-# effect runs in phases: the Red Pill's forced flatline and the guaranteed triple that
-# follows it are one two-spin item, not two items, so it gets one icon counting down 2, 1.
+# `phases` (issue #185) is what an item does over time, in order. An item whose effect
+# changes character partway through is still ONE badge: the count is the whole effect's
+# remaining spins, and the COLOUR is whichever phase is running right now — so the Red
+# Pill counts 2, 1 while turning from red (the forced flatline it makes you take) to
+# green (the triple it owes you), and the Energy Drink counts 3, 2, 1 while turning from
+# green (protected spins) to red (the compulsory spin at the end). Without phases the
+# entry is single-phase on `counter` alone.
 # `title`/`desc` are what the badge says when tapped (issue #185) — the description
 # describes the RUNNING effect, which is what the player tapped the icon to find out.
 const DURATION_BOOSTS := [
-	{ "counter": "decaySkips", "id": "item_energy_drink",     # no-decay rush
-		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH." },
+	# The rush is the upside; the compulsory spin it queues is the bill, and the badge
+	# turns red for it before it lands rather than after.
+	{ "counter": "decaySkips", "id": "item_energy_drink",
+		"phases": [
+			{ "counter": "decaySkips" },
+			{ "counter": "pendingCompulsiveSpinSkips", "negative": true },
+			{ "counter": "compulsiveSpinSkips", "negative": true },
+		],
+		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH, THEN ONE FORCED SPIN." },
 	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId",
 		"title": "SERUM", "desc": "THIS SYMBOL IS GUARANTEED TO APPEAR." },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
@@ -542,13 +553,16 @@ const DURATION_BOOSTS := [
 		"title": "SERUM", "desc": "THE ADJACENT SYMBOLS STAY BLURRED." },
 	{ "counter": "cocktailBoostSpins", "id": "item_cocktail", # rarity bonus, no cost
 		"title": "COCKTAIL", "desc": "EVERY VISIBLE REEL PAYS RARITY POINTS, WIN OR MISS." },
-	{ "counter": "pairBoostSpins", "id": "cons_cigarette", "mixed": true,   # 3x pairs - hidden reel
+	{ "counter": "pairBoostSpins", "id": "cons_cigarette",   # 3x pairs - hidden reel
 		"title": "TOBACCO", "desc": "PAIRS PAY 3X. ONE REEL IS HIDDEN FROM SCORING." },
 	{ "counter": "potionSpins", "id": "cons_potion",
 		"title": "POTION", "desc": "A RANDOM EFFECT ROLLS EVERY SPIN." },
-	# The Red Pill: one badge over both phases (forced flatline, then the promised triple).
-	{ "counter": "forceFlatlineSpins", "addCounters": ["guaranteedTripleSpins"],
-		"id": "item_pill", "mixed": true,
+	# The Red Pill: the forced flatline is the cost, the triple after it is the payoff.
+	{ "counter": "forceFlatlineSpins", "id": "item_pill",
+		"phases": [
+			{ "counter": "forceFlatlineSpins", "negative": true },
+			{ "counter": "guaranteedTripleSpins" },
+		],
 		"title": "RED PILL", "desc": "A FORCED FLATLINE FIRST, THEN A GUARANTEED TRIPLE." },
 ]
 
@@ -1607,14 +1621,11 @@ const BOOST_SLOT_POSITIONS: Array[Vector2] = [
 	Vector2(39.0, 99.0), Vector2(54.0, 99.0), Vector2(69.0, 99.0),
 	Vector2(84.0, 99.0), Vector2(99.0, 99.0),
 ]
-const BOOST_BADGE_FONT_SIZE := 5      # count + polarity glyphs, sized for the 8px badge
-const BOOST_COUNT_COLOR := Color(1.0, 0.95, 0.7)
+const BOOST_BADGE_FONT_SIZE := 5      # the turn count, sized for the 8px badge
+# Polarity is the count's colour (issue #185): the project's established positive/negative
+# pair, the same green and red the potion popup and the on-use hints already speak in.
+const BOOST_COUNT_COLOR := Color(0.72, 1.0, 0.65)
 const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
-# Issue #113: polarity corner glyphs — "+" top-left when the boost helps, "-"
-# top-right when it hurts, both on a mixed boost. Sign shape carries the meaning,
-# colour (HintLabel's shared green/red) only reinforces it — never colour alone.
-const BOOST_MARK_POS_COLOR := Color(0.13, 0.77, 0.37)
-const BOOST_MARK_NEG_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
@@ -1658,48 +1669,41 @@ func _build_boost_indicators() -> void:
 		count.add_theme_constant_override("outline_size", 1)
 		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(count)
-		# Polarity glyphs (issue #113): "+" pinned top-left, "-" pinned top-right.
-		var pos_mark := _make_boost_mark("+", HORIZONTAL_ALIGNMENT_LEFT, BOOST_MARK_POS_COLOR)
-		slot.add_child(pos_mark)
-		var neg_mark := _make_boost_mark("-", HORIZONTAL_ALIGNMENT_RIGHT, BOOST_MARK_NEG_COLOR)
-		slot.add_child(neg_mark)
 		_boost_indicator_slots.append({
 			"slot": slot, "icon": icon, "count": count,
-			"pos_mark": pos_mark, "neg_mark": neg_mark,
 			# Which boost this pooled slot is currently showing — the row is packed, so
 			# slot index is not boost index and a tap has to look it up here.
 			"boost": {},
 		})
 
-func _make_boost_mark(glyph: String, alignment: HorizontalAlignment, color: Color) -> Label:
-	var mark := Label.new()
-	mark.text = glyph
-	mark.horizontal_alignment = alignment
-	mark.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	mark.add_theme_font_size_override("font_size", BOOST_BADGE_FONT_SIZE)
-	if _font != null:
-		mark.add_theme_font_override("font", _font)
-	mark.add_theme_color_override("font_color", color)
-	mark.add_theme_color_override("font_outline_color", Color.BLACK)
-	mark.add_theme_constant_override("outline_size", 1)
-	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Pinned INSIDE the icon's top edge. It used to hang 3px above, which worked in the
-	# old y81..93 band but would now reach up into the target bar at y94..98. The box
-	# height comes from the font's real min height on refresh — asking for it here,
-	# before the node is in the tree, can return zero.
-	mark.position = Vector2.ZERO
-	mark.visible = false
-	return mark
+## The phases an item runs through, in order. A single-phase item is described by its own
+## `counter` and `negative` flag, so every entry can be read the same way.
+func _boost_phases(boost: Dictionary) -> Array:
+	var phases: Array = boost.get("phases", [])
+	if not phases.is_empty():
+		return phases
+	return [{ "counter": String(boost["counter"]),
+		"negative": bool(boost.get("negative", false)) }]
 
-
-## Spins left on a boost. Normally one counter; a phased item (the Red Pill) sums the
-## counters of every phase, so its badge counts the whole effect down rather than
-## restarting at each hand-off (issue #185).
+## Spins left on a boost: the whole effect, summed across its phases, so a phased item
+## counts down continuously instead of restarting at each hand-off (issue #185).
 func _boost_remaining(boost: Dictionary) -> int:
-	var total := int(RunStateStore.get(String(boost["counter"])))
-	for extra in boost.get("addCounters", []):
-		total += int(RunStateStore.get(String(extra)))
+	var total := 0
+	for phase: Dictionary in _boost_phases(boost):
+		total += int(RunStateStore.get(String(phase["counter"])))
 	return total
+
+## Whether what the item is doing RIGHT NOW is a downside — the first phase with spins
+## still on it. This is what colours the count, so an item that turns sour (or sweet)
+## partway through says so as it happens rather than averaging the two.
+func _boost_phase_is_negative(boost: Dictionary) -> bool:
+	var phases := _boost_phases(boost)
+	for phase: Dictionary in phases:
+		if int(RunStateStore.get(String(phase["counter"]))) > 0:
+			return bool(phase.get("negative", false))
+	# Nothing left running (the badge is lingering on zero): keep the last phase's colour
+	# rather than snapping back to the first one's as it goes out.
+	return bool((phases[phases.size() - 1] as Dictionary).get("negative", false))
 
 ## Whether a boost currently owns a slot: either it has spins left, or it just expired
 ## and is lingering on zero for one refresh.
@@ -1749,19 +1753,14 @@ func _refresh_boost_indicators() -> void:
 		slot.position = BOOST_SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
 		var cn: Label = s["count"]
-		var is_negative := bool(boost.get("negative", false))
-		var is_mixed := bool(boost.get("mixed", false))
-		# Issue #113 asked that polarity ride a SHAPE, never the count colour alone. It
-		# used to be two glyphs pinned to the badge's top corners, which the 8px badge no
-		# longer has room for — they landed on the art. The sign moves onto the count
-		# instead: "+3", "-2", "±4" for a boost that carries both. Same shape-carried
-		# meaning, no pixels spent, and the number it qualifies is right there.
-		var sign_prefix := "±" if is_mixed else ("-" if is_negative else "+")
-		cn.text = "%s%d" % [sign_prefix, maxi(0, remaining)]
+		# Just the number of turns left, coloured by what the item is doing right now:
+		# green while it is helping, red while it is costing. The badge is 8px and the
+		# sign glyphs that used to carry polarity crowded the art at that size, so the
+		# count carries it instead — and because the colour tracks the live phase, a
+		# phased item announces the turn as it happens.
+		cn.text = str(maxi(0, remaining))
 		cn.add_theme_color_override("font_color",
-			BOOST_NEGATIVE_COUNT_COLOR if is_negative else BOOST_COUNT_COLOR)
-		(s["pos_mark"] as Label).visible = false
-		(s["neg_mark"] as Label).visible = false
+			BOOST_NEGATIVE_COUNT_COLOR if _boost_phase_is_negative(boost) else BOOST_COUNT_COLOR)
 		# The caption sits BESIDE the icon, not on it. Overlaying was survivable on the old
 		# 12px badge, where a single digit tucked into a corner; on an 8px one a signed
 		# count covers the art it is labelling. Side by side, both stay readable and the
@@ -1770,12 +1769,6 @@ func _refresh_boost_indicators() -> void:
 		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
 		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh)
-		# The polarity glyphs share the count's font metrics, which are only reliable
-		# once the label is in the tree — sizing them at build time can yield a zero-high
-		# box and clip the sign.
-		for mark_key in ["pos_mark", "neg_mark"]:
-			var mark: Label = s[mark_key]
-			mark.size = Vector2(BOOST_ICON_SIZE, mark.get_minimum_size().y)
 		slot.visible = true
 		col += 1
 	# More boosts than slots: the last one carries how many are not shown, so the player

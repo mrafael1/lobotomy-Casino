@@ -5264,7 +5264,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum chosen-symbol boost icon did not show")
-	elif (slots[0]["count"] as Label).text != "+3":
+	elif (slots[0]["count"] as Label).text != "3":
 		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5280,7 +5280,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum zero-count handoff icon did not show")
-	elif (slots[0]["count"] as Label).text != "+0":
+	elif (slots[0]["count"] as Label).text != "0":
 		failures.append("issue92: Serum zero-count handoff icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5294,7 +5294,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._clear_boost_zero_linger()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue92: Serum negative boost icon did not show after zero handoff")
-	elif (slots[0]["count"] as Label).text != "-2":
+	elif (slots[0]["count"] as Label).text != "2":
 		failures.append("issue92: Serum negative boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
@@ -5311,13 +5311,13 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	machine._refresh_boost_indicators()
 	if not (slots[0]["slot"] as Control).visible:
 		failures.append("issue76: active boost did not show an icon")
-	elif (slots[0]["count"] as Label).text != "+2":
+	elif (slots[0]["count"] as Label).text != "2":
 		failures.append("issue76: boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 
 	# Two boosts: they stack in DURATION_BOOSTS order (energy no-decay first).
 	run_store.decaySkips = 3
 	machine._refresh_boost_indicators()
-	if (slots[0]["count"] as Label).text != "+3" or (slots[1]["count"] as Label).text != "+2":
+	if (slots[0]["count"] as Label).text != "3" or (slots[1]["count"] as Label).text != "2":
 		failures.append("issue76: stacked boost icons out of order/count (%s,%s)" % [(slots[0]["count"] as Label).text, (slots[1]["count"] as Label).text])
 	if not (slots[1]["slot"] as Control).visible:
 		failures.append("issue76: second stacked boost icon not shown")
@@ -5363,39 +5363,36 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			failures.append("issue185: boost slot %s collides with the dealer icon" % rect)
 		if rect.intersects(goal_rect) or rect.intersects(fill_bar_rect):
 			failures.append("issue185: boost slot %s collides with the TARGET art" % rect)
-	# Issue #113 asked for polarity as a SHAPE, never the count colour alone. On the 8px
-	# badge the corner glyphs landed on the art, so the sign moved onto the count itself:
-	# "+N" helping, "-N" hurting, "±N" when the item carries both.
-	if not (slots[0]["count"] as Label).text.begins_with("+"):
-		failures.append("issue113: a pure-positive boost should sign its count '+' (got '%s')"
-			% (slots[0]["count"] as Label).text)
-	if not (slots[1]["count"] as Label).text.begins_with("+"):
-		failures.append("issue113: the Cocktail should be pure upside (got '%s')"
-			% (slots[1]["count"] as Label).text)
-	if (slots[0]["pos_mark"] as Label).visible or (slots[0]["neg_mark"] as Label).visible:
-		failures.append("issue185: the old corner glyphs should be retired, not drawn on the art")
-	# Tobacco still carries a live cost (3x pairs bought with a hidden reel), so it is the
-	# mixed case: both marks at once. Shown alone — there are only two slots, and a third
-	# simultaneous boost folds into a "+N" instead of getting its own badge.
+	# Issue #185: the count is a bare turn number and its COLOUR carries polarity — green
+	# while the item is helping, red while it is costing. The badge is 8px and the sign
+	# glyphs that used to carry this crowded the art at that size.
+	var green: Color = machine.BOOST_COUNT_COLOR
+	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	for i in 2:
+		var badge_text: String = (slots[i]["count"] as Label).text
+		if not badge_text.is_valid_int():
+			failures.append("issue185: the count should be a bare number, got '%s'" % badge_text)
+	if (slots[1]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Cocktail is pure upside and should count in green")
+	# Tobacco buys 3x pairs with a hidden reel; the boost itself is what the player
+	# spent on, so it counts green like the other upsides.
 	run_store.cocktailBoostSpins = 0
 	run_store.decaySkips = 0
 	run_store.pairBoostSpins = 4
 	machine._refresh_boost_indicators()
-	if not (slots[0]["count"] as Label).text.begins_with("±"):
-		failures.append("issue113: mixed Tobacco should sign its count '±' (got '%s')"
-			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: Tobacco should count in green")
 	run_store.pairBoostSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
 	machine._refresh_boost_indicators()
-	# A pure downside (Serum's blur tail) shows only the "-" mark.
+	# A pure downside (Serum's blur tail) counts in red.
 	run_store.cocktailBoostSpins = 0
 	run_store.decaySkips = 0
 	run_store.blurReelsSpins = 2
 	machine._refresh_boost_indicators()
-	if not (slots[0]["count"] as Label).text.begins_with("-"):
-		failures.append("issue113: a pure-negative boost should sign its count '-' (got '%s')"
-			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: a pure-downside boost should count in red")
 	run_store.blurReelsSpins = 0
 	run_store.cocktailBoostSpins = 2
 	run_store.decaySkips = 3
@@ -5416,7 +5413,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	run_store.cocktailBoostSpins = 0
 	machine._apply_expiring_boost_linger(expiring)
 	machine._refresh_boost_indicators()
-	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "+0":
+	if not (slots[0]["slot"] as Control).visible or (slots[0]["count"] as Label).text != "0":
 		failures.append("issue76: final boost spin should linger as count 0")
 	machine._clear_boost_zero_linger()
 	if (slots[0]["slot"] as Control).visible:
@@ -5514,26 +5511,30 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 	var slot := slots[0]["slot"] as Control
 	if not slot.visible:
 		failures.append("issue185: the Red Pill badge did not show")
-	elif (slots[0]["count"] as Label).text != "±2":
+	elif (slots[0]["count"] as Label).text != "2":
 		failures.append("issue185: the Red Pill badge should count both phases, got '%s'"
 			% (slots[0]["count"] as Label).text)
 	var icon := (slots[0]["icon"] as TextureRect).texture
 	if icon == null or not String(icon.resource_path).ends_with("items/pill.png"):
 		failures.append("issue185: the Red Pill badge did not use the pill icon")
-	# Both an upside and a live cost, which the signed count carries as "±".
-	if not (slots[0]["count"] as Label).text.begins_with("±"):
-		failures.append("issue185: the Red Pill is mixed and should sign its count '±' (got '%s')"
-			% (slots[0]["count"] as Label).text)
+	# Phase one is the forced flatline it makes you take, so the count is RED.
+	var green: Color = machine.BOOST_COUNT_COLOR
+	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: the Red Pill's forced-flatline phase should count in red")
 
 	# The flatline is spent; the promised triple is still owed. ONE badge, now at 1 —
-	# not a second badge appearing as the first disappears.
+	# not a second badge appearing as the first disappears — and it turns GREEN, because
+	# what the item is doing has changed from costing to paying.
 	run_store.forceFlatlineSpins = 0
 	machine._refresh_boost_indicators()
 	if not slot.visible:
 		failures.append("issue185: the Red Pill badge vanished between its two phases")
-	elif (slots[0]["count"] as Label).text != "±1":
+	elif (slots[0]["count"] as Label).text != "1":
 		failures.append("issue185: the Red Pill badge should read 1 after the flatline, got '%s'"
 			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Red Pill should turn green for its guaranteed triple")
 	if slots.size() > 1 and (slots[1]["slot"] as Control).visible:
 		failures.append("issue185: the Red Pill should occupy one badge, not one per phase")
 
@@ -5543,6 +5544,27 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 	machine._refresh_boost_indicators()
 	if slot.visible:
 		failures.append("issue185: the Red Pill badge outlived both its phases")
+
+	# The Energy Drink runs the other way round: protected spins first, then the
+	# compulsory one it queued. 3 green, then red once only the bill is left.
+	run_store.reset_run_state()
+	run_store.decaySkips = 2
+	run_store.pendingCompulsiveSpinSkips = 1
+	machine._refresh_boost_indicators()
+	if (slots[0]["count"] as Label).text != "3":
+		failures.append("issue185: the Energy Drink should count its rush AND its forced spin, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != green:
+		failures.append("issue185: the Energy Drink's protected spins should count in green")
+	run_store.decaySkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.compulsiveSpinSkips = 1
+	machine._refresh_boost_indicators()
+	if (slots[0]["count"] as Label).text != "1":
+		failures.append("issue185: the Energy Drink should read 1 for its forced spin, got '%s'"
+			% (slots[0]["count"] as Label).text)
+	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
+		failures.append("issue185: the Energy Drink should turn red for its forced spin")
 	run_store.reset_run_state()
 
 ## Issue #185: a 12px icon cannot say what an item DOES. Tapping one pops its name and
