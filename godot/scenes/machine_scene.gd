@@ -1602,24 +1602,27 @@ func _refresh_restore_cap() -> void:
 ## the way across. The row is left-aligned to the fill bar above it (x41) so the two
 ## read as one block.
 const BOOST_ICON_SIZE := 8.0
-const BOOST_ICON_GAP := 1.0
-const BOOST_COUNT_WIDTH := 7.0        # room for a sign plus one digit beside the icon
-# How far the count sits from the slot origin. Deliberately INSIDE the 8px icon box: the
-# icon art is aspect-centred in that box and rarely fills it edge to edge, so measuring
-# the gap from the box drifted the number a few px away from the symbol it labels.
-const BOOST_COUNT_OFFSET := 7.0
-const BOOST_SLOT_WIDTH := BOOST_COUNT_OFFSET + BOOST_COUNT_WIDTH   # 14: icon + its count
+const BOOST_COUNT_WIDTH := 7.0
+# The count is pinned to the badge's bottom-right CORNER, the same place on every item.
+# It used to sit beside the icon at a fixed offset, which only looked consistent if the
+# art did: the icons are aspect-centred in their 8px box and fill wildly different amounts
+# of it (the cigarette is a wide horizontal object and runs the full width, the drink can
+# is tall and narrow and uses half), so the number appeared to sit on top of one item and
+# well clear of the next. Anchoring to the corner makes the number's position identical
+# across the row and lets each icon differ underneath it.
+const BOOST_COUNT_OFFSET := 6.0       # bottom-right corner of the 14px badge
+const BOOST_SLOT_WIDTH := BOOST_COUNT_OFFSET + BOOST_COUNT_WIDTH   # 13: icon + its corner
+# Per-item nudge for art that still reads badly under the shared anchor — the icons do not
+# share a silhouette, so a few need a pixel either way. Keyed by item id, in badge px.
+const BOOST_COUNT_NUDGE := {}
 # The row is bounded by the TV's own SCREEN, not by the cabinet around it: the near-black
 # screen runs x37..114 across y99..106 before the bezel and the curved bottom corners take
 # over (y107 already narrows to x39..112). Measuring "anything dark" instead caught the
 # cabinet grey and pushed the row about 5px past the bezel, off the TV entirely.
-const BOOST_ROW_LEFT := 39.0
-# y100 puts the row on the screen's last eight rows, y100..107. The bottom row is where
-# the screen curves in to x39..112, which is what fixes the row's width: the five 14px
-# slots at a 15px pitch land exactly x39..112, flush inside the corner.
-const BOOST_ROW_TOP := 100.0
-const BOOST_SLOT_PITCH := 15.0        # 14px of slot + 1px between slots
-const BOOST_SLOT_COUNT := 5
+# The row sits on the screen's last eight rows, y100..107. Its bottom row is where the
+# screen curves in to x39..112, and that corner is what fixes the row's width: five
+# BOOST_SLOT_WIDTH slots at a 15px pitch from x39 land flush inside it. These positions
+# are the layout — nothing derives them, so there is one place to change.
 const BOOST_SLOT_POSITIONS: Array[Vector2] = [
 	Vector2(39.0, 100.0), Vector2(54.0, 100.0), Vector2(69.0, 100.0),
 	Vector2(84.0, 100.0), Vector2(99.0, 100.0),
@@ -1764,14 +1767,15 @@ func _refresh_boost_indicators() -> void:
 		cn.text = str(maxi(0, remaining))
 		cn.add_theme_color_override("font_color",
 			BOOST_NEGATIVE_COUNT_COLOR if _boost_phase_is_negative(boost) else BOOST_COUNT_COLOR)
-		# The caption sits BESIDE the icon, not on it. Overlaying was survivable on the old
-		# 12px badge, where a single digit tucked into a corner; on an 8px one a signed
-		# count covers the art it is labelling. Side by side, both stay readable and the
-		# slot simply costs a few more pixels of a row that has them to spare.
+		# Pinned to the badge's bottom-right corner — the same coordinates on every item,
+		# so the row reads as one repeated shape rather than the number chasing each
+		# icon's silhouette. Right-aligned into that corner, bottom-aligned to the icon,
+		# plus whatever per-item nudge the art needs.
 		var mh := cn.get_minimum_size().y
-		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var nudge: Vector2 = BOOST_COUNT_NUDGE.get(String(boost.get("id", "")), Vector2.ZERO)
+		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
-		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh)
+		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh) + nudge
 		slot.visible = true
 		col += 1
 	# More boosts than slots: the last one carries how many are not shown, so the player
