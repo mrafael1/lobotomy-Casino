@@ -381,7 +381,12 @@ const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 # script's compile chain breaks headless -s runs, which compile before autoloads).
 # Augmented Run badge (issue #111): active-suit indicator, hold to peek at the
 # run's restrictions.
-const AUGMENTED_BADGE_POS := Vector2(27.0, 6.0) # top strip, right of the options gear
+# Left of the wealth bar, on its plate's own line: the plate's art starts at x39 and runs
+# y242..278, so a 14px badge at x22 leaves a 3px gap and centres on it. The suit belongs
+# beside the number the run is played for, not off in the top strip with the settings.
+const AUGMENTED_BADGE_POS := Vector2(22.0, 254.0)
+## The suit's own gold, on the badge and on the bubble it raises.
+const AUGMENTED_BADGE_BORDER := Color(0.86, 0.84, 0.24)
 const AUGMENTED_BADGE_SIZE := 14.0
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
@@ -781,6 +786,7 @@ var _pacte_augment_popup: Control = null
 # effects can never strand it on screen.
 var _item_info_popup: Control = null
 var _item_info_popup_time := 0.0
+var _item_info_popup_held := false # true while the badge is still under the finger
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -1718,7 +1724,7 @@ const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
-		# A Button, not a bare Control (issue #185): tapping a badge is how you find out
+		# A Button, not a bare Control (issue #185): HOLDING a badge is how you find out
 		# what the icon means. Flat and untextured, so it stays the authored art with a
 		# hit box on it. Its children keep MOUSE_FILTER_IGNORE so the whole 12px badge
 		# is the target — there is nothing else to hit at that size.
@@ -1731,7 +1737,11 @@ func _build_boost_indicators() -> void:
 		slot.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
 		slot.z_index = 12
 		slot.visible = false
-		slot.pressed.connect(_on_boost_indicator_pressed.bind(i))
+		# Hold to peek, release to dismiss — the same grip the Augmented suit badge and the
+		# score table's info chips use, so every explain-this control on the machine
+		# answers to one gesture instead of each having its own.
+		slot.button_down.connect(_on_boost_indicator_pressed.bind(i))
+		slot.button_up.connect(_on_boost_indicator_released)
 		add_child(slot)
 		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
 		var icon := TextureRect.new()
@@ -1919,9 +1929,86 @@ func _clear_boost_zero_linger() -> void:
 # thing occupying a screen four other systems are already competing for.
 const ITEM_INFO_POPUP_HOLD := 1.0     # seconds fully lit before it starts leaving
 const ITEM_INFO_POPUP_FADE := 0.18
-const ITEM_INFO_POPUP_SIZE := Vector2(104.0, 30.0)
+const ITEM_INFO_POPUP_MAX_WIDTH := 104.0 # wrap before the description leaves the TV
 const ITEM_INFO_POPUP_Z_INDEX := 42   # over the banner, the callouts and the dealer strip
 const ITEM_INFO_POPUP_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+# ── the machine's description bubble ─────────────────────────────────────────────────
+# One builder behind all three explain-this controls (the Augmented suit badge, the
+# augment row on the power bar, the item badges on the TV). The panel HUGS its text
+# instead of being a fixed box the words float inside, and callers set it down a few px
+# from the icon that raised it — a description has to read as attached to the thing it
+# describes, not as a plate that happens to be nearby.
+const INFO_BUBBLE_PAD := Vector2(8.0, 6.0)   # px of panel around the text block
+const INFO_BUBBLE_LINE_H := 8.0              # floor for one row, however short the font
+const INFO_BUBBLE_LINE_SPACING := 3          # pinned on the label so sizing can rely on it
+const INFO_BUBBLE_FONT_SIZE := 5
+const INFO_BUBBLE_GAP := 3.0                 # px between the icon and its bubble
+const INFO_BUBBLE_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+## `max_width` (0 = unbounded) wraps long text rather than letting the bubble run off the
+## panel it belongs to. The returned Control carries the finished size, so the caller can
+## place it against its own edges.
+func _make_info_bubble(node_name: String, text: String, border: Color,
+		font_color: Color, max_width := 0.0) -> Control:
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var lines := text.split("\n")
+	var text_w := 0.0
+	for line in lines:
+		text_w = maxf(text_w, font.get_string_size(
+			line, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_BUBBLE_FONT_SIZE).x)
+	var rows := lines.size()
+	if max_width > 0.0 and text_w + INFO_BUBBLE_PAD.x > max_width:
+		# Wrapping splits lines the measurement above cannot see; count the extra rows the
+		# long ones will need so the panel still ends up tall enough for all of them.
+		var inner := max_width - INFO_BUBBLE_PAD.x
+		rows = 0
+		for line in lines:
+			var w := font.get_string_size(
+				line, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_BUBBLE_FONT_SIZE).x
+			rows += maxi(1, ceili(w / maxf(1.0, inner)))
+		text_w = inner
+	# A row is the font's own line box PLUS the label's line spacing, which is pinned
+	# below so the two always agree. Sizing on the nominal 8px instead left the last line
+	# of a tall bubble (the joker suit lists seven) hanging out under its own border.
+	var line_h := maxf(INFO_BUBBLE_LINE_H,
+		font.get_height(INFO_BUBBLE_FONT_SIZE) + INFO_BUBBLE_LINE_SPACING)
+	var popup_size := Vector2(text_w + INFO_BUBBLE_PAD.x,
+		float(rows) * line_h + INFO_BUBBLE_PAD.y)
+	var popup := Control.new()
+	popup.name = node_name
+	popup.size = popup_size
+	# Purely informational, and it sits over live controls — it must never eat a tap.
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = INFO_BUBBLE_BG
+	bg_style.border_color = border
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", bg_style)
+	popup.add_child(bg)
+	var label := Label.new()
+	label.name = "Text"
+	label.position = INFO_BUBBLE_PAD * 0.5
+	label.size = popup_size - INFO_BUBBLE_PAD
+	label.text = text
+	if max_width > 0.0:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", INFO_BUBBLE_FONT_SIZE)
+	label.add_theme_constant_override("line_spacing", INFO_BUBBLE_LINE_SPACING)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", font_color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	return popup
 
 func _on_boost_indicator_pressed(slot_index: int) -> void:
 	if slot_index < 0 or slot_index >= _boost_indicator_slots.size():
@@ -1930,6 +2017,15 @@ func _on_boost_indicator_pressed(slot_index: int) -> void:
 	if not (entry["slot"] as Control).visible:
 		return
 	_show_item_info_popup(entry["boost"] as Dictionary, (entry["slot"] as Control).position)
+
+## Released: the description starts leaving. It is not cut off — the hold timer is wound
+## forward to the end of its dwell so the existing fade plays out from here, which is why
+## letting go looks the same as a popup that timed out on its own.
+func _on_boost_indicator_released() -> void:
+	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	_item_info_popup_held = false
+	_item_info_popup_time = maxf(_item_info_popup_time, ITEM_INFO_POPUP_HOLD)
 
 ## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
 ## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
@@ -1957,54 +2053,32 @@ func _show_item_info_popup(boost: Dictionary, anchor: Vector2) -> void:
 	var text := _item_info_popup_text(boost)
 	if text == "":
 		return
-	var popup := Control.new()
-	popup.name = "ItemInfoPopup"
+	var popup := _make_info_bubble("ItemInfoPopup", text, NEON_CYAN,
+		Color(0.88, 0.98, 1.0), ITEM_INFO_POPUP_MAX_WIDTH)
 	popup.z_index = ITEM_INFO_POPUP_Z_INDEX
-	# Purely informational, and it sits over live controls — it must never eat a tap.
-	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = ITEM_INFO_POPUP_BG
-	bg_style.border_color = NEON_CYAN
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.size = ITEM_INFO_POPUP_SIZE
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.add_theme_stylebox_override("panel", bg_style)
-	popup.add_child(bg)
-	var label := Label.new()
-	label.name = "Text"
-	label.position = Vector2(4.0, 3.0)
-	label.size = ITEM_INFO_POPUP_SIZE - Vector2(8.0, 6.0)
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
-	# Above the badge that was tapped, right-aligned to it, then clamped into the TV so a
-	# badge near either bezel still shows the whole box.
+	# Sitting on the badge being held: centred over it and a hair above, so the words are
+	# next to the icon they belong to. Then clamped into the TV, because a badge near
+	# either bezel would otherwise push half the description off the screen.
 	var pos := anchor + Vector2(
-		BOOST_ICON_SIZE - ITEM_INFO_POPUP_SIZE.x, -ITEM_INFO_POPUP_SIZE.y - 2.0)
+		(BOOST_ICON_SIZE - popup.size.x) * 0.5, -popup.size.y - INFO_BUBBLE_GAP + 1.0)
 	pos.x = clampf(pos.x, float(TV_SCREEN["left"]) + 1.0,
-		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - ITEM_INFO_POPUP_SIZE.x - 1.0)
+		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - popup.size.x - 1.0)
 	pos.y = clampf(pos.y, float(TV_SCREEN["top"]) + 1.0,
-		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - ITEM_INFO_POPUP_SIZE.y - 1.0)
+		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - popup.size.y - 1.0)
 	popup.position = pos.round()
 	_item_info_popup = popup
 	_item_info_popup_time = 0.0
+	_item_info_popup_held = true
 	add_child(popup)
 
-## Ages the popup out on its own. Fades over the last moments rather than vanishing, so
-## a description leaving does not read as a glitch on a screen full of blinking things.
+## Ages the popup out once the badge is let go. Fades over the last moments rather than
+## vanishing, so a description leaving does not read as a glitch on a screen full of
+## blinking things. A held badge never ages: the popup stays up for as long as the player
+## keeps reading it, which is the whole point of holding.
 func _step_item_info_popup(delta: float) -> void:
 	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	if _item_info_popup_held:
 		return
 	_item_info_popup_time += delta
 	var fading := _item_info_popup_time - ITEM_INFO_POPUP_HOLD
@@ -2019,6 +2093,7 @@ func _hide_item_info_popup() -> void:
 		_item_info_popup.queue_free()
 	_item_info_popup = null
 	_item_info_popup_time = 0.0
+	_item_info_popup_held = false
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -8069,7 +8144,7 @@ func _build_augmented_badge() -> void:
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.03, 0.02, 0.05, 0.85)
-	style.border_color = Color(0.86, 0.84, 0.24)
+	style.border_color = AUGMENTED_BADGE_BORDER
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(2)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
@@ -8113,46 +8188,17 @@ func _show_augmented_popup(button: Button) -> void:
 	var text := _augmented_restrictions_text()
 	if text == "":
 		return
-	_augmented_popup = Control.new()
-	_augmented_popup.name = "AugmentedPopup"
+	_augmented_popup = _make_info_bubble("AugmentedPopup", text,
+		AUGMENTED_BADGE_BORDER, Color(0.95, 0.92, 0.7))
 	_augmented_popup.z_index = 41
-	_augmented_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var font: Font = _font if _font != null else ThemeDB.fallback_font
-	var lines := text.split("\n")
-	var text_w := 0.0
-	for line in lines:
-		text_w = maxf(text_w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
-	var popup_size := Vector2(text_w + 8.0, float(lines.size()) * 8.0 + 6.0)
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
-	bg_style.border_color = Color(0.86, 0.84, 0.24)
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.add_theme_stylebox_override("panel", bg_style)
-	bg.size = popup_size
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_augmented_popup.add_child(bg)
-	var label := Label.new()
-	label.text = text
-	label.size = popup_size
-	label.custom_minimum_size = Vector2.ZERO
-	label.clip_text = true
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.7))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
-	label.set_deferred("size", popup_size)
-	var pos := button.position + Vector2(button.size.x + 3.0,
-		button.size.y * 0.5 - popup_size.y * 0.5)
-	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+	# Above the badge and centred on it, like the augment row and the TV badges. It used to
+	# open sideways, which worked while the badge lived in the top strip; from its new home
+	# beside the wealth plate that would lay the restrictions straight across the score.
+	var pos := button.position + Vector2(
+		(button.size.x - _augmented_popup.size.x) * 0.5,
+		-_augmented_popup.size.y - INFO_BUBBLE_GAP)
+	pos.x = clampf(pos.x, 2.0, SRC_W - _augmented_popup.size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - _augmented_popup.size.y - 2.0)
 	_augmented_popup.position = pos.round()
 	add_child(_augmented_popup)
 
@@ -8295,7 +8341,11 @@ func _build_pacte_augment_badge() -> void:
 			slice.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			glitch.add_child(slice)
 		badge.add_child(glitch)
-		badge.pressed.connect(_toggle_pacte_augment_popup)
+		# Held, not toggled: the same grip as the Augmented suit badge and the TV item
+		# badges. A toggle also left the description parked on screen if the second tap
+		# ever went astray, which a hold cannot do.
+		badge.button_down.connect(_show_pacte_augment_popup)
+		badge.button_up.connect(_hide_pacte_augment_popup)
 		add_child(badge)
 		_pacte_augment_badges.append({
 			"badge": badge, "icon": icon, "count": count, "glitch": glitch,
@@ -8350,6 +8400,9 @@ func _refresh_pacte_augment_badge() -> void:
 			if glitch != null:
 				glitch.visible = _augment_glitches(String(ids[i]))
 
+## Card names and their descriptions run long; wrapping keeps the bubble on the canvas.
+const PACTE_AUGMENT_POPUP_MAX_WIDTH := 126.0
+
 func _pacte_augment_popup_text() -> String:
 	var lines: Array[String] = []
 	for card_id in _active_pacte_augment_ids():
@@ -8358,51 +8411,23 @@ func _pacte_augment_popup_text() -> String:
 			String(entry.get("name", card_id)), String(entry.get("description", ""))])
 	return "\n".join(lines)
 
-func _toggle_pacte_augment_popup() -> void:
-	if _pacte_augment_popup != null:
-		_hide_pacte_augment_popup()
-		return
+func _show_pacte_augment_popup() -> void:
+	_hide_pacte_augment_popup()
 	if _pacte_augment_badge == null or _active_pacte_augment_ids().is_empty():
 		return
 	var text := _pacte_augment_popup_text()
 	if text == "":
 		return
-	var popup := Control.new()
-	popup.name = "PacteAugmentPopup"
+	var popup := _make_info_bubble("PacteAugmentPopup", text, NEON_CYAN,
+		Color(0.88, 0.98, 1.0), PACTE_AUGMENT_POPUP_MAX_WIDTH)
 	popup.z_index = 41
-	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var popup_size := Vector2(126.0,
-		minf(116.0, 8.0 + float(_active_pacte_augment_ids().size()) * 22.0))
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
-	bg_style.border_color = NEON_CYAN
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.size = popup_size
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.add_theme_stylebox_override("panel", bg_style)
-	popup.add_child(bg)
-	var label := Label.new()
-	label.position = Vector2(4.0, 3.0)
-	label.size = popup_size - Vector2(8.0, 6.0)
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
+	# Directly above the badge being held rather than a whole badge-height clear of it,
+	# which is what used to leave the words floating away from the row.
 	var pos := _pacte_augment_badge.position + Vector2(
-		_pacte_augment_badge.size.x - popup_size.x,
-		-_pacte_augment_badge.size.y - popup_size.y - 3.0)
-	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
+		(_pacte_augment_badge.size.x - popup.size.x) * 0.5,
+		-popup.size.y - INFO_BUBBLE_GAP)
+	pos.x = clampf(pos.x, 2.0, SRC_W - popup.size.x - 2.0)
+	pos.y = clampf(pos.y, 2.0, SRC_H - popup.size.y - 2.0)
 	popup.position = pos.round()
 	_pacte_augment_popup = popup
 	add_child(popup)

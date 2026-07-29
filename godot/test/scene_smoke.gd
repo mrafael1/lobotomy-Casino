@@ -5611,6 +5611,11 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 		return
 	if slot.mouse_filter == Control.MOUSE_FILTER_IGNORE:
 		failures.append("issue185: the item badge cannot receive a tap")
+	# The badge answers to a hold, like every other explain-this control on the machine:
+	# a plain press must pop nothing.
+	(slot as Button).pressed.emit()
+	if machine._item_info_popup != null:
+		failures.append("issue185: pressing an item badge popped a description instead of holding")
 
 	machine._on_boost_indicator_pressed(0)
 	var popup := machine._item_info_popup as Control
@@ -5631,18 +5636,35 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 		var tv_rect := Rect2(
 			Vector2(machine.TV_SCREEN["left"], machine.TV_SCREEN["top"]),
 			Vector2(machine.TV_SCREEN["width"], machine.TV_SCREEN["height"]))
-		var popup_rect := Rect2(popup.position, machine.ITEM_INFO_POPUP_SIZE)
+		# The bubble hugs its text, so its size is whatever the description needed.
+		var popup_rect := Rect2(popup.position, popup.size)
+		if popup_rect.size.x > machine.ITEM_INFO_POPUP_MAX_WIDTH:
+			failures.append("issue185: the popup is wider than the TV allows: %s" % popup_rect)
+		var badge_rect := Rect2(slot.position, slot.size)
+		# "Next to the icon": the bubble sits within a few px of the badge that raised it,
+		# never a plate floating elsewhere on the screen.
+		if popup_rect.grow(machine.INFO_BUBBLE_GAP + 1.0).intersection(badge_rect).get_area() <= 0.0:
+			failures.append("issue185: the description %s is not attached to its badge %s"
+				% [popup_rect, badge_rect])
 		if not tv_rect.encloses(popup_rect):
 			failures.append("issue185: the popup %s spills outside the TV %s"
 				% [popup_rect, tv_rect])
 
-	# It leaves by itself in about a second — no second tap needed, nothing to dismiss.
-	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD * 0.5)
+	# Hold to peek: while the badge is down the description stays, however long the player
+	# takes to read it. It ages out only once the badge is released, and then it fades
+	# rather than blinking off — no second tap needed, nothing to dismiss.
+	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD * 4.0)
 	if machine._item_info_popup == null:
-		failures.append("issue185: the popup vanished before it could be read")
-	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD + machine.ITEM_INFO_POPUP_FADE)
+		failures.append("issue185: the popup left while the badge was still held")
+	machine._on_boost_indicator_released()
+	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_FADE * 0.4)
+	if machine._item_info_popup == null:
+		failures.append("issue185: the popup snapped off on release instead of fading")
+	elif machine._item_info_popup.modulate.a >= 1.0:
+		failures.append("issue185: the released popup is not fading out")
+	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_FADE)
 	if machine._item_info_popup != null:
-		failures.append("issue185: the popup outstayed its ~1s welcome")
+		failures.append("issue185: the popup outstayed the release fade")
 
 	# A callout needs the whole screen: the popup gets out of the way with the badges.
 	machine._on_boost_indicator_pressed(0)
@@ -9137,10 +9159,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 				% augment_row_end)
 		if machine.PACTE_AUGMENT_ICON_SIZE < 8.0:
 			failures.append("issue181: the augment icons were not enlarged")
-		pacte_badge.pressed.emit()
+		# Hold to peek, release to dismiss — the machine's one gesture for "explain this".
+		pacte_badge.button_down.emit()
 		if machine.get_node_or_null("PacteAugmentPopup") == null:
-			failures.append("pacte: augment badge did not open its description popup")
+			failures.append("pacte: holding the augment badge did not open its description")
+		# The popup is queue_free'd, so it lingers in the tree until the frame ends: the
+		# handle is what says whether it is still up.
+		pacte_badge.button_up.emit()
+		if machine._pacte_augment_popup != null:
+			failures.append("pacte: the augment description outlived the hold")
 		pacte_badge.pressed.emit()
+		if machine._pacte_augment_popup != null:
+			failures.append("pacte: a plain press still toggles the augment description open")
 	pacte._show_reward_amp_picker()
 	var reward_amp_picker := pacte.get_node_or_null("RewardAmpPicker") as Control
 	if reward_amp_picker == null \
