@@ -69,7 +69,8 @@ const JOKER_DEALER_HELP_POWERS: Array[String] = ["cheat", "shift", "reroll", "me
 #   heart   (1): a paid spin costs 2 health instead of 1 (the last chip still costs 1)
 #   spade   (2): a power restore charge refills only every other spin
 #   diamond (3): two powers per spin, and the threshold Pacte deals no augment
-#   club    (4): shop prices +50% and a HOUSE ANGER row on every target payout
+#   club    (4): shop prices +50%, one item fewer per dealer counter, and a HOUSE
+#                ANGER row on every target payout
 const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
 # Selector cycle in the authored frame order of start_menu_augmented symbols.png
 # (frame index = position here): no augment, heart, diamond, spade, club, joker.
@@ -146,7 +147,6 @@ var prerunOfferIds: Variant = null
 ## which is run state: it opens and closes with the dealer.
 var dealerAugmentOfferId := ""        # current visit's dedicated offer ("" = none)
 var brainBoostSpins := 0
-var forcedRandomBetSpins := 0
 var guaranteedWinSpins := 0
 var blockPowersSpins := 0
 var hideNeuronsSpins := 0
@@ -167,6 +167,13 @@ var potionSpins := 0             # Potion: one random pool effect per spin
 var forceFlatlineSpins := 0      # Pill: force an all-flatline spin
 var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatline
 var hideResultSpins := 0         # White Powder: hide the next spin's result
+# Joker item effects (issue #111): the four in-run items turned against the player on a
+# joker Augmented run. They ride their own counters rather than negative values on the
+# normal ones, so nothing reading cocktailBoostSpins/forceFlatlineSpins has to learn a
+# second sign — the badges, the reel transforms and the scorer each check their own.
+var cocktailMalusSpins := 0      # joker Cocktail: a win is CHARGED its rarity points
+var jokerFlatlineSpins := 0      # joker Red Pill: one random reel lands on flatline
+var pendingPowerBarDrains := 0   # joker Water: gauges the machine must empty, then clear
 
 const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
 # Kept as an alias so the machine's per-reel Cocktail bursts read the same table the
@@ -277,6 +284,27 @@ func _forced_eye_reveal_symbols() -> Variant:
 		return null
 	return { eyeRevealReel: eyeRevealSymbol }
 
+## Every reel evaluate() must land on a chosen symbol this spin: the 3x eye reveal, plus
+## the joker Red Pill's single flatline (issue #111). The pill takes a reel the eye has
+## not already promised — a revealed reel was shown to the player before the spin, and
+## overwriting it would make the reveal a lie — and skips locked reels, which hold their
+## previous symbol. If every reel is spoken for the pill simply does not bite this spin.
+func _forced_reel_symbols(seed_val: int) -> Variant:
+	var forced := {}
+	var eye: Variant = _forced_eye_reveal_symbols()
+	if eye != null:
+		forced.merge(eye as Dictionary)
+	if jokerFlatlineSpins > 0:
+		var free_reels: Array = []
+		for i in 3:
+			if not bool(lockedReels[i]) and not forced.has(i):
+				free_reels.append(i)
+		if not free_reels.is_empty():
+			var rng := LobRNG.new((seed_val ^ 0x111f1a7) & M32)
+			forced[int(free_reels[mini(free_reels.size() - 1,
+				floori(rng.next() * free_reels.size()))])] = "flatline"
+	return forced if not forced.is_empty() else null
+
 static func _now_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0)
 
@@ -334,13 +362,12 @@ func pending_combo_power_ids() -> Array[String]:
 			ids.append(id)
 	return ids
 
-## True while the Energy Drink owns the gauge: the protected spins, then the
-## queued/active forced spin. The drink pins the multiplier to its forced x2 for
-## that whole window — combo losses can't drop it below x2 and wins can't push
-## it to x3 until the forced spin has fully resolved.
+## True while a queued or running compulsory spin owns the gauge: it is capped at x2, so
+## combo losses can't drop it below x2 and wins can't push it to x3 until the forced spin
+## has fully resolved. Only the joker Energy Drink queues one now — the classic drink's
+## protected spins no longer touch the multiplier at all, so they are not counted here.
 func energy_drink_owns_multiplier() -> bool:
-	return decaySkips > 0 or forcedRandomBetSpins > 0 \
-		or pendingCompulsiveSpinSkips > 0 or compulsiveSpinSkips > 0
+	return pendingCompulsiveSpinSkips > 0 or compulsiveSpinSkips > 0
 
 ## Resolves a pending defeat without touching the scored result. A successful power
 ## action normally resolves the flag through _apply_outcome(); this method handles
@@ -371,6 +398,35 @@ func augmented_modifier_active(modifier: int) -> bool:
 func _augmented_powers_blocked() -> bool:
 	return augmented_modifier_active(3) and powersUsedThisSpin >= 2
 
+## Joker runs deal the four in-run items in their turned-against-you form (see
+## InRunItems.JOKER_EFFECTS). This is joker's own fifth trait rather than one of the four
+## numbered modifiers, so it asks for the tier by name instead of going through
+## augmented_modifier_active() — which answers true for all four on a joker run.
+func augmented_joker_items_active() -> bool:
+	return augmentedTier == "joker"
+
+## The item a joker visit forces on the player, or "" when this run still gets to choose.
+## Derived from the visit itself (its index and the spin it landed on) rather than from a
+## wall-clock seed, so asking twice about the same visit always names the same item — the
+## overlay picks it for the animation and the machine applies exactly that one.
+func joker_forced_offer_id() -> String:
+	if not augmented_joker_items_active() or dealerOfferIds == null:
+		return ""
+	var ids := dealerOfferIds as Array
+	if ids.is_empty():
+		return ""
+	var rng := LobRNG.new(((dealerCount * 0x9e3779b9) ^ (spinCount * 0x85ebca6b)) & M32)
+	return String(ids[mini(ids.size() - 1, floori(rng.next() * ids.size()))])
+
+## The machine claims a queued joker-Water drain and empties its gauge. Returns false when
+## none is queued, so the caller can ask unconditionally after any item use.
+func consume_power_bar_drain() -> bool:
+	if pendingPowerBarDrains <= 0:
+		return false
+	pendingPowerBarDrains -= 1
+	_commit()
+	return true
+
 ## Club modifier: the casino is angry, so everything costs more. The markup rides the
 ## two price chokepoints (chip_augment_price / consumable_price) and the target payout's
 ## HOUSE ANGER row — never dealer_reroll_price(), which stays at its normal escalating
@@ -380,6 +436,16 @@ const AUGMENTED_CLUB_PRICE_MULTIPLIER := 1.5
 
 func augmented_price_multiplier() -> float:
 	return AUGMENTED_CLUB_PRICE_MULTIPLIER if augmented_modifier_active(4) else 1.0
+
+## Club modifier: the angry casino also puts less on the counter. Both dealer counters —
+## the pre-run consumable shop and the in-run visit — roll one item fewer, so the run's
+## squeeze is visible the moment the counter is opened rather than only in the prices.
+## Expanded Selection is bought back to the classic two rather than negated, which keeps
+## it worth owning on a club run; the floor of one is enforced in dealer_offer_count().
+const AUGMENTED_CLUB_OFFER_PENALTY := 1
+
+func augmented_offer_penalty() -> int:
+	return AUGMENTED_CLUB_OFFER_PENALTY if augmented_modifier_active(4) else 0
 
 ## The club charge on a beaten target's overflow, or 0.0 when no club run is armed.
 func augmented_anger_tax_rate() -> float:
@@ -715,11 +781,11 @@ func spin(compulsive := false) -> Variant:
 	# extra neurons or free spins — its downside is the dealer countdown advancing
 	# 3/2/1 steps at x1/x2/x3, so lower gauges pull the dealer in faster.
 	var combo_before := clampi(betMultiplier, 1, 3)
-	# The Energy-Drink forced spin is NOT dropped to x1 — it runs the drink's
-	# forced x2 like the protected spins before it.
+	# A compulsory spin is NOT dropped to x1 — it runs at x2, so the spin the machine
+	# takes from the player is still worth something.
 	var eff_bet := combo_before
-	if (forcedRandomBetSpins > 0 or is_compulsive) and eff_bet == 3:
-		eff_bet = 2 # Energy Drink dulls the frenzy: x3 runs as x2 for its duration
+	if is_compulsive and eff_bet == 3:
+		eff_bet = 2 # the seized spin dulls the frenzy: x3 runs as x2
 
 	# Augmented heart modifier (issue #111): a paid spin costs two health instead of
 	# one. The mini() below is what makes the last chip cost a single point rather
@@ -809,7 +875,7 @@ func spin(compulsive := false) -> Variant:
 			"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
 			"banExcluded": banBrainSpins > 0,
 			"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
-			"forceReelSymbols": _forced_eye_reveal_symbols(),
+			"forceReelSymbols": _forced_reel_symbols(seed),
 			"symbolToBrainCount": potion_symbol_to_brain,
 			"adjacentSymbolCount": potion_adjacent_symbols,
 			"pairScoreMult": _pair_score_multiplier(pair_boost_active),
@@ -831,11 +897,20 @@ func spin(compulsive := false) -> Variant:
 	if cocktailBoostSpins > 0:
 		cocktail_bonus = InRunItems.cocktail_bonus(result["reels"] as Array,
 			hidden_reel_count, float(result["scoreMultiplier"]))
+	# The joker Cocktail (issue #111) is that same total, charged rather than paid, and
+	# ONLY on a spin that won something: a miss pays nothing, so there is nothing to take
+	# and the item would otherwise be a tax on standing still. The win is floored at zero
+	# below rather than going negative — the drink takes the winnings, not the run.
+	var cocktail_malus := 0
+	if cocktailMalusSpins > 0 and int(result["scoreEarned"]) > 0 \
+			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
+		cocktail_malus = InRunItems.cocktail_bonus(result["reels"] as Array,
+			hidden_reel_count, float(result["scoreMultiplier"]))
 	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
 	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
 	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
 	# 0-score flatline wins never spend the charge — it waits for a real win.
-	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus)
+	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus - cocktail_malus)
 	var flatline_boost := 0
 	var flatline_boost_applied := false
 	if flatlineWinBoostArmed and base_score > 0 \
@@ -862,7 +937,7 @@ func spin(compulsive := false) -> Variant:
 	var final_score := base_score + flatline_boost + win_boost_bonus + specialist_bonus
 	var passive_lucidity := _passive_lucidity_per_spin()
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0 or flatline_boost_applied \
+	if cocktail_bonus > 0 or cocktail_malus > 0 or flatline_boost_applied \
 			or win_boost_applied or specialist_bonus > 0 or hidden_reel_count > 0 \
 			or passive_lucidity > 0:
 		final_result = result.duplicate(true)
@@ -873,6 +948,9 @@ func spin(compulsive := false) -> Variant:
 		if cocktail_bonus > 0:
 			final_result["cocktailApplied"] = true
 			final_result["cocktailBonus"] = cocktail_bonus
+		if cocktail_malus > 0:
+			final_result["cocktailMalusApplied"] = true
+			final_result["cocktailMalus"] = cocktail_malus
 		if flatline_boost_applied:
 			final_result["flatlineBoostApplied"] = true
 			final_result["flatlineBoostBonus"] = flatline_boost
@@ -893,7 +971,10 @@ func spin(compulsive := false) -> Variant:
 	var plan := Lucidity.plan_gain(lucidityCoins, lucidity_gain, abilitiesUsed, seed,
 		effective_coins_per_power_restore(), restore_budget_left())
 
-	var was_energy_last: bool = stasis and decaySkips == 1
+	# A queued compulsion lands on the spin after the one that queued it. It used to wait
+	# for the classic drink's protected spins to run out; only the joker drink queues one
+	# now, and it brings no protected spins with it, so the wait is a single spin.
+	var was_energy_last: bool = pendingCompulsiveSpinSkips > 0 and not is_compulsive
 
 	# Potion pool side effects (issue #32): ± lucidity and a free reroll (restore the
 	# reroll ability) resolve after the score plan.
@@ -986,11 +1067,12 @@ func spin(compulsive := false) -> Variant:
 	if stasis:
 		decaySkips -= 1
 	brainBoostSpins = maxi(0, brainBoostSpins - 1)
-	forcedRandomBetSpins = maxi(0, forcedRandomBetSpins - 1)
 	guaranteedWinSpins = maxi(0, guaranteedWinSpins - 1)
 	blockPowersSpins = maxi(0, blockPowersSpins - 1)
 	hideNeuronsSpins = maxi(0, hideNeuronsSpins - 1)
 	cocktailBoostSpins = maxi(0, cocktailBoostSpins - 1)
+	cocktailMalusSpins = maxi(0, cocktailMalusSpins - 1)
+	jokerFlatlineSpins = maxi(0, jokerFlatlineSpins - 1)
 	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if is_compulsive else compulsiveSpinSkips) \
 		+ (pendingCompulsiveSpinSkips if was_energy_last else 0)
 	pendingCompulsiveSpinSkips = 0 if was_energy_last else pendingCompulsiveSpinSkips
@@ -1130,7 +1212,6 @@ func reset_run_state() -> void:
 	# not confiscate them (issue #132).
 	dealerAugmentOfferId = ""
 	brainBoostSpins = 0
-	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
 	blockPowersSpins = 0
 	hideNeuronsSpins = 0
@@ -1152,6 +1233,9 @@ func reset_run_state() -> void:
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
+	cocktailMalusSpins = 0
+	jokerFlatlineSpins = 0
+	pendingPowerBarDrains = 0
 	flatlineResultCount = 0
 	runPairCount = 0
 	runTripleCounts = {}
@@ -1415,7 +1499,6 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# Chip Augments survive every new run, Pacte included: they are campaign state now
 	# (issue #132). Pre-run purchases are FOR this run and the overlay below applies them.
 	brainBoostSpins = 0
-	forcedRandomBetSpins = 0
 	guaranteedWinSpins = 0
 	blockPowersSpins = 0
 	hideNeuronsSpins = 0
@@ -1437,6 +1520,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
+	cocktailMalusSpins = 0
+	jokerFlatlineSpins = 0
+	pendingPowerBarDrains = 0
 	flatlineResultCount = 0
 	runPairCount = 0
 	runTripleCounts = {}
@@ -2671,24 +2757,33 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 		runConsumables[consumable_id] = charges - 1
 
 	if in_run != null:
-		var e: Dictionary = in_run["effect"]
+		# A joker run deals these items in their inverted form; everything else about
+		# using one (the charge spent, the stash, the hint) is identical (issue #111).
+		var e: Dictionary = InRunItems.effect_for(consumable_id,
+			augmented_joker_items_active()) as Dictionary
 		match String(e["type"]):
 			"skipDecay":
-				# Energy Drink: neurons preserved for N spins; blockBet "x3" locks the
-				# x3 bet for those spins, then queues the forced x1 spin.
+				# Energy Drink: neurons preserved for N spins, and nothing else. Stacking
+				# two stacks the rush (issue #97). The gauge lock and the compulsory spin
+				# that used to be the price are gone — the joker version below is the only
+				# place the drink still costs anything.
 				decaySkips += int(e["spins"])
-				forcedRandomBetSpins += int(e["spins"])
-				# Issue #97: stacking Energy Drinks stacks the free-spin rush
-				# (decaySkips) but NOT the compulsion — the negative debuff caps at
-				# a single forced spin no matter how many are used at once.
-				pendingCompulsiveSpinSkips = maxi(pendingCompulsiveSpinSkips, int(e["compulsiveSpins"]))
-				# The drink pins the gauge at x2 even while a combo defeat is pending;
-				# taken during an x3 defeat it also clears the defeat outright — the x3
-				# frenzy it would break is traded for the forced x2 rush.
-				if comboDefeatPending and clampi(pendingComboMultiplier, 1, 3) == 3:
-					comboDefeatPending = false
-					pendingComboMultiplier = 1
-				betMultiplier = 2
+			"compulsion":
+				# Joker Energy Drink: the bill with no rush in front of it. Capped at one
+				# forced spin however many are drunk at once, like the old debuff was.
+				pendingCompulsiveSpinSkips = maxi(pendingCompulsiveSpinSkips,
+					int(e["compulsiveSpins"]))
+			"cocktailMalus":
+				# Joker Cocktail: the same rarity points, charged instead of paid.
+				cocktailMalusSpins += int(e["spins"])
+			"drainPowerBar":
+				# Joker Water: the gauge progress toward the next power restore is
+				# forfeited. The machine owns the gauge, so this queues the drain for it
+				# and nothing here touches the banked score or the wallet.
+				pendingPowerBarDrains += 1
+			"flatlineOneReel":
+				# Joker Red Pill: one reel is dragged to flatline, with no triple owed back.
+				jokerFlatlineSpins += int(e["spins"])
 			"addLucidity":
 				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed,
 					_seed(spinCount * 0x2545f491), effective_coins_per_power_restore(),
@@ -2981,7 +3076,11 @@ func _prerun_candidate_ids() -> Array:
 # cleared here: they persist for the whole campaign (fresh Pacte runs and full
 # resets own the clear). `seed_override` keeps tests deterministic.
 func ensure_prerun_offer(seed_override := -1) -> Array:
-	if prerunOfferIds is Array and (prerunOfferIds as Array).size() >= 2:
+	# A club shop's counter is legitimately one item short, so the "already rolled"
+	# bar is the smaller of the classic pair and this run's count — otherwise every
+	# open would re-roll the offer and reset the reroll price with it.
+	if prerunOfferIds is Array \
+			and (prerunOfferIds as Array).size() >= mini(2, dealer_offer_count()):
 		return (prerunOfferIds as Array).duplicate()
 	var roll_seed := seed_override if seed_override >= 0 else _seed(0x21117)
 	var offers: Variant = Dealer.pick_pool_offer(_prerun_candidate_ids(), roll_seed, dealer_offer_count())
@@ -3013,10 +3112,12 @@ func reroll_prerun_offer(seed_override := -1) -> bool:
 # ── Chip Augments (data in rules/chip_augments.gd) ──────────────────────────────────
 
 ## Items/consumables generated per dealer visit: 2, or 3 with Expanded Selection.
+## A club run stocks one fewer at both counters (see AUGMENTED_CLUB_OFFER_PENALTY),
+## never fewer than one — an empty counter would read as a bug, not as a modifier.
 func dealer_offer_count() -> int:
-	if int(MetaStateStore.chipAugmentsPurchased.get("aug_offer_expand", 0)) > 0:
-		return ChipAugments.EXPANDED_OFFER_COUNT
-	return 2
+	var count := ChipAugments.EXPANDED_OFFER_COUNT \
+		if int(MetaStateStore.chipAugmentsPurchased.get("aug_offer_expand", 0)) > 0 else 2
+	return maxi(1, count - augmented_offer_penalty())
 
 ## One random eligible augment (stock left) for a fresh visit; "" when the pool
 ## is exhausted.

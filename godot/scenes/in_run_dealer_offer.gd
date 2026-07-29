@@ -3,6 +3,9 @@ class_name InRunDealerOffer
 extends Control
 
 signal item_selected(item_id: String)
+## Joker runs (issue #111): the forced item has reached the stash and must now be paid for
+## in state — accepted and used at once. Emitted mid-animation, between the two beats.
+signal item_forced(item_id: String)
 signal item_discarded(item_id: String)
 signal dealer_ignored
 signal offer_finished
@@ -49,6 +52,15 @@ const ITEM_HINTS := {
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
 	"item_energy_drink": { "pos": "FREE", "neg": "COMPULSIVE" },
 	"item_cocktail": { "pos": "EASY", "neg": "STICKY" },
+}
+## What the dealer says about the same four on a joker Augmented run (issue #111), where
+## what he is holding out is the inverted item. He is still selling, so the pitch stays a
+## pitch — the truth is in the second line and in the colour of the thing on the counter.
+const JOKER_ITEM_HINTS := {
+	"item_water": { "pos": "REFRESH", "neg": "DRAINS THE BAR" },
+	"item_pill": { "pos": "CLARITY", "neg": "A REEL FLATLINES" },
+	"item_energy_drink": { "pos": "ENERGY", "neg": "FORCED SPIN" },
+	"item_cocktail": { "pos": "EASY", "neg": "WINS PAY BACK" },
 }
 const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
 const INVERTED_HINT_ITEMS := ["item_pill"]
@@ -125,6 +137,9 @@ var _items_stage := false        # hands/items shown; look button doubles as TAK
 var _selected_offer_id := ""     # tapped item — TAKE buys this one
 var _offer_icons := {}           # offer id -> icon Control (selection highlight)
 var _current_offer_ids: Array[String] = []
+## Joker runs (issue #111): the item this visit forces on the player. "" on every other
+## run, where the offer is the normal look/take/leave choice.
+var _forced_item_id := ""
 
 func _ready() -> void:
 	if size == Vector2.ZERO:
@@ -150,11 +165,14 @@ func _draw() -> void:
 	draw_rect(rect, Color(0.13, 0.77, 0.37, 0.18), true)
 	draw_rect(rect, Color(0.13, 0.77, 0.37, 0.85), false, 1.0)
 
-func start_offer(items: Array, stash_items: Array = []) -> void:
+## `forced_id` (joker runs, issue #111) turns the visit into a delivery instead of an
+## offer: the buttons never appear and the dealer buys and uses the item himself.
+func start_offer(items: Array, stash_items: Array = [], forced_id := "") -> void:
 	visible = true
 	_finishing = false
 	_items_stage = false
 	_selected_offer_id = ""
+	_forced_item_id = forced_id if _string_items(items).has(forced_id) else ""
 	_choose_side()
 	_clear_offer_items()
 	_rebuild_stash(stash_items)
@@ -198,6 +216,10 @@ func start_offer(items: Array, stash_items: Array = []) -> void:
 	_position_prompt_buttons()
 	await get_tree().create_timer(0.18).timeout
 	if _finishing or not is_inside_tree():
+		return
+	# A joker visit asks nothing: no look, no take, no leave — he serves it himself.
+	if _forced_item_id != "":
+		await _play_forced_offer()
 		return
 	if _look_text_button != null:
 		_look_text_button.visible = true
@@ -724,8 +746,15 @@ func _clear_dynamic_icons(parent: Node) -> void:
 		else:
 			_clear_dynamic_icons(child)
 
+## Colour-inverted on a joker run, matching the machine's stash and badge art: what is on
+## the dealer's counter has to look like what lands in the pocket (issue #111).
 func _icon_for(id: String) -> Texture2D:
-	return Assets.texture(String(ITEM_ICONS.get(id, "items/consumable_placeholder.png")), true)
+	var tex := Assets.texture(String(ITEM_ICONS.get(id, "items/consumable_placeholder.png")), true)
+	if tex != null and not Engine.is_editor_hint() \
+			and RunStateStore.augmented_joker_items_active() \
+			and InRunItems.JOKER_EFFECTS.has(id):
+		return Assets.inverted_texture(tex)
+	return tex
 
 func _make_label(text: String, pos: Vector2, label_size: Vector2, font_size: int, color: Color, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	return _make_label_on(self, text, pos, label_size, font_size, color, align)
@@ -799,6 +828,8 @@ func _set_speech_hints(item_id: String, backing_text := "Interested in one?") ->
 		return
 	# No item name in the bubble — just the two hint lines, so they fit nicely.
 	var hints: Dictionary = ITEM_HINTS.get(item_id, FALLBACK_HINT)
+	if RunStateStore.augmented_joker_items_active() and JOKER_ITEM_HINTS.has(item_id):
+		hints = JOKER_ITEM_HINTS[item_id]
 	var inverted := INVERTED_HINT_ITEMS.has(item_id)
 	_speech_name_hint.visible = false
 	_speech_pos_hint.text = "+ %s" % String(hints["pos"])
@@ -853,6 +884,84 @@ func _on_look_pressed() -> void:
 		_ignore_text_button.visible = false
 	await _play_hands_entry()
 
+## The joker visit, played out rather than offered (issue #111). Same beats a player would
+## have performed by hand, so what happened stays readable: the hands come up with the
+## offer, the dealer's pick is singled out while the rest are withdrawn, it flies into the
+## stash (the buy), and then it goes off in the player's pocket (the use). The state change
+## rides on `item_forced`, emitted between the two so the on-use hint lands on the beat.
+const FORCED_BEAT := 0.42        # how long the offer is readable before he chooses
+const FORCED_PICK_TIME := 0.18
+const FORCED_FLIGHT_TIME := 0.34
+const FORCED_USE_TIME := 0.26
+func _play_forced_offer() -> void:
+	_items_stage = true
+	_set_speech_text("This one's on me.")
+	_hands_sprite.position = _hands_entry_position
+	_hands_sprite.visible = true
+	_item_layer.visible = true
+	_message_label.visible = false
+	await _play_hands_entry()
+	if _finishing or not is_inside_tree():
+		return
+	await get_tree().create_timer(FORCED_BEAT).timeout
+	if _finishing or not is_inside_tree():
+		return
+	var icon: Control = _offer_icons.get(_forced_item_id) as Control
+	if icon == null or not is_instance_valid(icon):
+		# No art to fly (a missing icon): still resolve the visit rather than stranding it.
+		item_forced.emit(_forced_item_id)
+		await finish_offer()
+		return
+	# His pick is singled out and the rest go back in the coat.
+	_set_speech_hints(_forced_item_id, "This one's on me.")
+	var pick := create_tween()
+	pick.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pick.tween_property(icon, "scale", Vector2(1.3, 1.3), FORCED_PICK_TIME)
+	for offer_id in _offer_icons:
+		var other: Control = _offer_icons[offer_id] as Control
+		if other == null or not is_instance_valid(other) or String(offer_id) == _forced_item_id:
+			continue
+		pick.parallel().tween_property(other, "modulate:a", 0.0, FORCED_PICK_TIME)
+	await pick.finished
+	if _finishing or not is_inside_tree():
+		return
+	_bump_dealer()
+	# The buy: it lands in the stash slot the player never got to choose.
+	icon.z_index = 20
+	var flight := create_tween()
+	flight.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	flight.tween_property(icon, "global_position", _forced_stash_target(icon), FORCED_FLIGHT_TIME)
+	flight.parallel().tween_property(icon, "scale", Vector2.ONE, FORCED_FLIGHT_TIME)
+	await flight.finished
+	if _finishing or not is_inside_tree():
+		return
+	# Accepted AND used in the same breath — the machine pops the item's own hint here.
+	item_forced.emit(_forced_item_id)
+	await get_tree().create_timer(0.12).timeout
+	if _finishing or not is_inside_tree():
+		return
+	# The use: it goes off in the pocket instead of waiting to be tapped.
+	_set_speech_text("Down the hatch.")
+	var burn := create_tween()
+	burn.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	burn.tween_property(icon, "scale", Vector2(1.6, 1.6), FORCED_USE_TIME)
+	burn.parallel().tween_property(icon, "modulate:a", 0.0, FORCED_USE_TIME)
+	await burn.finished
+	if _finishing or not is_inside_tree():
+		return
+	await get_tree().create_timer(0.16).timeout
+	if _finishing or not is_inside_tree():
+		return
+	await finish_offer()
+
+## Where the forced item lands: the machine's first stash slot, in the flying icon's own
+## space. The overlay shares the machine's canvas, so the shared stash layout resolves to
+## the same spot the item would have been dropped into by hand.
+func _forced_stash_target(icon: Control) -> Vector2:
+	var slot := Assets.stash_slot_pos(0, Consumables.MAX_CONSUMABLE_SLOTS)
+	var origin: Vector2 = _stash_layer.global_position if _stash_layer != null else global_position
+	return origin + slot + (Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE) - icon.size) * 0.5
+
 func _play_hands_entry() -> void:
 	if _hands_sprite == null:
 		return
@@ -872,6 +981,8 @@ func has_dealer_drop_point(global_pos: Vector2) -> bool:
 func _on_offer_icon_input(event: InputEvent, id: String, kind: String) -> void:
 	if Engine.is_editor_hint() or kind != "offer":
 		return
+	if _forced_item_id != "":
+		return # joker visit: there is nothing to choose
 	var pressed := false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton

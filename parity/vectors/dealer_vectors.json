@@ -368,16 +368,14 @@
       "id": "item_energy_drink",
       "effect": {
         "type": "skipDecay",
-        "spins": 2,
-        "blockBet": "x3"
+        "spins": 2
       }
     },
     {
       "id": "item_cocktail",
       "effect": {
         "type": "cocktailBoost",
-        "spins": 2,
-        "compulsiveSpins": 1
+        "spins": 2
       }
     },
     {
@@ -393,6 +391,35 @@
         "type": "forceFlatlinesThenTriple",
         "flatSpins": 1,
         "guaranteedTripleNext": true
+      }
+    }
+  ],
+  "jokerInRunItems": [
+    {
+      "id": "item_energy_drink",
+      "effect": {
+        "type": "compulsion",
+        "compulsiveSpins": 1
+      }
+    },
+    {
+      "id": "item_cocktail",
+      "effect": {
+        "type": "cocktailMalus",
+        "spins": 2
+      }
+    },
+    {
+      "id": "item_water",
+      "effect": {
+        "type": "drainPowerBar"
+      }
+    },
+    {
+      "id": "item_pill",
+      "effect": {
+        "type": "flatlineOneReel",
+        "spins": 1
       }
     }
   ]

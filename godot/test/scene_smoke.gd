@@ -113,6 +113,7 @@ func _run() -> void:
 	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
 	_check_starting_powers_and_random_118(run_store, failures)
 	_check_augmented_run_111(machine, run_store, meta_store, failures)
+	await _check_joker_forced_visit_111(machine, run_store, failures)
 	await _check_augmented_menu_111(run_store, meta_store, failures)
 	_check_run_persistence_111(run_store, failures)
 	_check_save_resume_151(machine, run_store, failures)
@@ -1583,18 +1584,35 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 	run_store.compulsiveSpinSkips = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
+	# The Energy Drink is two free spins and NOTHING else now: no queued compulsion, no
+	# gauge lock, no interaction with a pending defeat (issue #111).
+	run_store.betMultiplier = 3
+	run_store.comboDefeatPending = true
+	run_store.pendingComboMultiplier = 3
 	run_store.runConsumables = { "item_energy_drink": 1 }
 	run_store.use_consumable("item_energy_drink")
-	if int(run_store.decaySkips) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 1:
-		failures.append("consumables: Energy Drink did not queue compulsion")
+	if int(run_store.decaySkips) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 0:
+		failures.append("energy drink: the rush should be the whole item now")
+	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 3:
+		failures.append("energy drink: the drink still touches the gauge and the losing state")
+	run_store.comboDefeatPending = false
+	run_store.pendingComboMultiplier = 1
+	run_store.betMultiplier = 1
+	run_store.decaySkips = 0
+	# The forced spin lives on the JOKER drink now (issue #111), and it lands on the spin
+	# after the one that queued it — there are no protected spins in front of it to wait
+	# for. The blocking checks below are what a queued compulsion does to the run.
+	var prev_item_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = "joker"
+	run_store.runConsumables = { "item_energy_drink": 1 }
+	run_store.use_consumable("item_energy_drink")
+	if int(run_store.decaySkips) != 0 or int(run_store.pendingCompulsiveSpinSkips) != 1:
+		failures.append("issue111: the joker Energy Drink should queue the forced spin alone")
 	run_store.neurons = 100
 	run_store.spin()
 	run_store.set_spinning(false)
-	run_store.spin()
-	run_store.set_spinning(false)
 	if int(run_store.compulsiveSpinSkips) != 1 or int(run_store.pendingCompulsiveSpinSkips) != 0:
-		failures.append("consumables: Energy Drink compulsion did not unlock after no-decay spins")
+		failures.append("issue111: the joker drink's compulsion did not land on the next spin")
 	var queued_spin_count := int(run_store.spinCount)
 	var queued_neurons := int(run_store.neurons)
 	run_store.runConsumables = { "item_water": 1 }
@@ -1617,44 +1635,26 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 		if bool(run_store.comboDefeatPending):
 			run_store.resolve_pending_combo_defeat(false)
 
-	# Issue #97: stacking two Energy Drinks at once stacks the free-spin rush
-	# (decaySkips) but caps the negative compulsion at a single forced spin.
+	# Issue #97, still true: stacking two drinks stacks the free-spin rush, and stacking
+	# two JOKER drinks still caps the compulsion at a single forced spin.
 	run_store.compulsiveSpinSkips = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.betMultiplier = 1
 	run_store.runConsumables = { "item_energy_drink": 2 }
 	run_store.use_consumable("item_energy_drink")
 	run_store.use_consumable("item_energy_drink")
-	if int(run_store.decaySkips) != 4 or int(run_store.pendingCompulsiveSpinSkips) != 1:
-		failures.append("issue97: stacked Energy Drinks stacked the compulsion instead of the rush")
-	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
+	if int(run_store.pendingCompulsiveSpinSkips) != 1:
+		failures.append("issue97: stacked joker drinks stacked the compulsion")
+	run_store.augmentedTier = prev_item_tier
 	run_store.pendingCompulsiveSpinSkips = 0
-
-	# Energy Drink vs the losing state: during an x2 defeat the drink caps the gauge
-	# at x2 but the defeat stays pending; during an x3 defeat it clears the defeat
-	# outright (the x3 frenzy is traded for the capped x2 rush).
-	run_store.betMultiplier = 2
-	run_store.pendingComboMultiplier = 2
-	run_store.comboDefeatPending = true
+	run_store.decaySkips = 0
 	run_store.runConsumables = { "item_energy_drink": 2 }
 	run_store.use_consumable("item_energy_drink")
-	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2 \
-			or int(run_store.forcedRandomBetSpins) <= 0:
-		failures.append("energy drink: x2 losing state should stay pending with the gauge capped at x2")
-	run_store.betMultiplier = 3
-	run_store.pendingComboMultiplier = 3
-	run_store.comboDefeatPending = true
 	run_store.use_consumable("item_energy_drink")
-	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2:
-		failures.append("energy drink: x3 losing state should clear with the gauge capped at x2")
-	run_store.comboDefeatPending = false
-	run_store.pendingComboMultiplier = 1
-	run_store.betMultiplier = 1
+	if int(run_store.decaySkips) != 4 or int(run_store.pendingCompulsiveSpinSkips) != 0:
+		failures.append("issue97: stacked Energy Drinks did not stack the rush")
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 
 	# White Powder copy keeps other consumables and neurons intact after the copy.
@@ -4365,9 +4365,13 @@ func _check_flatline_win_boost_76(run_store: Node, failures: Array) -> void:
 # Issue #76: deferred-negative items show only the precise upside on use; the downside
 # pops separately when it activates. Flavor items (no real downside) show upside only.
 func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
+	var run_store: Node = get_root().get_node("RunStateStore")
 	machine._pending_deferred_neg.clear()
 
-	# Energy Drink on use: upside only, and the copy is precise.
+	# Energy Drink on use: upside only, and the copy is precise. Since issue #111 the
+	# classic drink has no downside left at all, so nothing is armed behind it.
+	var prev_hint_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = ""
 	var use_hint: HintLabel = machine._show_consumable_feedback("item_energy_drink")
 	if use_hint == null:
 		failures.append("issue76: energy-drink use hint was not created")
@@ -4377,7 +4381,17 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		if use_hint._pos_label.text != "+ 2 FREE SPINS":
 			failures.append("issue76: energy-drink upside copy wrong: '%s'" % use_hint._pos_label.text)
 		use_hint.queue_free()
-	# Using a hooked item arms its deferred negative.
+	if machine._pending_deferred_neg.get("item_energy_drink", false):
+		failures.append("issue111: the classic drink armed a downside it no longer has")
+
+	# The forced spin lives on the joker drink now, and it is still deferred: nothing on
+	# use, then the downside pops when the machine actually seizes the spin.
+	run_store.augmentedTier = "joker"
+	var joker_use: HintLabel = machine._show_consumable_feedback("item_energy_drink")
+	if joker_use != null:
+		if joker_use._pos_label.visible or joker_use._neg_label.visible:
+			failures.append("issue111: the joker drink's use popup should say nothing yet")
+		joker_use.queue_free()
 	if not machine._pending_deferred_neg.get("item_energy_drink", false):
 		failures.append("issue76: energy-drink use did not arm its deferred negative")
 
@@ -4392,6 +4406,7 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 	machine._pop_deferred_negative("item_energy_drink") # arms cleared -> no-op
 	if machine._pending_deferred_neg.get("item_energy_drink", false):
 		failures.append("issue76: deferred negative did not disarm after popping")
+	run_store.augmentedTier = prev_hint_tier
 
 	# A newly-deferred item (Serum) also shows upside-only on use.
 	var serum: HintLabel = machine._show_consumable_feedback("cons_focus")
@@ -4431,7 +4446,6 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 		if pill_win._pos_label.text != "+ WIN GUARANTEED":
 			failures.append("issue92: red pill guaranteed-win copy wrong: '%s'" % pill_win._pos_label.text)
 		pill_win.queue_free()
-	var run_store: Node = get_root().get_node("RunStateStore")
 	var previous_force_flatline := int(run_store.forceFlatlineSpins)
 	var previous_guaranteed_triple := int(run_store.guaranteedTripleSpins)
 	run_store.forceFlatlineSpins = 1
@@ -4788,9 +4802,9 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 1:
 		failures.append("combo pending: unavailable powers were not settled by spin confirmation")
 
-	# Energy Drink is a corrective item for an x3 defeat: used from the stash it
-	# clears the losing state and drops the beeping overlay immediately, leaving
-	# the gauge capped at x2.
+	# The Energy Drink is no longer a corrective item for an x3 defeat (issue #111): with
+	# the forced x2 gone there is nothing to trade the frenzy for, so using one from the
+	# stash leaves the losing state exactly where it was and the warning stays up.
 	run_store.abilitiesUsed = []
 	run_store.betMultiplier = 3
 	run_store.pendingComboMultiplier = 3
@@ -4801,12 +4815,11 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.neurons = 100
 	machine._show_pending_combo_defeat()
 	machine._on_stash_pressed(0)
-	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 2:
-		failures.append("combo pending: Energy Drink did not clear the x3 losing state to a capped x2")
-	if machine._pending_combo_overlay != null or machine._combo_loss_beep_tween != null:
-		failures.append("combo pending: Energy Drink rescue did not cancel the warning immediately")
+	if not bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 3:
+		failures.append("combo pending: the Energy Drink still rescues an x3 losing state")
+	run_store.comboDefeatPending = false
+	machine._close_pending_combo_defeat()
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.runConsumables = {}
 	run_store.betMultiplier = 1
@@ -5203,17 +5216,21 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			or dealer_overlay_3 == null or not dealer_overlay_3.visible:
 		failures.append("issue155: dealer warning overlays did not return after the result hold")
 
-	# Energy Drink keeps the authored engaged x2-cap frame through both protected
-	# spins and the queued compulsory spin, not only while forcedRandomBetSpins is > 0.
+	# The authored engaged x2-cap frame covers the whole compulsion window: from the
+	# moment the forced spin is queued through the spin itself. The classic Energy Drink
+	# no longer caps anything, so its protected spins do NOT raise the frame (issue #111).
 	run_store.betMultiplier = 2
 	run_store.decaySkips = 2
-	run_store.forcedRandomBetSpins = 2
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.compulsiveSpinSkips = 0
 	machine._refresh_multiplier_controls()
+	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 1:
+		failures.append("energy drink: the free-spin rush must not cap the gauge any more")
+	run_store.pendingCompulsiveSpinSkips = 1
+	machine._refresh_multiplier_controls()
 	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 5:
-		failures.append("energy drink: protected spins did not show the engaged x2-cap frame")
-	# The drink's visual activation must win over a score-popup HUD hold; otherwise
+		failures.append("energy drink: a queued forced spin did not show the engaged x2-cap frame")
+	# The cap's visual activation must win over a score-popup HUD hold; otherwise
 	# the normal x2 frame remains on screen until an unrelated animation completes.
 	machine._hud_delta_hold = true
 	machine._refresh_multiplier_controls()
@@ -5221,7 +5238,7 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		failures.append("energy drink: engaged x2-cap frame was deferred by HUD hold")
 	machine._hud_delta_hold = false
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
+	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.compulsiveSpinSkips = 1
 	machine._refresh_multiplier_controls()
 	if machine._multiplier_sprite != null and machine._multiplier_sprite.frame != 5:
@@ -7415,6 +7432,57 @@ func _check_dealer_compulsion_softlock_96(machine: Node, run_store: Node, failur
 	run_store.dealerIncoming = prev_incoming
 	run_store.dealerPending = prev_pending
 
+## The joker delivery played end to end (issue #111). The animation is the only path that
+## resolves a joker visit — no button can — so a runtime error anywhere in it would strand
+## the overlay with the sequence lock held and softlock the run. This drives the real
+## sequence and waits for it to close itself.
+func _check_joker_forced_visit_111(machine: Node, run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_tier := String(run_store.augmentedTier)
+	var prev_offers: Variant = run_store.dealerOfferIds
+	var prev_pending := bool(run_store.dealerPending)
+	var prev_stash: Dictionary = (run_store.runConsumables as Dictionary).duplicate(true)
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.comboDefeatPending = false
+	run_store.compulsiveSpinSkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.neurons = 100
+	run_store.runConsumables = {}
+	run_store.augmentedTier = "joker"
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water", "item_cocktail"]
+	machine._set_sequence_lock(false)
+	machine._show_dealer_offers()
+	if machine._dealer_offer_popup == null:
+		failures.append("issue111: the joker dealer popup did not open")
+		run_store.runPhase = prev_phase
+		return
+	if String(machine._dealer_offer_popup._forced_item_id) == "":
+		failures.append("issue111: the joker visit opened as a normal offer")
+	# The whole delivery is a little over 3s; poll rather than sleeping a fixed time so a
+	# faster sequence does not leave the suite waiting for nothing.
+	var waited := 0.0
+	while machine._dealer_offer_popup != null and waited < 8.0:
+		await machine.get_tree().create_timer(0.2).timeout
+		waited += 0.2
+	if machine._dealer_offer_popup != null:
+		failures.append("issue111: the joker delivery never closed the dealer (%.1fs)" % waited)
+		machine._close_dealer()
+	if bool(run_store.dealerPending):
+		failures.append("issue111: the joker delivery left the visit pending")
+	if Consumables.total_copies(run_store.runConsumables) != 0:
+		failures.append("issue111: the delivered item was left in the stash: %s" \
+			% str(run_store.runConsumables))
+	run_store.cocktailMalusSpins = 0
+	run_store.pendingPowerBarDrains = 0
+	machine._set_sequence_lock(false)
+	run_store.augmentedTier = prev_tier
+	run_store.dealerOfferIds = prev_offers
+	run_store.dealerPending = prev_pending
+	run_store.runConsumables = prev_stash
+	run_store.runPhase = prev_phase
+
 func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array) -> void:
 	# Save the state this check mutates.
 	var prev_phase := String(run_store.runPhase)
@@ -7746,6 +7814,46 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 	if int(run_store.consumable_price("cons_potion")) != base_item_price:
 		failures.append("issue111: the club markup outlived the club run")
 
+	# Club also stocks one item fewer at BOTH counters (pre-run shop and in-run
+	# visit), floored at one — an empty counter would read as a bug, not a modifier.
+	var prev_augments: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
+	var prev_prerun: Variant = run_store.prerunOfferIds
+	var prev_rerolls: int = int(run_store.dealerRerollCount)
+	meta_store.chipAugmentsPurchased = {}
+	run_store.augmentedTier = ""
+	var base_offers: int = run_store.dealer_offer_count()
+	run_store.augmentedTier = "club"
+	if int(run_store.dealer_offer_count()) != base_offers - 1:
+		failures.append("issue111: club offer count %d, expected %d" \
+			% [int(run_store.dealer_offer_count()), base_offers - 1])
+	# Expanded Selection buys the classic pair back rather than being negated, so the
+	# chip stays worth owning on a club run.
+	meta_store.chipAugmentsPurchased = { "aug_offer_expand": 1 }
+	if int(run_store.dealer_offer_count()) != base_offers:
+		failures.append("issue111: Expanded Selection did not restore the club counter to %d" \
+			% base_offers)
+	meta_store.chipAugmentsPurchased = {}
+	# The shortened offer is still a rolled offer: opening the pre-run shop twice must
+	# not re-roll it, which would also reset the escalating reroll price.
+	run_store.runPhase = "pre_run"
+	run_store.prerunOfferIds = null
+	var club_prerun: Array = run_store.ensure_prerun_offer(0x111c1)
+	if club_prerun.size() != base_offers - 1:
+		failures.append("issue111: club pre-run shop stocked %d items, expected %d" \
+			% [club_prerun.size(), base_offers - 1])
+	run_store.dealerRerollCount = 3
+	if run_store.ensure_prerun_offer(0x111c2) != club_prerun:
+		failures.append("issue111: reopening the club pre-run shop re-rolled its offer")
+	if int(run_store.dealerRerollCount) != 3:
+		failures.append("issue111: reopening the club pre-run shop reset the reroll price")
+	run_store.augmentedTier = ""
+	if int(run_store.dealer_offer_count()) != base_offers:
+		failures.append("issue111: the club offer penalty outlived the club run")
+	meta_store.chipAugmentsPurchased = prev_augments
+	run_store.prerunOfferIds = prev_prerun
+	run_store.dealerRerollCount = prev_rerolls
+	run_store.runPhase = "running"
+
 	# Spade: a spent charge takes two spins to come back, counted from the spend, and the
 	# pips under the light track that wait — dark whenever a charge is banked.
 	run_store.augmentedTier = "spade"
@@ -7819,6 +7927,164 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 			failures.append("issue111: heart no longer pays the full jackpot in the score table")
 	machine._close_score_table()
 	run_store.augmentedTier = ""
+
+	# Joker: the four in-run items are dealt turned against the player. Same ids, same
+	# stash, same icons (rendered inverted) — only the effect and the copy change.
+	var prev_items_phase := String(run_store.runPhase)
+	var prev_items_stash: Dictionary = (run_store.runConsumables as Dictionary).duplicate(true)
+	var prev_items_locked: Array = (run_store.lockedReels as Array).duplicate()
+	var prev_items_mult := int(run_store.betMultiplier)
+	if InRunItems.effect_for("item_water", false) == InRunItems.effect_for("item_water", true):
+		failures.append("issue111: a joker run deals the same Water as a classic one")
+	for id in InRunItems.JOKER_EFFECTS:
+		if InRunItems.effect_for(String(id), false) == null:
+			failures.append("issue111: joker table names an item the classic pool lacks: %s" % String(id))
+	run_store.augmentedTier = "joker"
+	run_store.runPhase = "running"
+	run_store.isSpinning = false
+	run_store.comboDefeatPending = false
+	run_store.dealerIncoming = false
+	run_store.dealerPending = false
+	run_store.compulsiveSpinSkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.decaySkips = 0
+	run_store.neurons = 100
+	run_store.freeSpinsRemaining = 0
+
+	# Joker Water drains the gauge instead of filling it, and takes nothing else: the
+	# banked score and the Lucidity wallet are what the player keeps.
+	var water_score := int(run_store.scoreEarned)
+	var water_coins := int(run_store.lucidityCoins)
+	run_store.pendingPowerBarDrains = 0
+	run_store.runConsumables = { "item_water": 1 }
+	if not run_store.use_consumable("item_water"):
+		failures.append("issue111: the joker Water was refused in a clean running state")
+	if int(run_store.pendingPowerBarDrains) != 1:
+		failures.append("issue111: the joker Water did not queue the gauge drain")
+	if int(run_store.scoreEarned) != water_score or int(run_store.lucidityCoins) != water_coins:
+		failures.append("issue111: the joker Water still paid out its 40 score/Lucidity")
+	machine._power_bar_score = 20
+	machine._set_power_bar_frame(2)
+	if not run_store.consume_power_bar_drain():
+		failures.append("issue111: the queued gauge drain could not be claimed")
+	machine._drain_power_bar()
+	if int(machine._power_bar_score) != 0 or int(machine._power_bar_frame) != 0:
+		failures.append("issue111: the joker Water left progress on the gauge")
+	if int(machine._power_seen_lucidity) != int(machine._power_point_total()):
+		failures.append("issue111: the drained points can be re-planned as a fresh gain")
+	if run_store.consume_power_bar_drain():
+		failures.append("issue111: a claimed gauge drain was handed out twice")
+
+	# Joker Red Pill: one reel is dragged to flatline, and nothing is owed back.
+	run_store.lockedReels = [false, false, false]
+	run_store.lockedReelSpins = [0, 0, 0]
+	run_store.runConsumables = { "item_pill": 1 }
+	run_store.use_consumable("item_pill")
+	if int(run_store.jokerFlatlineSpins) != 1 or int(run_store.forceFlatlineSpins) != 0 \
+			or int(run_store.guaranteedTripleSpins) != 0:
+		failures.append("issue111: the joker Red Pill set the classic pill's counters")
+	var joker_pill_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if joker_pill_spin == null:
+		failures.append("issue111: the joker Red Pill spin did not resolve")
+	elif not (joker_pill_spin["reels"] as Array).has("flatline"):
+		failures.append("issue111: the joker Red Pill dragged no reel to flatline: %s" \
+			% str(joker_pill_spin["reels"]))
+	if int(run_store.jokerFlatlineSpins) != 0:
+		failures.append("issue111: the joker Red Pill did not spend its spin")
+
+	# Joker Cocktail: a WIN is charged the rarity points the classic one would have paid,
+	# and a miss is charged nothing — there are no winnings to take.
+	run_store.neurons = 100
+	# The pill spin above may well have missed and opened a losing state; spin() resolves
+	# a pending one by dropping the gauge, which would quietly rescale the malus below.
+	run_store.comboDefeatPending = false
+	run_store.pendingComboMultiplier = 1
+	run_store.betMultiplier = 3
+	run_store.freeSpinsRemaining = 0
+	run_store.cocktailBoostSpins = 0
+	run_store.runConsumables = { "item_cocktail": 1 }
+	run_store.use_consumable("item_cocktail")
+	if int(run_store.cocktailMalusSpins) != 2 or int(run_store.cocktailBoostSpins) != 0:
+		failures.append("issue111: the joker Cocktail armed the paying boost")
+	run_store.lastResult = { "reels": ["eye", "eye", "vial"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	var malus_spin: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if malus_spin == null:
+		failures.append("issue111: the joker Cocktail test spin did not resolve")
+	else:
+		# The same 36 the classic Cocktail pays for these reels at x3 (issue #185's case),
+		# taken off a 30-point pair — floored at zero rather than going negative.
+		if int(malus_spin.get("cocktailMalus", 0)) != 36:
+			failures.append("issue111: the joker Cocktail charged %d, expected the 36 it would have paid" \
+				% int(malus_spin.get("cocktailMalus", 0)))
+		if int(malus_spin["scoreEarned"]) != 0 or int(malus_spin["coinsEarned"]) != 0:
+			failures.append("issue111: the joker Cocktail win was not taken down to zero: %s" \
+				% str(malus_spin))
+	run_store.lastResult = { "reels": ["eye", "vial", "brain"] }
+	run_store.lockedReels = [true, true, true]
+	run_store.lockedReelSpins = [2, 2, 2]
+	var malus_miss: Variant = run_store.spin()
+	run_store.set_spinning(false)
+	if malus_miss != null and malus_miss.has("cocktailMalus"):
+		failures.append("issue111: the joker Cocktail charged a miss that won nothing")
+	# The joker dealer does not offer, he delivers: one item of the visit is named up
+	# front (the same one however often it is asked for), then bought and used at once.
+	var prev_forced_pending := bool(run_store.dealerPending)
+	var prev_forced_offers: Variant = run_store.dealerOfferIds
+	run_store.comboDefeatPending = false
+	run_store.compulsiveSpinSkips = 0
+	run_store.pendingCompulsiveSpinSkips = 0
+	run_store.cocktailMalusSpins = 0
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water", "item_pill"]
+	var forced_id := String(run_store.joker_forced_offer_id())
+	if not ["item_water", "item_pill"].has(forced_id):
+		failures.append("issue111: the joker visit named no item from its own offer: '%s'" % forced_id)
+	if String(run_store.joker_forced_offer_id()) != forced_id:
+		failures.append("issue111: the joker visit named a different item when asked twice")
+	# A full stash cannot swallow the delivery: it is taken over the cap and spent at once.
+	run_store.runConsumables = { "item_cocktail": Consumables.MAX_CONSUMABLE_SLOTS }
+	run_store.jokerFlatlineSpins = 0
+	run_store.pendingPowerBarDrains = 0
+	# The gauge is left part-full so a forced Water can be seen emptying it: the machine
+	# claims its own drain inside the delivery, so the queue is back to zero afterwards.
+	machine._power_bar_score = 20
+	machine._set_power_bar_frame(2)
+	machine._dealer_forced_take(forced_id)
+	if bool(run_store.dealerPending) or run_store.dealerOfferIds != null:
+		failures.append("issue111: the forced delivery did not resolve the dealer visit")
+	if int((run_store.runConsumables as Dictionary).get(forced_id, 0)) != 0:
+		failures.append("issue111: the forced item was left sitting in the stash")
+	var forced_landed := int(run_store.jokerFlatlineSpins) > 0 \
+		if forced_id == "item_pill" else int(machine._power_bar_score) == 0 \
+			and int(machine._power_bar_frame) == 0
+	if not forced_landed:
+		failures.append("issue111: the forced item was taken but never used (%s)" % forced_id)
+	if int(run_store.pendingPowerBarDrains) != 0:
+		failures.append("issue111: the delivery left its gauge drain unclaimed")
+	run_store.jokerFlatlineSpins = 0
+	run_store.pendingPowerBarDrains = 0
+	run_store.dealerPending = prev_forced_pending
+	run_store.dealerOfferIds = prev_forced_offers
+	run_store.augmentedTier = ""
+	if String(run_store.joker_forced_offer_id()) != "":
+		failures.append("issue111: a classic visit had its item chosen for it")
+	run_store.augmentedTier = "joker"
+
+	run_store.cocktailMalusSpins = 0
+	run_store.lockedReels = prev_items_locked
+	run_store.lockedReelSpins = [0, 0, 0]
+	run_store.betMultiplier = prev_items_mult
+	run_store.runConsumables = prev_items_stash
+	run_store.runPhase = prev_items_phase
+	run_store.augmentedTier = ""
+	# Nothing of the joker items survives the joker run.
+	if int(run_store.pendingPowerBarDrains) != 0 or int(run_store.jokerFlatlineSpins) != 0 \
+			or int(run_store.cocktailMalusSpins) != 0:
+		failures.append("issue111: a joker item effect outlived the joker run")
 
 	# The tier survives start_new_run (menu -> pre-run shop -> run handoff).
 	run_store.runPhase = "idle"
@@ -8314,8 +8580,9 @@ func _check_dealer_gate_161(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.comboDefeatPending = prev_combo
 	run_store.compulsiveSpinSkips = prev_skips
 
-## Energy Drink forces the gauge to x2 and owns it until the forced spin resolves:
-## a confirmed combo loss inside the window can not drop it below x2.
+## A queued compulsory spin owns the gauge at x2 until it resolves: a confirmed combo loss
+## inside that window can not drop it below x2. Only the joker Energy Drink queues one
+## since issue #111 — the classic drink no longer touches the gauge at all.
 func _check_energy_drink_x2_161(run_store: Node, failures: Array) -> void:
 	var prev_phase := String(run_store.runPhase)
 	var prev_spinning := bool(run_store.isSpinning)
@@ -8329,18 +8596,19 @@ func _check_energy_drink_x2_161(run_store: Node, failures: Array) -> void:
 	run_store.compulsiveSpinSkips = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.betMultiplier = 1
+	var prev_x2_tier := String(run_store.augmentedTier)
+	run_store.augmentedTier = "joker"
 	run_store.runConsumables = { "item_energy_drink": 1 }
 	if not run_store.use_consumable("item_energy_drink"):
 		failures.append("pr161: energy drink was refused in a clean running state")
-	if int(run_store.betMultiplier) != 2:
-		failures.append("pr161: energy drink must force the gauge to x2 (got %d)" % int(run_store.betMultiplier))
-	if int(run_store.decaySkips) != 2 or int(run_store.pendingCompulsiveSpinSkips) != 1:
-		failures.append("pr161: energy drink counters wrong (decaySkips=%d pending=%d)" \
+	if int(run_store.decaySkips) != 0 or int(run_store.pendingCompulsiveSpinSkips) != 1:
+		failures.append("pr161: joker drink counters wrong (decaySkips=%d pending=%d)" \
 			% [int(run_store.decaySkips), int(run_store.pendingCompulsiveSpinSkips)])
-	# A protected-spin miss opens no losing state and keeps the drink-owned x2.
-	# Locked reels pin a deterministic non-paying result.
+	# The queued compulsion caps the gauge at x2 from the moment it is queued.
+	run_store.betMultiplier = 2
+	# A miss inside the window opens no losing state and keeps the capped x2. Locked
+	# reels pin a deterministic non-paying result.
 	run_store.neurons = 100
 	run_store.freeSpinsRemaining = 0
 	run_store.guaranteedWinSpins = 0
@@ -8356,29 +8624,29 @@ func _check_energy_drink_x2_161(run_store: Node, failures: Array) -> void:
 	run_store.lockedReelSpins = [2, 2, 2]
 	run_store.spin()
 	run_store.set_spinning(false)
-	if bool(run_store.comboDefeatPending):
-		failures.append("pr161: protected Energy Drink miss opened a losing state")
+	# The spin is an ordinary paid one — the drink no longer protects it — so a miss may
+	# well open a losing state. What must hold is the cap: it stays at x2.
 	if int(run_store.betMultiplier) != 2:
-		failures.append("pr161: protected Energy Drink miss dropped the x2 (got %d)" \
+		failures.append("pr161: a miss inside the compulsion window dropped the x2 (got %d)" \
 			% int(run_store.betMultiplier))
-	# A confirmed loss during the drink keeps the forced x2.
+	# A confirmed loss inside the window keeps the capped x2.
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
 	run_store.resolve_pending_combo_defeat(false)
 	if int(run_store.betMultiplier) != 2:
-		failures.append("pr161: combo loss must not break the drink's forced x2")
-	# Once the whole effect (protected + forced spins) is over, losses drop again.
+		failures.append("pr161: combo loss must not break the compulsion's capped x2")
+	# Once the forced spin is spent, losses drop the gauge again.
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	run_store.compulsiveSpinSkips = 0
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
 	run_store.resolve_pending_combo_defeat(false)
 	if int(run_store.betMultiplier) != 1:
-		failures.append("pr161: post-drink combo loss should drop the gauge to x1")
+		failures.append("pr161: a combo loss after the window should drop the gauge to x1")
 	run_store.comboDefeatPending = false
 	run_store.pendingComboMultiplier = 1
+	run_store.augmentedTier = prev_x2_tier
 	run_store.runConsumables = prev_consumables
 	run_store.betMultiplier = prev_mult
 	run_store.isSpinning = prev_spinning
@@ -8436,7 +8704,6 @@ func _check_energy_drink_discard_161(machine: Node, run_store: Node, failures: A
 	run_store.pendingComboMultiplier = 2
 	run_store.betMultiplier = 2
 	run_store.decaySkips = 0
-	run_store.forcedRandomBetSpins = 0
 	run_store.pendingCompulsiveSpinSkips = 0
 	if not machine._discard_moot_combo_defeat():
 		failures.append("pr161: queued compulsory spin must discard the pending loss warning")

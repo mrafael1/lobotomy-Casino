@@ -76,7 +76,7 @@ const AUGMENTED_DESCRIPTIONS := {
 	"heart": "SPINS COST 2 HEALTH",
 	"spade": "POWER RESTORES EVERY 2 SPINS",
 	"diamond": "MAX 2 POWERS, NO 2ND AUGMENT",
-	"club": "PRICES +50%, HOUSE TAX +15%",
+	"club": "+50% PRICES, -1 OFFER, +15% TAX",
 	"joker": "ALL FOUR MODIFIERS",
 }
 

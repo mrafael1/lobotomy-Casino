@@ -560,7 +560,10 @@ const DURATION_BOOSTS := [
 			{ "counter": "pendingCompulsiveSpinSkips", "negative": true },
 			{ "counter": "compulsiveSpinSkips", "negative": true },
 		],
-		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH, THEN ONE FORCED SPIN." },
+		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH.",
+		# On a joker run the drink is the compulsion alone: the same badge, but every
+		# phase it can reach is the red one.
+		"jokerDesc": "THE MACHINE TAKES THE NEXT SPIN." },
 	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId",
 		"title": "SERUM", "desc": "THIS SYMBOL IS GUARANTEED TO APPEAR." },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
@@ -579,6 +582,12 @@ const DURATION_BOOSTS := [
 			{ "counter": "guaranteedTripleSpins" },
 		],
 		"title": "RED PILL", "desc": "A FORCED FLATLINE FIRST, THEN A GUARANTEED TRIPLE." },
+	# Joker items (issue #111). They ride their own counters, so these entries are simply
+	# never active on a run that is not dealing the inverted four.
+	{ "counter": "cocktailMalusSpins", "id": "item_cocktail", "negative": true,
+		"title": "COCKTAIL", "desc": "EVERY WIN PAYS ITS RARITY POINTS BACK." },
+	{ "counter": "jokerFlatlineSpins", "id": "item_pill", "negative": true,
+		"title": "RED PILL", "desc": "ONE REEL IS DRAGGED TO FLATLINE." },
 ]
 
 @export_group("Run Balance")
@@ -604,8 +613,19 @@ const DURATION_BOOSTS := [
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
 	"item_water": { "pos": "+40 SCORE & LUCIDITY", "neg": "" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
-	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
+	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "" },
 	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
+}
+
+## What the same four items say on a joker Augmented run (issue #111), where they are
+## dealt in their turned-against-you form. Each is pure downside, so the positive line is
+## empty and only the red one shows — the mirror of the flavour items above, whose
+## negative is the empty one.
+@export var joker_use_hints: Dictionary = {
+	"item_water": { "pos": "", "neg": "POWER BAR DRAINED" },
+	"item_pill": { "pos": "", "neg": "A REEL FLATLINES" },
+	"item_energy_drink": { "pos": "", "neg": "FORCED SPIN" },
+	"item_cocktail": { "pos": "", "neg": "WINS PAY RARITY BACK" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
@@ -1918,6 +1938,9 @@ func _item_info_popup_text(boost: Dictionary) -> String:
 	if title == "":
 		title = _item_display_name(String(boost.get("id", "")))
 	var desc := String(boost.get("desc", ""))
+	# An item the joker run has turned around describes what it is doing NOW (issue #111).
+	if RunStateStore.augmented_joker_items_active() and boost.has("jokerDesc"):
+		desc = String(boost["jokerDesc"])
 	var symbol_field := String(boost.get("symbolField", ""))
 	if symbol_field != "":
 		var symbol_id := String(RunStateStore.get(symbol_field))
@@ -4483,6 +4506,16 @@ func _drive_power_coin_pop(t: float, pop: Sprite2D) -> void:
 	else:
 		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
 
+## Joker Water: the gauge is emptied and the points that filled it are written off, so the
+## next restore starts from scratch. `_power_seen_lucidity` catches up to the run's current
+## total in the same breath — otherwise the discarded progress would simply be re-planned
+## as a fresh gain on the next spin and the drink would do nothing. Banked score, wealth
+## and already-restored powers are untouched: this costs the next restore, not the run.
+func _drain_power_bar() -> void:
+	_power_bar_score = 0
+	_power_seen_lucidity = _power_point_total()
+	_set_power_bar_frame(0)
+
 ## Resolve the gauge without animation and clear pending restores (visual only). Used on
 ## the flatline/run-over transition — the gauge itself just holds its current frame.
 func _snap_power_bar() -> void:
@@ -4989,8 +5022,15 @@ func _apply_power_slot(power_id: String, slot_index: int) -> void:
 func _short_name(consumable_id: String) -> String:
 	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
 
+## An item's icon — colour-inverted on a joker Augmented run, where the four in-run items
+## are dealt turned against the player (issue #111). The silhouette is the one the player
+## already knows; only the colour says it is not the item they think it is.
 func _icon_for(id: String) -> Texture2D:
-	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+	var tex := _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+	if tex != null and RunStateStore.augmented_joker_items_active() \
+			and InRunItems.JOKER_EFFECTS.has(id):
+		return Assets.inverted_texture(tex)
+	return tex
 
 func _boost_icon_for(boost: Dictionary) -> Texture2D:
 	var counter := String(boost.get("counter", ""))
@@ -6412,6 +6452,10 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_close_pending_combo_defeat()
 		_finish_post_spin_sequence()
 	_refresh_reels_from_state()
+	# Joker Water (issue #111) empties the gauge instead of filling it: the progress
+	# banked toward the next power restore is forfeited on the spot.
+	if RunStateStore.consume_power_bar_drain():
+		_drain_power_bar()
 	_update_hud()
 	# Water adds score directly (no score popup carries it), so the odometer
 	# rolls up right here instead of waiting for a reward sequence.
@@ -6449,8 +6493,10 @@ func _show_consumable_feedback(id: String) -> HintLabel:
 	if id == "item_pill":
 		return _show_deferred_negative(id)
 	# Deferred-negative items (issue #76) show only the upside now; a hooked item also
-	# arms its downside so the activation hook can pop it later.
-	if id in HOOKED_DEFERRED_NEGATIVES:
+	# arms its downside so the activation hook can pop it later. An item with no negative
+	# line left to pop (the Energy Drink, off a joker run) is never armed — otherwise its
+	# hook would fire an empty popup at the takeover that never comes.
+	if id in HOOKED_DEFERRED_NEGATIVES and String(_hint_for(id).get("neg", "")) != "":
 		_pending_deferred_neg[id] = true
 	return _spawn_hint(id, false, id in DEFERRED_NEGATIVE_ITEMS)
 
@@ -6481,7 +6527,7 @@ func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLa
 	# bubble may appear while it is active, including on-use consumable hints.
 	if RunStateStore.comboDefeatPending:
 		return null
-	var hint: Dictionary = use_hints.get(id, {})
+	var hint := _hint_for(id)
 	if hint.is_empty():
 		return null
 	if _hint_layer == null or not is_instance_valid(_hint_layer):
@@ -6494,8 +6540,21 @@ func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLa
 	_hint_layer.add_child(hint_label)
 	var pos := "" if negative_only else String(hint["pos"])
 	var neg := "" if positive_only else String(hint["neg"])
-	hint_label.play(pos, neg, _item_display_name(id), HintLabel.item_is_corrupted(id))
+	hint_label.play(pos, neg, _item_display_name(id), _item_reads_corrupted(id))
 	return hint_label
+
+## The +/- vocabulary for an item, which on a joker run is the inverted one (issue #111).
+func _hint_for(id: String) -> Dictionary:
+	if RunStateStore.augmented_joker_items_active() and joker_use_hints.has(id):
+		return joker_use_hints[id] as Dictionary
+	return use_hints.get(id, {}) as Dictionary
+
+## Purple name. The standing rule is the explicit HintLabel list; on a joker run every
+## in-run item joins it, because every one of them is now something done TO the player.
+func _item_reads_corrupted(id: String) -> bool:
+	if RunStateStore.augmented_joker_items_active() and InRunItems.JOKER_EFFECTS.has(id):
+		return true
+	return HintLabel.item_is_corrupted(id)
 
 func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	var target_lucidity := int(RunStateStore.lucidityCoins)
@@ -6889,7 +6948,10 @@ func _play_use_fx(id: String) -> void:
 		_play_cocktail_shake()
 	elif id == "cons_tea" and tea_fx_enabled:
 		_play_tea_sakura_fx()
-	elif id == "item_water" and water_fx_enabled:
+	elif id == "item_water" and water_fx_enabled \
+			and not RunStateStore.augmented_joker_items_active():
+		# The pour reads as refreshment. A joker Water drains the gauge, so it gets the
+		# drink's absence rather than a celebration of it (issue #111).
 		_play_water_animation()
 
 ## The authored WATER_SHEET_FRAMES-frame pour, stepped once and then cleared. Built on
@@ -8039,6 +8101,9 @@ func _augmented_restrictions_text() -> String:
 	if RunStateStore.augmented_modifier_active(4):
 		lines.append("PRICES +%d%%" % roundi(
 			(RunStateStore.AUGMENTED_CLUB_PRICE_MULTIPLIER - 1.0) * 100.0))
+		lines.append("DEALER OFFERS %d ITEM%s FEWER" % [
+			RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY,
+			"" if RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY == 1 else "S"])
 		lines.append("HOUSE ANGER TAX +%d%%" % roundi(
 			EconomyConst.OVERFLOW_ANGER_RATE * 100.0))
 	return "\n".join(lines)
@@ -8446,11 +8511,15 @@ func _show_dealer_offers() -> void:
 	_set_stash_elevated(true)
 	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
+	_dealer_offer_popup.item_forced.connect(_dealer_forced_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
 	_set_stash_visible(true)
-	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [])
+	# Joker (issue #111): the visit is a delivery, not an offer — the overlay plays the
+	# buy and the use, and the store names the item so both ends force the same one.
+	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [],
+		RunStateStore.joker_forced_offer_id())
 	_refresh_controls()
 
 func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
@@ -8557,6 +8626,22 @@ func _dealer_take(item_id: String) -> void:
 		_dealer_offer_popup.finish_offer()
 	else:
 		_close_dealer()
+
+## Joker (issue #111): the visit's item is accepted and used in one go, halfway through the
+## overlay's delivery animation. It is taken with one slot of headroom over the normal cap
+## and spent immediately, so a full stash cannot swallow the forced item — the player is
+## never asked to make room for something they did not ask for. If the item cannot be used
+## right now (a compulsory spin is queued), it simply stays in the stash as a normal item.
+func _dealer_forced_take(item_id: String) -> void:
+	RunStateStore.accept_dealer_offer_with_limit(item_id,
+		Consumables.MAX_CONSUMABLE_SLOTS + 1)
+	if RunStateStore.use_consumable(item_id):
+		if RunStateStore.consume_power_bar_drain():
+			_drain_power_bar()
+		_show_consumable_feedback(item_id)
+		_play_use_fx(item_id)
+	_refresh_reels_from_state()
+	_update_hud()
 
 func _dealer_discard_stash(item_id: String) -> void:
 	RunStateStore.discard_run_consumable(item_id)

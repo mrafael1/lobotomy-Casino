@@ -55,6 +55,35 @@ func texture(rel: String, mipmaps := false) -> Texture2D:
 	_tex[key] = null
 	return null
 
+# Colour-inverted copy of a texture, cached by source path (issue #111). Joker Augmented
+# runs deal the four in-run items in their inverted art rather than in new sprites, so the
+# item is instantly recognisable and just as instantly wrong. Alpha is preserved — only
+# RGB flips — so the silhouette the player learned stays exactly the same.
+func inverted_texture(source: Texture2D) -> Texture2D:
+	if source == null:
+		return null
+	# Generated textures have no resource path; key those by identity so the cache can
+	# still hold them instead of collapsing every one of them onto the same empty key.
+	var key := "#inv:" + (source.resource_path if source.resource_path != "" \
+		else str(source.get_instance_id()))
+	if _tex.has(key):
+		return _tex[key]
+	var image := source.get_image()
+	if image == null:
+		_tex[key] = source
+		return source
+	image = image.duplicate() as Image
+	if image.is_compressed():
+		image.decompress()
+	image.convert(Image.FORMAT_RGBA8)
+	for y in image.get_height():
+		for x in image.get_width():
+			var c := image.get_pixel(x, y)
+			image.set_pixel(x, y, Color(1.0 - c.r, 1.0 - c.g, 1.0 - c.b, c.a))
+	var inverted := ImageTexture.create_from_image(image)
+	_tex[key] = inverted
+	return inverted
+
 # Dynamic font under assets/<rel>. Cached. Returns null if missing.
 func font(rel := "font/DTM-Sans.otf") -> FontFile:
 	if _fonts.has(rel):
