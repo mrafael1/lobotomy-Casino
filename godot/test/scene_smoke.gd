@@ -6,16 +6,406 @@ extends SceneTree
 ##
 ##   godot --headless --path godot -s res://test/scene_smoke.gd
 
+const _MACHINE_SCENE_PATH := "res://scenes/machine_scene.tscn"
+
+## Root children that belong to the engine, not to a check: the autoloads, plus whatever
+## an editor addon has parented there. Captured once before the first check so _reap_strays
+## can tell "the game" from "something a check left lying around" without a hardcoded list
+## that would silently start deleting a new autoload the day one is added.
+var _resident: Dictionary = {}
+
 func _initialize() -> void:
 	call_deferred("_run")
+
+## Hands the next check a machine and a campaign that owe nothing to the previous one.
+##
+## The suite used to build ONE machine and thread it through every check. That node
+## carries ~220 fields, 15 animation flags and 20 live tweens, none of which
+## reset_run_state() can reach — so a check inherited whatever presentation state its
+## predecessor left armed, and the resulting failure surfaced somewhere unrelated to
+## the bug. Both stores are returned to fresh-install defaults and the outgoing machine
+## is replaced outright.
+##
+## Freed immediately rather than with queue_free(): the checks run as one synchronous
+## burst, so deferred frees would pile up every machine the suite ever built before the
+## first one actually went.
+## `start_run` picks which of the two viable baselines the check gets, and the ORDER of
+## the reset is what decides it — machine_scene._ready() ends in _enter_run(), which
+## starts a run whenever the store is not already running:
+##
+##   true  — reset first, so _enter_run() opens a fresh, VIABLE run on a clean campaign.
+##           What nearly every machine check wants. Resetting afterwards instead leaves
+##           the store zeroed under a live machine, and the machine reads zero neurons
+##           and flatlines the run a few frames in (this is what used to strand
+##           _check_forced_spin_persistence_161's queued spin).
+##   false — reset after, so the machine exists but the store is idle and
+##           has_resume_state() is false. Required by anything that may not run with a
+##           run already held, i.e. Tutorial.can_start().
+func _isolate(previous: Node, run_store: Node, meta_store: Node, start_run := true) -> Node:
+	if previous != null:
+		previous.free()
+	_reap_strays()
+	if start_run:
+		_reset_stores(run_store, meta_store)
+	var machine := (load(_MACHINE_SCENE_PATH) as PackedScene).instantiate()
+	get_root().add_child(machine)
+	if not start_run:
+		_reset_stores(run_store, meta_store)
+	return machine
+
+## Isolation for the checks that never touch the machine — menu, upgrades, collection,
+## odds and the pure-rules checks. They get no machine at all rather than an idle one,
+## because a live machine is not inert: on its first processed frame against a
+## just-reset store it reads zero neurons and drives the run to a flatline ending,
+## which then locks the start menu's augmented selector behind has_resume_state().
+func _isolate_stores(previous: Node, run_store: Node, meta_store: Node) -> Node:
+	if previous != null:
+		previous.free()
+	_reap_strays()
+	_reset_stores(run_store, meta_store)
+	return null
+
+## Everything the suite left standing in the root, other than the autoloads.
+##
+## Freeing the machine _isolate handed out is not enough, because plenty of checks build
+## their own scenes — menus, dealers, overlays, and in two places a second machine — and
+## dismiss them with queue_free(). queue_free() does not free anything: it schedules the
+## free for the end of the frame, and the checks run as one synchronous burst that almost
+## never reaches a frame boundary. So those scenes stay in the tree, ALIVE, until some
+## later check awaits a frame — and they get one more _process() during it.
+##
+## That is not theoretical. A machine dismissed this way inside an earlier check ran its
+## _check_ending() during the awaited frame of _check_augmented_menu_111, flatlined the
+## freshly-reset run, and locked the start menu's selector behind has_resume_state(). The
+## failure surfaced in a menu check that had never built a machine, three checks away from
+## the one that leaked it — the exact signature this harness exists to eliminate.
+##
+## Freed outright, including the ones already queued for deletion, rather than merely
+## removed from the tree. Taking a node out of the tree stops it processing but does NOT
+## cancel the deferred calls it has already posted, and the machine posts exactly such a
+## call: `call_deferred("_check_ending")` when it rebuilds mid-run. A queue_free()d node is
+## still a valid object when the message queue flushes, so that call lands anyway and ends
+## a run the next check just reset. Freeing now invalidates the target and the queued call
+## is dropped with it — which is why _isolate has always used free() over queue_free() for
+## the machine it owns, and why the scenes the checks build themselves need the same
+## treatment. The SceneTree's delete queue skips instances that are already gone.
+func _reap_strays() -> void:
+	for node in get_root().get_children():
+		if _resident.has(node.name):
+			continue
+		get_root().remove_child(node)
+		node.free()
+
+func _reset_stores(run_store: Node, meta_store: Node) -> void:
+	run_store.reset_run_state()
+	meta_store.reset_to_defaults()
+	# Matches the precondition the suite has always run under: these checks assert on a
+	# returning player, not on the first-launch tutorial prompt. The checks that do care
+	# set it themselves.
+	meta_store.is_first_launch = false
+	SaveIO.remove(run_store.RUN_SAVE_PATH)
+	SaveIO.remove(meta_store.SAVE_PATH)
+
+## ── the check table ───────────────────────────────────────────────────────────────
+##
+## Which isolation a check opens with, in the terms _isolate() already draws:
+##   ISO_MACHINE       fresh machine over a fresh, viable run. What nearly all of them want.
+##   ISO_MACHINE_IDLE  fresh machine, stores reset AFTER it is built, so no run is held.
+##   ISO_STORES        no machine at all (see _isolate_stores for why not an idle one).
+const ISO_MACHINE := 0
+const ISO_MACHINE_IDLE := 1
+const ISO_STORES := 2
+
+## Every check the suite runs, as data rather than as a hand-written call list.
+##
+## The point of the table is the ORDER. As statements, the checks could only ever run in
+## the order they were typed, which meant the isolation work could be asserted (each call
+## sits behind an isolate line) but never demonstrated — a check that still leaned on its
+## predecessor would pass forever. As data the list can be shuffled, and a shuffled run
+## that passes is the actual proof:
+##
+##   godot --headless --path godot -s res://test/scene_smoke.gd -- --shuffle
+##   godot --headless --path godot -s res://test/scene_smoke.gd -- --shuffle=12345
+##
+## `args` names what the check is handed, resolved by _bind_args. Signatures differ per
+## check and are left alone deliberately: a uniform (machine, run, meta, failures) would
+## have meant editing 80 function headers to serve the runner, and would have hidden which
+## checks actually touch the machine — the very thing the isolation kind turns on.
+const CHECKS: Array = [
+	{"fn": "_check_scene_instantiation", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_jackpot_burst_hook", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_machine_art_mix", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_pacte_flow", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_pacte_power_rules", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_pacte_augment_effects", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_base_scene_parity", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_first_launch_tutorial", "iso": ISO_STORES, "args": ["meta_store", "failures"]},
+	{"fn": "_check_scene_nav", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_machine_ending_flow_source", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_flatline_action_text", "iso": ISO_MACHINE, "args": ["machine", "meta_store", "failures"]},
+	{"fn": "_check_global_options_layout", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_painting_reroll_117", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_chip_augments", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_dealer_tip_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_emergency_reserve_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_symbol_level_picker_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_pair_triple_picker_bounds_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_augment_feedback_map_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_wealth_ending_augment_teardown_132", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_water_lucidity_gain", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_additive_power_payout_181", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_jackpot_payout_181", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_target_readout_181", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_machine_water_feedback", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_water_wealth_169", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_off_spin_target_proc", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_augment_level_readouts", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_reserve_glow_132", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_dealer_tip_steps_132", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_machine_consumable_feedback", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_upgrades_scene", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_smart_save_retention", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_issue27_overlay_layout", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_issue27_machine_stash_drag", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_issue28_machine_sequence_lock", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_options_spin_lock_77", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_dealer_compulsion_softlock_96", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_dealer_refusal_countdown_161", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_dealer_gate_161", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_energy_drink_x2_161", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_forced_spin_persistence_161", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_tap_duration_161", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_energy_drink_discard_161", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_loss_visuals_161", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_ending_cleanup_161", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_new_run_balance_161", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_consumable_roster_32", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_machine_reactions_35", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_campaign_rebalance_38", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_odds_table_36", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_neuron_meter_on_menu", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_flatline_overlay_meter", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_wealth_screen", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_wealth_target_flow_176", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_wealth_score_feed", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_wealth_zero_spins_62", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_flatline_free_spins_75", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_flatline_win_boost_76", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_deferred_negative_76", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_dealer_pacing_76", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_frenzy_gauge_155", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_pending_combo_and_free_spin_ui", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_compulsion_multiplier_76", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_tv_information_priority", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_boost_duration_icons_76", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_red_pill_tv_badge_185", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_item_badge_popup_185", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_water_animation_185", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_dealer_item_usage_flow_185", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_hallucination_machine_reaction_185", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_power_bar_76", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_restore_cap_181", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_eye_reveal", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_score_table_51", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_spin_gain_fx_66", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_spins_bar_lever_80", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_spins_counter_accuracy_80", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_free_spin_multiplier_cost", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_issue92_rule_reworks", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_starting_powers_and_random_118", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_augmented_run_111", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_joker_forced_visit_111", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_augmented_menu_111", "iso": ISO_STORES, "args": ["run_store", "meta_store", "failures"]},
+	{"fn": "_check_run_persistence_111", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_save_resume_151", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
+	{"fn": "_check_tier_win_counter_142", "iso": ISO_STORES, "args": ["run_store", "meta_store", "failures"]},
+	{"fn": "_check_card_collection_52", "iso": ISO_STORES, "args": ["meta_store", "failures"]},
+	{"fn": "_check_card_unlock_rules_52", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	# Tutorial.can_start() refuses while a run is held, so this one takes the idle-store
+	# baseline rather than the fresh-run one.
+	{"fn": "_check_tutorial_105", "iso": ISO_MACHINE_IDLE, "args": ["machine", "run_store", "meta_store", "failures"]},
+	{"fn": "_check_dealer_offer_pools", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+]
+
+const _ARG_TOKENS := ["machine", "run_store", "meta_store", "failures"]
+
+## ── the runner ────────────────────────────────────────────────────────────────────
 
 func _run() -> void:
 	var failures: Array = []
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	meta_store.is_first_launch = false
+	for node in get_root().get_children():
+		_resident[node.name] = true
 
-	# Every touched scene loads + instantiates without parse/runtime errors.
+	_assert_check_table(failures)
+	if not failures.is_empty():
+		# A malformed table would dispatch garbage into 91 checks and bury this message
+		# under the wreckage. Report it alone.
+		for f in failures:
+			printerr("✗ ", f)
+		quit(1)
+		return
+
+	var order: Array = []
+	for i in CHECKS.size():
+		order.append(i)
+	var shuffle_seed := _shuffle_seed()
+	if shuffle_seed != 0:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = shuffle_seed
+		# Fisher-Yates. RandomNumberGenerator rather than Array.shuffle() so the order is
+		# reproducible from the printed seed — an order-dependent failure is worthless if
+		# you cannot run it again.
+		for i in range(order.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp = order[i]
+			order[i] = order[j]
+			order[j] = tmp
+		print("· shuffled check order, seed %d (re-run with --shuffle=%d)"
+			% [shuffle_seed, shuffle_seed])
+
+	# `--trace` names each check as it starts. An order-dependent failure is only ever
+	# diagnosable against the run that produced it, and the seed alone does not tell you
+	# what ran immediately before the check that broke.
+	var trace := OS.get_cmdline_user_args().has("--trace")
+
+	# Which check each failure came from. Under a shuffled order the message alone no
+	# longer tells you where in the run it happened.
+	var blamed: Array = []
+	var machine: Node = null
+	for index in order:
+		var check: Dictionary = CHECKS[index]
+		var kind := int(check["iso"])
+		if kind == ISO_MACHINE:
+			machine = _isolate(machine, run_store, meta_store)
+		elif kind == ISO_MACHINE_IDLE:
+			machine = _isolate(machine, run_store, meta_store, false)
+		else:
+			machine = _isolate_stores(machine, run_store, meta_store)
+		var name := String(check["fn"])
+		if trace:
+			print("· %02d %s" % [order.find(index), name])
+		var before := failures.size()
+		# Awaited unconditionally. Roughly a third of the checks are coroutines and the
+		# rest are not; `await` over a Callable resolves the coroutine ones and passes the
+		# plain ones straight through, so the runner does not have to keep a second list
+		# of which is which — a list that would be wrong the first time someone added an
+		# `await` inside an existing check.
+		await Callable(self, name).callv(
+			_bind_args(check["args"], machine, run_store, meta_store, failures))
+		for _i in range(before, failures.size()):
+			blamed.append(name)
+	machine = _isolate_stores(machine, run_store, meta_store)
+
+	if failures.is_empty():
+		print("✓ scene smoke PASSED (%d checks)" % CHECKS.size())
+		quit(0)
+	else:
+		for i in failures.size():
+			var who: String = blamed[i] if i < blamed.size() else "?"
+			printerr("✗ [%s] %s" % [who, failures[i]])
+		if shuffle_seed != 0:
+			printerr("  (shuffled order, seed %d — reproduce with --shuffle=%d)"
+				% [shuffle_seed, shuffle_seed])
+		quit(1)
+
+## Resolves each check's declared parameter names to the live objects. `machine` is null
+## for an ISO_STORES check, which is why no check that takes one may be registered under
+## that kind — _assert_check_table enforces it.
+func _bind_args(tokens: Array, machine: Node, run_store: Node, meta_store: Node,
+		failures: Array) -> Array:
+	var out: Array = []
+	for token in tokens:
+		match String(token):
+			"machine": out.append(machine)
+			"run_store": out.append(run_store)
+			"meta_store": out.append(meta_store)
+			"failures": out.append(failures)
+	return out
+
+## 0 = run in table order. Anything else is the shuffle seed.
+##   --shuffle          a fresh seed from the clock (printed, so a failure is repeatable)
+##   --shuffle=12345    that exact seed
+func _shuffle_seed() -> int:
+	for raw in OS.get_cmdline_user_args():
+		var arg := String(raw)
+		if arg == "--shuffle":
+			return Time.get_unix_time_from_system() as int
+		if arg.begins_with("--shuffle="):
+			var given := arg.get_slice("=", 1).to_int()
+			# A caller who asked for a seed and typoed it into 0 would silently get an
+			# unshuffled run and read it as proof of isolation.
+			return given if given != 0 else 1
+	return 0
+
+## Guards the table, which is now the only thing standing between a check and the
+## previous check's leftovers.
+##
+## The old lint read this file's source and asserted every call in _run() sat behind an
+## isolate line. The runner makes that true by construction, so the risk moved: a check
+## can now be WRITTEN and never registered, and an unregistered check does not fail — it
+## silently does not run, which is the same as deleting it but looks like coverage.
+func _assert_check_table(failures: Array) -> void:
+	var registered: Dictionary = {}
+	for entry in CHECKS:
+		var name := String(entry.get("fn", ""))
+		if name.is_empty():
+			failures.append("check table: an entry has no 'fn'")
+			continue
+		if registered.has(name):
+			failures.append("check table: '%s' is registered twice" % name)
+		registered[name] = true
+		if not has_method(name):
+			failures.append("check table: '%s' is registered but not defined" % name)
+		var kind := int(entry.get("iso", -1))
+		if kind != ISO_MACHINE and kind != ISO_MACHINE_IDLE and kind != ISO_STORES:
+			failures.append("check table: '%s' has an unknown isolation kind %d" % [name, kind])
+		var args: Array = entry.get("args", [])
+		for token in args:
+			if not _ARG_TOKENS.has(String(token)):
+				failures.append("check table: '%s' asks for unknown argument '%s'"
+					% [name, String(token)])
+		if kind == ISO_STORES and args.has("machine"):
+			failures.append("check table: '%s' takes a machine but is registered ISO_STORES, "
+				% name + "so it would be handed null")
+	# A refactor that emptied or halved the table would otherwise "pass" by running almost
+	# nothing at all.
+	if CHECKS.size() < 88:
+		failures.append("check table: only %d checks registered; the suite has lost entries"
+			% CHECKS.size())
+
+	# Every _check_* defined in this file must be either registered or called by another
+	# check. Neither is a judgement about which it should be — only that it is reachable.
+	var f := FileAccess.open("res://test/scene_smoke.gd", FileAccess.READ)
+	if f == null:
+		failures.append("check table: could not read the suite's own source")
+		return
+	var source := f.get_as_text()
+	f.close()
+	var defined: Array = []
+	for raw in source.split("\n"):
+		var line := String(raw)
+		if line.begins_with("func _check_"):
+			defined.append(line.substr(5).get_slice("(", 0))
+	if defined.size() < 88:
+		failures.append("check table: the source scan found only %d check functions and has "
+			% defined.size() + "lost track of the file")
+	for name in defined:
+		if registered.has(name):
+			continue
+		# Registered entries appear in the table as a quoted name; a nested call appears
+		# as `name(`. Only the latter counts here.
+		if source.count("%s(" % name) > 1:
+			continue
+		failures.append("check table: '%s' is defined but never registered and never " % name
+			+ "called — it does not run")
+
+## ── checks that used to be inline in _run() ───────────────────────────────────────
+
+## Every touched scene loads + instantiates without parse/runtime errors.
+func _check_scene_instantiation(failures: Array) -> void:
 	for path in [
 		"res://scenes/start_menu_scene.tscn",
 		"res://scenes/shop_scene.tscn",
@@ -36,92 +426,14 @@ func _run() -> void:
 		get_root().add_child(n)
 		n.queue_free()
 
-	# Machine scene must expose the dedicated jackpot burst (issue #22).
-	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
-	get_root().add_child(machine)
+## Machine scene must expose the dedicated jackpot burst (issue #22).
+func _check_jackpot_burst_hook(machine: Node, failures: Array) -> void:
 	if not machine.has_method("_spawn_jackpot_burst"):
 		failures.append("machine missing _spawn_jackpot_burst")
-	_check_machine_art_mix(machine, failures)
-	await _check_pacte_flow(machine, run_store, meta_store, failures)
-	_check_pacte_power_rules(machine, run_store, failures)
-	_check_pacte_augment_effects(machine, run_store, failures)
-	_check_base_scene_parity(failures)
-	_check_first_launch_tutorial(meta_store, failures)
-	_check_scene_nav(failures)
-	_check_machine_ending_flow_source(failures)
-	_check_flatline_action_text(machine, meta_store, failures)
-	_check_global_options_layout(failures)
-	_check_water_lucidity_gain(run_store, failures)
-	_check_additive_power_payout_181(run_store, failures)
-	_check_jackpot_payout_181(machine, run_store, failures)
-	_check_target_readout_181(machine, run_store, failures)
-	await _check_machine_water_feedback(machine, run_store, failures)
-	_check_water_wealth_169(machine, run_store, meta_store, failures)
-	_check_off_spin_target_proc(machine, run_store, meta_store, failures)
-	_check_augment_level_readouts(machine, run_store, failures)
-	_check_reserve_glow_132(machine, run_store, failures)
-	_check_dealer_tip_steps_132(machine, failures)
-	await _check_machine_consumable_feedback(machine, run_store, failures)
-	await _check_upgrades_scene(failures)
-	_check_smart_save_retention(failures)
-	_check_issue27_overlay_layout(failures)
-	_check_issue27_machine_stash_drag(machine, run_store, failures)
-	await _check_issue28_machine_sequence_lock(machine, run_store, failures)
-	_check_options_spin_lock_77(machine, run_store, failures)
-	_check_dealer_compulsion_softlock_96(machine, run_store, failures)
-	_check_dealer_refusal_countdown_161(run_store, failures)
-	_check_dealer_gate_161(machine, run_store, failures)
-	_check_energy_drink_x2_161(run_store, failures)
-	await _check_forced_spin_persistence_161(machine, run_store, failures)
-	_check_tap_duration_161(failures)
-	_check_energy_drink_discard_161(machine, run_store, failures)
-	_check_loss_visuals_161(machine, run_store, failures)
-	_check_ending_cleanup_161(machine, run_store, failures)
-	_check_new_run_balance_161(run_store, failures)
-	_check_consumable_roster_32(run_store, failures)
-	_check_machine_reactions_35(machine, run_store, failures)
-	_check_campaign_rebalance_38(machine, failures)
-	await _check_odds_table_36(run_store, failures)
-	await _check_neuron_meter_on_menu(failures)
-	_check_flatline_overlay_meter(machine, failures)
-	_check_wealth_screen(machine, run_store, failures)
-	_check_wealth_target_flow_176(machine, run_store, meta_store, failures)
-	_check_wealth_score_feed(machine, run_store, failures)
-	_check_wealth_zero_spins_62(machine, run_store, failures)
-	_check_flatline_free_spins_75(machine, run_store, failures)
-	_check_flatline_win_boost_76(run_store, failures)
-	_check_deferred_negative_76(machine, failures)
-	_check_dealer_pacing_76(run_store, failures)
-	_check_frenzy_gauge_155(run_store, failures)
-	await _check_pending_combo_and_free_spin_ui(machine, run_store, failures)
-	_check_compulsion_multiplier_76(machine, run_store, failures)
-	_check_tv_information_priority(machine, run_store, failures)
-	_check_boost_duration_icons_76(machine, run_store, failures)
-	_check_red_pill_tv_badge_185(machine, run_store, failures)
-	_check_item_badge_popup_185(machine, run_store, failures)
-	_check_water_animation_185(machine, run_store, failures)
-	_check_dealer_item_usage_flow_185(machine, run_store, failures)
-	_check_hallucination_machine_reaction_185(machine, run_store, failures)
-	await _check_power_bar_76(machine, run_store, failures)
-	_check_restore_cap_181(machine, run_store, failures)
-	await _check_eye_reveal(machine, failures)
-	_check_score_table_51(machine, failures)
-	await _check_spin_gain_fx_66(machine, run_store, failures)
-	_check_spins_bar_lever_80(machine, run_store, failures)
-	await _check_spins_counter_accuracy_80(machine, run_store, failures)
-	_check_free_spin_multiplier_cost(run_store, failures)
-	_check_issue92_rule_reworks(machine, run_store, meta_store, failures)
-	_check_starting_powers_and_random_118(run_store, failures)
-	_check_augmented_run_111(machine, run_store, meta_store, failures)
-	await _check_joker_forced_visit_111(machine, run_store, failures)
-	await _check_augmented_menu_111(run_store, meta_store, failures)
-	_check_run_persistence_111(run_store, failures)
-	_check_save_resume_151(machine, run_store, failures)
-	_check_tier_win_counter_142(run_store, meta_store, failures)
-	await _check_card_collection_52(meta_store, failures)
-	_check_card_unlock_rules_52(machine, run_store, meta_store, failures)
-	machine.queue_free()
 
+## The dealer's pre-run vs in-run offer-pool branching (issue #21, the suite's original
+## reason to exist).
+func _check_dealer_offer_pools(run_store: Node, failures: Array) -> void:
 	var dealer_ps := load("res://scenes/dealer_scene.tscn") as PackedScene
 	var dealer := dealer_ps.instantiate()
 
@@ -152,14 +464,6 @@ func _run() -> void:
 	if dealer._offer_ids() != ["item_water", "item_pill"]:
 		failures.append("in-run offers wrong: %s" % str(dealer._offer_ids()))
 	dealer.queue_free()
-
-	if failures.is_empty():
-		print("✓ scene smoke PASSED")
-		quit(0)
-	else:
-		for f in failures:
-			printerr("✗ ", f)
-		quit(1)
 
 func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# The new neon cabinet/control sheets are native 160x320 art. The surrounding
@@ -575,14 +879,12 @@ func _check_global_options_layout(failures: Array) -> void:
 	_check_neuron_meter_absent("dealer", dealer_bottom_hud, failures)
 	_check_start_confirm_and_lab_glow_84(dealer, failures)
 	dealer.queue_free()
-	_check_painting_reroll_117(failures)
-	_check_chip_augments(failures)
-	_check_dealer_tip_132(failures)
-	_check_emergency_reserve_132(failures)
-	_check_symbol_level_picker_132(failures)
-	_check_pair_triple_picker_bounds_132(failures)
-	_check_augment_feedback_map_132(failures)
-	_check_wealth_ending_augment_teardown_132(failures)
+	# The eight checks that used to be chained on here — painting reroll, chip augments,
+	# the four #132 pickers, the augment feedback map and the wealth-ending teardown — have
+	# nothing to do with the options layout. They were parked on this tail because _run()
+	# was a hand-written list and this was a convenient place to append. They are their own
+	# table entries now, each with its own isolation instead of inheriting whatever state
+	# this check happens to leave behind.
 
 	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(machine)
@@ -649,7 +951,9 @@ func _check_global_options_layout(failures: Array) -> void:
 		if options_panel != null else null
 	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
 		failures.append("options: panel is missing the neon contour style")
-	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/MenuButton"]:
+	# Issue #105: replaying the tutorial is an ACTION, so it belongs on this menu rather
+	# than buried in the audio settings screen behind it.
+	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/TutorialButton", "Panel/Menu/MenuButton"]:
 		var option_button := overlay.get_node_or_null(path) as Button
 		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
@@ -662,11 +966,24 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: overlay close button is not the pixel X control")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
+	# The panel grew to make room for the fifth row; the contour drawn behind it has to
+	# have grown with it, or the menu spills out of its own frame.
+	var options_contour_rect := Rect2(options_contour.position, options_contour.size) \
+		if options_contour != null else Rect2()
+	if options_panel != null and not options_contour_rect.encloses(
+			Rect2(options_panel.position, options_panel.size)):
+		failures.append("options: the neon contour no longer contains the panel")
+	var options_rows := overlay.get_node("Panel/Menu") as Control
+	if options_panel != null \
+			and options_panel.size.y < options_rows.get_combined_minimum_size().y:
+		failures.append("options: the panel is too short for its own rows")
 	overlay.queue_free()
 
 	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(settings)
 	_check_settings_neon(settings, failures)
+	if settings.find_child("TutorialButton", true, false) != null:
+		failures.append("settings: the tutorial button moved to the OPTIONS overlay")
 	settings.queue_free()
 
 func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
@@ -1371,8 +1688,18 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 	var bubble_graphic := overlay.get_node("SpeechBubble/BubbleGraphic") as TextureRect
 	if bubble_graphic.texture == null:
 		failures.append("issue27: bubble graphic texture missing")
-	if speech.position != Vector2.ZERO or speech.size.x > bubble.size.x or speech.size.y > bubble.size.y:
+	# Inside the bubble, not pinned to its corner: the label sits on the white BODY the art
+	# draws (InRunDealerOffer.BUBBLE_BODY_RECT), which starts a couple of px in and stops
+	# above the tail, so the line lands in the middle of the box rather than above it.
+	if not Rect2(Vector2.ZERO, bubble.size).encloses(Rect2(speech.position, speech.size)):
 		failures.append("issue27: speech text not inside bubble")
+	var speech_center := speech.position + speech.size * 0.5
+	# Read off the instance, not off the class: naming InRunDealerOffer here would pull that
+	# @tool script into this one's compilation, before the autoloads it uses exist.
+	var body_rect: Rect2 = overlay.BUBBLE_BODY_RECT
+	var body_center := body_rect.get_center()
+	if absf(speech_center.x - body_center.x) > 1.0 or absf(speech_center.y - body_center.y) > 1.5:
+		failures.append("issue27: speech text is not centred on the bubble body")
 
 	overlay._apply_side("left")
 	var dealer_sprite := overlay.get_node("DealerRoot/DealerSprite") as Sprite2D
@@ -1693,8 +2020,22 @@ func _check_start_menu_button_style(button: Button, expected_color: Color, label
 		var small_asset := String(button.get_meta(&"_small_neon_button_asset", ""))
 		if not small_asset.begins_with("ui/neon_small_"):
 			failures.append("%s: compact control is not using neon_small button art" % label)
-		if style.content_margin_bottom <= style.content_margin_top:
-			failures.append("%s: compact label is not visually centered in its plate" % label)
+		# A Button centres its label in the CONTENT box, so the gap between the top and
+		# bottom margins IS the label's offset from the plate's middle. This used to demand
+		# bottom > top — pushing every compact label upward on the theory that the font
+		# leaves its slack below the glyphs. It leaves it above: measured against rendered
+		# ink (test/debug_font_metrics.gd), upper-case copy in this font already sits high,
+		# and lifting it again is what put DONE and TABLES above their own plate centres.
+		# The box must now be balanced, offset only by that measured per-size correction.
+		# The const, not the accessor: an autoload's CONSTANTS resolve statically here, but
+		# a method call on it needs the singleton instance and will not compile in a `-s`
+		# script (the same trap as naming a @tool class from this file).
+		var nudge := float(Assets.CENTERED_TEXT_NUDGE.get(
+			button.get_theme_font_size("font_size"), 0.0))
+		var offset := style.content_margin_top - style.content_margin_bottom
+		if not is_equal_approx(offset, nudge * 2.0):
+			failures.append("%s: compact label sits %.1fpx off its plate's centre" % [
+				label, offset * 0.5 - nudge])
 
 func _check_start_menu_press_feedback(button: Button, label: String, failures: Array) -> void:
 	if button == null:
@@ -1721,9 +2062,25 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 		if slider != null else null
 	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
 		failures.append("settings: volume slider is missing the neon track")
+	# MUTE is a TOGGLE and must not wear the button art: with a plate it read as a second
+	# button stacked on BACK, one that mysteriously did not navigate. The box and its tick
+	# carry the state instead, so every stylebox on it has to draw nothing.
 	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
-	_check_start_menu_button_style(mute, Assets.START_MENU_BUTTON_PINK, "settings: MUTE", failures)
-	_check_start_menu_press_feedback(mute, "settings: MUTE", failures)
+	if mute == null:
+		failures.append("settings: MUTE toggle is missing")
+	else:
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			if not (mute.get_theme_stylebox(String(state)) is StyleBoxEmpty):
+				failures.append("settings: MUTE is wearing a %s button plate" % state)
+				break
+		# The tick is the only thing left that says on from off, so both icons must exist
+		# and must not be the same image.
+		var checked := mute.get_theme_icon(&"checked")
+		var unchecked := mute.get_theme_icon(&"unchecked")
+		if checked == null or unchecked == null or checked == unchecked:
+			failures.append("settings: MUTE cannot show checked apart from unchecked")
+		if mute.custom_minimum_size.y < 20.0:
+			failures.append("settings: MUTE lost its tap target with its plate")
 	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
 	_check_start_menu_button_style(back, Assets.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
 	_check_start_menu_press_feedback(back, "settings: BACK", failures)
@@ -8936,11 +9293,34 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		var expected_card_positions: Array[Vector2] = [
 			Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
 		]
+		# The cards do not simply appear at their offsets — _shuffle_face_down_cards
+		# wiggles each one ±2px around its origin for ~0.22s when the scene opens. This
+		# used to assert the position a single frame after instantiating the scene, which
+		# agreed with the authored offset only because the suite always arrived here at a
+		# moment the tween had not started yet. Under a shuffled order it arrives
+		# mid-wiggle and reads 9.73 against an expected 10.0.
+		#
+		# So settle first. The deadline is wall-clock rather than a frame count because
+		# headless frames are far shorter than real ones, and it exists so that a genuinely
+		# mis-authored layout still FAILS here instead of hanging the suite.
+		var settle_deadline := Time.get_ticks_msec() + 2000
+		while Time.get_ticks_msec() < settle_deadline:
+			var settled := true
+			for index in expected_card_positions.size():
+				var settling := pacte._card_buttons.get(String(augment_offers[index]), null) as Button
+				if settling == null or settling.position != expected_card_positions[index]:
+					settled = false
+					break
+			if settled:
+				break
+			await process_frame
 		for index in expected_card_positions.size():
 			var card_id := String(augment_offers[index])
 			var card_button := pacte._card_buttons.get(card_id, null) as Button
 			if card_button == null or card_button.position != expected_card_positions[index]:
-				failures.append("pacte: card slot %d did not use its authored offset" % (index + 1))
+				failures.append("pacte: card slot %d did not settle at its authored offset (%s)"
+					% [index + 1,
+					str(card_button.position) if card_button != null else "no button"])
 	if pacte._augment_deck == null or pacte._power_deck == null \
 			or pacte._augment_deck.hframes != pacte.DECK_FRAME_COUNT \
 			or pacte._power_deck.hframes != pacte.DECK_FRAME_COUNT \
@@ -9900,6 +10280,510 @@ func _restore_card_unlock_state(meta_store: Node, augments: Array, powers: Array
 	meta_store.pendingCardUnlocks = pending
 	meta_store.cardUnlockProgress = progress
 	UnlockCardPopup.pending_highlight_card_id = ""
+
+# ── issue #105: the played tutorial ──────────────────────────────────────────────
+# Two things have to hold or the tutorial is worse than none: it must never leave the
+# player behind a mask with nothing to tap, and it must never touch their save.
+
+func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failures: Array) -> void:
+	var tutorial: Node = get_root().get_node("Tutorial")
+	# An unlock popup left visible by an earlier check IS a blocking modal, and the tutorial
+	# now correctly stands down for one. Clear it so these checks see a quiet machine.
+	if machine._unlock_popup != null and is_instance_valid(machine._unlock_popup):
+		machine._unlock_popup.visible = false
+	meta_store.pendingCardUnlocks = []
+
+	# Every anchor the script names must resolve on the scene it names it for. A renamed
+	# anchor otherwise rings nothing and the beat points the player at empty screen. The
+	# other two scenes are stood up here rather than trusted: this check is worthless if
+	# it only ever looks at the machine.
+	var anchor_hosts := { "machine": machine }
+	for kind in ["pacte", "dealer"]:
+		var path := "res://scenes/%s_scene.tscn" % kind
+		var host: Node = (load(path) as PackedScene).instantiate()
+		get_root().add_child(host)
+		anchor_hosts[kind] = host
+	for scene_kind in TutorialScript.scenes():
+		var host: Node = anchor_hosts.get(scene_kind) as Node
+		if host == null or not host.has_method("tutorial_anchor"):
+			failures.append("issue105: no scene answers anchors for '%s'" % scene_kind)
+			continue
+		for anchor_id in TutorialScript.anchors_for(scene_kind):
+			var rect: Rect2 = host.call("tutorial_anchor", anchor_id)
+			if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+				failures.append("issue105: %s cannot anchor '%s'" % [scene_kind, anchor_id])
+			elif not Rect2(0.0, 0.0, 160.0, 320.0).encloses(rect):
+				failures.append("issue105: %s anchors '%s' off the canvas: %s" \
+					% [scene_kind, anchor_id, rect])
+
+	# An anchor naming a control must land ON that control. The stash is the one that bit:
+	# its slots are authored in the machine's .tscn, so the shared computed layout put the
+	# ring in the middle of the stash rather than on the slot the beat asks for.
+	if not machine._stash_icons.is_empty():
+		var first_slot: Control = machine._stash_icons[0] as Control
+		var stash_anchor: Rect2 = machine.call("tutorial_anchor", "stash")
+		var slot_rect := Rect2(machine.call("_canvas_position_of", first_slot), first_slot.size)
+		if not stash_anchor.encloses(slot_rect):
+			failures.append("issue105: the stash ring %s is not on the first slot %s" \
+				% [stash_anchor, slot_rect])
+
+	# Beats are well formed: every one says something, names a scene the script visits,
+	# and advances by a rule the director knows.
+	for i in TutorialScript.count():
+		var beat: Dictionary = TutorialScript.beat(i)
+		if String(beat.get("text", "")) == "":
+			failures.append("issue105: beat %d has nothing to say" % i)
+		if not TutorialScript.scenes().has(String(beat.get("scene", ""))):
+			failures.append("issue105: beat %d names an unknown scene" % i)
+		if not ["tap", "anchor", "spin", "scene"].has(String(beat.get("advance", ""))):
+			failures.append("issue105: beat %d advances by an unknown rule" % i)
+		# A beat that hands a control through must have one to hand through.
+		var advance := String(beat.get("advance", ""))
+		var anchor := String(beat.get("anchor", ""))
+		if advance == "anchor" and anchor == "":
+			failures.append("issue105: beat %d waits on a control it never rings" % i)
+		# The softlock shape: a beat that ends because the player DID something, while the
+		# mask covers the thing they have to do it with. A spin beat must open the lever;
+		# an action beat must open whatever it is waiting on.
+		if advance == "spin" and anchor != "spin_lever":
+			failures.append("issue105: beat '%s' waits for a spin but does not open the lever" \
+				% String(beat.get("id", i)))
+		if advance != "tap" and anchor == "":
+			failures.append("issue105: beat '%s' waits for an action behind a full mask" \
+				% String(beat.get("id", i)))
+
+	# The sandbox: the tutorial plays a whole scripted campaign and gives the player's own
+	# state back untouched. This is the check that matters most — a tutorial that eats a
+	# campaign is a bug report, not a first impression.
+	var prev_phase := String(run_store.runPhase)
+	var meta_before: Dictionary = meta_store._as_dict()
+	var run_before: Dictionary = {}
+	for prop in run_store._run_state_properties():
+		run_before[String(prop)] = run_store.get(prop)
+	var save_before := FileAccess.get_modified_time("user://lobotomy-meta.json")
+
+	if not tutorial.can_start():
+		failures.append("issue105: the tutorial refused to start from a clean state")
+	if not tutorial.start():
+		failures.append("issue105: start() failed")
+	if not bool(tutorial.active) or not bool(meta_store.sandboxed) or not bool(run_store.sandboxed):
+		failures.append("issue105: the tutorial did not seal the stores off from the disk")
+	if tutorial.can_start():
+		failures.append("issue105: a running tutorial offered to start a second one")
+
+	# Nothing the tutorial does counts. It plays the real machine, so it lands real wins and
+	# real consumable uses, but none of that is the player's play — and an unlock would take
+	# the whole screen to celebrate itself on top of a beat that is mid-sentence.
+	var progress_before: Dictionary = meta_store.card_unlock_progress_snapshot()
+	var earned: Array = meta_store.add_card_unlock_progress(CardUnlocks.METRIC_WINS, 99)
+	earned.append_array(meta_store.record_best_card_unlock_progress(
+		CardUnlocks.METRIC_BEST_RUN_SCORE, 999999))
+	if not earned.is_empty():
+		failures.append("issue105: the tutorial unlocked cards: %s" % str(earned))
+	if not _deep_equal_variants(meta_store.card_unlock_progress_snapshot(), progress_before):
+		failures.append("issue105: the tutorial moved card-unlock progress")
+	if meta_store.has_pending_card_unlocks():
+		failures.append("issue105: the tutorial queued an unlock popup over its own beats")
+
+	# ...and the deck it deals from leaves out the reward-amplification tier: taking one
+	# opens a symbol picker the script never planned for, and asks a player two minutes old
+	# to choose a symbol to boost with nothing to base the answer on.
+	var tutorial_offer: Array = run_store.pacteOfferAugmentIds if \
+		run_store.pacteOfferAugmentIds is Array else []
+	if tutorial_offer.is_empty():
+		failures.append("issue105: the tutorial's Pacte dealt no augments to check")
+	for amp_id in PacteCards.reward_amp_ids():
+		if tutorial_offer.has(amp_id):
+			failures.append("issue105: the tutorial's Pacte offered '%s'" % amp_id)
+	# Attaching the machine is what a real scene does on _ready; the beats that belong to
+	# it then present for real, pinning their scripted state.
+	tutorial.attach(machine, "machine")
+	if machine.get_node_or_null("TutorialOverlay") == null:
+		failures.append("issue105: attaching a scene did not mount the coach overlay")
+	# Walk to the first machine beat and confirm it actually PRESENTED: pinned its scripted
+	# state and rang a real control. Without this the walk below would pass on a director
+	# that silently shows nothing.
+	var guard := 0
+	while bool(tutorial.active) and guard < TutorialScript.count():
+		if String(TutorialScript.beat(int(tutorial.beat_index)).get("id", "")) == "health":
+			break
+		tutorial._advance()
+		guard += 1
+	if int(run_store.neurons) != 12:
+		failures.append("issue105: the health beat did not pin its scripted state (neurons %d)" \
+			% int(run_store.neurons))
+	var overlay: Control = machine.get_node_or_null("TutorialOverlay") as Control
+	if overlay == null or not overlay.visible:
+		failures.append("issue105: the coach overlay is not up on a machine beat")
+	elif overlay._ring_rect.size == Vector2.ZERO:
+		failures.append("issue105: the health beat rang nothing")
+	elif overlay.get_node_or_null("SkipButton") == null:
+		failures.append("issue105: no way out of the tutorial")
+
+	# A read-and-continue beat still SPOTLIGHTS what it names: the mask is cut around the
+	# anchor whether or not the tap is handed through. Pointing at a health bar dimmed to
+	# the same grey as everything else highlights nothing.
+	var lit := false
+	for panel: ColorRect in overlay._mask_panels:
+		if panel.size.x >= 160.0 and panel.size.y >= 320.0:
+			lit = false
+			break
+		lit = true
+	if not lit:
+		failures.append("issue105: the health beat dimmed the bar it was naming")
+	# ...but the tap still belongs to the tutorial, not to the control underneath.
+	if overlay._tap_catcher.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("issue105: a read-and-continue beat handed its tap to the machine")
+
+	# The coaching text has to fit inside its own box, at the longest line the script has.
+	var longest := ""
+	for i in TutorialScript.count():
+		var line := String(TutorialScript.beat(i).get("text", ""))
+		if line.length() > longest.length():
+			longest = line
+	overlay.show_beat(longest, Rect2(), false)
+	var box: Control = overlay._box
+	var text_label: Label = overlay._label
+	if box != null and text_label != null:
+		var needed := text_label.get_theme_font("font").get_multiline_string_size(
+			text_label.text, HORIZONTAL_ALIGNMENT_CENTER, text_label.size.x,
+			overlay.FONT_SIZE).y
+		if needed > text_label.size.y + 1.0:
+			failures.append("issue105: the longest line does not fit its box (%.1f > %.1f)" \
+				% [needed, text_label.size.y])
+		if box.size.x > 160.0 or box.position.x < 0.0 \
+				or box.position.x + box.size.x > 160.0:
+			failures.append("issue105: the coach box runs off the canvas: %s at %s" \
+				% [box.size, box.position])
+
+	# SKIP asks before it throws the tutorial away.
+	var skipped := [false]
+	overlay.skip_pressed.connect(func() -> void: skipped[0] = true)
+	(overlay.get_node("SkipButton") as Button).pressed.emit()
+	if overlay.get_node_or_null("SkipConfirm") == null:
+		failures.append("issue105: SKIP did not ask first")
+	elif skipped[0]:
+		failures.append("issue105: SKIP left before the player answered")
+	else:
+		var confirm: Control = overlay.get_node("SkipConfirm")
+		(confirm.find_child("NOButton", true, false) as Button).pressed.emit()
+		if overlay.get_node_or_null("SkipConfirm") != null or skipped[0]:
+			failures.append("issue105: answering NO did not put the player back")
+		(overlay.get_node("SkipButton") as Button).pressed.emit()
+		confirm = overlay.get_node_or_null("SkipConfirm") as Control
+		if confirm == null:
+			failures.append("issue105: SKIP could not be asked a second time")
+		else:
+			(confirm.find_child("YESButton", true, false) as Button).pressed.emit()
+			if not skipped[0]:
+				failures.append("issue105: answering YES did not leave the tutorial")
+
+	var walked := 0
+	while bool(tutorial.active) and walked <= TutorialScript.count() + 2:
+		# Every action beat must leave a real hole over the control it is asking for. This
+		# is the Pacte softlock: the beat rang the cards while the mask still covered them,
+		# so there was no way to choose one and only SKIP got out. Judged on what the
+		# DIRECTOR did with the live beat, not on a mask the check drove itself.
+		var beat: Dictionary = TutorialScript.beat(int(tutorial.beat_index))
+		if String(beat.get("scene", "")) == "machine" \
+				and String(beat.get("advance", "")) != "tap" \
+				and overlay != null and overlay.visible:
+			var sealed := false
+			for panel: ColorRect in overlay._mask_panels:
+				if panel.size.x >= 160.0 and panel.size.y >= 320.0:
+					sealed = true
+			if sealed:
+				failures.append("issue105: beat '%s' masks the control it asks for" \
+					% String(beat.get("id", "?")))
+				break
+		tutorial._advance()
+		walked += 1
+	if bool(tutorial.active):
+		failures.append("issue105: walking every beat never ended the tutorial")
+		tutorial.stop(false)
+	if bool(meta_store.sandboxed) or bool(run_store.sandboxed):
+		failures.append("issue105: the sandbox outlived the tutorial")
+	if not bool(meta_store.tutorialCompleted):
+		failures.append("issue105: finishing the tutorial did not record it")
+
+	# Restored, field by field. tutorialCompleted is the one deliberate exception: it is
+	# the record that the tutorial happened and must survive its own restore.
+	var meta_after: Dictionary = meta_store._as_dict()
+	for key in meta_before:
+		if String(key) == "tutorialCompleted":
+			continue
+		if not _deep_equal_variants(meta_after.get(key), meta_before[key]):
+			failures.append("issue105: the tutorial changed meta '%s': %s -> %s" \
+				% [String(key), str(meta_before[key]), str(meta_after.get(key))])
+			break
+	for prop in run_before:
+		if not _deep_equal_variants(run_store.get(String(prop)), run_before[prop]):
+			failures.append("issue105: the tutorial changed run state '%s'" % String(prop))
+			break
+	if FileAccess.get_modified_time("user://lobotomy-meta.json") != save_before \
+			and save_before != 0:
+		# The restore writes once on the way out, which is expected; what must NOT happen
+		# is the scripted campaign being written mid-tutorial. Checked by the sandbox flags
+		# above — this only guards against the save being left holding tutorial state.
+		var reloaded: Dictionary = meta_store._as_dict()
+		if int(reloaded.get("lucidityWallet", -1)) == int(tutorial.SANDBOX_WALLET):
+			failures.append("issue105: the tutorial's scripted wallet reached the save")
+
+	# Whatever the beat wants, a modal the script does NOT own must never be masked. Every
+	# post-run dealer visit opens the odds table — the target break as well as a flatline —
+	# and a coaching mask over it left the player unable to spend their tokens, unable to
+	# close the table, and unable to reach the START it was standing in front of.
+	var dealer_host: Node = anchor_hosts["dealer"] as Node
+	if not dealer_host.has_method("tutorial_blocking_modal"):
+		failures.append("issue105: the dealer cannot tell the tutorial a modal is up")
+	else:
+		tutorial.start()
+		dealer_host.set("_odds_overlay", null)
+		dealer_host.set("_augment_picker", null)
+		tutorial.attach(dealer_host, "dealer")
+		var dealer_overlay_ui: Control = tutorial._overlay as Control
+		# Walk to a dealer beat that is NOT the one about the odds table: `over_modal` beats
+		# are meant to be shown over it, so they would fail this check by design.
+		for i in TutorialScript.count():
+			var candidate: Dictionary = TutorialScript.beat(int(tutorial.beat_index))
+			if String(candidate.get("scene", "")) == "dealer" \
+					and not bool(candidate.get("over_modal", false)):
+				break
+			tutorial._advance()
+		# Stand up a modal the way a post-run visit does, then re-present the beat.
+		var fake_modal := Control.new()
+		fake_modal.visible = true
+		dealer_host.add_child(fake_modal)
+		dealer_host.set("_augment_picker", fake_modal)
+		tutorial._present_beat()
+		if not bool(tutorial._awaiting_modal):
+			failures.append("issue105: the tutorial did not stand down for a blocking modal")
+		for panel: ColorRect in dealer_overlay_ui._mask_panels:
+			if panel.size.x > 0.0 and panel.size.y > 0.0:
+				failures.append("issue105: a modal the tutorial does not own is masked")
+				break
+		if dealer_overlay_ui._tap_catcher.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("issue105: the tutorial ate the taps meant for another modal")
+		if not (dealer_overlay_ui.get_node("SkipButton") as Button).visible:
+			failures.append("issue105: no way out while another modal is up")
+		# Modal gone: the coaching comes back on its own.
+		dealer_host.set("_augment_picker", null)
+		fake_modal.queue_free()
+		tutorial._process(0.016)
+		if bool(tutorial._awaiting_modal):
+			failures.append("issue105: the tutorial stayed down after the modal closed")
+		tutorial.stop(false)
+
+	# The post-flatline flow visits a second Pacte and the odds table before the shop, and
+	# the tutorial has to cover both: a player dropped onto a second Pacte with no word
+	# about it just sits there, and the odds table is a whole screen of its own.
+	var flow_ids: Array[String] = []
+	for i in TutorialScript.count():
+		flow_ids.append(String(TutorialScript.beat(i).get("id", "")))
+	for expected in ["pacte_again", "odds"]:
+		if not flow_ids.has(expected):
+			failures.append("issue105: the script skips the '%s' step" % expected)
+	if flow_ids.has("odds") and flow_ids.has("shop") \
+			and flow_ids.find("odds") > flow_ids.find("shop"):
+		failures.append("issue105: the odds table is explained after the shop it precedes")
+	# The odds beat must be shown OVER the table rather than standing down for it, and must
+	# not take the taps the table needs.
+	var odds_beat: Dictionary = TutorialScript.beat(flow_ids.find("odds"))
+	if not bool(odds_beat.get("over_modal", false)):
+		failures.append("issue105: the odds beat stands down instead of explaining the table")
+	if String(odds_beat.get("advance", "")) == "tap":
+		failures.append("issue105: the odds beat would eat the taps the table needs")
+	if String(odds_beat.get("anchor", "")) != "screen":
+		failures.append("issue105: the odds beat would mask the table it explains")
+
+	# A tap does not count until the beat has been readable for a moment. Tapping through
+	# one line used to carry into the next, so a double tap skipped a beat unseen.
+	tutorial.start()
+	tutorial.attach(machine, "machine")
+	# A tap beat ON THE MACHINE: a beat waiting for another scene is not armed at all, so it
+	# would "pass" this check for the wrong reason.
+	while bool(tutorial.active) and not (
+			String(TutorialScript.beat(int(tutorial.beat_index)).get("advance", "")) == "tap"
+			and String(TutorialScript.beat(int(tutorial.beat_index)).get("scene", "")) == "machine"):
+		tutorial._advance()
+	var tap_beat := int(tutorial.beat_index)
+	tutorial._on_overlay_tapped()
+	if int(tutorial.beat_index) != tap_beat:
+		failures.append("issue105: a tap landing with the beat skipped it unread")
+	tutorial._process(float(tutorial.TAP_GRACE) + 0.02)
+	tutorial._on_overlay_tapped()
+	if int(tutorial.beat_index) == tap_beat:
+		failures.append("issue105: the beat could not be tapped through at all")
+	tutorial.stop(false)
+
+	# Beating a target parks the run at the dealer for a break; the tutorial has a losing
+	# run left to show, so it carries the player back to the machine itself rather than
+	# leaving them at a counter with the showcase half finished.
+	var target_beat := -1
+	for i in TutorialScript.count():
+		if String(TutorialScript.beat(i).get("id", "")) == "target_hit":
+			target_beat = i
+			break
+	if target_beat < 0:
+		failures.append("issue105: the script no longer has a target beat")
+	elif String(TutorialScript.beat(target_beat).get("go", "")) != "machine":
+		failures.append("issue105: the target beat does not hand back to the machine")
+	elif String(TutorialScript.beat(target_beat + 1).get("scene", "")) != "machine":
+		failures.append("issue105: the beat after the win is not on the machine")
+
+	# A gift ADDS to the pocket rather than replacing what is in it — taking away the item
+	# the player chose one beat after being congratulated for choosing it is not a lesson —
+	# and it lands in the FIRST slot, which is the one the beat rings. A full pocket must
+	# not leave the gift in a slot the stash does not draw.
+	tutorial.start()
+	run_store.runConsumables = { "item_energy_drink": 1, "cons_tea": 1 }
+	tutorial._give({ "cons_white_powder": 1 })
+	var pocket: Dictionary = run_store.runConsumables as Dictionary
+	if not pocket.has("cons_white_powder"):
+		failures.append("issue105: the tutorial's gift never arrived")
+	if not pocket.has("item_energy_drink") or not pocket.has("cons_tea"):
+		failures.append("issue105: the gift replaced what the player was holding: %s" % str(pocket))
+	if pocket.keys().is_empty() or String(pocket.keys()[0]) != "cons_white_powder":
+		failures.append("issue105: the gift is not in the slot the beat rings: %s" % str(pocket.keys()))
+	# Handing over a second copy of something already held must not stack it up.
+	run_store.runConsumables = { "cons_white_powder": 1 }
+	tutorial._give({ "cons_white_powder": 1 })
+	if int((run_store.runConsumables as Dictionary).get("cons_white_powder", 0)) != 1:
+		failures.append("issue105: the gift stacked onto a copy the player already had")
+	tutorial.stop(false)
+
+	# A beat whose SCREEN never opens must not park the tutorial. The overlay stands down
+	# so the game underneath is playable, SKIP stays live — hiding it was the trap: a
+	# tutorial that cannot be ended keeps the player's save sealed behind its sandbox —
+	# and the wait is bounded, so the beat is eventually dropped rather than waited on
+	# forever. This is what happened after the target was beaten.
+	tutorial.start()
+	tutorial.attach(machine, "machine")
+	var waiting_beat := -1
+	for i in TutorialScript.count():
+		if String(TutorialScript.beat(int(tutorial.beat_index)).get("scene", "")) == "dealer":
+			waiting_beat = int(tutorial.beat_index)
+			break
+		tutorial._advance()
+	if waiting_beat < 0:
+		failures.append("issue105: the script never waits on another scene")
+	else:
+		var waiting_overlay: Control = tutorial._overlay as Control
+		if waiting_overlay == null or not waiting_overlay.visible:
+			failures.append("issue105: waiting for a scene took the whole overlay away")
+		elif waiting_overlay.get_node_or_null("SkipButton") == null \
+				or not (waiting_overlay.get_node("SkipButton") as Button).visible:
+			failures.append("issue105: no way out while waiting for a scene that may never open")
+		else:
+			for panel: ColorRect in waiting_overlay._mask_panels:
+				if panel.size.x > 0.0 and panel.size.y > 0.0:
+					failures.append("issue105: a waiting beat still masks the game underneath")
+					break
+		# Bounded: the beat is dropped rather than waited on forever.
+		tutorial._process(float(tutorial.SCENE_WAIT_TIMEOUT) + 1.0)
+		if int(tutorial.beat_index) == waiting_beat:
+			failures.append("issue105: waiting for a scene never timed out")
+	tutorial.stop(false)
+
+	# The dealer beat, played at the machine's real timing: the spin that summons him
+	# resolves BEFORE check_dealer_trigger runs, so the beat opens with no dealer in sight.
+	# It must hold rather than arm against an empty counter — armed early, "did they take
+	# one?" was measured against a counter with no dealer on it and the beat could never
+	# complete, which is a stuck tutorial with a live-looking dealer in front of it.
+	tutorial.start()
+	tutorial.attach(machine, "machine")
+	run_store.dealerPending = false
+	run_store.dealerIncoming = false
+	run_store.runConsumables = {}
+	var reached_dealer := false
+	for i in TutorialScript.count():
+		if String(TutorialScript.beat(int(tutorial.beat_index)).get("id", "")) == "dealer_take":
+			reached_dealer = true
+			break
+		tutorial._advance()
+	if not reached_dealer:
+		failures.append("issue105: never reached the dealer beat")
+	else:
+		if bool(tutorial._armed):
+			failures.append("issue105: the dealer beat armed before the dealer arrived")
+		# Standing down, not vanishing: the overlay carries the only way out.
+		var waiting_ui: Control = tutorial._overlay as Control
+		if waiting_ui == null or not waiting_ui.visible \
+				or not (waiting_ui.get_node("SkipButton") as Button).visible:
+			failures.append("issue105: no way out while a beat waits for the dealer")
+		# He walks in; the beat wakes up on the next frame.
+		run_store.dealerPending = true
+		run_store.dealerOfferIds = ["item_water", "item_cocktail"]
+		tutorial._process(0.016)
+		if not bool(tutorial._armed):
+			failures.append("issue105: the dealer beat did not open once he was in")
+		# Taking an item is what completes it — not the dealer leaving, which also happens
+		# when the offer is waved off.
+		run_store.runConsumables = { "item_water": 1 }
+		run_store.dealerPending = false
+		var before_take := int(tutorial.beat_index)
+		tutorial._process(0.016)
+		if int(tutorial.beat_index) == before_take:
+			failures.append("issue105: taking an item from the dealer did nothing")
+	tutorial.stop(false)
+
+	# The same hole check on the Pacte, whose beats never present while the machine is the
+	# attached scene — and the Pacte pick is exactly where the mask sealed the player in.
+	# Its cards are DRAGGED into slots, so the hole has to span the row and the slots.
+	tutorial.start()
+	tutorial.attach(anchor_hosts["pacte"] as Node, "pacte")
+	var pacte_overlay: Control = (anchor_hosts["pacte"] as Node) \
+		.get_node_or_null("TutorialOverlay") as Control
+	var pacte_guard := 0
+	while bool(tutorial.active) and pacte_guard < TutorialScript.count():
+		var pacte_beat: Dictionary = TutorialScript.beat(int(tutorial.beat_index))
+		if String(pacte_beat.get("id", "")) == "pacte_pick":
+			var sealed_in := false
+			for panel: ColorRect in pacte_overlay._mask_panels:
+				if panel.size.x >= 160.0 and panel.size.y >= 320.0:
+					sealed_in = true
+			if sealed_in:
+				failures.append("issue105: the Pacte pick is masked — nothing can be chosen")
+			var hole: Rect2 = (anchor_hosts["pacte"] as Node).call("tutorial_anchor", "cards")
+			if not hole.has_point(Vector2(40.0, 274.0)):
+				failures.append("issue105: the Pacte hole misses the card slots: %s" % hole)
+			break
+		tutorial._advance()
+		pacte_guard += 1
+	tutorial.stop(false)
+
+	# Skipping unwinds exactly like finishing does.
+	tutorial.start()
+	tutorial.attach(machine, "machine")
+	tutorial._advance()
+	tutorial.stop(false)
+	if bool(tutorial.active) or bool(run_store.sandboxed) or bool(meta_store.sandboxed):
+		failures.append("issue105: skipping left the tutorial half up")
+	for prop in run_before:
+		if not _deep_equal_variants(run_store.get(String(prop)), run_before[prop]):
+			failures.append("issue105: skipping did not restore run state '%s'" % String(prop))
+			break
+
+	# A held run is the one refusal: the sandbox would have to snapshot over a live one.
+	run_store.runPhase = "running"
+	run_store.neurons = 5
+	if tutorial.can_start():
+		failures.append("issue105: the tutorial offered to start over a held run")
+	run_store.runPhase = prev_phase
+	for prop in run_before:
+		run_store.set(String(prop), run_before[prop])
+	meta_store._apply(meta_before)
+	for kind in ["pacte", "dealer"]:
+		(anchor_hosts[kind] as Node).queue_free()
+
+## Value equality that does not care whether a number arrived as an int or a float — the
+## meta dict round-trips through JSON in the real save, so 3 and 3.0 are the same value.
+func _deep_equal_variants(a: Variant, b: Variant) -> bool:
+	var num_a := typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT
+	var num_b := typeof(b) == TYPE_INT or typeof(b) == TYPE_FLOAT
+	if num_a and num_b:
+		return is_equal_approx(float(a), float(b))
+	return a == b
 
 # ── issue #52: the deck is gated and the run feeds the unlock counters ───────────
 
