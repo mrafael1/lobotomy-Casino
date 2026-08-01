@@ -1,0 +1,887 @@
+extends "res://test/checks/_base.gd"
+
+## Scene shells, navigation and the shared options/overlay layout.
+##
+## Cut from scene_smoke.gd unchanged. The suite's runner owns the order and the isolation;
+## this file owns nothing but the assertions. See test/checks/_base.gd for why the check
+## bodies can still call get_root(), create_timer() and `await process_frame` bare.
+
+
+## ── checks that used to be inline in _run() ───────────────────────────────────────
+
+## Every touched scene loads + instantiates without parse/runtime errors.
+func _check_scene_instantiation(failures: Array) -> void:
+	for path in [
+		"res://scenes/start_menu_scene.tscn",
+		"res://scenes/shop_scene.tscn",
+		"res://scenes/upgrades_scene.tscn",
+		"res://scenes/scores_scene.tscn",
+		"res://scenes/settings_scene.tscn",
+		"res://scenes/collection_scene.tscn",
+		"res://scenes/options_overlay.tscn",
+		"res://scenes/pacte_scene.tscn",
+		"res://scenes/in_run_dealer_offer.tscn",
+		"res://scenes/game_over_ending_overlay.tscn",
+	]:
+		var ps := load(path) as PackedScene
+		if ps == null:
+			failures.append("%s failed to load" % path)
+			continue
+		var n := ps.instantiate()
+		get_root().add_child(n)
+		n.queue_free()
+
+func _check_global_options_layout(failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var previous_campaign_failed := bool(meta_store.campaignFailed)
+	var previous_wealth_reached := bool(meta_store.wealthEndingReached)
+	var previous_campaign_active := bool(meta_store.campaignActive)
+	var previous_campaign_left := int(meta_store.campaignNeuronsLeft)
+	meta_store.campaignFailed = false
+	meta_store.wealthEndingReached = false
+	meta_store.campaignActive = true
+	meta_store.campaignNeuronsLeft = maxi(1, previous_campaign_left)
+	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(start_menu)
+	if start_menu.get_node_or_null("MenuColumn/UpgradesButton") != null:
+		failures.append("options: start menu still exposes old UpgradesButton")
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var previous_phase := String(run_store.runPhase)
+	run_store.runPhase = "running"
+	start_menu._refresh_start_button()
+	# Art mode reparents the button out of MenuColumn; reach it via the scene.
+	var start_button := start_menu._start_button as Button
+	if start_button == null:
+		failures.append("menu: start button is missing")
+	elif start_button.text != "CONTINUE":
+		failures.append("menu: active run should show CONTINUE")
+	run_store.runPhase = "idle"
+	start_menu._refresh_start_button()
+	if start_button != null and start_button.text != "CLASSIC RUN":
+		failures.append("menu: idle state should show CLASSIC RUN")
+	run_store.runPhase = previous_phase
+	meta_store.campaignFailed = previous_campaign_failed
+	meta_store.wealthEndingReached = previous_wealth_reached
+	meta_store.campaignActive = previous_campaign_active
+	meta_store.campaignNeuronsLeft = previous_campaign_left
+	start_menu.queue_free()
+
+	var dealer := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	var dealer_options := dealer.get_node_or_null("options") as TextureButton
+	if dealer_options == null:
+		failures.append("options: dealer scene missing renamed options button")
+	elif dealer_options.position.x > 20.0:
+		failures.append("options: dealer options button is not top-left")
+	_check_settings_icon(dealer_options, "dealer", failures)
+	if dealer.get_node_or_null("BackButton") != null:
+		failures.append("options: dealer scene still has BackButton node")
+	_check_dealer_scene_revamp_55(dealer, failures)
+	if dealer.get_node_or_null("OptionsOverlay") == null:
+		failures.append("options: dealer scene missing shared OptionsOverlay")
+	var credits_row := dealer.get_node_or_null("CreditsRow") as HBoxContainer
+	var credits_label := dealer.get_node_or_null("CreditsRow/CreditsLabel") as Label
+	var credits_coin := dealer.get_node_or_null("CreditsRow/Coin") as TextureRect
+	if credits_row == null:
+		failures.append("dealer: credits row is not an HBoxContainer")
+	else:
+		if credits_row.alignment != BoxContainer.ALIGNMENT_BEGIN:
+			failures.append("dealer: credits row should align contents to Begin")
+		if credits_row.anchor_left != 0.0 or credits_row.anchor_top != 1.0 or credits_row.anchor_bottom != 1.0:
+			failures.append("dealer: credits row is not anchored bottom-left")
+		if credits_row.position != Vector2(7.0, 300.0) or credits_row.size.y < 10.0:
+			failures.append("dealer: credits row is not inside the full bottom-left coin-bank box: %s %s" % [credits_row.position, credits_row.size])
+	if credits_label == null or credits_coin == null:
+		failures.append("dealer: credits row must contain label and coin")
+	elif credits_label.size_flags_vertical != Control.SIZE_SHRINK_CENTER or credits_coin.size_flags_vertical != Control.SIZE_SHRINK_CENTER:
+		failures.append("dealer: credits label and coin are not vertically centered in their HBox")
+	var dealer_bottom_hud := dealer.get_node_or_null("BottomHudLayer") as Control
+	var dealer_neuron_number := dealer.get_node_or_null("BottomHudLayer/neuron_number") as Label
+	if dealer_bottom_hud == null:
+		failures.append("dealer: BottomHudLayer is missing")
+	else:
+		if dealer_bottom_hud.size != Vector2(160.0, 320.0):
+			failures.append("dealer: BottomHudLayer is not full-canvas")
+		if dealer_bottom_hud.z_index <= 50 or dealer_bottom_hud.z_index >= 200:
+			failures.append("dealer: BottomHudLayer is not layered between scene art and options overlay")
+	if dealer_neuron_number == null:
+		failures.append("dealer: neuron_number label is missing")
+	else:
+		if dealer_neuron_number.anchor_left != 0.5 or dealer_neuron_number.anchor_right != 0.5 \
+				or dealer_neuron_number.anchor_top != 1.0 or dealer_neuron_number.anchor_bottom != 1.0:
+			failures.append("dealer: neuron_number is not anchored Center Bottom")
+		if dealer_neuron_number.offset_top != -14.0 or dealer_neuron_number.offset_bottom != -4.0:
+			failures.append("dealer: neuron_number is not positioned at the bottom edge")
+		if dealer_neuron_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
+			failures.append("dealer: neuron_number is not centered inside its label box")
+		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
+		if dealer_neuron_number.text != "":
+			failures.append("dealer: neuron_number should render no text (meter replaces it)")
+	_check_neuron_meter_absent("dealer", dealer_bottom_hud, failures)
+	_check_start_confirm_and_lab_glow_84(dealer, failures)
+	dealer.queue_free()
+	# The eight checks that used to be chained on here — painting reroll, chip augments,
+	# the four #132 pickers, the augment feedback map and the wealth-ending teardown — have
+	# nothing to do with the options layout. They were parked on this tail because _run()
+	# was a hand-written list and this was a convenient place to append. They are their own
+	# table entries now, each with its own isolation instead of inheriting whatever state
+	# this check happens to leave behind.
+
+	var machine := (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(machine)
+	var machine_options := machine.get_node_or_null("options") as TextureButton
+	if machine_options == null:
+		failures.append("options: machine scene missing options button")
+	elif machine_options.position.x > 20.0:
+		failures.append("options: machine options button is not top-left")
+	_check_settings_icon(machine_options, "machine", failures)
+	if machine.get_node_or_null("OptionsOverlay") == null:
+		failures.append("options: machine scene missing shared OptionsOverlay")
+	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
+	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
+	var health_bar := machine.get_node_or_null("HealthBar") as Sprite2D
+	var health_coin := machine.get_node_or_null("HealthCoin") as Sprite2D
+	if bottom_hud == null:
+		failures.append("machine: BottomHudLayer is missing")
+	else:
+		if bottom_hud.size != Vector2(160.0, 320.0):
+			failures.append("machine: BottomHudLayer is not full-canvas")
+		if bottom_hud.z_index <= 50 or bottom_hud.z_index >= 200:
+			failures.append("machine: BottomHudLayer is not layered between cabinet art and options overlay")
+	if spin_number == null:
+		failures.append("machine: spin_number label is missing")
+	else:
+		if spin_number.anchor_left != 0.5 or spin_number.anchor_right != 0.5 \
+				or spin_number.anchor_top != 1.0 or spin_number.anchor_bottom != 1.0:
+			failures.append("machine: spin_number is not anchored Center Bottom")
+		if spin_number.offset_top != -14.0 or spin_number.offset_bottom != -4.0:
+			failures.append("machine: spin_number is not positioned at the bottom edge")
+		if spin_number.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
+			failures.append("machine: spin_number is not centered inside its label box")
+		# Issue #38: the label is the anchor; the pixel-art meter is the readout.
+		if spin_number.text != "":
+			failures.append("machine: spin_number should render no text (tube readout replaces it)")
+		_check_neuron_meter_absent("machine", bottom_hud, failures)
+		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
+		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
+			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
+	# The spins readout left the TV: it is now the native 20-frame tube sheet
+	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
+	# plays while a spin launches.
+	if machine.get_node_or_null("HealthLabel") != null:
+		failures.append("machine: HealthLabel spins counter should be removed from the TV")
+	if health_bar == null or health_bar.hframes != 20:
+		failures.append("machine: HealthBar spins tube is not a 20-frame sheet")
+	# The tube must be able to draw every spin the economy can hand out: one frame per
+	# count from empty to the cap. A sheet that falls behind a raised cap silently
+	# clamps the top of the tube instead of failing.
+	if health_bar != null and health_bar.hframes != EconomyConst.MAX_NEURONS + 1:
+		failures.append("machine: the tube's %d frames cannot draw a %d-spin cap"
+			% [int(health_bar.hframes), EconomyConst.MAX_NEURONS])
+	if health_coin == null or health_coin.hframes != 4 or health_coin.visible:
+		failures.append("machine: HealthCoin drop sheet is missing or visible at rest")
+	machine.queue_free()
+
+	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
+	get_root().add_child(overlay)
+	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
+	var options_contour := overlay.get_node_or_null("Contour") as Panel
+	if options_contour == null:
+		failures.append("options: overlay missing neon contour")
+	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxFlat \
+		if options_panel != null else null
+	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
+		failures.append("options: panel is missing the neon contour style")
+	# Issue #105: replaying the tutorial is an ACTION, so it belongs on this menu rather
+	# than buried in the audio settings screen behind it.
+	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/TutorialButton", "Panel/Menu/MenuButton"]:
+		var option_button := overlay.get_node_or_null(path) as Button
+		if option_button == null:
+			failures.append("options: overlay missing %s" % path)
+		else:
+			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxTexture
+			if button_style == null or button_style.texture == null:
+				failures.append("options: %s is not using start-menu button art" % path)
+	var close_button := overlay.get_node_or_null("CloseButton") as Button
+	if close_button == null or close_button.text != "X":
+		failures.append("options: overlay close button is not the pixel X control")
+	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
+		failures.append("options: close button is not in the panel's top-right corner")
+	# The panel grew to make room for the fifth row; the contour drawn behind it has to
+	# have grown with it, or the menu spills out of its own frame.
+	var options_contour_rect := Rect2(options_contour.position, options_contour.size) \
+		if options_contour != null else Rect2()
+	if options_panel != null and not options_contour_rect.encloses(
+			Rect2(options_panel.position, options_panel.size)):
+		failures.append("options: the neon contour no longer contains the panel")
+	var options_rows := overlay.get_node("Panel/Menu") as Control
+	if options_panel != null \
+			and options_panel.size.y < options_rows.get_combined_minimum_size().y:
+		failures.append("options: the panel is too short for its own rows")
+	overlay.queue_free()
+
+	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(settings)
+	_check_settings_neon(settings, failures)
+	if settings.find_child("TutorialButton", true, false) != null:
+		failures.append("settings: the tutorial button moved to the OPTIONS overlay")
+	settings.queue_free()
+
+
+func _check_scene_nav(failures: Array) -> void:
+	var nav: Node = get_root().get_node("SceneNav")
+	nav.clear()
+	nav.push_scene("res://scenes/dealer_scene.tscn", true)
+	if nav.peek_back_scene() != "res://scenes/dealer_scene.tscn":
+		failures.append("scene nav: did not retain dealer as return scene")
+	if not nav.peek_back_restores_options():
+		failures.append("scene nav: did not retain options restore flag")
+	nav.clear()
+
+
+func _check_machine_ending_flow_source(failures: Array) -> void:
+	var file := FileAccess.open("res://scenes/machine_scene.gd", FileAccess.READ)
+	if file == null:
+		failures.append("machine ending flow: could not read machine_scene.gd")
+		return
+	var source := file.get_as_text()
+	if not source.contains("_start_again_from_wealth"):
+		failures.append("machine ending flow: wealth screen is missing Start Again handling")
+	if not source.contains("continue_pressed.connect(_continue_from_wealth)"):
+		failures.append("machine ending flow: wealth screen is missing CONTINUE handling")
+	if not source.contains("_can_resume_after_wealth()"):
+		failures.append("machine ending flow: wealth screen is missing continuation gating")
+	if not source.contains("GAME_OVER_ENDING_SCENE"):
+		failures.append("machine ending flow: dedicated game-over scene is missing")
+	if source.contains("EXIT CASINO"):
+		failures.append("machine ending flow: old EXIT CASINO wealth action still present")
+	if source.contains("BANK & LAB"):
+		failures.append("machine ending flow: old bank/lab wealth transition still present")
+
+
+func _check_issue27_overlay_layout(failures: Array) -> void:
+	var ps := load("res://scenes/in_run_dealer_offer.tscn") as PackedScene
+	if ps == null:
+		failures.append("issue27: in-run dealer overlay failed to load")
+		return
+	var overlay := ps.instantiate()
+	get_root().add_child(overlay)
+
+	var tap := overlay.get_node("TapLabel") as Label
+	if tap.get_theme_font_size("font_size") < 12:
+		failures.append("issue27: tap warning font is not punchy")
+	var tap_color := tap.get_theme_color("font_color")
+	if tap_color.r < 0.75 or tap_color.b < 0.9:
+		failures.append("issue27: tap warning is not light purple")
+
+	var bubble := overlay.get_node("SpeechBubble") as Control
+	var speech := overlay.get_node("SpeechBubble/SpeechLabel") as Label
+	var bubble_graphic := overlay.get_node("SpeechBubble/BubbleGraphic") as TextureRect
+	if bubble_graphic.texture == null:
+		failures.append("issue27: bubble graphic texture missing")
+	# Inside the bubble, not pinned to its corner: the label sits on the white BODY the art
+	# draws (InRunDealerOffer.BUBBLE_BODY_RECT), which starts a couple of px in and stops
+	# above the tail, so the line lands in the middle of the box rather than above it.
+	if not Rect2(Vector2.ZERO, bubble.size).encloses(Rect2(speech.position, speech.size)):
+		failures.append("issue27: speech text not inside bubble")
+	var speech_center := speech.position + speech.size * 0.5
+	# Read off the instance, not off the class: naming InRunDealerOffer here would pull that
+	# @tool script into this one's compilation, before the autoloads it uses exist.
+	var body_rect: Rect2 = overlay.BUBBLE_BODY_RECT
+	var body_center := body_rect.get_center()
+	if absf(speech_center.x - body_center.x) > 1.0 or absf(speech_center.y - body_center.y) > 1.5:
+		failures.append("issue27: speech text is not centred on the bubble body")
+
+	overlay._apply_side("left")
+	var dealer_sprite := overlay.get_node("DealerRoot/DealerSprite") as Sprite2D
+	var authored_dealer_scale := dealer_sprite.scale
+	var authored_dealer_position := dealer_sprite.position
+	if not is_equal_approx(dealer_sprite.rotation, PI / 2.0):
+		failures.append("issue27: left dealer rotation wrong")
+	if overlay._offscreen_x >= overlay._target_x:
+		failures.append("issue27: left dealer does not pop in from off-screen")
+	if bubble.position.x < 0.0 or bubble.position.x + bubble.size.x > 160.0:
+		failures.append("issue27: left bubble is off-screen")
+
+	overlay._apply_side("right")
+	if dealer_sprite.scale != authored_dealer_scale:
+		failures.append("issue27: dealer side placement overwrote authored scale")
+	if dealer_sprite.position != authored_dealer_position:
+		failures.append("issue27: dealer side placement overwrote authored position")
+	if not is_equal_approx(dealer_sprite.rotation, -PI / 2.0):
+		failures.append("issue27: right dealer rotation wrong")
+	if overlay._target_x < 0.0 or overlay._target_x > 160.0:
+		failures.append("issue27: right dealer target is off-canvas")
+	if overlay._offscreen_x <= overlay._target_x:
+		failures.append("issue27: right dealer does not pop in from off-screen")
+	if bubble.position.x < 0.0 or bubble.position.x + bubble.size.x > 160.0:
+		failures.append("issue27: right bubble is off-screen")
+
+	overlay._position_prompt_buttons()
+	var look := overlay.get_node("LookButton") as Button
+	var ignore_button := overlay.get_node("IgnoreButton") as Button
+	var row_left := look.position.x
+	var row_right := ignore_button.position.x + ignore_button.size.x
+	if absf(((row_left + row_right) * 0.5) - 80.0) > 0.5 or row_left <= 0.0 or row_right >= 160.0:
+		failures.append("issue27: look/ignore buttons are not bottom-centered")
+	if look.text != "look" or ignore_button.text != "ignore":
+		failures.append("issue27: look/ignore button labels wrong")
+	if look.position.y >= ignore_button.position.y:
+		failures.append("issue27: look button is not above ignore button")
+	var offer_slot_1 := overlay.get_node("ItemLayer/OfferSlot1") as Control
+	var offer_slot_2 := overlay.get_node("ItemLayer/OfferSlot2") as Control
+	if offer_slot_1.size != Vector2(32.0, 32.0) or offer_slot_2.size != Vector2(32.0, 32.0):
+		failures.append("issue27: offer slots are not 32x32")
+	var hands_rest := overlay.get_node("Hands") as Sprite2D
+	if hands_rest.position.y != 0.0:
+		failures.append("issue27: hands do not rest at top of screen")
+	if offer_slot_1.position != Vector2(20.0, 7.0) or offer_slot_2.position != Vector2(89.0, 8.0):
+		failures.append("issue27: offer slots did not preserve authored positions")
+
+	overlay._on_look_pressed()
+	var hands := overlay.get_node("Hands") as Sprite2D
+	if not look.visible or look.text != "take":
+		failures.append("issue27: look button did not become the take button")
+	if not look.disabled:
+		failures.append("issue27: take button should be disabled before selecting an item")
+	if look.position.y >= ignore_button.position.y:
+		failures.append("issue27: take button is not above the leave button")
+	if not ignore_button.visible or ignore_button.text != "leave":
+		failures.append("issue27: ignore button did not become leave")
+	if absf((ignore_button.position.x + ignore_button.size.x * 0.5) - 80.0) > 0.5:
+		failures.append("issue27: leave button is not centered")
+	var speech_after_look := overlay.get_node("SpeechBubble/SpeechLabel") as Label
+	if speech_after_look.text != "Interested in one?":
+		failures.append("issue27: look trigger did not show normal offer prompt")
+	overlay.show_full_pockets()
+	if speech_after_look.text != "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?":
+		failures.append("issue27: full stash trigger did not replace offer prompt")
+	if hands.position.y >= 0.0:
+		failures.append("issue27: hands did not start overhead entry")
+	if overlay.get_node("StashLayer").visible:
+		failures.append("issue27: overlay stash layer is visible")
+	overlay.set_stash_items(["cons_focus", "cons_white_powder"])
+	if overlay.get_node("StashLayer").get_child_count() != 0:
+		failures.append("issue27: overlay built a duplicate stash")
+	_check_dealer_offer_take_flow(overlay, failures)
+
+	overlay.queue_free()
+
+
+# The neuron meter left the menu: CONTINUE opens the run-state modal, which
+# carries it plus the resume/abandon choice (issue #111 follow-up).
+func _check_neuron_meter_on_menu(failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	var run_store: Node = get_root().get_node("RunStateStore")
+	var meta_before: Dictionary = meta_store._as_dict()
+	meta_store.is_first_launch = false
+	var start_menu := (load("res://scenes/start_menu_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(start_menu)
+	await process_frame
+	if _find_neuron_meter(start_menu) != null:
+		failures.append("menu: the neuron meter should not render on the start menu")
+
+	var prev_phase := String(run_store.runPhase)
+	run_store.runPhase = "pre_run"
+	start_menu._refresh_start_button()
+	if start_menu._start_button == null or (start_menu._start_button as Button).text != "CONTINUE":
+		failures.append("menu: pre-run dealer return should show CONTINUE")
+	run_store.runPhase = "running"
+	run_store.campaignNeuronPending = true
+	run_store.lucidityCoins = 200
+	run_store.scoreEarned = 40
+	meta_store.ownedPermanents = []
+	meta_store.lucidityWallet = 0
+	meta_store.campaignNeuronsLeft = int(meta_store.campaignNeuronsMax)
+	start_menu._show_continue_modal()
+	await process_frame
+	var meter := _find_neuron_meter(start_menu)
+	if meter == null:
+		failures.append("menu: CONTINUE modal is missing the neuron meter")
+	else:
+		var sprite: Sprite2D = null
+		for child in meter.get_children():
+			if child is Sprite2D:
+				sprite = child
+				break
+		if sprite == null:
+			failures.append("menu: modal meter built no sprite (sheet missing?)")
+		else:
+			if sprite.hframes != meter.frame_count:
+				failures.append("menu: meter hframes do not match frame_count")
+			if meter.frame_count != 34 or sprite.frame < 0 or sprite.frame >= meter.frame_count:
+				failures.append("menu: meter is not using the 34-frame idle neuron animation")
+		var death_sprites: Array[Sprite2D] = [
+			meter.get_node_or_null("Death") as Sprite2D,
+			meter.get_node_or_null("Death2") as Sprite2D,
+			meter.get_node_or_null("Death3") as Sprite2D,
+		]
+		for index: int in range(death_sprites.size()):
+			var death_sprite := death_sprites[index]
+			if death_sprite == null or death_sprite.hframes != 3 or death_sprite.visible:
+				failures.append("menu: meter is missing its hidden three-frame death overlay %d" % (index + 1))
+		# Each loss finishes on frame 3 and remains as a permanent overlay. Later
+		# losses must not clear the earlier damage (issue #176 feedback).
+		var health_before_animation := int(meta_store.campaignNeuronsLeft)
+		for remaining: int in [2, 1, 0]:
+			meta_store.campaignNeuronsLeft = remaining
+			meter.play_loss_animation()
+			await create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.65).timeout
+			var lost_count := int(meta_store.campaignNeuronsMax) - remaining
+			for index: int in range(death_sprites.size()):
+				var death_sprite := death_sprites[index]
+				var expected_visible := index < lost_count
+				if death_sprite == null or death_sprite.visible != expected_visible:
+					failures.append("menu: neuron death overlay %d did not persist" % (index + 1))
+				elif expected_visible and death_sprite.frame != NeuronMeter.DEATH_FRAME_COUNT - 1:
+					failures.append("menu: neuron death overlay %d did not stop on frame 3" % (index + 1))
+		meta_store.campaignNeuronsLeft = health_before_animation
+		meter.refresh()
+		var count := meter.get_node_or_null("CountLabel") as Label
+		if count == null:
+			failures.append("menu: modal meter is missing the numeric neuron count")
+		elif count.text != "%d/%d" % [int(meta_store.campaignNeuronsLeft), int(meta_store.campaignNeuronsMax)]:
+			failures.append("menu: modal neuron count reads '%s'" % count.text)
+	var stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if stats == null or stats.text != "CURRENT COINS : 200":
+		failures.append("menu: CONTINUE modal should show current coins only")
+	if stats != null and (stats.text.contains("SCORE") or stats.text.contains("LUCIDITY") \
+			or stats.text.contains("L-COIN")):
+		failures.append("menu: CONTINUE modal still shows the old score/coin label")
+	# A dealer/pre-run session shows the same banked wallet that the dealer spends.
+	var wallet_before_preview := int(meta_store.lucidityWallet)
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "pre_run"
+	run_store.lucidityCoins = 222
+	meta_store.lucidityWallet = 321
+	start_menu._show_continue_modal()
+	var pre_run_stats := start_menu.get_node_or_null("ContinueModal/Panel/Stats") as Label
+	if pre_run_stats == null or pre_run_stats.text != "CURRENT COINS : 321":
+		failures.append("menu: CONTINUE modal should show the dealer wallet")
+	start_menu._hide_continue_modal()
+	await process_frame
+	run_store.runPhase = "running"
+	meta_store.lucidityWallet = wallet_before_preview
+	start_menu._show_continue_modal()
+	await process_frame
+	var panel := start_menu.get_node_or_null("ContinueModal/Panel") as Panel
+	var close := start_menu.get_node_or_null("ContinueModal/Panel/CloseButton") as Button
+	if close == null:
+		failures.append("menu: CONTINUE modal has no close button")
+	elif panel != null and (close.position.x + close.size.x > panel.size.x \
+			or close.position.y >= 16.0):
+		failures.append("menu: CONTINUE modal close button is not in the top-right corner")
+	var resume := start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if stats != null and stats.position.y < 86.0:
+		failures.append("menu: current-coins label is too high under the neuron number")
+	if stats != null and resume != null \
+			and stats.position.y + stats.size.y + 6.0 > resume.position.y:
+		failures.append("menu: current-coins label is too close to CONTINUE")
+	if close != null:
+		close.pressed.emit()
+		if start_menu._continue_modal != null or String(run_store.runPhase) != "running":
+			failures.append("menu: modal close did not dismiss without losing the run")
+	start_menu._show_continue_modal()
+	var give_up := start_menu.get_node_or_null("ContinueModal/Panel/GiveUpButton") as Button
+	resume = start_menu.get_node_or_null("ContinueModal/Panel/ContinueButton") as Button
+	if resume == null:
+		failures.append("menu: CONTINUE modal has no resume button")
+	if give_up == null:
+		failures.append("menu: CONTINUE modal has no GIVE UP button")
+	else:
+		# Abandoning resets the run outright: nothing banks, the menu frees up.
+		give_up.pressed.emit()
+		if String(run_store.runPhase) == "running":
+			failures.append("menu: GIVE UP did not end the held run")
+		if int(run_store.scoreEarned) != 0 or int(run_store.lucidityCoins) != 0:
+			failures.append("menu: GIVE UP did not reset the run state")
+		if int(meta_store.campaignNeuronsLeft) != int(meta_store.campaignNeuronsMax):
+			failures.append("menu: GIVE UP did not restore the campaign neuron count")
+		if int(meta_store.lucidityWallet) != 0:
+			failures.append("menu: GIVE UP banked lucidity; abandoning should bank nothing")
+		# queue_free is deferred; the scene's reference clears immediately.
+		if start_menu._continue_modal != null:
+			failures.append("menu: GIVE UP left the run-state modal open")
+	run_store.runPhase = "over"
+	start_menu._refresh_start_button()
+	if start_menu._start_button != null and (start_menu._start_button as Button).text == "CONTINUE":
+		failures.append("menu: finished flatline state incorrectly shows CONTINUE")
+	run_store.reset_run_state()
+	run_store.runPhase = prev_phase
+	meta_store._apply(meta_before)
+	meta_store.save_state()
+	start_menu.queue_free()
+
+func _check_base_scene_parity(failures: Array) -> void:
+	for scene_path in [
+		"res://scenes/shop_scene.tscn",
+		"res://scenes/dealer_scene.tscn",
+		"res://scenes/machine_scene.tscn",
+	]:
+		var ps := load(scene_path) as PackedScene
+		if ps == null:
+			failures.append("parity: %s failed to load" % scene_path)
+			continue
+		var scene := ps.instantiate()
+		get_root().add_child(scene)
+		var stash := scene.get_node_or_null("stash") as TextureRect
+		if stash == null:
+			failures.append("parity: %s missing authored stash tray" % scene_path)
+		else:
+			if stash.position != Vector2(106.0, 290.0) or stash.size != Vector2(48.0, 26.0):
+				failures.append("parity: %s stash tray does not match authored shared layout: %s %s" % [scene_path, stash.position, stash.size])
+			if stash.z_index < 50:
+				failures.append("parity: %s stash tray can draw behind base art" % scene_path)
+			for i in range(1, 3):
+				var slot := stash.get_node_or_null("StashSlot%d" % i) as Control
+				if slot == null:
+					failures.append("parity: %s missing StashSlot%d" % [scene_path, i])
+				elif slot.size != Vector2(16.0, 16.0):
+					failures.append("parity: %s StashSlot%d is not 16x16: %s" % [scene_path, i, slot.size])
+		scene.queue_free()
+
+
+func _check_upgrades_scene(failures: Array) -> void:
+	var meta_store: Node = get_root().get_node("MetaStateStore")
+	# This check mutates ownedPermanents (reward-amp tiers); snapshot the
+	# current meta state so later checks see whatever they started with.
+	var saved_permanents: Array = meta_store.ownedPermanents.duplicate()
+	var ps := load("res://scenes/upgrades_scene.tscn") as PackedScene
+	if ps == null:
+		failures.append("upgrades: scene failed to load")
+		return
+	var scene := ps.instantiate()
+	get_root().add_child(scene)
+	await process_frame
+	var expected := [
+		"upgrades_scene_bg",
+		"upgrades_scene_brain",
+		"upgrades_scene_bubbles",
+		"upgrades_scene_eye_brain_overlay",
+		"upgrade_scene_memory_brain_overlay",
+		"upgrades_scene_cables",
+		"upgrades_scene_layer",
+		"upgrades_scene_eye_upgrades",
+		"upgrades_scene_memory_upgrades",
+		"upgrades_scene_eye_buttons",
+		"upgrades_scene_memory_buttons",
+		"upgrades_scene_LAB_SIGN",
+		"upgrades_scene_leak",
+	]
+	for i in expected.size():
+		if scene.get_child(i).name != expected[i]:
+			failures.append("upgrades: visual child %d should be %s, got %s" % [i, expected[i], scene.get_child(i).name])
+			break
+	var bg := scene.get_node("upgrades_scene_bg") as AnimatedSprite2D
+	if bg.sprite_frames.get_frame_count(&"default") != 4 or bg.frame != 3:
+		failures.append("upgrades: bg is not on static frame 4 by default")
+	if bg.z_index != -100 or bg.top_level:
+		failures.append("upgrades: bg z-index is not the back baseline")
+	var brain := scene.get_node("upgrades_scene_brain") as AnimatedSprite2D
+	if brain.z_index != -90:
+		failures.append("upgrades: brain z-index is not above bg")
+	if brain.sprite_frames.get_frame_count(&"default") != 15:
+		failures.append("upgrades: brain layer does not expose 15 frames")
+	if brain.sprite_frames.get_frame_texture(&"default", 0).get_width() > 1280:
+		failures.append("upgrades: brain frames still use an oversized sheet texture")
+	var bubbles := scene.get_node("upgrades_scene_bubbles") as AnimatedSprite2D
+	if bubbles.sprite_frames.get_frame_texture(&"default", 0).get_width() > 1280:
+		failures.append("upgrades: bubbles frames still use an oversized sheet texture")
+	if bubbles.frame != 12:
+		failures.append("upgrades: bubbles layer should rest on frame 13 by default")
+	var eye_overlay := scene.get_node("upgrades_scene_eye_brain_overlay") as AnimatedSprite2D
+	if eye_overlay.sprite_frames.get_frame_texture(&"default", 0).get_width() > 1280:
+		failures.append("upgrades: eye brain overlay still uses an oversized sheet texture")
+	var memory_overlay := scene.get_node("upgrade_scene_memory_brain_overlay") as AnimatedSprite2D
+	if memory_overlay.sprite_frames.get_frame_texture(&"default", 0).get_width() > 1280:
+		failures.append("upgrades: memory brain overlay still uses an oversized sheet texture")
+	var eye_terminal := scene.get_node("upgrades_scene_eye_upgrades") as AnimatedSprite2D
+	if eye_terminal.position != Vector2.ZERO:
+		failures.append("upgrades: eye terminal node is not at native canvas origin")
+	if eye_terminal.sprite_frames.get_frame_count(&"default") != 13:
+		failures.append("upgrades: eye terminal should use the asset's 13 exact 1280px frames")
+	var memory_terminal := scene.get_node("upgrades_scene_memory_upgrades") as AnimatedSprite2D
+	if memory_terminal.sprite_frames.get_frame_count(&"default") != 11:
+		failures.append("upgrades: memory terminal should use the asset's 11 exact 1280px frames")
+	if scene.get_child(13).name != "CanvasLayer":
+		failures.append("upgrades: CanvasLayer is not the foreground root after visual layers")
+	var ui_container := scene.get_node("CanvasLayer/UI_Container") as Control
+	if ui_container.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		failures.append("upgrades: UI_Container should ignore mouse outside child controls")
+	var eye_hitbox := scene.get_node("CanvasLayer/UI_Container/EyeComputerHitbox") as Button
+	var memory_hitbox := scene.get_node("CanvasLayer/UI_Container/MemoryComputerHitbox") as Button
+	if eye_hitbox.position != Vector2(61.0, 6.0) or eye_hitbox.size != Vector2(61.0, 44.0):
+		failures.append("upgrades: eye hitbox does not cover the eye terminal panel")
+	if memory_hitbox.position != Vector2(1.0, 10.0) or memory_hitbox.size != Vector2(35.0, 45.0):
+		failures.append("upgrades: memory hitbox does not cover the memory terminal panel")
+	# Regression check: a later, stop-filtered sibling sitting on top of a
+	# hitbox's center silently eats the click even though the hitbox itself
+	# is wired up correctly (this is exactly how the empty MemoryUpgradePanel
+	# used to swallow every click to MemoryComputerHitbox after its rows were
+	# removed). Assert nothing else claims mouse input at either hitbox's center.
+	for hitbox in [eye_hitbox, memory_hitbox]:
+		var center: Vector2 = hitbox.position + hitbox.size / 2.0
+		var seen_hitbox := false
+		for sibling in ui_container.get_children():
+			if sibling == hitbox:
+				seen_hitbox = true
+				continue
+			if not seen_hitbox or not (sibling is Control):
+				continue
+			var sib := sibling as Control
+			if sib.visible and sib.mouse_filter == Control.MOUSE_FILTER_STOP and sib.get_rect().has_point(center):
+				failures.append("upgrades: %s sits on top of %s's center and would swallow its click" % [sib.name, hitbox.name])
+	var coin_label := scene.get_node("CanvasLayer/UI_Container/LucidtyCoinDisplay/Label") as Label
+	var coin_icon := scene.get_node("CanvasLayer/UI_Container/LucidtyCoinDisplay/Coin") as TextureRect
+	if coin_label.text.contains("lucid") or coin_label.text.contains("coin"):
+		failures.append("upgrades: wallet label still includes lucidity coin text")
+	if coin_icon.texture == null:
+		failures.append("upgrades: wallet display is missing lucidity coin icon")
+	if coin_label.get_theme_color("font_color") != Color(0.92, 0.86, 0.56):
+		failures.append("upgrades: wallet label is not using the shared lucidity yellow")
+	if coin_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_RIGHT:
+		failures.append("upgrades: wallet label horizontal alignment should preserve the authored right setting")
+	var eye_prev := scene.get_node("CanvasLayer/UI_Container/EyePrevButton") as Button
+	var eye_next := scene.get_node("CanvasLayer/UI_Container/EyeNextButton") as Button
+	var memory_prev := scene.get_node("CanvasLayer/UI_Container/MemoryPrevButton") as Button
+	var memory_next := scene.get_node("CanvasLayer/UI_Container/MemoryNextButton") as Button
+	if eye_prev.visible or eye_next.visible or memory_prev.visible or memory_next.visible:
+		failures.append("upgrades: nav buttons should stay hidden before terminal activation")
+	if not bool(scene.get("editor_preview_eye_active")) or not bool(scene.get("editor_preview_memory_active")):
+		failures.append("upgrades: editor preview flags are not enabled for WYSIWYG layout")
+	var description := scene.get_node("CanvasLayer/UI_Container/DescriptionBubble") as Control
+	var description_label := scene.get_node("CanvasLayer/UI_Container/DescriptionBubble/DescriptionCenter/Text") as RichTextLabel
+	var power_name_box := scene.get_node("CanvasLayer/UI_Container/PowerNameBox") as Control
+	var power_name_label := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PowerNameLabel") as Label
+	var context_buy := scene.get_node("CanvasLayer/UI_Container/ContextBuyButton") as Button
+	var buy_stele := scene.get_node("CanvasLayer/UI_Container/BuyStele") as Sprite2D
+	var context_price := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup") as Control
+	var price_label := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/PriceLabel") as Label
+	var context_price_coin := scene.get_node("CanvasLayer/UI_Container/PowerNameBox/NamePriceRow/PriceGroup/Coin") as TextureRect
+	if power_name_box.position.y >= description.position.y:
+		failures.append("upgrades: power name box is not above the description bubble")
+	if scene.get_node_or_null("CanvasLayer/UI_Container/ContextPriceDisplay") != null:
+		failures.append("upgrades: contextual price should live inside PowerNameBox, not a separate panel")
+	if context_price.get_node_or_null("PriceTitle") != null:
+		failures.append("upgrades: contextual price should not include a PRICE title")
+	if price_label.vertical_alignment != VERTICAL_ALIGNMENT_CENTER:
+		failures.append("upgrades: price amount is not vertically centered")
+	if power_name_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER or price_label.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
+		failures.append("upgrades: power name and price amount are not horizontally centered")
+	if context_buy.visible:
+		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should be visible even before a terminal is open")
+	_check_start_menu_button_style(context_buy, Assets.START_MENU_BUTTON_CYAN,
+		"upgrades: BUY", failures, true)
+	_check_start_menu_press_feedback(context_buy, "upgrades: BUY", failures)
+	if context_buy.size != Vector2(22.0, 10.0):
+		failures.append("upgrades: contextual buy button should keep its authored 22x10 stele-aligned size (got %s)" % str(context_buy.size))
+	var context_buy_disabled_style := context_buy.get_theme_stylebox("disabled")
+	if context_buy_disabled_style != null:
+		if context_buy_disabled_style.content_margin_left != 0.0 or context_buy_disabled_style.content_margin_right != 0.0:
+			failures.append("upgrades: contextual buy button disabled state has asymmetric text margins")
+	if context_price.visible:
+		failures.append("upgrades: contextual price should be hidden before selecting a power")
+	if context_price_coin.texture == null:
+		failures.append("upgrades: contextual price is missing lucidity coin icon")
+	var back_button := scene.get_node("CanvasLayer/UI_Container/BackButton") as Button
+	_check_start_menu_button_style(back_button, Assets.START_MENU_BUTTON_PINK,
+		"upgrades: RETURN TO BAR", failures)
+	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
+	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
+		failures.append("upgrades: power name box is missing its cyan neon contour")
+	var description_style := description.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if description_style == null or not description_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
+		failures.append("upgrades: description bubble is missing its pink neon contour")
+	if back_button.z_index <= description.z_index:
+		failures.append("upgrades: back button should render above description bubble")
+	scene._activate_memory()
+	if not scene.get_node("upgrade_scene_memory_brain_overlay").visible:
+		failures.append("upgrades: memory activation did not reveal memory overlay")
+	if scene.get_node("upgrades_scene_eye_brain_overlay").visible:
+		failures.append("upgrades: memory activation revealed eye overlay")
+	if not memory_prev.visible or not memory_next.visible:
+		failures.append("upgrades: memory nav buttons did not appear after activating the memory terminal")
+	if not context_buy.visible:
+		failures.append("upgrades: contextual buy button did not appear for the memory terminal's first power")
+	await process_frame
+	if power_name_label.text != "Lock":
+		failures.append("upgrades: memory carousel did not open on the Lock power")
+	if context_buy.text != "BUY" and context_buy.text != "OWNED":
+		failures.append("upgrades: contextual buy button includes price text")
+	if context_buy.alignment != HORIZONTAL_ALIGNMENT_CENTER or context_buy.size.x < 22.0:
+		failures.append("upgrades: contextual buy button text is not centered with enough width")
+	if not context_price.visible:
+		failures.append("upgrades: contextual price group did not appear for the memory carousel's first power")
+	if context_price.position.x <= power_name_label.position.x:
+		failures.append("upgrades: contextual price group is not aligned to the right of the power name")
+	scene._memory_next()
+	await process_frame
+	if power_name_label.text != "Rewards+":
+		failures.append("upgrades: reward amp did not show the shortened power name")
+	if price_label.text != "30":
+		failures.append("upgrades: reward amp tier I price is not shown in PowerNameBox")
+	if not description_label.text.contains("[color=#183A8C]tier I[/color]"):
+		failures.append("upgrades: reward amp tier I description is not blue BBCode")
+	scene._build_reward_amp_picker("corr_reward_amp_1")
+	var reward_picker := scene._reward_amp_picker as Control
+	_check_symbol_picker_panel_63(reward_picker, 5, true, "issue63: Reward Amp", failures, false)
+	if reward_picker != null:
+		if reward_picker.find_child("SymbolButtonBrain", true, false) == null:
+			failures.append("issue63: Reward Amp picker should include brain")
+		if reward_picker.find_child("SymbolButtonFlatline", true, false) != null:
+			failures.append("issue63: Reward Amp picker should not include flatline")
+		if reward_picker.find_child("TitleLabel", true, false) != null \
+			or reward_picker.find_child("CancelButton", true, false) != null:
+			failures.append("issue63: Reward Amp picker still shows title/cross chrome")
+	if reward_picker != null:
+		var outside_reward_tap := InputEventMouseButton.new()
+		outside_reward_tap.button_index = MOUSE_BUTTON_LEFT
+		outside_reward_tap.pressed = true
+		scene._on_reward_amp_picker_input(outside_reward_tap)
+		await process_frame
+		if scene._reward_amp_picker == null or String(scene._pending_reward_amp_upgrade_id) == "":
+			failures.append("issue63: Reward Amp picker can be dismissed outside the mandatory choice")
+		# Test cleanup is internal scene teardown, not a player-facing cancel path.
+		scene._pending_reward_amp_upgrade_id = ""
+		scene._close_reward_amp_picker()
+	# Simulate owning tier I/II so the "reward_amp" carousel slot resolves to the
+	# next unpurchased tier, mirroring the old row's price/description swap.
+	meta_store.ownedPermanents.append("corr_reward_amp_1")
+	scene._refresh_all()
+	if price_label.text != "55":
+		failures.append("upgrades: reward amp tier II price should be 55")
+	if not description_label.text.contains("[color=#FBBF24]tier II[/color]"):
+		failures.append("upgrades: reward amp tier II description is not orange BBCode")
+	meta_store.ownedPermanents.append("corr_reward_amp_2")
+	scene._refresh_all()
+	if price_label.text != "90":
+		failures.append("upgrades: reward amp tier III price should be 90")
+	if not description_label.text.contains("[color=#D62828]tier III[/color]"):
+		failures.append("upgrades: reward amp tier III description is not red BBCode")
+	meta_store.ownedPermanents.append("corr_reward_amp_3")
+	scene._refresh_all()
+	scene._memory_next()
+	if power_name_label.text != "Saving":
+		failures.append("upgrades: memory carousel did not advance to the Smart Save power")
+	if price_label.text != "30":
+		failures.append("upgrades: Smart Save price should be 30")
+	scene._memory_next()
+	if power_name_label.text != "???":
+		failures.append("upgrades: memory carousel did not reach the locked/future slot")
+	if context_buy.visible:
+		failures.append("upgrades: contextual buy button should be hidden on the locked/future slot")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should stay visible on the memory locked/future slot")
+	scene._memory_next()
+	if power_name_label.text != "Lock":
+		failures.append("upgrades: memory carousel did not wrap back to the first power")
+	brain.frame = 7
+	scene._sync_brain_overlay_frames()
+	if memory_overlay.frame != 7:
+		failures.append("upgrades: memory brain overlay is not synced to brain frame")
+	scene._activate_eye()
+	if memory_overlay.visible:
+		failures.append("upgrades: eye activation did not hide memory overlay")
+	if scene.get_node("upgrades_scene_memory_upgrades").frame != 0:
+		failures.append("upgrades: eye activation did not reset memory terminal frame")
+	if not eye_prev.visible or not eye_next.visible:
+		failures.append("upgrades: eye nav buttons did not appear after activating the eye terminal")
+	if not context_buy.visible:
+		failures.append("upgrades: contextual buy button did not appear for the eye terminal's first power")
+	if power_name_label.text != "Pattern Fabrication":
+		failures.append("upgrades: eye carousel did not open on Pattern Fabrication")
+	if price_label.text != "160":
+		failures.append("upgrades: Pattern Fabrication price should be 160")
+	scene._eye_next()
+	if power_name_label.text != "Book Upgrade":
+		failures.append("upgrades: eye carousel did not advance to the Book power")
+	if price_label.text != "120":
+		failures.append("upgrades: Learning price should be 120")
+	scene._eye_next()
+	await process_frame
+	if power_name_label.text != "Hallucination":
+		failures.append("upgrades: Hallucination did not show in the power name box")
+	var hallucination_cost := int(Upgrades.upgrade_map()["pos_enlightenment"]["cost"])
+	if price_label.text != str(hallucination_cost):
+		failures.append("upgrades: Hallucination price should be %d" % hallucination_cost)
+	if not description_label.text.contains("Visible pairs count as triples"):
+		failures.append("upgrades: Hallucination description does not describe the rework")
+	scene._eye_next()
+	if power_name_label.text != "???":
+		failures.append("upgrades: eye carousel did not reach the locked/future slot")
+	if context_buy.visible:
+		failures.append("upgrades: contextual buy button should be hidden on the eye locked/future slot")
+	if not buy_stele.visible:
+		failures.append("upgrades: buy stele should stay visible on the eye locked/future slot")
+	scene._eye_prev()
+	if power_name_label.text != "Hallucination":
+		failures.append("upgrades: eye carousel prev did not step back from the locked slot")
+	brain.frame = 11
+	scene._sync_brain_overlay_frames()
+	if eye_overlay.frame != 11:
+		failures.append("upgrades: eye brain overlay is not synced to brain frame")
+	scene._activate_memory()
+	if eye_overlay.visible:
+		failures.append("upgrades: memory activation did not hide eye overlay")
+	if eye_terminal.frame != 0:
+		failures.append("upgrades: memory activation did not reset eye terminal frame")
+	await create_timer(0.2).timeout
+	if brain.frame <= 0:
+		failures.append("upgrades: brain layer did not animate while scene was ticking")
+	# Issue #109: the closed computer terminals must read as buttons — the
+	# contour light blinks on a short cycle, hover/focus holds it on, a press
+	# dips it, and an open terminal (active UI, not a button) stays untinted.
+	scene._reset_eye_terminal()
+	scene._reset_memory_terminal()
+	scene._refresh_all()
+	for hitbox in [eye_hitbox, memory_hitbox]:
+		if hitbox.mouse_entered.get_connections().is_empty() \
+				or hitbox.focus_entered.get_connections().is_empty() \
+				or hitbox.button_down.get_connections().is_empty():
+			failures.append("issue109: %s has no hover/focus/press feedback wiring" % hitbox.name)
+	scene._terminal_blink_time = float(scene.TERMINAL_BLINK_TIME) * 0.5
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: closed eye terminal contour does not light mid-blink")
+	if memory_terminal.self_modulate != Color.WHITE:
+		failures.append("issue109: memory terminal should blink on the opposite half-cycle")
+	scene._terminal_blink_time = float(scene.TERMINAL_BLINK_MEMORY_OFFSET) \
+		+ float(scene.TERMINAL_BLINK_TIME) * 0.5
+	scene._step_terminal_glow(0.0)
+	if memory_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: closed memory terminal contour does not light mid-blink")
+	scene._set_terminal_hot("eye", true)
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r <= 1.0:
+		failures.append("issue109: hover/focus does not hold the eye terminal light on")
+	scene._set_terminal_pressed("eye", true)
+	scene._step_terminal_glow(0.0)
+	if eye_terminal.self_modulate.r >= 1.0:
+		failures.append("issue109: press does not dip the eye terminal light")
+	scene._set_terminal_pressed("eye", false)
+	scene._set_terminal_hot("eye", false)
+	scene._activate_memory()
+	scene._step_terminal_glow(0.0)
+	if memory_terminal.self_modulate != Color.WHITE:
+		failures.append("issue109: open memory terminal should render untinted")
+	meta_store.ownedPermanents = saved_permanents
+	scene.queue_free()
+
+
+## The TAP TAP TAP warning must complete fast (under ~0.75s) while each tap stays
+## on screen long enough to read.
+func _check_tap_duration_161(failures: Array) -> void:
+	var script := load("res://scenes/in_run_dealer_offer.gd") as GDScript
+	var consts := script.get_script_constant_map()
+	var taps := int(consts["TAP_COUNT"])
+	var per_tap := float(consts["TAP_ENTRY_TIME"]) + float(consts["TAP_EXIT_TIME"])
+	var total := taps * per_tap + (taps - 1) * float(consts["TAP_WAIT"]) \
+		+ float(consts["TAP_FINAL_WAIT"])
+	if total > 0.75:
+		failures.append("pr161: TAP warning too slow (%.2fs > 0.75s)" % total)
+	if per_tap < 0.08:
+		failures.append("pr161: TAP flash too brief to read (%.2fs per tap)" % per_tap)
