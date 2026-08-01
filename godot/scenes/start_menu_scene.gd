@@ -130,6 +130,7 @@ var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
 var _tutorial_button: Button = null
+var _play_tutorial_button: Button = null # issue #105: "SHOW ME" on the first-launch card
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -571,7 +572,7 @@ func _refresh_campaign_ui() -> void:
 	if _campaign_hint == null:
 		return
 	if Engine.is_editor_hint():
-		_campaign_hint.text = "EACH RETURN COSTS ONE"
+		_campaign_hint.text = "EACH RETURN COSTS YOU"
 		return
 	# The neuron meter no longer lives on the menu — CONTINUE opens the
 	# run-state modal, which carries it (see _show_continue_modal).
@@ -582,7 +583,7 @@ func _refresh_campaign_ui() -> void:
 	elif MetaStateStore.campaignNeuronsLeft <= 0:
 		_campaign_hint.text = "NO NEURONS. RETURNING ENDS THIS MIND."
 	else:
-		_campaign_hint.text = "EACH RETURN COSTS ONE. REACH WEALTH BEFORE ZERO."
+		_campaign_hint.text = "EACH RETURN COSTS YOU. REACH WEALTH BEFORE DEATH."
 	_refresh_start_button() # also lays out the art frame + meter
 
 func _connect_button(button: Button, cb: Callable) -> void:
@@ -623,6 +624,37 @@ func _configure_tutorial_modal() -> void:
 			_tutorial_button.add_theme_font_override("font", _font)
 		if not _tutorial_button.pressed.is_connected(_dismiss_tutorial):
 			_tutorial_button.pressed.connect(_dismiss_tutorial)
+	_configure_play_tutorial_button()
+
+## The played tutorial (issue #105) is offered from the card that already explains the
+## game, above the button that dismisses it: reading is the fallback, playing is the offer.
+## Built in code so the authored modal keeps its single authored button.
+func _configure_play_tutorial_button() -> void:
+	if _tutorial_button == null or _play_tutorial_button != null:
+		return
+	var content := _tutorial_button.get_parent() as Control
+	if content == null:
+		return
+	_play_tutorial_button = Button.new()
+	_play_tutorial_button.name = "PlayTutorialButton"
+	_play_tutorial_button.text = "SHOW ME"
+	_play_tutorial_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	_play_tutorial_button.focus_mode = Control.FOCUS_NONE
+	_play_tutorial_button.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		_play_tutorial_button.add_theme_font_override("font", _font)
+	_play_tutorial_button.pressed.connect(_on_play_tutorial_pressed)
+	content.add_child(_play_tutorial_button)
+	content.move_child(_play_tutorial_button, _tutorial_button.get_index())
+
+func _on_play_tutorial_pressed() -> void:
+	if Engine.is_editor_hint():
+		return
+	# The card is dismissed either way — whichever button was pressed, it has been read.
+	_dismiss_tutorial()
+	if not Tutorial.start():
+		# A held run is the only refusal; say so rather than swallowing the tap.
+		_show_continue_modal()
 
 func _maybe_show_tutorial() -> void:
 	if Engine.is_editor_hint() or _tutorial_modal == null:
@@ -705,7 +737,7 @@ func _show_continue_modal() -> void:
 	NeuronMeter.attach(panel, Vector2(w * 0.5, 46.0))
 	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "CURRENT COINS : %d" % _current_coins()
+	stats.text = tr("CURRENT COINS : %d") % _current_coins()
 	var close := _modal_close_button(w)
 	panel.add_child(close)
 

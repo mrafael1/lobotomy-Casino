@@ -43,6 +43,17 @@ const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
 const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
 const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
 const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
+## The white BODY of speech_bubble_normal.png inside the 100x38 bubble control, measured
+## off the art itself (test/debug_bubble_ink.gd reports it): x2..98, y3..31, with the tail
+## spurring out below. The text used to be centred in the top 30px instead, which put every
+## line two and a half pixels above the middle of the box actually drawn around it.
+const BUBBLE_BODY_RECT := Rect2(2.0, 3.0, 96.0, 28.0)
+## The two hint rows inside that body: 10px tall on a 12px pitch, so the pair spans 22px
+## and the 6px left over splits evenly above and below.
+const HINT_ROW_H := 10.0
+const HINT_ROW_Y := [3.0, 15.0]
+const SPEECH_FONT_SIZE := 6
+const HINT_FONT_SIZE := 8
 ## Purple corrupted-name colour, shared with the dealer/upgrade rule (issue #33/#7).
 const CORRUPT_NAME_COLOR := Color(0.66, 0.33, 0.86)
 # In-run pool only (InRunItems.LIST). Pre-run cons_* hints live in
@@ -340,10 +351,12 @@ func _build_base() -> void:
 	_bubble_graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_bubble_graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_speech_bubble.add_child(_bubble_graphic)
-	# Centre the text in the bubble BODY: full width, and the top ~30px (the bottom ~8px
-	# is the tail, excluded) so it reads dead centre of the rounded box (issue #24
-	# follow-up). _make_label_on already vertical-centres.
-	_speech_label = _make_label_on(_speech_bubble, "I've got something for ya", Vector2(0.0, 0.0), Vector2(_speech_bubble.size.x, 30.0), 6, BUBBLE_TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+	# Centre the text in the bubble BODY — the white box the art actually draws, not the
+	# whole control (the tail spurs out below it). _make_label_on already vertical-centres.
+	_speech_label = _make_label_on(_speech_bubble, "I've got something for ya",
+		BUBBLE_BODY_RECT.position + Vector2(0.0, Assets.centered_text_nudge(SPEECH_FONT_SIZE)),
+		BUBBLE_BODY_RECT.size, SPEECH_FONT_SIZE, BUBBLE_TEXT_COLOR,
+		HORIZONTAL_ALIGNMENT_CENTER)
 	_ensure_speech_hint_layer()
 	_speech_bubble.visible = false
 
@@ -465,6 +478,9 @@ func _bind_authored_base() -> bool:
 		if _speech_label.text == "":
 			_speech_label.text = "I've got something for ya"
 		_speech_label.add_theme_color_override("font_color", BUBBLE_TEXT_COLOR)
+		_speech_label.position = BUBBLE_BODY_RECT.position + Vector2(
+			0.0, Assets.centered_text_nudge(SPEECH_FONT_SIZE))
+		_speech_label.size = BUBBLE_BODY_RECT.size
 		_ensure_speech_hint_layer()
 
 	if _look_text_button != null:
@@ -779,18 +795,21 @@ func _ensure_speech_hint_layer() -> void:
 	if _speech_hint_layer == null:
 		_speech_hint_layer = Control.new()
 		_speech_hint_layer.name = "HintLayer"
-		_speech_hint_layer.position = Vector2.ZERO
-		_speech_hint_layer.size = Vector2(_speech_bubble.size.x, 30.0)
 		_speech_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_speech_bubble.add_child(_speech_hint_layer)
+	# Set every time, not only on creation: the layer usually comes from the scene file,
+	# where it still carried the old full-bubble rect, and a geometry fix applied only to
+	# the fallback branch is a fix that never runs.
+	_speech_hint_layer.position = BUBBLE_BODY_RECT.position
+	_speech_hint_layer.size = BUBBLE_BODY_RECT.size
 	if _speech_name_hint == null:
-		_speech_name_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 1.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, BUBBLE_TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+		_speech_name_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 1.0), Vector2(_speech_bubble.size.x - 16.0, HINT_ROW_H), HINT_FONT_SIZE, BUBBLE_TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 		_speech_name_hint.name = "NameHint"
 	if _speech_pos_hint == null:
-		_speech_pos_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 12.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, TV_POSITIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+		_speech_pos_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 12.0), Vector2(_speech_bubble.size.x - 16.0, HINT_ROW_H), HINT_FONT_SIZE, TV_POSITIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 		_speech_pos_hint.name = "PositiveHint"
 	if _speech_neg_hint == null:
-		_speech_neg_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 23.0), Vector2(_speech_bubble.size.x - 16.0, 10.0), 8, TV_NEGATIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+		_speech_neg_hint = _make_label_on(_speech_hint_layer, "", Vector2(8.0, 23.0), Vector2(_speech_bubble.size.x - 16.0, HINT_ROW_H), HINT_FONT_SIZE, TV_NEGATIVE_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 		_speech_neg_hint.name = "NegativeHint"
 	var hint_labels: Array[Label] = [_speech_name_hint, _speech_pos_hint, _speech_neg_hint]
 	for label: Label in hint_labels:
@@ -804,8 +823,8 @@ func _ensure_speech_hint_layer() -> void:
 	_speech_name_hint.visible = false
 	_speech_pos_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_speech_neg_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_speech_pos_hint.position = Vector2(8.0, 4.0)
-	_speech_neg_hint.position = Vector2(8.0, 16.0)
+	_speech_pos_hint.position = Vector2(8.0, HINT_ROW_Y[0])
+	_speech_neg_hint.position = Vector2(8.0, HINT_ROW_Y[1])
 	_speech_pos_hint.add_theme_color_override("font_color", TV_POSITIVE_COLOR)
 	_speech_neg_hint.add_theme_color_override("font_color", TV_NEGATIVE_COLOR)
 	_speech_hint_layer.visible = false
@@ -832,11 +851,35 @@ func _set_speech_hints(item_id: String, backing_text := "Interested in one?") ->
 		hints = JOKER_ITEM_HINTS[item_id]
 	var inverted := INVERTED_HINT_ITEMS.has(item_id)
 	_speech_name_hint.visible = false
-	_speech_pos_hint.text = "+ %s" % String(hints["pos"])
-	_speech_neg_hint.text = "- %s" % String(hints["neg"])
-	_speech_pos_hint.position = Vector2(8.0, 16.0 if inverted else 4.0)
-	_speech_neg_hint.position = Vector2(8.0, 4.0 if inverted else 16.0)
+	# The hint itself is translated before the +/- goes on: the label auto-translates what
+	# it is given, and "+ EASY" as a whole is not a key — only "EASY" is.
+	_speech_pos_hint.text = "+ %s" % tr(String(hints["pos"]))
+	_speech_neg_hint.text = "- %s" % tr(String(hints["neg"]))
+	# The two lines share a left edge so the + and - prefixes stack, but that edge was a
+	# fixed 8px inset: a short pair of hints then sat against the left of the bubble with
+	# 40-odd px of empty white to its right. Centre the BLOCK instead — the prefixes still
+	# line up, and the pair now reads as centred in the bubble whatever its width.
+	var block_x := _hint_block_x()
+	var block_w := BUBBLE_BODY_RECT.size.x - block_x * 2.0
+	_speech_pos_hint.position = Vector2(block_x, HINT_ROW_Y[1] if inverted else HINT_ROW_Y[0])
+	_speech_neg_hint.position = Vector2(block_x, HINT_ROW_Y[0] if inverted else HINT_ROW_Y[1])
+	_speech_pos_hint.size = Vector2(block_w, HINT_ROW_H)
+	_speech_neg_hint.size = Vector2(block_w, HINT_ROW_H)
 	_speech_hint_layer.visible = true
+
+## Left edge that centres the wider of the two hint lines inside the bubble body. Rounded:
+## a fractional x knocks the pixel font off the grid and blurs it.
+func _hint_block_x() -> float:
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	# The labels already hold display text (translated by _set_speech_hints before the +/-
+	# went on), so measuring .text measures exactly what will be drawn.
+	var block_w := maxf(
+		font.get_string_size(_speech_pos_hint.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			HINT_FONT_SIZE).x,
+		font.get_string_size(_speech_neg_hint.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			HINT_FONT_SIZE).x)
+	# Relative to the hint layer, which already sits at the body's top-left corner.
+	return maxf(0.0, roundf((BUBBLE_BODY_RECT.size.x - block_w) * 0.5))
 
 func _item_name(id: String) -> String:
 	var imap := InRunItems.map()

@@ -843,7 +843,9 @@ func _is_corrupted_upgrade(upgrade_id: String) -> bool:
 
 func _set_description(text: String) -> void:
 	if _description_label != null:
-		_description_label.text = "[center]%s[/center]" % text
+		# tr() the description on its own: wrapped in bbcode it is no longer a key, and the
+		# label's own auto-translation only ever sees the wrapped string.
+		_description_label.text = "[center]%s[/center]" % tr(text)
 
 func _activate_eye() -> void:
 	_reset_memory_terminal()

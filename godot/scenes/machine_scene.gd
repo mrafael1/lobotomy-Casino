@@ -1039,6 +1039,83 @@ func _ready() -> void:
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
 	# waits for a quiet moment first — see _can_present_card_unlock.
 	_unlock_popup = UnlockCardPopup.attach_to(self, _can_present_card_unlock)
+	# Inert unless the played tutorial is running (issue #105). The autoload is not a
+	# @tool script, so it does not exist in an editor preview of this scene.
+	if not Engine.is_editor_hint():
+		Tutorial.attach(self, "machine")
+
+## Whether a control the tutorial wants to point at is really on screen yet (issue #105).
+## The dealer's offer hides the machine's own stash while he is in and it slides out over a
+## few frames after an item is taken, so the beat that says "tap the powder" would otherwise
+## open pointing at a stash that is not drawn.
+func tutorial_ready_for(id: String) -> bool:
+	match id:
+		"stash":
+			if _dealer_offer_popup != null:
+				return false
+			if _stash_icons.is_empty():
+				return false
+			var icon: Control = _stash_icons[0] as Control
+			return icon != null and is_instance_valid(icon) and icon.visible
+	return true
+
+## A descendant's position in this scene's own space, whatever it is nested under. The
+## tutorial overlay is a child of this scene, so this is the space its rects live in — and
+## an authored control can sit several nodes deep, where its own position means nothing on
+## its own. Subtracting this scene's origin also keeps the answer right mid-shake, since the
+## machine tweens its own position for the compulsive/cocktail wobbles.
+func _canvas_position_of(node: Control) -> Vector2:
+	return node.global_position - global_position
+
+## True while something the tutorial does not script owns the screen (issue #105) — here,
+## a card unlocked mid-run, which takes the whole machine until it is acknowledged. See
+## dealer_scene.tutorial_blocking_modal.
+func tutorial_blocking_modal() -> bool:
+	return _unlock_popup != null and is_instance_valid(_unlock_popup) and _unlock_popup.visible
+
+## The controls the tutorial rings and hands through (issue #105). Only this scene knows
+## where its own things are, so the director asks rather than reaching in. An id it does
+## not know answers with an empty rect, which the overlay reads as "mask everything".
+func tutorial_anchor(id: String) -> Rect2:
+	match id:
+		"spin_lever":
+			return Rect2(LEVER_HIT["left"], LEVER_HIT["top"],
+				LEVER_HIT["width"], LEVER_HIT["height"])
+		"health":
+			# The spins tube down the cabinet's left flank. Measured off health_bar.png's
+			# tallest frame (x3..19, y44..120), not eyeballed: a highlight that misses the
+			# thing it is naming is worse than no highlight.
+			return Rect2(2.0, 43.0, 18.0, 78.0)
+		"wealth":
+			return Rect2(39.0, 242.0, 97.0, 37.0) # the wealth plate
+		"target_bar":
+			# The bar itself (target_bar.png: x41..111, y94..99) plus the goal number above
+			# it (target_goals.png: y86..91) — the pair is what "the target" means.
+			return Rect2(40.0, 84.0, 72.0, 17.0)
+		"dealer_countdown":
+			return Rect2(DEALER_ICON_POS, DEALER_ICON_SIZE)
+		"reels":
+			return Rect2(REEL_HOLES[0]["left"], REEL_WINDOW["top"],
+				REEL_HOLES[2]["left"] + REEL_HOLES[2]["width"] - REEL_HOLES[0]["left"],
+				REEL_WINDOW["height"])
+		"stash":
+			# The LIVE slot node, not the shared computed layout: this scene's stash slots
+			# are authored in the .tscn, so Assets.stash_slot_pos describes where they would
+			# have gone rather than where they are — which put the ring in the middle of the
+			# stash instead of on the first slot the beat asks the player to tap.
+			if not _stash_icons.is_empty():
+				var icon: Control = _stash_icons[0] as Control
+				if icon != null and is_instance_valid(icon):
+					return Rect2(_canvas_position_of(icon), icon.size).grow(1.0)
+			var slot := Assets.stash_slot_pos(0, max_consumable_slots)
+			return Rect2(slot - Vector2.ONE,
+				Vector2.ONE * (Assets.STASH_ICON_SIZE + 2.0))
+		"dealer_offer", "screen":
+			# Whatever has taken the whole canvas — the dealer walking in, the payout
+			# receipt, the flatline screen. Nothing is masked and nothing is ringed: the
+			# screen IS the subject, and its own buttons carry on with the game.
+			return Rect2(0.0, 0.0, SRC_W, SRC_H)
+	return Rect2()
 
 func _apply_balance_exports() -> void:
 	if Engine.is_editor_hint():
@@ -1949,8 +2026,12 @@ const INFO_BUBBLE_BG := Color(0.045, 0.035, 0.075, 0.97)
 ## `max_width` (0 = unbounded) wraps long text rather than letting the bubble run off the
 ## panel it belongs to. The returned Control carries the finished size, so the caller can
 ## place it against its own edges.
-func _make_info_bubble(node_name: String, text: String, border: Color,
+func _make_info_bubble(node_name: String, source: String, border: Color,
 		font_color: Color, max_width := 0.0) -> Control:
+	# Translated once, up front, with the label's own auto-translation switched off below.
+	# The panel HUGS the text it measures, so measuring English while Godot drew French
+	# would size every bubble for the wrong language. Measure what you draw.
+	var text := tr(source)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var lines := text.split("\n")
 	var text_w := 0.0
@@ -1959,15 +2040,16 @@ func _make_info_bubble(node_name: String, text: String, border: Color,
 			line, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_BUBBLE_FONT_SIZE).x)
 	var rows := lines.size()
 	if max_width > 0.0 and text_w + INFO_BUBBLE_PAD.x > max_width:
-		# Wrapping splits lines the measurement above cannot see; count the extra rows the
-		# long ones will need so the panel still ends up tall enough for all of them.
+		# Wrapping splits lines the measurement above cannot see, so ask the font to do the
+		# wrap and report what it produced. Estimating the rows as ceil(width / limit) both
+		# miscounted (word wrapping breaks early, it does not fill every row) and left the
+		# panel pinned to the full max_width — which is why a wrapped description used to
+		# sit in a box with more slack on one side than the other.
 		var inner := max_width - INFO_BUBBLE_PAD.x
-		rows = 0
-		for line in lines:
-			var w := font.get_string_size(
-				line, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_BUBBLE_FONT_SIZE).x
-			rows += maxi(1, ceili(w / maxf(1.0, inner)))
-		text_w = inner
+		var wrapped := font.get_multiline_string_size(
+			text, HORIZONTAL_ALIGNMENT_LEFT, inner, INFO_BUBBLE_FONT_SIZE)
+		text_w = minf(inner, wrapped.x)
+		rows = maxi(1, roundi(wrapped.y / maxf(1.0, font.get_height(INFO_BUBBLE_FONT_SIZE))))
 	# A row is the font's own line box PLUS the label's line spacing, which is pinned
 	# below so the two always agree. Sizing on the nominal 8px instead left the last line
 	# of a tall bubble (the joker suit lists seven) hanging out under its own border.
@@ -1992,9 +2074,23 @@ func _make_info_bubble(node_name: String, text: String, border: Color,
 	popup.add_child(bg)
 	var label := Label.new()
 	label.name = "Text"
-	label.position = INFO_BUBBLE_PAD * 0.5
-	label.size = popup_size - INFO_BUBBLE_PAD
+	# ANCHORED to the panel rather than given a size, and that is not a style choice: a
+	# Control clamps an assigned size up to its minimum, and a Label built outside the
+	# scene tree measures its minimum with the DEFAULT 16px theme font (theme overrides
+	# only reach the metric cache once the node is in a tree). A one-row bubble asked for a
+	# 10px-tall label, got a 19px one, and centred its line below its own border. Anchors
+	# are recomputed from the parent whenever the metrics settle, so the rect self-corrects
+	# the moment the popup is added to the scene.
+	label.anchor_right = 1.0
+	label.anchor_bottom = 1.0
+	var nudge := Assets.centered_text_nudge(INFO_BUBBLE_FONT_SIZE)
+	label.offset_left = INFO_BUBBLE_PAD.x * 0.5
+	label.offset_top = INFO_BUBBLE_PAD.y * 0.5 + nudge
+	label.offset_right = -INFO_BUBBLE_PAD.x * 0.5
+	label.offset_bottom = -INFO_BUBBLE_PAD.y * 0.5 + nudge
 	label.text = text
+	# Already translated above; translating again would look up a French key.
+	label.auto_translate_mode = Control.AUTO_TRANSLATE_MODE_DISABLED
 	if max_width > 0.0:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2037,11 +2133,15 @@ func _item_info_popup_text(boost: Dictionary) -> String:
 	# An item the joker run has turned around describes what it is doing NOW (issue #111).
 	if RunStateStore.augmented_joker_items_active() and boost.has("jokerDesc"):
 		desc = String(boost["jokerDesc"])
+	# Translated part by part: the bubble auto-translates the whole string it is handed, and
+	# "COCKTAIL\n+1 SPIN ON EVERY WIN" glued together is not a key.
+	title = tr(title)
+	desc = tr(desc) if desc != "" else desc
 	var symbol_field := String(boost.get("symbolField", ""))
 	if symbol_field != "":
 		var symbol_id := String(RunStateStore.get(symbol_field))
 		if symbol_id != "":
-			desc = "%s: %s" % [symbol_id.to_upper(), desc]
+			desc = "%s: %s" % [tr(symbol_id.to_upper()), desc]
 	if desc == "":
 		return title
 	return "%s\n%s" % [title, desc]
@@ -6133,11 +6233,19 @@ func _show_score_table() -> void:
 	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
 	var close_label := _score_label(close, "BACK", Vector2.ZERO, 9,
 		NEON_GOLD, close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
-	close_label.size = close.size
 	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# The pixel font's line box leaves its slack above the glyph, so a pure
-	# vertical center reads low in the 14px band — pull the label up to comp.
-	close_label.position.y = -4.0
+	# ANCHORED to the button rather than given a size. `close` is not in the scene tree at
+	# this point, and a Label outside the tree measures its own minimum with the DEFAULT
+	# 16px theme font — so the 56x14 assigned here was silently clamped up to 63x23, which
+	# centred BACK on a box wider than its own plate and put it 3px right. The old -4px lift
+	# was compensating for the height half of that same clamp. Anchors are recomputed from
+	# the parent once the metrics settle, so the rect fixes itself when the button lands.
+	close_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var close_nudge := Assets.centered_text_nudge(9)
+	close_label.offset_left = 0.0
+	close_label.offset_top = close_nudge
+	close_label.offset_right = 0.0
+	close_label.offset_bottom = close_nudge
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Assets.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
 	# Pressed squash: shrink around the centre while held, spring back on release
@@ -6313,7 +6421,13 @@ func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	_score_info_popup.add_child(bg)
 	var label := Label.new()
 	label.text = text
-	label.size = popup_size
+	# Inset from the TOP by twice the cap-height nudge: that moves the rect's centre — and
+	# so the glyphs — down by one without letting the label hang past the bubble it belongs
+	# to. Godot centres the font's ascent+descent box, and this percentage never uses the
+	# descent, so it renders a pixel high without this.
+	var nudge := Assets.centered_text_nudge(5)
+	label.position = Vector2(0.0, nudge * 2.0)
+	label.size = Vector2(popup_size.x, popup_size.y - nudge * 2.0)
 	label.custom_minimum_size = Vector2.ZERO
 	label.clip_text = true
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6326,7 +6440,9 @@ func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	bg.add_child(label)
-	label.set_deferred("size", popup_size)
+	# Re-asserted once the label is in the tree: out of the tree a Label measures its own
+	# minimum with the default 16px theme font and the size above gets clamped up to it.
+	label.set_deferred("size", Vector2(popup_size.x, popup_size.y - nudge * 2.0))
 	# Right of the symbol box, vertically centered on the row.
 	var pos := button.position + Vector2(button.size.x + 3.0,
 		button.size.y * 0.5 - popup_size.y * 0.5)
@@ -6379,6 +6495,9 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	_score_info_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Size from the actual font: Label.get_minimum_size() before the popup is in
 	# the tree measures with the fallback theme font and comes out huge.
+	# Already display text (_triple_effect_text translates before it substitutes its
+	# counts). It is measured below to size the panel, so what is measured and what the
+	# per-line labels draw have to be this same string.
 	var text := _triple_effect_text(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
@@ -6391,9 +6510,15 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 		# Snap to whole pixels: a fractional offset knocks the pixel font off the
 		# grid and blurs the glyphs.
 		var line_x := roundf(4.0 + (text_size.x - line_w) * 0.5)
-		var line_y := 3.0 + float(li) * 10.0
+		# +nudge: these lines are top-aligned, so the gap the font's ascent leaves above the
+		# caps is not matched at the bottom, and the blurb reads a pixel high without it.
+		var line_y := 3.0 + Assets.centered_text_nudge(5) + float(li) * 10.0
 		for seg in _info_line_segments(symbol_id, lines[li]):
-			_score_label(_score_info_popup, seg[0], Vector2(line_x, line_y), 5, seg[1])
+			# Segments are FRAGMENTS of an already-translated line; letting each one
+			# translate itself again would look up half a sentence as a key.
+			var seg_label := _score_label(
+				_score_info_popup, seg[0], Vector2(line_x, line_y), 5, seg[1])
+			seg_label.auto_translate_mode = Control.AUTO_TRANSLATE_MODE_DISABLED
 			line_x = roundf(line_x + font.get_string_size(seg[0],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
 	# Rounded box: dark panel with a thin gold outline and soft corners.
@@ -6451,20 +6576,23 @@ func _reward_bonus_text(bonus: float) -> String:
 
 ## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
 ## Dynamic counts pull from the reaction exports so the copy never drifts.
+## Returns DISPLAY text: each line is translated before its counts go in, because the
+## finished sentence ("JACKPOT +1 SPIN") is not a key any table can hold. Callers must not
+## translate the result again.
 func _triple_effect_text(symbol_id: String) -> String:
 	match symbol_id:
 		"brain":
-			return "JACKPOT +%d SPIN" % triple_brain_free_spins
+			return tr("JACKPOT +%d SPIN") % triple_brain_free_spins
 		"eye":
-			return "REVEALS A REEL"
+			return tr("REVEALS A REEL")
 		"pill":
-			return "ALL POWERS BACK"
+			return tr("ALL POWERS BACK")
 		"syringe":
-			return "LAST ITEM BACK"
+			return tr("LAST ITEM BACK")
 		"vial":
-			return "+%d SPINS" % triple_vial_free_spins
+			return tr("+%d SPINS") % triple_vial_free_spins
 		"flatline":
-			return "CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN" % [
+			return tr("CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN") % [
 				RunStateStore.flatlineResultCount, fatal_flatline_count]
 	return ""
 
@@ -7767,7 +7895,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		if _font != null:
 			wallet.add_theme_font_override("font", _font)
 		wallet.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-		wallet.text = "CREDITS %d" % MetaStateStore.lucidityWallet
+		wallet.text = tr("CREDITS %d") % MetaStateStore.lucidityWallet
 		_overlay.add_child(wallet)
 
 	var to_menu := Button.new()
@@ -8074,7 +8202,7 @@ func _update_flatline_countdown_labels() -> void:
 		_flatline_score_label.text = str(_flatline_display)
 	if _flatline_lost_label != null:
 		var lost := _flatline_total - _flatline_display
-		_flatline_lost_label.text = "-%d lost" % lost if lost > 0 else ""
+		_flatline_lost_label.text = tr("-%d lost") % lost if lost > 0 else ""
 
 func _stop_flatline_countdown() -> void:
 	_flatline_countdown_active = false
@@ -8166,20 +8294,24 @@ func _build_augmented_badge() -> void:
 
 func _augmented_restrictions_text() -> String:
 	var lines: Array[String] = []
+	# Every line is tr()'d BEFORE its numbers go in: the popup's own auto-translation only
+	# sees the finished sentence, and "PRICES +50%" is not a key any table can hold. The
+	# plural is two whole keys rather than an appended "S" for the same reason — French
+	# does not pluralise by bolting a letter onto the end of the noun.
 	if RunStateStore.augmented_modifier_active(1):
-		lines.append("SPINS COST 2 HEALTH")
+		lines.append(tr("SPINS COST 2 HEALTH"))
 	if RunStateStore.augmented_modifier_active(2):
-		lines.append("POWER RESTORES EVERY 2 SPINS")
+		lines.append(tr("POWER RESTORES EVERY 2 SPINS"))
 	if RunStateStore.augmented_modifier_active(3):
-		lines.append("MAX 2 POWERS PER SPIN")
-		lines.append("NO AUGMENT AT THE 2ND PACTE")
+		lines.append(tr("MAX 2 POWERS PER SPIN"))
+		lines.append(tr("NO AUGMENT AT THE 2ND PACTE"))
 	if RunStateStore.augmented_modifier_active(4):
-		lines.append("PRICES +%d%%" % roundi(
+		lines.append(tr("PRICES +%d%%") % roundi(
 			(RunStateStore.AUGMENTED_CLUB_PRICE_MULTIPLIER - 1.0) * 100.0))
-		lines.append("DEALER OFFERS %d ITEM%s FEWER" % [
-			RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY,
-			"" if RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY == 1 else "S"])
-		lines.append("HOUSE ANGER TAX +%d%%" % roundi(
+		var penalty := int(RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY)
+		lines.append(tr("DEALER OFFERS %d ITEM FEWER" if penalty == 1
+			else "DEALER OFFERS %d ITEMS FEWER") % penalty)
+		lines.append(tr("HOUSE ANGER TAX +%d%%") % roundi(
 			EconomyConst.OVERFLOW_ANGER_RATE * 100.0))
 	return "\n".join(lines)
 

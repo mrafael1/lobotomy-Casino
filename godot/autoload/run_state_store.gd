@@ -200,6 +200,14 @@ var lastPotionEffect: Variant = null
 var eyeRevealReel := -1
 var eyeRevealSymbol := ""
 
+# Tutorial (issue #105): the exact reels the next spin must land on, as a symbol per reel
+# (["eye", "eye", "vial"]), or null when nothing is scripted. The tutorial is a showcase
+# and its beats have to land the result they are explaining — a real draw that misses
+# would leave the coaching talking about something that did not happen. It rides
+# evaluate()'s existing forceReelSymbols gate like the eye reveal does, so the scorer and
+# the pinned vectors are untouched; nothing but Tutorial ever sets it.
+var scriptedReels: Variant = null
+
 # Dealer odds table (issue #36): additive weight overrides bought with a token
 # budget at the post-run "what's next?" phase. Upgrades are PERMANENT — staged
 # purchases commit into MetaStateStore.oddsUpgrades when the phase is finalized,
@@ -294,6 +302,13 @@ func _forced_reel_symbols(seed_val: int) -> Variant:
 	var eye: Variant = _forced_eye_reveal_symbols()
 	if eye != null:
 		forced.merge(eye as Dictionary)
+	# A scripted tutorial spin outranks everything below: the beat is explaining THIS
+	# result, so it lands whole rather than being edged out by a reveal or a pill.
+	if scriptedReels is Array:
+		var scripted := scriptedReels as Array
+		for i in mini(3, scripted.size()):
+			forced[i] = String(scripted[i])
+		return forced
 	if jokerFlatlineSpins > 0:
 		var free_reels: Array = []
 		for i in 3:
@@ -475,6 +490,26 @@ func _commit() -> void:
 
 # ── run persistence ──────────────────────────────────────────────────────────────
 
+## Tutorial sandbox (issue #105): while this is set the store still behaves exactly as it
+## always does — it just never reaches the disk. The tutorial plays on the real machine
+## with scripted state, and none of that may land on the player's save; quitting halfway
+## through must leave the campaign they actually have. Tutorial owns setting and clearing
+## it, and restores the state it snapshotted on the way out.
+var sandboxed := false
+
+## What the augment deck must not deal. Always the cards already taken this run; during the
+## tutorial (issue #105) also the reward-amplification tier, because taking one opens a
+## symbol picker in the middle of a scripted beat and asks a two-minute-old player to pick
+## a symbol to boost — a decision they have nothing to base an answer on yet.
+func _augment_draw_exclusions() -> Array:
+	if not sandboxed:
+		return selectedAugmentCardIds
+	var excluded: Array = selectedAugmentCardIds.duplicate()
+	for card_id in PacteCards.reward_amp_ids():
+		if not excluded.has(card_id):
+			excluded.append(card_id)
+	return excluded
+
 ## Every non-exported script variable of the store IS the run state; exports are
 ## balance tunables and stay out of the save.
 func _run_state_properties() -> Array[String]:
@@ -487,6 +522,8 @@ func _run_state_properties() -> Array[String]:
 
 func _save_run_state() -> void:
 	if Engine.is_editor_hint():
+		return
+	if sandboxed:
 		return
 	if not has_resume_state():
 		# No live or resumable post-run session: a stale file (or a stale backup of
@@ -1088,6 +1125,7 @@ func spin(compulsive := false) -> Variant:
 	# 3x eye (issue #53): the revealed reel was committed into this spin — consume it.
 	eyeRevealReel = -1
 	eyeRevealSymbol = ""
+	scriptedReels = null # one scripted spin per beat (issue #105)
 	banBrainSpins = maxi(0, banBrainSpins - 1)
 	potionSpins = maxi(0, potionSpins - 1)
 	# Keep the pending triple until the flatline spin is spent, then consume it.
@@ -1228,6 +1266,7 @@ func reset_run_state() -> void:
 	pendingBlurSpins = 0
 	eyeRevealReel = -1
 	eyeRevealSymbol = ""
+	scriptedReels = null
 	banBrainSpins = 0
 	potionSpins = 0
 	forceFlatlineSpins = 0
@@ -1515,6 +1554,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	pendingBlurSpins = 0
 	eyeRevealReel = -1
 	eyeRevealSymbol = ""
+	scriptedReels = null
 	banBrainSpins = 0
 	potionSpins = 0
 	forceFlatlineSpins = 0
@@ -1542,7 +1582,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	pendingPowerRestores = []
 	pacteSeed = seed_override if seed_override >= 0 else _seed(PACTE_INITIAL_DRAW_SEED)
 	pacteOfferAugmentIds = PacteCards.draw("augment", pacteSeed,
-		MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
+		MetaStateStore.unlocked_augment_cards(), _augment_draw_exclusions(), 3)
 	pacteOfferPowerIds = PacteCards.draw("power", pacteSeed ^ 0x9e3779b9,
 		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
 	pacteSelectedAugmentId = ""
@@ -1807,7 +1847,7 @@ func open_threshold_pacte() -> bool:
 	var suppressed_augment: Array[String] = []
 	pacteOfferAugmentIds = suppressed_augment if augmented_pacte_augment_suppressed() \
 		else PacteCards.draw("augment", draw_seed,
-			MetaStateStore.unlocked_augment_cards(), selectedAugmentCardIds, 3)
+			MetaStateStore.unlocked_augment_cards(), _augment_draw_exclusions(), 3)
 	pacteOfferPowerIds = PacteCards.draw("power", draw_seed ^ 0x9e3779b9,
 		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
 	pacteSelectedAugmentId = ""

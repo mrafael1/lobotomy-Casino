@@ -85,15 +85,15 @@ func _build() -> void:
 	_value(Vector2(75.0, 180.0), 8, WEALTH_COLOR,
 		"yes" if reached.has("wealth") else "no")
 	_value(Vector2(48.0, 189), 7, WEALTH_COLOR,
-		"time  %s" % _fmt_playtime(h.get("wealthEndingPlaytimeMs", null)))
+		tr("time  %s") % _fmt_playtime(h.get("wealthEndingPlaytimeMs", null)))
 	_value(Vector2(48.0, 197), 7, WEALTH_COLOR,
-		"date  %s" % _fmt_date(h.get("wealthEndingReachedAt", null)))
+		tr("date  %s") % _fmt_date(h.get("wealthEndingReachedAt", null)))
 	_value(Vector2(75.0, 204.0), 8, SECRET_COLOR,
 		"yes" if reached.has("exit") else "no")
 	_value(Vector2(48.0, 214), 7, SECRET_COLOR,
-		"time  %s" % _fmt_playtime(h.get("exitEndingPlaytimeMs", null)))
+		tr("time  %s") % _fmt_playtime(h.get("exitEndingPlaytimeMs", null)))
 	_value(Vector2(48.0, 222), 7, SECRET_COLOR,
-		"date  %s" % _fmt_date(h.get("exitEndingReachedAt", null)))
+		tr("date  %s") % _fmt_date(h.get("exitEndingReachedAt", null)))
 
 	# The cabinet button bar's X plate is decorative; the explicit neon button
 	# below the cabinet is the only close action.

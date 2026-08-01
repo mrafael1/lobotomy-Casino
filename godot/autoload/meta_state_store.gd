@@ -30,6 +30,15 @@ var wealthEndingReached: bool = false
 # ending is reached; unlike wealthEndingReached it survives new campaigns.
 var augmentedRunUnlocked: bool = false
 var is_first_launch: bool = true
+# Tutorial (issue #105). Separate from is_first_launch, which is cleared by merely READING
+# the how-to-play card: this records that the played tutorial was actually seen through, so
+# the first-launch prompt can stop offering it while the Settings replay stays available.
+var tutorialCompleted: bool = false
+## Display language. "" means the player has never chosen one, so the game follows the
+## device; once they pick from OPTIONS this holds their choice and the device stops
+## mattering. Kept as a plain locale code so an unknown value degrades to English rather
+## than to a broken screen.
+var locale: String = ""
 # Permanent dealer-odds upgrades (symbol -> level). Bought at the post-run odds
 # phase, applied to every run, and only reset with a fresh campaign.
 var oddsUpgrades: Dictionary = {}
@@ -117,6 +126,8 @@ func _as_dict() -> Dictionary:
 		"wealthEndingReached": wealthEndingReached,
 		"augmentedRunUnlocked": augmentedRunUnlocked,
 		"is_first_launch": is_first_launch,
+		"tutorialCompleted": tutorialCompleted,
+		"locale": locale,
 		"oddsUpgrades": oddsUpgrades.duplicate(true),
 		"oddsTokensBanked": oddsTokensBanked,
 		"rewardAmpSymbol": rewardAmpSymbol,
@@ -152,6 +163,10 @@ func _apply(meta: Dictionary) -> void:
 	augmentedRunUnlocked = bool(meta.get("augmentedRunUnlocked",
 		wealthEndingReached or endingsReached.has("wealth")))
 	is_first_launch = bool(meta.get("is_first_launch", true))
+	# A save from before the played tutorial existed belongs to someone already past
+	# needing it: treat a launched game as having had its introduction.
+	tutorialCompleted = bool(meta.get("tutorialCompleted", not is_first_launch))
+	locale = String(meta.get("locale", ""))
 	oddsUpgrades = (meta.get("oddsUpgrades", {}) as Dictionary).duplicate(true)
 	oddsTokensBanked = maxi(0, int(meta.get("oddsTokensBanked", 0)))
 	rewardAmpSymbol = String(meta.get("rewardAmpSymbol", ""))
@@ -314,6 +329,14 @@ func record_best_card_unlock_progress(metric: String, value: int, save_immediate
 	return _set_card_unlock_progress(metric, value, save_immediately)
 
 func _set_card_unlock_progress(metric: String, value: int, save_immediately: bool) -> Array[String]:
+	# The tutorial (issue #105) plays on the real machine, so it lands real spins, real wins
+	# and real consumable uses — but none of it is the player's play, and none of it may
+	# count. Nothing accrues and nothing unlocks: not just because the progress would be
+	# unearned, but because an unlock takes the whole screen to celebrate itself and would
+	# do it on top of a beat that is mid-sentence.
+	if sandboxed:
+		var none: Array[String] = []
+		return none
 	cardUnlockProgress = cardUnlockProgress.duplicate(true)
 	cardUnlockProgress[metric] = value
 	var unlocked := _evaluate_card_unlocks(false)
@@ -754,9 +777,44 @@ func mark_tutorial_seen(save_immediately := true) -> void:
 	if save_immediately:
 		save_state()
 
+## The played tutorial (issue #105) was seen through — or deliberately skipped, which is
+## the same answer to "should we offer it again". The Settings replay ignores this.
+func mark_tutorial_completed(save_immediately := true) -> void:
+	if tutorialCompleted:
+		return
+	tutorialCompleted = true
+	meta_changed.emit()
+	if save_immediately:
+		save_state()
+
 # ── persistence (Step 4) ──────────────────────────────────────────────────────────
 
+## Tutorial sandbox (issue #105): set while the played tutorial is running, so its scripted
+## campaign never reaches the disk. See RunStateStore.sandboxed — Tutorial owns both.
+var sandboxed := false
+
+## Returns every field to the state a fresh install starts from, in memory only —
+## nothing is written to or removed from disk, so a caller that also wants the save
+## gone removes SAVE_PATH itself (SaveIO.remove takes the backup with it).
+##
+## `_apply({})` is reused deliberately instead of writing a second list of defaults:
+## every key it reads already documents its own fresh-install value, so a field added
+## there is reset here for free and the two can never disagree about what "default"
+## means. Only the handful of fields _apply does not own are listed below.
+##
+## RunStateStore.reset_run_state() is the run-scoped counterpart; the smoke suite
+## calls both to stop one check inheriting the campaign another one left behind.
+func reset_to_defaults() -> void:
+	_apply({})
+	max_consumable_slots = Consumables.MAX_CONSUMABLE_SLOTS
+	campaign_starting_neurons = EconomyConst.CAMPAIGN_STARTING_NEURONS
+	_campaign_neuron_spend_feedback_pending = false
+	_playtime_accum_ms = 0.0
+	sandboxed = false
+
 func save_state() -> void:
+	if sandboxed:
+		return
 	_flush_playtime()
 	SaveIO.write_text(SAVE_PATH, JSON.stringify(_as_dict()))
 

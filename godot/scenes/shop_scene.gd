@@ -241,7 +241,7 @@ func _refresh() -> void:
 	var wallet := 0 if Engine.is_editor_hint() else MetaStateStore.lucidityWallet
 	var history: Dictionary = {} if Engine.is_editor_hint() else MetaStateStore.history
 	var reached: Array = [] if Engine.is_editor_hint() else MetaStateStore.endingsReached
-	_header.text = "CREDITS %d   RUNS %d   BEST %d" % [
+	_header.text = tr("CREDITS %d   RUNS %d   BEST %d") % [
 		wallet,
 		int(history.get("runsPlayed", 0)),
 		int(history.get("bestScoreRun", 0)),
@@ -252,7 +252,13 @@ func _refresh() -> void:
 	if not Engine.is_editor_hint() and _campaign_meter == null:
 		_campaign_meter = NeuronMeter.attach(_header, Vector2.ZERO)
 		_campaign_meter.position = Vector2(148.0 - _campaign_meter.size.x, -2.0)
-	_endings.text = "REACHED: %s" % ("none" if reached.is_empty() else ", ".join(PackedStringArray(reached)))
+	# The endings are stored as IDs ("wealth", "flatline"); translate each before joining,
+	# or the line reads as a list of English identifiers in a French screen.
+	var reached_names := PackedStringArray()
+	for ending_id in reached:
+		reached_names.append(tr(String(ending_id)))
+	_endings.text = tr("REACHED: %s") % (tr("none") if reached.is_empty() \
+		else ", ".join(reached_names))
 
 	var owned: Array = [] if Engine.is_editor_hint() else MetaStateStore.ownedPermanents
 	for u in Upgrades.all_upgrades():
@@ -260,14 +266,17 @@ func _refresh() -> void:
 		var b: Button = _rows["U:" + id]
 		var cost := int(u["cost"])
 		var tier := (" " + String(u["tierLabel"])) if u.has("tierLabel") else ""
+		# The row is assembled here, so the upgrade's own name and the row template each
+		# have to be translated before they are joined — the finished row is not a key.
+		var upgrade_name := tr(String(u["name"]))
 		if owned.has(id):
-			b.text = "%s%s  OWNED" % [String(u["name"]), tier]
+			b.text = tr("%s%s  OWNED") % [upgrade_name, tier]
 			b.disabled = true
 		elif u.has("requiresId") and not owned.has(String(u["requiresId"])):
-			b.text = "%s%s  (needs prev)" % [String(u["name"]), tier]
+			b.text = tr("%s%s  (needs prev)") % [upgrade_name, tier]
 			b.disabled = true
 		else:
-			b.text = "%s%s  %dL" % [String(u["name"]), tier, cost]
+			b.text = "%s%s  %dL" % [upgrade_name, tier, cost]
 			b.disabled = wallet < cost
 
 	# Consumables are dealer-run items now; the old pre-run purchase/stash UI is

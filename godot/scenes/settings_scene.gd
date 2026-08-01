@@ -20,6 +20,9 @@ const NEON_PINK := Color(1.0, 0.5, 0.7)
 @onready var _title := $Panel/Rows/Title as Label
 @onready var _volume_title := $Panel/Rows/VolumeTitle as Label
 
+## This screen is audio settings only. Replaying the tutorial (issue #105) lives on the
+## OPTIONS overlay one level up, with the other things a player comes here to DO.
+
 func _ready() -> void:
 	_apply_font(self)
 	_style_controls()
@@ -70,11 +73,25 @@ func _style_controls() -> void:
 		_volume_slider.add_theme_icon_override("grabber_highlight", grabber)
 		_volume_slider.add_theme_icon_override("grabber_disabled", grabber)
 	if _mute_check != null:
+		# NO button plate. MUTE is a toggle, not an action, and wearing the same neon
+		# button art as BACK made it read as one — two buttons stacked, one of which
+		# mysteriously did not navigate. The box and its tick carry the state on their
+		# own, so every state gets an empty stylebox and the row keeps only its label.
+		# The 108x20 minimum stays: the plate is gone, the tap target is not.
 		_mute_check.custom_minimum_size = Vector2(108.0, 20.0)
-		_mute_check.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# Left, so the label sits against the box it belongs to instead of floating in the
+		# middle of a row with no plate to centre it in.
+		_mute_check.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_mute_check.add_theme_constant_override("icon_max_width", 9)
-		Assets.start_menu_button_style(_mute_check, NEON_PINK, 7)
-		Assets.start_menu_button_press_feedback(_mute_check)
+		for state in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
+			_mute_check.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		# Without the plate's styling the label would fall back to the default theme's
+		# colours on hover and press; pin them so it stays the same pink throughout.
+		for color_state in ["font_color", "font_hover_color", "font_pressed_color",
+				"font_hover_pressed_color", "font_focus_color"]:
+			_mute_check.add_theme_color_override(color_state, NEON_PINK)
+		_mute_check.focus_mode = Control.FOCUS_NONE
+		_mute_check.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var unchecked_icon := _make_checkbox_icon(false)
 		var checked_icon := _make_checkbox_icon(true)
 		_mute_check.add_theme_icon_override("unchecked", unchecked_icon)

@@ -53,8 +53,9 @@ func play(pos_text: String, neg_text: String, item_name: String = "", corrupted:
 	_ensure_labels()
 	_pos_label.visible = not pos_text.is_empty()
 	_neg_label.visible = not neg_text.is_empty()
-	_pos_label.text = "+ %s" % pos_text
-	_neg_label.text = "- %s" % neg_text
+	# The hint is translated before the sign goes on; "+ EASY" as a whole is not a key.
+	_pos_label.text = "+ %s" % tr(pos_text)
+	_neg_label.text = "- %s" % tr(neg_text)
 	_pos_label.add_theme_color_override(&"font_color", positive_color)
 	_neg_label.add_theme_color_override(&"font_color", negative_color)
 	if item_name.is_empty():

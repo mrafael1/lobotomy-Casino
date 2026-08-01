@@ -98,6 +98,24 @@ func font(rel := "font/DTM-Sans.otf") -> FontFile:
 	_fonts[rel] = null
 	return null
 
+# Whole-pixel correction for a VERTICAL_ALIGNMENT_CENTER label, per font size.
+#
+# Godot centres the font's ascent+descent box. The game's copy is upper case and sits
+# between the cap line and the baseline — it never reaches into the descent — so the ink
+# ends up above the middle of the box that was centred. On a 160x320 canvas that reads as
+# "the text is not quite centred", which is exactly what it is.
+#
+# Measured from the rendered glyphs by test/debug_font_metrics.gd: this font's cap bias is
+# about half a pixel at 5px and 6px — the two sizes the bubbles use — and lands on a whole
+# pixel once it meets a real bubble's box, which is what the entries below correct. The
+# other sizes measure flat, and nudging them would only move the text the other way.
+# Re-run that script, and test/debug_bubble_ink.gd, if the font ever changes.
+const CENTERED_TEXT_NUDGE := { 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0, 7: 0.0, 8: 0.0 }
+
+## Px to push a vertically centred label down so its GLYPHS land in the middle.
+func centered_text_nudge(font_size: int) -> float:
+	return float(CENTERED_TEXT_NUDGE.get(font_size, 0.0))
+
 # ── Augmented Run (issue #111) ───────────────────────────────────────────────────────
 # Suit tier icons cropped from the authored symbols sheet (six full-canvas
 # 160x320 frames: none, heart, diamond, spade, club, joker). Rects are in
@@ -235,14 +253,16 @@ func small_neon_button_style(button: Button, plate_color: Color, font_size: int 
 		return
 	var plate := _small_neon_button_plate(plate_color)
 	_apply_authored_button_style(button, plate, font_size, texture_margin)
-	# DTM Sans leaves more visual slack below these short all-caps labels. Keep
-	# the same total inset, but move that space below the glyphs so ENTER,
-	# CANCEL, TABLES, etc. sit on the plate's visible pixel centre.
-	var bottom_margin := 2.0 if texture_margin <= 1.0 else 3.0
+	# These used to push the label up by 2-3px on the theory that the font leaves its slack
+	# below the glyphs. It leaves it ABOVE: measured against the rendered ink, upper-case
+	# copy in this font already sits high, so lifting it again put DONE, CANCEL and TABLES
+	# visibly above the middle of their own plates. The box is balanced now, and
+	# centered_text_nudge carries the only correction the font actually needs.
+	var nudge := centered_text_nudge(font_size)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var style := button.get_theme_stylebox(String(state))
-		style.content_margin_top = 0.0
-		style.content_margin_bottom = bottom_margin
+		style.content_margin_top = 1.0 + nudge + (_PRESS_DROP if state == "pressed" else 0.0)
+		style.content_margin_bottom = maxf(0.0, 1.0 - nudge)
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.set_meta(&"_start_menu_button_color", plate[&"color"])
 	button.set_meta(&"_small_neon_button_asset", plate[&"asset"])
@@ -267,12 +287,18 @@ func _apply_authored_button_style(button: Button, plate: Dictionary, font_size: 
 		style.texture_margin_top = margin
 		style.texture_margin_right = margin
 		style.texture_margin_bottom = margin
+		# A Button centres its label in the CONTENT box, so the difference between the top
+		# and bottom margins is exactly how far off the plate's middle the label lands.
+		# These used to differ by a hand-tuned pixel, which put every label slightly high —
+		# on top of the font's own cap bias, which already sits the ink high. Balance the
+		# box and let centered_text_nudge (measured, see its own comment) do the correcting.
+		var nudge := centered_text_nudge(font_size)
 		style.content_margin_left = 1.0
-		style.content_margin_top = 1.0
+		style.content_margin_top = 1.0 + nudge
 		style.content_margin_right = 1.0
-		style.content_margin_bottom = 1.0 if margin <= 1.0 else _BUTTON_TEXT_BOTTOM_MARGIN
+		style.content_margin_bottom = maxf(0.0, 1.0 - nudge)
 		if state == "pressed":
-			style.content_margin_top = 1.0 if margin <= 1.0 else _PRESS_DROP
+			style.content_margin_top = 1.0 + nudge + (0.0 if margin <= 1.0 else _PRESS_DROP)
 		elif state == "disabled":
 			style.modulate_color = Color(1.0, 1.0, 1.0, 0.45)
 		button.add_theme_stylebox_override(String(state), style)

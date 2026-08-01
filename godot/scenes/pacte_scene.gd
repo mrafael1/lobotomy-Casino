@@ -29,9 +29,8 @@ const HOW_TO_CHEAT_FRAME_RECTS: Array[Rect2] = [
 const GLITCH_AUGMENT_ID := "augment_glitch_2"
 const GLITCH_CARD_TICK_INTERVAL := 0.62
 const GLITCH_CARD_CHANCE := 0.42
-const REWARD_AMP_CARD_IDS: Array[String] = [
-	"augment_reward_1", "augment_reward_2", "augment_reward_3",
-]
+## One source of truth with the draw that keeps these out of the tutorial's pool.
+static var REWARD_AMP_CARD_IDS: Array[String] = PacteCards.reward_amp_ids()
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
 # Pacte's authored split art is intentionally kept as full-canvas pieces. The
 # table, decks, dealer, and prompt bubble can then animate independently while
@@ -56,8 +55,12 @@ const DEALER_PROMPT_FONT_SIZE := 5
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
 const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
-const DESCRIPTION_TITLE_RECT := Rect2(2.0, 2.0, 46.0, 7.0)
-const DESCRIPTION_TEXT_RECT := Rect2(3.0, 9.0, 44.0, 17.0)
+# Title over body. The y here is only a starting point: _preview_card centres the pair as
+# one block once it knows how many rows the blurb wrapped to (see _layout_description).
+const DESCRIPTION_TITLE_RECT := Rect2(2.0, 3.0, 46.0, 7.0)
+const DESCRIPTION_TEXT_RECT := Rect2(3.0, 10.0, 44.0, 16.0)
+const DESCRIPTION_TITLE_FONT_SIZE := 4
+const DESCRIPTION_FONT_SIZE := 3
 const DESCRIPTION_BUBBLE_GAP := 1.0
 const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
@@ -125,6 +128,23 @@ func _ready() -> void:
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
+	# Inert unless the played tutorial is running (issue #105). The autoload is not a
+	# @tool script, so it does not exist in an editor preview of this scene.
+	if not Engine.is_editor_hint():
+		Tutorial.attach(self, "pacte")
+
+## Tutorial anchors (issue #105) — see machine_scene.tutorial_anchor.
+func tutorial_anchor(id: String) -> Rect2:
+	match id:
+		"cards":
+			# The whole play area, not just the dealt row: a Pacte card is DRAGGED from
+			# the row down into its slot, so the ring has to cover the path or the
+			# tutorial's mask stops the drag halfway and there is no way to choose.
+			var first: Vector2 = CARD_POSITIONS[0]
+			var last: Vector2 = CARD_POSITIONS[CARD_POSITIONS.size() - 1]
+			var row := Rect2(first, Vector2(last.x + CARD_SIZE.x - first.x, CARD_SIZE.y))
+			return row.merge(AUGMENT_DROP_RECT).merge(POWER_DROP_RECT)
+	return Rect2()
 
 func _build_background() -> void:
 	_background = _full_canvas_sprite(BG_ASSET, BACKGROUND_Z_INDEX)
@@ -213,12 +233,17 @@ func _build_overlay_ui() -> void:
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
-	_description_title = _label("CardTitle", DESCRIPTION_TITLE_RECT, 4, NEON_GOLD, _description_bubble)
+	_description_title = _label("CardTitle", DESCRIPTION_TITLE_RECT,
+		DESCRIPTION_TITLE_FONT_SIZE, NEON_GOLD, _description_bubble)
 	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_description_title.clip_text = true
-	_description_text = _label("CardDescription", DESCRIPTION_TEXT_RECT, 3, TEXT_COLOR, _description_bubble)
+	_description_text = _label("CardDescription", DESCRIPTION_TEXT_RECT,
+		DESCRIPTION_FONT_SIZE, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	# Centred in the space UNDER the title, not pinned to the top of it. The bubble is a
+	# fixed 50x28 box but the blurbs run one to three lines, so a top-pinned body left the
+	# short ones floating above eight px of empty panel.
+	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_description_text.clip_text = true
 	_description_bubble.visible = false
@@ -755,10 +780,7 @@ func _preview_card(card_id: String) -> void:
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
 	# compact panel as well as their glyphs.
-	_description_title.position = DESCRIPTION_TITLE_RECT.position
-	_description_title.size = DESCRIPTION_TITLE_RECT.size
-	_description_text.position = DESCRIPTION_TEXT_RECT.position
-	_description_text.size = DESCRIPTION_TEXT_RECT.size
+	_layout_description()
 	# Tapping a card replaces the generic prompt immediately, while the compact
 	# description remains visible until the player starts dragging it.
 	_instruction.text = "DRAG TO THE SLOT"
@@ -768,6 +790,25 @@ func _preview_card(card_id: String) -> void:
 			candidate.scale = Vector2.ONE * (1.08 if id == card_id else 1.0)
 			candidate.pivot_offset = CARD_SIZE * 0.5
 	_position_description_bubble(card_id)
+
+## Title over body, centred in the bubble as ONE block. The panel is a fixed 50x28 but the
+## blurbs wrap to one, two or three lines, so a fixed title y left the short ones hanging
+## above a dead strip of panel. Ask the label how many rows the wrap actually produced —
+## nothing else knows, since word wrapping breaks where the words allow.
+func _layout_description() -> void:
+	var title_h := DESCRIPTION_TITLE_RECT.size.y
+	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - title_h - 2.0 # 1px border either side
+	# Width first: a Label cannot report its wrap until it knows how wide it is.
+	_description_title.size = DESCRIPTION_TITLE_RECT.size
+	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, max_body_h)
+	var font := _description_text.get_theme_font(&"font")
+	var row_h := font.get_height(DESCRIPTION_FONT_SIZE) \
+		+ float(_description_text.get_theme_constant(&"line_spacing"))
+	var body_h := minf(max_body_h, float(maxi(1, _description_text.get_line_count())) * row_h)
+	var top := roundf((DESCRIPTION_BUBBLE_RECT.size.y - (title_h + body_h)) * 0.5)
+	_description_title.position = Vector2(DESCRIPTION_TITLE_RECT.position.x, top)
+	_description_text.position = Vector2(DESCRIPTION_TEXT_RECT.position.x, top + title_h)
+	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, body_h)
 
 func _position_description_bubble(card_id: String) -> void:
 	if _description_bubble == null:
@@ -876,8 +917,6 @@ func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		parent: Node = null) -> Label:
 	var label := Label.new()
 	label.name = label_name
-	label.position = rect.position
-	label.size = rect.size
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
@@ -887,5 +926,11 @@ func _label(label_name: String, rect: Rect2, font_size: int, color: Color,
 	var font := Assets.font()
 	if font != null:
 		label.add_theme_font_override("font", font)
+	# In the tree BEFORE the rect is assigned. A Control clamps an assigned size up to its
+	# minimum, and a Label outside the tree measures that minimum with the DEFAULT 16px
+	# theme font — theme overrides only reach the metric cache once the node has a tree —
+	# so a 7px-tall title asked for 7 and quietly got 23.
 	(parent if parent != null else self).add_child(label)
+	label.position = rect.position
+	label.size = rect.size
 	return label

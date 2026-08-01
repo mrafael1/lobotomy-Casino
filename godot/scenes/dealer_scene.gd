@@ -202,6 +202,49 @@ func _ready() -> void:
 			RunStateStore.state_changed.connect(_refresh_credits)
 		_refresh_credits()
 	_refresh_campaign_label()
+	# Inert unless the played tutorial is running (issue #105). The autoload is not a
+	# @tool script, so it does not exist in an editor preview of this scene.
+	if not Engine.is_editor_hint():
+		Tutorial.attach(self, "dealer")
+
+## True while something the tutorial does not script owns this screen (issue #105). The
+## odds table is the one that matters: every post-run visit opens with it — the target
+## break as well as a flatline — and a coaching mask over it left the player unable to
+## spend their tokens OR close the table, with the dealer's own START masked behind it.
+## The tutorial stands down until these are gone.
+func tutorial_blocking_modal() -> bool:
+	if _odds_overlay != null and is_instance_valid(_odds_overlay) and _odds_overlay.visible:
+		return true
+	if _augment_picker != null and is_instance_valid(_augment_picker):
+		return true
+	if _unlock_popup != null and is_instance_valid(_unlock_popup) and _unlock_popup.visible:
+		return true
+	return false
+
+## Whether the thing a tutorial beat is about is on screen here yet (issue #105).
+func tutorial_ready_for(id: String) -> bool:
+	match id:
+		"odds":
+			return _odds_overlay != null and is_instance_valid(_odds_overlay) \
+				and _odds_overlay.visible
+	return true
+
+## Tutorial anchors (issue #105) — see machine_scene.tutorial_anchor. The counter's slots
+## are authored, so the row is measured off the slots themselves rather than guessed.
+func tutorial_anchor(id: String) -> Rect2:
+	match id:
+		"offers":
+			if _offer_slots.is_empty():
+				return Rect2(0.0, ITEM_TOP - 4.0, 160.0, Assets.STASH_ICON_SIZE + 8.0)
+			var row: Rect2 = (_offer_slots[0] as Control).get_rect()
+			for slot: Control in _offer_slots:
+				row = row.merge(slot.get_rect())
+			return row
+		"screen":
+			# The whole canvas: nothing masked and nothing ringed, for a beat about a screen
+			# that owns everything (the odds table).
+			return Rect2(0.0, 0.0, 160.0, 320.0)
+	return Rect2()
 
 func _bind_scene_nodes() -> void:
 	_background_sprite = get_node_or_null("Background")
@@ -1359,14 +1402,16 @@ func _select(id: String) -> void:
 		# hints (a second green line when one word needs context) — no explanatory
 		# message text; the vague hints are all the dealer gives away.
 		var entry: Dictionary = amap[id]
+		# tr() on the hint alone: the label auto-translates the string it is handed, and the
+		# "+ " already stuck to the front makes it a key no table has.
 		var hints: Array = entry.get("hints", [])
-		_tv_pos.text = ("+ %s" % String(hints[0])) if hints.size() > 0 else ""
-		_tv_neg.text = ("+ %s" % String(hints[1])) if hints.size() > 1 else ""
+		_tv_pos.text = ("+ %s" % tr(String(hints[0]))) if hints.size() > 0 else ""
+		_tv_neg.text = ("+ %s" % tr(String(hints[1]))) if hints.size() > 1 else ""
 		_tv_neg.add_theme_color_override(&"font_color", Color(0.13, 0.77, 0.37))
 	else:
 		var h: Dictionary = item_hints.get(id, FALLBACK_HINT)
-		_tv_pos.text = "+ %s" % String(h["pos"])
-		_tv_neg.text = "- %s" % String(h["neg"])
+		_tv_pos.text = "+ %s" % tr(String(h["pos"]))
+		_tv_neg.text = "- %s" % tr(String(h["neg"]))
 		_tv_neg.add_theme_color_override(&"font_color", Color(0.94, 0.27, 0.27))
 	# The "-" glyph is half a pixel narrower than "+" in this font, so a "- " line
 	# needs a +0.5px nudge for its word to line up with the "+ " line above.
