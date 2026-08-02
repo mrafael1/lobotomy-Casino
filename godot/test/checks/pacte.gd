@@ -1107,45 +1107,45 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if pacte_badge.get_node_or_null("CardContour") != null:
 			failures.append("pacte: augment badge should not draw a full card around the icon")
 		var badge_style := pacte_badge.get_theme_stylebox("normal") as StyleBoxFlat
-		if badge_style == null or badge_style.border_color != machine.PACTE_AUGMENT_CONTOUR_COLOR:
+		if badge_style == null or badge_style.border_color != AugmentDisplay.PACTE_AUGMENT_CONTOUR_COLOR:
 			failures.append("pacte: augment badge is missing its compact blue icon contour")
-		if pacte_badge.position != machine.PACTE_AUGMENT_BADGE_POS \
-				or pacte_badge.size != machine.PACTE_AUGMENT_BADGE_SIZE:
+		if pacte_badge.position != AugmentDisplay.PACTE_AUGMENT_BADGE_POS \
+				or pacte_badge.size != AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE:
 			failures.append("pacte: augment badge geometry changed unexpectedly")
 		# Issue #181: the augments continue the power bar rather than sitting on the TV —
 		# same baseline as the three emplacements, same pitch, starting after the third.
-		if machine._pacte_augment_badges.size() != machine.PACTE_AUGMENT_BADGE_MAX:
+		if machine._augments.badges().size() != AugmentDisplay.PACTE_AUGMENT_BADGE_MAX:
 			failures.append("issue181: the augment row was not built to its full width")
 		# The sockets plate offers exactly one bed per badge on show: frame N = N+1 sockets,
 		# and nothing at all with no augments held.
-		var plate := machine._augment_plate_sprite as Sprite2D
-		var held_augments: Array = machine._active_pacte_augment_ids()
-		var expected_sockets: int = mini(held_augments.size(), machine.PACTE_AUGMENT_BADGE_MAX)
-		if plate == null or plate.hframes != machine.AUGMENT_PLATE_FRAMES:
+		var plate := machine._augments.plate_sprite() as Sprite2D
+		var held_augments: Array = machine._augments.active_ids()
+		var expected_sockets: int = mini(held_augments.size(), AugmentDisplay.PACTE_AUGMENT_BADGE_MAX)
+		if plate == null or plate.hframes != AugmentDisplay.AUGMENT_PLATE_FRAMES:
 			failures.append("issue181: the augment sockets plate is not a %d-frame sheet"
-				% int(machine.AUGMENT_PLATE_FRAMES))
+				% int(AugmentDisplay.AUGMENT_PLATE_FRAMES))
 		elif not plate.visible or plate.frame != expected_sockets - 1:
 			failures.append("issue181: the sockets plate shows %d beds for %d augments"
 				% [plate.frame + 1, expected_sockets])
 		var kept_augments: Array = (run_store.selectedAugmentCardIds as Array).duplicate()
 		run_store.selectedAugmentCardIds = []
-		machine._refresh_pacte_augment_badge()
+		machine._augments.refresh_pacte_badges()
 		if plate != null and plate.visible:
 			failures.append("issue181: the sockets plate stayed up with no augments held")
 		run_store.selectedAugmentCardIds = kept_augments
-		machine._refresh_pacte_augment_badge()
+		machine._augments.refresh_pacte_badges()
 		var third_slot: Dictionary = machine.POWER_HITS[machine.POWER_IDS[2]]
-		if not is_equal_approx(machine.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
+		if not is_equal_approx(AugmentDisplay.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
 			failures.append("issue181: the augment row is not on the power bar baseline")
-		if machine.PACTE_AUGMENT_BADGE_POS.x <= float(machine.POWER_ART_LEFT[machine.POWER_IDS[2]]):
+		if AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x <= float(machine.POWER_ART_LEFT[machine.POWER_IDS[2]]):
 			failures.append("issue181: the augment row does not start after the third power")
-		var augment_row_end: float = machine.PACTE_AUGMENT_BADGE_POS.x \
-			+ float(machine.PACTE_AUGMENT_BADGE_MAX - 1) * machine.PACTE_AUGMENT_BADGE_PITCH \
-			+ machine.PACTE_AUGMENT_BADGE_SIZE.x
+		var augment_row_end: float = AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x \
+			+ float(AugmentDisplay.PACTE_AUGMENT_BADGE_MAX - 1) * AugmentDisplay.PACTE_AUGMENT_BADGE_PITCH \
+			+ AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE.x
 		if augment_row_end > 160.0:
 			failures.append("issue181: the augment row runs off the canvas (ends %.1f)"
 				% augment_row_end)
-		if machine.PACTE_AUGMENT_ICON_SIZE < 8.0:
+		if AugmentDisplay.PACTE_AUGMENT_ICON_SIZE < 8.0:
 			failures.append("issue181: the augment icons were not enlarged")
 		# Hold to peek, release to dismiss — the machine's one gesture for "explain this".
 		pacte_badge.button_down.emit()
@@ -1154,10 +1154,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		# The popup is queue_free'd, so it lingers in the tree until the frame ends: the
 		# handle is what says whether it is still up.
 		pacte_badge.button_up.emit()
-		if machine._pacte_augment_popup != null:
+		if machine._augments.pacte_popup() != null:
 			failures.append("pacte: the augment description outlived the hold")
 		pacte_badge.pressed.emit()
-		if machine._pacte_augment_popup != null:
+		if machine._augments.pacte_popup() != null:
 			failures.append("pacte: a plain press still toggles the augment description open")
 	pacte._show_reward_amp_picker()
 	var reward_amp_picker := pacte.get_node_or_null("RewardAmpPicker") as Control
