@@ -944,10 +944,10 @@ func _evaluate_spin(ctx: SpinContext) -> void:
 		var heart_tier := 1 + floori(heart_rng.next() * 3.0)
 		result = Abilities.resolve_heart_spin(heart_tier, ctx.eff_mult,
 			_active_reward_scale(), symbolRewardBonuses)
-		result["neuronsAfter"] = mini(_neuron_cap(), neurons + int(result["neuronsDelta"]))
-		result["freeSpinsAfter"] = freeSpinsRemaining
-		result["isFreeSpin"] = true
-		result["scoreMultiplier"] = ctx.eff_mult
+		result[SpinResult.NEURONS_AFTER] = mini(_neuron_cap(), neurons + int(result["neuronsDelta"]))
+		result[SpinResult.FREE_SPINS_AFTER] = freeSpinsRemaining
+		result[SpinResult.IS_FREE_SPIN] = true
+		result[SpinResult.SCORE_MULTIPLIER] = ctx.eff_mult
 		heartPowerArmed = false
 	else:
 		result = Evaluate.evaluate({
@@ -997,25 +997,24 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 	# spins it was supposed to reward. The maths lives in InRunItems so parity can pin it.
 	var cocktail_bonus := 0
 	if cocktailBoostSpins > 0:
-		cocktail_bonus = InRunItems.cocktail_bonus(result["reels"] as Array,
-			ctx.hidden_reel_count, float(result["scoreMultiplier"]))
+		cocktail_bonus = InRunItems.cocktail_bonus(result[SpinResult.REELS] as Array,
+			ctx.hidden_reel_count, float(result[SpinResult.SCORE_MULTIPLIER]))
 	# The joker Cocktail (issue #111) is that same total, charged rather than paid, and
 	# ONLY on a spin that won something: a miss pays nothing, so there is nothing to take
 	# and the item would otherwise be a tax on standing still. The win is floored at zero
 	# below rather than going negative — the drink takes the winnings, not the run.
 	var cocktail_malus := 0
-	if cocktailMalusSpins > 0 and int(result["scoreEarned"]) > 0 \
-			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
-		cocktail_malus = InRunItems.cocktail_bonus(result["reels"] as Array,
-			ctx.hidden_reel_count, float(result["scoreMultiplier"]))
+	if cocktailMalusSpins > 0 and int(result[SpinResult.SCORE_EARNED]) > 0 \
+			and SpinResult.is_paying_type(result):
+		cocktail_malus = InRunItems.cocktail_bonus(result[SpinResult.REELS] as Array,
+			ctx.hidden_reel_count, float(result[SpinResult.SCORE_MULTIPLIER]))
 	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
 	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
 	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
 	# 0-score flatline wins never spend the charge — it waits for a real win.
-	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus - cocktail_malus)
+	var base_score := maxi(0, int(result[SpinResult.SCORE_EARNED]) + cocktail_bonus - cocktail_malus)
 	var flatline_boost := 0
-	if flatlineWinBoostArmed and base_score > 0 \
-			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
+	if flatlineWinBoostArmed and base_score > 0 and SpinResult.is_paying_type(result):
 		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		ctx.flatline_boost_applied = true
 	# COMBO is a separate Pacte streak from the flatline strike above. Each
@@ -1024,7 +1023,7 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 	var win_boost_percent := 0
 	var win_boost_combo := 0
 	var win_boost_applied := false
-	var paying_result := base_score > 0 and String(result["winType"]) in ["pair", "triple", "jackpot"]
+	var paying_result := base_score > 0 and SpinResult.is_paying_type(result)
 	if winBoostEnabled and paying_result:
 		var boost_step := clampi(winBoostCombo + 1, 1, 9)
 		win_boost_combo = boost_step
@@ -1034,7 +1033,7 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 	# Pair/Triple Specialist (Chip Augment): the chosen win type pays x1.25. Rides on
 	# top of the pinned score like the cocktail/flatline boosts (evaluate() untouched).
 	var specialist_bonus := ChipAugments.specialist_bonus(
-		base_score, String(result["winType"]), MetaStateStore.pairTripleAugmentChoice)
+		base_score, String(result[SpinResult.WIN_TYPE]), MetaStateStore.pairTripleAugmentChoice)
 	var final_score := base_score + flatline_boost + win_boost_bonus + specialist_bonus
 	ctx.passive_lucidity = _passive_lucidity_per_spin()
 	var passive_lucidity := ctx.passive_lucidity
@@ -1043,29 +1042,32 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 			or win_boost_applied or specialist_bonus > 0 or ctx.hidden_reel_count > 0 \
 			or passive_lucidity > 0:
 		final_result = result.duplicate(true)
-		final_result["scoreEarned"] = final_score
-		final_result["coinsEarned"] = final_score
+		final_result[SpinResult.SCORE_EARNED] = final_score
+		final_result[SpinResult.COINS_EARNED] = final_score
 		if ctx.hidden_reel_count > 0:
-			final_result["hiddenReelCount"] = ctx.hidden_reel_count
+			final_result[SpinResult.HIDDEN_REEL_COUNT] = ctx.hidden_reel_count
 		if cocktail_bonus > 0:
-			final_result["cocktailApplied"] = true
-			final_result["cocktailBonus"] = cocktail_bonus
+			final_result[SpinResult.COCKTAIL_APPLIED] = true
+			final_result[SpinResult.COCKTAIL_BONUS] = cocktail_bonus
 		if cocktail_malus > 0:
-			final_result["cocktailMalusApplied"] = true
-			final_result["cocktailMalus"] = cocktail_malus
+			final_result[SpinResult.COCKTAIL_MALUS_APPLIED] = true
+			final_result[SpinResult.COCKTAIL_MALUS] = cocktail_malus
 		if ctx.flatline_boost_applied:
-			final_result["flatlineBoostApplied"] = true
-			final_result["flatlineBoostBonus"] = flatline_boost
+			final_result[SpinResult.FLATLINE_BOOST_APPLIED] = true
+			final_result[SpinResult.FLATLINE_BOOST_BONUS] = flatline_boost
 		if win_boost_applied:
-			final_result["winBoostApplied"] = true
-			final_result["winBoostPercent"] = win_boost_percent
-			final_result["winBoostBonus"] = win_boost_bonus
-			final_result["winBoostCombo"] = win_boost_combo
-			final_result["winBoostBaseScore"] = maxi(0, final_score - win_boost_bonus)
+			final_result[SpinResult.WIN_BOOST_APPLIED] = true
+			final_result[SpinResult.WIN_BOOST_PERCENT] = win_boost_percent
+			final_result[SpinResult.WIN_BOOST_BONUS] = win_boost_bonus
+			final_result[SpinResult.WIN_BOOST_COMBO] = win_boost_combo
+			final_result[SpinResult.WIN_BOOST_BASE_SCORE] = maxi(0, final_score - win_boost_bonus)
 		if specialist_bonus > 0:
-			final_result["specialistBonus"] = specialist_bonus
+			final_result[SpinResult.SPECIALIST_BONUS] = specialist_bonus
 		if passive_lucidity > 0:
-			final_result["passiveLucidity"] = passive_lucidity
+			final_result[SpinResult.PASSIVE_LUCIDITY] = passive_lucidity
+	# The one place every spin's result is finished, and so the one place worth
+	# checking its shape. Compiles out of export builds.
+	SpinResult.validate(final_result)
 	ctx.final_result = final_result
 
 ## Committing the spin to the run: the lucidity plan, the potion's after-effects,
@@ -1076,7 +1078,7 @@ func _settle_spin(ctx: SpinContext) -> void:
 	var passive_lucidity := ctx.passive_lucidity
 	# Heart stays spent like every other power: it waits in the pool until the
 	# active power-restore threshold brings it back.
-	var lucidity_gain := int(final_result["scoreEarned"]) + passive_lucidity
+	var lucidity_gain := int(final_result[SpinResult.SCORE_EARNED]) + passive_lucidity
 	var plan := Lucidity.plan_gain(lucidityCoins, lucidity_gain, abilitiesUsed, ctx.spin_seed,
 		effective_coins_per_power_restore(), restore_budget_left())
 
@@ -1098,7 +1100,7 @@ func _settle_spin(ctx: SpinContext) -> void:
 		new_abilities = new_abilities.duplicate()
 		new_abilities.remove_at(restore_idx)
 
-	neurons = int(final_result["neuronsAfter"])
+	neurons = int(final_result[SpinResult.NEURONS_AFTER])
 	if ctx.potion_restore_spins > 0:
 		neurons += ctx.potion_restore_spins * maxi(1, ctx.base_decay)
 	_clamp_neurons()
@@ -1106,7 +1108,7 @@ func _settle_spin(ctx: SpinContext) -> void:
 	# wealth odometer and the target) alongside the Lucidity it already paid out. The
 	# per-spin result keeps only the reel payout, so the score popup still announces
 	# what the reels won.
-	scoreEarned += int(final_result["scoreEarned"]) + passive_lucidity
+	scoreEarned += int(final_result[SpinResult.SCORE_EARNED]) + passive_lucidity
 	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + ctx.potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
@@ -1117,9 +1119,9 @@ func _settle_spin(ctx: SpinContext) -> void:
 	# Compulsive spins don't consume banked free spins, but the parity-pinned
 	# evaluate() clamps freeSpinsAfter to maxFreeSpins on non-free spins — which
 	# would wipe banked vial/tea rewards (issue #66). Keep what the player had.
-	freeSpinsRemaining = maxi(int(final_result["freeSpinsAfter"]), freeSpinsRemaining) \
-		if ctx.is_compulsive else int(final_result["freeSpinsAfter"])
-	isFreeSpin = bool(final_result["isFreeSpin"])
+	freeSpinsRemaining = maxi(int(final_result[SpinResult.FREE_SPINS_AFTER]), freeSpinsRemaining) \
+		if ctx.is_compulsive else int(final_result[SpinResult.FREE_SPINS_AFTER])
+	isFreeSpin = bool(final_result[SpinResult.IS_FREE_SPIN])
 	# Checked here, after the spin's OWN restores (potion spins above, the free-spin
 	# tally just settled): the reserve is the last resort, so anything the spin itself
 	# gave back is counted first and leaves it untouched.
@@ -1129,10 +1131,10 @@ func _settle_spin(ctx: SpinContext) -> void:
 	# Baseline for the additive power payouts below: what the reels as spun are worth
 	# on their own, before any store-level boost. Powers reshape these reels, and each
 	# combination they form pays on top rather than replacing this one.
-	lastPureWinScore = maxi(0, int(result["scoreEarned"]))
-	lastPureWinCoins = maxi(0, int(result["coinsEarned"]))
+	lastPureWinScore = maxi(0, int(result[SpinResult.SCORE_EARNED]))
+	lastPureWinCoins = maxi(0, int(result[SpinResult.COINS_EARNED]))
 	_track_spin_card_progress(final_result)
-	if int(final_result.get("freeSpinsGranted", 0)) > 0:
+	if int(final_result.get(SpinResult.FREE_SPINS_GRANTED, 0)) > 0:
 		freeSpinGrantSerial += 1
 	lastPotionEffect = ctx.potion_pick
 	lastEffectiveBet = clampi(ctx.eff_bet, 1, 3)
@@ -1224,11 +1226,11 @@ func set_spinning(v: bool) -> void:
 ## advances the frenzy. Flatline pairs/triples come back as winType "pair"/"triple"
 ## with 0 score and must break the frenzy like any miss.
 func _is_winning_result(result: Dictionary) -> bool:
-	var win_type := String(result["winType"])
+	var win_type := String(result[SpinResult.WIN_TYPE])
 	if win_type == "heart":
 		return true
-	return win_type in ["pair", "triple", "jackpot"] \
-		and int(result["scoreEarned"]) > 0
+	return win_type in SpinResult.PAYING_WIN_TYPES \
+		and int(result[SpinResult.SCORE_EARNED]) > 0
 
 # ── card-unlock tracking (issue #52) ─────────────────────────────────────────────
 # The run only reports events; MetaStateStore owns the counters, the unlock rules,
@@ -2524,13 +2526,13 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int,
 	outcome["scoreDelta"] = win_score
 	outcome["coinsDelta"] = win_coins
 	if flatlineWinBoostArmed and win_score > 0 \
-			and outcome_win_type in ["pair", "triple", "jackpot"]:
+			and outcome_win_type in SpinResult.PAYING_WIN_TYPES:
 		flatline_boost_bonus = win_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
 		flatline_boost_applied = true
 		outcome["scoreDelta"] = int(outcome["scoreDelta"]) + flatline_boost_bonus
 		outcome["coinsDelta"] = int(outcome["coinsDelta"]) + flatline_boost_bonus
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
-			and outcome_win_type in ["pair", "triple", "jackpot"]:
+			and outcome_win_type in SpinResult.PAYING_WIN_TYPES:
 		var boost_step := clampi(winBoostCombo + 1, 1, 9)
 		win_boost_combo = boost_step
 		win_boost_percent = roundi(float(WIN_BOOST_RATES[boost_step]) * 100.0)
@@ -2630,7 +2632,7 @@ func _apply_outcome(outcome: Dictionary, marked_used: Array, seed: int,
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
 	if winBoostEnabled and int(outcome.get("scoreDelta", 0)) > 0 \
-			and outcome_win_type in ["pair", "triple", "jackpot"]:
+			and outcome_win_type in SpinResult.PAYING_WIN_TYPES:
 		winBoostCombo = mini(9, winBoostCombo + 1)
 	elif winBoostEnabled and outcome_win_type != "heart" and not comboDefeatPending \
 			and new_combination:
