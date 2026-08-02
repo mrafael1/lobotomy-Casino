@@ -776,7 +776,66 @@ func rewind() -> bool:
 	_commit()
 	return true
 
+## Everything one spin needs to know about itself. It exists because the five
+## stages below used to be a single function sharing thirty locals — this is that
+## shared frame, named, so each stage can state what it reads and what it fills in.
+## Nothing here outlives the spin that made it.
+class SpinContext extends RefCounted:
+	var is_compulsive := false
+	var is_free := false
+	var heart_armed := false
+	var spin_seed := 0
+	var rng: LobRNG = null
+	var stasis := false
+	var sedative := false
+	var combo_before := 1
+	var eff_bet := 1
+	var base_decay := 0
+	var decay_amt := 0
+	var brain_bonus := 0
+	var eff_mult := 0.0
+	var book_weight := 0
+	# Potion pool roll (issue #32), drawn on its own seed so the pick is
+	# independent of the reel roll.
+	var potion_pick: Variant = null
+	var potion_lucidity_delta := 0
+	var potion_symbol_to_brain := 0
+	var potion_free_reroll := false
+	var potion_restore_spins := 0
+	var potion_restore_power := false
+	var potion_adjacent_symbols := 0
+	# Consumable reel transforms.
+	var force_all: Variant = null
+	var force_triple: Variant = null
+	var pair_boost_active := false
+	var hallucination_active := false
+	var hidden_reel_count := 0
+	# Filled in by the stages that follow.
+	var result: Dictionary = {}       # the reels as evaluated, before any store boost
+	var final_result: Dictionary = {} # what the caller is handed
+	var passive_lucidity := 0
+	var flatline_boost_applied := false
+
+## One spin, start to finish. Each stage takes the context and either fills it in
+## or acts on it; the order they run in is the order the rules resolve in, and it
+## is load-bearing — the outcome stage reads decisions the score stage made.
 func spin(compulsive := false) -> Variant:
+	var ctx := _open_spin(compulsive)
+	if ctx == null:
+		return null
+	_roll_potion(ctx)
+	_resolve_reel_transforms(ctx)
+	_evaluate_spin(ctx)
+	_apply_score_bonuses(ctx)
+	_settle_spin(ctx)
+	_commit()
+	return ctx.final_result
+
+## The gate, and the per-spin numbers that follow from passing it. Returns null
+## when this spin is refused, having changed nothing the caller can observe apart
+## from the legacy-state normalisation and combo-defeat resolution that a refused
+## spin used to perform too.
+func _open_spin(compulsive: bool) -> SpinContext:
 	if runPhase != "running" or isSpinning:
 		return null
 	# Normalize legacy or externally restored state before charging this spin. The
@@ -795,12 +854,13 @@ func spin(compulsive := false) -> Variant:
 			resolve_pending_combo_defeat(false)
 	previousSpinSnapshot = _capture_rewind_snapshot()
 	rewindHistoryAvailable = true
-	var is_compulsive: bool = compulsive and compulsiveSpinSkips > 0
-	if not is_compulsive and compulsiveSpinSkips > 0:
+	var ctx := SpinContext.new()
+	ctx.is_compulsive = compulsive and compulsiveSpinSkips > 0
+	if not ctx.is_compulsive and compulsiveSpinSkips > 0:
 		return null
-	var heart_spin_armed := (not is_compulsive) and heartPowerArmed
-	var is_free: bool = (not is_compulsive) and (freeSpinsRemaining > 0 or heart_spin_armed)
-	if (not is_free) and neurons < 1:
+	ctx.heart_armed = (not ctx.is_compulsive) and heartPowerArmed
+	ctx.is_free = (not ctx.is_compulsive) and (freeSpinsRemaining > 0 or ctx.heart_armed)
+	if (not ctx.is_free) and neurons < 1:
 		return null
 
 	# One restore charge back for the spin. This spin's own payout and every power the
@@ -808,116 +868,115 @@ func spin(compulsive := false) -> Variant:
 	# power back can only be followed by another restore if a charge was banked.
 	_recharge_restores()
 
-	var seed := _seed(spinCount * 0x9e3779b9)
-	var rng := LobRNG.new(seed)
+	ctx.spin_seed = _seed(spinCount * 0x9e3779b9)
+	ctx.rng = LobRNG.new(ctx.spin_seed)
 
-	var stasis: bool = (not is_compulsive) and (not is_free) and decaySkips > 0
-	var sedative: bool = (not is_compulsive) and (not is_free) and Economy.has_sedative(ownedUpgrades) and (spinCount + 1) % 3 == 0
+	ctx.stasis = (not ctx.is_compulsive) and (not ctx.is_free) and decaySkips > 0
+	ctx.sedative = (not ctx.is_compulsive) and (not ctx.is_free) and Economy.has_sedative(ownedUpgrades) and (spinCount + 1) % 3 == 0
 
 	# Issue #155: the gauge value this spin runs at. The multiplier no longer costs
 	# extra neurons or free spins — its downside is the dealer countdown advancing
 	# 3/2/1 steps at x1/x2/x3, so lower gauges pull the dealer in faster.
-	var combo_before := clampi(betMultiplier, 1, 3)
+	ctx.combo_before = clampi(betMultiplier, 1, 3)
 	# A compulsory spin is NOT dropped to x1 — it runs at x2, so the spin the machine
 	# takes from the player is still worth something.
-	var eff_bet := combo_before
-	if is_compulsive and eff_bet == 3:
-		eff_bet = 2 # the seized spin dulls the frenzy: x3 runs as x2
+	ctx.eff_bet = ctx.combo_before
+	if ctx.is_compulsive and ctx.eff_bet == 3:
+		ctx.eff_bet = 2 # the seized spin dulls the frenzy: x3 runs as x2
 
 	# Augmented heart modifier (issue #111): a paid spin costs two health instead of
 	# one. The mini() below is what makes the last chip cost a single point rather
 	# than refusing the spin — the run gets to play its final health, then ends.
-	var base_decay := Economy.compute_neuron_decay(ownedUpgrades) \
+	ctx.base_decay = Economy.compute_neuron_decay(ownedUpgrades) \
 		* _augmented_health_cost_multiplier()
-	var decay_amt := 0 if (stasis or sedative or is_free) else mini(base_decay, neurons)
+	ctx.decay_amt = 0 if (ctx.stasis or ctx.sedative or ctx.is_free) else mini(ctx.base_decay, neurons)
 
-	var brain_bonus := Economy.compute_brain_weight_bonus(ownedUpgrades)
+	ctx.brain_bonus = Economy.compute_brain_weight_bonus(ownedUpgrades)
 	if brainBoostSpins > 0:
-		brain_bonus += int(Symbols.WEIGHT["brain"]) * 3
+		ctx.brain_bonus += int(Symbols.WEIGHT["brain"]) * 3
 
-	var base_mult := lucidityMultiplier * nextSpinLucidityMultiplier * eff_bet
-	var eff_mult: float = base_mult * 0.5 if brainBoostSpins > 0 else base_mult
+	var base_mult := lucidityMultiplier * nextSpinLucidityMultiplier * ctx.eff_bet
+	ctx.eff_mult = base_mult * 0.5 if brainBoostSpins > 0 else base_mult
+	return ctx
 
-	# Potion (issue #32): roll one equal-weight pool effect for this spin, with a
-	# dedicated seed so the pick is independent of the reel roll.
-	var potion_lucidity_delta := 0
-	var potion_symbol_to_brain := 0
-	var potion_free_reroll := false
-	var potion_restore_spins := 0
-	var potion_restore_power := false
-	var potion_adjacent_symbols := 0
-	var potion_pick: Variant = null
-	if potionSpins > 0:
-		var p_rng := LobRNG.new((seed ^ 0x50710000) & M32)
-		var pool: Array = Consumables.POTION_RANDOM_POOL
-		var pick: Dictionary = pool[int(p_rng.next() * pool.size())]
-		if String(pick["kind"]) == "restorePower" and abilitiesUsed.is_empty():
-			var fallback_pool: Array = []
-			for candidate in pool:
-				if String(candidate["kind"]) != "restorePower":
-					fallback_pool.append(candidate)
-			if not fallback_pool.is_empty():
-				pick = fallback_pool[int(p_rng.next() * fallback_pool.size())]
-		potion_pick = pick
-		match String(pick["kind"]):
-			"lucidity": potion_lucidity_delta = int(pick["amount"])
-			"symbolToBrain": potion_symbol_to_brain = 1
-			"freeReroll": potion_free_reroll = true
-			"restoreSpin": potion_restore_spins = int(pick.get("count", 1))
-			"restorePower": potion_restore_power = true
-			"adjacentSymbol": potion_adjacent_symbols = int(pick.get("count", 1))
+## The potion pool roll (issue #32): one equal-weight effect for this spin.
+func _roll_potion(ctx: SpinContext) -> void:
+	if potionSpins <= 0:
+		return
+	var p_rng := LobRNG.new((ctx.spin_seed ^ 0x50710000) & M32)
+	var pool: Array = Consumables.POTION_RANDOM_POOL
+	var pick: Dictionary = pool[int(p_rng.next() * pool.size())]
+	if String(pick["kind"]) == "restorePower" and abilitiesUsed.is_empty():
+		var fallback_pool: Array = []
+		for candidate in pool:
+			if String(candidate["kind"]) != "restorePower":
+				fallback_pool.append(candidate)
+		if not fallback_pool.is_empty():
+			pick = fallback_pool[int(p_rng.next() * fallback_pool.size())]
+	ctx.potion_pick = pick
+	match String(pick["kind"]):
+		"lucidity": ctx.potion_lucidity_delta = int(pick["amount"])
+		"symbolToBrain": ctx.potion_symbol_to_brain = 1
+		"freeReroll": ctx.potion_free_reroll = true
+		"restoreSpin": ctx.potion_restore_spins = int(pick.get("count", 1))
+		"restorePower": ctx.potion_restore_power = true
+		"adjacentSymbol": ctx.potion_adjacent_symbols = int(pick.get("count", 1))
 
-	# Consumable reel transforms (issue #32). Pill forces a flatline spin, then a
-	# guaranteed non-flatline triple the spin after; Serum bans/guarantees a symbol.
-	var force_all: Variant = "flatline" if forceFlatlineSpins > 0 else null
-	var force_triple: Variant = NON_FLATLINE_SYMBOLS if (forceFlatlineSpins <= 0 and guaranteedTripleSpins > 0) else null
-	var pair_boost_active := pairBoostSpins > 0
-	var hallucination_active := Economy.has_hallucination(ownedUpgrades)
-	var hidden_reel_count := _active_hidden_reel_count(pair_boost_active)
+## Consumable reel transforms (issue #32). Pill forces a flatline spin, then a
+## guaranteed non-flatline triple the spin after; Serum bans/guarantees a symbol.
+func _resolve_reel_transforms(ctx: SpinContext) -> void:
+	ctx.force_all = "flatline" if forceFlatlineSpins > 0 else null
+	ctx.force_triple = NON_FLATLINE_SYMBOLS if (forceFlatlineSpins <= 0 and guaranteedTripleSpins > 0) else null
+	ctx.pair_boost_active = pairBoostSpins > 0
+	ctx.hallucination_active = Economy.has_hallucination(ownedUpgrades)
+	ctx.hidden_reel_count = _active_hidden_reel_count(ctx.pair_boost_active)
+	ctx.book_weight = Economy.compute_book_weight(ownedUpgrades)
 
-	var book_w := Economy.compute_book_weight(ownedUpgrades)
+## The reels themselves: either a Heart spin, which ignores the symbol weights
+## entirely, or a normal weighted evaluation.
+func _evaluate_spin(ctx: SpinContext) -> void:
 	var result: Dictionary
-	if heart_spin_armed:
+	if ctx.heart_armed:
 		# Heart's result is intentionally independent of the normal symbol weights:
 		# one seeded draw chooses x1/x2/x3, then every reel lands on that symbol.
 		var heart_rng := LobRNG.new((pacteSeed ^ (spinCount * 0x9e3779b9) \
 				^ 0x48454152) & M32)
 		var heart_tier := 1 + floori(heart_rng.next() * 3.0)
-		result = Abilities.resolve_heart_spin(heart_tier, eff_mult,
+		result = Abilities.resolve_heart_spin(heart_tier, ctx.eff_mult,
 			_active_reward_scale(), symbolRewardBonuses)
 		result["neuronsAfter"] = mini(_neuron_cap(), neurons + int(result["neuronsDelta"]))
 		result["freeSpinsAfter"] = freeSpinsRemaining
 		result["isFreeSpin"] = true
-		result["scoreMultiplier"] = eff_mult
+		result["scoreMultiplier"] = ctx.eff_mult
 		heartPowerArmed = false
 	else:
 		result = Evaluate.evaluate({
 			"neurons": neurons,
-			"neuronDecayAmount": decay_amt,
+			"neuronDecayAmount": ctx.decay_amt,
 			"freeSpinsRemaining": freeSpinsRemaining,
 			"maxFreeSpins": maxFreeSpins,
-			"lucidityMultiplier": eff_mult,
-			"isFreeSpin": is_free,
+			"lucidityMultiplier": ctx.eff_mult,
+			"isFreeSpin": ctx.is_free,
 			"freeSpinCost": 1, # issue #155: the auto gauge never drains banked free spins faster
 			"lockedReels": lockedReels,
 			"previousReels": (lastResult["reels"] if lastResult != null else null),
-			"rng": rng,
-			"bookWeight": book_w,
-			"brainWeightBonus": brain_bonus,
+			"rng": ctx.rng,
+			"bookWeight": ctx.book_weight,
+			"brainWeightBonus": ctx.brain_bonus,
 			"guaranteedWin": guaranteedWinSpins > 0,
 			"pattern23Triple": Economy.has_pattern23_triple(ownedUpgrades),
-			"learningActive": book_w > 0,
-			"forceAllSymbol": force_all,
-			"forceTripleFrom": force_triple,
+			"learningActive": ctx.book_weight > 0,
+			"forceAllSymbol": ctx.force_all,
+			"forceTripleFrom": ctx.force_triple,
 			"excludeSymbol": ("brain" if banBrainSpins > 0 else null),
 			"banExcluded": banBrainSpins > 0,
 			"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
-			"forceReelSymbols": _forced_reel_symbols(seed),
-			"symbolToBrainCount": potion_symbol_to_brain,
-			"adjacentSymbolCount": potion_adjacent_symbols,
-			"pairScoreMult": _pair_score_multiplier(pair_boost_active),
-			"hiddenReelCount": hidden_reel_count,
-			"visiblePairAsTriple": hallucination_active,
+			"forceReelSymbols": _forced_reel_symbols(ctx.spin_seed),
+			"symbolToBrainCount": ctx.potion_symbol_to_brain,
+			"adjacentSymbolCount": ctx.potion_adjacent_symbols,
+			"pairScoreMult": _pair_score_multiplier(ctx.pair_boost_active),
+			"hiddenReelCount": ctx.hidden_reel_count,
+			"visiblePairAsTriple": ctx.hallucination_active,
 			"rewardScale": _active_reward_scale(),
 			"bookRewardScale": _book_reward_scale(),
 			"hallucinationRewardScale": _hallucination_reward_scale(),
@@ -925,7 +984,13 @@ func spin(compulsive := false) -> Variant:
 			"symbolRewardBonuses": symbolRewardBonuses,
 			"weightOverrides": oddsWeightOverrides,
 		})
+	ctx.result = result
 
+## Everything that pays on top of the pinned reel score. Each of these rides above
+## evaluate() rather than inside it, so the parity vectors keep pinning the reels
+## themselves while the store layers its own boosts on the total.
+func _apply_score_bonuses(ctx: SpinContext) -> void:
+	var result := ctx.result
 	# The Cocktail is pure upside: rarity points on every visible reel, no tax and no
 	# win-type gate — pairs and triples collect exactly like a miss does. It used to
 	# charge 15% of a pair/triple back, which made the item read as a trap on exactly the
@@ -933,7 +998,7 @@ func spin(compulsive := false) -> Variant:
 	var cocktail_bonus := 0
 	if cocktailBoostSpins > 0:
 		cocktail_bonus = InRunItems.cocktail_bonus(result["reels"] as Array,
-			hidden_reel_count, float(result["scoreMultiplier"]))
+			ctx.hidden_reel_count, float(result["scoreMultiplier"]))
 	# The joker Cocktail (issue #111) is that same total, charged rather than paid, and
 	# ONLY on a spin that won something: a miss pays nothing, so there is nothing to take
 	# and the item would otherwise be a tax on standing still. The win is floored at zero
@@ -942,18 +1007,17 @@ func spin(compulsive := false) -> Variant:
 	if cocktailMalusSpins > 0 and int(result["scoreEarned"]) > 0 \
 			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
 		cocktail_malus = InRunItems.cocktail_bonus(result["reels"] as Array,
-			hidden_reel_count, float(result["scoreMultiplier"]))
+			ctx.hidden_reel_count, float(result["scoreMultiplier"]))
 	# Issue #76: a charged flatline strike multiplies the next winning pair/triple. The
 	# bonus rides on top of the pinned score (evaluate() untouched, like cocktail above)
 	# so it flows through the lucidity plan; requiring base_score > 0 means misses and
 	# 0-score flatline wins never spend the charge — it waits for a real win.
 	var base_score := maxi(0, int(result["scoreEarned"]) + cocktail_bonus - cocktail_malus)
 	var flatline_boost := 0
-	var flatline_boost_applied := false
 	if flatlineWinBoostArmed and base_score > 0 \
 			and String(result["winType"]) in ["pair", "triple", "jackpot"]:
 		flatline_boost = base_score * (EconomyConst.FLATLINE_WIN_BOOST_MULT - 1)
-		flatline_boost_applied = true
+		ctx.flatline_boost_applied = true
 	# COMBO is a separate Pacte streak from the flatline strike above. Each
 	# successive paying result earns the next 5%-step bonus, then caps at 45%.
 	var win_boost_bonus := 0
@@ -972,23 +1036,24 @@ func spin(compulsive := false) -> Variant:
 	var specialist_bonus := ChipAugments.specialist_bonus(
 		base_score, String(result["winType"]), MetaStateStore.pairTripleAugmentChoice)
 	var final_score := base_score + flatline_boost + win_boost_bonus + specialist_bonus
-	var passive_lucidity := _passive_lucidity_per_spin()
+	ctx.passive_lucidity = _passive_lucidity_per_spin()
+	var passive_lucidity := ctx.passive_lucidity
 	var final_result: Dictionary = result
-	if cocktail_bonus > 0 or cocktail_malus > 0 or flatline_boost_applied \
-			or win_boost_applied or specialist_bonus > 0 or hidden_reel_count > 0 \
+	if cocktail_bonus > 0 or cocktail_malus > 0 or ctx.flatline_boost_applied \
+			or win_boost_applied or specialist_bonus > 0 or ctx.hidden_reel_count > 0 \
 			or passive_lucidity > 0:
 		final_result = result.duplicate(true)
 		final_result["scoreEarned"] = final_score
 		final_result["coinsEarned"] = final_score
-		if hidden_reel_count > 0:
-			final_result["hiddenReelCount"] = hidden_reel_count
+		if ctx.hidden_reel_count > 0:
+			final_result["hiddenReelCount"] = ctx.hidden_reel_count
 		if cocktail_bonus > 0:
 			final_result["cocktailApplied"] = true
 			final_result["cocktailBonus"] = cocktail_bonus
 		if cocktail_malus > 0:
 			final_result["cocktailMalusApplied"] = true
 			final_result["cocktailMalus"] = cocktail_malus
-		if flatline_boost_applied:
+		if ctx.flatline_boost_applied:
 			final_result["flatlineBoostApplied"] = true
 			final_result["flatlineBoostBonus"] = flatline_boost
 		if win_boost_applied:
@@ -1001,41 +1066,48 @@ func spin(compulsive := false) -> Variant:
 			final_result["specialistBonus"] = specialist_bonus
 		if passive_lucidity > 0:
 			final_result["passiveLucidity"] = passive_lucidity
+	ctx.final_result = final_result
 
+## Committing the spin to the run: the lucidity plan, the potion's after-effects,
+## then every field this spin moves and every per-spin counter it ticks down.
+func _settle_spin(ctx: SpinContext) -> void:
+	var result := ctx.result
+	var final_result := ctx.final_result
+	var passive_lucidity := ctx.passive_lucidity
 	# Heart stays spent like every other power: it waits in the pool until the
 	# active power-restore threshold brings it back.
 	var lucidity_gain := int(final_result["scoreEarned"]) + passive_lucidity
-	var plan := Lucidity.plan_gain(lucidityCoins, lucidity_gain, abilitiesUsed, seed,
+	var plan := Lucidity.plan_gain(lucidityCoins, lucidity_gain, abilitiesUsed, ctx.spin_seed,
 		effective_coins_per_power_restore(), restore_budget_left())
 
 	# A queued compulsion lands on the spin after the one that queued it. It used to wait
 	# for the classic drink's protected spins to run out; only the joker drink queues one
 	# now, and it brings no protected spins with it, so the wait is a single spin.
-	var was_energy_last: bool = pendingCompulsiveSpinSkips > 0 and not is_compulsive
+	var was_energy_last: bool = pendingCompulsiveSpinSkips > 0 and not ctx.is_compulsive
 
 	# Potion pool side effects (issue #32): ± lucidity and a free reroll (restore the
 	# reroll ability) resolve after the score plan.
 	var new_abilities: Array = plan["abilitiesUsed"]
-	if potion_free_reroll:
+	if ctx.potion_free_reroll:
 		new_abilities = new_abilities.filter(func(a): return String(a) != "reroll")
 	var potion_restored_power := ""
-	if potion_restore_power and not new_abilities.is_empty():
-		var restore_rng := LobRNG.new((seed ^ 0x7600babe) & M32)
+	if ctx.potion_restore_power and not new_abilities.is_empty():
+		var restore_rng := LobRNG.new((ctx.spin_seed ^ 0x7600babe) & M32)
 		var restore_idx := mini(new_abilities.size() - 1, floori(restore_rng.next() * new_abilities.size()))
 		potion_restored_power = String(new_abilities[restore_idx])
 		new_abilities = new_abilities.duplicate()
 		new_abilities.remove_at(restore_idx)
 
 	neurons = int(final_result["neuronsAfter"])
-	if potion_restore_spins > 0:
-		neurons += potion_restore_spins * maxi(1, base_decay)
+	if ctx.potion_restore_spins > 0:
+		neurons += ctx.potion_restore_spins * maxi(1, ctx.base_decay)
 	_clamp_neurons()
 	# Passive gain is wealth, not just power fuel: it feeds the run total (and so the
 	# wealth odometer and the target) alongside the Lucidity it already paid out. The
 	# per-spin result keeps only the reel payout, so the score popup still announces
 	# what the reels won.
 	scoreEarned += int(final_result["scoreEarned"]) + passive_lucidity
-	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + potion_lucidity_delta)
+	lucidityCoins = maxi(0, int(plan["lucidityCoins"]) + ctx.potion_lucidity_delta)
 	abilitiesUsed = new_abilities
 	pendingPowerRestores.append_array(plan["restores"])
 	_spend_restore_budget((plan["restores"] as Array).size())
@@ -1046,12 +1118,12 @@ func spin(compulsive := false) -> Variant:
 	# evaluate() clamps freeSpinsAfter to maxFreeSpins on non-free spins — which
 	# would wipe banked vial/tea rewards (issue #66). Keep what the player had.
 	freeSpinsRemaining = maxi(int(final_result["freeSpinsAfter"]), freeSpinsRemaining) \
-		if is_compulsive else int(final_result["freeSpinsAfter"])
+		if ctx.is_compulsive else int(final_result["freeSpinsAfter"])
 	isFreeSpin = bool(final_result["isFreeSpin"])
 	# Checked here, after the spin's OWN restores (potion spins above, the free-spin
 	# tally just settled): the reserve is the last resort, so anything the spin itself
 	# gave back is counted first and leaves it untouched.
-	_try_emergency_reserve(not is_free)
+	_try_emergency_reserve(not ctx.is_free)
 	isSpinning = true
 	lastResult = final_result
 	# Baseline for the additive power payouts below: what the reels as spun are worth
@@ -1062,17 +1134,17 @@ func spin(compulsive := false) -> Variant:
 	_track_spin_card_progress(final_result)
 	if int(final_result.get("freeSpinsGranted", 0)) > 0:
 		freeSpinGrantSerial += 1
-	lastPotionEffect = potion_pick
-	lastEffectiveBet = clampi(eff_bet, 1, 3)
+	lastPotionEffect = ctx.potion_pick
+	lastEffectiveBet = clampi(ctx.eff_bet, 1, 3)
 	# Issue #155 frenzy gauge: a paying win steps the multiplier up. A defeat keeps
 	# the pre-spin value visible until the machine's pending rescue state resolves.
 	# The Energy-Drink forced spin drives the gauge like any normal spin — it keeps
 	# the current combo and can lose it (no machine-forced x1).
-	lastComboMultiplier = combo_before
+	lastComboMultiplier = ctx.combo_before
 	if _is_winning_result(final_result):
 		if winBoostEnabled:
 			winBoostCombo = mini(9, winBoostCombo + 1)
-		betMultiplier = _combo_after(combo_before, final_result)
+		betMultiplier = _combo_after(ctx.combo_before, final_result)
 		if energy_drink_owns_multiplier():
 			betMultiplier = 2 # the drink still owns the gauge — no x3 until it ends
 		comboDefeatPending = false
@@ -1083,7 +1155,7 @@ func spin(compulsive := false) -> Variant:
 		# follows the rush is the next result that can set one.
 		comboDefeatPending = false
 		pendingComboMultiplier = 1
-		betMultiplier = combo_before
+		betMultiplier = ctx.combo_before
 		if winBoostEnabled:
 			# Protected spins have no rescue window, so a miss breaks COMBO now.
 			winBoostCombo = 0
@@ -1092,16 +1164,16 @@ func spin(compulsive := false) -> Variant:
 		# resolve_pending_combo_defeat(false) clears it if the player confirms the
 		# loss; a corrective power can still recover it here.
 		comboDefeatPending = true
-		pendingComboMultiplier = combo_before
-		betMultiplier = combo_before
+		pendingComboMultiplier = ctx.combo_before
+		betMultiplier = ctx.combo_before
 	# Issue #155 dealer countdown: every completed spin advances it by the inverse
 	# multiplier actually used this spin. No overflow carry — it just floors at 0.
-	var dealer_countdown_step: int = 3 if glitchDealerStepActive else 4 - clampi(eff_bet, 1, 3)
+	var dealer_countdown_step: int = 3 if glitchDealerStepActive else 4 - clampi(ctx.eff_bet, 1, 3)
 	dealerCountdown = maxi(0, dealerCountdown - dealer_countdown_step)
 	spinCount += 1
 	powersUsedThisSpin = 0 # diamond modifier counts power uses per spin
 	nextSpinLucidityMultiplier = 1.0
-	if stasis:
+	if ctx.stasis:
 		decaySkips -= 1
 	brainBoostSpins = maxi(0, brainBoostSpins - 1)
 	guaranteedWinSpins = maxi(0, guaranteedWinSpins - 1)
@@ -1110,7 +1182,7 @@ func spin(compulsive := false) -> Variant:
 	cocktailBoostSpins = maxi(0, cocktailBoostSpins - 1)
 	cocktailMalusSpins = maxi(0, cocktailMalusSpins - 1)
 	jokerFlatlineSpins = maxi(0, jokerFlatlineSpins - 1)
-	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if is_compulsive else compulsiveSpinSkips) \
+	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if ctx.is_compulsive else compulsiveSpinSkips) \
 		+ (pendingCompulsiveSpinSkips if was_energy_last else 0)
 	pendingCompulsiveSpinSkips = 0 if was_energy_last else pendingCompulsiveSpinSkips
 	pairBoostSpins = maxi(0, pairBoostSpins - 1)
@@ -1134,10 +1206,8 @@ func spin(compulsive := false) -> Variant:
 	guaranteedTripleSpins = guaranteedTripleSpins if flatline_was_active else maxi(0, guaranteedTripleSpins - 1)
 	hideResultSpins = maxi(0, hideResultSpins - 1)
 	# Issue #76: the charge is spent only when a win actually consumed it above.
-	if flatline_boost_applied:
+	if ctx.flatline_boost_applied:
 		flatlineWinBoostArmed = false
-	_commit()
-	return final_result
 
 func set_spinning(v: bool) -> void:
 	if v:
