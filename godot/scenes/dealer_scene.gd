@@ -97,6 +97,9 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const OFFER_PRICE_COIN_SIZE := 6.0
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
+const BACK_BUTTON_SIZE := Vector2(20.0, 18.0)
+const BACK_BUTTON_POS := Vector2(9.0, 15.0)
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
 # Painting-glow pulse (originally the LAB button glow): dim → bright and back,
@@ -642,9 +645,9 @@ func _build_hud() -> void:
 	# in-run: LEAVE declines. Both ride the 2-frame settings sheet (normal, pressed).
 	var back := TextureButton.new()
 	back.name = "options"
-	back.custom_minimum_size = Vector2(20.0, 18.0)
-	back.size = Vector2(20.0, 18.0)
-	back.position = Vector2(9.0, 15.0)
+	back.custom_minimum_size = BACK_BUTTON_SIZE
+	back.size = BACK_BUTTON_SIZE
+	back.position = BACK_BUTTON_POS
 	ButtonKit.skin_icon_button(back, SETTINGS_ASSET, 1)
 	back.pressed.connect(_toggle_options_overlay)
 	add_child(back)
@@ -660,10 +663,11 @@ func _build_hud() -> void:
 		# Right-edge placement is parametric on size.x, so it stays correct on art swaps.
 		const ARROW_W := 39.0
 		const ARROW_H := 24.0
+		const EDGE_MARGIN := 3.0
 		var start := Button.new()
 		start.text = "START"
 		start.size = Vector2(ARROW_W, ARROW_H)
-		start.position = Vector2(160.0 - start.size.x - 3.0, (320.0 - start.size.y) * 0.5)
+		start.position = Vector2(CANVAS_W - start.size.x - EDGE_MARGIN, (CANVAS_H - start.size.y) * 0.5)
 		start.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			start.add_theme_font_override("font", _font)
@@ -681,7 +685,7 @@ func _build_campaign_label() -> void:
 		bottom_hud = Control.new()
 		bottom_hud.name = "BottomHudLayer"
 		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.size = Vector2(CANVAS_W, CANVAS_H)
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
@@ -1313,7 +1317,7 @@ func _build_credits_display() -> void:
 			_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			_refresh_credits()
 		if _credits_coin != null:
-			_credits_coin.custom_minimum_size = Vector2(9.0, 9.0)
+			_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
 			_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -1344,7 +1348,7 @@ func _build_credits_display() -> void:
 	var coin := TextureRect.new()
 	coin.name = "Coin"
 	coin.texture = Assets.texture(COIN_ASSET, true)
-	coin.custom_minimum_size = Vector2(9.0, 9.0)
+	coin.custom_minimum_size = CREDITS_COIN_SIZE
 	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

@@ -18,6 +18,9 @@ const NEON_PINK := Color(1.0, 0.5, 0.7)
 const NEON_YELLOW := Color(1.0, 0.86, 0.36)
 ## px from the LANGUAGE row's right edge to the flag, matching the row's own text inset.
 const LANGUAGE_FLAG_INSET := 8.0
+const MENU_BUTTON_SIZE := Vector2(104.0, 20.0)
+const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
+const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the panel's top-right corner
 
 @export var editor_preview_visible := true:
 	set(value):
@@ -152,7 +155,7 @@ func _style_panel() -> void:
 func _style_menu_button(button: Button, border_color: Color) -> void:
 	if button == null:
 		return
-	button.custom_minimum_size = Vector2(104.0, 20.0)
+	button.custom_minimum_size = MENU_BUTTON_SIZE
 	ButtonKit.start_menu_button_style(button, border_color, 7)
 	button.pivot_offset = button.custom_minimum_size * 0.5
 	if not button.button_down.is_connected(_on_menu_button_down):
@@ -163,8 +166,10 @@ func _style_close_button(button: Button) -> void:
 	if button == null:
 		return
 	button.text = "X"
-	button.position = Vector2(_panel.position.x + _panel.size.x - 16.0, _panel.position.y + 3.0)
-	button.size = Vector2(12.0, 12.0)
+	button.position = Vector2(
+		_panel.position.x + _panel.size.x - CLOSE_BUTTON_INSET.x,
+		_panel.position.y + CLOSE_BUTTON_INSET.y)
+	button.size = CLOSE_BUTTON_SIZE
 	button.custom_minimum_size = Vector2.ZERO
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", 7)

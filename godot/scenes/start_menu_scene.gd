@@ -26,6 +26,8 @@ const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const CANVAS_W := 160.0
 const CANVAS_H := 320.0
 const MENU_W := 148.0
+const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
+const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
 # Authored menu art (issue #111). Legacy fallback background if missing.
 const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # bg + title
@@ -745,8 +747,8 @@ func _modal_close_button(panel_width: float) -> Button:
 	var close := Button.new()
 	close.name = "CloseButton"
 	close.text = "X"
-	close.position = Vector2(panel_width - 16.0, 3.0)
-	close.size = Vector2(12.0, 12.0)
+	close.position = Vector2(panel_width - CLOSE_BUTTON_INSET.x, CLOSE_BUTTON_INSET.y)
+	close.size = CLOSE_BUTTON_SIZE
 	close.custom_minimum_size = Vector2.ZERO
 	close.focus_mode = Control.FOCUS_NONE
 	close.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

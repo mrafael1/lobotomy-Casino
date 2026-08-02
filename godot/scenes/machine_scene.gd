@@ -12,6 +12,7 @@ extends Node2D
 const SRC_W := 160.0
 const SRC_H := 320.0
 const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 # Geometry measured from the authored machine art (source px).
@@ -2637,7 +2638,7 @@ func _build_score_button() -> void:
 	if not authored:
 		_score_button.size = Vector2(41.0, 15.0)
 		# Pulled off the top-right corner so it isn't glued to the edge.
-		_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
+		_score_button.position = Vector2(SRC_W - _score_button.size.x - HUD_CORNER_INSET, HUD_CORNER_INSET)
 	_score_button.flat = false
 	_score_button.focus_mode = Control.FOCUS_NONE
 	_score_button.add_theme_font_size_override("font_size", 7)
@@ -2653,7 +2654,7 @@ func _build_options_controls() -> void:
 	if _options_button == null:
 		_options_button = TextureButton.new()
 		_options_button.name = "options"
-		_options_button.position = Vector2(9.0, 9.0)
+		_options_button.position = Vector2(HUD_CORNER_INSET, HUD_CORNER_INSET)
 		_options_button.size = Vector2(20.0, 18.0)
 		add_child(_options_button)
 	ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
@@ -2744,7 +2745,7 @@ func _build_spin_label() -> void:
 		bottom_hud = Control.new()
 		bottom_hud.name = "BottomHudLayer"
 		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.size = Vector2(SRC_W, SRC_H)
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
@@ -3705,8 +3706,11 @@ func _show_power_animation(id: String) -> void:
 		if _power_anim_label == null:
 			_power_anim_label = Label.new()
 			_power_anim_label.name = "PowerCalloutName"
-			_power_anim_label.position = Vector2(35.0, 43.0)
-			_power_anim_label.size = Vector2(90.0, 18.0)
+			# Centred band: the x follows the width so a resize can't leave it off-centre.
+			const CALLOUT_SIZE := Vector2(90.0, 18.0)
+			const CALLOUT_Y := 43.0
+			_power_anim_label.size = CALLOUT_SIZE
+			_power_anim_label.position = Vector2((SRC_W - CALLOUT_SIZE.x) * 0.5, CALLOUT_Y)
 			_power_anim_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_power_anim_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			_power_anim_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -7300,8 +7304,11 @@ func _show_potion_popup(text: String, color: Color) -> void:
 	var label := Label.new()
 	label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	label.text = text
-	label.position = Vector2(30.0, 112.0) # between the TV and the multiplier strip
-	label.size = Vector2(100.0, 10.0)
+	# Centred band, sat between the TV and the multiplier strip.
+	const POPUP_SIZE := Vector2(100.0, 10.0)
+	const POPUP_Y := 112.0
+	label.size = POPUP_SIZE
+	label.position = Vector2((SRC_W - POPUP_SIZE.x) * 0.5, POPUP_Y)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -7497,8 +7504,9 @@ func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) ->
 		if tex != null:
 			var icon := TextureRect.new()
 			icon.texture = tex
-			icon.position = Vector2((cell_w - 16.0) * 0.5, 3.0)
-			icon.size = Vector2(16.0, 16.0)
+			const BOOK_ICON := 16.0
+			icon.size = Vector2(BOOK_ICON, BOOK_ICON)
+			icon.position = Vector2((cell_w - BOOK_ICON) * 0.5, 3.0)
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -7821,6 +7829,19 @@ func _cleanup_transient_presentation() -> void:
 	_clear_targeting()
 	_set_stash_elevated(false)
 
+# Fallback ending overlay (used when no authored ending scene answers). Both the copy
+# column and the button are centred bands, so each is parametric on its own inset.
+const ENDING_TEXT_INSET := 20.0
+const ENDING_TEXT_W := SRC_W - ENDING_TEXT_INSET * 2.0 # 120
+const ENDING_TITLE_H := 28.0
+const ENDING_LABEL_H := 20.0
+const ENDING_FLATLINE_TITLE_Y := 58.0
+const ENDING_TITLE_Y := 120.0
+const ENDING_WALLET_Y := 145.0
+const ENDING_BUTTON_SIZE := Vector2(100.0, 20.0)
+const ENDING_BUTTON_FLATLINE_Y := 238.0
+const ENDING_BUTTON_Y := 175.0
+
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
@@ -7870,15 +7891,15 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		# flatline with neurons left just reads FLATLINE.
 		var fatal := not _has_campaign_neurons_remaining()
 		title.text = fatal_flatline_text if fatal else "FLATLINE"
-		title.position = Vector2(20, 58)
-		title.size = Vector2(120, 28)
+		title.position = Vector2(ENDING_TEXT_INSET, ENDING_FLATLINE_TITLE_Y)
+		title.size = Vector2(ENDING_TEXT_W, ENDING_TITLE_H)
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
 	else:
 		title.text = resolved_ending.to_upper()
-		title.position = Vector2(20, 120)
-		title.size = Vector2(120, 20)
+		title.position = Vector2(ENDING_TEXT_INSET, ENDING_TITLE_Y)
+		title.size = Vector2(ENDING_TEXT_W, ENDING_LABEL_H)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
@@ -7890,7 +7911,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_build_flatline_countdown(run)
 	else:
 		var wallet := Label.new()
-		wallet.position = Vector2(20, 145)
+		wallet.position = Vector2(ENDING_TEXT_INSET, ENDING_WALLET_Y)
 		wallet.add_theme_font_size_override("font_size", 9)
 		if _font != null:
 			wallet.add_theme_font_override("font", _font)
@@ -7900,8 +7921,10 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	var to_menu := Button.new()
 	to_menu.text = _flatline_action_text()
-	to_menu.position = Vector2(30, 238 if resolved_ending == "flatline" else 175)
-	to_menu.size = Vector2(100, 20)
+	to_menu.size = ENDING_BUTTON_SIZE
+	to_menu.position = Vector2(
+		(SRC_W - ENDING_BUTTON_SIZE.x) * 0.5,
+		ENDING_BUTTON_FLATLINE_Y if resolved_ending == "flatline" else ENDING_BUTTON_Y)
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		to_menu.add_theme_font_override("font", _font)
