@@ -231,7 +231,7 @@ func _build_overlay_ui() -> void:
 	_description_bubble.size = DESCRIPTION_BUBBLE_RECT.size
 	_description_bubble.z_index = UI_Z_INDEX
 	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_description_bubble.add_theme_stylebox_override("panel", Assets.neon_panel_style(NEON_GOLD))
+	_description_bubble.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(NEON_GOLD))
 	add_child(_description_bubble)
 	_description_title = _label("CardTitle", DESCRIPTION_TITLE_RECT,
 		DESCRIPTION_TITLE_FONT_SIZE, NEON_GOLD, _description_bubble)
@@ -325,7 +325,7 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = _atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
+	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
 		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.stretch_mode = TextureRect.STRETCH_SCALE
@@ -400,14 +400,14 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var back := TextureRect.new()
 	back.name = "Back"
-	back.texture = _atlas(PacteCards.sheet_for_pool(kind), PacteCards.back_rect_for_pool(kind))
+	back.texture = UiKit.atlas(PacteCards.sheet_for_pool(kind), PacteCards.back_rect_for_pool(kind))
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	view.add_child(back)
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = _atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
+	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
 		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
@@ -487,7 +487,7 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 	if card_id != PATTERN_RECOGNITION_ID and card_id != HOW_TO_CHEAT_ID:
 		var icon := TextureRect.new()
 		icon.name = "Icon"
-		icon.texture = _atlas(String(entry.get("sheet", "")), source_rect)
+		icon.texture = UiKit.atlas(String(entry.get("sheet", "")), source_rect)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_SCALE
 		icon.size = display_size
@@ -553,7 +553,7 @@ func _show_reward_amp_picker() -> void:
 		var symbol_id := String(raw_symbol)
 		if symbol_id != "flatline":
 			symbols.append(symbol_id)
-	Assets.build_symbol_picker_panel(picker, symbols, "", REWARD_AMP_PICKER_RECT,
+	SymbolPicker.build_symbol_picker_panel(picker, symbols, "", REWARD_AMP_PICKER_RECT,
 		Callable(self, "_on_reward_amp_symbol_picked"),
 		Callable(self, "_cancel_reward_amp_picker"), true, false, false)
 	_reward_amp_picker = picker
@@ -575,11 +575,6 @@ func _on_reward_amp_symbol_picked(symbol_id: String) -> void:
 	MetaStateStore.set_reward_amp_symbol(symbol_id)
 	_close_reward_amp_picker()
 
-func _atlas(asset: String, region: Rect2) -> AtlasTexture:
-	var atlas := AtlasTexture.new()
-	atlas.atlas = Assets.texture(asset)
-	atlas.region = region
-	return atlas
 
 func _set_deck_visible(_kind: String) -> void:
 	if _augment_deck != null:
@@ -709,7 +704,7 @@ func _update_drag(global_position: Vector2) -> void:
 	if not _dragging and global_position.distance_to(_press_position) <= DRAG_SLOP:
 		return
 	if not _dragging:
-		Assets.add_drag_shadow(button)
+		DragShadow.add_drag_shadow(button)
 	_dragging = true
 	# Keep the odds explanation open while a card is only being inspected. It
 	# closes when the drag gesture actually leaves the card.
@@ -730,7 +725,7 @@ func _finish_drag(global_position: Vector2) -> void:
 	_set_drop_hint_visible(false)
 	if button == null:
 		return
-	Assets.remove_drag_shadow(button)
+	DragShadow.remove_drag_shadow(button)
 	button.position = _drag_origin
 	button.z_index = _drag_origin_z
 	if not was_dragging:

@@ -370,7 +370,7 @@ func _build_base() -> void:
 	_look_text_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_look_text_button.add_theme_font_override("font", _font)
-	Assets.skin_sheet_button(_look_text_button, "ui/green_button.png", 4)
+	ButtonKit.skin_sheet_button(_look_text_button, "ui/green_button.png", 4)
 	_look_text_button.pressed.connect(_on_look_pressed)
 	add_child(_look_text_button)
 	_look_text_button.visible = false
@@ -383,7 +383,7 @@ func _build_base() -> void:
 	_ignore_action_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_ignore_action_button.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(_ignore_action_button)
+	ButtonKit.skin_negative_button(_ignore_action_button)
 	_ignore_action_button.pressed.connect(_on_ignore_pressed)
 	add_child(_ignore_action_button)
 	_ignore_action_button.visible = false
@@ -394,7 +394,7 @@ func _build_base() -> void:
 	_ignore_text_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_ignore_text_button.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(_ignore_text_button)
+	ButtonKit.skin_negative_button(_ignore_text_button)
 	_ignore_text_button.pressed.connect(_on_ignore_pressed)
 	add_child(_ignore_text_button)
 	_ignore_text_button.visible = false
@@ -488,7 +488,7 @@ func _bind_authored_base() -> bool:
 		_look_text_button.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			_look_text_button.add_theme_font_override("font", _font)
-		Assets.skin_sheet_button(_look_text_button, "ui/green_button.png", 4)
+		ButtonKit.skin_sheet_button(_look_text_button, "ui/green_button.png", 4)
 		if not _look_text_button.pressed.is_connected(_on_look_pressed):
 			_look_text_button.pressed.connect(_on_look_pressed)
 		_look_text_button.visible = false
@@ -498,7 +498,7 @@ func _bind_authored_base() -> bool:
 		_ignore_action_button.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			_ignore_action_button.add_theme_font_override("font", _font)
-		Assets.skin_negative_button(_ignore_action_button)
+		ButtonKit.skin_negative_button(_ignore_action_button)
 		if not _ignore_action_button.pressed.is_connected(_on_ignore_pressed):
 			_ignore_action_button.pressed.connect(_on_ignore_pressed)
 		_ignore_action_button.visible = false

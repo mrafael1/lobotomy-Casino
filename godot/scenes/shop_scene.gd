@@ -144,7 +144,7 @@ func _build() -> void:
 		_connect_scene_button(_start_button, _start_run)
 		_connect_scene_button(_scores_button, _go_scores)
 		if _menu_button != null:
-			Assets.skin_negative_button(_menu_button)
+			ButtonKit.skin_negative_button(_menu_button)
 			_connect_scene_button(_menu_button, _go_menu)
 		return
 
@@ -185,7 +185,7 @@ func _build() -> void:
 	scores.pressed.connect(_go_scores)
 	footer.add_child(scores)
 	var back := _styled_button("MENU", 8)
-	Assets.skin_negative_button(back)
+	ButtonKit.skin_negative_button(back)
 	back.pressed.connect(_go_menu)
 	footer.add_child(back)
 	if DEBUG:

@@ -292,7 +292,7 @@ func _reparent_plate_button(b: Button, col: VBoxContainer, rect: Rect2,
 		col.remove_child(b)
 		add_child(b)
 	_style_plate_button(b, rect, color, font_size)
-	_connect_button(b, cb)
+	UiKit.connect_button(b, cb)
 
 func _style_plate_button(b: Button, rect: Rect2, color: Color, font_size: int) -> void:
 	b.position = rect.position
@@ -467,8 +467,8 @@ func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT
 
 func _build_menu() -> void:
 	_build_campaign_labels()
-	_connect_button(_start_button, _start_run)
-	_connect_button(_scores_button, _open_scores)
+	UiKit.connect_button(_start_button, _start_run)
+	UiKit.connect_button(_scores_button, _open_scores)
 
 func _build_campaign_labels() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
@@ -586,11 +586,6 @@ func _refresh_campaign_ui() -> void:
 		_campaign_hint.text = "EACH RETURN COSTS YOU. REACH WEALTH BEFORE DEATH."
 	_refresh_start_button() # also lays out the art frame + meter
 
-func _connect_button(button: Button, cb: Callable) -> void:
-	if button == null:
-		return
-	if not button.pressed.is_connected(cb):
-		button.pressed.connect(cb)
 
 func _configure_tutorial_modal() -> void:
 	if _tutorial_modal == null:
@@ -725,7 +720,7 @@ func _show_continue_modal() -> void:
 
 	var panel := Panel.new()
 	panel.name = "Panel"
-	var style := Assets.neon_panel_style(ART_CYAN)
+	var style := ButtonKit.neon_panel_style(ART_CYAN)
 	panel.add_theme_stylebox_override("panel", style)
 	panel.position = CONTINUE_MODAL_PANEL_RECT.position
 	panel.size = CONTINUE_MODAL_PANEL_RECT.size
@@ -772,7 +767,7 @@ func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
 	var b := Button.new()
 	b.name = button_name
 	b.text = text
-	Assets.start_menu_button_style(b, color, 6)
+	ButtonKit.start_menu_button_style(b, color, 6)
 	b.custom_minimum_size = Vector2.ZERO
 	b.position = rect.position
 	b.size = rect.size

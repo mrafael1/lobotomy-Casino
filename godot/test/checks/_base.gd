@@ -146,7 +146,7 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 		if mute.custom_minimum_size.y < 20.0:
 			failures.append("settings: MUTE lost its tap target with its plate")
 	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
-	_check_start_menu_button_style(back, Assets.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
+	_check_start_menu_button_style(back, ButtonKit.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
 	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal.
@@ -181,9 +181,9 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 		if enter_button == null or cancel_button == null:
 			failures.append("issue84: confirm modal missing ENTER/CANCEL buttons")
 		else:
-			_check_start_menu_button_style(cancel_button, Assets.START_MENU_BUTTON_PINK,
+			_check_start_menu_button_style(cancel_button, ButtonKit.START_MENU_BUTTON_PINK,
 				"issue84: CANCEL", failures, true)
-			_check_start_menu_button_style(enter_button, Assets.START_MENU_BUTTON_CYAN,
+			_check_start_menu_button_style(enter_button, ButtonKit.START_MENU_BUTTON_CYAN,
 				"issue84: ENTER", failures, true)
 			_check_start_menu_press_feedback(cancel_button, "issue84: CANCEL", failures)
 			_check_start_menu_press_feedback(enter_button, "issue84: ENTER", failures)
@@ -425,7 +425,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	if close == null:
 		failures.append("issue119: table has no CLOSE button")
 	else:
-		_check_start_menu_button_style(close, Assets.START_MENU_BUTTON_YELLOW,
+		_check_start_menu_button_style(close, ButtonKit.START_MENU_BUTTON_YELLOW,
 			"issue119: BACK", failures, true)
 		if overlay.get_viewport() != null and overlay.get_viewport().gui_get_focus_owner() != close:
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")

@@ -78,7 +78,7 @@ func _build() -> void:
 	var bg := Panel.new()
 	bg.name = "Panel"
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.add_theme_stylebox_override("panel", Assets.neon_panel_style(RING_COLOR))
+	bg.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(RING_COLOR))
 	_box.add_child(bg)
 	_label = Label.new()
 	_label.name = "Text"
@@ -117,7 +117,7 @@ func _build() -> void:
 	_skip.name = "SkipButton"
 	_skip.text = "skip"
 	_skip.focus_mode = Control.FOCUS_NONE
-	Assets.small_neon_button_style(_skip, Assets.START_MENU_BUTTON_PINK, 5)
+	ButtonKit.small_neon_button_style(_skip, ButtonKit.START_MENU_BUTTON_PINK, 5)
 	# Above the mask, and alive in every beat: the tutorial must never be a room the
 	# player cannot walk out of.
 	_skip.z_index = 1
@@ -155,7 +155,7 @@ func _show_skip_confirm() -> void:
 	panel.size = panel_size
 	panel.position = ((CANVAS - panel_size) * 0.5).round()
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", Assets.neon_panel_style(RING_COLOR))
+	panel.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(RING_COLOR))
 	_confirm.add_child(panel)
 	var ask := Label.new()
 	ask.name = "Ask"
@@ -175,13 +175,13 @@ func _show_skip_confirm() -> void:
 	ask.position = Vector2(4.0, 5.0 + Assets.centered_text_nudge(FONT_SIZE))
 	ask.size = Vector2(panel_size.x - 8.0, 14.0)
 	var yes := _confirm_button(panel, "YES", Vector2(8.0, 26.0),
-		Assets.START_MENU_BUTTON_PINK)
+		ButtonKit.START_MENU_BUTTON_PINK)
 	yes.pressed.connect(func() -> void:
 		_dismiss_skip_confirm()
 		skip_pressed.emit())
 	var no := _confirm_button(panel, "NO",
 		Vector2(panel_size.x - 8.0 - CONFIRM_BUTTON_SIZE.x, 26.0),
-		Assets.START_MENU_BUTTON_CYAN)
+		ButtonKit.START_MENU_BUTTON_CYAN)
 	no.pressed.connect(_dismiss_skip_confirm)
 
 ## The caller adds the returned button to the panel, so the rect is applied THERE rather
@@ -193,7 +193,7 @@ func _confirm_button(parent: Control, text: String, pos: Vector2, color: Color) 
 	b.name = text + "Button"
 	b.text = text.to_lower()
 	b.focus_mode = Control.FOCUS_NONE
-	Assets.small_neon_button_style(b, color, 6)
+	ButtonKit.small_neon_button_style(b, color, 6)
 	parent.add_child(b)
 	b.size = CONFIRM_BUTTON_SIZE
 	b.position = pos

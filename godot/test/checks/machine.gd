@@ -1072,7 +1072,7 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 		return
 	if machine._score_button != null and machine._score_button.text != "TABLES":
 		failures.append("issue51: score button is not renamed TABLES")
-	_check_start_menu_button_style(machine._score_button, Assets.START_MENU_BUTTON_CYAN,
+	_check_start_menu_button_style(machine._score_button, ButtonKit.START_MENU_BUTTON_CYAN,
 		"issue51: TABLES", failures, true)
 	_check_start_menu_press_feedback(machine._score_button, "issue51: TABLES", failures)
 	var texts := _overlay_label_texts(overlay)

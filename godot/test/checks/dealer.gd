@@ -506,7 +506,7 @@ func _check_odds_table_36(run_store: Node, failures: Array) -> void:
 			failures.append("issue130: DONE button is oversized for the modal")
 		if done_button.pivot_offset != done_button.size * 0.5:
 			failures.append("issue130: DONE button press animation needs a centered pivot")
-		_check_start_menu_button_style(done_button, Assets.START_MENU_BUTTON_CYAN,
+		_check_start_menu_button_style(done_button, ButtonKit.START_MENU_BUTTON_CYAN,
 			"issue130: DONE", failures, true)
 	var brain_symbol_button := symbol_buttons.get("brain") as Button
 	var brain_icon := overlay._symbol_icons.get("brain") as Sprite2D

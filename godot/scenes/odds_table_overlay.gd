@@ -309,7 +309,7 @@ func _rebuild() -> void:
 	done.add_theme_font_size_override("font_size", 5)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(done, Assets.START_MENU_BUTTON_CYAN, 5, 2.0)
+	ButtonKit.small_neon_button_style(done, ButtonKit.START_MENU_BUTTON_CYAN, 5, 2.0)
 	done.custom_minimum_size = Vector2.ZERO
 	done.button_down.connect(_on_done_button_down.bind(done))
 	done.button_up.connect(_on_done_button_up.bind(done))
