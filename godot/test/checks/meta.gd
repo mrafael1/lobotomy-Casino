@@ -47,6 +47,44 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	meta_store.is_first_launch = previous_first_launch
 
 
+## The run snapshot is keyed by field name. Marking a store field internal by
+## renaming it to _name would, without the trim on both sides of the save
+## boundary, drop it from every snapshot already on disk — and drop it silently,
+## because load skips absent keys and leaves the field at its default. A player
+## mid-run would resume having quietly lost their powers rather than see an error.
+##
+## So the on-disk key stays the bare name whatever the field is called in source.
+## This pins that boundary: bare-keyed data has to land in prefixed fields.
+func _check_run_save_key_stability(run_store: Node, failures: Array) -> void:
+	var internal: Array[String] = []
+	for prop in run_store._run_state_properties():
+		var name := String(prop)
+		if name.begins_with("_"):
+			internal.append(name)
+	if internal.is_empty():
+		failures.append("save keys: no internal run-state fields found to protect")
+		return
+	for name in internal:
+		if run_store._save_key(name) != name.substr(1):
+			failures.append("save keys: %s does not persist under its bare name" % name)
+	# A concrete round trip through the two fields most costly to lose silently.
+	var legacy := { "ownedPowerIds": ["memory", "cheat"], "pacteSeed": 4242 }
+	var prev_powers: Variant = run_store._ownedPowerIds
+	var prev_seed: Variant = run_store._pacteSeed
+	run_store._ownedPowerIds = []
+	run_store._pacteSeed = 0
+	for prop in run_store._run_state_properties():
+		var key: String = run_store._save_key(String(prop))
+		if legacy.has(key):
+			run_store.set(String(prop), legacy[key])
+	if str(run_store._ownedPowerIds) != str(["memory", "cheat"]):
+		failures.append("save keys: a bare-keyed snapshot did not restore ownedPowerIds")
+	if int(run_store._pacteSeed) != 4242:
+		failures.append("save keys: a bare-keyed snapshot did not restore pacteSeed")
+	run_store._ownedPowerIds = prev_powers
+	run_store._pacteSeed = prev_seed
+
+
 func _check_smart_save_retention(failures: Array) -> void:
 	var run := { "neurons": 0, "lucidityCoins": 200, "scoreEarned": 0 }
 	var meta := {

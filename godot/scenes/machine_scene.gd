@@ -4187,7 +4187,7 @@ func _emit_score_burst(source_reel) -> float:
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
 	var combo_applied := bool(lr.get("winBoostApplied", false)) \
-		and win_type in ["pair", "triple", "jackpot"]
+		and win_type in SpinResult.PAYING_WIN_TYPES
 	var combo_bonus := maxi(0, int(lr.get("winBoostBonus", 0))) if combo_applied else 0
 	var combo_number := clampi(int(lr.get("winBoostCombo", 1)), 1, COMBO_EFFECT_FRAMES)
 	var combo_percent := clampi(int(lr.get("winBoostPercent", 0)), 0, 45)
