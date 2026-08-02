@@ -19,6 +19,8 @@ const GRID_COLUMNS := 3
 const NEON_GOLD := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const LOCKED_MODULATE := Color(0.34, 0.32, 0.42, 0.9)
+const TEAR_TOP_Y := 16.0   # first redaction line, measured down the card back
+const TEAR_SPACING := 21.0 # and the gap to the second
 const LOCKED_NAME := "LOCKED"
 const LOCKED_DESCRIPTION := "NOT YET UNLOCKED."
 const HIGHLIGHT_PULSES := 3
@@ -176,7 +178,7 @@ func _add_locked_glitch(button: Button) -> void:
 		var tear := ColorRect.new()
 		tear.name = "Tear%d" % index
 		tear.color = Color(0.55, 0.9, 1.0, 0.16)
-		tear.position = Vector2(0.0, 16.0 + float(index) * 21.0)
+		tear.position = Vector2(0.0, TEAR_TOP_Y + float(index) * TEAR_SPACING)
 		tear.size = Vector2(CARD_SIZE.x, 2.0)
 		tear.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		fx.add_child(tear)

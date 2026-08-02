@@ -6,6 +6,7 @@ const MIN_VOLUME_DB := -48.0
 const MAX_VOLUME_DB := 0.0
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
+const MUTE_ROW_MIN_SIZE := Vector2(108.0, 20.0) # tap target; survives the plate being gone
 
 @export var audio_bus_name: StringName = &"Master":
 	set(value):
@@ -77,8 +78,8 @@ func _style_controls() -> void:
 		# button art as BACK made it read as one — two buttons stacked, one of which
 		# mysteriously did not navigate. The box and its tick carry the state on their
 		# own, so every state gets an empty stylebox and the row keeps only its label.
-		# The 108x20 minimum stays: the plate is gone, the tap target is not.
-		_mute_check.custom_minimum_size = Vector2(108.0, 20.0)
+		# The minimum stays: the plate is gone, the tap target is not.
+		_mute_check.custom_minimum_size = MUTE_ROW_MIN_SIZE
 		# Left, so the label sits against the box it belongs to instead of floating in the
 		# middle of a row with no plate to centre it in.
 		_mute_check.alignment = HORIZONTAL_ALIGNMENT_LEFT

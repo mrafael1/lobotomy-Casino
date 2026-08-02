@@ -39,6 +39,7 @@ const ENTRY_EASE := Tween.EASE_OUT
 const ENTRY_TIME := 0.32
 const ITEM_VISUAL_SIZE := Vector2(16.0, 16.0)
 const OFFER_SLOT_SIZE := Vector2(32.0, 32.0)
+const ACTION_BUTTON_SIZE := Vector2(52.0, 16.0) # look / ignore, both skinned sheets
 const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
 const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
 const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
@@ -47,10 +48,12 @@ const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
 ## off the art itself (test/debug_bubble_ink.gd reports it): x2..98, y3..31, with the tail
 ## spurring out below. The text used to be centred in the top 30px instead, which put every
 ## line two and a half pixels above the middle of the box actually drawn around it.
+const SPEECH_BUBBLE_SIZE := Vector2(100.0, 38.0) # bubble art incl. the tail spur below the body
 const BUBBLE_BODY_RECT := Rect2(2.0, 3.0, 96.0, 28.0)
 ## The two hint rows inside that body: 10px tall on a 12px pitch, so the pair spans 22px
 ## and the 6px left over splits evenly above and below.
 const HINT_ROW_H := 10.0
+const HINT_ROW_X := 8.0 # both hint lines share a left edge so their +/- prefixes align
 const HINT_ROW_Y := [3.0, 15.0]
 const SPEECH_FONT_SIZE := 6
 const HINT_FONT_SIZE := 8
@@ -339,7 +342,7 @@ func _build_base() -> void:
 	add_child(_stash_layer)
 
 	_speech_bubble = Control.new()
-	_speech_bubble.size = Vector2(100.0, 38.0)
+	_speech_bubble.size = SPEECH_BUBBLE_SIZE
 	add_child(_speech_bubble)
 	# Bubble GRAPHIC and Label are separate siblings: we flip only the graphic per side
 	# (_choose_side), so the text is never mirrored.
@@ -365,8 +368,8 @@ func _build_base() -> void:
 	_look_text_button = Button.new()
 	_look_text_button.name = "LookButton"
 	_look_text_button.text = "look"
-	_look_text_button.custom_minimum_size = Vector2(52.0, 16.0)
-	_look_text_button.size = Vector2(52.0, 16.0)
+	_look_text_button.custom_minimum_size = ACTION_BUTTON_SIZE
+	_look_text_button.size = ACTION_BUTTON_SIZE
 	_look_text_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_look_text_button.add_theme_font_override("font", _font)
@@ -378,8 +381,8 @@ func _build_base() -> void:
 	_ignore_action_button = Button.new()
 	_ignore_action_button.name = "IgnoreButton"
 	_ignore_action_button.text = "ignore"
-	_ignore_action_button.custom_minimum_size = Vector2(52.0, 16.0)
-	_ignore_action_button.size = Vector2(52.0, 16.0)
+	_ignore_action_button.custom_minimum_size = ACTION_BUTTON_SIZE
+	_ignore_action_button.size = ACTION_BUTTON_SIZE
 	_ignore_action_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_ignore_action_button.add_theme_font_override("font", _font)
@@ -390,7 +393,7 @@ func _build_base() -> void:
 
 	_ignore_text_button = Button.new()
 	_ignore_text_button.text = "IGNORE"
-	_ignore_text_button.size = Vector2(52.0, 16.0)
+	_ignore_text_button.size = ACTION_BUTTON_SIZE
 	_ignore_text_button.add_theme_font_size_override("font_size", 8)
 	if _font != null:
 		_ignore_text_button.add_theme_font_override("font", _font)
@@ -464,7 +467,7 @@ func _bind_authored_base() -> bool:
 
 	if _speech_bubble != null:
 		if _speech_bubble.size == Vector2.ZERO:
-			_speech_bubble.size = Vector2(100.0, 38.0)
+			_speech_bubble.size = SPEECH_BUBBLE_SIZE
 		_speech_bubble.visible = false
 
 	if _bubble_graphic != null and _speech_bubble != null:
@@ -507,7 +510,7 @@ func _bind_authored_base() -> bool:
 		if _ignore_text_button.text == "":
 			_ignore_text_button.text = "IGNORE"
 		if _ignore_text_button.size == Vector2.ZERO:
-			_ignore_text_button.size = Vector2(52.0, 16.0)
+			_ignore_text_button.size = ACTION_BUTTON_SIZE
 		if not _ignore_text_button.pressed.is_connected(_on_ignore_pressed):
 			_ignore_text_button.pressed.connect(_on_ignore_pressed)
 		_ignore_text_button.visible = false
@@ -823,8 +826,8 @@ func _ensure_speech_hint_layer() -> void:
 	_speech_name_hint.visible = false
 	_speech_pos_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_speech_neg_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_speech_pos_hint.position = Vector2(8.0, HINT_ROW_Y[0])
-	_speech_neg_hint.position = Vector2(8.0, HINT_ROW_Y[1])
+	_speech_pos_hint.position = Vector2(HINT_ROW_X, HINT_ROW_Y[0])
+	_speech_neg_hint.position = Vector2(HINT_ROW_X, HINT_ROW_Y[1])
 	_speech_pos_hint.add_theme_color_override("font_color", TV_POSITIVE_COLOR)
 	_speech_neg_hint.add_theme_color_override("font_color", TV_NEGATIVE_COLOR)
 	_speech_hint_layer.visible = false
