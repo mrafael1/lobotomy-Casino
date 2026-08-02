@@ -175,7 +175,7 @@ const CHECKS: Array = [
 	{"fn": "_check_machine_consumable_feedback", "file": "consumables", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
 	{"fn": "_check_upgrades_scene", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_smart_save_retention", "file": "meta", "iso": ISO_STORES, "args": ["failures"]},
-	{"fn": "_check_run_save_key_stability", "file": "meta", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_dynamic_store_field_names", "file": "meta", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
 	{"fn": "_check_issue27_overlay_layout", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_issue27_machine_stash_drag", "file": "consumables", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
 	{"fn": "_check_issue28_machine_sequence_lock", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},

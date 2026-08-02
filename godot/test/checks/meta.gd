@@ -47,43 +47,39 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	meta_store.is_first_launch = previous_first_launch
 
 
-## The run snapshot is keyed by field name. Marking a store field internal by
-## renaming it to _name would, without the trim on both sides of the save
-## boundary, drop it from every snapshot already on disk — and drop it silently,
-## because load skips absent keys and leaves the field at its default. A player
-## mid-run would resume having quietly lost their powers rather than see an error.
+## Some store fields are named by DATA rather than by code: machine_scene's
+## DURATION_BOOSTS table gives each item a "counter" (and sometimes a
+## "symbolField") that is looked up with RunStateStore.get(name), and the tutorial
+## script pins beat state the same way. A field named only from a table is
+## invisible to any search for `RunStateStore.fieldName`, so renaming one looks
+## safe and is not: the boost row starts reading null (int(null) throws every
+## frame the HUD refreshes) and the tutorial's pinned state silently stops
+## applying, because _pin skips properties the store does not have.
 ##
-## So the on-disk key stays the bare name whatever the field is called in source.
-## This pins that boundary: bare-keyed data has to land in prefixed fields.
-func _check_run_save_key_stability(run_store: Node, failures: Array) -> void:
-	var internal: Array[String] = []
-	for prop in run_store._run_state_properties():
-		var name := String(prop)
-		if name.begins_with("_"):
-			internal.append(name)
-	if internal.is_empty():
-		failures.append("save keys: no internal run-state fields found to protect")
-		return
-	for name in internal:
-		if run_store._save_key(name) != name.substr(1):
-			failures.append("save keys: %s does not persist under its bare name" % name)
-	# A concrete round trip through the two fields most costly to lose silently.
-	var legacy := { "ownedPowerIds": ["memory", "cheat"], "pacteSeed": 4242 }
-	var prev_powers: Variant = run_store._ownedPowerIds
-	var prev_seed: Variant = run_store._pacteSeed
-	run_store._ownedPowerIds = []
-	run_store._pacteSeed = 0
-	for prop in run_store._run_state_properties():
-		var key: String = run_store._save_key(String(prop))
-		if legacy.has(key):
-			run_store.set(String(prop), legacy[key])
-	if str(run_store._ownedPowerIds) != str(["memory", "cheat"]):
-		failures.append("save keys: a bare-keyed snapshot did not restore ownedPowerIds")
-	if int(run_store._pacteSeed) != 4242:
-		failures.append("save keys: a bare-keyed snapshot did not restore pacteSeed")
-	run_store._ownedPowerIds = prev_powers
-	run_store._pacteSeed = prev_seed
-
+## That is exactly how the phase-3 rename broke the boost indicators. These names
+## are part of an external contract, so this check holds them to it: every name
+## any table hands to get() must resolve to a real property.
+func _check_dynamic_store_field_names(machine: Node, run_store: Node, failures: Array) -> void:
+	var wanted: Array[String] = []
+	for boost: Dictionary in machine.DURATION_BOOSTS:
+		for key in ["counter", "symbolField"]:
+			var name := String(boost.get(key, ""))
+			if name != "" and not wanted.has(name):
+				wanted.append(name)
+		for phase: Dictionary in boost.get("phases", []):
+			var phase_name := String(phase.get("counter", ""))
+			if phase_name != "" and not wanted.has(phase_name):
+				wanted.append(phase_name)
+	if wanted.is_empty():
+		failures.append("dynamic fields: no boost counters found to check")
+	for beat: Dictionary in TutorialScript.BEATS:
+		for key in (beat.get("state", {}) as Dictionary):
+			var state_name := String(key)
+			if not wanted.has(state_name):
+				wanted.append(state_name)
+	for name in wanted:
+		if not (name in run_store):
+			failures.append("dynamic fields: '%s' is named by a table but is not a store property" % name)
 
 func _check_smart_save_retention(failures: Array) -> void:
 	var run := { "neurons": 0, "lucidityCoins": 200, "scoreEarned": 0 }
