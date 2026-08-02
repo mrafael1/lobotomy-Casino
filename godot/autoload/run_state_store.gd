@@ -150,29 +150,29 @@ var _brainBoostSpins := 0
 var _guaranteedWinSpins := 0
 var _blockPowersSpins := 0
 var _hideNeuronsSpins := 0
-var _cocktailBoostSpins := 0
+var cocktailBoostSpins := 0
 var compulsiveSpinSkips := 0
-var _pendingCompulsiveSpinSkips := 0
+var pendingCompulsiveSpinSkips := 0
 var decaySkips := 0
 # Consumable roster effects (issue #32).
 var pairBoostSpins := 0          # Tobacco: hidden reel + pair multiplier active
 var _pairBoostMult := 1           # Tobacco: pair payout multiplier while active
 var pairBoostHiddenReels := 0    # Tobacco: reels hidden from scoring while active
-var _guaranteeSymbolSpins := 0    # Serum: force the picked symbol to appear
-var _guaranteeSymbolId := ""      # Serum: the player-picked symbol (issue #53)
+var guaranteeSymbolSpins := 0    # Serum: force the picked symbol to appear
+var guaranteeSymbolId := ""      # Serum: the player-picked symbol (issue #53)
 var blurReelsSpins := 0          # Serum: adjacent strip symbols hide for these spins
 var _pendingBlurSpins := 0        # Serum: adjacent hiding queued after the guarantee
 var _banBrainSpins := 0           # Serum (legacy): brain banned from the reels
-var _potionSpins := 0             # Potion: one random pool effect per spin
+var potionSpins := 0             # Potion: one random pool effect per spin
 var forceFlatlineSpins := 0      # Pill: force an all-flatline spin
 var guaranteedTripleSpins := 0   # Pill: force a triple the spin after the flatline
 var hideResultSpins := 0         # White Powder: hide the next spin's result
 # Joker item effects (issue #111): the four in-run items turned against the player on a
 # joker Augmented run. They ride their own counters rather than negative values on the
-# normal ones, so nothing reading _cocktailBoostSpins/forceFlatlineSpins has to learn a
+# normal ones, so nothing reading cocktailBoostSpins/forceFlatlineSpins has to learn a
 # second sign — the badges, the reel transforms and the scorer each check their own.
-var _cocktailMalusSpins := 0      # joker Cocktail: a win is CHARGED its rarity points
-var _jokerFlatlineSpins := 0      # joker Red Pill: one random reel lands on flatline
+var cocktailMalusSpins := 0      # joker Cocktail: a win is CHARGED its rarity points
+var jokerFlatlineSpins := 0      # joker Red Pill: one random reel lands on flatline
 var _pendingPowerBarDrains := 0   # joker Water: gauges the machine must empty, then clear
 
 const NON_FLATLINE_SYMBOLS := ["brain", "eye", "pill", "syringe", "vial"]
@@ -206,7 +206,7 @@ var _eyeRevealSymbol := ""
 # would leave the coaching talking about something that did not happen. It rides
 # evaluate()'s existing forceReelSymbols gate like the eye reveal does, so the scorer and
 # the pinned vectors are untouched; nothing but Tutorial ever sets it.
-var _scriptedReels: Variant = null
+var scriptedReels: Variant = null
 
 # Dealer odds table (issue #36): additive weight overrides bought with a token
 # budget at the post-run "what's next?" phase. Upgrades are PERMANENT — staged
@@ -304,12 +304,12 @@ func _forced_reel_symbols(seed_val: int) -> Variant:
 		forced.merge(eye as Dictionary)
 	# A scripted tutorial spin outranks everything below: the beat is explaining THIS
 	# result, so it lands whole rather than being edged out by a reveal or a pill.
-	if _scriptedReels is Array:
-		var scripted := _scriptedReels as Array
+	if scriptedReels is Array:
+		var scripted := scriptedReels as Array
 		for i in mini(3, scripted.size()):
 			forced[i] = String(scripted[i])
 		return forced
-	if _jokerFlatlineSpins > 0:
+	if jokerFlatlineSpins > 0:
 		var free_reels: Array = []
 		for i in 3:
 			if not bool(lockedReels[i]) and not forced.has(i):
@@ -382,7 +382,7 @@ func pending_combo_power_ids() -> Array[String]:
 ## has fully resolved. Only the joker Energy Drink queues one now — the classic drink's
 ## protected spins no longer touch the multiplier at all, so they are not counted here.
 func energy_drink_owns_multiplier() -> bool:
-	return _pendingCompulsiveSpinSkips > 0 or compulsiveSpinSkips > 0
+	return pendingCompulsiveSpinSkips > 0 or compulsiveSpinSkips > 0
 
 ## Resolves a pending defeat without touching the scored result. A successful power
 ## action normally resolves the flag through _apply_outcome(); this method handles
@@ -911,7 +911,7 @@ func _open_spin(compulsive: bool) -> SpinContext:
 
 ## The potion pool roll (issue #32): one equal-weight effect for this spin.
 func _roll_potion(ctx: SpinContext) -> void:
-	if _potionSpins <= 0:
+	if potionSpins <= 0:
 		return
 	var p_rng := LobRNG.new((ctx.spin_seed ^ 0x50710000) & M32)
 	var pool: Array = Consumables.POTION_RANDOM_POOL
@@ -980,7 +980,7 @@ func _evaluate_spin(ctx: SpinContext) -> void:
 			"forceTripleFrom": ctx.force_triple,
 			"excludeSymbol": ("brain" if _banBrainSpins > 0 else null),
 			"banExcluded": _banBrainSpins > 0,
-			"guaranteeSymbolId": (_guaranteeSymbolId if (_guaranteeSymbolSpins > 0 and _guaranteeSymbolId != "") else null),
+			"guaranteeSymbolId": (guaranteeSymbolId if (guaranteeSymbolSpins > 0 and guaranteeSymbolId != "") else null),
 			"forceReelSymbols": _forced_reel_symbols(ctx.spin_seed),
 			"symbolToBrainCount": ctx.potion_symbol_to_brain,
 			"adjacentSymbolCount": ctx.potion_adjacent_symbols,
@@ -1006,7 +1006,7 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 	# charge 15% of a pair/triple back, which made the item read as a trap on exactly the
 	# spins it was supposed to reward. The maths lives in InRunItems so parity can pin it.
 	var cocktail_bonus := 0
-	if _cocktailBoostSpins > 0:
+	if cocktailBoostSpins > 0:
 		cocktail_bonus = InRunItems.cocktail_bonus(result[SpinResult.REELS] as Array,
 			ctx.hidden_reel_count, float(result[SpinResult.SCORE_MULTIPLIER]))
 	# The joker Cocktail (issue #111) is that same total, charged rather than paid, and
@@ -1014,7 +1014,7 @@ func _apply_score_bonuses(ctx: SpinContext) -> void:
 	# and the item would otherwise be a tax on standing still. The win is floored at zero
 	# below rather than going negative — the drink takes the winnings, not the run.
 	var cocktail_malus := 0
-	if _cocktailMalusSpins > 0 and int(result[SpinResult.SCORE_EARNED]) > 0 \
+	if cocktailMalusSpins > 0 and int(result[SpinResult.SCORE_EARNED]) > 0 \
 			and SpinResult.is_paying_type(result):
 		cocktail_malus = InRunItems.cocktail_bonus(result[SpinResult.REELS] as Array,
 			ctx.hidden_reel_count, float(result[SpinResult.SCORE_MULTIPLIER]))
@@ -1095,7 +1095,7 @@ func _settle_spin(ctx: SpinContext) -> void:
 	# A queued compulsion lands on the spin after the one that queued it. It used to wait
 	# for the classic drink's protected spins to run out; only the joker drink queues one
 	# now, and it brings no protected spins with it, so the wait is a single spin.
-	var was_energy_last: bool = _pendingCompulsiveSpinSkips > 0 and not ctx.is_compulsive
+	var was_energy_last: bool = pendingCompulsiveSpinSkips > 0 and not ctx.is_compulsive
 
 	# Potion pool side effects (issue #32): ± lucidity and a free reroll (restore the
 	# reroll ability) resolve after the score plan.
@@ -1191,27 +1191,27 @@ func _settle_spin(ctx: SpinContext) -> void:
 	_guaranteedWinSpins = maxi(0, _guaranteedWinSpins - 1)
 	_blockPowersSpins = maxi(0, _blockPowersSpins - 1)
 	_hideNeuronsSpins = maxi(0, _hideNeuronsSpins - 1)
-	_cocktailBoostSpins = maxi(0, _cocktailBoostSpins - 1)
-	_cocktailMalusSpins = maxi(0, _cocktailMalusSpins - 1)
-	_jokerFlatlineSpins = maxi(0, _jokerFlatlineSpins - 1)
+	cocktailBoostSpins = maxi(0, cocktailBoostSpins - 1)
+	cocktailMalusSpins = maxi(0, cocktailMalusSpins - 1)
+	jokerFlatlineSpins = maxi(0, jokerFlatlineSpins - 1)
 	compulsiveSpinSkips = (maxi(0, compulsiveSpinSkips - 1) if ctx.is_compulsive else compulsiveSpinSkips) \
-		+ (_pendingCompulsiveSpinSkips if was_energy_last else 0)
-	_pendingCompulsiveSpinSkips = 0 if was_energy_last else _pendingCompulsiveSpinSkips
+		+ (pendingCompulsiveSpinSkips if was_energy_last else 0)
+	pendingCompulsiveSpinSkips = 0 if was_energy_last else pendingCompulsiveSpinSkips
 	pairBoostSpins = maxi(0, pairBoostSpins - 1)
 	# Serum (issue #53): the spin AFTER the guaranteed one renders blurry — queued
 	# blur moves in when the guarantee is consumed.
-	var guarantee_was_last := _guaranteeSymbolSpins == 1
-	_guaranteeSymbolSpins = maxi(0, _guaranteeSymbolSpins - 1)
-	if _guaranteeSymbolSpins <= 0:
-		_guaranteeSymbolId = ""
+	var guarantee_was_last := guaranteeSymbolSpins == 1
+	guaranteeSymbolSpins = maxi(0, guaranteeSymbolSpins - 1)
+	if guaranteeSymbolSpins <= 0:
+		guaranteeSymbolId = ""
 	blurReelsSpins = _pendingBlurSpins if guarantee_was_last else maxi(0, blurReelsSpins - 1)
 	_pendingBlurSpins = 0 if guarantee_was_last else _pendingBlurSpins
 	# 3x eye (issue #53): the revealed reel was committed into this spin — consume it.
 	_eyeRevealReel = -1
 	_eyeRevealSymbol = ""
-	_scriptedReels = null # one scripted spin per beat (issue #105)
+	scriptedReels = null # one scripted spin per beat (issue #105)
 	_banBrainSpins = maxi(0, _banBrainSpins - 1)
-	_potionSpins = maxi(0, _potionSpins - 1)
+	potionSpins = maxi(0, potionSpins - 1)
 	# Keep the pending triple until the flatline spin is spent, then consume it.
 	var flatline_was_active := forceFlatlineSpins > 0
 	forceFlatlineSpins = maxi(0, forceFlatlineSpins - 1)
@@ -1335,27 +1335,27 @@ func reset_run_state() -> void:
 	_guaranteedWinSpins = 0
 	_blockPowersSpins = 0
 	_hideNeuronsSpins = 0
-	_cocktailBoostSpins = 0
+	cocktailBoostSpins = 0
 	compulsiveSpinSkips = 0
-	_pendingCompulsiveSpinSkips = 0
+	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
 	pairBoostSpins = 0
 	_pairBoostMult = 1
 	pairBoostHiddenReels = 0
-	_guaranteeSymbolSpins = 0
-	_guaranteeSymbolId = ""
+	guaranteeSymbolSpins = 0
+	guaranteeSymbolId = ""
 	blurReelsSpins = 0
 	_pendingBlurSpins = 0
 	_eyeRevealReel = -1
 	_eyeRevealSymbol = ""
-	_scriptedReels = null
+	scriptedReels = null
 	_banBrainSpins = 0
-	_potionSpins = 0
+	potionSpins = 0
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
-	_cocktailMalusSpins = 0
-	_jokerFlatlineSpins = 0
+	cocktailMalusSpins = 0
+	jokerFlatlineSpins = 0
 	_pendingPowerBarDrains = 0
 	flatlineResultCount = 0
 	_runPairCount = 0
@@ -1623,27 +1623,27 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	_guaranteedWinSpins = 0
 	_blockPowersSpins = 0
 	_hideNeuronsSpins = 0
-	_cocktailBoostSpins = 0
+	cocktailBoostSpins = 0
 	compulsiveSpinSkips = 0
-	_pendingCompulsiveSpinSkips = 0
+	pendingCompulsiveSpinSkips = 0
 	decaySkips = 0
 	pairBoostSpins = 0
 	_pairBoostMult = 1
 	pairBoostHiddenReels = 0
-	_guaranteeSymbolSpins = 0
-	_guaranteeSymbolId = ""
+	guaranteeSymbolSpins = 0
+	guaranteeSymbolId = ""
 	blurReelsSpins = 0
 	_pendingBlurSpins = 0
 	_eyeRevealReel = -1
 	_eyeRevealSymbol = ""
-	_scriptedReels = null
+	scriptedReels = null
 	_banBrainSpins = 0
-	_potionSpins = 0
+	potionSpins = 0
 	forceFlatlineSpins = 0
 	guaranteedTripleSpins = 0
 	hideResultSpins = 0
-	_cocktailMalusSpins = 0
-	_jokerFlatlineSpins = 0
+	cocktailMalusSpins = 0
+	jokerFlatlineSpins = 0
 	_pendingPowerBarDrains = 0
 	flatlineResultCount = 0
 	_runPairCount = 0
@@ -2893,11 +2893,11 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 			"compulsion":
 				# Joker Energy Drink: the bill with no rush in front of it. Capped at one
 				# forced spin however many are drunk at once, like the old debuff was.
-				_pendingCompulsiveSpinSkips = maxi(_pendingCompulsiveSpinSkips,
+				pendingCompulsiveSpinSkips = maxi(pendingCompulsiveSpinSkips,
 					int(e["compulsiveSpins"]))
 			"cocktailMalus":
 				# Joker Cocktail: the same rarity points, charged instead of paid.
-				_cocktailMalusSpins += int(e["spins"])
+				cocktailMalusSpins += int(e["spins"])
 			"drainPowerBar":
 				# Joker Water: the gauge progress toward the next power restore is
 				# forfeited. The machine owns the gauge, so this queues the drain for it
@@ -2905,7 +2905,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				_pendingPowerBarDrains += 1
 			"flatlineOneReel":
 				# Joker Red Pill: one reel is dragged to flatline, with no triple owed back.
-				_jokerFlatlineSpins += int(e["spins"])
+				jokerFlatlineSpins += int(e["spins"])
 			"addLucidity":
 				var plan := Lucidity.plan_gain(lucidityCoins, int(e["amount"]), abilitiesUsed,
 					_seed(spinCount * 0x2545f491), effective_coins_per_power_restore(),
@@ -2920,7 +2920,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				# its own gain after the drink has been used.
 				_apply_direct_score_gain(int(e["amount"]))
 			"cocktailBoost":
-				_cocktailBoostSpins += int(e["spins"])
+				cocktailBoostSpins += int(e["spins"])
 			"forceFlatlinesThenTriple":
 				# Red Pill: force flatlines for flatSpins, then a guaranteed triple.
 				forceFlatlineSpins += int(e["flatSpins"])
@@ -2944,8 +2944,8 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 				if not excludes.has(String(s)):
 					pool.append(String(s))
 			var picked := serum_symbol if pool.has(serum_symbol) else (String(pool[0]) if not pool.is_empty() else "")
-			_guaranteeSymbolSpins += int(ce["appearSpins"])
-			_guaranteeSymbolId = picked
+			guaranteeSymbolSpins += int(ce["appearSpins"])
+			guaranteeSymbolId = picked
 			# Issue #97: stacking Serums stacks the guarantee window (appearSpins)
 			# but NOT the negative blur — it caps at a single item's duration.
 			_pendingBlurSpins = maxi(_pendingBlurSpins, int(ce.get("blurSpins", 0)))
@@ -2955,7 +2955,7 @@ func use_consumable(consumable_id: String, serum_symbol := "") -> bool:
 		"resetPowersRandomEffect":
 			# Potion: restore ALL powers now, then roll a random pool effect per spin.
 			abilitiesUsed = []
-			_potionSpins += int(ce["spins"])
+			potionSpins += int(ce["spins"])
 		"restoreAbilityOrSpins":
 			# Tea: restore a used ability, or restore normal spins if none were used.
 			if abilitiesUsed.is_empty():

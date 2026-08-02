@@ -47,6 +47,40 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	meta_store.is_first_launch = previous_first_launch
 
 
+## Some store fields are named by DATA rather than by code: machine_scene's
+## DURATION_BOOSTS table gives each item a "counter" (and sometimes a
+## "symbolField") that is looked up with RunStateStore.get(name), and the tutorial
+## script pins beat state the same way. A field named only from a table is
+## invisible to any search for `RunStateStore.fieldName`, so renaming one looks
+## safe and is not: the boost row starts reading null (int(null) throws every
+## frame the HUD refreshes) and the tutorial's pinned state silently stops
+## applying, because _pin skips properties the store does not have.
+##
+## That is exactly how the phase-3 rename broke the boost indicators. These names
+## are part of an external contract, so this check holds them to it: every name
+## any table hands to get() must resolve to a real property.
+func _check_dynamic_store_field_names(machine: Node, run_store: Node, failures: Array) -> void:
+	var wanted: Array[String] = []
+	for boost: Dictionary in machine.DURATION_BOOSTS:
+		for key in ["counter", "symbolField"]:
+			var name := String(boost.get(key, ""))
+			if name != "" and not wanted.has(name):
+				wanted.append(name)
+		for phase: Dictionary in boost.get("phases", []):
+			var phase_name := String(phase.get("counter", ""))
+			if phase_name != "" and not wanted.has(phase_name):
+				wanted.append(phase_name)
+	if wanted.is_empty():
+		failures.append("dynamic fields: no boost counters found to check")
+	for beat: Dictionary in TutorialScript.BEATS:
+		for key in (beat.get("state", {}) as Dictionary):
+			var state_name := String(key)
+			if not wanted.has(state_name):
+				wanted.append(state_name)
+	for name in wanted:
+		if not (name in run_store):
+			failures.append("dynamic fields: '%s' is named by a table but is not a store property" % name)
+
 ## The run snapshot is keyed by field name. Marking a store field internal by
 ## renaming it to _name would, without the trim on both sides of the save
 ## boundary, drop it from every snapshot already on disk — and drop it silently,
