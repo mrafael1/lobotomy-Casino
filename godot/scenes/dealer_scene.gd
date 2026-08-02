@@ -625,7 +625,7 @@ func _build_hud() -> void:
 	_build_campaign_label()
 	if _options_button != null or _start_button != null or _credits_row != null:
 		if _options_button != null:
-			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
+			ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 			var options_cb := Callable(self, "_toggle_options_overlay")
 			if not _options_button.pressed.is_connected(options_cb):
 				_options_button.pressed.connect(options_cb)
@@ -645,7 +645,7 @@ func _build_hud() -> void:
 	back.custom_minimum_size = Vector2(20.0, 18.0)
 	back.size = Vector2(20.0, 18.0)
 	back.position = Vector2(9.0, 15.0)
-	Assets.skin_icon_button(back, SETTINGS_ASSET, 1)
+	ButtonKit.skin_icon_button(back, SETTINGS_ASSET, 1)
 	back.pressed.connect(_toggle_options_overlay)
 	add_child(back)
 	_options_button = back
@@ -667,7 +667,7 @@ func _build_hud() -> void:
 		start.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			start.add_theme_font_override("font", _font)
-		Assets.skin_sheet_button(start, "ui/arrow_button.png", 3)
+		ButtonKit.skin_sheet_button(start, "ui/arrow_button.png", 3)
 		_apply_button_text_margin(start)
 		start.pressed.connect(_confirm_start_run)
 		add_child(start)
@@ -1270,8 +1270,8 @@ func _confirm_button(node_name: String, text: String, border_color: Color, cb: C
 	b.name = node_name
 	b.text = text
 	b.custom_minimum_size = min_size
-	Assets.small_neon_button_style(b, border_color, 7)
-	Assets.start_menu_button_press_feedback(b)
+	ButtonKit.small_neon_button_style(b, border_color, 7)
+	ButtonKit.start_menu_button_press_feedback(b)
 	b.pressed.connect(cb)
 	return b
 
@@ -1484,7 +1484,7 @@ func _begin_drag_visual() -> void:
 	_drag_node.z_index = 10
 	_drag_node.scale = Vector2(1.25, 1.25)
 	_drag_node.modulate = Color(1.2, 1.2, 1.2)
-	Assets.add_drag_shadow(_drag_node)
+	DragShadow.add_drag_shadow(_drag_node)
 
 func _update_drag_position(pos: Vector2) -> void:
 	if _drag_node == null:
@@ -1519,7 +1519,7 @@ func _end_drag(release_pos: Vector2) -> void:
 	_drag_active = false
 	_drag_node = null
 	if node != null:
-		Assets.remove_drag_shadow(node)
+		DragShadow.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _drag_home # snap back
 		node.scale = Vector2.ONE

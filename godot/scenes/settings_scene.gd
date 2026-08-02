@@ -24,7 +24,7 @@ const NEON_PINK := Color(1.0, 0.5, 0.7)
 ## OPTIONS overlay one level up, with the other things a player comes here to DO.
 
 func _ready() -> void:
-	_apply_font(self)
+	UiKit.apply_font(self)
 	_style_controls()
 	_connect_controls()
 	_refresh_controls()
@@ -39,7 +39,7 @@ func _connect_controls() -> void:
 
 func _style_controls() -> void:
 	if _panel != null:
-		var panel_style := Assets.neon_panel_style(NEON_CYAN, 8.0)
+		var panel_style := ButtonKit.neon_panel_style(NEON_CYAN, 8.0)
 		panel_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.42)
 		panel_style.shadow_size = 3
 		_panel.add_theme_stylebox_override("panel", panel_style)
@@ -99,8 +99,8 @@ func _style_controls() -> void:
 		_mute_check.add_theme_icon_override("unchecked_disabled", unchecked_icon)
 		_mute_check.add_theme_icon_override("checked_disabled", checked_icon)
 	if _back_button != null:
-		Assets.start_menu_button_style(_back_button, NEON_CYAN, 8)
-		Assets.start_menu_button_press_feedback(_back_button)
+		ButtonKit.start_menu_button_style(_back_button, NEON_CYAN, 8)
+		ButtonKit.start_menu_button_press_feedback(_back_button)
 
 func _style_label(label: Label, color: Color, font_size: int) -> void:
 	if label == null:
@@ -139,16 +139,6 @@ func _make_checkbox_icon(checked: bool) -> ImageTexture:
 			image.set_pixel(pixel.x, pixel.y, NEON_CYAN)
 	return ImageTexture.create_from_image(image)
 
-func _apply_font(node: Node) -> void:
-	var font := Assets.font()
-	for child in node.get_children():
-		if child is Label and font != null:
-			(child as Label).add_theme_font_override("font", font)
-		elif child is Button and font != null:
-			(child as Button).add_theme_font_override("font", font)
-		elif child is CheckBox and font != null:
-			(child as CheckBox).add_theme_font_override("font", font)
-		_apply_font(child)
 
 func _bus_index() -> int:
 	var index := AudioServer.get_bus_index(audio_bus_name)

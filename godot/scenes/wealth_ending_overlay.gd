@@ -71,8 +71,8 @@ func _ready() -> void:
 		continue_button.pressed.connect(_on_continue_pressed)
 	if not start_again_button.pressed.is_connected(_on_start_again_pressed):
 		start_again_button.pressed.connect(_on_start_again_pressed)
-	Assets.start_menu_button_press_feedback(continue_button)
-	Assets.start_menu_button_press_feedback(start_again_button)
+	ButtonKit.start_menu_button_press_feedback(continue_button)
+	ButtonKit.start_menu_button_press_feedback(start_again_button)
 	button_host.pivot_offset = button_host.size * 0.5
 	if Engine.is_editor_hint():
 		set_final_score(999999)
@@ -125,8 +125,8 @@ func _style_labels() -> void:
 
 
 func _style_button() -> void:
-	Assets.small_neon_button_style(continue_button, NEON_PINK, 7, 1.0)
-	Assets.small_neon_button_style(start_again_button, NEON_YELLOW, 7, 1.0)
+	ButtonKit.small_neon_button_style(continue_button, NEON_PINK, 7, 1.0)
+	ButtonKit.small_neon_button_style(start_again_button, NEON_YELLOW, 7, 1.0)
 
 
 func _setup_joker() -> void:

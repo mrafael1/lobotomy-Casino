@@ -42,7 +42,7 @@ const LANGUAGE_FLAG_INSET := 8.0
 func _ready() -> void:
 	size = Vector2(160.0, 320.0)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	_apply_font(self)
+	UiKit.apply_font(self)
 	_style_panel()
 	_style_menu_button(_scores_button, NEON_PINK)
 	_style_menu_button(_settings_button, NEON_YELLOW)
@@ -51,13 +51,13 @@ func _ready() -> void:
 	_style_menu_button(_language_button, NEON_YELLOW)
 	_style_menu_button(_menu_button, NEON_CYAN)
 	_style_close_button(_close_button)
-	_connect_button(_scores_button, _open_scores)
-	_connect_button(_settings_button, _open_settings)
-	_connect_button(_collection_button, _open_collection)
-	_connect_button(_tutorial_button, _start_tutorial)
-	_connect_button(_language_button, _cycle_language)
-	_connect_button(_menu_button, _return_to_menu)
-	_connect_button(_close_button, hide_overlay)
+	UiKit.connect_button(_scores_button, _open_scores)
+	UiKit.connect_button(_settings_button, _open_settings)
+	UiKit.connect_button(_collection_button, _open_collection)
+	UiKit.connect_button(_tutorial_button, _start_tutorial)
+	UiKit.connect_button(_language_button, _cycle_language)
+	UiKit.connect_button(_menu_button, _return_to_menu)
+	UiKit.connect_button(_close_button, hide_overlay)
 	_refresh_tutorial_button()
 	_refresh_language_button()
 	visible = editor_preview_visible if Engine.is_editor_hint() else false
@@ -135,25 +135,12 @@ func _cycle_language() -> void:
 	Language.choose(Language.next_of(Language.current()))
 	_refresh_language_button()
 
-func _connect_button(button: Button, cb: Callable) -> void:
-	if button == null:
-		return
-	if not button.pressed.is_connected(cb):
-		button.pressed.connect(cb)
 
-func _apply_font(node: Node) -> void:
-	var font := Assets.font()
-	for child in node.get_children():
-		if child is Button and font != null:
-			(child as Button).add_theme_font_override("font", font)
-		elif child is Label and font != null:
-			(child as Label).add_theme_font_override("font", font)
-		_apply_font(child)
 
 func _style_panel() -> void:
 	if _panel == null:
 		return
-	var panel_style: StyleBoxFlat = Assets.neon_panel_style(NEON_CYAN, 8.0)
+	var panel_style: StyleBoxFlat = ButtonKit.neon_panel_style(NEON_CYAN, 8.0)
 	panel_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.42)
 	panel_style.shadow_size = 3
 	_panel.add_theme_stylebox_override("panel", panel_style)
@@ -166,7 +153,7 @@ func _style_menu_button(button: Button, border_color: Color) -> void:
 	if button == null:
 		return
 	button.custom_minimum_size = Vector2(104.0, 20.0)
-	Assets.start_menu_button_style(button, border_color, 7)
+	ButtonKit.start_menu_button_style(button, border_color, 7)
 	button.pivot_offset = button.custom_minimum_size * 0.5
 	if not button.button_down.is_connected(_on_menu_button_down):
 		button.button_down.connect(_on_menu_button_down.bind(button))

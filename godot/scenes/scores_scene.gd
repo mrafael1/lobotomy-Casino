@@ -175,8 +175,8 @@ func _build_close_button() -> void:
 	close.position = CLOSE_BUTTON_RECT.position
 	close.size = CLOSE_BUTTON_RECT.size
 	close.focus_mode = Control.FOCUS_NONE
-	Assets.small_neon_button_style(close, Assets.START_MENU_BUTTON_PINK, 6, 2.0)
-	Assets.start_menu_button_press_feedback(close)
+	ButtonKit.small_neon_button_style(close, ButtonKit.START_MENU_BUTTON_PINK, 6, 2.0)
+	ButtonKit.start_menu_button_press_feedback(close)
 	close.pressed.connect(_go_back)
 	add_child(close)
 

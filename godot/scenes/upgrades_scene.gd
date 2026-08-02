@@ -205,7 +205,7 @@ func _ready() -> void:
 	_configure_layer_visibility()
 	_build_reward_amp_glows()
 	_bind_buttons()
-	_apply_font(self)
+	UiKit.apply_font(self)
 	_style_buttons(self)
 	_style_lucidity_displays()
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_refresh_all):
@@ -389,16 +389,16 @@ func _configure_layer_visibility() -> void:
 		_ui_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _bind_buttons() -> void:
-	_connect_button(_eye_hitbox, _activate_eye)
-	_connect_button(_memory_hitbox, _activate_memory)
+	UiKit.connect_button(_eye_hitbox, _activate_eye)
+	UiKit.connect_button(_memory_hitbox, _activate_memory)
 	_bind_terminal_feedback(_eye_hitbox, "eye")
 	_bind_terminal_feedback(_memory_hitbox, "memory")
-	_connect_button(_context_buy_button, _buy_selected_upgrade)
-	_connect_button(_back_button, _go_back)
-	_connect_button(_eye_prev_button, _eye_prev)
-	_connect_button(_eye_next_button, _eye_next)
-	_connect_button(_memory_prev_button, _memory_prev)
-	_connect_button(_memory_next_button, _memory_next)
+	UiKit.connect_button(_context_buy_button, _buy_selected_upgrade)
+	UiKit.connect_button(_back_button, _go_back)
+	UiKit.connect_button(_eye_prev_button, _eye_prev)
+	UiKit.connect_button(_eye_next_button, _eye_next)
+	UiKit.connect_button(_memory_prev_button, _memory_prev)
+	UiKit.connect_button(_memory_next_button, _memory_next)
 	_bind_nav_press_feedback(_eye_prev_button, _eye_nav_sprite, 1)
 	_bind_nav_press_feedback(_eye_next_button, _eye_nav_sprite, 2)
 	# MemoryPrevButton sits at the TOP hitbox, MemoryNextButton at the BOTTOM
@@ -436,16 +436,11 @@ func _flash_nav_frame(sprite: AnimatedSprite2D, pressed_frame: int) -> void:
 			sprite.frame = 0
 	get_tree().create_timer(NAV_FLASH_TIME).timeout.connect(release)
 
-func _connect_button(button: Button, cb: Callable) -> void:
-	if button == null:
-		return
-	if not button.pressed.is_connected(cb):
-		button.pressed.connect(cb)
 
 func _bind_options_button() -> void:
 	if _options_button == null:
 		return
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
+	ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 
@@ -461,22 +456,6 @@ func _restore_options_overlay_if_requested() -> void:
 	if scene_nav != null and bool(scene_nav.call("consume_restore_options", String(scene_file_path))):
 		_options_overlay.call_deferred("show_overlay")
 
-func _apply_font(node: Node) -> void:
-	var font := Assets.font()
-	for child in node.get_children():
-		if child is Label:
-			var label := child as Label
-			if font != null:
-				label.add_theme_font_override("font", font)
-		elif child is RichTextLabel:
-			var rich_label := child as RichTextLabel
-			if font != null:
-				rich_label.add_theme_font_override("normal_font", font)
-		elif child is Button:
-			var button := child as Button
-			if font != null:
-				button.add_theme_font_override("font", font)
-		_apply_font(child)
 
 func _style_buttons(node: Node) -> void:
 	if node is OptionsOverlay:
@@ -487,15 +466,15 @@ func _style_buttons(node: Node) -> void:
 			var button := child as Button
 			if not skip_names.has(button.name):
 				if button.name == "BackButton":
-					Assets.start_menu_button_style(button, NEON_PINK, 7)
-					Assets.start_menu_button_press_feedback(button)
+					ButtonKit.start_menu_button_style(button, NEON_PINK, 7)
+					ButtonKit.start_menu_button_press_feedback(button)
 				elif button.name == "ContextBuyButton":
 					# This authored hit area is only 22x10, so its nine-slice keeps
 					# one-pixel margins instead of increasing the stele geometry.
-					Assets.small_neon_button_style(button, NEON_CYAN, 6, 1.0)
-					Assets.start_menu_button_press_feedback(button)
+					ButtonKit.small_neon_button_style(button, NEON_CYAN, 6, 1.0)
+					ButtonKit.start_menu_button_press_feedback(button)
 				else:
-					Assets.skin_sheet_button(button, "ui/green_button.png", 4)
+					ButtonKit.skin_sheet_button(button, "ui/green_button.png", 4)
 		_style_buttons(child)
 
 func _style_lucidity_displays() -> void:
@@ -512,12 +491,12 @@ func _style_lucidity_displays() -> void:
 		_context_price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_context_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if _power_name_box != null:
-		var power_style := Assets.neon_panel_style(NEON_CYAN, 3.0)
+		var power_style := ButtonKit.neon_panel_style(NEON_CYAN, 3.0)
 		power_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.48)
 		power_style.shadow_size = 3
 		_power_name_box.add_theme_stylebox_override(&"panel", power_style)
 	if _description_bubble != null:
-		var description_style := Assets.neon_panel_style(NEON_PINK, 6.0)
+		var description_style := ButtonKit.neon_panel_style(NEON_PINK, 6.0)
 		description_style.shadow_color = Color(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, 0.42)
 		description_style.shadow_size = 3
 		_description_bubble.add_theme_stylebox_override(&"panel", description_style)
@@ -726,7 +705,7 @@ func _build_reward_amp_picker(upgrade_id: String) -> void:
 	for symbol_id in Symbols.BASE_SYMBOL_CYCLE:
 		if String(symbol_id) != "flatline":
 			symbols.append(String(symbol_id))
-	Assets.build_symbol_picker_panel(_reward_amp_picker, symbols, "", REWARD_AMP_PICKER_RECT,
+	SymbolPicker.build_symbol_picker_panel(_reward_amp_picker, symbols, "", REWARD_AMP_PICKER_RECT,
 		Callable(self, "_on_reward_amp_symbol_picked"), Callable(self, "_cancel_reward_amp_picker"),
 		true, false, false)
 

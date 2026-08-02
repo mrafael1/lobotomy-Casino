@@ -2643,8 +2643,8 @@ func _build_score_button() -> void:
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
-	Assets.start_menu_button_press_feedback(_score_button)
+	ButtonKit.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
+	ButtonKit.start_menu_button_press_feedback(_score_button)
 	if not _score_button.pressed.is_connected(_show_score_table):
 		_score_button.pressed.connect(_show_score_table)
 
@@ -2656,7 +2656,7 @@ func _build_options_controls() -> void:
 		_options_button.position = Vector2(9.0, 9.0)
 		_options_button.size = Vector2(20.0, 18.0)
 		add_child(_options_button)
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
+	ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
@@ -6247,7 +6247,7 @@ func _show_score_table() -> void:
 	close_label.offset_right = 0.0
 	close_label.offset_bottom = close_nudge
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Assets.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
+	ButtonKit.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
 	# Pressed squash: shrink around the centre while held, spring back on release
 	# (same feel as the row info buttons).
 	close.pivot_offset = close.size * 0.5
@@ -6796,7 +6796,7 @@ func _build_serum_picker() -> void:
 	for s in Symbols.BASE_SYMBOL_CYCLE:
 		if String(s) != "brain":
 			pool.append(String(s))
-	Assets.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
+	SymbolPicker.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
 		Callable(self, "_on_serum_pick"), Callable(self, "_close_serum_picker"), true)
 
 func _on_serum_picker_input(event: InputEvent) -> void:
@@ -7905,7 +7905,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		to_menu.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(to_menu)
+	ButtonKit.skin_negative_button(to_menu)
 	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
@@ -8724,7 +8724,7 @@ func _input(event: InputEvent) -> void:
 			_dealer_drag_node.global_position = m - _dealer_drag_node.size * 0.5
 		if m.distance_to(_dealer_drag_press) > 4.0:
 			if not _dealer_drag_moved:
-				Assets.add_drag_shadow(_dealer_drag_node)
+				DragShadow.add_drag_shadow(_dealer_drag_node)
 			_dealer_drag_moved = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_end_dealer_drag(get_global_mouse_position())
@@ -8741,7 +8741,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	if node != null:
-		Assets.remove_drag_shadow(node)
+		DragShadow.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _dealer_drag_home
 		node.scale = Vector2.ONE

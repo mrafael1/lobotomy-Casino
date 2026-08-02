@@ -173,7 +173,7 @@ func _ready() -> void:
 		continue_button.pressed.connect(_on_continue_pressed)
 	if not skip_catcher.pressed.is_connected(_skip_to_end):
 		skip_catcher.pressed.connect(_skip_to_end)
-	Assets.start_menu_button_press_feedback(continue_button)
+	ButtonKit.start_menu_button_press_feedback(continue_button)
 	button_host.pivot_offset = button_host.size * 0.5
 	if Engine.is_editor_hint():
 		_score = 650
@@ -703,7 +703,7 @@ func _style_text() -> void:
 
 
 func _style_button() -> void:
-	Assets.small_neon_button_style(continue_button, BLUE_NEON, 7, 1.0)
+	ButtonKit.small_neon_button_style(continue_button, BLUE_NEON, 7, 1.0)
 
 
 func _on_continue_pressed() -> void:

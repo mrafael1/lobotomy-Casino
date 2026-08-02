@@ -673,7 +673,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 		failures.append("upgrades: contextual buy button should be hidden before selecting a power")
 	if not buy_stele.visible:
 		failures.append("upgrades: buy stele should be visible even before a terminal is open")
-	_check_start_menu_button_style(context_buy, Assets.START_MENU_BUTTON_CYAN,
+	_check_start_menu_button_style(context_buy, ButtonKit.START_MENU_BUTTON_CYAN,
 		"upgrades: BUY", failures, true)
 	_check_start_menu_press_feedback(context_buy, "upgrades: BUY", failures)
 	if context_buy.size != Vector2(22.0, 10.0):
@@ -687,7 +687,7 @@ func _check_upgrades_scene(failures: Array) -> void:
 	if context_price_coin.texture == null:
 		failures.append("upgrades: contextual price is missing lucidity coin icon")
 	var back_button := scene.get_node("CanvasLayer/UI_Container/BackButton") as Button
-	_check_start_menu_button_style(back_button, Assets.START_MENU_BUTTON_PINK,
+	_check_start_menu_button_style(back_button, ButtonKit.START_MENU_BUTTON_PINK,
 		"upgrades: RETURN TO BAR", failures)
 	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
 	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
