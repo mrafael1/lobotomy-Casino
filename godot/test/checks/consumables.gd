@@ -61,7 +61,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	var previous_spin_count := int(run_store.spinCount)
 	var previous_score := int(run_store.scoreEarned)
 	var previous_result: Variant = run_store.lastResult
-	var previous_display := int(machine._display_lucidity)
+	var previous_display: int = machine._wealth.display_score()
 	var previous_coin_prev := int(machine._coin_prev_lucidity)
 	var previous_burst_spin: int = machine._bursts.prev_spin()
 	var previous_burst_score: int = machine._bursts.prev_score()
@@ -97,7 +97,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	if machine._bursts.prev_score() != 60:
 		failures.append("machine water: payout baseline did not advance past the direct score gain")
 	await create_timer(0.1).timeout
-	if int(machine._display_lucidity) != 60:
+	if machine._wealth.display_score() != 60:
 		failures.append("machine water: score gain should roll the wealth odometer")
 
 	machine._set_sequence_lock(false)

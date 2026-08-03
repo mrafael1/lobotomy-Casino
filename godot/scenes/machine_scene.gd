@@ -55,14 +55,6 @@ const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
 # entry, so its frame index is the target index; the bar's twelve frames are the fill
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
-const TARGET_BAR_SHEET := "machine new view/target_bar.png"
-const TARGET_BAR_FRAME_COUNT := 12
-const TARGET_GOALS_SHEET := "machine new view/target_goals.png"
-const TARGET_GOALS_FRAME_COUNT := 8
-const TARGET_BAR_ANIM_SHEET := "machine new view/target_bar_animation.png"
-const TARGET_BAR_ANIM_FRAME_COUNT := 6
-const TARGET_BAR_ANIM_FRAME_TIME := 0.12
-const TARGET_TV_Z_INDEX := 8 # above the cabinet and callout sheets, below the icons
 # Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
 # the lever animation starts.
 const COIN_INSERT_FRAME_COUNT := 4
@@ -708,11 +700,6 @@ var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the
 var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
 var _free_spin_overlay_active := false
-var _wealth_odometer: WealthOdometer = null
-var _target_bar_sprite: Sprite2D = null
-var _target_goals_sprite: Sprite2D = null
-var _target_bar_anim_sprite: Sprite2D = null
-var _target_bar_anim_time := 0.0
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
 ## Set once CONTINUE on the target screen starts the hand-off to the between-run flow: the
@@ -740,6 +727,7 @@ var _callouts: WinCallouts = null
 var _flatline: FlatlineScreen = null
 var _bursts: ScoreBursts = null
 var _score_table: ScoreTable = null
+var _wealth: WealthReadout = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -803,7 +791,6 @@ var _restore_flash_chip: Sprite2D = null # chip currently pulsing, so it can be 
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
 var _power_seen_lucidity := 0    # legacy name: total power points the gauge has accounted for
-var _display_lucidity := 0 # wealth score shown by the odometer (legacy variable name)
 var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
@@ -885,6 +872,7 @@ func _ready() -> void:
 	_flatline = FlatlineScreen.new(_view)
 	_bursts = ScoreBursts.new(_view, REEL_CELL_CENTERS, REEL_WINDOW["top"], SRC_W)
 	_score_table = ScoreTable.new(_view, _triple_effect_text, _info_line_segments)
+	_wealth = WealthReadout.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1360,10 +1348,8 @@ func _hide_spin_reels() -> void:
 		spr.visible = false
 
 func _build_tv_indicators() -> void:
-	_wealth_odometer = WealthOdometer.new()
-	_wealth_odometer.name = "WealthOdometer"
-	add_child(_wealth_odometer)
-	_build_target_readout()
+	_wealth.build()
+	_refresh_target_readout()
 	_health_bar_sprite = _build_full_canvas_sheet(
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
@@ -1376,75 +1362,6 @@ func _build_tv_indicators() -> void:
 	_build_power_bar()
 	_build_restore_cap()
 	_build_augment_emplacements()
-
-## Objective readout on the TV (issue #181): the authored TARGET plate with its fill
-## bar, and the goal number below it. Both are full-canvas sheets, so their placement
-## is baked into the art — the code only picks frames.
-func _build_target_readout() -> void:
-	_target_bar_sprite = _build_full_canvas_sheet(TARGET_BAR_SHEET, TARGET_BAR_FRAME_COUNT)
-	if _target_bar_sprite != null:
-		_target_bar_sprite.z_index = TARGET_TV_Z_INDEX
-	_target_goals_sprite = _build_full_canvas_sheet(TARGET_GOALS_SHEET, TARGET_GOALS_FRAME_COUNT)
-	if _target_goals_sprite != null:
-		_target_goals_sprite.z_index = TARGET_TV_Z_INDEX
-	# The shimmer plays underneath the bar, so the authored fill always reads on top
-	# of it rather than being animated over.
-	_target_bar_anim_sprite = _build_full_canvas_sheet(
-		TARGET_BAR_ANIM_SHEET, TARGET_BAR_ANIM_FRAME_COUNT)
-	if _target_bar_anim_sprite != null:
-		_target_bar_anim_sprite.z_index = TARGET_TV_Z_INDEX - 1
-	_refresh_target_readout()
-
-
-## Two-frame loop over the fill bar. Driven from _process rather than a tween so it
-## survives the tween sweeps that clear the run's transient effects.
-func _advance_target_bar_animation(delta: float) -> void:
-	if _target_bar_anim_sprite == null or not _target_bar_anim_sprite.visible:
-		return
-	_target_bar_anim_time += delta
-	if _target_bar_anim_time < TARGET_BAR_ANIM_FRAME_TIME:
-		return
-	_target_bar_anim_time = fmod(_target_bar_anim_time, TARGET_BAR_ANIM_FRAME_TIME)
-	_set_sheet_frame(_target_bar_anim_sprite,
-		(_target_bar_anim_sprite.frame + 1) % TARGET_BAR_ANIM_FRAME_COUNT)
-
-## The goal frames are authored one per WEALTH_TARGETS entry, so the frame index IS the
-## target index. The bar fills with progress toward the CURRENT target and therefore
-## empties again each time one is paid — complete_wealth_target() subtracts the target
-## from the score and advances the index together.
-func _refresh_target_readout() -> void:
-	if _target_goals_sprite == null and _target_bar_sprite == null:
-		return
-	# A win callout or a power animation owns the whole TV while it is up, and the whole
-	# objective readout steps aside. The lit FREE SPIN banner is weaker: it takes only the
-	# goal NUMBER, whose y86..90 the banner text runs into, and leaves the fill bar and its
-	# shimmer running underneath (issue #185 follow-up). Progress toward the target is
-	# exactly what free spins are being spent on, so blanking it during them hid the one
-	# readout the player was watching.
-	var callout := _tv_callout_active()
-	var should_show := not callout
-	var goal_number_show := not _tv_content_muted()
-	if _target_bar_sprite != null:
-		_target_bar_sprite.visible = should_show
-	if _target_bar_anim_sprite != null:
-		_target_bar_anim_sprite.visible = should_show
-	if _target_goals_sprite != null:
-		_target_goals_sprite.visible = goal_number_show
-	if not should_show:
-		return
-	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, TARGET_GOALS_FRAME_COUNT - 1)
-	_set_sheet_frame(_target_goals_sprite, index)
-	var target := maxi(1, RunStateStore.current_wealth_target())
-	# The bar tracks the score the odometer is SHOWING, not the score the state already
-	# holds: while the reward deltas are held back (or COMBO's second beat is pending)
-	# the win has not been revealed yet, and a bar that filled early announced the
-	# payout before the number did.
-	var shown_score := int(RunStateStore.scoreEarned)
-	if _hud_delta_hold or _callouts.pending_score() >= 0:
-		shown_score = _display_lucidity
-	var progress := clampf(float(shown_score) / float(target), 0.0, 1.0)
-	_set_sheet_frame(_target_bar_sprite, clampi(
-		floori(progress * float(TARGET_BAR_FRAME_COUNT - 1)), 0, TARGET_BAR_FRAME_COUNT - 1))
 
 ## Numeric spins-left readout under the neuron tube — tracks the same
 ## _display_spins_left() budget the capped tube frames show.
@@ -2810,8 +2727,8 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	# The overlay flies a copy of the machine's own wealth reels, so the roll has to be
 	# quiesced first — _drive_roll rewrites the digit transforms every frame.
 	var snapshot: WealthOdometer = null
-	if _wealth_odometer != null:
-		_wealth_odometer.stop_roll()
+	_wealth.stop_roll()
+	if _wealth.odometer() != null:
 		snapshot = WealthOdometer.make_snapshot(score)
 	_begin_tv_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
@@ -2825,8 +2742,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 ## The lifted copy has reached the TV; blank the cabinet's own digits so the number is
 ## never on screen twice.
 func _on_wealth_target_digits_lifted() -> void:
-	if _wealth_odometer != null:
-		_wealth_odometer.set_digits_hidden(true)
+	_wealth.set_digits_hidden(true)
 
 ## Fades the TV to black behind the payout screen. Reuses the shared content mute for
 ## the layers that already know how to step aside (dealer bar, combo, free spins) and
@@ -2860,8 +2776,7 @@ func _end_tv_blackout() -> void:
 		_tv_blackout_rect.visible = false
 		_tv_blackout_rect.modulate.a = 0.0
 	_end_tv_info_pop(TV_BLACKOUT_SOURCE)
-	if _wealth_odometer != null:
-		_wealth_odometer.set_digits_hidden(false)
+	_wealth.set_digits_hidden(false)
 
 func _finish_wealth_target_transition() -> void:
 	if not _wealth_target_transition_active:
@@ -3027,7 +2942,7 @@ func _process(delta: float) -> void:
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
 	_augments.step_glitch(delta)
-	_advance_target_bar_animation(delta)
+	_wealth.step_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
 	_step_item_info_popup(delta)
@@ -3664,7 +3579,7 @@ func _refresh_tv_indicators() -> void:
 	# the persistent indicator's bonus lands, then release the final total.
 	if _callouts.pending_score() >= 0:
 		return
-	if RunStateStore.scoreEarned < _display_lucidity:
+	if RunStateStore.scoreEarned < _wealth.display_score():
 		_set_display_lucidity(RunStateStore.scoreEarned)
 
 ## The number of spins the neuron pool affords: ceil(neurons / decay) — the SAME
@@ -3688,16 +3603,23 @@ func _display_spins_left() -> int:
 func _current_display_spins_left() -> int:
 	return _display_spins_left()
 
+## The legacy method name is kept because scene smoke hooks call it; its value is
+## now the cumulative score shown by the wealth odometer.
 func _set_display_lucidity(value: int, animated := true, duration_override := 0.0) -> void:
-	# The legacy method name is kept because scene smoke hooks call it; its value is
-	# now the cumulative score shown by the wealth odometer. `duration_override` lets a
-	# payout pace its own roll (the jackpot); 0.0 keeps the delta-derived default.
-	_display_lucidity = maxi(0, value)
-	if _wealth_odometer != null:
-		_wealth_odometer.set_value(_display_lucidity, animated, duration_override)
+	_wealth.set_score(value, animated, duration_override)
 	# The objective bar reads the shown score, so it moves with the reels rather than
 	# waiting for the next HUD refresh (some release paths update the digits alone).
 	_refresh_target_readout()
+
+## What the objective bar should fill to. NOT RunStateStore.scoreEarned: while the
+## reward deltas are held back (or COMBO's second beat is pending) the win has not
+## been revealed yet, and a bar that filled early announced the payout before the
+## number did. Only the machine knows about either hold, so the readout is told.
+func _refresh_target_readout() -> void:
+	var shown := int(RunStateStore.scoreEarned)
+	if _hud_delta_hold or _callouts.pending_score() >= 0:
+		shown = _wealth.display_score()
+	_wealth.refresh_target(shown, _tv_callout_active(), _tv_content_muted())
 
 ## Whether the cabinet's lamp should be lit is a question about the last result
 ## and about whether the HUD is still holding its deltas back — both the
@@ -3818,8 +3740,8 @@ func _emit_score_burst(source_reel) -> float:
 	var wealth_score := int(RunStateStore.scoreEarned)
 	var roll_override := JACKPOT_ODOMETER_ROLL_TIME if gain > 0 and win_type == "jackpot" else 0.0
 	if combo_bonus > 0 and _callouts.combo_sprite() != null:
-		_set_display_lucidity(maxi(_display_lucidity, wealth_score - combo_bonus), true, roll_override)
-	elif wealth_score > _display_lucidity:
+		_set_display_lucidity(maxi(_wealth.display_score(), wealth_score - combo_bonus), true, roll_override)
+	elif wealth_score > _wealth.display_score():
 		_set_display_lucidity(wealth_score, true, roll_override)
 
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
@@ -5771,7 +5693,7 @@ func _on_stash_pressed(slot_index: int) -> void:
 	_update_hud()
 	# Water adds score directly (no score popup carries it), so the odometer
 	# rolls up right here instead of waiting for a reward sequence.
-	if int(RunStateStore.scoreEarned) > _display_lucidity:
+	if int(RunStateStore.scoreEarned) > _wealth.display_score():
 		_set_display_lucidity(int(RunStateStore.scoreEarned))
 	_show_consumable_feedback(id)
 	_play_use_fx(id)
@@ -7145,8 +7067,7 @@ func _clear_wealth_presentation_fx() -> void:
 	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
 		_white_powder_distortion_tween.kill()
 	_white_powder_distortion_tween = null
-	if _wealth_odometer != null:
-		_wealth_odometer.stop_roll()
+	_wealth.stop_roll()
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
 	# wealth digits — the group sweep below only hides nodes, it restores nothing.
 	_end_tv_blackout()

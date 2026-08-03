@@ -152,7 +152,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 
 	# The authored four-reel odometer replaces the old progress bar and x/goal label.
 	machine._set_display_lucidity(300, false)
-	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+	if machine._wealth.odometer() == null or machine._wealth.odometer().get_value() != 300:
 		failures.append("wealth: odometer did not initialize to 0300")
 
 	run_store.runPhase = "running"
@@ -315,27 +315,27 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	# The odometer has no goal suffix to mask after a Wealth continuation; it keeps
 	# rolling the current total through the normal HUD refresh and scene-reentry paths.
 	machine._refresh_tv_indicators()
-	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+	if machine._wealth.odometer() == null or machine._wealth.odometer().get_value() != 300:
 		failures.append("issue131: continued-run odometer did not preserve 0300")
 	else:
-		machine._wealth_odometer._drive_roll(0.5, 1999, 2000)
+		machine._wealth.odometer()._drive_roll(0.5, 1999, 2000)
 		var from_digits: Array[int] = [1, 9, 9, 9]
 		var to_digits: Array[int] = [2, 0, 0, 0]
 		for reel_index in 4:
-			var reel := machine._wealth_odometer.get_node("Reel%d" % reel_index) as Control
+			var reel := machine._wealth.odometer().get_node("Reel%d" % reel_index) as Control
 			var current := reel.get_node("Current") as Sprite2D
 			var next := reel.get_node("Next") as Sprite2D
-			if current.frame != machine._wealth_odometer.FRAME_FOR_DIGIT[from_digits[reel_index]] \
-					or next.frame != machine._wealth_odometer.FRAME_FOR_DIGIT[to_digits[reel_index]] \
+			if current.frame != machine._wealth.odometer().FRAME_FOR_DIGIT[from_digits[reel_index]] \
+					or next.frame != machine._wealth.odometer().FRAME_FOR_DIGIT[to_digits[reel_index]] \
 					or not next.visible or is_equal_approx(current.position.y, next.position.y):
 				failures.append("wealth: 1999 -> 2000 carry did not roll reel %d" % reel_index)
 		machine._set_display_lucidity(450, false)
-		if machine._wealth_odometer.get_value() != 450:
+		if machine._wealth.odometer().get_value() != 450:
 			failures.append("issue131: continued-run odometer did not update to 0450")
 	# A fresh standard run restores a zero-padded mechanical readout.
 	run_store.reset_run_state()
 	machine._set_display_lucidity(300, false)
-	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 300:
+	if machine._wealth.odometer() == null or machine._wealth.odometer().get_value() != 300:
 		failures.append("wealth: fresh-run odometer did not restore 0300")
 	if machine._overlay != null:
 		machine._overlay.queue_free()
@@ -407,12 +407,12 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 					% overlay.net_label.text)
 			if overlay._snapshot.get_value() != net_overflow:
 				failures.append("issue181: skipping the payout did not settle on the remainder")
-			if machine._wealth_odometer.get_node("Reel3").visible:
+			if machine._wealth.odometer().get_node("Reel3").visible:
 				failures.append("issue181: the machine kept drawing the digits it handed over")
 		machine._stop_wealth_target_transition()
 		if machine._tv_blackout_rect != null and machine._tv_blackout_rect.visible:
 			failures.append("issue181: the TV stayed dark after the payout screen closed")
-		if not machine._wealth_odometer.get_node("Reel3").visible:
+		if not machine._wealth.odometer().get_node("Reel3").visible:
 			failures.append("issue181: the machine never got its wealth digits back")
 		machine._wealth_target_transition_active = false
 		machine._set_sequence_lock(false)
@@ -612,7 +612,7 @@ func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -
 	var previous_bet := int(run_store.lastEffectiveBet)
 	var previous_burst_spin: int = machine._bursts.prev_spin()
 	var previous_burst_score: int = machine._bursts.prev_score()
-	var previous_display := int(machine._display_lucidity)
+	var previous_display: int = machine._wealth.display_score()
 	run_store.runPhase = "running"
 	run_store.scoreEarned = 42
 	run_store.lucidityCoins = 0
@@ -627,7 +627,7 @@ func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -
 	machine._bursts.remember(-1, 0)
 	machine._set_display_lucidity(0, false)
 	machine._emit_score_burst(null)
-	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 42:
+	if machine._wealth.odometer() == null or machine._wealth.odometer().get_value() != 42:
 		failures.append("wealth: score popup did not advance the odometer without Lucidity coins")
 	run_store.lastResult = previous_result
 	run_store.runPhase = previous_phase
