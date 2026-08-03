@@ -68,10 +68,6 @@ const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
 # Landed reel strip (uses the reel-strip presentation): a smaller centre symbol with dim
 # 0.9x neighbours peeking above/below, clipped by the cabinet hole.
-const STRIP_CENTER_H := 16.0
-const STRIP_ADJ_H := 12.0
-const STRIP_OFFSET := 14.0 # vertical gap between symbol centres ((center+adj)/2)
-const STRIP_ADJ_ALPHA := 0.5
 
 # Swap presentation (issue #181). One cue per idea: the slot frames say where a symbol
 # may land, the symbol shake says what can be grabbed, the instruction says what to do,
@@ -96,7 +92,7 @@ const SWAP_CROSS_ANGLE_DEG := 38.0
 const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever takes centre
 # Swap talks about whole reels, so its cues cover the whole visible reel: the hole plus the
 # strip symbols above and below it, not just the centre window.
-const SWAP_REEL_HALF_HEIGHT := STRIP_OFFSET + STRIP_CENTER_H * 0.5
+const SWAP_REEL_HALF_HEIGHT := ReelSymbols.OFFSET + ReelSymbols.CENTER_H * 0.5
 
 # Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
 # candidate symbol, tapping the symbol commits it.
@@ -630,9 +626,6 @@ var _pending_deferred_neg: Dictionary = {}
 ## Game-over flatline copy — byte-for-byte from the GDD.
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
-var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
-var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
-var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
 var _reel_backing_sprite: Sprite2D = null # the shared reel art all three covers copy
 var _swap_shake_cover_state: Array[bool] = [] # cover visibility to restore after a shake
 var _overlay: Control = null
@@ -693,6 +686,7 @@ var _dealer_bar: DealerBar = null
 var _boosts: BoostIndicators = null
 var _coins: CoinFlights = null
 var _reel_blur: ReelBlur = null
+var _reel_symbols: ReelSymbols = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -813,7 +807,6 @@ var _close_call_heartbeat_tween: Tween = null
 var _white_powder_distortion_tween: Tween = null
 var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
-var _adjacent_symbols_hidden_active := false # Serum downside: hide strip neighbours
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
 var _book_choice_overlay: Control = null
 var _compulsive_queued := false            # energy-drink auto-spin pending
@@ -835,6 +828,8 @@ func _ready() -> void:
 		_icon_for, _item_info_popup_text)
 	_coins = CoinFlights.new(_view)
 	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
+	_reel_symbols = ReelSymbols.new(_view, REEL_CELL_CENTERS, REEL_WINDOW,
+		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -846,7 +841,7 @@ func _ready() -> void:
 		"machine new view/reel_final_machine.png")
 	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
 	_reel_blur.build_covers("machine new view/reel_final_machine.png")
-	_build_reels()
+	_reel_symbols.build()
 	_build_full_canvas_sprite("machine new view/machine_neon.png")
 	_build_tv_indicators()
 	_build_machine_control_art()
@@ -1723,108 +1718,15 @@ func _play_reel_stop_sfx(index: int) -> void:
 
 # A reel lands: mask its blur, show its final symbol, stop animating that reel.
 func _reveal_reel(index: int) -> void:
-	var was_visible := _reel_sprites[index].visible
+	var was_visible := _reel_symbols.center(index).visible
 	if not was_visible:
 		_play_reel_stop_sfx(index)
 	_reel_blur.set_spin_visible(index, false)
 	_reel_blur.set_cover(index, true)
-	_set_reel_symbol(index, String(_final_reels[index]))
-	_set_reel_visible(index, true)
+	_reel_symbols.set_symbol(index, String(_final_reels[index]))
+	_reel_symbols.set_visible(index, true)
 	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
-	_apply_adjacent_symbol_visibility(index)      # Serum hides above/below neighbours
-
-func _configure_reel_sprite(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true) -> void:
-	s.centered = true
-	if apply_position:
-		s.position = pos
-	s.modulate = Color(1, 1, 1, alpha)
-	# Symbols are authored large and drawn at 12-16px, so keep their downscale
-	# pixel-perfect with the rest of the machine art.
-	s.texture_filter = MACHINE_ART_TEXTURE_FILTER
-
-func _new_reel_sprite(name: String, pos: Vector2, alpha: float) -> Sprite2D:
-	var s := _authored_sprite(name)
-	var authored := s != null
-	if s == null:
-		s = Sprite2D.new()
-		s.name = name
-		add_child(s)
-	_configure_reel_sprite(s, pos, alpha, not authored)
-	return s
-
-func _build_reels() -> void:
-	var cy := REEL_WINDOW["top"] + REEL_WINDOW["height"] * 0.5
-	for i in 3:
-		var cx: float = REEL_CELL_CENTERS[i]
-		# Add neighbours first, centre last so it draws on top where they meet.
-		_reel_top_sprites.append(_new_reel_sprite("Reel%dTop" % i, Vector2(cx, cy - STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_bottom_sprites.append(_new_reel_sprite("Reel%dBottom" % i, Vector2(cx, cy + STRIP_OFFSET), STRIP_ADJ_ALPHA))
-		_reel_sprites.append(_new_reel_sprite("Reel%dCenter" % i, Vector2(cx, cy), 1.0))
-
-func _set_reel_visible(index: int, visible: bool) -> void:
-	_reel_sprites[index].visible = visible
-	_reel_top_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
-	_reel_bottom_sprites[index].visible = visible and not _adjacent_symbols_hidden_active
-
-func _set_all_reels_visible(visible: bool) -> void:
-	for i in _reel_sprites.size():
-		_set_reel_visible(i, visible)
-
-# Symbol above/below `sym` in the canonical cycle (book sits outside it).
-func _reel_neighbours(sym: String) -> Dictionary:
-	if sym.begins_with("heart"):
-		# A heart strip cycles x1 -> x2 -> x3 around the landed tier, so the
-		# display shows exactly three of each heart symbol — never nine of one.
-		var tier := clampi(int(sym.trim_prefix("heart_x")), 1, 3) \
-			if sym.begins_with("heart_x") else 1
-		return {
-			"top": "heart_x%d" % (((tier - 2) + 3) % 3 + 1),
-			"bottom": "heart_x%d" % (tier % 3 + 1),
-		}
-	var cyc: Array = Symbols.BASE_SYMBOL_CYCLE
-	var n := cyc.size()
-	var i := cyc.find(sym)
-	if i < 0:
-		if sym == "book":
-			# Shift treats out-of-cycle symbols as index 0, so book up -> eye and down -> flatline.
-			return { "top": cyc[n - 1], "bottom": cyc[1] }
-		return { "top": cyc[n - 1], "bottom": cyc[0] }
-	return { "top": cyc[(i - 1 + n) % n], "bottom": cyc[(i + 1) % n] }
-
-func _apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
-	var heart_asset := String(HEART_SYMBOL_ASSETS.get(symbol_id, ""))
-	if symbol_id == "heart" and heart_asset == "":
-		heart_asset = String(HEART_SYMBOL_ASSETS["heart_x1"])
-	if heart_asset != "":
-		var heart_tex := _load_texture(heart_asset, true)
-		if heart_tex == null:
-			return
-		s.region_enabled = false
-		s.texture = heart_tex
-		var heart_scale := minf(1.0, target_h / float(heart_tex.get_height()))
-		s.scale = Vector2(heart_scale, heart_scale)
-		return
-	var tex := _load_texture("symbols/%s.png" % symbol_id, true) # mipmaps for crisp downscale
-	if tex == null:
-		return
-	s.region_enabled = false
-	s.texture = tex
-	var k := minf(1.0, target_h / float(tex.get_height()))
-	s.scale = Vector2(k, k)
-
-func _set_reel_symbol(index: int, symbol_id: String) -> void:
-	_apply_symbol(_reel_sprites[index], symbol_id, STRIP_CENTER_H)
-	var nb := _reel_neighbours(symbol_id)
-	_apply_symbol(_reel_top_sprites[index], String(nb["top"]), STRIP_ADJ_H)
-	_apply_symbol(_reel_bottom_sprites[index], String(nb["bottom"]), STRIP_ADJ_H)
-	_apply_adjacent_symbol_visibility(index)
-
-func _apply_adjacent_symbol_visibility(index: int) -> void:
-	if index < 0 or index >= _reel_sprites.size():
-		return
-	var visible := bool(_reel_sprites[index].visible) and not _adjacent_symbols_hidden_active
-	_reel_top_sprites[index].visible = visible
-	_reel_bottom_sprites[index].visible = visible
+	_reel_symbols.refresh_adjacent(index)      # Serum hides above/below neighbours
 
 func _build_hud() -> void:
 	_build_score_button()
@@ -2168,7 +2070,7 @@ func _sync_visuals() -> void:
 	_clear_targeting()
 	_clear_close_call_heartbeat()
 	_set_hidden_result_active(false)
-	_set_adjacent_symbols_hidden_active(false)
+	_reel_symbols.set_adjacent_hidden(false)
 	_close_serum_picker()
 	_close_book_choice_overlay()
 	_hide_compulsive_overlay()
@@ -2180,9 +2082,9 @@ func _sync_visuals() -> void:
 	if RunStateStore.lastResult != null:
 		_refresh_reels_from_state()
 	else:
-		_set_all_reels_visible(true)
+		_reel_symbols.set_all_visible(true)
 		for i in 3:
-			_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
+			_reel_symbols.set_symbol(i, VISIBLE_SYMBOLS[i])
 	# Settled reels show their cover (masks any blur); spin sheet hidden.
 	for i in 3:
 		_reel_blur.set_cover(i, true)
@@ -2448,7 +2350,7 @@ func _do_spin(compulsive := false) -> void:
 	_apply_expiring_boost_linger(expiring_boost_counters)
 	_update_hud() # SPINS LEFT drops with the spent neuron immediately
 	_set_hidden_result_active(consumable_fx_enabled and hidden_fx_enabled and hide_this_spin)
-	_set_adjacent_symbols_hidden_active(consumable_fx_enabled and blur_this_spin)
+	_reel_symbols.set_adjacent_hidden(consumable_fx_enabled and blur_this_spin)
 	# Issue #76: a deferred downside pops the moment it bites — the spin it applies to.
 	if hide_this_spin:
 		_pop_deferred_negative("cons_white_powder")
@@ -2525,7 +2427,7 @@ func _process(delta: float) -> void:
 		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= stop_sfx_time:
 			_play_reel_stop_sfx(i)
 	for i in 3:
-		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= float(_reel_stop_times[i]) and not _reel_sprites[i].visible:
+		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= float(_reel_stop_times[i]) and not _reel_symbols.center(i).visible:
 			_reveal_reel(i)
 	if _anim_elapsed >= _reel_stop_times[2]:
 		for i in 3:
@@ -2551,7 +2453,7 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 			_locked_reels_during_spin[i] = true
 		var locked := bool(_locked_reels_during_spin[i])
 		_reel_stop_sfx_played[i] = locked
-		_set_reel_visible(i, locked)
+		_reel_symbols.set_visible(i, locked)
 		_reel_blur.set_cover(i, locked)
 		_reel_blur.set_spin_frame(i, _spin_frame)
 		_reel_blur.set_spin_visible(i, not locked)
@@ -3080,11 +2982,11 @@ func _refresh_reels_from_state() -> void:
 	var lr: Variant = RunStateStore.lastResult
 	if lr == null:
 		return
-	_set_all_reels_visible(true)
+	_reel_symbols.set_all_visible(true)
 	for i in 3:
 		# An armed Heart previews immediately: every strip symbol — centre and
 		# adjacent — turns into a heart until the next spin resolves the tier.
-		_set_reel_symbol(i, "heart" if RunStateStore.heartPowerArmed \
+		_reel_symbols.set_symbol(i, "heart" if RunStateStore.heartPowerArmed \
 			else String(lr["reels"][i]))
 	_refresh_lock_art()
 
@@ -4129,7 +4031,7 @@ func _start_rewind_restore() -> void:
 	_play_sfx(&"reel_spin")
 	for i in 3:
 		_reel_stop_sfx_played[i] = false
-		_set_reel_visible(i, false)
+		_reel_symbols.set_visible(i, false)
 		_reel_blur.set_cover(i, false)
 		_reel_blur.set_spin_frame(i, _spin_frame)
 		_reel_blur.set_spin_visible(i, true)
@@ -4286,7 +4188,7 @@ func _cycle_cheat_symbol(step: int) -> void:
 func _refresh_cheat_preview(pop: bool) -> void:
 	if _cheat_preview_sprite == null or not is_instance_valid(_cheat_preview_sprite):
 		return
-	_apply_symbol(_cheat_preview_sprite, _cheat_symbol_pool[_cheat_symbol_index], STRIP_CENTER_H)
+	_reel_symbols.apply_symbol(_cheat_preview_sprite, _cheat_symbol_pool[_cheat_symbol_index], ReelSymbols.CENTER_H)
 	if pop:
 		var rest := _cheat_preview_sprite.scale
 		_cheat_preview_sprite.scale = rest * 1.25
@@ -4361,7 +4263,7 @@ func _start_swap_symbol_shake() -> void:
 	# so shaking it would advertise a target the drag refuses. Its cover is still switched
 	# on, because the shared backing goes off for every reel and the cover is what draws
 	# the art in its place; it simply stays still.
-	for i in _reel_sprites.size():
+	for i in _reel_symbols.count():
 		var live: bool = not _reel_is_dead(i)
 		# The reel asset first — this is the thing that shakes.
 		if i < _reel_blur.cover_count():
@@ -4375,7 +4277,7 @@ func _start_swap_symbol_shake() -> void:
 					_swap_shake_reel.append(i)
 		if not live:
 			continue
-		for sprite in [_reel_top_sprites[i], _reel_sprites[i], _reel_bottom_sprites[i]]:
+		for sprite in [_reel_symbols.top(i), _reel_symbols.center(i), _reel_symbols.bottom(i)]:
 			var symbol_sprite := sprite as Sprite2D
 			if symbol_sprite == null:
 				continue
@@ -4514,9 +4416,9 @@ func _swap_symbol_at(reel_index: int, slot: int) -> String:
 	if reel_index < 0 or reel_index >= reels.size():
 		return ""
 	var centre := String(reels[reel_index])
-	if slot == 1 or _adjacent_symbols_hidden_active:
+	if slot == 1 or _reel_symbols.adjacent_hidden():
 		return centre
-	var neighbours := _reel_neighbours(centre)
+	var neighbours := _reel_symbols.neighbours_of(centre)
 	return String(neighbours["top"] if slot == 0 else neighbours["bottom"])
 
 func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2) -> void:
@@ -4550,7 +4452,7 @@ func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2)
 	_swap_drag_ghost.z_index = 5
 	_swap_drag_ghost.modulate = Color(1.0, 1.0, 1.0, 0.92)
 	_swap_drag_ghost.position = _targeting_local_position(global_position) - _swap_drag_offset
-	_apply_symbol(_swap_drag_ghost, source_symbol, STRIP_CENTER_H)
+	_reel_symbols.apply_symbol(_swap_drag_ghost, source_symbol, ReelSymbols.CENTER_H)
 	# Drop shadow under the dragged symbol: same texture, black, slightly offset.
 	# It is a child of the ghost, so it follows the drag and dies with it.
 	var ghost_shadow := Sprite2D.new()
@@ -4688,13 +4590,13 @@ func _cancel_swap_drag_gesture() -> void:
 	_swap_source_symbol = ""
 
 func _swap_symbol_position(reel_index: int, slot: int) -> Vector2:
-	if reel_index < 0 or reel_index >= _reel_sprites.size():
+	if reel_index < 0 or reel_index >= _reel_symbols.count():
 		return Vector2.ZERO
 	if slot == 0:
-		return _reel_top_sprites[reel_index].position
+		return _reel_symbols.top(reel_index).position
 	if slot == 2:
-		return _reel_bottom_sprites[reel_index].position
-	return _reel_sprites[reel_index].position
+		return _reel_symbols.bottom(reel_index).position
+	return _reel_symbols.center(reel_index).position
 
 func _targeting_local_position(global_position: Vector2) -> Vector2:
 	if _targeting_layer == null:
@@ -4849,7 +4751,7 @@ func _start_reroll_animation(reel_index: int) -> void:
 	_play_sfx(&"reel_spin")
 	for i in 3:
 		var active := i == reel_index
-		_set_reel_visible(i, not active)
+		_reel_symbols.set_visible(i, not active)
 		_reel_blur.set_cover(i, not active)
 		_reel_blur.set_spin_frame(i, _spin_frame)
 		_reel_blur.set_spin_visible(i, active)
@@ -4871,9 +4773,9 @@ func _step_reroll(delta: float) -> void:
 		_reroll_anim_active = false
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
-			_set_reel_symbol(_reroll_reel_index, String(lr["reels"][_reroll_reel_index]))
+			_reel_symbols.set_symbol(_reroll_reel_index, String(lr["reels"][_reroll_reel_index]))
 		_reel_blur.set_spin_visible(_reroll_reel_index, false)
-		_set_reel_visible(_reroll_reel_index, true)
+		_reel_symbols.set_visible(_reroll_reel_index, true)
 		_reel_blur.set_cover(_reroll_reel_index, true)
 		var rerolled := _reroll_reel_index
 		_reroll_reel_index = -1
@@ -5742,11 +5644,6 @@ func _set_hidden_cover(index: int, visible_now: bool) -> void:
 
 # Serum downside: after the guaranteed-symbol spins, hide the strip neighbours above
 # and below each center symbol so only the actual result remains readable.
-func _set_adjacent_symbols_hidden_active(active: bool) -> void:
-	_adjacent_symbols_hidden_active = active
-	for i in _reel_sprites.size():
-		_apply_adjacent_symbol_visibility(i)
-
 # Legacy frost covers stay built but inactive; Serum now hides adjacent strip symbols.
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
 # All reactions run in this presentation layer AFTER the parity-pinned spin()/power
@@ -5990,7 +5887,7 @@ func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 		icon.texture = tex
 		icon.position = popup.size * 0.5
 		icon.centered = true
-		var icon_scale := minf(1.0, STRIP_CENTER_H / float(tex.get_height()))
+		var icon_scale := minf(1.0, ReelSymbols.CENTER_H / float(tex.get_height()))
 		icon.scale = Vector2(icon_scale, icon_scale)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		popup.add_child(icon)
@@ -6403,7 +6300,7 @@ func _clear_wealth_presentation_fx() -> void:
 		cover.visible = false
 	_reel_blur.clear_blur()
 	_hide_result_active = false
-	_adjacent_symbols_hidden_active = false
+	_reel_symbols.set_adjacent_hidden(false)
 
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
 		_cocktail_shake_tween.kill()
