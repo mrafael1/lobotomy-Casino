@@ -165,14 +165,9 @@ const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
 const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
 const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
 const FREE_SPIN_SHEET := "machine new view/free_spin.png"
-const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
-const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
-# The x3 losing state is an authored 9-frame diminished-fire sheet (1440x320)
-# stepped at the same cadence as the regular multiplier effects.
-const COMBO_LOSS_3_FRAMES := 9
 const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
 # One authored placement again (issue #185 follow-up). The banner briefly carried a
 # second, lowered frame for when the item badges still sat in the y81..93 band and it had
@@ -185,35 +180,16 @@ const FREE_SPIN_FRAMES := 1
 const WATER_SHEET := "machine new view/water.png"
 const WATER_SHEET_FRAMES := 3
 const WATER_FX_Z_INDEX := 30      # over the cabinet and the TV, under the overlays
-const COMBO_LOSS_BEEP_FADE_TIME := 0.1
-const COMBO_LOSS_BEEP_PAUSE := 0.42
-# Authored TV callout sheets (full-canvas x1 frames): the win sheet flashes
-# PAIR/TRIPLE after a win is identified; the power sheet flashes the seven power
-# names in authored order while that power's targeting is armed. Both beep with
-# the combo-loss pulse cadence.
-const WIN_ANIM_SHEET := "machine new view/win_animation.png"
-const WIN_ANIM_FRAMES := 2
-const WIN_ANIM_FRAME := { "pair": 0, "triple": 1 }
-const COMBO_EFFECT_SHEET := "machine new view/COMBO_effect.png"
-const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose fewer frames
-const COMBO_EFFECT_DELAY := 2.55
-const COMBO_EFFECT_TIME := 1.05
+# Authored TV callout sheet (full-canvas x1 frames): the power sheet flashes the
+# seven power names in authored order while that power's targeting is armed. It
+# beeps on the same cadence as the win callout, which is WinCallouts' — the two
+# should share a common home when 4.6 cuts the targeting seam out.
 const POWER_ANIM_SHEET := "machine new view/power_animation.png"
 const POWER_ANIM_FRAMES := 7
 const POWER_ANIM_FRAME := {
 	"reroll": 0, "shift": 1, "memory": 2,
 	"rewind": 3, "heart": 4, "cheat": 5, "swap": 6,
 }
-const CALLOUT_BEEP_COUNT := 4
-# "+ X" payout line under the PAIR/TRIPLE callout (both words centre on x~76 and
-# end at y86 in the re-authored art; the TV screen bottom is y108). Child of the
-# callout sprite, so it inherits the beep pulse and hides with it.
-const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
-const WIN_PAYOUT_COLOR := Color("#20d6c7")
-# The combo sheet already contains COMBO x1..x9 at y63..92. Keep the bonus line
-# below that authored title so the two payouts read as separate beats.
-const COMBO_PAYOUT_RECT := Rect2(35.0, 94.0, 82.0, 12.0)
-const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 # Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
 # is the empty bar at the start of the active cycle (12 steps normally, 24 for
 # Club/Joker); the last frame means the dealer arrives after the current spin. The
@@ -352,10 +328,9 @@ const SCORE_TABLE_MAXED_COLOR := Color(1.0, 0.24, 0.24)
 const SCORE_TABLE_BRAIN_COLOR := Color(1.0, 0.33, 0.58)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
-# Presentation stack: machine art → loss overlays (97) → dealer offer (100) →
-# dealer-interactive stash (110, only while his offer is up; 50 otherwise) →
-# HUD/options (BottomHudLayer 120).
-const COMBO_LOSS_OVERLAY_Z_INDEX := 97
+# Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
+# offer (100) → dealer-interactive stash (110, only while his offer is up; 50
+# otherwise) → HUD/options (BottomHudLayer 120).
 const DEALER_OVERLAY_Z_INDEX := 100
 const STASH_TRAY_Z_INDEX := 50
 const DEALER_STASH_Z_INDEX := 110
@@ -797,8 +772,6 @@ var _dealer_bar_frame_initialized := false
 var _dealer_warning_wanted := 0    # lights the multiplier has earned (gates the beep)
 var _dealer_bar_overlay_beep_time := 0.0
 var _dealer_icon: TextureRect = null
-var _combo_loss_2_sprite: Sprite2D = null
-var _combo_loss_3_sprite: Sprite2D = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _free_spin_sprite: Sprite2D = null
 var _free_spin_blink_time := 0.0
@@ -820,15 +793,6 @@ var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remain
 var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
 var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
-var _win_anim_sprite: Sprite2D = null
-var _win_anim_tween: Tween = null
-var _win_payout_label: Label = null # "+ X" line under the PAIR/TRIPLE callout
-var _combo_effect_sprite: Sprite2D = null
-var _combo_effect_delay_tween: Tween = null
-var _combo_effect_tween: Tween = null
-var _combo_payout_tween: Tween = null
-var _combo_payout_label: Label = null
-var _combo_effect_frame_count := COMBO_EFFECT_FRAMES
 var _power_anim_sprite: Sprite2D = null
 var _power_anim_tween: Tween = null
 var _power_anim_label: Label = null
@@ -840,6 +804,7 @@ var _tv_info_pop_sources: Dictionary = {}
 ## can touch here is a written-down list instead of all ~210 remaining fields.
 var _view: MachineView = null
 var _augments: AugmentDisplay = null
+var _callouts: WinCallouts = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -898,7 +863,6 @@ var _burst_prev_score := 0           # last announced result score (for power ga
 var _hud_delta_hold := false
 var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
-var _combo_score_pending := -1 # final score held until the COMBO bonus beat lands
 var _power_bar_sprite: Sprite2D = null
 var _restore_cap_sprite: Sprite2D = null # per-spin restore budget lights beside the gauge
 var _restore_cap_glow: Sprite2D = null   # the lit frame, flashed and faded when a charge is spent
@@ -923,7 +887,6 @@ var _sequence_lock_active := false
 var _post_spin_sequence_active := false
 var _pending_combo_overlay: Control = null
 var _pending_combo_power_flow := false
-var _combo_loss_beep_tween: Tween = null
 var _sfx_players: Dictionary = {}
 var _spin_launch_pending := false
 
@@ -995,6 +958,7 @@ func _ready() -> void:
 	# the display, and that runs inside the sprite pass below.
 	_view = MachineView.new(self)
 	_augments = AugmentDisplay.new(_view)
+	_callouts = WinCallouts.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1550,7 +1514,7 @@ func _refresh_target_readout() -> void:
 	# the win has not been revealed yet, and a bar that filled early announced the
 	# payout before the number did.
 	var shown_score := int(RunStateStore.scoreEarned)
-	if _hud_delta_hold or _combo_score_pending >= 0:
+	if _hud_delta_hold or _callouts.pending_score() >= 0:
 		shown_score = _display_lucidity
 	var progress := clampf(float(shown_score) / float(target), 0.0, 1.0)
 	_set_sheet_frame(_target_bar_sprite, clampi(
@@ -2206,53 +2170,15 @@ func _build_machine_control_art() -> void:
 		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
 	_build_dealer_tip_steps()
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, FREE_SPIN_FRAMES)
-	_combo_loss_2_sprite = _build_full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
-	_combo_loss_3_sprite = _build_full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
-	_win_anim_sprite = _build_full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
-	if _win_anim_sprite != null:
-		_win_payout_label = Label.new()
-		_win_payout_label.name = "WinPayout"
-		_win_payout_label.position = WIN_PAYOUT_RECT.position
-		_win_payout_label.size = WIN_PAYOUT_RECT.size
-		_win_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_win_payout_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_win_payout_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_win_payout_label.add_theme_font_size_override("font_size", 11)
-		if _font != null:
-			_win_payout_label.add_theme_font_override("font", _font)
-		_win_payout_label.add_theme_color_override("font_color", WIN_PAYOUT_COLOR)
-		_win_payout_label.text = ""
-		_win_anim_sprite.add_child(_win_payout_label)
-	var combo_texture := _load_texture(COMBO_EFFECT_SHEET, true)
-	if combo_texture != null:
-		_combo_effect_frame_count = clampi(
-			roundi(float(combo_texture.get_width()) / float(SRC_W)), 1, COMBO_EFFECT_FRAMES)
-	_combo_effect_sprite = _build_full_canvas_sheet(
-		COMBO_EFFECT_SHEET, _combo_effect_frame_count)
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.z_index = 9
-		_combo_payout_label = Label.new()
-		_combo_payout_label.name = "ComboPayout"
-		_combo_payout_label.position = COMBO_PAYOUT_RECT.position
-		_combo_payout_label.size = COMBO_PAYOUT_RECT.size
-		_combo_payout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_combo_payout_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_combo_payout_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_combo_payout_label.add_theme_font_size_override("font_size", 8)
-		if _font != null:
-			_combo_payout_label.add_theme_font_override("font", _font)
-		_combo_payout_label.add_theme_color_override("font_color", COMBO_PAYOUT_COLOR)
-		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		_combo_payout_label.add_theme_constant_override("outline_size", 1)
-		_combo_payout_label.text = ""
-		_combo_payout_label.visible = false
-		_combo_effect_sprite.add_child(_combo_payout_label)
+	# The four callout sheets are built here, at the point in the layer stack they
+	# have always occupied: the win sheet keeps the machine's default z_index, so
+	# the tree order at this line IS its layer (issue #195, seam 4.2).
+	_callouts.build()
 	_power_anim_sprite = _build_full_canvas_sheet(POWER_ANIM_SHEET, POWER_ANIM_FRAMES)
 	_cheat_selection_sprite = _build_full_canvas_sheet(
 		CHEAT_SELECTION_SHEET, CHEAT_SELECTION_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
-			_combo_loss_2_sprite, _combo_loss_3_sprite,
-			_win_anim_sprite, _combo_effect_sprite, _power_anim_sprite, _cheat_selection_sprite]:
+			_power_anim_sprite, _cheat_selection_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
 	if _cheat_selection_sprite != null:
@@ -2267,9 +2193,6 @@ func _build_machine_control_art() -> void:
 			_dealer_bar_overlay_3]:
 		if dealer_overlay != null:
 			(dealer_overlay as Sprite2D).visible = false
-	for loss_sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
-		if loss_sprite != null:
-			(loss_sprite as Sprite2D).z_index = COMBO_LOSS_OVERLAY_Z_INDEX
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
 	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
@@ -3088,8 +3011,8 @@ func _do_spin(compulsive := false) -> void:
 	_clear_boost_zero_linger()
 	var expiring_boost_counters := _capture_expiring_boost_counters()
 	_clear_targeting()
-	_stop_win_animation() # last spin's PAIR/TRIPLE callout must not outlive its win
-	_stop_combo_effect() # finish the previous Win Boost beat before the next reveal
+	_callouts.stop_win() # last spin's PAIR/TRIPLE callout must not outlive its win
+	_callouts.stop_combo() # finish the previous Win Boost beat before the next reveal
 	_close_score_table()
 	_copy_source = -1 # abandon any half-armed white-powder copy
 	_refresh_jackpot_lamp(false)
@@ -3398,8 +3321,8 @@ func _show_pending_combo_defeat() -> void:
 	_pending_combo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pending_combo_overlay.z_index = 96
 	add_child(_pending_combo_overlay)
-	_set_combo_loss_display(int(RunStateStore.pendingComboMultiplier))
-	_start_combo_loss_beep()
+	_callouts.set_loss_display(int(RunStateStore.pendingComboMultiplier))
+	_callouts.start_loss_beep()
 	_refresh_controls()
 
 func _on_pending_combo_declined() -> void:
@@ -3409,8 +3332,8 @@ func _on_pending_combo_declined() -> void:
 	_close_pending_combo_defeat()
 	_finish_post_spin_sequence()
 func _close_pending_combo_defeat() -> void:
-	_stop_combo_loss_beep()
-	_set_combo_loss_display(0)
+	_callouts.stop_loss_beep()
+	_callouts.set_loss_display(0)
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
@@ -3421,50 +3344,6 @@ func _close_pending_combo_defeat() -> void:
 func _maybe_cancel_combo_defeat_warning(was_pending: bool) -> void:
 	if was_pending and not RunStateStore.comboDefeatPending:
 		_close_pending_combo_defeat()
-
-func _set_combo_loss_display(multiplier: int) -> void:
-	if _combo_loss_2_sprite != null:
-		_combo_loss_2_sprite.visible = multiplier == 2
-	if _combo_loss_3_sprite != null:
-		_combo_loss_3_sprite.visible = multiplier == 3
-		if multiplier == 3:
-			_combo_loss_3_sprite.frame = 0
-	# The loss overlay replaces the regular gauge effects; closing it (0) brings
-	# the sparks / glitch + fire straight back for the surviving multiplier.
-	_apply_multiplier_fx_visibility()
-
-func _start_combo_loss_beep() -> void:
-	_stop_combo_loss_beep()
-	# The COMBO streak is recoverable while the warning is open, so its persistent
-	# TV component beeps at every multiplier. The authored x2 loss marker keeps its
-	# existing pulse; x3 remains a steady diminished-fire sheet.
-	var loss_sprite: Sprite2D = _combo_loss_2_sprite \
-		if int(RunStateStore.pendingComboMultiplier) == 2 else null
-	var combo_sprite := _combo_effect_sprite if RunStateStore.winBoostEnabled else null
-	if loss_sprite == null and combo_sprite == null:
-		return
-	if loss_sprite != null:
-		loss_sprite.modulate = Color.WHITE
-	if combo_sprite != null:
-		combo_sprite.modulate = Color.WHITE
-	_combo_loss_beep_tween = create_tween().set_loops()
-	_combo_loss_beep_tween.set_parallel(true)
-	if loss_sprite != null:
-		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 0.18,
-			COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if combo_sprite != null:
-		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 0.18,
-			COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_combo_loss_beep_tween.set_parallel(false)
-	_combo_loss_beep_tween.set_parallel(true)
-	if loss_sprite != null:
-		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 1.0,
-			COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if combo_sprite != null:
-		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 1.0,
-			COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_combo_loss_beep_tween.set_parallel(false)
-	_combo_loss_beep_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
 
 ## Full-screen TV callouts take visual priority over persistent TV information.
 ## Multiple callouts can overlap (for example a power callout over a win callout),
@@ -3528,8 +3407,7 @@ func _hide_tv_info_layers() -> void:
 	# (issue #185): a callout clears them, the banner beside them does not.
 	if _free_spin_sprite != null and not _tv_info_pop_sources.is_empty():
 		_free_spin_sprite.visible = false
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.visible = false
+	_callouts.hide_combo()
 	if not _tv_callout_active():
 		_refresh_boost_indicators()
 		return
@@ -3552,8 +3430,8 @@ func _restore_tv_info_layers() -> void:
 	# while the dealer interface comes back with the objective. The item badges come back
 	# too (issue #185) — the banner drops a frame for them rather than blanking them.
 	_refresh_boost_indicators()
-	if _free_spin_overlay_active and _combo_effect_sprite != null:
-		_combo_effect_sprite.visible = false
+	if _free_spin_overlay_active:
+		_callouts.hide_combo()
 	_refresh_dealer_countdown()
 	if _dealer_bar_sprite != null:
 		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
@@ -3562,131 +3440,7 @@ func _restore_tv_info_layers() -> void:
 		_dealer_icon.visible = _tv_info_pop_restore_dealer_icon_visible \
 			or RunStateStore.comboDefeatPending
 	if not _free_spin_overlay_active:
-		_refresh_combo_effect()
-
-## PAIR/TRIPLE TV callout: the matching win_animation frame beeps (alpha pulse,
-## combo-loss cadence) CALLOUT_BEEP_COUNT times after the win is identified, then
-## hides. The "+ score" payout line rides along as a child of the callout sprite.
-func _play_win_animation(win_type: String, score: int, payout_text := "") -> void:
-	if _win_anim_sprite == null or not WIN_ANIM_FRAME.has(win_type):
-		return
-	_stop_win_animation()
-	_begin_tv_info_pop(&"win")
-	_set_sheet_frame(_win_anim_sprite, int(WIN_ANIM_FRAME[win_type]))
-	if _win_payout_label != null:
-		_win_payout_label.text = payout_text if payout_text != "" else "+ %d" % score
-	_win_anim_sprite.modulate.a = 1.0
-	_win_anim_sprite.visible = true
-	_win_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
-	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 0.18,
-		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 1.0,
-		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_win_anim_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
-	_win_anim_tween.finished.connect(_stop_win_animation)
-
-func _stop_win_animation() -> void:
-	if _win_anim_tween != null and _win_anim_tween.is_valid():
-		_win_anim_tween.kill()
-	_win_anim_tween = null
-	if _win_anim_sprite != null:
-		_win_anim_sprite.visible = false
-		_win_anim_sprite.modulate.a = 1.0
-	_end_tv_info_pop(&"win")
-
-## COMBO is a persistent TV component, but a paying PAIR/TRIPLE result gives it
-## a second beat: the authored stage shakes and its separate bonus flies out after
-## the base payout callout. The component remains at the new stage afterward.
-func _queue_combo_effect(combo_number: int, bonus: int, percent: int) -> float:
-	if _combo_effect_sprite == null:
-		return 0.0
-	_stop_combo_effect()
-	var frame := clampi(combo_number - 1, 0, maxi(0, _combo_effect_frame_count - 1))
-	_combo_effect_delay_tween = create_tween()
-	_combo_effect_delay_tween.tween_interval(COMBO_EFFECT_DELAY)
-	_combo_effect_delay_tween.tween_callback(
-		_show_combo_effect.bind(frame, bonus, percent))
-	return COMBO_EFFECT_DELAY + COMBO_EFFECT_TIME
-
-func _show_combo_effect(frame: int, bonus: int, percent: int) -> void:
-	_combo_effect_delay_tween = null
-	if _combo_effect_sprite == null or not RunStateStore.winBoostEnabled:
-		return
-	_stop_win_animation()
-	_set_sheet_frame(_combo_effect_sprite,
-		clampi(frame, 0, maxi(0, _combo_effect_frame_count - 1)))
-	if _combo_payout_label != null:
-		_combo_payout_label.text = "+ %d (%d%%)" % [maxi(0, bonus), clampi(percent, 0, 45)]
-		_combo_payout_label.position = COMBO_PAYOUT_RECT.position
-		_combo_payout_label.modulate.a = 1.0
-		_combo_payout_label.visible = true
-	_combo_effect_sprite.modulate.a = 1.0
-	_combo_effect_sprite.visible = not _tv_content_muted()
-	if _combo_score_pending >= 0:
-		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
-		_combo_score_pending = -1
-	if _combo_effect_tween != null and _combo_effect_tween.is_valid():
-		_combo_effect_tween.kill()
-	_combo_effect_tween = create_tween()
-	var origin := _combo_effect_sprite.position
-	for offset in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(-1.0, 0.0),
-			Vector2(1.0, 0.0), Vector2(-1.0, 0.0), Vector2(1.0, 0.0)]:
-		_combo_effect_tween.tween_property(_combo_effect_sprite, "position",
-			origin + offset, 0.06)
-	_combo_effect_tween.tween_property(_combo_effect_sprite, "position", origin, 0.06)
-	_combo_effect_tween.tween_interval(maxf(0.0, COMBO_EFFECT_TIME - 0.42))
-	_combo_effect_tween.finished.connect(_finish_combo_effect)
-	if _combo_payout_tween != null and _combo_payout_tween.is_valid():
-		_combo_payout_tween.kill()
-	if _combo_payout_label != null:
-		_combo_payout_tween = create_tween()
-		_combo_payout_tween.tween_property(_combo_payout_label, "position:y",
-			COMBO_PAYOUT_RECT.position.y - 8.0, 0.72)
-		_combo_payout_tween.parallel().tween_property(_combo_payout_label, "modulate:a",
-			0.0, 0.72).set_delay(0.18)
-
-func _finish_combo_effect() -> void:
-	_combo_effect_tween = null
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.position = Vector2.ZERO
-		_combo_effect_sprite.modulate.a = 1.0
-	if _combo_payout_label != null:
-		_combo_payout_label.position = COMBO_PAYOUT_RECT.position
-		_combo_payout_label.modulate.a = 1.0
-		_combo_payout_label.visible = false
-		_combo_payout_label.text = ""
-	if _combo_score_pending >= 0:
-		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
-		_combo_score_pending = -1
-	_refresh_combo_effect()
-
-func _stop_combo_effect() -> void:
-	if _combo_effect_delay_tween != null and _combo_effect_delay_tween.is_valid():
-		_combo_effect_delay_tween.kill()
-	_combo_effect_delay_tween = null
-	if _combo_effect_tween != null and _combo_effect_tween.is_valid():
-		_combo_effect_tween.kill()
-		_combo_effect_tween = null
-	if _combo_payout_tween != null and _combo_payout_tween.is_valid():
-		_combo_payout_tween.kill()
-		_combo_payout_tween = null
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.position = Vector2.ZERO
-		_combo_effect_sprite.modulate.a = 1.0
-	if _combo_payout_label != null:
-		_combo_payout_label.position = COMBO_PAYOUT_RECT.position
-		_combo_payout_label.modulate.a = 1.0
-		_combo_payout_label.visible = false
-		_combo_payout_label.text = ""
-	if _combo_score_pending >= 0:
-		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
-		_combo_score_pending = -1
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.visible = RunStateStore.winBoostEnabled \
-			and not _tv_content_muted()
-		if _combo_effect_sprite.visible:
-			_set_sheet_frame(_combo_effect_sprite,
-				_combo_effect_frame(int(RunStateStore.winBoostCombo)))
+		_callouts.refresh_combo()
 
 ## Power TV callout: the selected power's power_animation frame beeps a few times
 ## and then holds while its targeting stays armed (_clear_targeting hides it).
@@ -3721,12 +3475,12 @@ func _show_power_animation(id: String) -> void:
 		_power_anim_label.visible = false
 	_power_anim_sprite.modulate.a = 1.0
 	_power_anim_sprite.visible = true
-	_power_anim_tween = create_tween().set_loops(CALLOUT_BEEP_COUNT)
+	_power_anim_tween = create_tween().set_loops(WinCallouts.BEEP_COUNT)
 	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 0.18,
-		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		WinCallouts.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 1.0,
-		COMBO_LOSS_BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_power_anim_tween.tween_interval(COMBO_LOSS_BEEP_PAUSE)
+		WinCallouts.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_power_anim_tween.tween_interval(WinCallouts.BEEP_PAUSE)
 
 func _stop_power_animation() -> void:
 	if _power_anim_tween != null and _power_anim_tween.is_valid():
@@ -3738,16 +3492,6 @@ func _stop_power_animation() -> void:
 	if _power_anim_label != null:
 		_power_anim_label.visible = false
 	_end_tv_info_pop(&"power")
-
-func _stop_combo_loss_beep() -> void:
-	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():
-		_combo_loss_beep_tween.kill()
-	_combo_loss_beep_tween = null
-	for sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
-		if sprite != null:
-			(sprite as Sprite2D).modulate = Color.WHITE
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.modulate = Color.WHITE
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -3951,26 +3695,6 @@ func _refresh_lock_art() -> void:
 			label.visible = remaining > 0
 			label.text = str(remaining) if remaining > 0 else ""
 
-func _combo_effect_frame(stage: int) -> int:
-	var zero_based := maxi(0, stage - 1) if stage > 0 else 0
-	return clampi(zero_based, 0, maxi(0, _combo_effect_frame_count - 1))
-
-## COMBO is part of the normal TV HUD while the augment is owned. Transient
-## announcements own the TV priority stack and temporarily hide this sprite;
-## the sprite itself is never destroyed, so its stage survives every popup.
-func _refresh_combo_effect() -> void:
-	if _combo_effect_sprite == null:
-		return
-	if not RunStateStore.winBoostEnabled:
-		_stop_combo_effect()
-		_combo_effect_sprite.visible = false
-		return
-	if _tv_content_muted():
-		_combo_effect_sprite.visible = false
-		return
-	_set_sheet_frame(_combo_effect_sprite, _combo_effect_frame(int(RunStateStore.winBoostCombo)))
-	_combo_effect_sprite.visible = true
-
 func _refresh_tv_indicators() -> void:
 	# The FREE SPIN banner lights the TV while the next spin is free (banked free
 	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
@@ -4006,14 +3730,14 @@ func _refresh_tv_indicators() -> void:
 	# frame follows the recoverable streak, while higher-priority callouts hide it
 	# through _begin_tv_info_pop/_restore_tv_info_layers.
 	if not _hud_delta_hold:
-		_refresh_combo_effect()
+		_callouts.refresh_combo()
 	# The wealth odometer is a score total. Hold it (with the multiplier badge and
 	# jackpot lamp) until the score popup lands (issue #54).
 	if _hud_delta_hold:
 		return
 	# COMBO has a second payout beat. Keep the base PAIR/TRIPLE total visible until
 	# the persistent indicator's bonus lands, then release the final total.
-	if _combo_score_pending >= 0:
+	if _callouts.pending_score() >= 0:
 		return
 	if RunStateStore.scoreEarned < _display_lucidity:
 		_set_display_lucidity(RunStateStore.scoreEarned)
@@ -4183,7 +3907,7 @@ func _emit_score_burst(source_reel) -> float:
 	var combo_applied := bool(lr.get("winBoostApplied", false)) \
 		and win_type in SpinResult.PAYING_WIN_TYPES
 	var combo_bonus := maxi(0, int(lr.get("winBoostBonus", 0))) if combo_applied else 0
-	var combo_number := clampi(int(lr.get("winBoostCombo", 1)), 1, COMBO_EFFECT_FRAMES)
+	var combo_number := clampi(int(lr.get("winBoostCombo", 1)), 1, WinCallouts.COMBO_EFFECT_FRAMES)
 	var combo_percent := clampi(int(lr.get("winBoostPercent", 0)), 0, 45)
 	var combo_base_gain := maxi(0, gain - combo_bonus)
 	if combo_applied and lr.has("winBoostBaseScore"):
@@ -4192,9 +3916,7 @@ func _emit_score_burst(source_reel) -> float:
 	_coin_prev_lucidity = int(RunStateStore.lucidityCoins)
 	# A previous sequence can be interrupted by a power or a scene transition. Make
 	# sure a held final odometer value is not mistaken for this result's base payout.
-	if _combo_score_pending >= 0:
-		_set_display_lucidity(maxi(_display_lucidity, _combo_score_pending))
-		_combo_score_pending = -1
+	_callouts.flush_held_score()
 	# Score is the wealth bar's source of truth. The number reels begin their roll with
 	# the score popup; no individual Lucidity coins leave the cash tray for this HUD.
 	# A jackpot rolls them slowly on purpose (issue #181) — watching the money land is
@@ -4202,7 +3924,7 @@ func _emit_score_burst(source_reel) -> float:
 	# payout beat.
 	var wealth_score := int(RunStateStore.scoreEarned)
 	var roll_override := JACKPOT_ODOMETER_ROLL_TIME if gain > 0 and win_type == "jackpot" else 0.0
-	if combo_bonus > 0 and _combo_effect_sprite != null:
+	if combo_bonus > 0 and _callouts.combo_sprite() != null:
 		_set_display_lucidity(maxi(_display_lucidity, wealth_score - combo_bonus), true, roll_override)
 	elif wealth_score > _display_lucidity:
 		_set_display_lucidity(wealth_score, true, roll_override)
@@ -4220,7 +3942,7 @@ func _emit_score_burst(source_reel) -> float:
 	if is_new_spin and win_type == "heart":
 		var heart_tier := clampi(int(lr.get("heartTier", lr.get("heartCount", 1))), 1, 3)
 		_play_sfx(&"triple_win")
-		_play_win_animation("triple", 0, "+ %d" % heart_tier)
+		_callouts.play_win("triple", 0, "+ %d" % heart_tier)
 		_play_spin_gain_fx(heart_tier, _reel_window_center(), 0.55, true)
 		_spawn_reaction_flash(triple_vial_color, "+%d SPINS" % heart_tier)
 		_nudge(1.0)
@@ -4236,10 +3958,10 @@ func _emit_score_burst(source_reel) -> float:
 			var fountain_time := _spawn_jackpot_coin_fountain()
 			_flash_jackpot_lamp()
 			_nudge(2.2)
-			var jackpot_combo_time: float = _queue_combo_effect(
+			var jackpot_combo_time: float = _callouts.queue_combo(
 				combo_number, combo_bonus, combo_percent) if combo_applied else 0.0
 			if combo_bonus > 0 and jackpot_combo_time > 0.0:
-				_combo_score_pending = wealth_score
+				_callouts.hold_score(wealth_score)
 			# The lock has to outlast the slow reel roll AND the coin spray, or the next
 			# spin can be pulled while the money is still landing (issue #181).
 			return maxf(reward_time, maxf(
@@ -4251,7 +3973,7 @@ func _emit_score_burst(source_reel) -> float:
 			_play_sfx(&"triple_win")
 		elif win_type == "pair":
 			_play_sfx(&"pair_win")
-		_play_win_animation(win_type, combo_base_gain)
+		_callouts.play_win(win_type, combo_base_gain)
 		# Issue #76: a flatline strike charged this win — call it out and tint it red so
 		# the doubled score reads as the flatline payoff, not a normal pair/triple.
 		if is_new_spin and bool(lr.get("flatlineBoostApplied", false)):
@@ -4269,9 +3991,9 @@ func _emit_score_burst(source_reel) -> float:
 			if solo != -1 and solo < _visible_reel_count():
 				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
 		if combo_applied:
-			var combo_time: float = _queue_combo_effect(combo_number, combo_bonus, combo_percent)
+			var combo_time: float = _callouts.queue_combo(combo_number, combo_bonus, combo_percent)
 			if combo_bonus > 0 and combo_time > 0.0:
-				_combo_score_pending = wealth_score
+				_callouts.hold_score(wealth_score)
 			reward_time = maxf(reward_time, combo_time)
 	return reward_time
 
@@ -4864,8 +4586,7 @@ func _refresh_multiplier_fx(effective: int) -> void:
 ## overlay shows — the normal x2 sparks and the x3 glitch + fire sheets stay
 ## hidden and come back the moment the loss display closes.
 func _apply_multiplier_fx_visibility() -> void:
-	var loss_active := (_combo_loss_2_sprite != null and _combo_loss_2_sprite.visible) \
-		or (_combo_loss_3_sprite != null and _combo_loss_3_sprite.visible)
+	var loss_active := _callouts.loss_showing()
 	if _mult_fx_2 != null:
 		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active
 	if _mult_fx_3 != null:
@@ -4874,7 +4595,7 @@ func _apply_multiplier_fx_visibility() -> void:
 		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active
 
 func _step_multiplier_fx(delta: float) -> void:
-	var loss_3_active := _combo_loss_3_sprite != null and _combo_loss_3_sprite.visible
+	var loss_3_active := _callouts.loss_3_showing()
 	if (_mult_fx_2 == null or not _mult_fx_2.visible) \
 			and (_mult_fx_3 == null or not _mult_fx_3.visible) \
 			and not loss_3_active:
@@ -4890,7 +4611,7 @@ func _step_multiplier_fx(delta: float) -> void:
 	if _mult_fx_fire != null and _mult_fx_fire.visible:
 		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
 	if loss_3_active:
-		_combo_loss_3_sprite.frame = (_combo_loss_3_sprite.frame + 1) % COMBO_LOSS_3_FRAMES
+		_callouts.step_loss_3_frame()
 
 ## Every lit warning beeps; how fast is what changes. A lone first light beeps on the slow
 ## period, and from the second light on it tightens to the fast one, so the machine audibly
@@ -5282,8 +5003,8 @@ func _start_rewind_restore() -> void:
 	_rewind_accum = 0.0
 	_spin_frame = 0
 	_set_sequence_lock(true)
-	_stop_win_animation()
-	_stop_combo_effect()
+	_callouts.stop_win()
+	_callouts.stop_combo()
 	_play_sfx(&"reel_spin")
 	for i in 3:
 		_reel_stop_sfx_played[i] = false
@@ -5996,8 +5717,8 @@ func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	_refresh_jackpot_lamp()
 
 func _start_reroll_animation(reel_index: int) -> void:
-	_stop_win_animation() # the rerolled reveal supersedes the previous win callout
-	_stop_combo_effect()
+	_callouts.stop_win() # the rerolled reveal supersedes the previous win callout
+	_callouts.stop_combo()
 	_reroll_anim_active = true
 	_reroll_reel_index = reel_index
 	_reroll_elapsed = 0.0
@@ -7809,13 +7530,13 @@ func _cleanup_transient_presentation() -> void:
 	_wealth_target_transition_active = false
 	if _dealer_overlay != null or _dealer_offer_popup != null:
 		_close_dealer(false)
-	_stop_combo_loss_beep()
-	_set_combo_loss_display(0)
+	_callouts.stop_loss_beep()
+	_callouts.set_loss_display(0)
 	if _pending_combo_overlay != null:
 		_pending_combo_overlay.queue_free()
 		_pending_combo_overlay = null
-	_stop_win_animation()
-	_stop_combo_effect()
+	_callouts.stop_win()
+	_callouts.stop_combo()
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false

@@ -230,7 +230,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	machine._hud_delta_hold = false
 	machine._spinning_anim = false
 	machine._spin_launch_pending = false
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	machine._stop_power_animation()
 	machine._tv_info_pop_sources.clear()
 	machine._set_tv_progress_bars_visible(true)
@@ -277,8 +277,8 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 			or (dealer_icon != null and not dealer_icon.visible):
 		failures.append("TV callout priority: FREE SPIN hid the dealer interface")
 
-	machine._play_win_animation("pair", 20)
-	if machine._win_anim_sprite == null or not machine._win_anim_sprite.visible:
+	machine._callouts.play_win("pair", 20)
+	if machine._callouts.win_sprite() == null or not machine._callouts.win_sprite().visible:
 		failures.append("TV callout priority: PAIR callout did not show")
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible) \
 			or (dealer_icon != null and dealer_icon.visible) \
@@ -294,7 +294,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	# Closing the callout hands the screen back to the banner and to everything that
 	# shares it with: the dealer strip, the item icons and the fill bar. Only the goal
 	# number keeps waiting the banner out.
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after PAIR")
 	if target_goals != null and target_goals.visible:
@@ -322,9 +322,9 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible):
 		failures.append("TV callout priority: power callout did not hide persistent TV information")
 	machine._stop_power_animation()
-	machine._play_win_animation("triple", 50)
+	machine._callouts.play_win("triple", 50)
 	machine._show_power_animation("shift")
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	if free_spin != null and free_spin.visible:
 		failures.append("TV callout priority: overlapping power callout released priority too early")
 	machine._stop_power_animation()
@@ -1453,47 +1453,47 @@ func _check_machine_reactions_35(machine: Node, run_store: Node, failures: Array
 ## glitch, no fire) stepped at the multiplier-effect cadence, and the regular
 ## effects return the moment the loss display closes.
 func _check_loss_visuals_161(machine: Node, run_store: Node, failures: Array) -> void:
-	if machine._combo_loss_3_sprite == null:
+	if machine._callouts.loss_sprite(3) == null:
 		failures.append("pr161: x3 loss sprite missing")
 		return
-	if int(machine._combo_loss_3_sprite.hframes) != int(machine.COMBO_LOSS_3_FRAMES):
+	if int(machine._callouts.loss_sprite(3).hframes) != int(WinCallouts.COMBO_LOSS_3_FRAMES):
 		failures.append("pr161: x3 loss sheet should slice into %d frames (got %d)" \
-			% [int(machine.COMBO_LOSS_3_FRAMES), int(machine._combo_loss_3_sprite.hframes)])
+			% [int(WinCallouts.COMBO_LOSS_3_FRAMES), int(machine._callouts.loss_sprite(3).hframes)])
 	# x2 loss: only the authored overlay, sparks suppressed.
 	machine._refresh_multiplier_fx(2)
-	machine._set_combo_loss_display(2)
-	if machine._combo_loss_2_sprite == null or not machine._combo_loss_2_sprite.visible:
+	machine._callouts.set_loss_display(2)
+	if machine._callouts.loss_sprite(2) == null or not machine._callouts.loss_sprite(2).visible:
 		failures.append("pr161: x2 loss overlay not shown")
 	if machine._mult_fx_2 != null and machine._mult_fx_2.visible:
 		failures.append("pr161: x2 loss must suppress the normal x2 sparks")
-	machine._set_combo_loss_display(0)
+	machine._callouts.set_loss_display(0)
 	if machine._mult_fx_2 != null and not machine._mult_fx_2.visible:
 		failures.append("pr161: closing the x2 loss must restore the sparks")
 	# x3 loss: only the diminished-fire sheet, glitch + fire suppressed, animated.
 	machine._refresh_multiplier_fx(3)
-	machine._set_combo_loss_display(3)
-	if not machine._combo_loss_3_sprite.visible or int(machine._combo_loss_3_sprite.frame) != 0:
+	machine._callouts.set_loss_display(3)
+	if not machine._callouts.loss_sprite(3).visible or int(machine._callouts.loss_sprite(3).frame) != 0:
 		failures.append("pr161: x3 loss overlay should start visible on frame 0")
 	if (machine._mult_fx_3 != null and machine._mult_fx_3.visible) \
 			or (machine._mult_fx_fire != null and machine._mult_fx_fire.visible):
 		failures.append("pr161: x3 loss must suppress the normal x3 glitch and fire sheets")
 	machine._mult_fx_time = 0.0
 	machine._step_multiplier_fx(float(machine.MULT_FX_FRAME_TIME) + 0.001)
-	if int(machine._combo_loss_3_sprite.frame) != 1:
+	if int(machine._callouts.loss_sprite(3).frame) != 1:
 		failures.append("pr161: x3 loss sheet did not advance at the multiplier-effect cadence")
-	machine._set_combo_loss_display(0)
+	machine._callouts.set_loss_display(0)
 	if machine._mult_fx_3 != null and not machine._mult_fx_3.visible:
 		failures.append("pr161: closing the x3 loss must restore the glitch effect")
 	# Only the x2 losing state beeps — x3 plays its sheet steady.
 	run_store.pendingComboMultiplier = 3
-	machine._start_combo_loss_beep()
-	if machine._combo_loss_beep_tween != null:
+	machine._callouts.start_loss_beep()
+	if machine._callouts.loss_beeping():
 		failures.append("pr161: x3 losing state must not beep")
 	run_store.pendingComboMultiplier = 2
-	machine._start_combo_loss_beep()
-	if machine._combo_loss_beep_tween == null:
+	machine._callouts.start_loss_beep()
+	if not machine._callouts.loss_beeping():
 		failures.append("pr161: x2 losing state should beep")
-	machine._stop_combo_loss_beep()
+	machine._callouts.stop_loss_beep()
 	run_store.pendingComboMultiplier = 1
 	machine._refresh_multiplier_fx(1)
-	machine._set_combo_loss_display(0)
+	machine._callouts.set_loss_display(0)

@@ -274,7 +274,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 	machine._set_display_lucidity(previous_display, false)
 	machine._burst_prev_spin = previous_burst_spin
 	machine._burst_prev_score = previous_burst_score
-	machine._combo_score_pending = -1
+	machine._callouts.hold_score(-1)
 	run_store.lastResult = previous_result
 	run_store.runPhase = previous_phase
 	run_store.scoreEarned = previous_score
@@ -387,7 +387,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	# Earlier smoke cases may have left a presentation-only free-spin entrance
 	# running; isolate the pending-defeat assertions from that modal animation.
 	machine._close_pending_combo_defeat()
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	machine._stop_power_animation()
 	machine._set_free_spin_display(false)
 	var dealer_icon := machine.get_node_or_null("DealerIcon") as TextureRect
@@ -465,7 +465,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 				or machine._dealer_bar_overlay_3 == null \
 				or not machine._dealer_bar_overlay_3.visible:
 			failures.append("combo pending: pending x2 loss did not show all dealer warning overlays")
-		if machine._combo_loss_beep_tween == null:
+		if not machine._callouts.loss_beeping():
 			failures.append("combo pending: x2 losing animation did not start beeping")
 		if machine._pending_combo_overlay.get_node_or_null("Title") != null:
 			failures.append("combo pending: old COMBO AT RISK headline was not removed")
@@ -567,7 +567,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._on_copy_pick(1) # copy the eye onto the vial reel -> a rescuing triple
 	if bool(run_store.comboDefeatPending) or int(run_store.betMultiplier) != 3:
 		failures.append("combo pending: copy-made win did not rescue the combo (got x%d)" % int(run_store.betMultiplier))
-	if machine._pending_combo_overlay != null or machine._combo_loss_beep_tween != null:
+	if machine._pending_combo_overlay != null or machine._callouts.loss_beeping():
 		failures.append("combo pending: rescue did not cancel the warning immediately")
 	var loss_2_rescued := machine.get_node_or_null("ComboLoss2") as Sprite2D
 	var loss_3_rescued := machine.get_node_or_null("ComboLoss3") as Sprite2D
@@ -617,7 +617,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.runConsumables = {}
 	run_store.betMultiplier = 1
 	machine._close_pending_combo_defeat()
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	machine._stop_power_animation()
 	machine._set_tv_progress_bars_visible(true)
 
@@ -680,7 +680,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	if spins_tube != null and not spins_tube.visible:
 		failures.append("free spin banner: spins tube did not restore")
 	machine._close_pending_combo_defeat()
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 	machine._stop_power_animation()
 	run_store.reset_run_state()
 	machine._set_tv_progress_bars_visible(true)

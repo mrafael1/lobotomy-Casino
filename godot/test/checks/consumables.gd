@@ -625,10 +625,10 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 
 	# A callout needs the whole screen: the popup gets out of the way with the badges.
 	machine._on_boost_indicator_pressed(0)
-	machine._play_win_animation("pair", 20)
+	machine._callouts.play_win("pair", 20)
 	if machine._item_info_popup != null:
 		failures.append("issue185: the popup survived a PAIR callout taking the TV")
-	machine._stop_win_animation()
+	machine._callouts.stop_win()
 
 	# A hidden badge describes nothing — a tap racing the boost running out must not pop
 	# the item that just expired.

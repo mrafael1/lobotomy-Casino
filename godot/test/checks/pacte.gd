@@ -722,19 +722,19 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 		else:
 			saved_state[property_name] = value
 
-	var combo_effect: Sprite2D = machine._combo_effect_sprite
+	var combo_effect: Sprite2D = machine._callouts.combo_sprite()
 	if combo_effect == null or int(combo_effect.hframes) < 1 \
-			or int(combo_effect.hframes) > machine.COMBO_EFFECT_FRAMES:
+			or int(combo_effect.hframes) > WinCallouts.COMBO_EFFECT_FRAMES:
 		failures.append("pacte augment: COMBO effect sheet has an invalid frame count")
 	else:
 		run_store.winBoostEnabled = true
 		var last_combo_frame := int(combo_effect.hframes) - 1
-		machine._show_combo_effect(last_combo_frame, 45, 45)
+		machine._callouts.show_combo(last_combo_frame, 45, 45)
 		if not combo_effect.visible or int(combo_effect.frame) != last_combo_frame \
-				or machine._combo_payout_label == null \
-				or String(machine._combo_payout_label.text) != "+ 45 (45%)":
+				or machine._callouts.combo_payout_label() == null \
+				or String(machine._callouts.combo_payout_label().text) != "+ 45 (45%)":
 			failures.append("pacte augment: COMBO did not show its frame and bonus")
-		machine._stop_combo_effect()
+		machine._callouts.stop_combo()
 
 	# Win Boost uses the 5/10/15...45% steps on successive paying results and
 	# exposes the stage/bonus separately for the machine's second TV beat.
@@ -778,9 +778,9 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 		failures.append("pacte augment: a COMBO miss did not enter a recoverable warning")
 	run_store.comboDefeatPending = true
 	run_store.pendingComboMultiplier = 2
-	machine._refresh_combo_effect()
+	machine._callouts.refresh_combo()
 	machine._show_pending_combo_defeat()
-	if not combo_effect.visible or machine._combo_loss_beep_tween == null:
+	if not combo_effect.visible or not machine._callouts.loss_beeping():
 		failures.append("pacte augment: COMBO did not beep during its recoverable loss")
 	run_store.resolve_pending_combo_defeat(false)
 	machine._close_pending_combo_defeat()
@@ -1470,8 +1470,8 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		machine._burst_prev_score = 0
 		machine._refresh_reels_from_state()
 		machine._emit_score_burst(null)
-		if machine._win_anim_sprite == null or not bool(machine._win_anim_sprite.visible) \
-				or int(machine._win_anim_sprite.frame) != int(machine.WIN_ANIM_FRAME["triple"]):
+		if machine._callouts.win_sprite() == null or not bool(machine._callouts.win_sprite().visible) \
+				or int(machine._callouts.win_sprite().frame) != int(WinCallouts.WIN_ANIM_FRAME["triple"]):
 			failures.append("pacte powers: Heart did not use the TRIPLE callout animation")
 		var heart_gain_fx := machine.get_node_or_null("SpinGainFx") as Label
 		if heart_gain_fx == null or heart_gain_fx.text != "+%d" % heart_tier:
@@ -1487,7 +1487,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			failures.append("pacte powers: Heart did not use the vial-style +%d reaction flash" % heart_tier)
 		if machine.get_node_or_null("HeartHealthOverlay") != null:
 			failures.append("pacte powers: Heart still builds the removed red health-bar overlay")
-		machine._stop_win_animation()
+		machine._callouts.stop_win()
 		machine._pending_spin_gain = 0
 	# Swap's UI is a drag gesture over every reel, including adjacent destinations.
 	run_store.abilitiesUsed = []

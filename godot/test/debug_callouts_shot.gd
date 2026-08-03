@@ -15,7 +15,7 @@ func _run() -> void:
 	get_root().add_child(scene)
 	for i in 10:
 		await process_frame
-	scene.call("_play_win_animation", "pair", 35)
+	scene._callouts.play_win("pair", 35)
 	await process_frame
 	get_root().get_texture().get_image().save_png(OS.get_environment("SHOT_PATH"))
 	quit(0)
