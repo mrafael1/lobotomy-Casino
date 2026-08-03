@@ -77,11 +77,11 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 			failures.append("flatline: CONTINUE does not reveal returning heartbeats")
 	# The presentation changes, but the existing drain still lands on the exact
 	# amount banked by the 10% end-of-run retention rule.
-	machine._flatline_countdown_elapsed = machine.FLATLINE_HOLD_TIME + machine.FLATLINE_DRAIN_TIME
-	machine._step_flatline_countdown(0.0)
-	if machine._flatline_score_label == null or machine._flatline_score_label.text != "10":
+	machine._flatline.seek_to_end()
+	machine._flatline.step(0.0)
+	if machine._flatline.score_label() == null or machine._flatline.score_label().text != "10":
 		failures.append("flatline: score drain did not settle on the 10 credits kept")
-	if machine._flatline_lost_label == null or machine._flatline_lost_label.text != "-90 lost":
+	if machine._flatline.lost_label() == null or machine._flatline.lost_label().text != "-90 lost":
 		failures.append("flatline: score drain did not preserve the lost-credit feedback")
 	var tray := machine.get_node_or_null("stash") as Control
 	if tray != null and tray.visible:
