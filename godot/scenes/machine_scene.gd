@@ -223,10 +223,6 @@ const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
 # fully inside the pink TV border.
 const DEALER_ICON_POS := Vector2(100.0, 59.0)
 const LOCK_POWER_FRAME_COUNT := 3
-const JACKPOT_FRAME_COUNT := 3
-const JACKPOT_FRAME_OFF := 0
-const JACKPOT_FRAME_LIT := 1
-const JACKPOT_FRAME_ALT := 2
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
@@ -305,18 +301,15 @@ const HEART_SYMBOL_ASSETS := {
 }
 
 # Score-burst (score-burst presentation). Visual only.
-const BURST_TIME := 1.05
 # How long the score popup is on screen before spin aftereffects (multiplier/bar
 # deltas, jackpot lamp, machine reactions) are allowed to pop (issue #54 scope).
 const AFTEREFFECT_POP_DELAY := 0.4
-const BURST_RISE := 28.0
 const MULT_COLORS := {
 	1: Color(0.094, 0.227, 0.549), # x1 dark blue  (#183A8C)
 	2: Color(0.984, 0.749, 0.141), # x2 gold       (#fbbf24)
 	3: Color(0.839, 0.157, 0.157), # x3 red        (#D62828)
 }
 const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
-const JACKPOT_GOLD := Color(1.0, 0.84, 0.18) # jackpot burst is ALWAYS golden (issue #22)
 const SCORE_TABLE_GAIN_COLOR := Color(0.75, 1.0, 0.8)
 const SCORE_TABLE_DIM_COLOR := Color(0.45, 0.48, 0.58)
 const SCORE_TABLE_LEVEL_COLOR := Color(1.0, 0.86, 0.2)
@@ -395,7 +388,6 @@ const SCORE_TABLE_BULBS: Array[Vector2] = [
 ]
 const SCORE_TABLE_BULB_GLOW_SIZE := 13.0
 const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
-const JACKPOT_FLASH_TIME := 0.9
 # Issue #181: a jackpot is the biggest thing the machine does, so the money landing
 # IS the reward — the wealth reels roll deliberately slowly instead of snapping, and
 # the tray throws a coin spray up through the cabinet like a casino payout.
@@ -803,6 +795,7 @@ var _view: MachineView = null
 var _augments: AugmentDisplay = null
 var _callouts: WinCallouts = null
 var _flatline: FlatlineScreen = null
+var _bursts: ScoreBursts = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -810,7 +803,6 @@ var _coin_anim_active := false
 var _coin_anim_elapsed := 0.0
 var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
 var _boost_zero_linger: Dictionary = {} # counter -> snapshot while the just-spent final spin shows "0"
-var _jackpot_sprite: Sprite2D = null
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
@@ -852,14 +844,11 @@ var _dealer_drag_kind := ""
 var _dealer_drag_home := Vector2.ZERO
 var _dealer_drag_moved := false
 var _dealer_drag_press := Vector2.ZERO
-var _burst_layer: Control = null     # score bursts spawn here (drawn on top)
 var _coin_layer: Control = null      # power-coin flights and wealth pop FX spawn here
-var _burst_prev_score := 0           # last announced result score (for power gain)
 # Freezes HUD delta visuals (multiplier badge, TV bars, jackpot lamp) between a
 # spin/power commit and its score popup, so aftereffects never pop before the
 # score does (issue #54 scope).
 var _hud_delta_hold := false
-var _burst_prev_spin := -1           # spin the last announcement belonged to
 var _coin_prev_lucidity := 0 # retained as a consumable-gain marker; no coin flight uses it
 var _power_bar_sprite: Sprite2D = null
 var _restore_cap_sprite: Sprite2D = null # per-spin restore budget lights beside the gauge
@@ -875,10 +864,8 @@ var _power_coins_in_flight := 0   # bank + restore coins currently animating
 var _power_batch_running := false # a batch of bank coins is being launched/processed
 var _pending_dealer_offer := false # a dealer offer is queued behind the power-coin sequence
 var _nudge_tween: Tween = null       # quick machine shake on lucidity/jackpot
-var _jackpot_flash_tween: Tween = null
 var _jackpot_coin_tween: Tween = null
 var _jackpot_coins: Array[Sprite2D] = []
-var _jackpot_flashing := false
 var _font: FontFile = null
 var _tex_cache := {}
 var _sequence_lock_active := false
@@ -952,6 +939,7 @@ func _ready() -> void:
 	_augments = AugmentDisplay.new(_view)
 	_callouts = WinCallouts.new(_view)
 	_flatline = FlatlineScreen.new(_view)
+	_bursts = ScoreBursts.new(_view, REEL_CELL_CENTERS, REEL_WINDOW["top"], SRC_W)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -973,7 +961,7 @@ func _ready() -> void:
 	_build_stash()
 	_build_sfx_players()
 	_build_fx_layer() # before the burst/coin layers so rewards draw above effects
-	_build_burst_layer()
+	_bursts.build_layer(REWARD_FX_Z_INDEX)
 	_build_coin_layer()
 	_build_options_controls()
 	_augments.build_augmented_badge()
@@ -2187,8 +2175,7 @@ func _build_machine_control_art() -> void:
 		if dealer_overlay != null:
 			(dealer_overlay as Sprite2D).visible = false
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
-	_jackpot_sprite = _build_full_canvas_sheet("machine new view/neon_machine_jackpot.png", JACKPOT_FRAME_COUNT)
-	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
+	_bursts.build_jackpot_lamp()
 	for i in 3:
 		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
 		if lock != null:
@@ -2614,7 +2601,7 @@ func _pulse_spins_readout(label: String) -> void:
 	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
 		.set_trans(Tween.TRANS_SINE)
 	if label != "":
-		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 0)
+		_bursts.spawn(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 0)
 
 ## The dealer bar flashes on its new head start, so the Tip's 2/12 is seen being bought.
 func _pulse_dealer_bar(label: String) -> void:
@@ -2627,7 +2614,7 @@ func _pulse_dealer_bar(label: String) -> void:
 	tw.tween_property(target, "modulate", Color.WHITE, SCENE_FEEDBACK_FADE) \
 		.set_trans(Tween.TRANS_SINE)
 	if label != "":
-		_spawn_burst(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 2)
+		_bursts.spawn(label, 0, SCENE_FEEDBACK_LABEL_COLOR, 2)
 
 func _set_score_button_locked(locked: bool) -> void:
 	if _score_button == null:
@@ -3767,36 +3754,16 @@ func _set_display_lucidity(value: int, animated := true, duration_override := 0.
 	# waiting for the next HUD refresh (some release paths update the digits alone).
 	_refresh_target_readout()
 
+## Whether the cabinet's lamp should be lit is a question about the last result
+## and about whether the HUD is still holding its deltas back — both the
+## machine's. The lamp itself is ScoreBursts'; this answers and delegates.
 func _refresh_jackpot_lamp(use_result := true) -> void:
-	if _jackpot_sprite == null or _jackpot_flashing:
-		return # don't fight an active flash
-	if _hud_delta_hold:
-		return # lamp state pops with the other aftereffects, after the score popup
 	var lit := false
 	if use_result and RunStateStore.lastResult != null:
 		lit = bool(RunStateStore.lastResult.get("isJackpot", false))
-	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_LIT if lit else JACKPOT_FRAME_OFF)
-
-func _flash_jackpot_lamp() -> void:
-	if _jackpot_sprite == null:
-		return
-	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
-		_jackpot_flash_tween.kill()
-	_jackpot_flashing = true
-	_jackpot_flash_tween = create_tween()
-	_jackpot_flash_tween.tween_method(_drive_jackpot_flash, 0.0, 1.0, JACKPOT_FLASH_TIME)
-	_jackpot_flash_tween.tween_callback(_end_jackpot_flash)
-
-func _end_jackpot_flash() -> void:
-	_jackpot_flashing = false
-	_refresh_jackpot_lamp()
-
-func _drive_jackpot_flash(t: float) -> void:
-	if _jackpot_sprite == null:
-		return
-	_set_sheet_frame(
-		_jackpot_sprite,
-		JACKPOT_FRAME_LIT if (int(t * 12.0) % 2 == 0) else JACKPOT_FRAME_ALT)
+	# While the delta hold is up the lamp waits with the other aftereffects, so it
+	# pops with the score popup rather than ahead of it.
+	_bursts.refresh_jackpot_lamp(lit, _hud_delta_hold)
 
 # Quick horizontal machine shake — feedback on a Lucidity gain / jackpot.
 func _nudge(strength: float) -> void:
@@ -3809,16 +3776,6 @@ func _nudge(strength: float) -> void:
 	_nudge_tween.tween_property(self, "position:x", 0.0, 0.05)
 
 # ── score bursts (visual only — score-burst presentation) ──────────────
-
-func _build_burst_layer() -> void:
-	_burst_layer = _authored_control("BurstLayer")
-	if _burst_layer == null:
-		_burst_layer = Control.new()
-		_burst_layer.name = "BurstLayer"
-		add_child(_burst_layer)
-	_burst_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_burst_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_burst_layer.z_index = REWARD_FX_Z_INDEX
 
 func _build_coin_layer() -> void:
 	_coin_layer = _authored_control("CoinLayer")
@@ -3834,11 +3791,10 @@ func _build_coin_layer() -> void:
 # dealer/scores never replays an old burst, and a power then computes its true gain.
 func _init_burst_tracking() -> void:
 	if RunStateStore.lastResult != null:
-		_burst_prev_spin = int(RunStateStore.spinCount)
-		_burst_prev_score = int(RunStateStore.lastResult["scoreEarned"])
+		_bursts.remember(int(RunStateStore.spinCount),
+			int(RunStateStore.lastResult["scoreEarned"]))
 	else:
-		_burst_prev_spin = -1
-		_burst_prev_score = 0
+		_bursts.remember(-1, 0)
 	_coin_prev_lucidity = RunStateStore.lucidityCoins
 	_set_display_lucidity(RunStateStore.scoreEarned, false)
 
@@ -3889,11 +3845,10 @@ func _emit_score_burst(source_reel) -> float:
 		return 0.0
 	var reward_time := 0.0
 	var spin_count := int(RunStateStore.spinCount)
-	var is_new_spin := spin_count != _burst_prev_spin
+	var is_new_spin := spin_count != _bursts.prev_spin()
 	var score := int(lr["scoreEarned"])
-	var gain := score if is_new_spin else score - _burst_prev_score
-	_burst_prev_spin = spin_count
-	_burst_prev_score = score
+	var gain := score if is_new_spin else score - _bursts.prev_score()
+	_bursts.remember(spin_count, score)
 
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
@@ -3925,9 +3880,9 @@ func _emit_score_burst(source_reel) -> float:
 	# Cocktail miss: one "+rarity" mini-burst from each reel.
 	if is_new_spin and win_type == "miss" and bool(lr.get("cocktailApplied", false)):
 		for i in _visible_reel_count():
-			_spawn_burst("", _cocktail_reel_bonus(String(reels[i]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, i)
+			_bursts.spawn("", _cocktail_reel_bonus(String(reels[i]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, i)
 		_nudge(0.8)
-		return maxf(reward_time, BURST_TIME)
+		return maxf(reward_time, ScoreBursts.BURST_TIME)
 
 	# Heart is a guaranteed triple that pays run spins instead of score. Reuse the
 	# authored TRIPLE callout/music and the vial-style reaction flash; the landed
@@ -3939,7 +3894,7 @@ func _emit_score_burst(source_reel) -> float:
 		_play_spin_gain_fx(heart_tier, _reel_window_center(), 0.55, true)
 		_spawn_reaction_flash(triple_vial_color, "+%d SPINS" % heart_tier)
 		_nudge(1.0)
-		return maxf(reward_time, BURST_TIME)
+		return maxf(reward_time, ScoreBursts.BURST_TIME)
 
 	# A rescore that doesn't increase the score must NOT pop (gain <= 0).
 	if gain > 0 and win_type != "miss":
@@ -3947,9 +3902,9 @@ func _emit_score_burst(source_reel) -> float:
 		# machine centre — never a reel-anchored pair/triple-style burst.
 		if win_type == "jackpot":
 			_play_sfx(&"jackpot_win")
-			_spawn_jackpot_burst(combo_base_gain)
+			_bursts.spawn_jackpot(combo_base_gain)
 			var fountain_time := _spawn_jackpot_coin_fountain()
-			_flash_jackpot_lamp()
+			_bursts.flash_jackpot_lamp(_refresh_jackpot_lamp)
 			_nudge(2.2)
 			var jackpot_combo_time: float = _callouts.queue_combo(
 				combo_number, combo_bonus, combo_percent) if combo_applied else 0.0
@@ -3958,7 +3913,7 @@ func _emit_score_burst(source_reel) -> float:
 			# The lock has to outlast the slow reel roll AND the coin spray, or the next
 			# spin can be pulled while the money is still landing (issue #181).
 			return maxf(reward_time, maxf(
-				maxf(maxf(BURST_TIME * 1.25, JACKPOT_FLASH_TIME), jackpot_combo_time),
+				maxf(maxf(ScoreBursts.BURST_TIME * 1.25, ScoreBursts.JACKPOT_FLASH_TIME), jackpot_combo_time),
 				maxf(JACKPOT_ODOMETER_ROLL_TIME + JACKPOT_ROLL_TAIL, fountain_time)))
 		var label := "TRIPLE" if win_type == "triple" else ("PAIR" if win_type == "pair" \
 			else ("HEART" if win_type == "heart" else "BONUS"))
@@ -3975,14 +3930,14 @@ func _emit_score_burst(source_reel) -> float:
 		var reel := int(source_reel) if source_reel != null else _derive_source_reel(reels)
 		if _active_hidden_reel_count() > 0:
 			reel = mini(reel, _visible_reel_count() - 1)
-		_spawn_burst(label, combo_base_gain, color, reel)
+		_bursts.spawn(label, combo_base_gain, color, reel)
 		_nudge(1.0)
-		reward_time = maxf(reward_time, BURST_TIME)
+		reward_time = maxf(reward_time, ScoreBursts.BURST_TIME)
 		# Cocktail + pair: surface the unpaired reel's rarity gain from its own reel.
 		if is_new_spin and bool(lr.get("cocktailApplied", false)) and win_type == "pair":
 			var solo := _solo_reel(reels)
 			if solo != -1 and solo < _visible_reel_count():
-				_spawn_burst("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
+				_bursts.spawn("", _cocktail_reel_bonus(String(reels[solo]), float(lr["scoreMultiplier"])), COCKTAIL_COLOR, solo)
 		if combo_applied:
 			var combo_time: float = _callouts.queue_combo(combo_number, combo_bonus, combo_percent)
 			if combo_bonus > 0 and combo_time > 0.0:
@@ -3993,88 +3948,6 @@ func _emit_score_burst(source_reel) -> float:
 func _cocktail_reel_bonus(symbol_id: String, score_multiplier: float) -> int:
 	var points := int(RunStateStore.COCKTAIL_RARITY_POINTS.get(symbol_id, 0))
 	return floori(float(points) * score_multiplier + 0.5)
-
-func _burst_text(text: String, size: int, color: Color, width: float) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.size = Vector2(width, float(size) + 2.0)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", size)
-	if _font != null:
-		l.add_theme_font_override("font", _font)
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	l.add_theme_constant_override("shadow_offset_x", 1)
-	l.add_theme_constant_override("shadow_offset_y", 1)
-	return l
-
-func _spawn_burst(label: String, amount: int, color: Color, reel: int) -> void:
-	if _burst_layer == null:
-		return
-	var cx: float = REEL_CELL_CENTERS[reel]
-	var box_w := 64.0 if label != "" else 28.0
-	var top := REEL_WINDOW["top"] - 10.0
-	var burst := Control.new()
-	burst.position = Vector2(cx - box_w * 0.5, top)
-	burst.size = Vector2(box_w, 16.0)
-	burst.pivot_offset = Vector2(box_w * 0.5, 8.0)
-	burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_burst_layer.add_child(burst)
-	var y := 0.0
-	if label != "":
-		var lab := _burst_text(label, 8, color, box_w)
-		lab.position = Vector2(0, y)
-		burst.add_child(lab)
-		y += 8.0
-	var amt := _burst_text("+%d" % amount, 7, color, box_w)
-	amt.position = Vector2(0, y)
-	burst.add_child(amt)
-	var tw := create_tween()
-	tw.tween_method(_drive_burst.bind(burst, top), 0.0, 1.0, BURST_TIME)
-	tw.tween_callback(burst.queue_free)
-
-# Jackpot burst (issue #22): a large, always-golden number centred on the machine
-# (not anchored to a reel) that rises out of the cabinet. Display only.
-func _spawn_jackpot_burst(amount: int) -> void:
-	if _burst_layer == null:
-		return
-	var cx := SRC_W * 0.5
-	var box_w := 140.0
-	var top := REEL_WINDOW["top"] - 18.0
-	var burst := Control.new()
-	burst.position = Vector2(cx - box_w * 0.5, top)
-	burst.size = Vector2(box_w, 30.0)
-	burst.pivot_offset = Vector2(box_w * 0.5, 15.0)
-	burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_burst_layer.add_child(burst)
-	var lab := _burst_text("JACKPOT", 13, JACKPOT_GOLD, box_w)
-	lab.position = Vector2(0.0, 0.0)
-	burst.add_child(lab)
-	var amt := _burst_text("+%d" % amount, 20, JACKPOT_GOLD, box_w)
-	amt.position = Vector2(0.0, 12.0)
-	burst.add_child(amt)
-	var tw := create_tween()
-	tw.tween_method(_drive_burst.bind(burst, top), 0.0, 1.0, BURST_TIME * 1.25)
-	tw.tween_callback(burst.queue_free)
-
-func _drive_burst(t: float, burst: Control, base_y: float) -> void:
-	if not is_instance_valid(burst):
-		return
-	burst.position.y = base_y - BURST_RISE * t
-	var s: float
-	if t < 0.18:
-		s = lerpf(0.5, 1.1, t / 0.18)
-	else:
-		s = lerpf(1.1, 1.0, (t - 0.18) / 0.82)
-	burst.scale = Vector2(s, s)
-	var o: float
-	if t < 0.12:
-		o = t / 0.12
-	elif t < 0.7:
-		o = 1.0
-	else:
-		o = 1.0 - (t - 0.7) / 0.3
-	burst.modulate.a = clampf(o, 0.0, 1.0)
 
 ## Kept as a compatibility hook for consumable callers and older smoke scripts.
 ## Lucidity no longer animates cash-tray coins into the wealth display; the odometer
@@ -6358,9 +6231,10 @@ func _on_stash_pressed(slot_index: int) -> void:
 		# Direct score events advance the current result in RunStateStore, so keep the
 		# rescore baseline aligned before a power can announce a same-spin delta.
 		if RunStateStore.lastResult is Dictionary:
-			_burst_prev_score = int((RunStateStore.lastResult as Dictionary).get("scoreEarned", 0))
+			_bursts.remember(_bursts.prev_spin(),
+				int((RunStateStore.lastResult as Dictionary).get("scoreEarned", 0)))
 		else:
-			_burst_prev_score = int(RunStateStore.scoreEarned)
+			_bursts.remember(_bursts.prev_spin(), int(RunStateStore.scoreEarned))
 	# Energy Drink taken during an x3 defeat clears it in the store — drop the
 	# beeping loss overlay and let the normal post-spin tail resume.
 	if defeat_was_pending and not RunStateStore.comboDefeatPending:
@@ -7753,19 +7627,9 @@ func _clear_wealth_presentation_fx() -> void:
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
 	# wealth digits — the group sweep below only hides nodes, it restores nothing.
 	_end_tv_blackout()
-	if _jackpot_flash_tween != null and _jackpot_flash_tween.is_valid():
-		_jackpot_flash_tween.kill()
-	_jackpot_flash_tween = null
-	_jackpot_flashing = false
+	_bursts.reset_jackpot_lamp()
 	_clear_jackpot_coins()
-	_set_sheet_frame(_jackpot_sprite, JACKPOT_FRAME_OFF)
-
-	if _burst_layer != null:
-		for child: Node in _burst_layer.get_children():
-			var item := child as CanvasItem
-			if item != null:
-				item.visible = false
-				item.modulate.a = 0.0
+	_bursts.hide_pending()
 	if _coin_layer != null:
 		for child: Node in _coin_layer.get_children():
 			var item := child as CanvasItem

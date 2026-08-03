@@ -235,8 +235,8 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 	var previous_phase := String(run_store.runPhase)
 	var previous_score := int(run_store.scoreEarned)
 	var previous_spin := int(run_store.spinCount)
-	var previous_burst_spin := int(machine._burst_prev_spin)
-	var previous_burst_score := int(machine._burst_prev_score)
+	var previous_burst_spin: int = machine._bursts.prev_spin()
+	var previous_burst_score: int = machine._bursts.prev_score()
 	var previous_display := int(machine._display_lucidity)
 
 	if not machine.has_method("_spawn_jackpot_coin_fountain"):
@@ -248,8 +248,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 		"scoreEarned": 200, "coinsEarned": 200, "winType": "jackpot", "isJackpot": true,
 		"reels": ["brain", "brain", "brain"], "scoreMultiplier": 1.0,
 	}
-	machine._burst_prev_spin = 6
-	machine._burst_prev_score = 0
+	machine._bursts.remember(6, 0)
 	machine._set_display_lucidity(200, false)
 	var reward_time: float = machine._emit_score_burst(null)
 	var slow_roll: float = machine.JACKPOT_ODOMETER_ROLL_TIME + machine.JACKPOT_ROLL_TAIL
@@ -272,8 +271,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue181: jackpot coins survived the teardown")
 
 	machine._set_display_lucidity(previous_display, false)
-	machine._burst_prev_spin = previous_burst_spin
-	machine._burst_prev_score = previous_burst_score
+	machine._bursts.remember(previous_burst_spin, previous_burst_score)
 	machine._callouts.hold_score(-1)
 	run_store.lastResult = previous_result
 	run_store.runPhase = previous_phase

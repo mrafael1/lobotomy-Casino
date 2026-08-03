@@ -610,8 +610,8 @@ func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -
 	var previous_lucidity := int(run_store.lucidityCoins)
 	var previous_spin := int(run_store.spinCount)
 	var previous_bet := int(run_store.lastEffectiveBet)
-	var previous_burst_spin := int(machine._burst_prev_spin)
-	var previous_burst_score := int(machine._burst_prev_score)
+	var previous_burst_spin: int = machine._bursts.prev_spin()
+	var previous_burst_score: int = machine._bursts.prev_score()
 	var previous_display := int(machine._display_lucidity)
 	run_store.runPhase = "running"
 	run_store.scoreEarned = 42
@@ -624,8 +624,7 @@ func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -
 		"reels": ["eye", "eye", "vial"],
 		"scoreMultiplier": 1.0,
 	}
-	machine._burst_prev_spin = -1
-	machine._burst_prev_score = 0
+	machine._bursts.remember(-1, 0)
 	machine._set_display_lucidity(0, false)
 	machine._emit_score_burst(null)
 	if machine._wealth_odometer == null or machine._wealth_odometer.get_value() != 42:
@@ -636,8 +635,7 @@ func _check_wealth_score_feed(machine: Node, run_store: Node, failures: Array) -
 	run_store.lucidityCoins = previous_lucidity
 	run_store.spinCount = previous_spin
 	run_store.lastEffectiveBet = previous_bet
-	machine._burst_prev_spin = previous_burst_spin
-	machine._burst_prev_score = previous_burst_score
+	machine._bursts.remember(previous_burst_spin, previous_burst_score)
 	machine._set_display_lucidity(previous_display, false)
 
 # Issue #62: reaching the wealth goal with no spins left must still open the

@@ -9,8 +9,8 @@ extends "res://test/checks/_base.gd"
 
 ## Machine scene must expose the dedicated jackpot burst (issue #22).
 func _check_jackpot_burst_hook(machine: Node, failures: Array) -> void:
-	if not machine.has_method("_spawn_jackpot_burst"):
-		failures.append("machine missing _spawn_jackpot_burst")
+	if not machine._bursts.has_method("spawn_jackpot"):
+		failures.append("machine missing the jackpot burst")
 
 func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# The new neon cabinet/control sheets are native 160x320 art. The surrounding
@@ -719,8 +719,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		"cocktailApplied": true,
 		"cocktailBonus": 12,
 	}
-	machine._burst_prev_spin = -1
-	machine._burst_prev_score = 0
+	machine._bursts.remember(-1, 0)
 	machine._set_display_lucidity(0, false)
 	machine._emit_score_burst(null)
 	run_store.comboDefeatPending = true

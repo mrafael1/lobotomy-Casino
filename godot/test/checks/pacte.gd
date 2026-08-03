@@ -1466,8 +1466,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		# The heart triple uses the normal TRIPLE callout/music and a spin-gain
 		# fly-in plus the vial-style reaction flash even though its score payout remains zero.
 		machine._pending_spin_gain = heart_tier
-		machine._burst_prev_spin = -1
-		machine._burst_prev_score = 0
+		machine._bursts.remember(-1, 0)
 		machine._refresh_reels_from_state()
 		machine._emit_score_burst(null)
 		if machine._callouts.win_sprite() == null or not bool(machine._callouts.win_sprite().visible) \
