@@ -166,16 +166,6 @@ const FREE_SPIN_FRAMES := 1
 const WATER_SHEET := "machine new view/water.png"
 const WATER_SHEET_FRAMES := 3
 const WATER_FX_Z_INDEX := 30      # over the cabinet and the TV, under the overlays
-# Authored TV callout sheet (full-canvas x1 frames): the power sheet flashes the
-# seven power names in authored order while that power's targeting is armed. It
-# beeps on the same cadence as the win callout, which is WinCallouts' — the two
-# should share a common home when 4.6 cuts the targeting seam out.
-const POWER_ANIM_SHEET := "machine new view/power_animation.png"
-const POWER_ANIM_FRAMES := 7
-const POWER_ANIM_FRAME := {
-	"reroll": 0, "shift": 1, "memory": 2,
-	"rewind": 3, "heart": 4, "cheat": 5, "swap": 6,
-}
 # Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
 # is the empty bar at the start of the active cycle (12 steps normally, 24 for
 # Club/Joker); the last frame means the dealer arrives after the current spin. The
@@ -666,9 +656,6 @@ var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remain
 var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
 var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
-var _power_anim_sprite: Sprite2D = null
-var _power_anim_tween: Tween = null
-var _power_anim_label: Label = null
 var _cheat_selection_sprite: Sprite2D = null
 var _tv_info_pop_sources: Dictionary = {}
 
@@ -687,6 +674,7 @@ var _boosts: BoostIndicators = null
 var _coins: CoinFlights = null
 var _reel_blur: ReelBlur = null
 var _reel_symbols: ReelSymbols = null
+var _power_callout: PowerCallout = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -830,6 +818,7 @@ func _ready() -> void:
 	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
 	_reel_symbols = ReelSymbols.new(_view, REEL_CELL_CENTERS, REEL_WINDOW,
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
+	_power_callout = PowerCallout.new(_view, SRC_W)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1638,11 +1627,11 @@ func _build_machine_control_art() -> void:
 	# have always occupied: the win sheet keeps the machine's default z_index, so
 	# the tree order at this line IS its layer (issue #195, seam 4.2).
 	_callouts.build()
-	_power_anim_sprite = _build_full_canvas_sheet(POWER_ANIM_SHEET, POWER_ANIM_FRAMES)
+	_power_callout.build()
 	_cheat_selection_sprite = _build_full_canvas_sheet(
 		CHEAT_SELECTION_SHEET, CHEAT_SELECTION_FRAMES)
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
-			_power_anim_sprite, _cheat_selection_sprite]:
+			_cheat_selection_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
 	if _cheat_selection_sprite != null:
@@ -2521,9 +2510,9 @@ func _run_post_reveal_sequence() -> void:
 	if not dealer_help.is_empty():
 		_refresh_reels_from_state()
 		_refresh_lock_art()
-		_show_power_animation(String(dealer_help.get("power", "")))
+		_power_callout.show_power(String(dealer_help.get("power", "")))
 		await get_tree().create_timer(0.55).timeout
-		_stop_power_animation()
+		_power_callout.stop()
 		_update_hud()
 	var reward_time := _emit_score_burst(null) # normal spin: source reel derived from the result
 	# Dealer may appear between spins (logic + offers are vector-pinned in dealer.gd).
@@ -2747,57 +2736,6 @@ func _restore_tv_info_layers() -> void:
 			or RunStateStore.comboDefeatPending
 	if not _free_spin_overlay_active:
 		_callouts.refresh_combo()
-
-## Power TV callout: the selected power's power_animation frame beeps a few times
-## and then holds while its targeting stays armed (_clear_targeting hides it).
-func _show_power_animation(id: String) -> void:
-	if _power_anim_sprite == null:
-		return
-	_stop_power_animation()
-	_begin_tv_info_pop(&"power")
-	_set_sheet_frame(_power_anim_sprite, int(POWER_ANIM_FRAME.get(id, 0)))
-	if not POWER_ANIM_FRAME.has(id):
-		if _power_anim_label == null:
-			_power_anim_label = Label.new()
-			_power_anim_label.name = "PowerCalloutName"
-			# Centred band: the x follows the width so a resize can't leave it off-centre.
-			const CALLOUT_SIZE := Vector2(90.0, 18.0)
-			const CALLOUT_Y := 43.0
-			_power_anim_label.size = CALLOUT_SIZE
-			_power_anim_label.position = Vector2((SRC_W - CALLOUT_SIZE.x) * 0.5, CALLOUT_Y)
-			_power_anim_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			_power_anim_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			_power_anim_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			_power_anim_label.add_theme_font_size_override("font_size", 8)
-			_power_anim_label.add_theme_color_override("font_color", NEON_CYAN)
-			_power_anim_label.add_theme_color_override("font_outline_color", Color.BLACK)
-			_power_anim_label.add_theme_constant_override("outline_size", 1)
-			if _font != null:
-				_power_anim_label.add_theme_font_override("font", _font)
-			_power_anim_sprite.add_child(_power_anim_label)
-		_power_anim_label.text = id.to_upper()
-		_power_anim_label.visible = true
-	elif _power_anim_label != null:
-		_power_anim_label.visible = false
-	_power_anim_sprite.modulate.a = 1.0
-	_power_anim_sprite.visible = true
-	_power_anim_tween = create_tween().set_loops(WinCallouts.BEEP_COUNT)
-	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 0.18,
-		WinCallouts.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_power_anim_tween.tween_property(_power_anim_sprite, "modulate:a", 1.0,
-		WinCallouts.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_power_anim_tween.tween_interval(WinCallouts.BEEP_PAUSE)
-
-func _stop_power_animation() -> void:
-	if _power_anim_tween != null and _power_anim_tween.is_valid():
-		_power_anim_tween.kill()
-	_power_anim_tween = null
-	if _power_anim_sprite != null:
-		_power_anim_sprite.visible = false
-		_power_anim_sprite.modulate.a = 1.0
-	if _power_anim_label != null:
-		_power_anim_label.visible = false
-	_end_tv_info_pop(&"power")
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -3998,7 +3936,7 @@ func _on_power_pressed(id: String) -> void:
 		# reroll / memory pick a single reel.
 		_arm_reel_picker(func(reel_index: int) -> void: _apply_reel_power(id, reel_index))
 	_targeting_power_id = id
-	_show_power_animation(id)
+	_power_callout.show_power(id)
 	_refresh_controls()
 
 func _use_rewind_power() -> void:
@@ -4111,7 +4049,7 @@ func _on_cheat_reel_pick(reel_index: int) -> void:
 	_cheat_reel = reel_index
 	_clear_targeting()
 	_targeting_power_id = "cheat"
-	_show_power_animation("cheat")
+	_power_callout.show_power("cheat")
 	_set_cheat_selection_state(0)
 	_cheat_symbol_pool.clear()
 	for symbol in Symbols.BASE_SYMBOL_CYCLE:
@@ -4213,7 +4151,7 @@ func _on_cheat_symbol_pick(symbol_id: String) -> void:
 func _arm_swap_source() -> void:
 	_clear_targeting()
 	_targeting_power_id = "swap"
-	_show_power_animation("swap")
+	_power_callout.show_power("swap")
 	_targeting_layer = Control.new()
 	_targeting_layer.name = "SwapSymbolDragLayer"
 	_targeting_layer.size = Vector2(SRC_W, SRC_H)
@@ -4870,7 +4808,7 @@ func _clear_targeting() -> void:
 		_cheat_selection_sprite.visible = false
 		_set_sheet_frame(_cheat_selection_sprite, 0)
 	_targeting_power_id = ""
-	_stop_power_animation()
+	_power_callout.stop()
 
 func _score_label(parent: Control, text: String, pos: Vector2, size: int, color: Color,
 		width := 0.0, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:

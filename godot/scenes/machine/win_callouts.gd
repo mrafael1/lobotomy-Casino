@@ -20,10 +20,9 @@ extends RefCounted
 ## four flow methods on a contract that exists to stay countable.
 ##
 ## Three beats, one cadence: a win callout, a power callout and the loss warning
-## all pulse on BEEP_FADE_TIME / BEEP_PAUSE. The power callout is 4.6's seam and
-## still lives in the machine, which reads that cadence from here in the
-## meantime — when 4.6 is cut, the two callout components should share it from a
-## common home rather than one importing the other.
+## all pulse on CalloutCadence. That cadence sat on THIS class from seam 4.2,
+## because the win callout was cut first and one of the two had to hold it;
+## 4.6a moved it to a home neither of them owns (#197).
 
 ## --- the PAIR/TRIPLE callout ---------------------------------------------------
 const WIN_ANIM_SHEET := "machine new view/win_animation.png"
@@ -60,10 +59,6 @@ const COMBO_LOSS_OVERLAY_Z_INDEX := 97
 ## The 160x320 virtual canvas the authored sheets are drawn against.
 const SRC_W := 160.0
 
-## --- the shared callout cadence ------------------------------------------------
-const BEEP_FADE_TIME := 0.1
-const BEEP_PAUSE := 0.42
-const BEEP_COUNT := 4
 
 var _view: MachineView = null
 
@@ -142,7 +137,7 @@ func _payout_label(node_name: String, rect: Rect2, font_size: int, color: Color)
 ## --- the PAIR/TRIPLE callout ---------------------------------------------------
 
 ## The matching win_animation frame beeps (alpha pulse, loss-warning cadence)
-## BEEP_COUNT times after the win is identified, then hides. The "+ score" payout
+## CalloutCadence.BEEP_COUNT times after the win is identified, then hides. The "+ score" payout
 ## line rides along as a child of the callout sprite.
 func play_win(win_type: String, score: int, payout_text := "") -> void:
 	if _win_anim_sprite == null or not WIN_ANIM_FRAME.has(win_type):
@@ -154,12 +149,12 @@ func play_win(win_type: String, score: int, payout_text := "") -> void:
 		_win_payout_label.text = payout_text if payout_text != "" else "+ %d" % score
 	_win_anim_sprite.modulate.a = 1.0
 	_win_anim_sprite.visible = true
-	_win_anim_tween = _view.tween().set_loops(BEEP_COUNT)
+	_win_anim_tween = _view.tween().set_loops(CalloutCadence.BEEP_COUNT)
 	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 0.18,
-		BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_win_anim_tween.tween_property(_win_anim_sprite, "modulate:a", 1.0,
-		BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_win_anim_tween.tween_interval(BEEP_PAUSE)
+		CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_win_anim_tween.tween_interval(CalloutCadence.BEEP_PAUSE)
 	_win_anim_tween.finished.connect(stop_win)
 
 func stop_win() -> void:
@@ -343,20 +338,20 @@ func start_loss_beep() -> void:
 	_combo_loss_beep_tween.set_parallel(true)
 	if loss_sprite != null:
 		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 0.18,
-			BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if combo_sprite != null:
 		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 0.18,
-			BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_combo_loss_beep_tween.set_parallel(false)
 	_combo_loss_beep_tween.set_parallel(true)
 	if loss_sprite != null:
 		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 1.0,
-			BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if combo_sprite != null:
 		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 1.0,
-			BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_combo_loss_beep_tween.set_parallel(false)
-	_combo_loss_beep_tween.tween_interval(BEEP_PAUSE)
+	_combo_loss_beep_tween.tween_interval(CalloutCadence.BEEP_PAUSE)
 
 func stop_loss_beep() -> void:
 	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():

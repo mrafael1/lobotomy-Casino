@@ -386,7 +386,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	# running; isolate the pending-defeat assertions from that modal animation.
 	machine._close_pending_combo_defeat()
 	machine._callouts.stop_win()
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	machine._set_free_spin_display(false)
 	var dealer_icon := machine.get_node_or_null("DealerIcon") as TextureRect
 	if dealer_icon == null or dealer_icon.texture == null:
@@ -616,7 +616,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	run_store.betMultiplier = 1
 	machine._close_pending_combo_defeat()
 	machine._callouts.stop_win()
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	machine._set_tv_progress_bars_visible(true)
 
 	# The FREE SPIN banner is state-driven: it shows while the next spin is free
@@ -679,7 +679,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		failures.append("free spin banner: spins tube did not restore")
 	machine._close_pending_combo_defeat()
 	machine._callouts.stop_win()
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	run_store.reset_run_state()
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
