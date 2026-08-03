@@ -273,10 +273,10 @@ func _check_augmented_run_111(machine: Node, run_store: Node, meta_store: Node, 
 		failures.append("issue111: heart still suppresses the brain triple's free spin")
 	machine._close_score_table()
 	machine._show_score_table()
-	if machine._score_overlay == null:
+	if machine._score_table.overlay() == null:
 		failures.append("issue111: score table failed to open for the heart check")
 	else:
-		var table_texts := _overlay_label_texts(machine._score_overlay)
+		var table_texts := _overlay_label_texts(machine._score_table.overlay())
 		if not table_texts.has("+200"):
 			failures.append("issue111: heart no longer pays the full jackpot in the score table")
 	machine._close_score_table()

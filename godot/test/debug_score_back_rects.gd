@@ -17,7 +17,7 @@ func _run() -> void:
 	scene._show_score_table()
 	for i in 5:
 		await process_frame
-	var close := scene._score_overlay.get_node("CloseButton") as Button
+	var close := scene._score_table.overlay().get_node("CloseButton") as Button
 	var label := close.get_child(0) as Label
 	var font := label.get_theme_font(&"font")
 	var fs := label.get_theme_font_size(&"font_size")

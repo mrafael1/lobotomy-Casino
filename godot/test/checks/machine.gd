@@ -1061,7 +1061,7 @@ func _check_score_table_51(machine: Node, failures: Array) -> void:
 	machine._set_sequence_lock(false)
 	machine._close_score_table()
 	machine._show_score_table()
-	var overlay: Control = machine._score_overlay
+	var overlay: Control = machine._score_table.overlay()
 	if overlay == null:
 		failures.append("issue51: score table did not open")
 		run_store.ownedUpgrades = owned_before

@@ -171,8 +171,8 @@ func _machine() -> void:
 	scene._show_score_table()
 	for i in 4:
 		await process_frame
-	var close := scene._score_overlay.get_node_or_null("CloseButton") as Button \
-		if scene._score_overlay != null else null
+	var close := scene._score_table.overlay().get_node_or_null("CloseButton") as Button \
+		if scene._score_table.overlay() != null else null
 	await _measure("score-table BACK", close)
 	get_root().remove_child(scene)
 	scene.queue_free()

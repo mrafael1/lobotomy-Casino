@@ -165,25 +165,25 @@ func _machine() -> void:
 	scene._show_score_table()
 	for i in 4:
 		await process_frame
-	if not scene._score_pct_buttons.is_empty():
-		scene._show_score_pct_popup("brain", scene._score_pct_buttons[0])
+	if not scene._score_table.pct_buttons().is_empty():
+		scene._score_table.show_pct_popup("brain", scene._score_table.pct_buttons()[0])
 		await process_frame
-		var pp := scene._score_info_popup as Control
+		var pp := scene._score_table.info_popup() as Control
 		if pp != null:
 			await _ink("M2 pct", pp.get_child(0) as Control, [pp.get_child(0)])
-		scene._hide_score_info_popup()
+		scene._score_table.hide_info_popup()
 	await process_frame
-	if not scene._score_info_buttons.is_empty():
-		scene._show_score_info_popup("flatline", scene._score_info_buttons[0])
+	if not scene._score_table.info_buttons().is_empty():
+		scene._score_table.show_info_popup("flatline", scene._score_table.info_buttons()[0])
 		await process_frame
-		var tp := scene._score_info_popup as Control
+		var tp := scene._score_table.info_popup() as Control
 		if tp != null:
 			# The blurb's panel is child 0; the per-line labels are siblings of it.
 			var bg := tp.get_child(0) as Panel
 			bg.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 			tp.size = bg.size
 			await _ink("M3 triple (2 rows)", tp, [])
-		scene._hide_score_info_popup()
+		scene._score_table.hide_info_popup()
 	get_root().remove_child(scene)
 	scene.queue_free()
 	await process_frame
