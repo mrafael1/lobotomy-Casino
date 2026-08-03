@@ -145,38 +145,38 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	var previous_score := int(run_store.scoreEarned)
 	var previous_index := int(run_store.wealthTargetIndex)
 
-	if machine._target_bar_sprite == null or machine._target_goals_sprite == null:
+	if machine._wealth.bar_sprite() == null or machine._wealth.goals_sprite() == null:
 		failures.append("issue181: the TV is missing the TARGET bar/goal art")
 		return
-	if machine._target_bar_sprite.hframes != machine.TARGET_BAR_FRAME_COUNT \
-			or machine._target_goals_sprite.hframes != machine.TARGET_GOALS_FRAME_COUNT:
+	if machine._wealth.bar_sprite().hframes != WealthReadout.BAR_FRAME_COUNT \
+			or machine._wealth.goals_sprite().hframes != WealthReadout.GOALS_FRAME_COUNT:
 		failures.append("issue181: the TARGET sheets were sliced into the wrong frame count")
 	# The shimmer is re-authored from time to time; catch a sheet whose real frame count
 	# has drifted from the constant rather than letting it play sliced-up frames.
-	var shimmer: Sprite2D = machine._target_bar_anim_sprite
+	var shimmer: Sprite2D = machine._wealth.bar_anim_sprite()
 	if shimmer == null:
 		failures.append("issue181: the TARGET bar shimmer is missing")
 	else:
-		if shimmer.hframes != machine.TARGET_BAR_ANIM_FRAME_COUNT:
+		if shimmer.hframes != WealthReadout.BAR_ANIM_FRAME_COUNT:
 			failures.append("issue181: the shimmer sheet was sliced into the wrong frame count")
 		if shimmer.texture != null:
 			var sheet_frames := int(round(
 				float(shimmer.texture.get_width()) / float(machine.SRC_W)))
-			if sheet_frames != machine.TARGET_BAR_ANIM_FRAME_COUNT:
+			if sheet_frames != WealthReadout.BAR_ANIM_FRAME_COUNT:
 				failures.append("issue181: the shimmer sheet holds %d frames, the code expects %d"
-					% [sheet_frames, int(machine.TARGET_BAR_ANIM_FRAME_COUNT)])
-		if shimmer.z_index >= machine._target_bar_sprite.z_index:
+					% [sheet_frames, int(WealthReadout.BAR_ANIM_FRAME_COUNT)])
+		if shimmer.z_index >= machine._wealth.bar_sprite().z_index:
 			failures.append("issue181: the shimmer should play under the fill bar")
 		# It has to actually advance, and wrap rather than run off the sheet.
 		var first_frame := shimmer.frame
-		for _step in machine.TARGET_BAR_ANIM_FRAME_COUNT:
-			machine._advance_target_bar_animation(machine.TARGET_BAR_ANIM_FRAME_TIME)
+		for _step in WealthReadout.BAR_ANIM_FRAME_COUNT:
+			machine._wealth.step_bar_animation(WealthReadout.BAR_ANIM_FRAME_TIME)
 		if shimmer.frame != first_frame:
 			failures.append("issue181: the shimmer did not loop back around")
-		machine._advance_target_bar_animation(machine.TARGET_BAR_ANIM_FRAME_TIME)
+		machine._wealth.step_bar_animation(WealthReadout.BAR_ANIM_FRAME_TIME)
 		if shimmer.frame == first_frame:
 			failures.append("issue181: the shimmer is not advancing")
-	if machine._target_goals_sprite.hframes != EconomyConst.WEALTH_TARGETS.size():
+	if machine._wealth.goals_sprite().hframes != EconomyConst.WEALTH_TARGETS.size():
 		failures.append("issue181: the goal sheet does not carry one frame per wealth target")
 
 	run_store.runPhase = "running"
@@ -184,27 +184,27 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._target_goals_sprite.frame != 0 or machine._target_bar_sprite.frame != 0:
+	if machine._wealth.goals_sprite().frame != 0 or machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: a fresh run did not show goal 0 with an empty bar")
 	# Meeting the current target fills the bar completely.
 	run_store.scoreEarned = EconomyConst.WEALTH_TARGETS[0]
 	machine._refresh_target_readout()
-	if machine._target_bar_sprite.frame != machine.TARGET_BAR_FRAME_COUNT - 1:
+	if machine._wealth.bar_sprite().frame != WealthReadout.BAR_FRAME_COUNT - 1:
 		failures.append("issue181: reaching the target did not fill the TARGET bar")
 	# Paying it advances the goal frame and empties the bar again.
 	run_store.wealthTargetIndex = 3
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._target_goals_sprite.frame != 3:
+	if machine._wealth.goals_sprite().frame != 3:
 		failures.append("issue181: the goal frame does not follow the wealth target index")
-	if machine._target_bar_sprite.frame != 0:
+	if machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: the TARGET bar did not refill from empty after a payout")
 	# Half way to the last target reads as a partially filled bar, never a full one.
 	run_store.wealthTargetIndex = EconomyConst.WEALTH_TARGETS.size() - 1
 	run_store.scoreEarned = int(run_store.current_wealth_target() / 2)
 	machine._refresh_target_readout()
-	var half_frame: int = machine._target_bar_sprite.frame
-	if half_frame <= 0 or half_frame >= machine.TARGET_BAR_FRAME_COUNT - 1:
+	var half_frame: int = machine._wealth.bar_sprite().frame
+	if half_frame <= 0 or half_frame >= WealthReadout.BAR_FRAME_COUNT - 1:
 		failures.append("issue181: half progress did not land mid-bar (frame %d)" % half_frame)
 
 	run_store.wealthTargetIndex = previous_index
@@ -238,9 +238,9 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	var free_spin := machine._free_spin_sprite as CanvasItem
 	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
 	var dealer_icon := machine._dealer_icon as CanvasItem
-	var target_bar := machine._target_bar_sprite as CanvasItem
-	var target_goals := machine._target_goals_sprite as CanvasItem
-	var target_bar_anim := machine._target_bar_anim_sprite as CanvasItem
+	var target_bar := machine._wealth.bar_sprite() as CanvasItem
+	var target_goals := machine._wealth.goals_sprite() as CanvasItem
+	var target_bar_anim := machine._wealth.bar_anim_sprite() as CanvasItem
 	var boost_slot: CanvasItem = null
 	if not machine._boost_indicator_slots.is_empty():
 		boost_slot = (machine._boost_indicator_slots[0] as Dictionary)["slot"] as CanvasItem
@@ -1148,7 +1148,7 @@ func _check_issue28_machine_sequence_lock(machine: Node, run_store: Node, failur
 	var coin_duration: float = machine._spawn_lucidity_coins(3, 3)
 	if coin_duration != 0.0:
 		failures.append("issue28: removed cash-tray wealth coin flow still reports a duration")
-	if machine._display_lucidity != 0:
+	if machine._wealth.display_score() != 0:
 		failures.append("issue28: removed Lucidity feedback changed the wealth display")
 
 # Issue #77: opening options and leaving the scene (Settings/Scores/Collection)

@@ -237,7 +237,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 	var previous_spin := int(run_store.spinCount)
 	var previous_burst_spin: int = machine._bursts.prev_spin()
 	var previous_burst_score: int = machine._bursts.prev_score()
-	var previous_display := int(machine._display_lucidity)
+	var previous_display: int = machine._wealth.display_score()
 
 	if not machine.has_method("_spawn_jackpot_coin_fountain"):
 		failures.append("issue181: machine is missing the jackpot coin fountain")
@@ -263,7 +263,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 		var tray: Vector2 = machine._cash_tray_pos()
 		if first_coin == null or absf(first_coin.position.y - tray.y) > 1.0:
 			failures.append("issue181: jackpot coins do not start at the cash tray mouth")
-	if machine._wealth_odometer != null and not machine._wealth_odometer.is_rolling():
+	if machine._wealth.odometer() != null and not machine._wealth.odometer().is_rolling():
 		failures.append("issue181: jackpot did not roll the wealth odometer")
 	# The coin layer sweep only hides children, so the spray needs its own free.
 	machine._clear_jackpot_coins()
