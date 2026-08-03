@@ -390,7 +390,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	elif art.expand_mode != TextureRect.EXPAND_IGNORE_SIZE:
 		failures.append("issue119: table art cannot scale down to the canvas")
 
-	var info_buttons: Array = machine._score_info_buttons
+	var info_buttons: Array = machine._score_table.info_buttons()
 	if info_buttons.size() != Symbols.BASE_SYMBOL_CYCLE.size():
 		failures.append("issue119: expected one info button per symbol row, got %d" % info_buttons.size())
 		return
@@ -406,7 +406,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 	# Hold shows the triple effect; release hides it (plus a pressed squash).
 	var eye_button := info_buttons[Symbols.BASE_SYMBOL_CYCLE.find("eye")] as Button
 	eye_button.button_down.emit()
-	var popup: Control = machine._score_info_popup
+	var popup: Control = machine._score_table.info_popup()
 	if popup == null:
 		failures.append("issue119: holding the info button did not open the effect popup")
 	else:
@@ -417,7 +417,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 		if icon.scale == Vector2.ONE:
 			failures.append("issue119: info button press did not start the pressed animation")
 	eye_button.button_up.emit()
-	if machine._score_info_popup != null:
+	if machine._score_table.info_popup() != null:
 		failures.append("issue119: releasing the info button did not hide the effect popup")
 
 	# Focus chain: CLOSE holds initial focus and links down into the rows.
@@ -431,7 +431,7 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 			failures.append("issue119: CLOSE did not take initial focus for keyboard/controller nav")
 		# The chain interleaves each row's LVL pct-peek "i" before its effect
 		# info button, so CLOSE links down into the first pct button (#153).
-		var first_pct := machine._score_pct_buttons[0] as Button
+		var first_pct := machine._score_table.pct_buttons()[0] as Button
 		if close.get_node_or_null(close.focus_neighbor_bottom) != first_pct:
 			failures.append("issue119: CLOSE does not link down to the first pct button")
 		if first_pct.get_node_or_null(first_pct.focus_neighbor_top) != close:
@@ -440,22 +440,22 @@ func _check_points_table_119(machine: Node, overlay: Control, failures: Array) -
 			failures.append("issue119: first pct button does not link down to its info button")
 	# Issue #153: holding the "i" under a row's LVL value peeks at the symbol's
 	# live draw chance (moved off the baked symbol box, matching the odds table).
-	if machine._score_pct_buttons.size() != 6:
+	if machine._score_table.pct_buttons().size() != 6:
 		failures.append("score-pct: every row should have a pct-peek button under LVL")
 	else:
-		var pct_button := machine._score_pct_buttons[1] as Button
+		var pct_button := machine._score_table.pct_buttons()[1] as Button
 		pct_button.button_down.emit()
-		var pct_popup: Control = machine._score_info_popup
+		var pct_popup: Control = machine._score_table.info_popup()
 		if pct_popup == null or pct_popup.name != "PctPopup":
 			failures.append("score-pct: holding the LVL info button did not show the pct bubble")
 		else:
 			var panel := pct_popup.get_child(0) as Panel
 			var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
-			var expected: Color = machine.SCORE_TABLE_PCT_COLORS["eye"]
+			var expected: Color = ScoreTable.PCT_COLORS["eye"]
 			if style == null or not style.border_color.is_equal_approx(expected):
 				failures.append("score-pct: bubble contour is not the symbol row color")
 		pct_button.button_up.emit()
-		if machine._score_info_popup != null:
+		if machine._score_table.info_popup() != null:
 			failures.append("score-pct: releasing the LVL info button did not hide the pct bubble")
 
 

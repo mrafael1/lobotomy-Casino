@@ -13,11 +13,11 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	run_store.reset_run_state()
 	var base_level: int = run_store.effective_symbol_level("eye")
-	var base_percent: float = machine._symbol_draw_percent("eye")
+	var base_percent: float = machine._score_table.symbol_draw_percent("eye")
 	meta_store.symbolAugmentLevels = { "eye": 1 } # one per symbol is the cap
 	if run_store.effective_symbol_level("eye") != base_level + 1:
 		failures.append("augment readouts: the effective symbol level ignored the augment")
-	if machine._symbol_draw_percent("eye") <= base_percent:
+	if machine._score_table.symbol_draw_percent("eye") <= base_percent:
 		failures.append("augment readouts: the score table quoted the pre-augment draw chance")
 
 	# Kept untyped: naming OddsTableOverlay here would compile that script (and its

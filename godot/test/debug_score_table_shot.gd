@@ -13,18 +13,18 @@ func _run() -> void:
 	machine._show_score_table()
 	for i in 10:
 		await process_frame
-	if OS.get_environment("PCT_SYMBOL") != "" and not machine._score_pct_buttons.is_empty():
+	if OS.get_environment("PCT_SYMBOL") != "" and not machine._score_table.pct_buttons().is_empty():
 		var idx := Symbols.BASE_SYMBOL_CYCLE.find(StringName(OS.get_environment("PCT_SYMBOL")))
-		machine._show_score_pct_popup(OS.get_environment("PCT_SYMBOL"),
-			machine._score_pct_buttons[maxi(idx, 0)])
-	elif not machine._score_info_buttons.is_empty():
+		machine._score_table.show_pct_popup(OS.get_environment("PCT_SYMBOL"),
+			machine._score_table.pct_buttons()[maxi(idx, 0)])
+	elif not machine._score_table.info_buttons().is_empty():
 		var forced := OS.get_environment("FLATLINE_COUNT")
 		if forced != "":
 			get_root().get_node("RunStateStore").flatlineResultCount = int(forced)
-		machine._show_score_info_popup("flatline", machine._score_info_buttons[5])
+		machine._score_table.show_info_popup("flatline", machine._score_table.info_buttons()[5])
 	for i in 5:
 		await process_frame
-	var popup: Control = machine._score_info_popup
+	var popup: Control = machine._score_table.info_popup()
 	if popup != null:
 		print("popup pos=", popup.position, " size=", popup.size)
 		for c in popup.get_children():

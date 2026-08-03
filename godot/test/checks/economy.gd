@@ -478,7 +478,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		if machine._score_button == null or machine._score_button.disabled:
 			failures.append("combo pending: TABLES button read disabled during the losing state")
 		machine._show_score_table()
-		if machine._score_overlay == null:
+		if machine._score_table.overlay() == null:
 			failures.append("combo pending: TABLES overlay did not open during the losing state")
 		else:
 			machine._close_score_table()
