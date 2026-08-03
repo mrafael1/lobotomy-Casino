@@ -231,7 +231,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	machine._spinning_anim = false
 	machine._spin_launch_pending = false
 	machine._callouts.stop_win()
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	machine._tv_info_pop_sources.clear()
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
@@ -314,20 +314,20 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 		"heart": 4, "cheat": 5, "swap": 6,
 	}
 	for power_id in expected_power_frames:
-		machine._show_power_animation(String(power_id))
-		if machine._power_anim_sprite == null \
-				or int(machine._power_anim_sprite.frame) != int(expected_power_frames[power_id]):
+		machine._power_callout.show_power(String(power_id))
+		if machine._power_callout.sprite() == null \
+				or int(machine._power_callout.sprite().frame) != int(expected_power_frames[power_id]):
 			failures.append("TV callout priority: %s uses the wrong power animation frame" % power_id)
-	machine._show_power_animation("reroll")
+	machine._power_callout.show_power("reroll")
 	if (free_spin != null and free_spin.visible) or (dealer_bar != null and dealer_bar.visible):
 		failures.append("TV callout priority: power callout did not hide persistent TV information")
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	machine._callouts.play_win("triple", 50)
-	machine._show_power_animation("shift")
+	machine._power_callout.show_power("shift")
 	machine._callouts.stop_win()
 	if free_spin != null and free_spin.visible:
 		failures.append("TV callout priority: overlapping power callout released priority too early")
-	machine._stop_power_animation()
+	machine._power_callout.stop()
 	if free_spin != null and not free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner did not restore after overlapping pops")
 	if not machine._tv_info_pop_sources.is_empty():
