@@ -142,11 +142,11 @@ func _machine() -> void:
 		var p := scene.get_node_or_null("AugmentedPopup") as Control
 		if p != null:
 			await _ink("M1 suit (7 rows)", p, [p.get_child(0)])
-		scene._hide_augmented_popup()
+		scene._augments.hide_augmented_popup()
 	await process_frame
 
 	scene._refresh_boost_indicators()
-	scene._on_boost_indicator_pressed(0)
+	scene._boosts.on_pressed(0)
 	await process_frame
 	var ip := scene.get_node_or_null("ItemInfoPopup") as Control
 	if ip != null:
