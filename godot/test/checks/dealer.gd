@@ -728,7 +728,7 @@ func _check_dealer_item_usage_flow_185(machine: Node, run_store: Node, failures:
 		run_store.reset_run_state()
 		return
 	var slot_index := slots.find("item_cocktail")
-	var stash_icons: Array = machine._stash_icons
+	var stash_icons: Array = machine._stash.icons()
 	if slot_index < stash_icons.size():
 		var stash_icon := stash_icons[slot_index] as TextureRect
 		if stash_icon == null or stash_icon.texture == null:
@@ -861,7 +861,7 @@ func _check_dealer_gate_161(machine: Node, run_store: Node, failures: Array) -> 
 		if int(machine._dealer_offer_popup.z_index) != int(machine.DEALER_OVERLAY_Z_INDEX):
 			failures.append("pr161: dealer overlay must draw at z %d" % int(machine.DEALER_OVERLAY_Z_INDEX))
 		var tray := machine.get_node_or_null("stash") as Control
-		if tray != null and int(tray.z_index) != int(machine.DEALER_STASH_Z_INDEX):
+		if tray != null and int(tray.z_index) != int(StashTray.DEALER_Z_INDEX):
 			failures.append("pr161: stash must ride above the dealer while his offer is up")
 	machine._close_dealer()
 	if not bool(run_store.comboDefeatPending):
@@ -869,7 +869,7 @@ func _check_dealer_gate_161(machine: Node, run_store: Node, failures: Array) -> 
 	if not bool(machine._sequence_lock_active):
 		failures.append("pr161: pending loss must keep the sequence lock after the dealer closes")
 	var tray_after := machine.get_node_or_null("stash") as Control
-	if tray_after != null and int(tray_after.z_index) != int(machine.STASH_TRAY_Z_INDEX):
+	if tray_after != null and int(tray_after.z_index) != int(StashTray.TRAY_Z_INDEX):
 		failures.append("pr161: closing the dealer must restore normal stash layering")
 
 	# The Energy-Drink forced spin still outranks the visit: keep waiting.

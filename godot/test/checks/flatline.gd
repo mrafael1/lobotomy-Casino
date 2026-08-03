@@ -168,7 +168,7 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	machine._overlay.queue_free()
 	machine._overlay = null
 	machine._stop_flatline_countdown()
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -235,7 +235,7 @@ func _check_flatline_free_spins_75(machine: Node, run_store: Node, failures: Arr
 	if machine._check_ending():
 		failures.append("issue75: run with HP left flatlined from spin count alone")
 
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -465,7 +465,7 @@ func _check_ending_cleanup_161(machine: Node, run_store: Node, failures: Array) 
 			failures.append("pr161: ending cleanup left a gauge/loss effect visible")
 			break
 	var tray := machine.get_node_or_null("stash") as Control
-	if tray != null and int(tray.z_index) != int(machine.STASH_TRAY_Z_INDEX):
+	if tray != null and int(tray.z_index) != int(StashTray.TRAY_Z_INDEX):
 		failures.append("pr161: ending cleanup did not reset stash layering")
 	# The funnel itself must invoke the cleanup for every terminal screen.
 	var src := FileAccess.get_file_as_string("res://scenes/machine_scene.gd")

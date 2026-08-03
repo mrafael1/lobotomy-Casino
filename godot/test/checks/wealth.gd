@@ -340,7 +340,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
@@ -714,7 +714,7 @@ func _check_wealth_zero_spins_62(machine: Node, run_store: Node, failures: Array
 	if machine._check_ending():
 		failures.append("issue62: wealth-continued run with neurons left ended early")
 
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()

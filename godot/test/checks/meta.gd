@@ -456,8 +456,8 @@ func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failu
 	# An anchor naming a control must land ON that control. The stash is the one that bit:
 	# its slots are authored in the machine's .tscn, so the shared computed layout put the
 	# ring in the middle of the stash rather than on the slot the beat asks for.
-	if not machine._stash_icons.is_empty():
-		var first_slot: Control = machine._stash_icons[0] as Control
+	if not machine._stash.icons().is_empty():
+		var first_slot: Control = machine._stash.icons()[0] as Control
 		var stash_anchor: Rect2 = machine.call("tutorial_anchor", "stash")
 		var slot_rect := Rect2(machine.call("_canvas_position_of", first_slot), first_slot.size)
 		if not stash_anchor.encloses(slot_rect):

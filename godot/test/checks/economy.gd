@@ -548,8 +548,8 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._show_pending_combo_defeat()
 	run_store.runConsumables = { "item_water": 1 }
 	machine._refresh_controls()
-	if machine._stash_icons.size() > 0 \
-			and machine._stash_icons[0].modulate != Color.WHITE:
+	if machine._stash.icons().size() > 0 \
+			and machine._stash.icons()[0].modulate != Color.WHITE:
 		failures.append("combo pending: stash icons read disabled during the losing state")
 	if machine._spawn_hint("item_water", false, false) != null:
 		failures.append("combo pending: consumable text bubble appeared during the losing state")

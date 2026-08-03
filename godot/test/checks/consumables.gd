@@ -141,7 +141,7 @@ func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 	if machine._overlay != null:
 		machine._overlay.queue_free()
 		machine._overlay = null
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()
@@ -791,14 +791,14 @@ func _check_issue27_machine_stash_drag(machine: Node, run_store: Node, failures:
 		failures.append("issue27: machine stash tray is outside canvas: %s %s" % [stash_tray.position, stash_tray.size])
 	elif stash_tray.z_index < 1:
 		failures.append("issue27: machine stash tray is not drawn above cabinet")
-	if not machine._stash_icons[0].visible:
+	if not machine._stash.icons()[0].visible:
 		failures.append("issue27: machine stash hidden during dealer popup")
-	if machine._stash_icons[0].texture == null:
+	if machine._stash.icons()[0].texture == null:
 		failures.append("issue27: machine stash icon texture missing during dealer popup")
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
-	machine._on_stash_input(press, machine._stash_icons[0], 0)
+	machine._on_stash_input(press, machine._stash.icons()[0], 0)
 	if not machine._dealer_drag_active or machine._dealer_drag_kind != "stash":
 		failures.append("issue27: machine stash did not start dealer drag")
 		return
