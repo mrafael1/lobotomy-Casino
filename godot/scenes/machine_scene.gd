@@ -633,7 +633,6 @@ var _pending_deferred_neg: Dictionary = {}
 var _reel_sprites: Array[Sprite2D] = []        # centre symbol per reel
 var _reel_top_sprites: Array[Sprite2D] = []    # dim neighbour above
 var _reel_bottom_sprites: Array[Sprite2D] = [] # dim neighbour below
-var _reel_covers: Array = []   # per-reel bg patch shown when a reel stops (masks its blur)
 var _reel_backing_sprite: Sprite2D = null # the shared reel art all three covers copy
 var _swap_shake_cover_state: Array[bool] = [] # cover visibility to restore after a shake
 var _overlay: Control = null
@@ -693,6 +692,7 @@ var _wealth: WealthReadout = null
 var _dealer_bar: DealerBar = null
 var _boosts: BoostIndicators = null
 var _coins: CoinFlights = null
+var _reel_blur: ReelBlur = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -705,7 +705,6 @@ var _lock_count_labels: Array[Label] = []
 var _stash_icons: Array[TextureRect] = []  # bottom-right tap-to-use stash (issue #26)
 var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
-var _spin_reel_sprites: Array[Sprite2D] = []
 var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
 var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
@@ -814,8 +813,6 @@ var _close_call_heartbeat_tween: Tween = null
 var _white_powder_distortion_tween: Tween = null
 var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
-var _blur_covers: Array = []               # per-reel frost cover (Serum, issue #53)
-var _blur_result_active := false           # the displayed result renders blurry
 var _adjacent_symbols_hidden_active := false # Serum downside: hide strip neighbours
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
 var _book_choice_overlay: Control = null
@@ -837,6 +834,7 @@ func _ready() -> void:
 	_boosts = BoostIndicators.new(_view, DURATION_BOOSTS, TV_SCREEN,
 		_icon_for, _item_info_popup_text)
 	_coins = CoinFlights.new(_view)
+	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -846,8 +844,8 @@ func _ready() -> void:
 	_build_neon_background()
 	_reel_backing_sprite = _build_full_canvas_sprite(
 		"machine new view/reel_final_machine.png")
-	_build_reel_animation_art()
-	_build_reel_covers()
+	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
+	_reel_blur.build_covers("machine new view/reel_final_machine.png")
 	_build_reels()
 	_build_full_canvas_sprite("machine new view/machine_neon.png")
 	_build_tv_indicators()
@@ -1264,52 +1262,6 @@ func _build_control_grid_sheet_on(parent: Control, rel: String, hframes: int, vf
 func _set_sheet_frame(spr: Sprite2D, frame: int) -> void:
 	if spr != null:
 		spr.frame = frame
-
-func _build_reel_animation_art() -> void:
-	var tex := _load_texture("machine new view/spin_final_machine.png", true)
-	if tex == null:
-		return
-	for i in 3:
-		var spr := _authored_sprite("SpinReel%d" % i)
-		var authored := spr != null
-		if spr == null:
-			spr = Sprite2D.new()
-			spr.name = "SpinReel%d" % i
-			add_child(spr)
-		spr.texture = tex
-		spr.centered = false
-		spr.region_enabled = true
-		if not authored:
-			spr.position = Vector2(REEL_HOLES[i]["left"], REEL_HOLES[i]["top"])
-			spr.scale = Vector2(1.0 / ASSET_SCALE, 1.0 / ASSET_SCALE)
-		spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
-		spr.visible = false
-		_spin_reel_sprites.append(spr)
-		_set_spin_reel_frame(i, 0)
-
-func _set_spin_reel_frame(index: int, frame: int) -> void:
-	if index < 0 or index >= _spin_reel_sprites.size():
-		return
-	var spr: Sprite2D = _spin_reel_sprites[index]
-	if spr == null or spr.texture == null:
-		return
-	var tex := spr.texture
-	var frame_w := float(tex.get_width()) / float(SPIN_FRAME_COUNT)
-	var hole: Dictionary = REEL_HOLES[index]
-	spr.region_rect = Rect2(
-		frame_w * float(frame) + float(hole["left"]) * ASSET_SCALE,
-		float(hole["top"]) * ASSET_SCALE,
-		float(hole["width"]) * ASSET_SCALE,
-		float(hole["height"]) * ASSET_SCALE
-	)
-
-func _set_spin_reel_visible(index: int, visible: bool) -> void:
-	if index >= 0 and index < _spin_reel_sprites.size():
-		_spin_reel_sprites[index].visible = visible
-
-func _hide_spin_reels() -> void:
-	for spr in _spin_reel_sprites:
-		spr.visible = false
 
 func _build_tv_indicators() -> void:
 	_wealth.build()
@@ -1761,26 +1713,6 @@ func _make_or_bind_hit_button(name: String, rect: Dictionary, cb: Callable) -> B
 # Per-reel reel-background patches, drawn above the spin-blur sheet and below the
 # symbols. Showing one masks the blur in that hole, so a reel goes static the moment
 # its symbol lands — independent per-reel stops over the single full-canvas sheet.
-## Per-reel copies of the reel art. The crop is the hole grown a little, because the authored
-## patch runs from y169 to y202 — a pixel above the hole and two below — and Swap shakes these
-## copies in place of the shared backing, which would otherwise leave those rows behind.
-func _build_reel_covers() -> void:
-	for i in 3:
-		var hole: Dictionary = REEL_HOLES[i]
-		var cover := _build_region_sprite("machine new view/reel_final_machine.png", {
-			"left": float(hole["left"]) - 1.0,
-			"top": float(hole["top"]) - 3.0,
-			"width": float(hole["width"]) + 2.0,
-			"height": float(hole["height"]) + 6.0,
-		})
-		if cover != null:
-			cover.visible = false
-		_reel_covers.append(cover)
-
-func _set_reel_cover(index: int, visible: bool) -> void:
-	if index < _reel_covers.size() and _reel_covers[index] != null:
-		_reel_covers[index].visible = visible
-
 func _play_reel_stop_sfx(index: int) -> void:
 	if index < 0 or index >= _reel_stop_sfx_played.size():
 		return
@@ -1794,8 +1726,8 @@ func _reveal_reel(index: int) -> void:
 	var was_visible := _reel_sprites[index].visible
 	if not was_visible:
 		_play_reel_stop_sfx(index)
-	_set_spin_reel_visible(index, false)
-	_set_reel_cover(index, true)
+	_reel_blur.set_spin_visible(index, false)
+	_reel_blur.set_cover(index, true)
 	_set_reel_symbol(index, String(_final_reels[index]))
 	_set_reel_visible(index, true)
 	_set_hidden_cover(index, _hide_result_active) # White Powder masks the reveal (issue #34)
@@ -2253,8 +2185,8 @@ func _sync_visuals() -> void:
 			_set_reel_symbol(i, VISIBLE_SYMBOLS[i])
 	# Settled reels show their cover (masks any blur); spin sheet hidden.
 	for i in 3:
-		_set_reel_cover(i, true)
-	_hide_spin_reels()
+		_reel_blur.set_cover(i, true)
+	_reel_blur.hide_spin_strips()
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
 	_cancel_coin_insert()
@@ -2587,7 +2519,7 @@ func _process(delta: float) -> void:
 		_spin_frame = (_spin_frame + 1) % SPIN_FRAME_COUNT
 		for i in 3:
 			if not bool(_locked_reels_during_spin[i]) and _anim_elapsed < float(_reel_stop_times[i]):
-				_set_spin_reel_frame(i, _spin_frame)
+				_reel_blur.set_spin_frame(i, _spin_frame)
 	for i in 3:
 		var stop_sfx_time := maxf(0.0, float(_reel_stop_times[i]) - REEL_STOP_SFX_LEAD_TIME)
 		if not bool(_locked_reels_during_spin[i]) and _anim_elapsed >= stop_sfx_time:
@@ -2598,7 +2530,7 @@ func _process(delta: float) -> void:
 	if _anim_elapsed >= _reel_stop_times[2]:
 		for i in 3:
 			_reveal_reel(i)
-		_hide_spin_reels()
+		_reel_blur.hide_spin_strips()
 		if _spin_sheet_sprite != null:
 			_spin_sheet_sprite.visible = false
 		_spinning_anim = false
@@ -2620,9 +2552,9 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		var locked := bool(_locked_reels_during_spin[i])
 		_reel_stop_sfx_played[i] = locked
 		_set_reel_visible(i, locked)
-		_set_reel_cover(i, locked)
-		_set_spin_reel_frame(i, _spin_frame)
-		_set_spin_reel_visible(i, not locked)
+		_reel_blur.set_cover(i, locked)
+		_reel_blur.set_spin_frame(i, _spin_frame)
+		_reel_blur.set_spin_visible(i, not locked)
 
 func _start_coin_insert() -> void:
 	if _coin_insert_sprite == null:
@@ -4198,9 +4130,9 @@ func _start_rewind_restore() -> void:
 	for i in 3:
 		_reel_stop_sfx_played[i] = false
 		_set_reel_visible(i, false)
-		_set_reel_cover(i, false)
-		_set_spin_reel_frame(i, _spin_frame)
-		_set_spin_reel_visible(i, true)
+		_reel_blur.set_cover(i, false)
+		_reel_blur.set_spin_frame(i, _spin_frame)
+		_reel_blur.set_spin_visible(i, true)
 	_refresh_controls()
 
 func _step_rewind_restore(delta: float) -> void:
@@ -4211,7 +4143,7 @@ func _step_rewind_restore(delta: float) -> void:
 		# The blur runs backwards — the machine is unwinding the previous spin.
 		_spin_frame = (_spin_frame - 1 + SPIN_FRAME_COUNT) % SPIN_FRAME_COUNT
 		for i in 3:
-			_set_spin_reel_frame(i, _spin_frame)
+			_reel_blur.set_spin_frame(i, _spin_frame)
 	if _rewind_elapsed >= maxf(0.0, REWIND_RESTORE_DURATION - REEL_STOP_SFX_LEAD_TIME):
 		for i in 3:
 			_play_reel_stop_sfx(i)
@@ -4223,8 +4155,8 @@ func _finish_rewind_restore() -> void:
 	_rewind_anim_active = false
 	_post_spin_sequence_active = false
 	for i in 3:
-		_set_spin_reel_visible(i, false)
-		_set_reel_cover(i, true)
+		_reel_blur.set_spin_visible(i, false)
+		_reel_blur.set_cover(i, true)
 	_refresh_reels_from_state()
 	_update_hud()
 	_refresh_jackpot_lamp()
@@ -4432,8 +4364,8 @@ func _start_swap_symbol_shake() -> void:
 	for i in _reel_sprites.size():
 		var live: bool = not _reel_is_dead(i)
 		# The reel asset first — this is the thing that shakes.
-		if i < _reel_covers.size():
-			var cover := _reel_covers[i] as Sprite2D
+		if i < _reel_blur.cover_count():
+			var cover := _reel_blur.cover(i)
 			if cover != null:
 				_swap_shake_cover_state.append(cover.visible)
 				cover.visible = true
@@ -4485,8 +4417,8 @@ func _stop_swap_symbol_shake() -> void:
 	if not _swap_shake_cover_state.is_empty():
 		if _reel_backing_sprite != null:
 			_reel_backing_sprite.visible = true
-		for i in mini(_swap_shake_cover_state.size(), _reel_covers.size()):
-			var cover := _reel_covers[i] as Sprite2D
+		for i in mini(_swap_shake_cover_state.size(), _reel_blur.cover_count()):
+			var cover := _reel_blur.cover(i)
 			if cover != null:
 				cover.visible = _swap_shake_cover_state[i]
 		_swap_shake_cover_state.clear()
@@ -4918,9 +4850,9 @@ func _start_reroll_animation(reel_index: int) -> void:
 	for i in 3:
 		var active := i == reel_index
 		_set_reel_visible(i, not active)
-		_set_reel_cover(i, not active)
-		_set_spin_reel_frame(i, _spin_frame)
-		_set_spin_reel_visible(i, active)
+		_reel_blur.set_cover(i, not active)
+		_reel_blur.set_spin_frame(i, _spin_frame)
+		_reel_blur.set_spin_visible(i, active)
 	if _spin_button != null:
 		_spin_button.disabled = true
 
@@ -4930,7 +4862,7 @@ func _step_reroll(delta: float) -> void:
 	if _reroll_accum >= SPIN_FRAME_TIME:
 		_reroll_accum = 0.0
 		_spin_frame = (_spin_frame + 1) % SPIN_FRAME_COUNT
-		_set_spin_reel_frame(_reroll_reel_index, _spin_frame)
+		_reel_blur.set_spin_frame(_reroll_reel_index, _spin_frame)
 	if _reroll_elapsed >= maxf(0.0, REROLL_REEL_DURATION - REEL_STOP_SFX_LEAD_TIME):
 		_play_reel_stop_sfx(_reroll_reel_index)
 	if _reroll_elapsed >= REROLL_REEL_DURATION:
@@ -4940,9 +4872,9 @@ func _step_reroll(delta: float) -> void:
 		var lr: Variant = RunStateStore.lastResult
 		if lr != null:
 			_set_reel_symbol(_reroll_reel_index, String(lr["reels"][_reroll_reel_index]))
-		_set_spin_reel_visible(_reroll_reel_index, false)
+		_reel_blur.set_spin_visible(_reroll_reel_index, false)
 		_set_reel_visible(_reroll_reel_index, true)
-		_set_reel_cover(_reroll_reel_index, true)
+		_reel_blur.set_cover(_reroll_reel_index, true)
 		var rerolled := _reroll_reel_index
 		_reroll_reel_index = -1
 		if _spin_button != null:
@@ -5453,24 +5385,13 @@ func _build_fx_layer() -> void:
 	_build_tobacco_fx()
 	_build_energy_edges()
 	_build_hidden_covers()
-	_build_blur_covers()
+	var blur_rects: Array = []
+	for i in 3:
+		blur_rects.append(_fx_cover_rect(REEL_HOLES[i]))
+	_reel_blur.build_blur_covers(_fx_layer, blur_rects, blur_cover_color)
 
 ## Serum frost (issue #53): translucent per-reel covers — symbols show through but
 ## read harder. Reuses the hidden-cover geometry.
-func _build_blur_covers() -> void:
-	_blur_covers.clear()
-	for i in 3:
-		var cover := ColorRect.new()
-		cover.name = "BlurCover%d" % i
-		cover.color = blur_cover_color
-		var rect := _fx_cover_rect(REEL_HOLES[i])
-		cover.position = rect.position
-		cover.size = rect.size
-		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cover.visible = false
-		_fx_layer.add_child(cover)
-		_blur_covers.append(cover)
-
 func _build_tobacco_fx() -> void:
 	_tobacco_covers.clear()
 	_tobacco_smoke.clear()
@@ -5827,15 +5748,6 @@ func _set_adjacent_symbols_hidden_active(active: bool) -> void:
 		_apply_adjacent_symbol_visibility(i)
 
 # Legacy frost covers stay built but inactive; Serum now hides adjacent strip symbols.
-func _set_blur_result_active(active: bool) -> void:
-	_blur_result_active = active
-	for c in _blur_covers:
-		(c as ColorRect).visible = false
-
-func _set_blur_cover(index: int, visible_now: bool) -> void:
-	if index >= 0 and index < _blur_covers.size():
-		(_blur_covers[index] as ColorRect).visible = visible_now
-
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
 # All reactions run in this presentation layer AFTER the parity-pinned spin()/power
 # results, so they never touch evaluate()/spin() outputs or the pinned vectors.
@@ -6489,10 +6401,8 @@ func _clear_wealth_presentation_fx() -> void:
 			smoke.visible = false
 	for cover: CanvasItem in _hidden_covers:
 		cover.visible = false
-	for cover: CanvasItem in _blur_covers:
-		cover.visible = false
+	_reel_blur.clear_blur()
 	_hide_result_active = false
-	_blur_result_active = false
 	_adjacent_symbols_hidden_active = false
 
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
@@ -6544,7 +6454,7 @@ func _clear_wealth_presentation_fx() -> void:
 			persistent_fx.append(_energy_edges)
 		for node: Node in _hidden_covers:
 			persistent_fx.append(node)
-		for node: Node in _blur_covers:
+		for node: Node in _reel_blur.blur_covers():
 			persistent_fx.append(node)
 		for child: Node in _fx_layer.get_children():
 			if not persistent_fx.has(child):
