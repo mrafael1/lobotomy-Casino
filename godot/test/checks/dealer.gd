@@ -296,7 +296,7 @@ func _check_dealer_tip_steps_132(machine: Node, failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
 	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
 	var marker: Sprite2D = machine._dealer_tip_steps
-	var bar: Sprite2D = machine._dealer_bar_sprite
+	var bar: Sprite2D = machine._dealer_bar.bar_sprite()
 	if marker == null:
 		failures.append("issue132: the machine built no Dealer's Tip step marker")
 	elif bar == null or marker.get_parent() != bar:

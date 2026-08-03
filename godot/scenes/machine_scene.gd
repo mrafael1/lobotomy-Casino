@@ -185,14 +185,6 @@ const POWER_ANIM_FRAME := {
 # Club/Joker); the last frame means the dealer arrives after the current spin. The
 # three small sheets are cumulative warning lights: x3 shows overlay 1, x2 shows
 # 1+2, and x1 shows 1+2+3.
-const DEALER_BAR_SHEET := "machine new view/dealer_bar.png"
-const DEALER_BAR_FRAME_COUNT := 13
-const DEALER_BAR_OVERLAY_1_SHEET := "machine new view/dealer_bar_overlay_1.png"
-const DEALER_BAR_OVERLAY_2_SHEET := "machine new view/dealer_bar_overlay_2.png"
-const DEALER_BAR_OVERLAY_3_SHEET := "machine new view/dealer_bar_overlay_3.png"
-const DEALER_BAR_OVERLAY_1_FRAMES := 12
-const DEALER_BAR_OVERLAY_2_FRAMES := 11
-const DEALER_BAR_OVERLAY_3_FRAMES := 10
 # Dealer's Tip (issue #132) starts every countdown DEALER_TIP_HEAD_START steps along, and
 # this single native full-canvas frame recolours exactly those first steps so the head
 # start is visible on the bar instead of only in the arithmetic. Shown while the augment
@@ -201,14 +193,9 @@ const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
 # The bar walks through each authored progress frame when one spin advances it
 # by multiple steps; the warning itself beeps through alpha so it does not
 # reveal a different countdown position before that spin's result is known.
-const DEALER_BAR_PROGRESS_FRAME_TIME := 0.10
 # The warning speeds up as the dealer closes in: a lone first light beeps lazily, and from
 # the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
 # BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
-const DEALER_BAR_OVERLAY_BEEP_PERIOD := 0.9
-const DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD := 1.8
-const DEALER_BAR_OVERLAY_BEEP_TIME := 0.5
-const DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA := 0.18
 const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
 const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
@@ -684,17 +671,7 @@ var _mult_fx_2: Sprite2D = null
 var _mult_fx_3: Sprite2D = null
 var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
-var _dealer_bar_sprite: Sprite2D = null
-var _dealer_bar_overlay_1: Sprite2D = null
-var _dealer_bar_overlay_2: Sprite2D = null
-var _dealer_bar_overlay_3: Sprite2D = null
 var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
-var _dealer_bar_display_frame: int = 0
-var _dealer_bar_target_frame: int = 0
-var _dealer_bar_progress_time: float = 0.0
-var _dealer_bar_frame_initialized := false
-var _dealer_warning_wanted := 0    # lights the multiplier has earned (gates the beep)
-var _dealer_bar_overlay_beep_time := 0.0
 var _dealer_icon: TextureRect = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _free_spin_sprite: Sprite2D = null
@@ -728,6 +705,7 @@ var _flatline: FlatlineScreen = null
 var _bursts: ScoreBursts = null
 var _score_table: ScoreTable = null
 var _wealth: WealthReadout = null
+var _dealer_bar: DealerBar = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -873,6 +851,7 @@ func _ready() -> void:
 	_bursts = ScoreBursts.new(_view, REEL_CELL_CENTERS, REEL_WINDOW["top"], SRC_W)
 	_score_table = ScoreTable.new(_view, _triple_effect_text, _info_line_segments)
 	_wealth = WealthReadout.new(_view)
+	_dealer_bar = DealerBar.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -2004,13 +1983,7 @@ func _build_machine_control_art() -> void:
 	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
 	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
-	_dealer_bar_sprite = _build_full_canvas_sheet(DEALER_BAR_SHEET, DEALER_BAR_FRAME_COUNT)
-	_dealer_bar_overlay_1 = _build_full_canvas_sheet(
-		DEALER_BAR_OVERLAY_1_SHEET, DEALER_BAR_OVERLAY_1_FRAMES)
-	_dealer_bar_overlay_2 = _build_full_canvas_sheet(
-		DEALER_BAR_OVERLAY_2_SHEET, DEALER_BAR_OVERLAY_2_FRAMES)
-	_dealer_bar_overlay_3 = _build_full_canvas_sheet(
-		DEALER_BAR_OVERLAY_3_SHEET, DEALER_BAR_OVERLAY_3_FRAMES)
+	_dealer_bar.build()
 	_build_dealer_tip_steps()
 	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, FREE_SPIN_FRAMES)
 	# The four callout sheets are built here, at the point in the layer stack they
@@ -2026,16 +1999,6 @@ func _build_machine_control_art() -> void:
 			(fx as Sprite2D).visible = false
 	if _cheat_selection_sprite != null:
 		_cheat_selection_sprite.z_index = 98
-	for dealer_art in [_dealer_bar_sprite, _dealer_bar_overlay_1,
-			_dealer_bar_overlay_2, _dealer_bar_overlay_3]:
-		if dealer_art != null:
-			(dealer_art as Sprite2D).z_index = 11
-	if _dealer_bar_sprite != null:
-		_dealer_bar_sprite.visible = true
-	for dealer_overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
-			_dealer_bar_overlay_3]:
-		if dealer_overlay != null:
-			(dealer_overlay as Sprite2D).visible = false
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_bursts.build_jackpot_lamp()
 	for i in 3:
@@ -2252,11 +2215,6 @@ func _build_dealer_icon() -> void:
 	_dealer_icon = icon
 	add_child(icon)
 
-## The whole warning stack the multiplier has earned is drawn at once. What changes with it
-## is the BEEP RATE: one light beeps on the slow period, two or more on the fast one, so the
-## machine audibly speeds up as the dealer closes in. `_dealer_warning_wanted` is how many
-## lights the state earned.
-const DEALER_WARNING_FAST_BEEP_LIGHTS := 2
 
 ## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own
 ## visibility is driven from four unrelated places (the callout mute, the losing-state
@@ -2265,7 +2223,7 @@ const DEALER_WARNING_FAST_BEEP_LIGHTS := 2
 ## of them. As a child it simply never draws when the bar doesn't. Both are native 1:1
 ## full-canvas art at the origin, so the child needs no transform of its own.
 func _build_dealer_tip_steps() -> void:
-	if _dealer_bar_sprite == null:
+	if _dealer_bar.bar_sprite() == null:
 		return
 	var tex := _load_texture(DEALER_TIP_STEPS_SHEET, true)
 	if tex == null:
@@ -2278,7 +2236,7 @@ func _build_dealer_tip_steps() -> void:
 	_dealer_tip_steps.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	_dealer_tip_steps.visible = false
 	# Above the bar it recolours, below the warning lights that beep over everything.
-	_dealer_bar_sprite.add_child(_dealer_tip_steps)
+	_dealer_bar.bar_sprite().add_child(_dealer_tip_steps)
 
 ## Owned → the tipped steps wear their own colour; not owned → the bar is untouched.
 func _refresh_dealer_tip_steps() -> void:
@@ -2288,7 +2246,7 @@ func _refresh_dealer_tip_steps() -> void:
 
 func _refresh_dealer_countdown() -> void:
 	_refresh_dealer_tip_steps()
-	if _dealer_bar_sprite == null:
+	if _dealer_bar.bar_sprite() == null:
 		return
 	var remaining := maxi(0, int(RunStateStore.dealerCountdown))
 	# The FULL cycle, not the reset value: Dealer's Tip resets to 10 of 12, and the bar
@@ -2296,26 +2254,10 @@ func _refresh_dealer_countdown() -> void:
 	# redraw the same empty bar on a shorter scale and hide the head start entirely.
 	var cycle_start := maxi(1, int(RunStateStore.dealer_countdown_cycle_length()))
 	var elapsed := clampi(cycle_start - remaining, 0, cycle_start)
-	var progress_frame := clampi(roundi(float(elapsed) * float(DEALER_BAR_FRAME_COUNT - 1)
-		/ float(cycle_start)), 0, DEALER_BAR_FRAME_COUNT - 1)
-	if not _dealer_bar_frame_initialized:
-		_dealer_bar_frame_initialized = true
-		_dealer_bar_display_frame = progress_frame
-		_dealer_bar_target_frame = progress_frame
-		_dealer_bar_progress_time = 0.0
-		_set_dealer_bar_progress_frame(progress_frame)
-	elif progress_frame < _dealer_bar_display_frame:
-		# A dealer visit/new run resets the bar. Snap the reset so the next cycle
-		# can visibly walk forward from frame 0 again.
-		_dealer_bar_display_frame = progress_frame
-		_dealer_bar_target_frame = progress_frame
-		_dealer_bar_progress_time = 0.0
-		_set_dealer_bar_progress_frame(progress_frame)
-	else:
-		_dealer_bar_target_frame = progress_frame
-		if _dealer_bar_display_frame == _dealer_bar_target_frame:
-			_dealer_bar_progress_time = 0.0
-	_set_dealer_overlay_progress_frame(_dealer_bar_display_frame)
+	var progress_frame := clampi(roundi(float(elapsed) * float(DealerBar.FRAME_COUNT - 1)
+		/ float(cycle_start)), 0, DealerBar.FRAME_COUNT - 1)
+	_dealer_bar.seek(progress_frame)
+	_dealer_bar.sync_overlay_frames()
 	# The warning sheets are cumulative: the x3 warning is overlay 1, x2 adds
 	# overlay 2, and x1 adds overlay 3. Each sheet follows the same countdown
 	# progress as the bar; its shorter tail clamps to its final authored frame.
@@ -2351,38 +2293,26 @@ func _refresh_dealer_countdown() -> void:
 		and not RunStateStore.isSpinning and not _hud_delta_hold
 	var dealer_info_allowed := not _tv_callout_active() \
 		or RunStateStore.comboDefeatPending
-	# How many lights the state earned — the beep waits for the second one (see
-	# DEALER_WARNING_BEEP_FROM_LIGHTS); the lights themselves all draw immediately.
-	_dealer_warning_wanted = 0
+	# How many lights the state earned, which is not the same as how many are shown:
+	# the count sets the beep tempo (DealerBar.WARNING_FAST_BEEP_LIGHTS), while the
+	# spin gates above decide whether they may draw at all yet.
+	var wanted := 0
 	if show_overlay_1:
-		_dealer_warning_wanted = 1
+		wanted = 1
 	if show_overlay_2:
-		_dealer_warning_wanted = 2
+		wanted = 2
 	if show_overlay_3:
-		_dealer_warning_wanted = 3
-	var overlay_states: Array = [
-		{ "sprite": _dealer_bar_overlay_1, "visible": show_overlay_1 },
-		{ "sprite": _dealer_bar_overlay_2, "visible": show_overlay_2 },
-		{ "sprite": _dealer_bar_overlay_3, "visible": show_overlay_3 },
-	]
-	for state: Dictionary in overlay_states:
-		var overlay := state["sprite"] as Sprite2D
-		if overlay == null:
-			continue
-		var should_show := bool(state["visible"])
-		var was_visible := overlay.visible
-		overlay.visible = should_show and overlay_ready and dealer_info_allowed
-		if overlay.visible and not was_visible:
-			overlay.modulate.a = 1.0
-		elif not overlay.visible:
-			overlay.modulate.a = 1.0
+		wanted = 3
+	var allowed := overlay_ready and dealer_info_allowed
+	_dealer_bar.set_warning_lights(wanted,
+		show_overlay_1 and allowed, show_overlay_2 and allowed, show_overlay_3 and allowed)
 	if _tv_callout_active() and not RunStateStore.comboDefeatPending:
 		_hide_tv_info_layers()
 	elif RunStateStore.comboDefeatPending:
 		# The dealer warning remains readable over the losing-state art, even if
 		# the result's PAIR/TRIPLE callout is still fading out.
-		if _dealer_bar_sprite != null:
-			_dealer_bar_sprite.visible = true
+		if _dealer_bar.bar_sprite() != null:
+			_dealer_bar.bar_sprite().visible = true
 		if _dealer_icon != null:
 			_dealer_icon.visible = true
 
@@ -2468,7 +2398,7 @@ func _pulse_spins_readout(label: String) -> void:
 ## The dealer bar flashes on its new head start, so the Tip's 2/12 is seen being bought.
 func _pulse_dealer_bar(label: String) -> void:
 	_refresh_dealer_countdown() # the head start applies from this reset onward
-	var target: CanvasItem = _dealer_bar_sprite
+	var target: CanvasItem = _dealer_bar.bar_sprite()
 	if target == null or not is_instance_valid(target):
 		return
 	target.modulate = SCENE_FEEDBACK_TINT
@@ -2940,10 +2870,10 @@ func _process(delta: float) -> void:
 	if _flatline.counting_down():
 		_flatline.step(delta)
 	_step_multiplier_fx(delta)
-	_step_dealer_bar_progress(delta)
+	_dealer_bar.step_progress(delta)
 	_augments.step_glitch(delta)
 	_wealth.step_bar_animation(delta)
-	_step_dealer_overlay_beep(delta)
+	_dealer_bar.step_beep(delta)
 	_step_free_spin_blink(delta)
 	_step_item_info_popup(delta)
 	_try_start_power_coin_flow()
@@ -3203,8 +3133,8 @@ func _begin_tv_info_pop(source: StringName) -> void:
 func _capture_tv_restore_state() -> void:
 	if _tv_content_muted():
 		return
-	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar_sprite != null \
-		and _dealer_bar_sprite.visible
+	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar.bar_sprite() != null \
+		and _dealer_bar.bar_sprite().visible
 	_tv_info_pop_restore_dealer_icon_visible = _dealer_icon != null \
 		and _dealer_icon.visible
 
@@ -3255,8 +3185,9 @@ func _hide_tv_info_layers() -> void:
 	_hide_boost_indicators()
 	# Past this point a callout owns the TV, so the dealer interface clears with
 	# everything else; under the banner alone it stayed readable and returned above.
-	for node in [_dealer_bar_sprite, _dealer_bar_overlay_1, _dealer_bar_overlay_2,
-			_dealer_bar_overlay_3, _dealer_icon]:
+	var dealer_nodes: Array = _dealer_bar.overlays()
+	dealer_nodes.append(_dealer_icon)
+	for node in dealer_nodes:
 		var info := node as CanvasItem
 		if info != null:
 			info.visible = false
@@ -3273,8 +3204,8 @@ func _restore_tv_info_layers() -> void:
 	if _free_spin_overlay_active:
 		_callouts.hide_combo()
 	_refresh_dealer_countdown()
-	if _dealer_bar_sprite != null:
-		_dealer_bar_sprite.visible = _tv_info_pop_restore_dealer_bar_visible \
+	if _dealer_bar.bar_sprite() != null:
+		_dealer_bar.bar_sprite().visible = _tv_info_pop_restore_dealer_bar_visible \
 			or RunStateStore.comboDefeatPending
 	if _dealer_icon != null:
 		_dealer_icon.visible = _tv_info_pop_restore_dealer_icon_visible \
@@ -4345,67 +4276,6 @@ func _step_multiplier_fx(delta: float) -> void:
 		_mult_fx_fire.frame = (_mult_fx_fire.frame + 1) % MULT_FX_3_FRAMES
 	if loss_3_active:
 		_callouts.step_loss_3_frame()
-
-## Every lit warning beeps; how fast is what changes. A lone first light beeps on the slow
-## period, and from the second light on it tightens to the fast one, so the machine audibly
-## speeds up as the dealer closes in.
-func _dealer_overlay_beep_period() -> float:
-	return DEALER_BAR_OVERLAY_BEEP_PERIOD \
-		if _dealer_warning_wanted >= DEALER_WARNING_FAST_BEEP_LIGHTS \
-		else DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD
-
-func _step_dealer_overlay_beep(delta: float) -> void:
-	var active := false
-	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
-			_dealer_bar_overlay_3]:
-		if overlay != null and (overlay as Sprite2D).visible:
-			active = true
-			break
-	if not active:
-		_dealer_bar_overlay_beep_time = 0.0
-		for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
-				_dealer_bar_overlay_3]:
-			if overlay != null:
-				(overlay as Sprite2D).modulate.a = 1.0
-		return
-	_dealer_bar_overlay_beep_time = fmod(
-		_dealer_bar_overlay_beep_time + delta, _dealer_overlay_beep_period())
-	# One state change per beep, not a fade: the lights drop to the dim alpha for BEEP_TIME
-	# and snap back for the rest of the period. Interpolating between the two read as a
-	# second, breathing animation on top of the blink.
-	var alpha := 1.0
-	if _dealer_bar_overlay_beep_time < DEALER_BAR_OVERLAY_BEEP_TIME:
-		alpha = DEALER_BAR_OVERLAY_BEEP_MIN_ALPHA
-	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
-			_dealer_bar_overlay_3]:
-		if overlay != null and (overlay as Sprite2D).visible:
-			(overlay as Sprite2D).modulate.a = alpha
-
-func _step_dealer_bar_progress(delta: float) -> void:
-	if not _dealer_bar_frame_initialized or _dealer_bar_sprite == null \
-			or _dealer_bar_display_frame == _dealer_bar_target_frame:
-		_dealer_bar_progress_time = 0.0
-		return
-	_dealer_bar_progress_time += maxf(0.0, delta)
-	if _dealer_bar_progress_time < DEALER_BAR_PROGRESS_FRAME_TIME:
-		return
-	_dealer_bar_progress_time -= DEALER_BAR_PROGRESS_FRAME_TIME
-	var direction := 1 if _dealer_bar_target_frame > _dealer_bar_display_frame else -1
-	_dealer_bar_display_frame += direction
-	_set_dealer_bar_progress_frame(_dealer_bar_display_frame)
-	if _dealer_bar_display_frame == _dealer_bar_target_frame:
-		_dealer_bar_progress_time = 0.0
-
-func _set_dealer_bar_progress_frame(progress_frame: int) -> void:
-	var frame := clampi(progress_frame, 0, DEALER_BAR_FRAME_COUNT - 1)
-	_set_sheet_frame(_dealer_bar_sprite, frame)
-	_set_dealer_overlay_progress_frame(frame)
-
-func _set_dealer_overlay_progress_frame(progress_frame: int) -> void:
-	for overlay in [_dealer_bar_overlay_1, _dealer_bar_overlay_2,
-			_dealer_bar_overlay_3]:
-		if overlay != null:
-			(overlay as Sprite2D).frame = clampi(progress_frame, 0, overlay.hframes - 1)
 
 ## FREE SPINS TV banner: blinks for as long as the NEXT spin is free (banked
 ## free spins or an Energy Drink no-decay rush) and holds until the lever is

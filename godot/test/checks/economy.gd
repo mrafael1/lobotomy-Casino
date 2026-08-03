@@ -410,13 +410,13 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 			failures.append("dealer icon: numeric countdown badge was not removed")
 	var dealer_bar := machine.get_node_or_null("DealerBar") as Sprite2D
 	if dealer_bar == null or dealer_bar.texture == null \
-				or dealer_bar.hframes != int(machine.DEALER_BAR_FRAME_COUNT) \
+				or dealer_bar.hframes != int(DealerBar.FRAME_COUNT) \
 				or dealer_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("dealer bar: 13-frame countdown sheet is missing")
 	for expected in [
-		["DealerBarOverlay1", machine.DEALER_BAR_OVERLAY_1_FRAMES],
-		["DealerBarOverlay2", machine.DEALER_BAR_OVERLAY_2_FRAMES],
-		["DealerBarOverlay3", machine.DEALER_BAR_OVERLAY_3_FRAMES],
+		["DealerBarOverlay1", DealerBar.OVERLAY_1_FRAMES],
+		["DealerBarOverlay2", DealerBar.OVERLAY_2_FRAMES],
+		["DealerBarOverlay3", DealerBar.OVERLAY_3_FRAMES],
 	]:
 		var overlay := machine.get_node_or_null(String(expected[0])) as Sprite2D
 		if overlay == null or overlay.texture == null or overlay.hframes != int(expected[1]) \
@@ -454,14 +454,14 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		if loss_3_sprite != null and loss_3_sprite.visible:
 			failures.append("combo pending: x3 losing animation was shown for x2")
 		machine._refresh_dealer_countdown()
-		var dealer_bar_during_loss := machine._dealer_bar_sprite as Sprite2D
+		var dealer_bar_during_loss := machine._dealer_bar.bar_sprite() as Sprite2D
 		if dealer_bar_during_loss == null or not dealer_bar_during_loss.visible \
-				or machine._dealer_bar_overlay_1 == null \
-				or not machine._dealer_bar_overlay_1.visible \
-				or machine._dealer_bar_overlay_2 == null \
-				or not machine._dealer_bar_overlay_2.visible \
-				or machine._dealer_bar_overlay_3 == null \
-				or not machine._dealer_bar_overlay_3.visible:
+				or machine._dealer_bar.warning_light(0) == null \
+				or not machine._dealer_bar.warning_light(0).visible \
+				or machine._dealer_bar.warning_light(1) == null \
+				or not machine._dealer_bar.warning_light(1).visible \
+				or machine._dealer_bar.warning_light(2) == null \
+				or not machine._dealer_bar.warning_light(2).visible:
 			failures.append("combo pending: pending x2 loss did not show all dealer warning overlays")
 		if not machine._callouts.loss_beeping():
 			failures.append("combo pending: x2 losing animation did not start beeping")
@@ -706,10 +706,10 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	# frame. The bar starts at frame 0 for 0/12 progress, then walks through frames
 	# 1..3 at 3/12 and 4..8 at 8/12; shorter warning sheets clamp only at their
 	# final frame.
-	var dealer_bar := machine._dealer_bar_sprite as Sprite2D
-	var dealer_overlay_1 := machine._dealer_bar_overlay_1 as Sprite2D
-	var dealer_overlay_2 := machine._dealer_bar_overlay_2 as Sprite2D
-	var dealer_overlay_3 := machine._dealer_bar_overlay_3 as Sprite2D
+	var dealer_bar := machine._dealer_bar.bar_sprite() as Sprite2D
+	var dealer_overlay_1 := machine._dealer_bar.warning_light(0) as Sprite2D
+	var dealer_overlay_2 := machine._dealer_bar.warning_light(1) as Sprite2D
+	var dealer_overlay_3 := machine._dealer_bar.warning_light(2) as Sprite2D
 	run_store.betMultiplier = 1
 	run_store.isSpinning = false
 	machine._spinning_anim = false
@@ -724,8 +724,8 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		run_store.dealerCountdown = 12 - int(expected_progress)
 		machine._refresh_dealer_countdown()
 		for intermediate_frame in range(previous_progress + 1, int(expected_progress) + 1):
-			machine._step_dealer_bar_progress(
-				float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+			machine._dealer_bar.step_progress(
+				float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 			if dealer_bar == null or dealer_bar.frame != intermediate_frame:
 				failures.append("issue155: dealer bar skipped frame %d while advancing to %d/12" \
 					% [intermediate_frame, int(expected_progress)])
@@ -740,8 +740,8 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	run_store.dealerCountdown = 10
 	machine._refresh_dealer_countdown()
 	for intermediate_frame in [1, 2]:
-		machine._step_dealer_bar_progress(
-			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+		machine._dealer_bar.step_progress(
+			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 		if dealer_bar == null or dealer_bar.frame != int(intermediate_frame):
 			failures.append("issue155: two-step dealer bar transition skipped frame %d" % int(intermediate_frame))
 	# PR #169: the authored bar spans all 13 frames across the COMPLETE cycle, whatever
@@ -756,20 +756,20 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		failures.append("pr169: dealer bar did not reset to frame 0 at a 24-step countdown")
 	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
-	if int(machine._dealer_bar_target_frame) != 6:
+	if machine._dealer_bar.target_frame() != 6:
 		failures.append("pr169: 24-step dealer bar midpoint was not frame 6")
 	for _step in 6:
-		machine._step_dealer_bar_progress(
-			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+		machine._dealer_bar.step_progress(
+			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 	if dealer_bar == null or dealer_bar.frame != 6:
 		failures.append("pr169: 24-step dealer bar did not reach frame 6 at countdown 12")
 	run_store.dealerCountdown = 0
 	machine._refresh_dealer_countdown()
-	if int(machine._dealer_bar_target_frame) != 12:
+	if machine._dealer_bar.target_frame() != 12:
 		failures.append("pr169: 24-step dealer bar did not target frame 12 at countdown 0")
 	for _step in 6:
-		machine._step_dealer_bar_progress(
-			float(machine.DEALER_BAR_PROGRESS_FRAME_TIME) + 0.001)
+		machine._dealer_bar.step_progress(
+			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 	if dealer_bar == null or dealer_bar.frame != 12:
 		failures.append("pr169: 24-step dealer bar did not reach its final frame")
 	run_store.dealer_countdown_start = previous_countdown_start
@@ -777,20 +777,20 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	machine._refresh_dealer_countdown()
 	run_store.betMultiplier = 3
 	machine._refresh_dealer_countdown()
-	if machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible \
-			or (machine._dealer_bar_overlay_2 != null and machine._dealer_bar_overlay_2.visible) \
-			or (machine._dealer_bar_overlay_3 != null and machine._dealer_bar_overlay_3.visible):
+	if machine._dealer_bar.warning_light(0) == null or not machine._dealer_bar.warning_light(0).visible \
+			or (machine._dealer_bar.warning_light(1) != null and machine._dealer_bar.warning_light(1).visible) \
+			or (machine._dealer_bar.warning_light(2) != null and machine._dealer_bar.warning_light(2).visible):
 		failures.append("issue155: x3 should show only dealer bar overlay 1")
 	run_store.betMultiplier = 2
 	machine._refresh_dealer_countdown()
-	if machine._dealer_bar_overlay_2 == null or not machine._dealer_bar_overlay_2.visible \
-			or machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible:
+	if machine._dealer_bar.warning_light(1) == null or not machine._dealer_bar.warning_light(1).visible \
+			or machine._dealer_bar.warning_light(0) == null or not machine._dealer_bar.warning_light(0).visible:
 		failures.append("issue155: x2 should show dealer bar overlays 1 and 2")
 	run_store.betMultiplier = 1
 	machine._refresh_dealer_countdown()
-	if machine._dealer_bar_overlay_3 == null or not machine._dealer_bar_overlay_3.visible \
-			or machine._dealer_bar_overlay_2 == null or not machine._dealer_bar_overlay_2.visible \
-			or machine._dealer_bar_overlay_1 == null or not machine._dealer_bar_overlay_1.visible:
+	if machine._dealer_bar.warning_light(2) == null or not machine._dealer_bar.warning_light(2).visible \
+			or machine._dealer_bar.warning_light(1) == null or not machine._dealer_bar.warning_light(1).visible \
+			or machine._dealer_bar.warning_light(0) == null or not machine._dealer_bar.warning_light(0).visible:
 		failures.append("issue155: x1 should show all three dealer bar overlays")
 	# Glitch 2 keeps all three warning sheets visible even while the gauge is x3.
 	run_store.glitchDealerStepActive = true
@@ -807,11 +807,11 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	if dealer_overlay_1 != null:
 		machine._refresh_dealer_countdown()
 		dealer_overlay_1.modulate.a = 1.0
-		machine._dealer_bar_overlay_beep_time = 0.0
-		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME) * 0.25)
+		machine._dealer_bar.reset_beep()
+		machine._dealer_bar.step_beep(float(DealerBar.OVERLAY_BEEP_TIME) * 0.25)
 		if dealer_overlay_1.modulate.a >= 0.99:
 			failures.append("issue155: dealer warning overlays did not beep")
-		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME))
+		machine._dealer_bar.step_beep(float(DealerBar.OVERLAY_BEEP_TIME))
 		if dealer_overlay_1.modulate.a < 0.99:
 			failures.append("issue155: dealer warning overlay did not return to full alpha")
 		# ...and a lone first light beeps too, just on the slower period: the cadence, not the
@@ -819,20 +819,20 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		run_store.betMultiplier = 3
 		machine._refresh_dealer_countdown()
 		dealer_overlay_1.modulate.a = 1.0
-		machine._dealer_bar_overlay_beep_time = 0.0
-		machine._step_dealer_overlay_beep(float(machine.DEALER_BAR_OVERLAY_BEEP_TIME) * 0.25)
+		machine._dealer_bar.reset_beep()
+		machine._dealer_bar.step_beep(float(DealerBar.OVERLAY_BEEP_TIME) * 0.25)
 		if dealer_overlay_1.modulate.a >= 0.99:
 			failures.append("issue155: the x3 warning did not beep on its single light")
-		if not is_equal_approx(float(machine._dealer_overlay_beep_period()),
-				float(machine.DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD)):
+		if not is_equal_approx(float(machine._dealer_bar.beep_period()),
+				float(DealerBar.OVERLAY_SLOW_BEEP_PERIOD)):
 			failures.append("issue155: one light should beep on the slow period")
 		run_store.betMultiplier = 2
 		machine._refresh_dealer_countdown()
-		if not is_equal_approx(float(machine._dealer_overlay_beep_period()),
-				float(machine.DEALER_BAR_OVERLAY_BEEP_PERIOD)):
+		if not is_equal_approx(float(machine._dealer_bar.beep_period()),
+				float(DealerBar.OVERLAY_BEEP_PERIOD)):
 			failures.append("issue155: the second light should tighten the beep cadence")
-		if float(machine.DEALER_BAR_OVERLAY_SLOW_BEEP_PERIOD) \
-				<= float(machine.DEALER_BAR_OVERLAY_BEEP_PERIOD):
+		if float(DealerBar.OVERLAY_SLOW_BEEP_PERIOD) \
+				<= float(DealerBar.OVERLAY_BEEP_PERIOD):
 			failures.append("issue155: the slow warning period is not slower than the fast one")
 		run_store.betMultiplier = 1
 	# A pending x2 loss falls to the x1 warning state, so it keeps the full

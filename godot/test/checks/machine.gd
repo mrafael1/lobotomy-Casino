@@ -236,7 +236,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
 	var free_spin := machine._free_spin_sprite as CanvasItem
-	var dealer_bar := machine._dealer_bar_sprite as CanvasItem
+	var dealer_bar := machine._dealer_bar.bar_sprite() as CanvasItem
 	var dealer_icon := machine._dealer_icon as CanvasItem
 	var target_bar := machine._wealth.bar_sprite() as CanvasItem
 	var target_goals := machine._wealth.goals_sprite() as CanvasItem
