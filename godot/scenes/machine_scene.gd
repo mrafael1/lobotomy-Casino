@@ -156,8 +156,6 @@ const REEL_STOP_SFX_LEAD_TIME := 0.1
 # Rewind rolls the previous spin back in: all three reels blur backwards for this
 # long while the sequence lock keeps the lever out of reach.
 const REWIND_RESTORE_DURATION := 0.9
-const FLATLINE_HOLD_TIME := 0.7
-const FLATLINE_DRAIN_TIME := 1.6
 const MULTIPLIER_FRAME_COUNT := 6
 # Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
 # blinking FREE SPINS TV overlay.
@@ -262,7 +260,6 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
-const FLATLINE_ENDING_SCENE := preload("res://scenes/flatline_ending_overlay.tscn")
 const TARGET_REACHED_SCENE := preload("res://scenes/target_reached_overlay.tscn")
 const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
@@ -805,6 +802,7 @@ var _tv_info_pop_sources: Dictionary = {}
 var _view: MachineView = null
 var _augments: AugmentDisplay = null
 var _callouts: WinCallouts = null
+var _flatline: FlatlineScreen = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -909,15 +907,9 @@ var _reroll_accum := 0.0
 var _rewind_anim_active := false
 var _rewind_elapsed := 0.0
 var _rewind_accum := 0.0
-var _flatline_countdown_active := false
-var _flatline_countdown_elapsed := 0.0
-var _flatline_total := 0
-var _flatline_kept := 0
-var _flatline_display := 0
-var _flatline_score_label: Label = null
-var _flatline_lost_label: Label = null
 var _spin_label: Label = null
-var _flatline_meter: NeuronMeter = null # neuron meter shown on the flatline overlay
+## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
+## is still awaiting its animation. Flow, not presentation, so it stays here.
 var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
 var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
@@ -959,6 +951,7 @@ func _ready() -> void:
 	_view = MachineView.new(self)
 	_augments = AugmentDisplay.new(_view)
 	_callouts = WinCallouts.new(_view)
+	_flatline = FlatlineScreen.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -3097,8 +3090,8 @@ func _process(delta: float) -> void:
 		_step_reroll(delta)
 	if _rewind_anim_active:
 		_step_rewind_restore(delta)
-	if _flatline_countdown_active:
-		_step_flatline_countdown(delta)
+	if _flatline.counting_down():
+		_flatline.step(delta)
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
 	_augments.step_glitch(delta)
@@ -7623,7 +7616,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	_overlay.add_child(title)
 
 	if resolved_ending == "flatline":
-		_build_flatline_countdown(run)
+		_flatline.build_countdown(run)
 	else:
 		var wallet := Label.new()
 		wallet.position = Vector2(ENDING_TEXT_INSET, ENDING_WALLET_Y)
@@ -7651,12 +7644,8 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 ## message, animated trace, and action; MachineScene retains countdown state,
 ## banking, and the existing dealer/menu transition.
 func _build_flatline_screen(run: Dictionary) -> void:
-	var flatline_screen := FLATLINE_ENDING_SCENE.instantiate() as FlatlineEndingOverlay
-	_overlay.add_child(flatline_screen)
 	var fatal_copy := fatal_flatline_text if not _has_campaign_neurons_remaining() else ""
-	flatline_screen.present(_flatline_action_text(), fatal_copy)
-	flatline_screen.action_pressed.connect(_on_flatline_action_pressed)
-	_build_flatline_countdown(run, flatline_screen)
+	_flatline.build_screen(run, _flatline_action_text(), fatal_copy, _on_flatline_action_pressed)
 
 
 ## Terminal campaign ending: the machine remains visible, damaged, and un-dimmed.
@@ -7854,14 +7843,14 @@ func _on_flatline_action_pressed() -> void:
 		"FlatlineEndingOverlay") as FlatlineEndingOverlay
 	if flatline_screen != null:
 		if not flatline_screen.first_revival_beep.is_connected(
-			_on_flatline_first_revival_beep):
-			flatline_screen.first_revival_beep.connect(_on_flatline_first_revival_beep)
+			_flatline.attach_revival_meter):
+			flatline_screen.first_revival_beep.connect(_flatline.attach_revival_meter)
 		flatline_screen.play_continue_animation()
 		await flatline_screen.continue_animation_finished
 	if _overlay == null or not is_instance_valid(_overlay):
 		return
 	if flatline_screen == null:
-		_attach_flatline_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
+		_flatline.attach_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
 		# The campaign-neuron threshold Pacte is a post-flatline handoff. It must
@@ -7875,82 +7864,15 @@ func _on_flatline_action_pressed() -> void:
 	else:
 		_to_menu()
 
-func _on_flatline_first_revival_beep() -> void:
-	_attach_flatline_meter(FlatlineEndingOverlay.REVIVAL_METER_CENTER,
-		FlatlineEndingOverlay.REVIVAL_METER_CENTER + Vector2(0.0, 27.0))
-
-func _attach_flatline_meter(center: Vector2, feedback_center: Vector2) -> void:
-	if _overlay == null or not is_instance_valid(_overlay):
-		return
-	if _flatline_meter != null and is_instance_valid(_flatline_meter):
-		return
-	_flatline_meter = NeuronMeter.attach(_overlay, center)
-	_flatline_meter.play_loss_animation()
-	_show_neuron_spend_feedback(_overlay, feedback_center)
-
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
 
-func _build_flatline_countdown(run: Dictionary,
-		flatline_screen: FlatlineEndingOverlay = null) -> void:
-	_flatline_total = int(run["lucidityCoins"])
-	_flatline_kept = floori(float(_flatline_total) * _end_run_lucidity_kept_fraction())
-	_flatline_display = _flatline_total
-	_flatline_countdown_elapsed = 0.0
-	_flatline_countdown_active = _flatline_kept < _flatline_total
-
-	# Retained-percent line only ("10% kept", or "50% kept" with Smart Saving);
-	# the draining number below it is the whole story.
-	var kept_pct := roundi(_end_run_lucidity_kept_fraction() * 100.0)
-	if flatline_screen != null:
-		flatline_screen.set_kept_percentage(kept_pct)
-		_flatline_score_label = flatline_screen.score_label
-		_flatline_lost_label = flatline_screen.lost_label
-	else:
-		_score_label(_overlay, "%d%% kept" % kept_pct, Vector2(20.0, 96.0), 8,
-			Color(0.58, 0.64, 0.72), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-		_flatline_score_label = _score_label(_overlay, str(_flatline_display),
-			Vector2(20.0, 110.0), 28, Color(0.97, 0.98, 1.0), 120.0,
-			HORIZONTAL_ALIGNMENT_CENTER)
-		_flatline_lost_label = _score_label(_overlay, "", Vector2(20.0, 148.0), 10,
-			Color(0.93, 0.27, 0.27), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
-	_update_flatline_countdown_labels()
-
-	# Keep the neuron-loss treatment only for the legacy fallback. The dedicated
-	# flatline screen intentionally stays focused on the money drain and trace.
-	if flatline_screen == null:
-		_flatline_meter = NeuronMeter.attach(_overlay, Vector2(80.0, 198.0))
-		_flatline_meter.play_loss_animation()
-		_show_neuron_spend_feedback(_overlay, Vector2(80.0, 190.0))
-
-func _step_flatline_countdown(delta: float) -> void:
-	_flatline_countdown_elapsed += delta
-	if _flatline_countdown_elapsed < FLATLINE_HOLD_TIME:
-		return
-	var drain_elapsed := _flatline_countdown_elapsed - FLATLINE_HOLD_TIME
-	var p := clampf(drain_elapsed / FLATLINE_DRAIN_TIME, 0.0, 1.0)
-	var eased := 1.0 - (1.0 - p) * (1.0 - p)
-	_flatline_display = _flatline_kept if p >= 1.0 else int(round(float(_flatline_total) - float(_flatline_total - _flatline_kept) * eased))
-	_update_flatline_countdown_labels()
-	if p >= 1.0:
-		_flatline_countdown_active = false
-
-func _update_flatline_countdown_labels() -> void:
-	if _flatline_score_label != null:
-		_flatline_score_label.text = str(_flatline_display)
-	if _flatline_lost_label != null:
-		var lost := _flatline_total - _flatline_display
-		_flatline_lost_label.text = tr("-%d lost") % lost if lost > 0 else ""
-
+## Tears the ending screen's state down: the drain on the screen itself, and the
+## re-entry guard around the button that leaves it. Every path out of an ending
+## goes through here, which is why it clears both halves rather than only the one
+## it owns.
 func _stop_flatline_countdown() -> void:
-	_flatline_countdown_active = false
-	_flatline_countdown_elapsed = 0.0
-	_flatline_total = 0
-	_flatline_kept = 0
-	_flatline_display = 0
-	_flatline_score_label = null
-	_flatline_lost_label = null
-	_flatline_meter = null
+	_flatline.stop()
 	_flatline_transition_active = false
 
 # The stash tray (z 50) would draw over full-screen ending overlays; hide it while

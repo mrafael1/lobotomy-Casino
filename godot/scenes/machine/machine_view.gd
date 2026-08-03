@@ -82,6 +82,23 @@ func raise_display_lucidity(value: int) -> void:
 func apply_multiplier_fx_visibility() -> void:
 	host._apply_multiplier_fx_visibility()
 
+## The full-screen host an ending has claimed, or null when no ending is up. The
+## machine owns claiming and releasing it — an ending screen only fills it.
+func ending_overlay() -> Control:
+	return host._overlay
+
+## A plain readout label in the machine's font. Shared with the score table and
+## the ending screens, which is why it stays the machine's rather than each
+## component growing its own slightly different one.
+func score_label(parent: Control, text: String, pos: Vector2, size: int, color: Color,
+		width := 0.0, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	return host._score_label(parent, text, pos, size, color, width, align)
+
+## The "-1 NEURON" flyaway. Only ever one at a time, which the machine enforces
+## by freeing the previous label — so it stays on that side.
+func show_neuron_spend_feedback(parent: Control, center: Vector2) -> void:
+	host._show_neuron_spend_feedback(parent, center)
+
 func info_bubble(node_name: String, source: String, border: Color,
 		font_color: Color, max_width := 0.0) -> Control:
 	return host._make_info_bubble(node_name, source, border, font_color, max_width)
