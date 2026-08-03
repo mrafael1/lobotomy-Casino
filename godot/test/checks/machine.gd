@@ -558,13 +558,13 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	run_store.pairBoostHiddenReels = 0
 
 	# Serum negative now hides the above/below strip neighbours, leaving center symbols.
-	machine._set_reel_symbol(0, "eye")
-	machine._set_reel_visible(0, true)
-	machine._set_adjacent_symbols_hidden_active(true)
-	if not machine._reel_sprites[0].visible or machine._reel_top_sprites[0].visible or machine._reel_bottom_sprites[0].visible:
+	machine._reel_symbols.set_symbol(0, "eye")
+	machine._reel_symbols.set_visible(0, true)
+	machine._reel_symbols.set_adjacent_hidden(true)
+	if not machine._reel_symbols.center(0).visible or machine._reel_symbols.top(0).visible or machine._reel_symbols.bottom(0).visible:
 		failures.append("issue92: Serum negative did not hide adjacent reel symbols")
-	machine._set_adjacent_symbols_hidden_active(false)
-	if not machine._reel_top_sprites[0].visible or not machine._reel_bottom_sprites[0].visible:
+	machine._reel_symbols.set_adjacent_hidden(false)
+	if not machine._reel_symbols.top(0).visible or not machine._reel_symbols.bottom(0).visible:
 		failures.append("issue92: adjacent reel symbols did not restore after Serum negative")
 
 	machine._build_serum_picker()

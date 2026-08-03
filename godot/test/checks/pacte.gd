@@ -1399,7 +1399,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	run_store.runPhase = "running"
 	for heart_symbol in ["heart_x1", "heart_x2", "heart_x3"]:
 		var heart_view := Sprite2D.new()
-		machine._apply_symbol(heart_view, heart_symbol, 24.0)
+		machine._reel_symbols.apply_symbol(heart_view, heart_symbol, 24.0)
 		if heart_view.texture == null:
 			failures.append("pacte powers: missing %s machine asset" % heart_symbol)
 		heart_view.free()
@@ -1426,14 +1426,14 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	var heart_x2_tex: Variant = machine._load_texture("symbols/heart x2.png", true)
 	var heart_x3_tex: Variant = machine._load_texture("symbols/heart x3.png", true)
 	for reel_index in 3:
-		if machine._reel_sprites[reel_index].texture != heart_x1_tex \
-				or machine._reel_top_sprites[reel_index].texture != heart_x3_tex \
-				or machine._reel_bottom_sprites[reel_index].texture != heart_x2_tex:
+		if machine._reel_symbols.center(reel_index).texture != heart_x1_tex \
+				or machine._reel_symbols.top(reel_index).texture != heart_x3_tex \
+				or machine._reel_symbols.bottom(reel_index).texture != heart_x2_tex:
 			failures.append("pacte powers: arming Heart did not preview the heart tier cycle on reel %d" % reel_index)
 			break
 	# A resolved heart triple shows the landed tier flanked by the OTHER tiers —
 	# never nine copies of one heart symbol.
-	var heart_neighbours: Dictionary = machine._reel_neighbours("heart_x2")
+	var heart_neighbours: Dictionary = machine._reel_symbols.neighbours_of("heart_x2")
 	if String(heart_neighbours["top"]) != "heart_x1" \
 			or String(heart_neighbours["bottom"]) != "heart_x3":
 		failures.append("pacte powers: heart reveal strip does not cycle the other tiers")
