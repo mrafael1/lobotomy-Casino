@@ -17,6 +17,42 @@ extends SceneTree
 
 const _MACHINE_SCENE_PATH := "res://scenes/machine_scene.tscn"
 
+## ── the engine-error gate ─────────────────────────────────────────────────────────
+##
+## The checks assert on themselves and nothing else, so for most of this suite's life a
+## machine that threw on every single frame still reported every check green. That is not
+## hypothetical: the phase 3.3 regression reached a merge (#194) with machine_scene
+## throwing `int(null)` on every HUD refresh beside 92 passing checks.
+##
+## Engine errors cannot be observed from inside the process that raises them — GDScript has
+## no hook on the error stream — so the documented command now runs TWICE. The first
+## process spawns itself again with `--smoke-child`, captures the child's merged
+## stdout/stderr, replays it, and fails the run on any error line the allowlist below does
+## not name. The child sees the flag and runs the checks exactly as before, which is why
+## every other command in this file is unchanged.
+const _CHILD_FLAG := "--smoke-child"
+
+## Error lines a clean run is EXPECTED to print. Everything else fails the suite.
+##
+## Kept as an explicit list rather than a blanket "ignore errors during check X" because the
+## whole point of the gate is that an error nobody has looked at is a failure. Adding an
+## entry here means claiming the error is deliberate — say why, so the next person can tell
+## a designed error from one that was merely loud on the day it was added.
+const _EXPECTED_ERRORS := [
+	# meta/_check_smart_save_retention writes a deliberately truncated save and asserts the
+	# loader rejects it rather than crashing. The parse failure IS the check.
+	"Parse JSON failed",
+	# Teardown accounting from the headless dummy renderer, printed after quit(). The suite
+	# frees its scenes outright (see _reap_strays) but the servers still report what the
+	# engine's own boot allocated.
+	"were leaked at exit",
+	"still in use at exit",
+]
+
+## Prefixes the engine puts on an error line. The `at:` and `GDScript backtrace` lines that
+## follow belong to the error above them and are not counted separately.
+const _ERROR_PREFIXES := ["ERROR:", "SCRIPT ERROR:", "USER ERROR:", "USER SCRIPT ERROR:"]
+
 ## Root children that belong to the engine, not to a check: the autoloads, plus whatever
 ## an editor addon has parented there. Captured once before the first check so _reap_strays
 ## can tell "the game" from "something a check left lying around" without a hardcoded list
@@ -258,6 +294,9 @@ func _domain(file: String) -> Object:
 	return _domains[file]
 
 func _run() -> void:
+	if not OS.get_cmdline_user_args().has(_CHILD_FLAG):
+		_run_gated()
+		return
 	var failures: Array = []
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
@@ -327,7 +366,11 @@ func _run() -> void:
 	machine = _isolate_stores(machine, run_store, meta_store)
 
 	if failures.is_empty():
-		print("✓ scene smoke PASSED (%d checks)" % CHECKS.size())
+		# Deliberately NOT the "✓ ... PASSED" line: this process only knows that the checks
+		# asserted clean, and a run can still fail on an engine error the parent sees and
+		# this one cannot. The parent owns the verdict, so it owns the word PASSED — otherwise
+		# a grep for it would report green on exactly the runs the gate exists to catch.
+		print("· checks green (%d checks)" % CHECKS.size())
 		quit(0)
 	else:
 		for i in failures.size():
@@ -337,6 +380,76 @@ func _run() -> void:
 			printerr("  (shuffled order, seed %d — reproduce with --shuffle=%d)"
 				% [shuffle_seed, shuffle_seed])
 		quit(1)
+
+## Runs the suite in a child process and judges what came out of it.
+##
+## Forwards this run's user args verbatim, so `--shuffle`, `--shuffle=N` and `--trace` reach
+## the checks unchanged and the seed the child prints is the seed you re-run with.
+func _run_gated() -> void:
+	var args: Array = ["--headless", "--path", ProjectSettings.globalize_path("res://"),
+		"-s", "res://test/scene_smoke.gd", "--"]
+	for raw in OS.get_cmdline_user_args():
+		args.append(String(raw))
+	args.append(_CHILD_FLAG)
+
+	var output: Array = []
+	# read_stderr, because the errors this gate exists to catch are the only thing that goes
+	# there. Interleaving with stdout is the point: it keeps each error next to the check
+	# that was running when it fired.
+	var code := OS.execute(OS.get_executable_path(), args, output, true)
+
+	var lines: Array = []
+	for chunk in output:
+		for raw in String(chunk).split("\n"):
+			lines.append(String(raw).strip_edges(false, true))
+	for line in lines:
+		print(line)
+
+	if code < 0:
+		# Nothing ran. Reporting that as a pass would leave the suite looking green while
+		# asserting nothing at all — the exact failure this gate was written against.
+		printerr("✗ scene smoke could not spawn its child process (%s); no checks ran"
+			% OS.get_executable_path())
+		quit(1)
+		return
+
+	var unexpected := _unexpected_errors(lines)
+	if not unexpected.is_empty():
+		printerr("")
+		printerr("✗ scene smoke FAILED: %d engine error(s) during the run" % unexpected.size())
+		for line in unexpected:
+			printerr("    %s" % line)
+		printerr("  A check passing beside an engine error is not a pass. Fix the error, or —")
+		printerr("  if it is deliberate — name it in _EXPECTED_ERRORS with the reason.")
+		quit(1)
+		return
+
+	if code != 0:
+		quit(1)
+		return
+	print("✓ scene smoke PASSED (%d checks, no unexpected engine errors)" % CHECKS.size())
+	quit(0)
+
+## Every error line the child printed that _EXPECTED_ERRORS does not account for.
+func _unexpected_errors(lines: Array) -> Array:
+	var out: Array = []
+	for raw in lines:
+		var line := String(raw).strip_edges()
+		var is_error := false
+		for prefix in _ERROR_PREFIXES:
+			if line.begins_with(prefix):
+				is_error = true
+				break
+		if not is_error:
+			continue
+		var expected := false
+		for allowed in _EXPECTED_ERRORS:
+			if line.contains(allowed):
+				expected = true
+				break
+		if not expected:
+			out.append(line)
+	return out
 
 ## Resolves each check's declared parameter names to the live objects. `machine` is null
 ## for an ISO_STORES check, which is why no check that takes one may be registered under
