@@ -12,11 +12,11 @@ extends RefCounted
 ##   has earned and how long the machine owes it, and drives the odometer. That
 ##   is the reward sequence, not the popup — it stays and calls in here.
 ##
-##   The jackpot coin fountain shares _coin_layer and _make_flying_coin with the
+##   The jackpot coin fountain shared the coin layer and the coin factory with the
 ##   power-coin flight. Taking it would have meant putting the coin layer, the
 ##   coin factory and the cash-tray position on MachineView to serve one caller,
-##   with the other caller still on the machine. It belongs with the coin family
-##   whenever that is cut.
+##   with the other caller still on the machine. It now lives in CoinFlights,
+##   which was cut afterwards precisely because this seam refused it.
 ##
 ## So this is presentation with nothing behind it: hand it a label, an amount, a
 ## colour and a reel, and it spawns, rises, fades and frees. Nothing here reads

@@ -256,10 +256,10 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue181: jackpot sequence unlocks before the slow score roll ends")
 	if reward_time < machine.jackpot_coin_fountain_time():
 		failures.append("issue181: jackpot sequence unlocks before the coin spray ends")
-	if machine._jackpot_coins.is_empty():
+	if machine._coins.jackpot_coins().is_empty():
 		failures.append("issue181: jackpot did not throw any coins from the cash tray")
 	else:
-		var first_coin := machine._jackpot_coins[0] as Sprite2D
+		var first_coin := machine._coins.jackpot_coins()[0] as Sprite2D
 		var tray: Vector2 = machine._cash_tray_pos()
 		if first_coin == null or absf(first_coin.position.y - tray.y) > 1.0:
 			failures.append("issue181: jackpot coins do not start at the cash tray mouth")
@@ -267,7 +267,7 @@ func _check_jackpot_payout_181(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue181: jackpot did not roll the wealth odometer")
 	# The coin layer sweep only hides children, so the spray needs its own free.
 	machine._clear_jackpot_coins()
-	if not machine._jackpot_coins.is_empty():
+	if not machine._coins.jackpot_coins().is_empty():
 		failures.append("issue181: jackpot coins survived the teardown")
 
 	machine._set_display_lucidity(previous_display, false)
