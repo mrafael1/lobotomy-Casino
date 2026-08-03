@@ -113,3 +113,15 @@ func info_bubble(node_name: String, source: String, border: Color,
 ## description bubble step aside for one rather than stacking on top of it.
 func tv_callout_open() -> bool:
 	return not (host._tv_info_pop_sources as Dictionary).is_empty()
+
+## A Sprite2D the .tscn already authored under this name, or null. The sprite twin
+## of authored_control, and the same reason: a component that always built its own
+## node would silently orphan the authored placement.
+func authored_sprite(node_name: String) -> Sprite2D:
+	return host._authored_sprite(node_name)
+
+## A sprite cropped to one rect of a sheet, built the machine's way — it measures
+## the sheet's own scale rather than assuming the legacy x8, and reuses an authored
+## node when one exists. The region twin of full_canvas_sheet.
+func region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
+	return host._build_region_sprite(rel, rect)

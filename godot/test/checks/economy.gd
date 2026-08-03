@@ -136,7 +136,7 @@ func _check_issue92_rule_reworks(machine: Node, run_store: Node, meta_store: Nod
 		failures.append("issue174: hallucination should derive a last-two pair from the third reel")
 	run_store.lockedReels = [false, false, false]
 	machine._start_reel_spin_animation([false, false, false])
-	if bool(machine._locked_reels_during_spin[2]) or not bool(machine._spin_reel_sprites[2].visible):
+	if bool(machine._locked_reels_during_spin[2]) or not machine._reel_blur.spin_visible(2):
 		failures.append("issue174: hallucination should keep the third reel visible")
 	machine._stop_sfx(&"reel_spin")
 
