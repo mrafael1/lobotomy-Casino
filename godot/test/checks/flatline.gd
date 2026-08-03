@@ -457,9 +457,9 @@ func _check_ending_cleanup_161(machine: Node, run_store: Node, failures: Array) 
 		failures.append("pr161: ending cleanup left the dealer UI up")
 	if machine._pending_combo_overlay != null:
 		failures.append("pr161: ending cleanup left the loss warning overlay up")
-	if machine._combo_loss_beep_tween != null:
+	if machine._callouts.loss_beeping():
 		failures.append("pr161: ending cleanup left the loss beep running")
-	for fx in [machine._combo_loss_2_sprite, machine._combo_loss_3_sprite,
+	for fx in [machine._callouts.loss_sprite(2), machine._callouts.loss_sprite(3),
 			machine._mult_fx_2, machine._mult_fx_3, machine._mult_fx_fire]:
 		if fx != null and fx.visible:
 			failures.append("pr161: ending cleanup left a gauge/loss effect visible")
