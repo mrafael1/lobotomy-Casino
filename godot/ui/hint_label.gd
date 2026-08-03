@@ -9,8 +9,12 @@ extends Control
 ## Item ids whose NAME reads as corrupted (purple). Explicit and DECOUPLED from any
 ## mechanical "corrupted" category, matching the #7 approach. Kept forward-compatible
 ## with the #2 roster — `cons_cigarette` lands there but flagging it early is inert.
+## The Energy Drink left this list when it lost its downside: a purple name for an item
+## that is now two free spins and nothing else read as a warning with nothing behind it.
+## A joker Augmented run turns all four in-run items purple, but that is the RUN talking,
+## not the item — the machine adds it at the call site (issue #111).
 const CORRUPTED_ITEM_IDS: Array[String] = [
-	"cons_cigarette", "cons_white_powder", "item_energy_drink", "item_pill",
+	"cons_cigarette", "cons_white_powder", "item_pill",
 ]
 
 @export var grow_time: float = 1.5
@@ -49,8 +53,9 @@ func play(pos_text: String, neg_text: String, item_name: String = "", corrupted:
 	_ensure_labels()
 	_pos_label.visible = not pos_text.is_empty()
 	_neg_label.visible = not neg_text.is_empty()
-	_pos_label.text = "+ %s" % pos_text
-	_neg_label.text = "- %s" % neg_text
+	# The hint is translated before the sign goes on; "+ EASY" as a whole is not a key.
+	_pos_label.text = "+ %s" % tr(pos_text)
+	_neg_label.text = "- %s" % tr(neg_text)
 	_pos_label.add_theme_color_override(&"font_color", positive_color)
 	_neg_label.add_theme_color_override(&"font_color", negative_color)
 	if item_name.is_empty():

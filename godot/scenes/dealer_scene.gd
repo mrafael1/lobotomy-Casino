@@ -97,6 +97,9 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const OFFER_PRICE_COIN_SIZE := 6.0
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
+const BACK_BUTTON_SIZE := Vector2(20.0, 18.0)
+const BACK_BUTTON_POS := Vector2(9.0, 15.0)
 const BUTTON_TEXT_BOTTOM_MARGIN := 2.0
 
 # Painting-glow pulse (originally the LAB button glow): dim → bright and back,
@@ -202,6 +205,49 @@ func _ready() -> void:
 			RunStateStore.state_changed.connect(_refresh_credits)
 		_refresh_credits()
 	_refresh_campaign_label()
+	# Inert unless the played tutorial is running (issue #105). The autoload is not a
+	# @tool script, so it does not exist in an editor preview of this scene.
+	if not Engine.is_editor_hint():
+		Tutorial.attach(self, "dealer")
+
+## True while something the tutorial does not script owns this screen (issue #105). The
+## odds table is the one that matters: every post-run visit opens with it — the target
+## break as well as a flatline — and a coaching mask over it left the player unable to
+## spend their tokens OR close the table, with the dealer's own START masked behind it.
+## The tutorial stands down until these are gone.
+func tutorial_blocking_modal() -> bool:
+	if _odds_overlay != null and is_instance_valid(_odds_overlay) and _odds_overlay.visible:
+		return true
+	if _augment_picker != null and is_instance_valid(_augment_picker):
+		return true
+	if _unlock_popup != null and is_instance_valid(_unlock_popup) and _unlock_popup.visible:
+		return true
+	return false
+
+## Whether the thing a tutorial beat is about is on screen here yet (issue #105).
+func tutorial_ready_for(id: String) -> bool:
+	match id:
+		"odds":
+			return _odds_overlay != null and is_instance_valid(_odds_overlay) \
+				and _odds_overlay.visible
+	return true
+
+## Tutorial anchors (issue #105) — see machine_scene.tutorial_anchor. The counter's slots
+## are authored, so the row is measured off the slots themselves rather than guessed.
+func tutorial_anchor(id: String) -> Rect2:
+	match id:
+		"offers":
+			if _offer_slots.is_empty():
+				return Rect2(0.0, ITEM_TOP - 4.0, 160.0, Assets.STASH_ICON_SIZE + 8.0)
+			var row: Rect2 = (_offer_slots[0] as Control).get_rect()
+			for slot: Control in _offer_slots:
+				row = row.merge(slot.get_rect())
+			return row
+		"screen":
+			# The whole canvas: nothing masked and nothing ringed, for a beat about a screen
+			# that owns everything (the odds table).
+			return Rect2(0.0, 0.0, 160.0, 320.0)
+	return Rect2()
 
 func _bind_scene_nodes() -> void:
 	_background_sprite = get_node_or_null("Background")
@@ -582,7 +628,7 @@ func _build_hud() -> void:
 	_build_campaign_label()
 	if _options_button != null or _start_button != null or _credits_row != null:
 		if _options_button != null:
-			Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
+			ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 			var options_cb := Callable(self, "_toggle_options_overlay")
 			if not _options_button.pressed.is_connected(options_cb):
 				_options_button.pressed.connect(options_cb)
@@ -599,10 +645,10 @@ func _build_hud() -> void:
 	# in-run: LEAVE declines. Both ride the 2-frame settings sheet (normal, pressed).
 	var back := TextureButton.new()
 	back.name = "options"
-	back.custom_minimum_size = Vector2(20.0, 18.0)
-	back.size = Vector2(20.0, 18.0)
-	back.position = Vector2(9.0, 15.0)
-	Assets.skin_icon_button(back, SETTINGS_ASSET, 1)
+	back.custom_minimum_size = BACK_BUTTON_SIZE
+	back.size = BACK_BUTTON_SIZE
+	back.position = BACK_BUTTON_POS
+	ButtonKit.skin_icon_button(back, SETTINGS_ASSET, 1)
 	back.pressed.connect(_toggle_options_overlay)
 	add_child(back)
 	_options_button = back
@@ -617,14 +663,15 @@ func _build_hud() -> void:
 		# Right-edge placement is parametric on size.x, so it stays correct on art swaps.
 		const ARROW_W := 39.0
 		const ARROW_H := 24.0
+		const EDGE_MARGIN := 3.0
 		var start := Button.new()
 		start.text = "START"
 		start.size = Vector2(ARROW_W, ARROW_H)
-		start.position = Vector2(160.0 - start.size.x - 3.0, (320.0 - start.size.y) * 0.5)
+		start.position = Vector2(CANVAS_W - start.size.x - EDGE_MARGIN, (CANVAS_H - start.size.y) * 0.5)
 		start.add_theme_font_size_override("font_size", 8)
 		if _font != null:
 			start.add_theme_font_override("font", _font)
-		Assets.skin_sheet_button(start, "ui/arrow_button.png", 3)
+		ButtonKit.skin_sheet_button(start, "ui/arrow_button.png", 3)
 		_apply_button_text_margin(start)
 		start.pressed.connect(_confirm_start_run)
 		add_child(start)
@@ -638,7 +685,7 @@ func _build_campaign_label() -> void:
 		bottom_hud = Control.new()
 		bottom_hud.name = "BottomHudLayer"
 		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.size = Vector2(CANVAS_W, CANVAS_H)
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
@@ -1227,8 +1274,8 @@ func _confirm_button(node_name: String, text: String, border_color: Color, cb: C
 	b.name = node_name
 	b.text = text
 	b.custom_minimum_size = min_size
-	Assets.small_neon_button_style(b, border_color, 7)
-	Assets.start_menu_button_press_feedback(b)
+	ButtonKit.small_neon_button_style(b, border_color, 7)
+	ButtonKit.start_menu_button_press_feedback(b)
 	b.pressed.connect(cb)
 	return b
 
@@ -1270,7 +1317,7 @@ func _build_credits_display() -> void:
 			_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			_refresh_credits()
 		if _credits_coin != null:
-			_credits_coin.custom_minimum_size = Vector2(9.0, 9.0)
+			_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
 			_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -1301,7 +1348,7 @@ func _build_credits_display() -> void:
 	var coin := TextureRect.new()
 	coin.name = "Coin"
 	coin.texture = Assets.texture(COIN_ASSET, true)
-	coin.custom_minimum_size = Vector2(9.0, 9.0)
+	coin.custom_minimum_size = CREDITS_COIN_SIZE
 	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -1359,14 +1406,16 @@ func _select(id: String) -> void:
 		# hints (a second green line when one word needs context) — no explanatory
 		# message text; the vague hints are all the dealer gives away.
 		var entry: Dictionary = amap[id]
+		# tr() on the hint alone: the label auto-translates the string it is handed, and the
+		# "+ " already stuck to the front makes it a key no table has.
 		var hints: Array = entry.get("hints", [])
-		_tv_pos.text = ("+ %s" % String(hints[0])) if hints.size() > 0 else ""
-		_tv_neg.text = ("+ %s" % String(hints[1])) if hints.size() > 1 else ""
+		_tv_pos.text = ("+ %s" % tr(String(hints[0]))) if hints.size() > 0 else ""
+		_tv_neg.text = ("+ %s" % tr(String(hints[1]))) if hints.size() > 1 else ""
 		_tv_neg.add_theme_color_override(&"font_color", Color(0.13, 0.77, 0.37))
 	else:
 		var h: Dictionary = item_hints.get(id, FALLBACK_HINT)
-		_tv_pos.text = "+ %s" % String(h["pos"])
-		_tv_neg.text = "- %s" % String(h["neg"])
+		_tv_pos.text = "+ %s" % tr(String(h["pos"]))
+		_tv_neg.text = "- %s" % tr(String(h["neg"]))
 		_tv_neg.add_theme_color_override(&"font_color", Color(0.94, 0.27, 0.27))
 	# The "-" glyph is half a pixel narrower than "+" in this font, so a "- " line
 	# needs a +0.5px nudge for its word to line up with the "+ " line above.
@@ -1439,7 +1488,7 @@ func _begin_drag_visual() -> void:
 	_drag_node.z_index = 10
 	_drag_node.scale = Vector2(1.25, 1.25)
 	_drag_node.modulate = Color(1.2, 1.2, 1.2)
-	Assets.add_drag_shadow(_drag_node)
+	DragShadow.add_drag_shadow(_drag_node)
 
 func _update_drag_position(pos: Vector2) -> void:
 	if _drag_node == null:
@@ -1474,7 +1523,7 @@ func _end_drag(release_pos: Vector2) -> void:
 	_drag_active = false
 	_drag_node = null
 	if node != null:
-		Assets.remove_drag_shadow(node)
+		DragShadow.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _drag_home # snap back
 		node.scale = Vector2.ONE

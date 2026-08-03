@@ -130,6 +130,16 @@ static func check_dealer(out: Array) -> void:
 		var got := Dealer.evaluate_dealer_trigger(c["input"])
 		if not deep_equal(got, c["expect"]):
 			_fail(out, "evaluateDealerTrigger " + str(c["input"]), got, c["expect"])
+	# The item effect tables themselves. The vectors carried them as documentation only,
+	# which let the file drift out of step with the code (it still listed a compulsion on
+	# the Cocktail long after the Energy Drink took it over). They are now pinned, in both
+	# the classic and the joker form a run can deal them in (issue #111).
+	for key in ["inRunItems", "jokerInRunItems"]:
+		var joker: bool = key == "jokerInRunItems"
+		for c in data[key]:
+			var got: Variant = InRunItems.effect_for(String(c["id"]), joker)
+			if not deep_equal(got, c["effect"]):
+				_fail(out, "%s %s" % [key, String(c["id"])], got, c["effect"])
 
 # Painting reroll (issue #117): deterministic, seed-driven like pick_dealer_items.
 static func check_dealer_reroll(out: Array) -> void:

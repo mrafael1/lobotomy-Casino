@@ -5,8 +5,11 @@ extends RefCounted
 ## pinned in dealer_vectors.json -> inRunItems.
 
 const LIST := [
-	{ "id": "item_energy_drink", "name": "Energy Drink", "corrupt": true,
-	  "effect": { "type": "skipDecay", "spins": 2, "blockBet": "x3", "compulsiveSpins": 1 } },
+	# The Energy Drink is two free spins and nothing else. It used to pin the gauge at x2
+	# and queue a compulsory spin afterwards, which made the run's most common item a
+	# trade the player kept declining; the rush is now simply the item.
+	{ "id": "item_energy_drink", "name": "Energy Drink",
+	  "effect": { "type": "skipDecay", "spins": 2 } },
 	{ "id": "item_cocktail", "name": "Cocktail",
 	  "effect": { "type": "cocktailBoost", "spins": 2 } },
 	{ "id": "item_water", "name": "Water",
@@ -14,6 +17,32 @@ const LIST := [
 	{ "id": "item_pill", "name": "Red Pill", "corrupt": true,
 	  "effect": { "type": "forceFlatlinesThenTriple", "flatSpins": 1, "guaranteedTripleNext": true } },
 ]
+
+## Joker Augmented runs (issue #111) deal these four instead: the same four items with
+## the same ids, turned against the player. Keeping the ids means the stash, the icons,
+## the badges and the save format need no second pool — only the effect looked up here
+## and the inverted colour the art renders in differ.
+##
+## Each is the mirror of what the item normally does: the drink's rush becomes the
+## compulsion alone, Water drains the gauge it should have filled, the Red Pill's forced
+## flatline shrinks to a single reel with no triple owed back, and the Cocktail's rarity
+## points are charged instead of paid.
+const JOKER_EFFECTS := {
+	"item_energy_drink": { "type": "compulsion", "compulsiveSpins": 1 },
+	"item_cocktail": { "type": "cocktailMalus", "spins": 2 },
+	"item_water": { "type": "drainPowerBar" },
+	"item_pill": { "type": "flatlineOneReel", "spins": 1 },
+}
+
+## The effect an item actually applies. `joker` is the run asking, not the item: the same
+## stashed Water is a gift on a classic run and a drain on a joker one.
+static func effect_for(item_id: String, joker: bool) -> Variant:
+	var entry: Variant = map().get(item_id, null)
+	if entry == null:
+		return null
+	if joker and JOKER_EFFECTS.has(item_id):
+		return JOKER_EFFECTS[item_id]
+	return (entry as Dictionary)["effect"]
 
 ## Rarity points the Cocktail pays per VISIBLE reel. Rarer symbol, bigger point.
 const COCKTAIL_RARITY_POINTS := {

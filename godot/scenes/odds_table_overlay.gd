@@ -309,7 +309,7 @@ func _rebuild() -> void:
 	done.add_theme_font_size_override("font_size", 5)
 	if _font != null:
 		done.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(done, Assets.START_MENU_BUTTON_CYAN, 5, 2.0)
+	ButtonKit.small_neon_button_style(done, ButtonKit.START_MENU_BUTTON_CYAN, 5, 2.0)
 	done.custom_minimum_size = Vector2.ZERO
 	done.button_down.connect(_on_done_button_down.bind(done))
 	done.button_up.connect(_on_done_button_up.bind(done))
@@ -524,9 +524,14 @@ func _make_pct_bubble(text: String, symbol_id: String) -> Control:
 	label.name = "PctLabel"
 	label.text = text
 	# Fill the whole bubble so the centered alignment is symmetric (the old
-	# fixed insets left the text visibly off-centre).
-	label.position = Vector2.ZERO
-	label.size = popup_size
+	# fixed insets left the text visibly off-centre). Inset from the TOP by twice the
+	# cap-height nudge: that moves the rect's centre — and so the glyphs — down by one
+	# without letting the label hang past the bubble it belongs to. Godot centres the
+	# font's ascent+descent box, and a percentage never uses the descent, so it renders
+	# a pixel high without this.
+	var nudge := Assets.centered_text_nudge(5)
+	label.position = Vector2(0.0, nudge * 2.0)
+	label.size = Vector2(popup_size.x, popup_size.y - nudge * 2.0)
 	label.custom_minimum_size = Vector2.ZERO
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.clip_text = true
@@ -539,7 +544,9 @@ func _make_pct_bubble(text: String, symbol_id: String) -> Control:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	bg.add_child(label)
-	label.set_deferred("size", popup_size)
+	# Re-asserted once the label is in the tree: out of the tree a Label measures its own
+	# minimum with the default 16px theme font and the size above gets clamped up to it.
+	label.set_deferred("size", Vector2(popup_size.x, popup_size.y - nudge * 2.0))
 	bubble.size = popup_size
 	return bubble
 

@@ -6,6 +6,7 @@ const MIN_VOLUME_DB := -48.0
 const MAX_VOLUME_DB := 0.0
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
+const MUTE_ROW_MIN_SIZE := Vector2(108.0, 20.0) # tap target; survives the plate being gone
 
 @export var audio_bus_name: StringName = &"Master":
 	set(value):
@@ -20,8 +21,11 @@ const NEON_PINK := Color(1.0, 0.5, 0.7)
 @onready var _title := $Panel/Rows/Title as Label
 @onready var _volume_title := $Panel/Rows/VolumeTitle as Label
 
+## This screen is audio settings only. Replaying the tutorial (issue #105) lives on the
+## OPTIONS overlay one level up, with the other things a player comes here to DO.
+
 func _ready() -> void:
-	_apply_font(self)
+	UiKit.apply_font(self)
 	_style_controls()
 	_connect_controls()
 	_refresh_controls()
@@ -36,7 +40,7 @@ func _connect_controls() -> void:
 
 func _style_controls() -> void:
 	if _panel != null:
-		var panel_style := Assets.neon_panel_style(NEON_CYAN, 8.0)
+		var panel_style := ButtonKit.neon_panel_style(NEON_CYAN, 8.0)
 		panel_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.42)
 		panel_style.shadow_size = 3
 		_panel.add_theme_stylebox_override("panel", panel_style)
@@ -70,11 +74,25 @@ func _style_controls() -> void:
 		_volume_slider.add_theme_icon_override("grabber_highlight", grabber)
 		_volume_slider.add_theme_icon_override("grabber_disabled", grabber)
 	if _mute_check != null:
-		_mute_check.custom_minimum_size = Vector2(108.0, 20.0)
-		_mute_check.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# NO button plate. MUTE is a toggle, not an action, and wearing the same neon
+		# button art as BACK made it read as one — two buttons stacked, one of which
+		# mysteriously did not navigate. The box and its tick carry the state on their
+		# own, so every state gets an empty stylebox and the row keeps only its label.
+		# The minimum stays: the plate is gone, the tap target is not.
+		_mute_check.custom_minimum_size = MUTE_ROW_MIN_SIZE
+		# Left, so the label sits against the box it belongs to instead of floating in the
+		# middle of a row with no plate to centre it in.
+		_mute_check.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_mute_check.add_theme_constant_override("icon_max_width", 9)
-		Assets.start_menu_button_style(_mute_check, NEON_PINK, 7)
-		Assets.start_menu_button_press_feedback(_mute_check)
+		for state in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
+			_mute_check.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		# Without the plate's styling the label would fall back to the default theme's
+		# colours on hover and press; pin them so it stays the same pink throughout.
+		for color_state in ["font_color", "font_hover_color", "font_pressed_color",
+				"font_hover_pressed_color", "font_focus_color"]:
+			_mute_check.add_theme_color_override(color_state, NEON_PINK)
+		_mute_check.focus_mode = Control.FOCUS_NONE
+		_mute_check.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var unchecked_icon := _make_checkbox_icon(false)
 		var checked_icon := _make_checkbox_icon(true)
 		_mute_check.add_theme_icon_override("unchecked", unchecked_icon)
@@ -82,8 +100,8 @@ func _style_controls() -> void:
 		_mute_check.add_theme_icon_override("unchecked_disabled", unchecked_icon)
 		_mute_check.add_theme_icon_override("checked_disabled", checked_icon)
 	if _back_button != null:
-		Assets.start_menu_button_style(_back_button, NEON_CYAN, 8)
-		Assets.start_menu_button_press_feedback(_back_button)
+		ButtonKit.start_menu_button_style(_back_button, NEON_CYAN, 8)
+		ButtonKit.start_menu_button_press_feedback(_back_button)
 
 func _style_label(label: Label, color: Color, font_size: int) -> void:
 	if label == null:
@@ -122,16 +140,6 @@ func _make_checkbox_icon(checked: bool) -> ImageTexture:
 			image.set_pixel(pixel.x, pixel.y, NEON_CYAN)
 	return ImageTexture.create_from_image(image)
 
-func _apply_font(node: Node) -> void:
-	var font := Assets.font()
-	for child in node.get_children():
-		if child is Label and font != null:
-			(child as Label).add_theme_font_override("font", font)
-		elif child is Button and font != null:
-			(child as Button).add_theme_font_override("font", font)
-		elif child is CheckBox and font != null:
-			(child as CheckBox).add_theme_font_override("font", font)
-		_apply_font(child)
 
 func _bus_index() -> int:
 	var index := AudioServer.get_bus_index(audio_bus_name)

@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://ctfw6ye0dd3y6"
+
+[deps]
+
+files=["res://assets/locale/game.en.translation", "res://assets/locale/game.fr.translation"]
+
+source_file="res://assets/locale/game.csv"
+dest_files=["res://assets/locale/game.en.translation", "res://assets/locale/game.fr.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

@@ -16,6 +16,16 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 # still seed wallet state through MetaStateStore or save JSON when needed.
 const DEBUG := false
 
+# Layout, in virtual-canvas px. The column is the canvas inset on both sides; the
+# readability scrim sits a little proud of it so the art still breathes at the edge.
+const CANVAS_W := 160.0
+const PANEL_INSET := 6.0
+const PANEL_W := CANVAS_W - PANEL_INSET * 2.0  # 148
+const LIST_W := PANEL_W - 2.0                  # 146: room for the scrollbar
+const SCROLL_H := 196.0
+const FOOTER_Y := 262.0
+const READABILITY_RECT := Rect2(3.0, 3.0, 154.0, 286.0)
+
 const ITEM_ICONS := {
 	"cons_focus": "items/focus_serum.png",
 	"cons_cigarette": "items/cigarette.png",
@@ -116,8 +126,8 @@ func _build_shop_art_background() -> void:
 
 	var readability := ColorRect.new()
 	readability.color = Color(0.02, 0.015, 0.035, 0.68)
-	readability.position = Vector2(3, 3)
-	readability.size = Vector2(154, 286)
+	readability.position = READABILITY_RECT.position
+	readability.size = READABILITY_RECT.size
 	add_child(readability)
 
 func _label(text: String, size: int, color: Color) -> Label:
@@ -144,13 +154,13 @@ func _build() -> void:
 		_connect_scene_button(_start_button, _start_run)
 		_connect_scene_button(_scores_button, _go_scores)
 		if _menu_button != null:
-			Assets.skin_negative_button(_menu_button)
+			ButtonKit.skin_negative_button(_menu_button)
 			_connect_scene_button(_menu_button, _go_menu)
 		return
 
 	var root := VBoxContainer.new()
-	root.position = Vector2(6, 6)
-	root.custom_minimum_size = Vector2(148, 0)
+	root.position = Vector2(PANEL_INSET, PANEL_INSET)
+	root.custom_minimum_size = Vector2(PANEL_W, 0.0)
 	add_child(root)
 
 	root.add_child(_label("LOBOTOMY — SHOP", 11, Color(0.8, 0.9, 1.0)))
@@ -160,10 +170,10 @@ func _build() -> void:
 	root.add_child(_endings)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(148, 196)
+	scroll.custom_minimum_size = Vector2(PANEL_W, SCROLL_H)
 	root.add_child(scroll)
 	_list = VBoxContainer.new()
-	_list.custom_minimum_size = Vector2(146, 0)
+	_list.custom_minimum_size = Vector2(LIST_W, 0.0)
 	scroll.add_child(_list)
 
 	_list.add_child(_label("— UPGRADES —", 8, Color(1.0, 0.7, 0.5)))
@@ -176,7 +186,7 @@ func _build() -> void:
 	# Footer sits well above the bottom-right stash row (issue #26) so the wide button
 	# row never overlaps the corner stash icons.
 	var footer := HBoxContainer.new()
-	footer.position = Vector2(6, 262)
+	footer.position = Vector2(PANEL_INSET, FOOTER_Y)
 	add_child(footer)
 	var start := _styled_button("START RUN", 10)
 	start.pressed.connect(_start_run)
@@ -185,7 +195,7 @@ func _build() -> void:
 	scores.pressed.connect(_go_scores)
 	footer.add_child(scores)
 	var back := _styled_button("MENU", 8)
-	Assets.skin_negative_button(back)
+	ButtonKit.skin_negative_button(back)
 	back.pressed.connect(_go_menu)
 	footer.add_child(back)
 	if DEBUG:
@@ -241,7 +251,7 @@ func _refresh() -> void:
 	var wallet := 0 if Engine.is_editor_hint() else MetaStateStore.lucidityWallet
 	var history: Dictionary = {} if Engine.is_editor_hint() else MetaStateStore.history
 	var reached: Array = [] if Engine.is_editor_hint() else MetaStateStore.endingsReached
-	_header.text = "CREDITS %d   RUNS %d   BEST %d" % [
+	_header.text = tr("CREDITS %d   RUNS %d   BEST %d") % [
 		wallet,
 		int(history.get("runsPlayed", 0)),
 		int(history.get("bestScoreRun", 0)),
@@ -251,8 +261,14 @@ func _refresh() -> void:
 	# native px (no resampling), so it sizes itself; right-align it to the column.
 	if not Engine.is_editor_hint() and _campaign_meter == null:
 		_campaign_meter = NeuronMeter.attach(_header, Vector2.ZERO)
-		_campaign_meter.position = Vector2(148.0 - _campaign_meter.size.x, -2.0)
-	_endings.text = "REACHED: %s" % ("none" if reached.is_empty() else ", ".join(PackedStringArray(reached)))
+		_campaign_meter.position = Vector2(PANEL_W - _campaign_meter.size.x, -2.0)
+	# The endings are stored as IDs ("wealth", "flatline"); translate each before joining,
+	# or the line reads as a list of English identifiers in a French screen.
+	var reached_names := PackedStringArray()
+	for ending_id in reached:
+		reached_names.append(tr(String(ending_id)))
+	_endings.text = tr("REACHED: %s") % (tr("none") if reached.is_empty() \
+		else ", ".join(reached_names))
 
 	var owned: Array = [] if Engine.is_editor_hint() else MetaStateStore.ownedPermanents
 	for u in Upgrades.all_upgrades():
@@ -260,14 +276,17 @@ func _refresh() -> void:
 		var b: Button = _rows["U:" + id]
 		var cost := int(u["cost"])
 		var tier := (" " + String(u["tierLabel"])) if u.has("tierLabel") else ""
+		# The row is assembled here, so the upgrade's own name and the row template each
+		# have to be translated before they are joined — the finished row is not a key.
+		var upgrade_name := tr(String(u["name"]))
 		if owned.has(id):
-			b.text = "%s%s  OWNED" % [String(u["name"]), tier]
+			b.text = tr("%s%s  OWNED") % [upgrade_name, tier]
 			b.disabled = true
 		elif u.has("requiresId") and not owned.has(String(u["requiresId"])):
-			b.text = "%s%s  (needs prev)" % [String(u["name"]), tier]
+			b.text = tr("%s%s  (needs prev)") % [upgrade_name, tier]
 			b.disabled = true
 		else:
-			b.text = "%s%s  %dL" % [String(u["name"]), tier, cost]
+			b.text = "%s%s  %dL" % [upgrade_name, tier, cost]
 			b.disabled = wallet < cost
 
 	# Consumables are dealer-run items now; the old pre-run purchase/stash UI is

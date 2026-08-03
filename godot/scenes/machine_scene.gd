@@ -12,6 +12,7 @@ extends Node2D
 const SRC_W := 160.0
 const SRC_H := 320.0
 const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 # Geometry measured from the authored machine art (source px).
@@ -381,8 +382,10 @@ const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 # script's compile chain breaks headless -s runs, which compile before autoloads).
 # Augmented Run badge (issue #111): active-suit indicator, hold to peek at the
 # run's restrictions.
-const AUGMENTED_BADGE_POS := Vector2(27.0, 6.0) # top strip, right of the options gear
-const AUGMENTED_BADGE_SIZE := 14.0
+# Left of the wealth bar, on its plate's own line: the plate's art starts at x39 and runs
+# y242..278, so a 14px badge at x22 leaves a 3px gap and centres on it. The suit belongs
+# beside the number the run is played for, not off in the top strip with the settings.
+## The suit's own gold, on the badge and on the bubble it raises.
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
 # Pressing it opens the current card(s) and effects.
@@ -390,15 +393,8 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
 # and the same 14px pitch, so the whole strip reads as one row of chips.
 const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
-const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
-const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
-const PACTE_AUGMENT_BADGE_PITCH := 14.0
-const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 10.0
-const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
 	"eye": Color("#ce3dde"),
@@ -485,6 +481,21 @@ const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
 const RESTORE_CAP_SHEET := "machine new view/restore_cap.png"
 const RESTORE_CAP_FRAMES := 2
 
+# Augmented spade (issue #111) makes a spent charge take two spins to come back, so the
+# two pips under the light are a countdown rather than a state: BOTH DARK while a charge
+# is banked (a lit light has nothing to count down to), then one pip per spin waited, the
+# second landing on the same spin the light returns. Anchoring them to the player's own
+# spend is what makes the wait plannable instead of arbitrary.
+# The light itself is authored at x142..152, y58..68 of the full canvas; the pips sit in
+# the clear strip directly beneath it.
+const RESTORE_SPADE_WAITING_TINT := Color(0.45, 0.62, 1.0)
+const RESTORE_CYCLE_PIP_RECTS: Array[Rect2] = [
+	Rect2(143.0, 71.0, 3.0, 2.0),
+	Rect2(148.0, 71.0, 3.0, 2.0),
+]
+const RESTORE_CYCLE_PIP_ON := Color(1.0, 0.86, 0.2)
+const RESTORE_CYCLE_PIP_OFF := Color(0.24, 0.26, 0.34)
+
 # Power restored (issue #181). The coin that used to fly the gauge -> button carried the
 # causality: it SHOWED the light paying for the power. Without it the light just switched
 # off and the button quietly re-enabled, two unrelated-looking events. The replacement is
@@ -545,7 +556,10 @@ const DURATION_BOOSTS := [
 			{ "counter": "pendingCompulsiveSpinSkips", "negative": true },
 			{ "counter": "compulsiveSpinSkips", "negative": true },
 		],
-		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH, THEN ONE FORCED SPIN." },
+		"title": "ENERGY DRINK", "desc": "SPINS COST NO HEALTH.",
+		# On a joker run the drink is the compulsion alone: the same badge, but every
+		# phase it can reach is the red one.
+		"jokerDesc": "THE MACHINE TAKES THE NEXT SPIN." },
 	{ "counter": "guaranteeSymbolSpins", "id": "cons_focus", "symbolField": "guaranteeSymbolId",
 		"title": "SERUM", "desc": "THIS SYMBOL IS GUARANTEED TO APPEAR." },
 	{ "counter": "blurReelsSpins", "id": "cons_focus",
@@ -564,6 +578,12 @@ const DURATION_BOOSTS := [
 			{ "counter": "guaranteedTripleSpins" },
 		],
 		"title": "RED PILL", "desc": "A FORCED FLATLINE FIRST, THEN A GUARANTEED TRIPLE." },
+	# Joker items (issue #111). They ride their own counters, so these entries are simply
+	# never active on a run that is not dealing the inverted four.
+	{ "counter": "cocktailMalusSpins", "id": "item_cocktail", "negative": true,
+		"title": "COCKTAIL", "desc": "EVERY WIN PAYS ITS RARITY POINTS BACK." },
+	{ "counter": "jokerFlatlineSpins", "id": "item_pill", "negative": true,
+		"title": "RED PILL", "desc": "ONE REEL IS DRAGGED TO FLATLINE." },
 ]
 
 @export_group("Run Balance")
@@ -589,8 +609,19 @@ const DURATION_BOOSTS := [
 	"cons_tea": { "pos": "RESTORE POWER", "neg": "" },
 	"item_water": { "pos": "+40 SCORE & LUCIDITY", "neg": "" },
 	"item_pill": { "pos": "WIN GUARANTEED", "neg": "CLOSE CALL" },
-	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "FORCED SPIN" },
+	"item_energy_drink": { "pos": "2 FREE SPINS", "neg": "" },
 	"item_cocktail": { "pos": "RARITY BONUS", "neg": "" },
+}
+
+## What the same four items say on a joker Augmented run (issue #111), where they are
+## dealt in their turned-against-you form. Each is pure downside, so the positive line is
+## empty and only the red one shows — the mirror of the flavour items above, whose
+## negative is the empty one.
+@export var joker_use_hints: Dictionary = {
+	"item_water": { "pos": "", "neg": "POWER BAR DRAINED" },
+	"item_pill": { "pos": "", "neg": "A REEL FLATLINES" },
+	"item_energy_drink": { "pos": "", "neg": "FORCED SPIN" },
+	"item_cocktail": { "pos": "", "neg": "WINS PAY RARITY BACK" },
 }
 
 ## Items whose downside only bites later (issue #76): the use popup shows just the
@@ -735,17 +766,12 @@ var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
 var _score_pct_buttons: Array[Button] = []
-var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
-var _pacte_augment_badges: Array[Dictionary] = []
-var _pacte_augment_badge: Button = null # first slot; anchors the popup
-var _pacte_augment_badge_icon: TextureRect = null
-var _pacte_augment_count: Label = null
-var _pacte_augment_popup: Control = null
 # Tap-an-item-badge description (issue #185). Lifetime is a plain countdown stepped from
 # _process rather than a tween, so the tween sweeps that clear the run's transient
 # effects can never strand it on screen.
 var _item_info_popup: Control = null
 var _item_info_popup_time := 0.0
+var _item_info_popup_held := false # true while the badge is still under the finger
 var _score_bulb_tween: Tween = null
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
@@ -769,8 +795,6 @@ var _dealer_bar_target_frame: int = 0
 var _dealer_bar_progress_time: float = 0.0
 var _dealer_bar_frame_initialized := false
 var _dealer_warning_wanted := 0    # lights the multiplier has earned (gates the beep)
-var _augment_glitch_time := 0.0
-var _augment_glitch_rng := RandomNumberGenerator.new()
 var _dealer_bar_overlay_beep_time := 0.0
 var _dealer_icon: TextureRect = null
 var _combo_loss_2_sprite: Sprite2D = null
@@ -810,6 +834,12 @@ var _power_anim_tween: Tween = null
 var _power_anim_label: Label = null
 var _cheat_selection_sprite: Sprite2D = null
 var _tv_info_pop_sources: Dictionary = {}
+
+## First component split out of this file (see scenes/machine/augment_display.gd).
+## It reaches back through a MachineView rather than through this node, so what it
+## can touch here is a written-down list instead of all ~210 remaining fields.
+var _view: MachineView = null
+var _augments: AugmentDisplay = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -872,9 +902,9 @@ var _combo_score_pending := -1 # final score held until the COMBO bonus beat lan
 var _power_bar_sprite: Sprite2D = null
 var _restore_cap_sprite: Sprite2D = null # per-spin restore budget lights beside the gauge
 var _restore_cap_glow: Sprite2D = null   # the lit frame, flashed and faded when a charge is spent
+var _restore_cycle_pips: Array[ColorRect] = [] # spade only: which half of the restore cycle is next
 var _restore_flash_tweens: Array[Tween] = []
 var _restore_flash_chip: Sprite2D = null # chip currently pulsing, so it can be reset
-var _augment_plate_sprite: Sprite2D = null # authored augment sockets under the badges
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
 var _power_seen_lucidity := 0    # legacy name: total power points the gauge has accounted for
@@ -961,6 +991,10 @@ var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive s
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
+	# Before any build step: _build_augment_emplacements hands the plate straight to
+	# the display, and that runs inside the sprite pass below.
+	_view = MachineView.new(self)
+	_augments = AugmentDisplay.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -985,18 +1019,94 @@ func _ready() -> void:
 	_build_burst_layer()
 	_build_coin_layer()
 	_build_options_controls()
-	_build_augmented_badge()
+	_augments.build_augmented_badge()
 	_restore_options_overlay_if_requested()
 	_play_pending_scene_feedback()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
-	_augment_glitch_rng.seed = 181_0726
-	_build_pacte_augment_badge()
+	_augments.build_pacte_badges()
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
 	# waits for a quiet moment first — see _can_present_card_unlock.
 	_unlock_popup = UnlockCardPopup.attach_to(self, _can_present_card_unlock)
+	# Inert unless the played tutorial is running (issue #105). The autoload is not a
+	# @tool script, so it does not exist in an editor preview of this scene.
+	if not Engine.is_editor_hint():
+		Tutorial.attach(self, "machine")
+
+## Whether a control the tutorial wants to point at is really on screen yet (issue #105).
+## The dealer's offer hides the machine's own stash while he is in and it slides out over a
+## few frames after an item is taken, so the beat that says "tap the powder" would otherwise
+## open pointing at a stash that is not drawn.
+func tutorial_ready_for(id: String) -> bool:
+	match id:
+		"stash":
+			if _dealer_offer_popup != null:
+				return false
+			if _stash_icons.is_empty():
+				return false
+			var icon: Control = _stash_icons[0] as Control
+			return icon != null and is_instance_valid(icon) and icon.visible
+	return true
+
+## A descendant's position in this scene's own space, whatever it is nested under. The
+## tutorial overlay is a child of this scene, so this is the space its rects live in — and
+## an authored control can sit several nodes deep, where its own position means nothing on
+## its own. Subtracting this scene's origin also keeps the answer right mid-shake, since the
+## machine tweens its own position for the compulsive/cocktail wobbles.
+func _canvas_position_of(node: Control) -> Vector2:
+	return node.global_position - global_position
+
+## True while something the tutorial does not script owns the screen (issue #105) — here,
+## a card unlocked mid-run, which takes the whole machine until it is acknowledged. See
+## dealer_scene.tutorial_blocking_modal.
+func tutorial_blocking_modal() -> bool:
+	return _unlock_popup != null and is_instance_valid(_unlock_popup) and _unlock_popup.visible
+
+## The controls the tutorial rings and hands through (issue #105). Only this scene knows
+## where its own things are, so the director asks rather than reaching in. An id it does
+## not know answers with an empty rect, which the overlay reads as "mask everything".
+func tutorial_anchor(id: String) -> Rect2:
+	match id:
+		"spin_lever":
+			return Rect2(LEVER_HIT["left"], LEVER_HIT["top"],
+				LEVER_HIT["width"], LEVER_HIT["height"])
+		"health":
+			# The spins tube down the cabinet's left flank. Measured off health_bar.png's
+			# tallest frame (x3..19, y44..120), not eyeballed: a highlight that misses the
+			# thing it is naming is worse than no highlight.
+			return Rect2(2.0, 43.0, 18.0, 78.0)
+		"wealth":
+			return Rect2(39.0, 242.0, 97.0, 37.0) # the wealth plate
+		"target_bar":
+			# The bar itself (target_bar.png: x41..111, y94..99) plus the goal number above
+			# it (target_goals.png: y86..91) — the pair is what "the target" means.
+			return Rect2(40.0, 84.0, 72.0, 17.0)
+		"dealer_countdown":
+			return Rect2(DEALER_ICON_POS, DEALER_ICON_SIZE)
+		"reels":
+			return Rect2(REEL_HOLES[0]["left"], REEL_WINDOW["top"],
+				REEL_HOLES[2]["left"] + REEL_HOLES[2]["width"] - REEL_HOLES[0]["left"],
+				REEL_WINDOW["height"])
+		"stash":
+			# The LIVE slot node, not the shared computed layout: this scene's stash slots
+			# are authored in the .tscn, so Assets.stash_slot_pos describes where they would
+			# have gone rather than where they are — which put the ring in the middle of the
+			# stash instead of on the first slot the beat asks the player to tap.
+			if not _stash_icons.is_empty():
+				var icon: Control = _stash_icons[0] as Control
+				if icon != null and is_instance_valid(icon):
+					return Rect2(_canvas_position_of(icon), icon.size).grow(1.0)
+			var slot := Assets.stash_slot_pos(0, max_consumable_slots)
+			return Rect2(slot - Vector2.ONE,
+				Vector2.ONE * (Assets.STASH_ICON_SIZE + 2.0))
+		"dealer_offer", "screen":
+			# Whatever has taken the whole canvas — the dealer walking in, the payout
+			# receipt, the flatline screen. Nothing is masked and nothing is ringed: the
+			# screen IS the subject, and its own buttons carry on with the game.
+			return Rect2(0.0, 0.0, SRC_W, SRC_H)
+	return Rect2()
 
 func _apply_balance_exports() -> void:
 	if Engine.is_editor_hint():
@@ -1472,11 +1582,15 @@ func _build_spins_left_label() -> void:
 ## so the row only ever offers as many beds as the run has augments to put in them (nothing
 ## at all with none). Full-canvas art, so placement is baked in; the code picks the frame and
 ## the layer it draws on: above the cabinet, below the badges themselves.
+## The socket plate is built here because the full-canvas sheet helper and the
+## layering it sits in belong to the machine; AugmentDisplay only shows and frames
+## it, so it is handed over once and owned there from then on.
 func _build_augment_emplacements() -> void:
-	_augment_plate_sprite = _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AUGMENT_PLATE_FRAMES)
-	if _augment_plate_sprite != null:
-		_augment_plate_sprite.z_index = AUGMENT_PLATE_Z_INDEX
-		_augment_plate_sprite.visible = false
+	var plate := _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AugmentDisplay.AUGMENT_PLATE_FRAMES)
+	if plate != null:
+		plate.z_index = AUGMENT_PLATE_Z_INDEX
+		plate.visible = false
+	_augments.attach_plate(plate)
 
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
@@ -1563,7 +1677,30 @@ func _build_restore_cap() -> void:
 	if _restore_cap_glow != null:
 		_restore_cap_glow.visible = false
 		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_build_restore_cycle_pips()
 	_refresh_restore_cap()
+
+## The spade cycle read-out. Built only for a spade/joker run: every other suit refills
+## the charge every spin, where a cycle indicator would say nothing.
+func _build_restore_cycle_pips() -> void:
+	# Free the old nodes before dropping the references: clearing the array alone orphans
+	# live children, so a rebuild would stack a fresh set of pips on top of the last one.
+	for old: ColorRect in _restore_cycle_pips:
+		if is_instance_valid(old):
+			old.queue_free()
+	_restore_cycle_pips.clear()
+	if not RunStateStore.augmented_modifier_active(2):
+		return
+	for rect: Rect2 in RESTORE_CYCLE_PIP_RECTS.slice(0,
+			EconomyConst.SPADE_RESTORE_CYCLE_SPINS):
+		var pip := ColorRect.new()
+		pip.name = "RestoreCyclePip%d" % _restore_cycle_pips.size()
+		pip.position = rect.position
+		pip.size = rect.size
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pip.z_index = 30
+		add_child(pip)
+		_restore_cycle_pips.append(pip)
 
 ## The light is lit while a restore charge is banked, so the player can read what the
 ## economy still owes them before committing a power rather than discovering it on a gauge
@@ -1584,6 +1721,23 @@ func _refresh_restore_cap() -> void:
 		return
 	var spent := EconomyConst.POWER_RESTORE_CHARGE_MAX - _shown_restore_charges()
 	_set_sheet_frame(_restore_cap_sprite, clampi(spent, 0, RESTORE_CAP_FRAMES - 1))
+	# On a spade run a dark light is a wait, not just an empty budget — tint it so the
+	# two read differently at a glance, and let the pips say how much longer.
+	var waiting: bool = spent > 0 and RunStateStore.augmented_modifier_active(2)
+	_restore_cap_sprite.modulate = RESTORE_SPADE_WAITING_TINT if waiting else Color.WHITE
+	_refresh_restore_cycle_pips()
+
+func _refresh_restore_cycle_pips() -> void:
+	if _restore_cycle_pips.is_empty():
+		return
+	# Pips fill left to right as the wait elapses, and are all dark while a charge is
+	# banked: restore_cycle_progress() is 0 in exactly that case.
+	var lit := RunStateStore.restore_cycle_progress()
+	for i in _restore_cycle_pips.size():
+		var pip := _restore_cycle_pips[i]
+		if not is_instance_valid(pip):
+			continue
+		pip.color = RESTORE_CYCLE_PIP_ON if i < lit else RESTORE_CYCLE_PIP_OFF
 
 ## Pooled duration icons on the TV (issue #76): one slot per possible boost, hidden
 ## until active. The icon says WHICH boost, a badge on its bottom-right corner says how
@@ -1642,7 +1796,7 @@ const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
 func _build_boost_indicators() -> void:
 	_boost_indicator_slots.clear()
 	for i in DURATION_BOOSTS.size():
-		# A Button, not a bare Control (issue #185): tapping a badge is how you find out
+		# A Button, not a bare Control (issue #185): HOLDING a badge is how you find out
 		# what the icon means. Flat and untextured, so it stays the authored art with a
 		# hit box on it. Its children keep MOUSE_FILTER_IGNORE so the whole 12px badge
 		# is the target — there is nothing else to hit at that size.
@@ -1655,7 +1809,11 @@ func _build_boost_indicators() -> void:
 		slot.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
 		slot.z_index = 12
 		slot.visible = false
-		slot.pressed.connect(_on_boost_indicator_pressed.bind(i))
+		# Hold to peek, release to dismiss — the same grip the Augmented suit badge and the
+		# score table's info chips use, so every explain-this control on the machine
+		# answers to one gesture instead of each having its own.
+		slot.button_down.connect(_on_boost_indicator_pressed.bind(i))
+		slot.button_up.connect(_on_boost_indicator_released)
 		add_child(slot)
 		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
 		var icon := TextureRect.new()
@@ -1843,9 +2001,105 @@ func _clear_boost_zero_linger() -> void:
 # thing occupying a screen four other systems are already competing for.
 const ITEM_INFO_POPUP_HOLD := 1.0     # seconds fully lit before it starts leaving
 const ITEM_INFO_POPUP_FADE := 0.18
-const ITEM_INFO_POPUP_SIZE := Vector2(104.0, 30.0)
+const ITEM_INFO_POPUP_MAX_WIDTH := 104.0 # wrap before the description leaves the TV
 const ITEM_INFO_POPUP_Z_INDEX := 42   # over the banner, the callouts and the dealer strip
 const ITEM_INFO_POPUP_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+# ── the machine's description bubble ─────────────────────────────────────────────────
+# One builder behind all three explain-this controls (the Augmented suit badge, the
+# augment row on the power bar, the item badges on the TV). The panel HUGS its text
+# instead of being a fixed box the words float inside, and callers set it down a few px
+# from the icon that raised it — a description has to read as attached to the thing it
+# describes, not as a plate that happens to be nearby.
+const INFO_BUBBLE_PAD := Vector2(8.0, 6.0)   # px of panel around the text block
+const INFO_BUBBLE_LINE_H := 8.0              # floor for one row, however short the font
+const INFO_BUBBLE_LINE_SPACING := 3          # pinned on the label so sizing can rely on it
+const INFO_BUBBLE_FONT_SIZE := 5
+const INFO_BUBBLE_GAP := 3.0                 # px between the icon and its bubble
+const INFO_BUBBLE_BG := Color(0.045, 0.035, 0.075, 0.97)
+
+## `max_width` (0 = unbounded) wraps long text rather than letting the bubble run off the
+## panel it belongs to. The returned Control carries the finished size, so the caller can
+## place it against its own edges.
+func _make_info_bubble(node_name: String, source: String, border: Color,
+		font_color: Color, max_width := 0.0) -> Control:
+	# Translated once, up front, with the label's own auto-translation switched off below.
+	# The panel HUGS the text it measures, so measuring English while Godot drew French
+	# would size every bubble for the wrong language. Measure what you draw.
+	var text := tr(source)
+	var font: Font = _font if _font != null else ThemeDB.fallback_font
+	var lines := text.split("\n")
+	var text_w := 0.0
+	for line in lines:
+		text_w = maxf(text_w, font.get_string_size(
+			line, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_BUBBLE_FONT_SIZE).x)
+	var rows := lines.size()
+	if max_width > 0.0 and text_w + INFO_BUBBLE_PAD.x > max_width:
+		# Wrapping splits lines the measurement above cannot see, so ask the font to do the
+		# wrap and report what it produced. Estimating the rows as ceil(width / limit) both
+		# miscounted (word wrapping breaks early, it does not fill every row) and left the
+		# panel pinned to the full max_width — which is why a wrapped description used to
+		# sit in a box with more slack on one side than the other.
+		var inner := max_width - INFO_BUBBLE_PAD.x
+		var wrapped := font.get_multiline_string_size(
+			text, HORIZONTAL_ALIGNMENT_LEFT, inner, INFO_BUBBLE_FONT_SIZE)
+		text_w = minf(inner, wrapped.x)
+		rows = maxi(1, roundi(wrapped.y / maxf(1.0, font.get_height(INFO_BUBBLE_FONT_SIZE))))
+	# A row is the font's own line box PLUS the label's line spacing, which is pinned
+	# below so the two always agree. Sizing on the nominal 8px instead left the last line
+	# of a tall bubble (the joker suit lists seven) hanging out under its own border.
+	var line_h := maxf(INFO_BUBBLE_LINE_H,
+		font.get_height(INFO_BUBBLE_FONT_SIZE) + INFO_BUBBLE_LINE_SPACING)
+	var popup_size := Vector2(text_w + INFO_BUBBLE_PAD.x,
+		float(rows) * line_h + INFO_BUBBLE_PAD.y)
+	var popup := Control.new()
+	popup.name = node_name
+	popup.size = popup_size
+	# Purely informational, and it sits over live controls — it must never eat a tap.
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = INFO_BUBBLE_BG
+	bg_style.border_color = border
+	bg_style.set_border_width_all(1)
+	bg_style.set_corner_radius_all(3)
+	var bg := Panel.new()
+	bg.size = popup_size
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", bg_style)
+	popup.add_child(bg)
+	var label := Label.new()
+	label.name = "Text"
+	# ANCHORED to the panel rather than given a size, and that is not a style choice: a
+	# Control clamps an assigned size up to its minimum, and a Label built outside the
+	# scene tree measures its minimum with the DEFAULT 16px theme font (theme overrides
+	# only reach the metric cache once the node is in a tree). A one-row bubble asked for a
+	# 10px-tall label, got a 19px one, and centred its line below its own border. Anchors
+	# are recomputed from the parent whenever the metrics settle, so the rect self-corrects
+	# the moment the popup is added to the scene.
+	label.anchor_right = 1.0
+	label.anchor_bottom = 1.0
+	var nudge := Assets.centered_text_nudge(INFO_BUBBLE_FONT_SIZE)
+	label.offset_left = INFO_BUBBLE_PAD.x * 0.5
+	label.offset_top = INFO_BUBBLE_PAD.y * 0.5 + nudge
+	label.offset_right = -INFO_BUBBLE_PAD.x * 0.5
+	label.offset_bottom = -INFO_BUBBLE_PAD.y * 0.5 + nudge
+	label.text = text
+	# Already translated above; translating again would look up a French key.
+	label.auto_translate_mode = Control.AUTO_TRANSLATE_MODE_DISABLED
+	if max_width > 0.0:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", INFO_BUBBLE_FONT_SIZE)
+	label.add_theme_constant_override("line_spacing", INFO_BUBBLE_LINE_SPACING)
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_color_override("font_color", font_color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 1)
+	bg.add_child(label)
+	return popup
 
 func _on_boost_indicator_pressed(slot_index: int) -> void:
 	if slot_index < 0 or slot_index >= _boost_indicator_slots.size():
@@ -1855,6 +2109,15 @@ func _on_boost_indicator_pressed(slot_index: int) -> void:
 		return
 	_show_item_info_popup(entry["boost"] as Dictionary, (entry["slot"] as Control).position)
 
+## Released: the description starts leaving. It is not cut off — the hold timer is wound
+## forward to the end of its dwell so the existing fade plays out from here, which is why
+## letting go looks the same as a popup that timed out on its own.
+func _on_boost_indicator_released() -> void:
+	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	_item_info_popup_held = false
+	_item_info_popup_time = maxf(_item_info_popup_time, ITEM_INFO_POPUP_HOLD)
+
 ## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
 ## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
 func _item_info_popup_text(boost: Dictionary) -> String:
@@ -1862,11 +2125,18 @@ func _item_info_popup_text(boost: Dictionary) -> String:
 	if title == "":
 		title = _item_display_name(String(boost.get("id", "")))
 	var desc := String(boost.get("desc", ""))
+	# An item the joker run has turned around describes what it is doing NOW (issue #111).
+	if RunStateStore.augmented_joker_items_active() and boost.has("jokerDesc"):
+		desc = String(boost["jokerDesc"])
+	# Translated part by part: the bubble auto-translates the whole string it is handed, and
+	# "COCKTAIL\n+1 SPIN ON EVERY WIN" glued together is not a key.
+	title = tr(title)
+	desc = tr(desc) if desc != "" else desc
 	var symbol_field := String(boost.get("symbolField", ""))
 	if symbol_field != "":
 		var symbol_id := String(RunStateStore.get(symbol_field))
 		if symbol_id != "":
-			desc = "%s: %s" % [symbol_id.to_upper(), desc]
+			desc = "%s: %s" % [tr(symbol_id.to_upper()), desc]
 	if desc == "":
 		return title
 	return "%s\n%s" % [title, desc]
@@ -1878,54 +2148,32 @@ func _show_item_info_popup(boost: Dictionary, anchor: Vector2) -> void:
 	var text := _item_info_popup_text(boost)
 	if text == "":
 		return
-	var popup := Control.new()
-	popup.name = "ItemInfoPopup"
+	var popup := _make_info_bubble("ItemInfoPopup", text, NEON_CYAN,
+		Color(0.88, 0.98, 1.0), ITEM_INFO_POPUP_MAX_WIDTH)
 	popup.z_index = ITEM_INFO_POPUP_Z_INDEX
-	# Purely informational, and it sits over live controls — it must never eat a tap.
-	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = ITEM_INFO_POPUP_BG
-	bg_style.border_color = NEON_CYAN
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.size = ITEM_INFO_POPUP_SIZE
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.add_theme_stylebox_override("panel", bg_style)
-	popup.add_child(bg)
-	var label := Label.new()
-	label.name = "Text"
-	label.position = Vector2(4.0, 3.0)
-	label.size = ITEM_INFO_POPUP_SIZE - Vector2(8.0, 6.0)
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
-	# Above the badge that was tapped, right-aligned to it, then clamped into the TV so a
-	# badge near either bezel still shows the whole box.
+	# Sitting on the badge being held: centred over it and a hair above, so the words are
+	# next to the icon they belong to. Then clamped into the TV, because a badge near
+	# either bezel would otherwise push half the description off the screen.
 	var pos := anchor + Vector2(
-		BOOST_ICON_SIZE - ITEM_INFO_POPUP_SIZE.x, -ITEM_INFO_POPUP_SIZE.y - 2.0)
+		(BOOST_ICON_SIZE - popup.size.x) * 0.5, -popup.size.y - INFO_BUBBLE_GAP + 1.0)
 	pos.x = clampf(pos.x, float(TV_SCREEN["left"]) + 1.0,
-		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - ITEM_INFO_POPUP_SIZE.x - 1.0)
+		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - popup.size.x - 1.0)
 	pos.y = clampf(pos.y, float(TV_SCREEN["top"]) + 1.0,
-		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - ITEM_INFO_POPUP_SIZE.y - 1.0)
+		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - popup.size.y - 1.0)
 	popup.position = pos.round()
 	_item_info_popup = popup
 	_item_info_popup_time = 0.0
+	_item_info_popup_held = true
 	add_child(popup)
 
-## Ages the popup out on its own. Fades over the last moments rather than vanishing, so
-## a description leaving does not read as a glitch on a screen full of blinking things.
+## Ages the popup out once the badge is let go. Fades over the last moments rather than
+## vanishing, so a description leaving does not read as a glitch on a screen full of
+## blinking things. A held badge never ages: the popup stays up for as long as the player
+## keeps reading it, which is the whole point of holding.
 func _step_item_info_popup(delta: float) -> void:
 	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
+		return
+	if _item_info_popup_held:
 		return
 	_item_info_popup_time += delta
 	var fading := _item_info_popup_time - ITEM_INFO_POPUP_HOLD
@@ -1940,6 +2188,7 @@ func _hide_item_info_popup() -> void:
 		_item_info_popup.queue_free()
 	_item_info_popup = null
 	_item_info_popup_time = 0.0
+	_item_info_popup_held = false
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -2383,14 +2632,14 @@ func _build_score_button() -> void:
 	if not authored:
 		_score_button.size = Vector2(41.0, 15.0)
 		# Pulled off the top-right corner so it isn't glued to the edge.
-		_score_button.position = Vector2(160.0 - _score_button.size.x - 9.0, 9.0)
+		_score_button.position = Vector2(SRC_W - _score_button.size.x - HUD_CORNER_INSET, HUD_CORNER_INSET)
 	_score_button.flat = false
 	_score_button.focus_mode = Control.FOCUS_NONE
 	_score_button.add_theme_font_size_override("font_size", 7)
 	if _font != null:
 		_score_button.add_theme_font_override("font", _font)
-	Assets.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
-	Assets.start_menu_button_press_feedback(_score_button)
+	ButtonKit.small_neon_button_style(_score_button, NEON_CYAN, 7, 2.0)
+	ButtonKit.start_menu_button_press_feedback(_score_button)
 	if not _score_button.pressed.is_connected(_show_score_table):
 		_score_button.pressed.connect(_show_score_table)
 
@@ -2399,10 +2648,10 @@ func _build_options_controls() -> void:
 	if _options_button == null:
 		_options_button = TextureButton.new()
 		_options_button.name = "options"
-		_options_button.position = Vector2(9.0, 9.0)
+		_options_button.position = Vector2(HUD_CORNER_INSET, HUD_CORNER_INSET)
 		_options_button.size = Vector2(20.0, 18.0)
 		add_child(_options_button)
-	Assets.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
+	ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
 	if not _options_button.pressed.is_connected(_toggle_options_overlay):
 		_options_button.pressed.connect(_toggle_options_overlay)
 	_options_overlay = get_node_or_null("OptionsOverlay") as OptionsOverlay
@@ -2490,7 +2739,7 @@ func _build_spin_label() -> void:
 		bottom_hud = Control.new()
 		bottom_hud.name = "BottomHudLayer"
 		bottom_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		bottom_hud.size = Vector2(160.0, 320.0)
+		bottom_hud.size = Vector2(SRC_W, SRC_H)
 		bottom_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_hud.z_index = 120
 		add_child(bottom_hud)
@@ -2929,7 +3178,7 @@ func _process(delta: float) -> void:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
-	_step_augment_glitch(delta)
+	_augments.step_glitch(delta)
 	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
@@ -3223,8 +3472,8 @@ func _start_combo_loss_beep() -> void:
 func _begin_tv_info_pop(source: StringName) -> void:
 	_capture_tv_restore_state()
 	_tv_info_pop_sources[source] = true
-	_hide_pacte_augment_popup()
-	_refresh_pacte_augment_badge()
+	_augments.hide_pacte_popup()
+	_augments.refresh_pacte_badges()
 	_refresh_target_readout()
 	_hide_tv_info_layers()
 
@@ -3247,7 +3496,7 @@ func _end_tv_info_pop(source: StringName) -> void:
 	if not _tv_info_pop_sources.is_empty():
 		return
 	_restore_tv_info_layers()
-	_refresh_pacte_augment_badge()
+	_augments.refresh_pacte_badges()
 	_refresh_target_readout()
 
 ## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
@@ -3451,8 +3700,11 @@ func _show_power_animation(id: String) -> void:
 		if _power_anim_label == null:
 			_power_anim_label = Label.new()
 			_power_anim_label.name = "PowerCalloutName"
-			_power_anim_label.position = Vector2(35.0, 43.0)
-			_power_anim_label.size = Vector2(90.0, 18.0)
+			# Centred band: the x follows the width so a resize can't leave it off-centre.
+			const CALLOUT_SIZE := Vector2(90.0, 18.0)
+			const CALLOUT_Y := 43.0
+			_power_anim_label.size = CALLOUT_SIZE
+			_power_anim_label.position = Vector2((SRC_W - CALLOUT_SIZE.x) * 0.5, CALLOUT_Y)
 			_power_anim_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			_power_anim_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			_power_anim_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3594,7 +3846,7 @@ func _update_hud() -> void:
 		return
 	_refresh_tv_indicators()
 	_refresh_spin_label()
-	_refresh_pacte_augment_badge()
+	_augments.refresh_pacte_badges()
 	_refresh_controls()
 	_refresh_consumable_fx()
 	_maybe_present_card_unlocks()
@@ -3929,7 +4181,7 @@ func _emit_score_burst(source_reel) -> float:
 	var win_type := String(lr["winType"])
 	var reels: Array = lr["reels"]
 	var combo_applied := bool(lr.get("winBoostApplied", false)) \
-		and win_type in ["pair", "triple", "jackpot"]
+		and win_type in SpinResult.PAYING_WIN_TYPES
 	var combo_bonus := maxi(0, int(lr.get("winBoostBonus", 0))) if combo_applied else 0
 	var combo_number := clampi(int(lr.get("winBoostCombo", 1)), 1, COMBO_EFFECT_FRAMES)
 	var combo_percent := clampi(int(lr.get("winBoostPercent", 0)), 0, 45)
@@ -4426,6 +4678,16 @@ func _drive_power_coin_pop(t: float, pop: Sprite2D) -> void:
 		pop.modulate.a = 1.0
 	else:
 		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
+
+## Joker Water: the gauge is emptied and the points that filled it are written off, so the
+## next restore starts from scratch. `_power_seen_lucidity` catches up to the run's current
+## total in the same breath — otherwise the discarded progress would simply be re-planned
+## as a fresh gain on the next spin and the drink would do nothing. Banked score, wealth
+## and already-restored powers are untouched: this costs the next restore, not the run.
+func _drain_power_bar() -> void:
+	_power_bar_score = 0
+	_power_seen_lucidity = _power_point_total()
+	_set_power_bar_frame(0)
 
 ## Resolve the gauge without animation and clear pending restores (visual only). Used on
 ## the flatline/run-over transition — the gauge itself just holds its current frame.
@@ -4933,8 +5195,15 @@ func _apply_power_slot(power_id: String, slot_index: int) -> void:
 func _short_name(consumable_id: String) -> String:
 	return consumable_id.replace("cons_", "").replace("item_", "").substr(0, 4)
 
+## An item's icon — colour-inverted on a joker Augmented run, where the four in-run items
+## are dealt turned against the player (issue #111). The silhouette is the one the player
+## already knows; only the colour says it is not the item they think it is.
 func _icon_for(id: String) -> Texture2D:
-	return _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+	var tex := _load_texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
+	if tex != null and RunStateStore.augmented_joker_items_active() \
+			and InRunItems.JOKER_EFFECTS.has(id):
+		return Assets.inverted_texture(tex)
+	return tex
 
 func _boost_icon_for(boost: Dictionary) -> Texture2D:
 	var counter := String(boost.get("counter", ""))
@@ -5930,9 +6199,6 @@ func _show_score_table() -> void:
 		var reward_bonus := float(RunStateStore.symbolRewardBonuses.get(symbol_id, 0.0))
 		var pair := floori(float(int(Payouts.PAIR_SCORE.get(symbol_id, 0))) * (1.0 + reward_bonus) + 0.5)
 		var triple_base := Payouts.JACKPOT_SCORE if symbol_id == "brain" else int(Payouts.TRIPLE_SCORE.get(symbol_id, 0))
-		# Augmented heart modifier (issue #111): the table shows the halved jackpot.
-		if symbol_id == "brain" and RunStateStore.augmented_modifier_active(1):
-			triple_base = Payouts.JACKPOT_SCORE / 2
 		var triple := floori(float(triple_base) * (1.0 + reward_bonus) + 0.5)
 		var reward_amp_active := reward_amp_bonus > 0.0 and reward_amp_symbol == symbol_id
 		var pair_color := SCORE_TABLE_REWARD_AMP_COLOR if reward_amp_active else SCORE_TABLE_GAIN_COLOR
@@ -5965,13 +6231,21 @@ func _show_score_table() -> void:
 	close.position = Vector2(SRC_W * 0.5 - close.size.x * 0.5, 290.0)
 	var close_label := _score_label(close, "BACK", Vector2.ZERO, 9,
 		NEON_GOLD, close.size.x, HORIZONTAL_ALIGNMENT_CENTER)
-	close_label.size = close.size
 	close_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# The pixel font's line box leaves its slack above the glyph, so a pure
-	# vertical center reads low in the 14px band — pull the label up to comp.
-	close_label.position.y = -4.0
+	# ANCHORED to the button rather than given a size. `close` is not in the scene tree at
+	# this point, and a Label outside the tree measures its own minimum with the DEFAULT
+	# 16px theme font — so the 56x14 assigned here was silently clamped up to 63x23, which
+	# centred BACK on a box wider than its own plate and put it 3px right. The old -4px lift
+	# was compensating for the height half of that same clamp. Anchors are recomputed from
+	# the parent once the metrics settle, so the rect fixes itself when the button lands.
+	close_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var close_nudge := Assets.centered_text_nudge(9)
+	close_label.offset_left = 0.0
+	close_label.offset_top = close_nudge
+	close_label.offset_right = 0.0
+	close_label.offset_bottom = close_nudge
 	close_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Assets.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
+	ButtonKit.small_neon_button_style(close, NEON_GOLD, 6, 2.0)
 	# Pressed squash: shrink around the centre while held, spring back on release
 	# (same feel as the row info buttons).
 	close.pivot_offset = close.size * 0.5
@@ -6145,7 +6419,13 @@ func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	_score_info_popup.add_child(bg)
 	var label := Label.new()
 	label.text = text
-	label.size = popup_size
+	# Inset from the TOP by twice the cap-height nudge: that moves the rect's centre — and
+	# so the glyphs — down by one without letting the label hang past the bubble it belongs
+	# to. Godot centres the font's ascent+descent box, and this percentage never uses the
+	# descent, so it renders a pixel high without this.
+	var nudge := Assets.centered_text_nudge(5)
+	label.position = Vector2(0.0, nudge * 2.0)
+	label.size = Vector2(popup_size.x, popup_size.y - nudge * 2.0)
 	label.custom_minimum_size = Vector2.ZERO
 	label.clip_text = true
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6158,7 +6438,9 @@ func _show_score_pct_popup(symbol_id: String, button: Button) -> void:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
 	bg.add_child(label)
-	label.set_deferred("size", popup_size)
+	# Re-asserted once the label is in the tree: out of the tree a Label measures its own
+	# minimum with the default 16px theme font and the size above gets clamped up to it.
+	label.set_deferred("size", Vector2(popup_size.x, popup_size.y - nudge * 2.0))
 	# Right of the symbol box, vertically centered on the row.
 	var pos := button.position + Vector2(button.size.x + 3.0,
 		button.size.y * 0.5 - popup_size.y * 0.5)
@@ -6211,6 +6493,9 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 	_score_info_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Size from the actual font: Label.get_minimum_size() before the popup is in
 	# the tree measures with the fallback theme font and comes out huge.
+	# Already display text (_triple_effect_text translates before it substitutes its
+	# counts). It is measured below to size the panel, so what is measured and what the
+	# per-line labels draw have to be this same string.
 	var text := _triple_effect_text(symbol_id)
 	var font: Font = _font if _font != null else ThemeDB.fallback_font
 	var text_size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5)
@@ -6223,9 +6508,15 @@ func _show_score_info_popup(symbol_id: String, button: Button) -> void:
 		# Snap to whole pixels: a fractional offset knocks the pixel font off the
 		# grid and blurs the glyphs.
 		var line_x := roundf(4.0 + (text_size.x - line_w) * 0.5)
-		var line_y := 3.0 + float(li) * 10.0
+		# +nudge: these lines are top-aligned, so the gap the font's ascent leaves above the
+		# caps is not matched at the bottom, and the blurb reads a pixel high without it.
+		var line_y := 3.0 + Assets.centered_text_nudge(5) + float(li) * 10.0
 		for seg in _info_line_segments(symbol_id, lines[li]):
-			_score_label(_score_info_popup, seg[0], Vector2(line_x, line_y), 5, seg[1])
+			# Segments are FRAGMENTS of an already-translated line; letting each one
+			# translate itself again would look up half a sentence as a key.
+			var seg_label := _score_label(
+				_score_info_popup, seg[0], Vector2(line_x, line_y), 5, seg[1])
+			seg_label.auto_translate_mode = Control.AUTO_TRANSLATE_MODE_DISABLED
 			line_x = roundf(line_x + font.get_string_size(seg[0],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
 	# Rounded box: dark panel with a thin gold outline and soft corners.
@@ -6283,23 +6574,23 @@ func _reward_bonus_text(bonus: float) -> String:
 
 ## Short 3x-bonus blurb per symbol, shown under the TRIPLE value (issue #51).
 ## Dynamic counts pull from the reaction exports so the copy never drifts.
+## Returns DISPLAY text: each line is translated before its counts go in, because the
+## finished sentence ("JACKPOT +1 SPIN") is not a key any table can hold. Callers must not
+## translate the result again.
 func _triple_effect_text(symbol_id: String) -> String:
 	match symbol_id:
 		"brain":
-			# Augmented heart modifier (issue #111): no free spin, jackpot halved.
-			if RunStateStore.augmented_modifier_active(1):
-				return "JACKPOT %d, NO SPIN" % (Payouts.JACKPOT_SCORE / 2)
-			return "JACKPOT +%d SPIN" % triple_brain_free_spins
+			return tr("JACKPOT +%d SPIN") % triple_brain_free_spins
 		"eye":
-			return "REVEALS A REEL"
+			return tr("REVEALS A REEL")
 		"pill":
-			return "ALL POWERS BACK"
+			return tr("ALL POWERS BACK")
 		"syringe":
-			return "LAST ITEM BACK"
+			return tr("LAST ITEM BACK")
 		"vial":
-			return "+%d SPINS" % triple_vial_free_spins
+			return tr("+%d SPINS") % triple_vial_free_spins
 		"flatline":
-			return "CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN" % [
+			return tr("CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN") % [
 				RunStateStore.flatlineResultCount, fatal_flatline_count]
 	return ""
 
@@ -6362,6 +6653,10 @@ func _on_stash_pressed(slot_index: int) -> void:
 		_close_pending_combo_defeat()
 		_finish_post_spin_sequence()
 	_refresh_reels_from_state()
+	# Joker Water (issue #111) empties the gauge instead of filling it: the progress
+	# banked toward the next power restore is forfeited on the spot.
+	if RunStateStore.consume_power_bar_drain():
+		_drain_power_bar()
 	_update_hud()
 	# Water adds score directly (no score popup carries it), so the odometer
 	# rolls up right here instead of waiting for a reward sequence.
@@ -6399,8 +6694,10 @@ func _show_consumable_feedback(id: String) -> HintLabel:
 	if id == "item_pill":
 		return _show_deferred_negative(id)
 	# Deferred-negative items (issue #76) show only the upside now; a hooked item also
-	# arms its downside so the activation hook can pop it later.
-	if id in HOOKED_DEFERRED_NEGATIVES:
+	# arms its downside so the activation hook can pop it later. An item with no negative
+	# line left to pop (the Energy Drink, off a joker run) is never armed — otherwise its
+	# hook would fire an empty popup at the takeover that never comes.
+	if id in HOOKED_DEFERRED_NEGATIVES and String(_hint_for(id).get("neg", "")) != "":
 		_pending_deferred_neg[id] = true
 	return _spawn_hint(id, false, id in DEFERRED_NEGATIVE_ITEMS)
 
@@ -6431,7 +6728,7 @@ func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLa
 	# bubble may appear while it is active, including on-use consumable hints.
 	if RunStateStore.comboDefeatPending:
 		return null
-	var hint: Dictionary = use_hints.get(id, {})
+	var hint := _hint_for(id)
 	if hint.is_empty():
 		return null
 	if _hint_layer == null or not is_instance_valid(_hint_layer):
@@ -6444,8 +6741,21 @@ func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLa
 	_hint_layer.add_child(hint_label)
 	var pos := "" if negative_only else String(hint["pos"])
 	var neg := "" if positive_only else String(hint["neg"])
-	hint_label.play(pos, neg, _item_display_name(id), HintLabel.item_is_corrupted(id))
+	hint_label.play(pos, neg, _item_display_name(id), _item_reads_corrupted(id))
 	return hint_label
+
+## The +/- vocabulary for an item, which on a joker run is the inverted one (issue #111).
+func _hint_for(id: String) -> Dictionary:
+	if RunStateStore.augmented_joker_items_active() and joker_use_hints.has(id):
+		return joker_use_hints[id] as Dictionary
+	return use_hints.get(id, {}) as Dictionary
+
+## Purple name. The standing rule is the explicit HintLabel list; on a joker run every
+## in-run item joins it, because every one of them is now something done TO the player.
+func _item_reads_corrupted(id: String) -> bool:
+	if RunStateStore.augmented_joker_items_active() and InRunItems.JOKER_EFFECTS.has(id):
+		return true
+	return HintLabel.item_is_corrupted(id)
 
 func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 	var target_lucidity := int(RunStateStore.lucidityCoins)
@@ -6484,7 +6794,7 @@ func _build_serum_picker() -> void:
 	for s in Symbols.BASE_SYMBOL_CYCLE:
 		if String(s) != "brain":
 			pool.append(String(s))
-	Assets.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
+	SymbolPicker.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
 		Callable(self, "_on_serum_pick"), Callable(self, "_close_serum_picker"), true)
 
 func _on_serum_picker_input(event: InputEvent) -> void:
@@ -6839,7 +7149,10 @@ func _play_use_fx(id: String) -> void:
 		_play_cocktail_shake()
 	elif id == "cons_tea" and tea_fx_enabled:
 		_play_tea_sakura_fx()
-	elif id == "item_water" and water_fx_enabled:
+	elif id == "item_water" and water_fx_enabled \
+			and not RunStateStore.augmented_joker_items_active():
+		# The pour reads as refreshment. A joker Water drains the gauge, so it gets the
+		# drink's absence rather than a celebration of it (issue #111).
 		_play_water_animation()
 
 ## The authored WATER_SHEET_FRAMES-frame pour, stepped once and then cleared. Built on
@@ -6985,8 +7298,11 @@ func _show_potion_popup(text: String, color: Color) -> void:
 	var label := Label.new()
 	label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	label.text = text
-	label.position = Vector2(30.0, 112.0) # between the TV and the multiplier strip
-	label.size = Vector2(100.0, 10.0)
+	# Centred band, sat between the TV and the multiplier strip.
+	const POPUP_SIZE := Vector2(100.0, 10.0)
+	const POPUP_Y := 112.0
+	label.size = POPUP_SIZE
+	label.position = Vector2((SRC_W - POPUP_SIZE.x) * 0.5, POPUP_Y)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -7112,17 +7428,12 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 		"brain":
 			# ALWAYS a free spin: on a natural spin the pinned evaluate already granted
 			# one (free_spins_granted > 0); only top up when it didn't (power / free spin).
-			# Augmented heart modifier (issue #111): the jackpot grants no free spin.
-			if RunStateStore.augmented_modifier_active(1):
-				color = triple_brain_color
-				label = "JACKPOT"
-			else:
-				if free_spins_granted <= 0:
-					RunStateStore.grant_free_spins(triple_brain_free_spins)
-					_play_spin_gain_fx(_current_display_spins_left() - spins_before,
-						_reel_window_center())
-				color = triple_brain_color
-				label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
+			if free_spins_granted <= 0:
+				RunStateStore.grant_free_spins(triple_brain_free_spins)
+				_play_spin_gain_fx(_current_display_spins_left() - spins_before,
+					_reel_window_center())
+			color = triple_brain_color
+			label = "FREE"  # 🎨 "FREE" sticker art pending — text placeholder
 		"eye":
 			# The player picks the reel to reveal (issue follow-up): the reel-selection
 			# UI arms and the chosen reel's NEXT spin result pops up when it lands.
@@ -7187,8 +7498,9 @@ func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) ->
 		if tex != null:
 			var icon := TextureRect.new()
 			icon.texture = tex
-			icon.position = Vector2((cell_w - 16.0) * 0.5, 3.0)
-			icon.size = Vector2(16.0, 16.0)
+			const BOOK_ICON := 16.0
+			icon.size = Vector2(BOOK_ICON, BOOK_ICON)
+			icon.position = Vector2((cell_w - BOOK_ICON) * 0.5, 3.0)
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -7511,6 +7823,19 @@ func _cleanup_transient_presentation() -> void:
 	_clear_targeting()
 	_set_stash_elevated(false)
 
+# Fallback ending overlay (used when no authored ending scene answers). Both the copy
+# column and the button are centred bands, so each is parametric on its own inset.
+const ENDING_TEXT_INSET := 20.0
+const ENDING_TEXT_W := SRC_W - ENDING_TEXT_INSET * 2.0 # 120
+const ENDING_TITLE_H := 28.0
+const ENDING_LABEL_H := 20.0
+const ENDING_FLATLINE_TITLE_Y := 58.0
+const ENDING_TITLE_Y := 120.0
+const ENDING_WALLET_Y := 145.0
+const ENDING_BUTTON_SIZE := Vector2(100.0, 20.0)
+const ENDING_BUTTON_FLATLINE_Y := 238.0
+const ENDING_BUTTON_Y := 175.0
+
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
@@ -7560,15 +7885,15 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		# flatline with neurons left just reads FLATLINE.
 		var fatal := not _has_campaign_neurons_remaining()
 		title.text = fatal_flatline_text if fatal else "FLATLINE"
-		title.position = Vector2(20, 58)
-		title.size = Vector2(120, 28)
+		title.position = Vector2(ENDING_TEXT_INSET, ENDING_FLATLINE_TITLE_Y)
+		title.size = Vector2(ENDING_TEXT_W, ENDING_TITLE_H)
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
 	else:
 		title.text = resolved_ending.to_upper()
-		title.position = Vector2(20, 120)
-		title.size = Vector2(120, 20)
+		title.position = Vector2(ENDING_TEXT_INSET, ENDING_TITLE_Y)
+		title.size = Vector2(ENDING_TEXT_W, ENDING_LABEL_H)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 16)
 	if _font != null:
@@ -7580,22 +7905,24 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		_build_flatline_countdown(run)
 	else:
 		var wallet := Label.new()
-		wallet.position = Vector2(20, 145)
+		wallet.position = Vector2(ENDING_TEXT_INSET, ENDING_WALLET_Y)
 		wallet.add_theme_font_size_override("font_size", 9)
 		if _font != null:
 			wallet.add_theme_font_override("font", _font)
 		wallet.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-		wallet.text = "CREDITS %d" % MetaStateStore.lucidityWallet
+		wallet.text = tr("CREDITS %d") % MetaStateStore.lucidityWallet
 		_overlay.add_child(wallet)
 
 	var to_menu := Button.new()
 	to_menu.text = _flatline_action_text()
-	to_menu.position = Vector2(30, 238 if resolved_ending == "flatline" else 175)
-	to_menu.size = Vector2(100, 20)
+	to_menu.size = ENDING_BUTTON_SIZE
+	to_menu.position = Vector2(
+		(SRC_W - ENDING_BUTTON_SIZE.x) * 0.5,
+		ENDING_BUTTON_FLATLINE_Y if resolved_ending == "flatline" else ENDING_BUTTON_Y)
 	to_menu.add_theme_font_size_override("font_size", 9)
 	if _font != null:
 		to_menu.add_theme_font_override("font", _font)
-	Assets.skin_negative_button(to_menu)
+	ButtonKit.skin_negative_button(to_menu)
 	to_menu.pressed.connect(_on_flatline_action_pressed)
 	_overlay.add_child(to_menu)
 
@@ -7650,8 +7977,8 @@ func _clear_wealth_presentation_fx() -> void:
 
 	_clear_targeting()
 	_close_score_table()
-	_hide_augmented_popup()
-	_hide_pacte_augment_popup()
+	_augments.hide_augmented_popup()
+	_augments.hide_pacte_popup()
 	_hide_item_info_popup()
 	_close_serum_picker()
 	_close_book_choice_overlay()
@@ -7892,7 +8219,7 @@ func _update_flatline_countdown_labels() -> void:
 		_flatline_score_label.text = str(_flatline_display)
 	if _flatline_lost_label != null:
 		var lost := _flatline_total - _flatline_display
-		_flatline_lost_label.text = "-%d lost" % lost if lost > 0 else ""
+		_flatline_lost_label.text = tr("-%d lost") % lost if lost > 0 else ""
 
 func _stop_flatline_countdown() -> void:
 	_flatline_countdown_active = false
@@ -7941,366 +8268,9 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 func _end_run_lucidity_kept_fraction() -> float:
 	# Asks the store rather than reading ownedPermanents directly, so a Pacte-granted
 	# SMART SAVING counts here exactly as it does in the bank.
-	var frac := MetaStateStore.effective_lucidity_kept_fraction()
-	# Augmented spade modifier (issue #111): end-of-run gain kept is halved.
-	# Mirrors MetaStateStore.bank_run so the "% kept" countdown matches the bank.
-	return frac * 0.5 if RunStateStore.augmented_modifier_active(2) else frac
+	return MetaStateStore.effective_lucidity_kept_fraction()
 
 # ── Augmented Run badge (issue #111) ─────────────────────────────────────────────────
-# The active suit stays visible during the run; holding it peeks at the list of
-# active restrictions in the shared bubble style.
-
-func _build_augmented_badge() -> void:
-	if RunStateStore.augmentedTier == "":
-		return
-	var icon_tex := Assets.augmented_suit_icon(RunStateStore.augmentedTier)
-	if icon_tex == null:
-		return
-	var b := Button.new()
-	b.name = "AugmentedBadge"
-	b.position = AUGMENTED_BADGE_POS
-	b.size = Vector2.ONE * AUGMENTED_BADGE_SIZE
-	b.z_index = 40
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.02, 0.05, 0.85)
-	style.border_color = Color(0.86, 0.84, 0.24)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(2)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		b.add_theme_stylebox_override(state, style)
-	var icon := TextureRect.new()
-	icon.texture = icon_tex
-	# expand_mode BEFORE size: with the default EXPAND_KEEP_SIZE the texture's
-	# native size becomes the minimum and the size assignment gets clamped up.
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.position = Vector2.ONE * 2.0
-	icon.size = Vector2.ONE * (AUGMENTED_BADGE_SIZE - 4.0)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(icon)
-	b.button_down.connect(_show_augmented_popup.bind(b))
-	b.button_up.connect(_hide_augmented_popup)
-	add_child(b)
-
-func _augmented_restrictions_text() -> String:
-	var lines: Array[String] = []
-	if RunStateStore.augmented_modifier_active(1):
-		lines.append("JACKPOT %d, NO FREE SPIN" % (Payouts.JACKPOT_SCORE / 2))
-	if RunStateStore.augmented_modifier_active(2):
-		lines.append("END-OF-RUN GAIN HALVED")
-	if RunStateStore.augmented_modifier_active(3):
-		lines.append("MAX 2 POWERS PER SPIN")
-	if RunStateStore.augmented_modifier_active(4):
-		lines.append("DEALER + REWARDS HALVED")
-	return "\n".join(lines)
-
-func _show_augmented_popup(button: Button) -> void:
-	_hide_augmented_popup()
-	var text := _augmented_restrictions_text()
-	if text == "":
-		return
-	_augmented_popup = Control.new()
-	_augmented_popup.name = "AugmentedPopup"
-	_augmented_popup.z_index = 41
-	_augmented_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var font: Font = _font if _font != null else ThemeDB.fallback_font
-	var lines := text.split("\n")
-	var text_w := 0.0
-	for line in lines:
-		text_w = maxf(text_w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
-	var popup_size := Vector2(text_w + 8.0, float(lines.size()) * 8.0 + 6.0)
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
-	bg_style.border_color = Color(0.86, 0.84, 0.24)
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.add_theme_stylebox_override("panel", bg_style)
-	bg.size = popup_size
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_augmented_popup.add_child(bg)
-	var label := Label.new()
-	label.text = text
-	label.size = popup_size
-	label.custom_minimum_size = Vector2.ZERO
-	label.clip_text = true
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.7))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
-	label.set_deferred("size", popup_size)
-	var pos := button.position + Vector2(button.size.x + 3.0,
-		button.size.y * 0.5 - popup_size.y * 0.5)
-	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
-	_augmented_popup.position = pos.round()
-	add_child(_augmented_popup)
-
-func _hide_augmented_popup() -> void:
-	if _augmented_popup != null:
-		_augmented_popup.queue_free()
-		_augmented_popup = null
-
-func _active_pacte_augment_ids() -> Array[String]:
-	var ids: Array[String] = []
-	for raw_id in RunStateStore.selectedAugmentCardIds:
-		var id := String(raw_id)
-		if not ids.has(id) and PacteCards.augment_map().has(id):
-			ids.append(id)
-	return ids
-
-## The glitching chip: only the augment whose effect glitches the dealer gets one, keyed off
-## the card's effect rather than its id so a renamed card keeps the treatment.
-const AUGMENT_GLITCH_SLICES := 4
-const AUGMENT_GLITCH_STEP_TIME := 0.09
-const AUGMENT_GLITCH_COLORS: Array[Color] = [
-	Color("#3ee0ff"), Color("#ff3ea5"), Color("#e8ff5a"), Color("#3ee0ff"),
-]
-
-func _augment_glitches(card_id: String) -> bool:
-	var entry := PacteCards.card(card_id)
-	var effect: Dictionary = entry.get("effect", {})
-	return String(effect.get("type", "")) == "glitch_dealer"
-
-func _step_augment_glitch(delta: float) -> void:
-	if _pacte_augment_badges.is_empty():
-		return
-	_augment_glitch_time += delta
-	if _augment_glitch_time < AUGMENT_GLITCH_STEP_TIME:
-		return
-	_augment_glitch_time = 0.0
-	for entry: Dictionary in _pacte_augment_badges:
-		var glitch := entry.get("glitch") as Control
-		if glitch == null or not glitch.visible:
-			continue
-		if not (entry["badge"] as Button).visible:
-			continue
-		_scramble_augment_glitch(glitch)
-
-## One frame of the effect: each slice jumps to a new row, overhangs the chip sideways so the
-## clip cuts it, and takes a fresh alpha. Seeded, so the same frame count always looks the same.
-func _scramble_augment_glitch(host: Control) -> void:
-	for i in host.get_child_count():
-		var slice := host.get_child(i) as ColorRect
-		if slice == null:
-			continue
-		var height := floorf(_augment_glitch_rng.randf_range(1.0, 3.0))
-		slice.position = Vector2(
-			floorf(_augment_glitch_rng.randf_range(-2.0, 2.0)),
-			floorf(_augment_glitch_rng.randf_range(0.0, maxf(1.0, host.size.y - height))))
-		slice.size = Vector2(host.size.x + 4.0, height)
-		var color: Color = AUGMENT_GLITCH_COLORS[i % AUGMENT_GLITCH_COLORS.size()]
-		color.a = _augment_glitch_rng.randf_range(0.4, 1.0)
-		slice.color = color
-
-func _pacte_augment_icon(card_id: String) -> Texture2D:
-	var entry := PacteCards.card(card_id)
-	var sheet := _load_texture(String(entry.get("sheet", "")), true)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	if sheet == null or icon_rect.size == Vector2.ZERO:
-		return null
-	var atlas := AtlasTexture.new()
-	atlas.atlas = sheet
-	atlas.region = icon_rect
-	return atlas
-
-## A row of augment icons along the TV's bottom-left, one badge per held card up to
-## PACTE_AUGMENT_BADGE_MAX (issue #181). The row stops short of the TARGET goal number
-## in the middle of the screen; a fourth augment turns the last badge into a "+N".
-## Every badge opens the same description popup.
-func _build_pacte_augment_badge() -> void:
-	if _pacte_augment_badge != null:
-		_refresh_pacte_augment_badge()
-		return
-	for i in PACTE_AUGMENT_BADGE_MAX:
-		var badge := Button.new()
-		# The first badge keeps the historical node name; the scene smoke and the popup
-		# anchoring both look it up by it.
-		badge.name = "PacteAugmentBadge" if i == 0 else "PacteAugmentBadge%d" % (i + 1)
-		badge.position = PACTE_AUGMENT_BADGE_POS + Vector2(float(i) * PACTE_AUGMENT_BADGE_PITCH, 0.0)
-		badge.size = PACTE_AUGMENT_BADGE_SIZE
-		badge.z_index = 40
-		badge.text = ""
-		badge.flat = true
-		badge.visible = false
-		badge.focus_mode = Control.FOCUS_NONE
-		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var badge_style := StyleBoxFlat.new()
-		badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
-		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
-		badge_style.set_border_width_all(1)
-		badge_style.set_corner_radius_all(1)
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			badge.add_theme_stylebox_override(state, badge_style)
-		var icon := TextureRect.new()
-		icon.name = "Icon"
-		icon.position = (PACTE_AUGMENT_BADGE_SIZE
-			- Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)) * 0.5
-		icon.size = Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.add_child(icon)
-		# The overflow count replaces the last icon rather than sitting on top of one,
-		# so it can never obscure the art it is counting.
-		var count := Label.new()
-		count.name = "Count"
-		count.position = Vector2.ZERO
-		count.size = PACTE_AUGMENT_BADGE_SIZE
-		count.visible = false
-		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		count.add_theme_font_size_override("font_size", 5)
-		if _font != null:
-			count.add_theme_font_override("font", _font)
-		count.add_theme_color_override("font_color", NEON_GOLD)
-		count.add_theme_color_override("font_outline_color", Color.BLACK)
-		count.add_theme_constant_override("outline_size", 1)
-		badge.add_child(count)
-		# GLITCH has no authored chip art, so its badge carries the effect itself: a few
-		# neon slices that jump and flicker inside the chip (clipped to it), stepped by
-		# _step_augment_glitch. It draws over the icon, so authored art can arrive later
-		# and keep the effect.
-		var glitch := Control.new()
-		glitch.name = "Glitch"
-		glitch.position = icon.position
-		glitch.size = icon.size
-		glitch.clip_contents = true
-		glitch.visible = false
-		glitch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		for _slice_index in AUGMENT_GLITCH_SLICES:
-			var slice := ColorRect.new()
-			slice.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			glitch.add_child(slice)
-		badge.add_child(glitch)
-		badge.pressed.connect(_toggle_pacte_augment_popup)
-		add_child(badge)
-		_pacte_augment_badges.append({
-			"badge": badge, "icon": icon, "count": count, "glitch": glitch,
-		})
-	if not _pacte_augment_badges.is_empty():
-		_pacte_augment_badge = _pacte_augment_badges[0]["badge"]
-		_pacte_augment_badge_icon = _pacte_augment_badges[0]["icon"]
-		_pacte_augment_count = _pacte_augment_badges[0]["count"]
-	_refresh_pacte_augment_badge()
-
-func _refresh_pacte_augment_badge() -> void:
-	if _pacte_augment_badges.is_empty():
-		return
-	var ids := _active_pacte_augment_ids()
-	# The row lives on the power bar now, not on the TV, so a TV callout no longer
-	# hides it — only the description popup steps aside for one.
-	if not _tv_info_pop_sources.is_empty():
-		_hide_pacte_augment_popup()
-	if ids.is_empty():
-		for entry: Dictionary in _pacte_augment_badges:
-			(entry["badge"] as Button).visible = false
-		if _augment_plate_sprite != null:
-			_augment_plate_sprite.visible = false # no augments, no sockets
-		_hide_pacte_augment_popup()
-		return
-	var shown := mini(ids.size(), _pacte_augment_badges.size())
-	# One socket per badge on show, so the plate never offers an empty bed.
-	if _augment_plate_sprite != null:
-		_augment_plate_sprite.visible = true
-		_set_sheet_frame(_augment_plate_sprite, clampi(shown - 1, 0, AUGMENT_PLATE_FRAMES - 1))
-	for i in _pacte_augment_badges.size():
-		var entry: Dictionary = _pacte_augment_badges[i]
-		var badge: Button = entry["badge"]
-		var icon: TextureRect = entry["icon"]
-		var count: Label = entry["count"]
-		badge.visible = i < shown
-		if not badge.visible:
-			icon.texture = null
-			continue
-		# The last slot counts the remainder instead of showing one more icon.
-		var overflow := i == shown - 1 and ids.size() > shown
-		count.visible = overflow
-		icon.visible = not overflow
-		var glitch := entry.get("glitch") as Control
-		if overflow:
-			count.text = "+%d" % (ids.size() - shown + 1)
-			icon.texture = null
-			if glitch != null:
-				glitch.visible = false
-		else:
-			icon.texture = _pacte_augment_icon(ids[i])
-			if glitch != null:
-				glitch.visible = _augment_glitches(String(ids[i]))
-
-func _pacte_augment_popup_text() -> String:
-	var lines: Array[String] = []
-	for card_id in _active_pacte_augment_ids():
-		var entry := PacteCards.card(card_id)
-		lines.append("%s\n%s" % [
-			String(entry.get("name", card_id)), String(entry.get("description", ""))])
-	return "\n".join(lines)
-
-func _toggle_pacte_augment_popup() -> void:
-	if _pacte_augment_popup != null:
-		_hide_pacte_augment_popup()
-		return
-	if _pacte_augment_badge == null or _active_pacte_augment_ids().is_empty():
-		return
-	var text := _pacte_augment_popup_text()
-	if text == "":
-		return
-	var popup := Control.new()
-	popup.name = "PacteAugmentPopup"
-	popup.z_index = 41
-	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var popup_size := Vector2(126.0,
-		minf(116.0, 8.0 + float(_active_pacte_augment_ids().size()) * 22.0))
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
-	bg_style.border_color = NEON_CYAN
-	bg_style.set_border_width_all(1)
-	bg_style.set_corner_radius_all(3)
-	var bg := Panel.new()
-	bg.size = popup_size
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.add_theme_stylebox_override("panel", bg_style)
-	popup.add_child(bg)
-	var label := Label.new()
-	label.position = Vector2(4.0, 3.0)
-	label.size = popup_size - Vector2(8.0, 6.0)
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 5)
-	if _font != null:
-		label.add_theme_font_override("font", _font)
-	label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
-	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
-	bg.add_child(label)
-	var pos := _pacte_augment_badge.position + Vector2(
-		_pacte_augment_badge.size.x - popup_size.x,
-		-_pacte_augment_badge.size.y - popup_size.y - 3.0)
-	pos.x = clampf(pos.x, 2.0, SRC_W - popup_size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - popup_size.y - 2.0)
-	popup.position = pos.round()
-	_pacte_augment_popup = popup
-	add_child(popup)
-
-func _hide_pacte_augment_popup() -> void:
-	if _pacte_augment_popup != null:
-		_pacte_augment_popup.queue_free()
-		_pacte_augment_popup = null
-
 ## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
 ## neurons (or banked free spins) remain (issue #62). The normal spin pool is capped
 ## at 18, including after a Wealth continuation.
@@ -8400,11 +8370,15 @@ func _show_dealer_offers() -> void:
 	_set_stash_elevated(true)
 	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
+	_dealer_offer_popup.item_forced.connect(_dealer_forced_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
 	_set_stash_visible(true)
-	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [])
+	# Joker (issue #111): the visit is a delivery, not an offer — the overlay plays the
+	# buy and the use, and the store names the item so both ends force the same one.
+	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [],
+		RunStateStore.joker_forced_offer_id())
 	_refresh_controls()
 
 func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
@@ -8452,7 +8426,7 @@ func _input(event: InputEvent) -> void:
 			_dealer_drag_node.global_position = m - _dealer_drag_node.size * 0.5
 		if m.distance_to(_dealer_drag_press) > 4.0:
 			if not _dealer_drag_moved:
-				Assets.add_drag_shadow(_dealer_drag_node)
+				DragShadow.add_drag_shadow(_dealer_drag_node)
 			_dealer_drag_moved = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_end_dealer_drag(get_global_mouse_position())
@@ -8469,7 +8443,7 @@ func _end_dealer_drag(release_pos: Vector2) -> void:
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
 	if node != null:
-		Assets.remove_drag_shadow(node)
+		DragShadow.remove_drag_shadow(node)
 		node.z_index = 0
 		node.position = _dealer_drag_home
 		node.scale = Vector2.ONE
@@ -8511,6 +8485,22 @@ func _dealer_take(item_id: String) -> void:
 		_dealer_offer_popup.finish_offer()
 	else:
 		_close_dealer()
+
+## Joker (issue #111): the visit's item is accepted and used in one go, halfway through the
+## overlay's delivery animation. It is taken with one slot of headroom over the normal cap
+## and spent immediately, so a full stash cannot swallow the forced item — the player is
+## never asked to make room for something they did not ask for. If the item cannot be used
+## right now (a compulsory spin is queued), it simply stays in the stash as a normal item.
+func _dealer_forced_take(item_id: String) -> void:
+	RunStateStore.accept_dealer_offer_with_limit(item_id,
+		Consumables.MAX_CONSUMABLE_SLOTS + 1)
+	if RunStateStore.use_consumable(item_id):
+		if RunStateStore.consume_power_bar_drain():
+			_drain_power_bar()
+		_show_consumable_feedback(item_id)
+		_play_use_fx(item_id)
+	_refresh_reels_from_state()
+	_update_hud()
 
 func _dealer_discard_stash(item_id: String) -> void:
 	RunStateStore.discard_run_consumable(item_id)

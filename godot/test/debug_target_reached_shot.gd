@@ -36,4 +36,21 @@ func _run() -> void:
 	for i in 4:
 		await process_frame
 	get_root().get_texture().get_image().save_png(OS.get_environment("SHOT_BLOWOUT"))
+	blowout.queue_free()
+	await process_frame
+	# Issue #111 club: the widest receipt there is — five rows, because HOUSE ANGER
+	# joins the three standing charges above the target line. The thing to check is
+	# that the block grew UPWARD and still clears the rule and the total beneath it.
+	var run_store: Node = get_root().get_node_or_null(^"RunStateStore")
+	if run_store != null:
+		run_store.augmentedTier = "club"
+	var angry := (load("res://scenes/target_reached_overlay.tscn") as PackedScene).instantiate()
+	get_root().add_child(angry)
+	angry.present(650, 500)
+	angry._skip_to_end()
+	for i in 4:
+		await process_frame
+	get_root().get_texture().get_image().save_png(OS.get_environment("SHOT_CLUB"))
+	if run_store != null:
+		run_store.augmentedTier = ""
 	quit(0)

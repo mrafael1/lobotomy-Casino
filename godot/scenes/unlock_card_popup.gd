@@ -146,8 +146,10 @@ func _build() -> void:
 	_panel.name = "Panel"
 	_panel.position = PANEL_RECT.position
 	_panel.size = PANEL_RECT.size
-	if _assets != null:
-		_panel.add_theme_stylebox_override("panel", _assets.call("neon_panel_style", NEON_GOLD, 5.0))
+	# Called directly rather than through _assets: button styling left the Assets autoload
+	# for ButtonKit, and ButtonKit is a plain static class, so there is no autoload to be
+	# absent — which is the only reason the rest of this file goes through _assets at all.
+	_panel.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(NEON_GOLD, 5.0))
 	add_child(_panel)
 
 	var rows := VBoxContainer.new()
@@ -244,8 +246,7 @@ func _make_action_button(node_name: String, text: String, color: Color) -> Butto
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(PANEL_RECT.size.x - 16.0, 17.0)
-	if _assets != null:
-		_assets.call("small_neon_button_style", button, color, 6)
+	ButtonKit.small_neon_button_style(button, color, 6)
 	return button
 
 ## Presents the next queued unlock. Returns false when the queue is drained.

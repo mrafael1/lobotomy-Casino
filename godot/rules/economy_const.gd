@@ -39,6 +39,12 @@ const LUCIDITY_COINS_PER_RESTORE := 50
 # economy, and spend no charge.
 const POWER_RESTORE_CHARGE_MAX := 1
 const POWER_RESTORE_RECHARGE_PER_SPIN := 1
+# Augmented spade (issue #111): spins a SPENT restore charge takes to come back, counted
+# from the spend rather than from spin parity, and therefore how many pips the machine
+# draws under the restore light. It lives here rather than on RunStateStore because
+# reading a const through an autoload NAME makes GDScript compile that store as a plain
+# class, outside the autoload context where its own singleton references resolve.
+const SPADE_RESTORE_CYCLE_SPINS := 2
 const END_OF_RUN_LUCIDITY_KEPT := 0.10
 const SMART_SAVE_LUCIDITY_KEPT := 0.50
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
@@ -71,6 +77,14 @@ const OVERFLOW_TAX_LINES := [
 	{"key": "maintenance", "label": "MAINTENANCE"},
 ]
 
+# The augmented club charge (issue #111). It is a FLAT rate rather than a fifth column on
+# the bands: one number to balance, and a row that appears out of nowhere on the receipt
+# says "the casino is angry with you" more plainly than three rates quietly going up.
+# Deliberately sized so the worst band takes 80%, not everything — an overflow that banks
+# nothing would just teach the player to stop overshooting, which flattens the run.
+const OVERFLOW_ANGER_RATE := 0.15
+const OVERFLOW_ANGER_LINE := {"key": "anger", "label": "HOUSE ANGER"}
+
 
 ## The tax band for an overflow, as a share of the target it overshot.
 static func overflow_tax_band(overflow: int, target: int) -> Dictionary:
@@ -85,13 +99,20 @@ static func overflow_tax_band(overflow: int, target: int) -> Dictionary:
 ## Returns { lines: [{key, label, rate, amount}], taxed, net, ratio }. Every line is
 ## floored — the rounding goes to the player — and `net` is the true remainder, so the
 ## rows on screen always add up to exactly what was banked.
-static func overflow_bill(overflow: int, target: int) -> Dictionary:
+## `anger_rate` is the augmented club charge; callers pass RunStateStore's live rate so
+## this stays a pure rules file with no store dependency. 0.0 (the default) bills exactly
+## as before, which is every classic run and every other suit.
+static func overflow_bill(overflow: int, target: int, anger_rate := 0.0) -> Dictionary:
 	var gross := maxi(0, overflow)
 	var band := overflow_tax_band(gross, target)
+	var billed: Array = OVERFLOW_TAX_LINES.duplicate()
+	if anger_rate > 0.0:
+		billed.append(OVERFLOW_ANGER_LINE)
 	var lines: Array[Dictionary] = []
 	var taxed := 0
-	for line: Dictionary in OVERFLOW_TAX_LINES:
-		var rate := float(band[line["key"]])
+	for line: Dictionary in billed:
+		var rate: float = anger_rate if line["key"] == OVERFLOW_ANGER_LINE["key"] \
+			else float(band[line["key"]])
 		var amount := floori(float(gross) * rate)
 		taxed += amount
 		lines.append({
@@ -110,8 +131,8 @@ static func overflow_bill(overflow: int, target: int) -> Dictionary:
 
 
 ## What actually reaches the wallet out of an overflow.
-static func overflow_after_tax(overflow: int, target: int) -> int:
-	return int(overflow_bill(overflow, target)["net"])
+static func overflow_after_tax(overflow: int, target: int, anger_rate := 0.0) -> int:
+	return int(overflow_bill(overflow, target, anger_rate)["net"])
 
 
 # The Nth coin (50, 100, …) is a "power coin". Pass the total AFTER counting it.

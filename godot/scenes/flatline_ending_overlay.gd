@@ -51,7 +51,7 @@ func present(action_text: String, fatal_copy: String = "") -> void:
 
 
 func set_kept_percentage(kept_percentage: int) -> void:
-	kept_label.text = "%d%% kept" % kept_percentage
+	kept_label.text = tr("%d%% kept") % kept_percentage
 
 
 ## Replaces the dead line with three returning beats. The first beat swaps the

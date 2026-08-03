@@ -26,6 +26,8 @@ const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const CANVAS_W := 160.0
 const CANVAS_H := 320.0
 const MENU_W := 148.0
+const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
+const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
 # Authored menu art (issue #111). Legacy fallback background if missing.
 const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # bg + title
@@ -73,10 +75,10 @@ const ART_YELLOW := Color(1.0, 0.86, 0.36)
 # has been reached. Cycling picks one suit modifier (joker = all four).
 const AUGMENTED_DESCRIPTIONS := {
 	"": "NO AUGMENT",
-	"heart": "JACKPOT 100, NO FREE SPIN",
-	"spade": "END-OF-RUN GAIN HALVED",
-	"diamond": "MAX 2 POWERS PER SPIN",
-	"club": "DEALER + REWARDS HALVED",
+	"heart": "SPINS COST 2 HEALTH",
+	"spade": "POWER RESTORES EVERY 2 SPINS",
+	"diamond": "MAX 2 POWERS, NO 2ND AUGMENT",
+	"club": "+50% PRICES, -1 OFFER, +15% TAX",
 	"joker": "ALL FOUR MODIFIERS",
 }
 
@@ -130,6 +132,7 @@ var _tutorial_modal: Control = null
 var _tutorial_title: Label = null
 var _tutorial_body: RichTextLabel = null
 var _tutorial_button: Button = null
+var _play_tutorial_button: Button = null # issue #105: "SHOW ME" on the first-launch card
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -291,7 +294,7 @@ func _reparent_plate_button(b: Button, col: VBoxContainer, rect: Rect2,
 		col.remove_child(b)
 		add_child(b)
 	_style_plate_button(b, rect, color, font_size)
-	_connect_button(b, cb)
+	UiKit.connect_button(b, cb)
 
 func _style_plate_button(b: Button, rect: Rect2, color: Color, font_size: int) -> void:
 	b.position = rect.position
@@ -466,8 +469,8 @@ func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT
 
 func _build_menu() -> void:
 	_build_campaign_labels()
-	_connect_button(_start_button, _start_run)
-	_connect_button(_scores_button, _open_scores)
+	UiKit.connect_button(_start_button, _start_run)
+	UiKit.connect_button(_scores_button, _open_scores)
 
 func _build_campaign_labels() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
@@ -571,7 +574,7 @@ func _refresh_campaign_ui() -> void:
 	if _campaign_hint == null:
 		return
 	if Engine.is_editor_hint():
-		_campaign_hint.text = "EACH RETURN COSTS ONE"
+		_campaign_hint.text = "EACH RETURN COSTS YOU"
 		return
 	# The neuron meter no longer lives on the menu — CONTINUE opens the
 	# run-state modal, which carries it (see _show_continue_modal).
@@ -582,14 +585,9 @@ func _refresh_campaign_ui() -> void:
 	elif MetaStateStore.campaignNeuronsLeft <= 0:
 		_campaign_hint.text = "NO NEURONS. RETURNING ENDS THIS MIND."
 	else:
-		_campaign_hint.text = "EACH RETURN COSTS ONE. REACH WEALTH BEFORE ZERO."
+		_campaign_hint.text = "EACH RETURN COSTS YOU. REACH WEALTH BEFORE DEATH."
 	_refresh_start_button() # also lays out the art frame + meter
 
-func _connect_button(button: Button, cb: Callable) -> void:
-	if button == null:
-		return
-	if not button.pressed.is_connected(cb):
-		button.pressed.connect(cb)
 
 func _configure_tutorial_modal() -> void:
 	if _tutorial_modal == null:
@@ -623,6 +621,37 @@ func _configure_tutorial_modal() -> void:
 			_tutorial_button.add_theme_font_override("font", _font)
 		if not _tutorial_button.pressed.is_connected(_dismiss_tutorial):
 			_tutorial_button.pressed.connect(_dismiss_tutorial)
+	_configure_play_tutorial_button()
+
+## The played tutorial (issue #105) is offered from the card that already explains the
+## game, above the button that dismisses it: reading is the fallback, playing is the offer.
+## Built in code so the authored modal keeps its single authored button.
+func _configure_play_tutorial_button() -> void:
+	if _tutorial_button == null or _play_tutorial_button != null:
+		return
+	var content := _tutorial_button.get_parent() as Control
+	if content == null:
+		return
+	_play_tutorial_button = Button.new()
+	_play_tutorial_button.name = "PlayTutorialButton"
+	_play_tutorial_button.text = "SHOW ME"
+	_play_tutorial_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	_play_tutorial_button.focus_mode = Control.FOCUS_NONE
+	_play_tutorial_button.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		_play_tutorial_button.add_theme_font_override("font", _font)
+	_play_tutorial_button.pressed.connect(_on_play_tutorial_pressed)
+	content.add_child(_play_tutorial_button)
+	content.move_child(_play_tutorial_button, _tutorial_button.get_index())
+
+func _on_play_tutorial_pressed() -> void:
+	if Engine.is_editor_hint():
+		return
+	# The card is dismissed either way — whichever button was pressed, it has been read.
+	_dismiss_tutorial()
+	if not Tutorial.start():
+		# A held run is the only refusal; say so rather than swallowing the tap.
+		_show_continue_modal()
 
 func _maybe_show_tutorial() -> void:
 	if Engine.is_editor_hint() or _tutorial_modal == null:
@@ -693,7 +722,7 @@ func _show_continue_modal() -> void:
 
 	var panel := Panel.new()
 	panel.name = "Panel"
-	var style := Assets.neon_panel_style(ART_CYAN)
+	var style := ButtonKit.neon_panel_style(ART_CYAN)
 	panel.add_theme_stylebox_override("panel", style)
 	panel.position = CONTINUE_MODAL_PANEL_RECT.position
 	panel.size = CONTINUE_MODAL_PANEL_RECT.size
@@ -705,7 +734,7 @@ func _show_continue_modal() -> void:
 	NeuronMeter.attach(panel, Vector2(w * 0.5, 46.0))
 	var stats := _overlay_label("Stats", Rect2(0.0, 88.0, w, 10.0), 5,
 		Color(0.9, 0.94, 1.0), panel)
-	stats.text = "CURRENT COINS : %d" % _current_coins()
+	stats.text = tr("CURRENT COINS : %d") % _current_coins()
 	var close := _modal_close_button(w)
 	panel.add_child(close)
 
@@ -718,8 +747,8 @@ func _modal_close_button(panel_width: float) -> Button:
 	var close := Button.new()
 	close.name = "CloseButton"
 	close.text = "X"
-	close.position = Vector2(panel_width - 16.0, 3.0)
-	close.size = Vector2(12.0, 12.0)
+	close.position = Vector2(panel_width - CLOSE_BUTTON_INSET.x, CLOSE_BUTTON_INSET.y)
+	close.size = CLOSE_BUTTON_SIZE
 	close.custom_minimum_size = Vector2.ZERO
 	close.focus_mode = Control.FOCUS_NONE
 	close.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -740,7 +769,7 @@ func _modal_button(button_name: String, text: String, rect: Rect2, color: Color,
 	var b := Button.new()
 	b.name = button_name
 	b.text = text
-	Assets.start_menu_button_style(b, color, 6)
+	ButtonKit.start_menu_button_style(b, color, 6)
 	b.custom_minimum_size = Vector2.ZERO
 	b.position = rect.position
 	b.size = rect.size

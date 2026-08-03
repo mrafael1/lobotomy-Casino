@@ -24,7 +24,9 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 Assets="*res://autoload/assets.gd"
 MetaStateStore="*res://autoload/meta_state_store.gd"
 RunStateStore="*res://autoload/run_state_store.gd"
+Language="*res://autoload/language.gd"
 SceneNav="*res://autoload/scene_nav.gd"
+Tutorial="*res://autoload/tutorial.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
@@ -40,6 +42,11 @@ window/handheld/orientation="portrait"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+
+[internationalization]
+
+locale/translation_remaps={}
+locale/translations=PackedStringArray("res://assets/locale/game.en.translation", "res://assets/locale/game.fr.translation")
 
 [rendering]
 

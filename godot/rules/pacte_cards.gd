@@ -203,6 +203,21 @@ static func newly_shipped_augment_ids() -> Array[String]:
 static func power_ids() -> Array[String]:
 	return _ids(POWERS)
 
+## The augments that do not resolve on their own: taking one opens a symbol picker and the
+## card does nothing until the player answers it. Derived from the effects rather than
+## listed by hand, so a fourth tier cannot be added without this following it.
+##
+## The tutorial draws without these (see RunStateStore.start_new_run): a picker the script
+## never planned for takes the screen in the middle of a beat, and choosing which symbol to
+## amplify is not something a player has any basis for two minutes in.
+static func reward_amp_ids() -> Array[String]:
+	var result: Array[String] = []
+	for card in AUGMENTS:
+		var effect := card.get("effect", {}) as Dictionary
+		if String(effect.get("upgrade_id", "")).begins_with("corr_reward_amp"):
+			result.append(String(card["id"]))
+	return result
+
 static func power_draw_ids() -> Array[String]:
 	var result: Array[String] = []
 	for card in POWERS:

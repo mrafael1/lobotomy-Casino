@@ -104,6 +104,11 @@ const PHASE_BUTTON_IN := 0.24
 const TARGET_PAID_LABEL := "TARGET PAID"
 const BILL_ROW_FIRST_Y := 180.0
 const BILL_ROW_STEP := 10.0
+# The receipt is bottom-anchored, not top-anchored: rows are laid out so the LAST one
+# always ends just above BillRule (y229). A four-row bill therefore starts at 180 exactly
+# as before, and club's fifth HOUSE ANGER row grows the block upward into the clear space
+# under the score rather than down through the rule and the total.
+const BILL_ROW_BASE_COUNT := 4
 const BILL_ROW_HEIGHT := 9.0
 const BILL_LABEL_X := 22.0
 const BILL_LABEL_WIDTH := 86.0
@@ -168,13 +173,16 @@ func _ready() -> void:
 		continue_button.pressed.connect(_on_continue_pressed)
 	if not skip_catcher.pressed.is_connected(_skip_to_end):
 		skip_catcher.pressed.connect(_skip_to_end)
-	Assets.start_menu_button_press_feedback(continue_button)
+	ButtonKit.start_menu_button_press_feedback(continue_button)
 	button_host.pivot_offset = button_host.size * 0.5
 	if Engine.is_editor_hint():
 		_score = 650
 		_target = 500
 		_remaining = 150
-		var preview := EconomyConst.overflow_bill(_remaining, _target)
+		# The editor preview bills the club charge so the widest receipt — the one that
+		# has to fit five rows above the rule — is what the layout is designed against.
+		var preview := EconomyConst.overflow_bill(_remaining, _target,
+			EconomyConst.OVERFLOW_ANGER_RATE)
 		_bill_lines.clear()
 		_bill_lines.append({"key": "target", "label": TARGET_PAID_LABEL,
 			"amount": _target, "roll": false})
@@ -201,7 +209,8 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 	_final_target = final_target
 	# The bill is derived here rather than passed in: the store settles it from the same
 	# EconomyConst helper on CONTINUE, so recomputing cannot drift from what is banked.
-	var bill := EconomyConst.overflow_bill(_remaining, _target) if not final_target else {}
+	var bill := EconomyConst.overflow_bill(_remaining, _target,
+		RunStateStore.augmented_anger_tax_rate()) if not final_target else {}
 	# The target heads the receipt whatever else happens — it explains the drain the
 	# player just watched. It carries no rate and does not roll the reels again: the
 	# drain phase already took it off them.
@@ -324,18 +333,25 @@ func _build_bill_rows() -> void:
 			if is_instance_valid(node):
 				node.queue_free()
 	_bill_rows.clear()
+	var first_y := BILL_ROW_FIRST_Y \
+		- float(maxi(0, _bill_lines.size() - BILL_ROW_BASE_COUNT)) * BILL_ROW_STEP
 	for i in _bill_lines.size():
 		var line: Dictionary = _bill_lines[i]
-		var rest_y := BILL_ROW_FIRST_Y + float(i) * BILL_ROW_STEP
+		var rest_y := first_y + float(i) * BILL_ROW_STEP
 		# The rate is on the charge, not the amount: the player should read WHY the
 		# number on the right is that big before they read the number. A row with no
 		# rate (the target itself) is a flat debt and shows its name alone.
 		var text := String(line["label"])
 		if line.has("rate"):
 			text += " %d%%" % roundi(float(line["rate"]) * 100.0)
+		# The club charge is the one row that is not a standing cost of doing business,
+		# so it is named in the same red as the amounts: a punishment, not a fee.
+		var label_color: Color = LOSS_RED \
+			if String(line.get("key", "")) == String(EconomyConst.OVERFLOW_ANGER_LINE["key"]) \
+			else BILL_LABEL_COLOR
 		var label := _make_bill_label(text,
 			BILL_LABEL_X, rest_y, BILL_LABEL_WIDTH, HORIZONTAL_ALIGNMENT_LEFT,
-			BILL_LABEL_COLOR)
+			label_color)
 		var amount := _make_bill_label("-%d" % int(line["amount"]),
 			BILL_AMOUNT_X, rest_y, BILL_AMOUNT_WIDTH, HORIZONTAL_ALIGNMENT_RIGHT,
 			LOSS_RED)
@@ -687,7 +703,7 @@ func _style_text() -> void:
 
 
 func _style_button() -> void:
-	Assets.small_neon_button_style(continue_button, BLUE_NEON, 7, 1.0)
+	ButtonKit.small_neon_button_style(continue_button, BLUE_NEON, 7, 1.0)
 
 
 func _on_continue_pressed() -> void:

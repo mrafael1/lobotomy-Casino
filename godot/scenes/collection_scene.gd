@@ -19,6 +19,8 @@ const GRID_COLUMNS := 3
 const NEON_GOLD := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const LOCKED_MODULATE := Color(0.34, 0.32, 0.42, 0.9)
+const TEAR_TOP_Y := 16.0   # first redaction line, measured down the card back
+const TEAR_SPACING := 21.0 # and the gap to the second
 const LOCKED_NAME := "LOCKED"
 const LOCKED_DESCRIPTION := "NOT YET UNLOCKED."
 const HIGHLIGHT_PULSES := 3
@@ -52,11 +54,11 @@ var _modal_card_icon: TextureRect = null
 var _highlighted_card_id := ""
 
 func _ready() -> void:
-	_apply_font(self)
+	UiKit.apply_font(self)
 	_slim_scrollbar()
 	_build_modal_card_art()
-	_connect_button(_modal_close, _hide_modal)
-	_connect_button(_back_button, _go_back)
+	UiKit.connect_button(_modal_close, _hide_modal)
+	UiKit.connect_button(_back_button, _go_back)
 	_style_button(_modal_close, true)
 	_style_button(_back_button, true)
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_rebuild_grid):
@@ -120,7 +122,7 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 
 	var art := TextureRect.new()
 	art.name = "CardArt"
-	art.texture = _atlas(PacteCards.sheet_for_pool(pool),
+	art.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool),
 		PacteCards.front_rect_for_pool(pool) if unlocked else PacteCards.back_rect_for_pool(pool))
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_SCALE
@@ -176,7 +178,7 @@ func _add_locked_glitch(button: Button) -> void:
 		var tear := ColorRect.new()
 		tear.name = "Tear%d" % index
 		tear.color = Color(0.55, 0.9, 1.0, 0.16)
-		tear.position = Vector2(0.0, 16.0 + float(index) * 21.0)
+		tear.position = Vector2(0.0, TEAR_TOP_Y + float(index) * TEAR_SPACING)
 		tear.size = Vector2(CARD_SIZE.x, 2.0)
 		tear.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		fx.add_child(tear)
@@ -188,7 +190,7 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 		return null
 	var icon := TextureRect.new()
 	icon.name = "CardIcon"
-	icon.texture = _atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
@@ -262,7 +264,7 @@ func show_card_detail(card_id: String, pool: String = "") -> void:
 	_modal_card_id = card_id
 	_modal_state = "unlocked" if unlocked else "locked"
 	if _modal_card_art != null:
-		_modal_card_art.texture = _atlas(PacteCards.sheet_for_pool(resolved_pool),
+		_modal_card_art.texture = UiKit.atlas(PacteCards.sheet_for_pool(resolved_pool),
 			PacteCards.front_rect_for_pool(resolved_pool) if unlocked
 			else PacteCards.back_rect_for_pool(resolved_pool))
 		_modal_card_art.modulate = Color.WHITE if unlocked else LOCKED_MODULATE
@@ -287,7 +289,7 @@ func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 		_modal_card_icon.texture = null
 		_modal_card_icon.visible = false
 		return
-	_modal_card_icon.texture = _atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	_modal_card_icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
 		(CARD_SIZE.y - 6.0) / icon_rect.size.y))
 	_modal_card_icon.size = icon_rect.size * scale
@@ -340,35 +342,17 @@ func highlighted_card_id() -> String:
 
 # ── helpers ──────────────────────────────────────────────────────────────────────
 
-func _atlas(asset: String, region: Rect2) -> AtlasTexture:
-	var atlas := AtlasTexture.new()
-	atlas.atlas = Assets.texture(asset)
-	atlas.region = region
-	return atlas
 
-func _connect_button(button: Button, cb: Callable) -> void:
-	if button == null:
-		return
-	if not button.pressed.is_connected(cb):
-		button.pressed.connect(cb)
 
 func _style_button(button: Button, negative := false) -> void:
 	if button == null:
 		return
 	button.add_theme_font_size_override("font_size", 8)
 	if negative:
-		Assets.skin_negative_button(button)
+		ButtonKit.skin_negative_button(button)
 	else:
-		Assets.skin_sheet_button(button, "ui/green_button.png", 4)
+		ButtonKit.skin_sheet_button(button, "ui/green_button.png", 4)
 
-func _apply_font(node: Node) -> void:
-	var font := Assets.font()
-	for child in node.get_children():
-		if child is Label and font != null:
-			(child as Label).add_theme_font_override("font", font)
-		elif child is Button and font != null:
-			(child as Button).add_theme_font_override("font", font)
-		_apply_font(child)
 
 func _go_back() -> void:
 	if Engine.is_editor_hint():
