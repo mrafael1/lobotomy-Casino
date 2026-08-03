@@ -385,10 +385,7 @@ const SCORE_TABLE_ROW_CY := [45.5, 89.5, 133.0, 176.5, 220.0, 264.0]
 # Left of the wealth bar, on its plate's own line: the plate's art starts at x39 and runs
 # y242..278, so a 14px badge at x22 leaves a 3px gap and centres on it. The suit belongs
 # beside the number the run is played for, not off in the top strip with the settings.
-const AUGMENTED_BADGE_POS := Vector2(22.0, 254.0)
 ## The suit's own gold, on the badge and on the bubble it raises.
-const AUGMENTED_BADGE_BORDER := Color(0.86, 0.84, 0.24)
-const AUGMENTED_BADGE_SIZE := 14.0
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
 # Pressing it opens the current card(s) and effects.
@@ -396,15 +393,8 @@ const AUGMENTED_BADGE_SIZE := 14.0
 # third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
 # and the same 14px pitch, so the whole strip reads as one row of chips.
 const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
-const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
-const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
-const PACTE_AUGMENT_BADGE_PITCH := 14.0
-const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 10.0
-const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 const SCORE_TABLE_PCT_COLORS := {
 	"brain": Color("#e86a73"),
 	"eye": Color("#ce3dde"),
@@ -776,12 +766,6 @@ var _score_overlay: Control = null
 var _score_info_popup: Control = null
 var _score_info_buttons: Array[Button] = []
 var _score_pct_buttons: Array[Button] = []
-var _augmented_popup: Control = null # issue #111 hold-to-peek restrictions bubble
-var _pacte_augment_badges: Array[Dictionary] = []
-var _pacte_augment_badge: Button = null # first slot; anchors the popup
-var _pacte_augment_badge_icon: TextureRect = null
-var _pacte_augment_count: Label = null
-var _pacte_augment_popup: Control = null
 # Tap-an-item-badge description (issue #185). Lifetime is a plain countdown stepped from
 # _process rather than a tween, so the tween sweeps that clear the run's transient
 # effects can never strand it on screen.
@@ -811,8 +795,6 @@ var _dealer_bar_target_frame: int = 0
 var _dealer_bar_progress_time: float = 0.0
 var _dealer_bar_frame_initialized := false
 var _dealer_warning_wanted := 0    # lights the multiplier has earned (gates the beep)
-var _augment_glitch_time := 0.0
-var _augment_glitch_rng := RandomNumberGenerator.new()
 var _dealer_bar_overlay_beep_time := 0.0
 var _dealer_icon: TextureRect = null
 var _combo_loss_2_sprite: Sprite2D = null
@@ -852,6 +834,12 @@ var _power_anim_tween: Tween = null
 var _power_anim_label: Label = null
 var _cheat_selection_sprite: Sprite2D = null
 var _tv_info_pop_sources: Dictionary = {}
+
+## First component split out of this file (see scenes/machine/augment_display.gd).
+## It reaches back through a MachineView rather than through this node, so what it
+## can touch here is a written-down list instead of all ~210 remaining fields.
+var _view: MachineView = null
+var _augments: AugmentDisplay = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -917,7 +905,6 @@ var _restore_cap_glow: Sprite2D = null   # the lit frame, flashed and faded when
 var _restore_cycle_pips: Array[ColorRect] = [] # spade only: which half of the restore cycle is next
 var _restore_flash_tweens: Array[Tween] = []
 var _restore_flash_chip: Sprite2D = null # chip currently pulsing, so it can be reset
-var _augment_plate_sprite: Sprite2D = null # authored augment sockets under the badges
 var _power_bar_frame := 0    # current gauge frame (0 empty .. POWER_BAR_FRAMES-1 full)
 var _power_bar_score := 0        # score banked toward the next restore (0 .. coins_per_power_restore)
 var _power_seen_lucidity := 0    # legacy name: total power points the gauge has accounted for
@@ -1004,6 +991,10 @@ var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive s
 
 func _ready() -> void:
 	_font = _load_font("font/DTM-Sans.otf")
+	# Before any build step: _build_augment_emplacements hands the plate straight to
+	# the display, and that runs inside the sprite pass below.
+	_view = MachineView.new(self)
+	_augments = AugmentDisplay.new(_view)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1028,13 +1019,12 @@ func _ready() -> void:
 	_build_burst_layer()
 	_build_coin_layer()
 	_build_options_controls()
-	_build_augmented_badge()
+	_augments.build_augmented_badge()
 	_restore_options_overlay_if_requested()
 	_play_pending_scene_feedback()
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
-	_augment_glitch_rng.seed = 181_0726
-	_build_pacte_augment_badge()
+	_augments.build_pacte_badges()
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
@@ -1592,11 +1582,15 @@ func _build_spins_left_label() -> void:
 ## so the row only ever offers as many beds as the run has augments to put in them (nothing
 ## at all with none). Full-canvas art, so placement is baked in; the code picks the frame and
 ## the layer it draws on: above the cabinet, below the badges themselves.
+## The socket plate is built here because the full-canvas sheet helper and the
+## layering it sits in belong to the machine; AugmentDisplay only shows and frames
+## it, so it is handed over once and owned there from then on.
 func _build_augment_emplacements() -> void:
-	_augment_plate_sprite = _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AUGMENT_PLATE_FRAMES)
-	if _augment_plate_sprite != null:
-		_augment_plate_sprite.z_index = AUGMENT_PLATE_Z_INDEX
-		_augment_plate_sprite.visible = false
+	var plate := _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AugmentDisplay.AUGMENT_PLATE_FRAMES)
+	if plate != null:
+		plate.z_index = AUGMENT_PLATE_Z_INDEX
+		plate.visible = false
+	_augments.attach_plate(plate)
 
 func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
@@ -3184,7 +3178,7 @@ func _process(delta: float) -> void:
 		_step_flatline_countdown(delta)
 	_step_multiplier_fx(delta)
 	_step_dealer_bar_progress(delta)
-	_step_augment_glitch(delta)
+	_augments.step_glitch(delta)
 	_advance_target_bar_animation(delta)
 	_step_dealer_overlay_beep(delta)
 	_step_free_spin_blink(delta)
@@ -3478,8 +3472,8 @@ func _start_combo_loss_beep() -> void:
 func _begin_tv_info_pop(source: StringName) -> void:
 	_capture_tv_restore_state()
 	_tv_info_pop_sources[source] = true
-	_hide_pacte_augment_popup()
-	_refresh_pacte_augment_badge()
+	_augments.hide_pacte_popup()
+	_augments.refresh_pacte_badges()
 	_refresh_target_readout()
 	_hide_tv_info_layers()
 
@@ -3502,7 +3496,7 @@ func _end_tv_info_pop(source: StringName) -> void:
 	if not _tv_info_pop_sources.is_empty():
 		return
 	_restore_tv_info_layers()
-	_refresh_pacte_augment_badge()
+	_augments.refresh_pacte_badges()
 	_refresh_target_readout()
 
 ## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
@@ -3852,7 +3846,7 @@ func _update_hud() -> void:
 		return
 	_refresh_tv_indicators()
 	_refresh_spin_label()
-	_refresh_pacte_augment_badge()
+	_augments.refresh_pacte_badges()
 	_refresh_controls()
 	_refresh_consumable_fx()
 	_maybe_present_card_unlocks()
@@ -7983,8 +7977,8 @@ func _clear_wealth_presentation_fx() -> void:
 
 	_clear_targeting()
 	_close_score_table()
-	_hide_augmented_popup()
-	_hide_pacte_augment_popup()
+	_augments.hide_augmented_popup()
+	_augments.hide_pacte_popup()
 	_hide_item_info_popup()
 	_close_serum_picker()
 	_close_book_choice_overlay()
@@ -8277,321 +8271,6 @@ func _end_run_lucidity_kept_fraction() -> float:
 	return MetaStateStore.effective_lucidity_kept_fraction()
 
 # ── Augmented Run badge (issue #111) ─────────────────────────────────────────────────
-# The active suit stays visible during the run; holding it peeks at the list of
-# active restrictions in the shared bubble style.
-
-func _build_augmented_badge() -> void:
-	if RunStateStore.augmentedTier == "":
-		return
-	var icon_tex := Assets.augmented_suit_icon(RunStateStore.augmentedTier)
-	if icon_tex == null:
-		return
-	var b := Button.new()
-	b.name = "AugmentedBadge"
-	b.position = AUGMENTED_BADGE_POS
-	b.size = Vector2.ONE * AUGMENTED_BADGE_SIZE
-	b.z_index = 40
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.02, 0.05, 0.85)
-	style.border_color = AUGMENTED_BADGE_BORDER
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(2)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		b.add_theme_stylebox_override(state, style)
-	var icon := TextureRect.new()
-	icon.texture = icon_tex
-	# expand_mode BEFORE size: with the default EXPAND_KEEP_SIZE the texture's
-	# native size becomes the minimum and the size assignment gets clamped up.
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.position = Vector2.ONE * 2.0
-	icon.size = Vector2.ONE * (AUGMENTED_BADGE_SIZE - 4.0)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(icon)
-	b.button_down.connect(_show_augmented_popup.bind(b))
-	b.button_up.connect(_hide_augmented_popup)
-	add_child(b)
-
-func _augmented_restrictions_text() -> String:
-	var lines: Array[String] = []
-	# Every line is tr()'d BEFORE its numbers go in: the popup's own auto-translation only
-	# sees the finished sentence, and "PRICES +50%" is not a key any table can hold. The
-	# plural is two whole keys rather than an appended "S" for the same reason — French
-	# does not pluralise by bolting a letter onto the end of the noun.
-	if RunStateStore.augmented_modifier_active(1):
-		lines.append(tr("SPINS COST 2 HEALTH"))
-	if RunStateStore.augmented_modifier_active(2):
-		lines.append(tr("POWER RESTORES EVERY 2 SPINS"))
-	if RunStateStore.augmented_modifier_active(3):
-		lines.append(tr("MAX 2 POWERS PER SPIN"))
-		lines.append(tr("NO AUGMENT AT THE 2ND PACTE"))
-	if RunStateStore.augmented_modifier_active(4):
-		lines.append(tr("PRICES +%d%%") % roundi(
-			(RunStateStore.AUGMENTED_CLUB_PRICE_MULTIPLIER - 1.0) * 100.0))
-		var penalty := int(RunStateStore.AUGMENTED_CLUB_OFFER_PENALTY)
-		lines.append(tr("DEALER OFFERS %d ITEM FEWER" if penalty == 1
-			else "DEALER OFFERS %d ITEMS FEWER") % penalty)
-		lines.append(tr("HOUSE ANGER TAX +%d%%") % roundi(
-			EconomyConst.OVERFLOW_ANGER_RATE * 100.0))
-	return "\n".join(lines)
-
-func _show_augmented_popup(button: Button) -> void:
-	_hide_augmented_popup()
-	var text := _augmented_restrictions_text()
-	if text == "":
-		return
-	_augmented_popup = _make_info_bubble("AugmentedPopup", text,
-		AUGMENTED_BADGE_BORDER, Color(0.95, 0.92, 0.7))
-	_augmented_popup.z_index = 41
-	# Above the badge and centred on it, like the augment row and the TV badges. It used to
-	# open sideways, which worked while the badge lived in the top strip; from its new home
-	# beside the wealth plate that would lay the restrictions straight across the score.
-	var pos := button.position + Vector2(
-		(button.size.x - _augmented_popup.size.x) * 0.5,
-		-_augmented_popup.size.y - INFO_BUBBLE_GAP)
-	pos.x = clampf(pos.x, 2.0, SRC_W - _augmented_popup.size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - _augmented_popup.size.y - 2.0)
-	_augmented_popup.position = pos.round()
-	add_child(_augmented_popup)
-
-func _hide_augmented_popup() -> void:
-	if _augmented_popup != null:
-		_augmented_popup.queue_free()
-		_augmented_popup = null
-
-func _active_pacte_augment_ids() -> Array[String]:
-	var ids: Array[String] = []
-	for raw_id in RunStateStore.selectedAugmentCardIds:
-		var id := String(raw_id)
-		if not ids.has(id) and PacteCards.augment_map().has(id):
-			ids.append(id)
-	return ids
-
-## The glitching chip: only the augment whose effect glitches the dealer gets one, keyed off
-## the card's effect rather than its id so a renamed card keeps the treatment.
-const AUGMENT_GLITCH_SLICES := 4
-const AUGMENT_GLITCH_STEP_TIME := 0.09
-const AUGMENT_GLITCH_COLORS: Array[Color] = [
-	Color("#3ee0ff"), Color("#ff3ea5"), Color("#e8ff5a"), Color("#3ee0ff"),
-]
-
-func _augment_glitches(card_id: String) -> bool:
-	var entry := PacteCards.card(card_id)
-	var effect: Dictionary = entry.get("effect", {})
-	return String(effect.get("type", "")) == "glitch_dealer"
-
-func _step_augment_glitch(delta: float) -> void:
-	if _pacte_augment_badges.is_empty():
-		return
-	_augment_glitch_time += delta
-	if _augment_glitch_time < AUGMENT_GLITCH_STEP_TIME:
-		return
-	_augment_glitch_time = 0.0
-	for entry: Dictionary in _pacte_augment_badges:
-		var glitch := entry.get("glitch") as Control
-		if glitch == null or not glitch.visible:
-			continue
-		if not (entry["badge"] as Button).visible:
-			continue
-		_scramble_augment_glitch(glitch)
-
-## One frame of the effect: each slice jumps to a new row, overhangs the chip sideways so the
-## clip cuts it, and takes a fresh alpha. Seeded, so the same frame count always looks the same.
-func _scramble_augment_glitch(host: Control) -> void:
-	for i in host.get_child_count():
-		var slice := host.get_child(i) as ColorRect
-		if slice == null:
-			continue
-		var height := floorf(_augment_glitch_rng.randf_range(1.0, 3.0))
-		slice.position = Vector2(
-			floorf(_augment_glitch_rng.randf_range(-2.0, 2.0)),
-			floorf(_augment_glitch_rng.randf_range(0.0, maxf(1.0, host.size.y - height))))
-		slice.size = Vector2(host.size.x + 4.0, height)
-		var color: Color = AUGMENT_GLITCH_COLORS[i % AUGMENT_GLITCH_COLORS.size()]
-		color.a = _augment_glitch_rng.randf_range(0.4, 1.0)
-		slice.color = color
-
-func _pacte_augment_icon(card_id: String) -> Texture2D:
-	var entry := PacteCards.card(card_id)
-	var sheet := _load_texture(String(entry.get("sheet", "")), true)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	if sheet == null or icon_rect.size == Vector2.ZERO:
-		return null
-	var atlas := AtlasTexture.new()
-	atlas.atlas = sheet
-	atlas.region = icon_rect
-	return atlas
-
-## A row of augment icons along the TV's bottom-left, one badge per held card up to
-## PACTE_AUGMENT_BADGE_MAX (issue #181). The row stops short of the TARGET goal number
-## in the middle of the screen; a fourth augment turns the last badge into a "+N".
-## Every badge opens the same description popup.
-func _build_pacte_augment_badge() -> void:
-	if _pacte_augment_badge != null:
-		_refresh_pacte_augment_badge()
-		return
-	for i in PACTE_AUGMENT_BADGE_MAX:
-		var badge := Button.new()
-		# The first badge keeps the historical node name; the scene smoke and the popup
-		# anchoring both look it up by it.
-		badge.name = "PacteAugmentBadge" if i == 0 else "PacteAugmentBadge%d" % (i + 1)
-		badge.position = PACTE_AUGMENT_BADGE_POS + Vector2(float(i) * PACTE_AUGMENT_BADGE_PITCH, 0.0)
-		badge.size = PACTE_AUGMENT_BADGE_SIZE
-		badge.z_index = 40
-		badge.text = ""
-		badge.flat = true
-		badge.visible = false
-		badge.focus_mode = Control.FOCUS_NONE
-		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var badge_style := StyleBoxFlat.new()
-		badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
-		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
-		badge_style.set_border_width_all(1)
-		badge_style.set_corner_radius_all(1)
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			badge.add_theme_stylebox_override(state, badge_style)
-		var icon := TextureRect.new()
-		icon.name = "Icon"
-		icon.position = (PACTE_AUGMENT_BADGE_SIZE
-			- Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)) * 0.5
-		icon.size = Vector2(PACTE_AUGMENT_ICON_SIZE, PACTE_AUGMENT_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.add_child(icon)
-		# The overflow count replaces the last icon rather than sitting on top of one,
-		# so it can never obscure the art it is counting.
-		var count := Label.new()
-		count.name = "Count"
-		count.position = Vector2.ZERO
-		count.size = PACTE_AUGMENT_BADGE_SIZE
-		count.visible = false
-		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		count.add_theme_font_size_override("font_size", 5)
-		if _font != null:
-			count.add_theme_font_override("font", _font)
-		count.add_theme_color_override("font_color", NEON_GOLD)
-		count.add_theme_color_override("font_outline_color", Color.BLACK)
-		count.add_theme_constant_override("outline_size", 1)
-		badge.add_child(count)
-		# GLITCH has no authored chip art, so its badge carries the effect itself: a few
-		# neon slices that jump and flicker inside the chip (clipped to it), stepped by
-		# _step_augment_glitch. It draws over the icon, so authored art can arrive later
-		# and keep the effect.
-		var glitch := Control.new()
-		glitch.name = "Glitch"
-		glitch.position = icon.position
-		glitch.size = icon.size
-		glitch.clip_contents = true
-		glitch.visible = false
-		glitch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		for _slice_index in AUGMENT_GLITCH_SLICES:
-			var slice := ColorRect.new()
-			slice.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			glitch.add_child(slice)
-		badge.add_child(glitch)
-		# Held, not toggled: the same grip as the Augmented suit badge and the TV item
-		# badges. A toggle also left the description parked on screen if the second tap
-		# ever went astray, which a hold cannot do.
-		badge.button_down.connect(_show_pacte_augment_popup)
-		badge.button_up.connect(_hide_pacte_augment_popup)
-		add_child(badge)
-		_pacte_augment_badges.append({
-			"badge": badge, "icon": icon, "count": count, "glitch": glitch,
-		})
-	if not _pacte_augment_badges.is_empty():
-		_pacte_augment_badge = _pacte_augment_badges[0]["badge"]
-		_pacte_augment_badge_icon = _pacte_augment_badges[0]["icon"]
-		_pacte_augment_count = _pacte_augment_badges[0]["count"]
-	_refresh_pacte_augment_badge()
-
-func _refresh_pacte_augment_badge() -> void:
-	if _pacte_augment_badges.is_empty():
-		return
-	var ids := _active_pacte_augment_ids()
-	# The row lives on the power bar now, not on the TV, so a TV callout no longer
-	# hides it — only the description popup steps aside for one.
-	if not _tv_info_pop_sources.is_empty():
-		_hide_pacte_augment_popup()
-	if ids.is_empty():
-		for entry: Dictionary in _pacte_augment_badges:
-			(entry["badge"] as Button).visible = false
-		if _augment_plate_sprite != null:
-			_augment_plate_sprite.visible = false # no augments, no sockets
-		_hide_pacte_augment_popup()
-		return
-	var shown := mini(ids.size(), _pacte_augment_badges.size())
-	# One socket per badge on show, so the plate never offers an empty bed.
-	if _augment_plate_sprite != null:
-		_augment_plate_sprite.visible = true
-		_set_sheet_frame(_augment_plate_sprite, clampi(shown - 1, 0, AUGMENT_PLATE_FRAMES - 1))
-	for i in _pacte_augment_badges.size():
-		var entry: Dictionary = _pacte_augment_badges[i]
-		var badge: Button = entry["badge"]
-		var icon: TextureRect = entry["icon"]
-		var count: Label = entry["count"]
-		badge.visible = i < shown
-		if not badge.visible:
-			icon.texture = null
-			continue
-		# The last slot counts the remainder instead of showing one more icon.
-		var overflow := i == shown - 1 and ids.size() > shown
-		count.visible = overflow
-		icon.visible = not overflow
-		var glitch := entry.get("glitch") as Control
-		if overflow:
-			count.text = "+%d" % (ids.size() - shown + 1)
-			icon.texture = null
-			if glitch != null:
-				glitch.visible = false
-		else:
-			icon.texture = _pacte_augment_icon(ids[i])
-			if glitch != null:
-				glitch.visible = _augment_glitches(String(ids[i]))
-
-## Card names and their descriptions run long; wrapping keeps the bubble on the canvas.
-const PACTE_AUGMENT_POPUP_MAX_WIDTH := 126.0
-
-func _pacte_augment_popup_text() -> String:
-	var lines: Array[String] = []
-	for card_id in _active_pacte_augment_ids():
-		var entry := PacteCards.card(card_id)
-		lines.append("%s\n%s" % [
-			String(entry.get("name", card_id)), String(entry.get("description", ""))])
-	return "\n".join(lines)
-
-func _show_pacte_augment_popup() -> void:
-	_hide_pacte_augment_popup()
-	if _pacte_augment_badge == null or _active_pacte_augment_ids().is_empty():
-		return
-	var text := _pacte_augment_popup_text()
-	if text == "":
-		return
-	var popup := _make_info_bubble("PacteAugmentPopup", text, NEON_CYAN,
-		Color(0.88, 0.98, 1.0), PACTE_AUGMENT_POPUP_MAX_WIDTH)
-	popup.z_index = 41
-	# Directly above the badge being held rather than a whole badge-height clear of it,
-	# which is what used to leave the words floating away from the row.
-	var pos := _pacte_augment_badge.position + Vector2(
-		(_pacte_augment_badge.size.x - popup.size.x) * 0.5,
-		-popup.size.y - INFO_BUBBLE_GAP)
-	pos.x = clampf(pos.x, 2.0, SRC_W - popup.size.x - 2.0)
-	pos.y = clampf(pos.y, 2.0, SRC_H - popup.size.y - 2.0)
-	popup.position = pos.round()
-	_pacte_augment_popup = popup
-	add_child(popup)
-
-func _hide_pacte_augment_popup() -> void:
-	if _pacte_augment_popup != null:
-		_pacte_augment_popup.queue_free()
-		_pacte_augment_popup = null
-
 ## A wealth CONTINUE only makes sense if the resumed run can still take a spin:
 ## neurons (or banked free spins) remain (issue #62). The normal spin pool is capped
 ## at 18, including after a Wealth continuation.
