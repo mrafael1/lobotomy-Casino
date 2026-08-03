@@ -41,12 +41,12 @@ func _run() -> void:
 			badge.button_down.emit())
 
 	await _shot(scene, "SHOT_AUGMENT", func() -> void:
-		if scene._pacte_augment_badge != null:
-			scene._pacte_augment_badge.button_down.emit())
+		if scene._augments.pacte_badge() != null:
+			scene._augments.pacte_badge().button_down.emit())
 
 	await _shot(scene, "SHOT_ITEM", func() -> void:
 		scene._refresh_boost_indicators()
-		scene._on_boost_indicator_pressed(0))
+		scene._boosts.on_pressed(0))
 	quit(0)
 
 ## Raises one bubble, captures, then clears every bubble so the next shot starts clean.
@@ -57,8 +57,8 @@ func _shot(scene: Node, env_var: String, raise: Callable) -> void:
 	var path := OS.get_environment(env_var)
 	if path != "":
 		get_root().get_texture().get_image().save_png(path)
-	scene._hide_augmented_popup()
-	scene._hide_pacte_augment_popup()
+	scene._augments.hide_augmented_popup()
+	scene._augments.hide_pacte_popup()
 	scene._hide_item_info_popup()
 	for i in 2:
 		await process_frame

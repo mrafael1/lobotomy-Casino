@@ -467,7 +467,7 @@ func _check_consumable_roster_32(run_store: Node, failures: Array) -> void:
 ## invisibly. It gets ONE badge over both phases, counting the whole effect down.
 func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
-	var slots: Array = machine._boost_indicator_slots
+	var slots: Array = machine._boosts.slots()
 	if slots.is_empty():
 		failures.append("issue185: boost indicator slots were not built")
 		return
@@ -493,8 +493,8 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 	if icon == null or not String(icon.resource_path).ends_with("items/pill.png"):
 		failures.append("issue185: the Red Pill badge did not use the pill icon")
 	# Phase one is the forced flatline it makes you take, so the count is RED.
-	var green: Color = machine.BOOST_COUNT_COLOR
-	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	var green: Color = BoostIndicators.COUNT_COLOR
+	var red: Color = BoostIndicators.NEGATIVE_COUNT_COLOR
 	if (slots[0]["count"] as Label).get_theme_color("font_color") != red:
 		failures.append("issue185: the Red Pill's forced-flatline phase should count in red")
 
@@ -548,7 +548,7 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
 	run_store.runPhase = "running"
-	var slots: Array = machine._boost_indicator_slots
+	var slots: Array = machine._boosts.slots()
 	if slots.is_empty():
 		failures.append("issue185: boost indicator slots were not built")
 		return
@@ -569,11 +569,11 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 	# The badge answers to a hold, like every other explain-this control on the machine:
 	# a plain press must pop nothing.
 	(slot as Button).pressed.emit()
-	if machine._item_info_popup != null:
+	if machine._boosts.popup() != null:
 		failures.append("issue185: pressing an item badge popped a description instead of holding")
 
-	machine._on_boost_indicator_pressed(0)
-	var popup := machine._item_info_popup as Control
+	machine._boosts.on_pressed(0)
+	var popup := machine._boosts.popup() as Control
 	if popup == null:
 		failures.append("issue185: tapping an item badge popped nothing")
 	else:
@@ -593,7 +593,7 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 			Vector2(machine.TV_SCREEN["width"], machine.TV_SCREEN["height"]))
 		# The bubble hugs its text, so its size is whatever the description needed.
 		var popup_rect := Rect2(popup.position, popup.size)
-		if popup_rect.size.x > machine.ITEM_INFO_POPUP_MAX_WIDTH:
+		if popup_rect.size.x > BoostIndicators.POPUP_MAX_WIDTH:
 			failures.append("issue185: the popup is wider than the TV allows: %s" % popup_rect)
 		var badge_rect := Rect2(slot.position, slot.size)
 		# "Next to the icon": the bubble sits within a few px of the badge that raised it,
@@ -608,23 +608,23 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 	# Hold to peek: while the badge is down the description stays, however long the player
 	# takes to read it. It ages out only once the badge is released, and then it fades
 	# rather than blinking off — no second tap needed, nothing to dismiss.
-	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_HOLD * 4.0)
-	if machine._item_info_popup == null:
+	machine._boosts.step_popup(BoostIndicators.POPUP_HOLD * 4.0)
+	if machine._boosts.popup() == null:
 		failures.append("issue185: the popup left while the badge was still held")
-	machine._on_boost_indicator_released()
-	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_FADE * 0.4)
-	if machine._item_info_popup == null:
+	machine._boosts.on_released()
+	machine._boosts.step_popup(BoostIndicators.POPUP_FADE * 0.4)
+	if machine._boosts.popup() == null:
 		failures.append("issue185: the popup snapped off on release instead of fading")
-	elif machine._item_info_popup.modulate.a >= 1.0:
+	elif machine._boosts.popup().modulate.a >= 1.0:
 		failures.append("issue185: the released popup is not fading out")
-	machine._step_item_info_popup(machine.ITEM_INFO_POPUP_FADE)
-	if machine._item_info_popup != null:
+	machine._boosts.step_popup(BoostIndicators.POPUP_FADE)
+	if machine._boosts.popup() != null:
 		failures.append("issue185: the popup outstayed the release fade")
 
 	# A callout needs the whole screen: the popup gets out of the way with the badges.
-	machine._on_boost_indicator_pressed(0)
+	machine._boosts.on_pressed(0)
 	machine._callouts.play_win("pair", 20)
-	if machine._item_info_popup != null:
+	if machine._boosts.popup() != null:
 		failures.append("issue185: the popup survived a PAIR callout taking the TV")
 	machine._callouts.stop_win()
 
@@ -633,8 +633,8 @@ func _check_item_badge_popup_185(machine: Node, run_store: Node, failures: Array
 	run_store.cocktailBoostSpins = 0
 	machine._clear_boost_zero_linger()
 	machine._refresh_boost_indicators()
-	machine._on_boost_indicator_pressed(0)
-	if machine._item_info_popup != null:
+	machine._boosts.on_pressed(0)
+	if machine._boosts.popup() != null:
 		failures.append("issue185: an expired badge still popped a description")
 	machine._hide_item_info_popup()
 	run_store.reset_run_state()

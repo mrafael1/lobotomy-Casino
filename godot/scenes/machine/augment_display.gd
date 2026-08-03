@@ -83,6 +83,11 @@ func plate_sprite() -> Sprite2D:
 func pacte_popup() -> Control:
 	return _pacte_augment_popup
 
+## The first chip, which is what the popup anchors on and what a shot script
+## presses to raise it.
+func pacte_badge() -> Button:
+	return _pacte_augment_badge
+
 ## The augment cards actually held, de-duplicated and filtered to ones the catalog
 ## still knows. What the row draws, and what the smoke checks count sockets against.
 func active_ids() -> Array[String]:

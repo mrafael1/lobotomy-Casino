@@ -182,7 +182,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
-	for boost_entry: Dictionary in machine._boost_indicator_slots:
+	for boost_entry: Dictionary in machine._boosts.slots():
 		var boost_slot := boost_entry.get("slot") as Control
 		if boost_slot != null and boost_slot.visible:
 			failures.append("wealth: active boost icon was not cleared")

@@ -656,9 +656,6 @@ var _dealer_portrait_sprite: Sprite2D = null
 # Tap-an-item-badge description (issue #185). Lifetime is a plain countdown stepped from
 # _process rather than a tween, so the tween sweeps that clear the run's transient
 # effects can never strand it on screen.
-var _item_info_popup: Control = null
-var _item_info_popup_time := 0.0
-var _item_info_popup_held := false # true while the badge is still under the finger
 var _options_button: TextureButton = null
 var _options_overlay: OptionsOverlay = null
 var _score_button: Button = null
@@ -706,13 +703,12 @@ var _bursts: ScoreBursts = null
 var _score_table: ScoreTable = null
 var _wealth: WealthReadout = null
 var _dealer_bar: DealerBar = null
+var _boosts: BoostIndicators = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
 var _coin_anim_active := false
 var _coin_anim_elapsed := 0.0
-var _boost_indicator_slots: Array = [] # pooled { slot, icon, count } for the TV duration icons
-var _boost_zero_linger: Dictionary = {} # counter -> snapshot while the just-spent final spin shows "0"
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
@@ -852,6 +848,8 @@ func _ready() -> void:
 	_score_table = ScoreTable.new(_view, _triple_effect_text, _info_line_segments)
 	_wealth = WealthReadout.new(_view)
 	_dealer_bar = DealerBar.new(_view)
+	_boosts = BoostIndicators.new(_view, DURATION_BOOSTS, TV_SCREEN,
+		_icon_for, _item_info_popup_text)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1337,7 +1335,7 @@ func _build_tv_indicators() -> void:
 		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
 	if _coin_insert_sprite != null:
 		_coin_insert_sprite.visible = false
-	_build_boost_indicators()
+	_boosts.build()
 	_build_power_bar()
 	_build_restore_cap()
 	_build_augment_emplacements()
@@ -1541,256 +1539,61 @@ func _refresh_restore_cycle_pips() -> void:
 ## dropped source pixels unevenly, while 8px is exactly 32/4 — every fourth pixel, all
 ## the way across. The row is left-aligned to the fill bar above it (x41) so the two
 ## read as one block.
-const BOOST_ICON_SIZE := 8.0
-const BOOST_COUNT_WIDTH := 7.0
-# The count is pinned to the badge's bottom-right CORNER, the same place on every item.
-# It used to sit beside the icon at a fixed offset, which only looked consistent if the
-# art did: the icons are aspect-centred in their 8px box and fill wildly different amounts
-# of it (the cigarette is a wide horizontal object and runs the full width, the drink can
-# is tall and narrow and uses half), so the number appeared to sit on top of one item and
-# well clear of the next. Anchoring to the corner makes the number's position identical
-# across the row and lets each icon differ underneath it.
-#
-# It sits ON the icon rather than beside it: the number belongs to that item, and a number
-# floating in the gap between two icons reads as ambiguous about which one it counts. Its
-# right edge overhangs the icon's by BOOST_COUNT_OVERHANG px so the digit still has a clean
-# edge to sit against, but the rest of it overlaps the art's bottom-right — the black
-# outline on the label is what keeps it legible over the icon underneath.
-const BOOST_COUNT_OVERHANG := 1.0     # px the number's right edge clears the icon's
-const BOOST_COUNT_OFFSET := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG - BOOST_COUNT_WIDTH  # 2
-const BOOST_SLOT_WIDTH := BOOST_ICON_SIZE + BOOST_COUNT_OVERHANG   # 9: icon + the overhang
-# Per-item nudge for art that still reads badly under the shared anchor — the icons do not
-# share a silhouette, so a few need a pixel either way. Keyed by item id, in badge px.
-const BOOST_COUNT_NUDGE := {}
-# The row is bounded by the TV's own SCREEN, not by the cabinet around it: the near-black
-# screen runs x37..114 across y99..106 before the bezel and the curved bottom corners take
-# over (y107 already narrows to x39..112). Measuring "anything dark" instead caught the
-# cabinet grey and pushed the row about 5px past the bezel, off the TV entirely.
-# The row sits on the screen's last eight rows, y100..107. Its bottom row is where the
-# screen curves in to x39..112, and that corner is what fixes the row's width: five
-# BOOST_SLOT_WIDTH slots at a 15px pitch from x39 land flush inside it. These positions
-# are the layout — nothing derives them, so there is one place to change.
-const BOOST_SLOT_POSITIONS: Array[Vector2] = [
-	Vector2(39.0, 100.0), Vector2(54.0, 100.0), Vector2(69.0, 100.0),
-	Vector2(84.0, 100.0), Vector2(99.0, 100.0),
-]
-const BOOST_BADGE_FONT_SIZE := 5      # the turn count, sized for the 8px badge
-# Polarity is the count's colour (issue #185): the project's established positive/negative
-# pair, the same green and red the potion popup and the on-use hints already speak in.
-const BOOST_COUNT_COLOR := Color(0.72, 1.0, 0.65)
-const BOOST_NEGATIVE_COUNT_COLOR := Color(0.94, 0.27, 0.27)
-func _build_boost_indicators() -> void:
-	_boost_indicator_slots.clear()
-	for i in DURATION_BOOSTS.size():
-		# A Button, not a bare Control (issue #185): HOLDING a badge is how you find out
-		# what the icon means. Flat and untextured, so it stays the authored art with a
-		# hit box on it. Its children keep MOUSE_FILTER_IGNORE so the whole 12px badge
-		# is the target — there is nothing else to hit at that size.
-		var slot := Button.new()
-		slot.name = "BoostIndicator%d" % i
-		slot.flat = true
-		slot.text = ""
-		slot.focus_mode = Control.FOCUS_NONE
-		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		slot.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
-		slot.z_index = 12
-		slot.visible = false
-		# Hold to peek, release to dismiss — the same grip the Augmented suit badge and the
-		# score table's info chips use, so every explain-this control on the machine
-		# answers to one gesture instead of each having its own.
-		slot.button_down.connect(_on_boost_indicator_pressed.bind(i))
-		slot.button_up.connect(_on_boost_indicator_released)
-		add_child(slot)
-		# Icon at the slot origin; the whole slot is positioned per-row on refresh.
-		var icon := TextureRect.new()
-		icon.position = Vector2.ZERO
-		icon.size = Vector2(BOOST_ICON_SIZE, BOOST_ICON_SIZE)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(icon)
-		# Count in the icon's bottom-right corner. The DTM font forces a ~23px min box
-		# height, so a fixed box would push bottom-aligned text well below the icon; the
-		# box is instead sized/placed from the label's real min height on refresh.
-		var count := Label.new()
-		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-		# Font 5 on the 8px badge, matching the augment chips' own count (issue #185
-		# follow-up); the old 7 was sized for a 12px icon and would swallow this one.
-		count.add_theme_font_size_override("font_size", BOOST_BADGE_FONT_SIZE)
-		if _font != null:
-			count.add_theme_font_override("font", _font)
-		count.add_theme_color_override("font_color", BOOST_COUNT_COLOR)
-		count.add_theme_color_override("font_outline_color", Color.BLACK)
-		count.add_theme_constant_override("outline_size", 1)
-		count.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(count)
-		_boost_indicator_slots.append({
-			"slot": slot, "icon": icon, "count": count,
-			# Which boost this pooled slot is currently showing — the row is packed, so
-			# slot index is not boost index and a tap has to look it up here.
-			"boost": {},
-		})
-
-## The phases an item runs through, in order. A single-phase item is described by its own
-## `counter` and `negative` flag, so every entry can be read the same way.
-func _boost_phases(boost: Dictionary) -> Array:
-	var phases: Array = boost.get("phases", [])
-	if not phases.is_empty():
-		return phases
-	return [{ "counter": String(boost["counter"]),
-		"negative": bool(boost.get("negative", false)) }]
-
-## Spins left on a boost: the whole effect, summed across its phases, so a phased item
-## counts down continuously instead of restarting at each hand-off (issue #185).
-func _boost_remaining(boost: Dictionary) -> int:
-	var total := 0
-	for phase: Dictionary in _boost_phases(boost):
-		total += int(RunStateStore.get(String(phase["counter"])))
-	return total
-
-## Whether what the item is doing RIGHT NOW is a downside — the first phase with spins
-## still on it. This is what colours the count, so an item that turns sour (or sweet)
-## partway through says so as it happens rather than averaging the two.
-func _boost_phase_is_negative(boost: Dictionary) -> bool:
-	var phases := _boost_phases(boost)
-	for phase: Dictionary in phases:
-		if int(RunStateStore.get(String(phase["counter"]))) > 0:
-			return bool(phase.get("negative", false))
-	# Nothing left running (the badge is lingering on zero): keep the last phase's colour
-	# rather than snapping back to the first one's as it goes out.
-	return bool((phases[phases.size() - 1] as Dictionary).get("negative", false))
-
-## Whether a boost currently owns a slot: either it has spins left, or it just expired
-## and is lingering on zero for one refresh.
-func _boost_is_active(boost: Dictionary) -> bool:
-	var counter := String(boost["counter"])
-	var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
-	if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
-		return false
-	return _boost_remaining(boost) > 0 or _boost_zero_linger.has(counter)
-
-## Shows one icon per active multi-spin boost, stacked down the TV's right edge, each
-## with a spins-remaining badge. A boost whose icon is missing is skipped rather than
-## shown as a bare number. Unused slots hide (issue #76). There are more boosts than
-## slots, so the last visible one carries a "+N" overflow count (issue #181).
+## The row steps aside for a full-screen callout and only for that, and whether one
+## is up is the TV priority stack's question, not the row's — so it is answered here.
 func _refresh_boost_indicators() -> void:
-	if _boost_indicator_slots.is_empty():
-		return
-	# The item icons step aside for a full-screen callout, and only for that (issue #185).
-	# The FREE SPIN banner no longer blanks them — the row sits below the target bar now,
-	# well clear of the banner, so what is running stays readable through the free spins.
-	if _tv_callout_active():
-		_hide_boost_indicators()
-		return
-	var column_capacity := mini(BOOST_SLOT_POSITIONS.size(), _boost_indicator_slots.size())
-	var active_total := 0
-	for boost in DURATION_BOOSTS:
-		if _boost_is_active(boost):
-			active_total += 1
-	var col := 0
-	for boost in DURATION_BOOSTS:
-		var counter := String(boost["counter"])
-		var remaining := _boost_remaining(boost)
-		var show_zero := remaining <= 0 and _boost_zero_linger.has(counter)
-		var suppress_when_zero_counter := String(boost.get("suppressWhenZeroCounter", ""))
-		if suppress_when_zero_counter != "" and _boost_zero_linger.has(suppress_when_zero_counter):
-			continue
-		if remaining > 0:
-			_boost_zero_linger.erase(counter)
-		if (remaining <= 0 and not show_zero) or col >= column_capacity:
-			continue
-		var tex := _boost_icon_for(boost)
-		if tex == null:
-			continue
-		var s: Dictionary = _boost_indicator_slots[col]
-		var slot: Control = s["slot"]
-		s["boost"] = boost
-		slot.position = BOOST_SLOT_POSITIONS[col]
-		(s["icon"] as TextureRect).texture = tex
-		var cn: Label = s["count"]
-		# Just the number of turns left, coloured by what the item is doing right now:
-		# green while it is helping, red while it is costing. The badge is 8px and the
-		# sign glyphs that used to carry polarity crowded the art at that size, so the
-		# count carries it instead — and because the colour tracks the live phase, a
-		# phased item announces the turn as it happens.
-		cn.text = str(maxi(0, remaining))
-		cn.add_theme_color_override("font_color",
-			BOOST_NEGATIVE_COUNT_COLOR if _boost_phase_is_negative(boost) else BOOST_COUNT_COLOR)
-		# Pinned over the icon's bottom-right corner — the same coordinates on every item,
-		# so the row reads as one repeated shape rather than the number chasing each
-		# icon's silhouette, and overlapping the art so the count is visibly attached to
-		# the item it belongs to. Plus whatever per-item nudge the art needs.
-		var mh := cn.get_minimum_size().y
-		var nudge: Vector2 = BOOST_COUNT_NUDGE.get(String(boost.get("id", "")), Vector2.ZERO)
-		cn.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		cn.size = Vector2(BOOST_COUNT_WIDTH, mh)
-		cn.position = Vector2(BOOST_COUNT_OFFSET, BOOST_ICON_SIZE - mh) + nudge
-		slot.visible = true
-		col += 1
-	# More boosts than slots: the last one carries how many are not shown, so the player
-	# still knows something is running rather than silently losing it.
-	if col > 0 and active_total > col:
-		var overflow: Label = _boost_indicator_slots[col - 1]["count"]
-		overflow.text = "+%d" % (active_total - col + 1)
-	_hide_boost_indicators(col)
+	_boosts.refresh(_tv_callout_active())
 
 func _boost_indicators_showing() -> bool:
-	for entry: Dictionary in _boost_indicator_slots:
-		if (entry["slot"] as Control).visible:
-			return true
-	return false
+	return _boosts.showing()
 
-## Blanks the boost slots from `first` onwards. Dropping the texture matters: a slot
-## re-shown before its icon is resolved would otherwise flash the previous boost's art.
 func _hide_boost_indicators(first := 0) -> void:
-	for i in range(first, _boost_indicator_slots.size()):
-		var hidden: Dictionary = _boost_indicator_slots[i]
-		(hidden["slot"] as Control).visible = false
-		(hidden["icon"] as TextureRect).texture = null
-		# Forget what the slot was showing along with the art: a tap that raced a
-		# hide must not describe a boost that has already run out.
-		hidden["boost"] = {}
+	_boosts.hide_all(first)
+
+func _hide_item_info_popup() -> void:
+	_boosts.hide_popup()
+
+## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
+## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
+##
+## Stays on the machine and is handed to the row as a Callable: it reaches the item
+## catalogue for a display name and the joker run's reworded blurbs, neither of which
+## the row has any business in.
+func _item_info_popup_text(boost: Dictionary) -> String:
+	var title := String(boost.get("title", ""))
+	if title == "":
+		title = _item_display_name(String(boost.get("id", "")))
+	var desc := String(boost.get("desc", ""))
+	# An item the joker run has turned around describes what it is doing NOW (issue #111).
+	if RunStateStore.augmented_joker_items_active() and boost.has("jokerDesc"):
+		desc = String(boost["jokerDesc"])
+	# Translated part by part: the bubble auto-translates the whole string it is handed, and
+	# "COCKTAIL\n+1 SPIN ON EVERY WIN" glued together is not a key.
+	title = tr(title)
+	desc = tr(desc) if desc != "" else desc
+	var symbol_field := String(boost.get("symbolField", ""))
+	if symbol_field != "":
+		var symbol_id := String(RunStateStore.get(symbol_field))
+		if symbol_id != "":
+			desc = "%s: %s" % [tr(symbol_id.to_upper()), desc]
+	if desc == "":
+		return title
+	return "%s\n%s" % [title, desc]
 
 func _capture_expiring_boost_counters() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for boost in DURATION_BOOSTS:
-		var counter := String(boost["counter"])
-		if _boost_remaining(boost) == 1:
-			var snapshot: Dictionary = { "counter": counter }
-			var symbol_field := String(boost.get("symbolField", ""))
-			if symbol_field != "":
-				var symbol_id := String(RunStateStore.get(symbol_field))
-				if symbol_id != "":
-					snapshot["symbolId"] = symbol_id
-			out.append(snapshot)
-	return out
+	return _boosts.capture_expiring()
 
 func _apply_expiring_boost_linger(counters: Array[Dictionary]) -> void:
-	for snapshot in counters:
-		var counter := String(snapshot.get("counter", ""))
-		if int(RunStateStore.get(counter)) <= 0:
-			_boost_zero_linger[counter] = snapshot
+	_boosts.apply_linger(counters)
 
 func _clear_boost_zero_linger() -> void:
-	if _boost_zero_linger.is_empty():
+	if not _boosts.has_linger():
 		return
-	_boost_zero_linger.clear()
+	_boosts.clear_linger()
 	_refresh_boost_indicators()
 	_refresh_consumable_fx()
 
 # ── tap-an-item-badge description (issue #185) ────────────────────────────────────
-# A 12px icon can say WHICH item is running and for how long, but not what it does.
-# Tapping one pops its name and effect over the TV for about a second and then gets out
-# of the way on its own — long enough to read, short enough that it never becomes another
-# thing occupying a screen four other systems are already competing for.
-const ITEM_INFO_POPUP_HOLD := 1.0     # seconds fully lit before it starts leaving
-const ITEM_INFO_POPUP_FADE := 0.18
-const ITEM_INFO_POPUP_MAX_WIDTH := 104.0 # wrap before the description leaves the TV
-const ITEM_INFO_POPUP_Z_INDEX := 42   # over the banner, the callouts and the dealer strip
-const ITEM_INFO_POPUP_BG := Color(0.045, 0.035, 0.075, 0.97)
-
 # ── the machine's description bubble ─────────────────────────────────────────────────
 # One builder behind all three explain-this controls (the Augmented suit badge, the
 # augment row on the power bar, the item badges on the TV). The panel HUGS its text
@@ -1886,95 +1689,6 @@ func _make_info_bubble(node_name: String, source: String, border: Color,
 	label.add_theme_constant_override("outline_size", 1)
 	bg.add_child(label)
 	return popup
-
-func _on_boost_indicator_pressed(slot_index: int) -> void:
-	if slot_index < 0 or slot_index >= _boost_indicator_slots.size():
-		return
-	var entry: Dictionary = _boost_indicator_slots[slot_index]
-	if not (entry["slot"] as Control).visible:
-		return
-	_show_item_info_popup(entry["boost"] as Dictionary, (entry["slot"] as Control).position)
-
-## Released: the description starts leaving. It is not cut off — the hold timer is wound
-## forward to the end of its dwell so the existing fade plays out from here, which is why
-## letting go looks the same as a popup that timed out on its own.
-func _on_boost_indicator_released() -> void:
-	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
-		return
-	_item_info_popup_held = false
-	_item_info_popup_time = maxf(_item_info_popup_time, ITEM_INFO_POPUP_HOLD)
-
-## Name over effect, straight off the badge's DURATION_BOOSTS entry. Serum names the
-## symbol it guaranteed, because the badge is showing that symbol rather than the bottle.
-func _item_info_popup_text(boost: Dictionary) -> String:
-	var title := String(boost.get("title", ""))
-	if title == "":
-		title = _item_display_name(String(boost.get("id", "")))
-	var desc := String(boost.get("desc", ""))
-	# An item the joker run has turned around describes what it is doing NOW (issue #111).
-	if RunStateStore.augmented_joker_items_active() and boost.has("jokerDesc"):
-		desc = String(boost["jokerDesc"])
-	# Translated part by part: the bubble auto-translates the whole string it is handed, and
-	# "COCKTAIL\n+1 SPIN ON EVERY WIN" glued together is not a key.
-	title = tr(title)
-	desc = tr(desc) if desc != "" else desc
-	var symbol_field := String(boost.get("symbolField", ""))
-	if symbol_field != "":
-		var symbol_id := String(RunStateStore.get(symbol_field))
-		if symbol_id != "":
-			desc = "%s: %s" % [tr(symbol_id.to_upper()), desc]
-	if desc == "":
-		return title
-	return "%s\n%s" % [title, desc]
-
-func _show_item_info_popup(boost: Dictionary, anchor: Vector2) -> void:
-	_hide_item_info_popup()
-	if boost.is_empty():
-		return
-	var text := _item_info_popup_text(boost)
-	if text == "":
-		return
-	var popup := _make_info_bubble("ItemInfoPopup", text, NEON_CYAN,
-		Color(0.88, 0.98, 1.0), ITEM_INFO_POPUP_MAX_WIDTH)
-	popup.z_index = ITEM_INFO_POPUP_Z_INDEX
-	# Sitting on the badge being held: centred over it and a hair above, so the words are
-	# next to the icon they belong to. Then clamped into the TV, because a badge near
-	# either bezel would otherwise push half the description off the screen.
-	var pos := anchor + Vector2(
-		(BOOST_ICON_SIZE - popup.size.x) * 0.5, -popup.size.y - INFO_BUBBLE_GAP + 1.0)
-	pos.x = clampf(pos.x, float(TV_SCREEN["left"]) + 1.0,
-		float(TV_SCREEN["left"] + TV_SCREEN["width"]) - popup.size.x - 1.0)
-	pos.y = clampf(pos.y, float(TV_SCREEN["top"]) + 1.0,
-		float(TV_SCREEN["top"] + TV_SCREEN["height"]) - popup.size.y - 1.0)
-	popup.position = pos.round()
-	_item_info_popup = popup
-	_item_info_popup_time = 0.0
-	_item_info_popup_held = true
-	add_child(popup)
-
-## Ages the popup out once the badge is let go. Fades over the last moments rather than
-## vanishing, so a description leaving does not read as a glitch on a screen full of
-## blinking things. A held badge never ages: the popup stays up for as long as the player
-## keeps reading it, which is the whole point of holding.
-func _step_item_info_popup(delta: float) -> void:
-	if _item_info_popup == null or not is_instance_valid(_item_info_popup):
-		return
-	if _item_info_popup_held:
-		return
-	_item_info_popup_time += delta
-	var fading := _item_info_popup_time - ITEM_INFO_POPUP_HOLD
-	if fading >= ITEM_INFO_POPUP_FADE:
-		_hide_item_info_popup()
-		return
-	if fading > 0.0:
-		_item_info_popup.modulate.a = clampf(1.0 - fading / ITEM_INFO_POPUP_FADE, 0.0, 1.0)
-
-func _hide_item_info_popup() -> void:
-	if _item_info_popup != null and is_instance_valid(_item_info_popup):
-		_item_info_popup.queue_free()
-	_item_info_popup = null
-	_item_info_popup_time = 0.0
-	_item_info_popup_held = false
 
 func _build_machine_control_art() -> void:
 	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
@@ -2875,7 +2589,7 @@ func _process(delta: float) -> void:
 	_wealth.step_bar_animation(delta)
 	_dealer_bar.step_beep(delta)
 	_step_free_spin_blink(delta)
-	_step_item_info_popup(delta)
+	_boosts.step_popup(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
 		return
@@ -4529,24 +4243,6 @@ func _icon_for(id: String) -> Texture2D:
 		return Assets.inverted_texture(tex)
 	return tex
 
-func _boost_icon_for(boost: Dictionary) -> Texture2D:
-	var counter := String(boost.get("counter", ""))
-	if _boost_zero_linger.has(counter):
-		var snapshot := _boost_zero_linger[counter] as Dictionary
-		var linger_symbol_id := String(snapshot.get("symbolId", ""))
-		if linger_symbol_id != "":
-			var linger_symbol_tex := _load_texture("symbols/%s.png" % linger_symbol_id, true)
-			if linger_symbol_tex != null:
-				return linger_symbol_tex
-	var symbol_field := String(boost.get("symbolField", ""))
-	if symbol_field != "":
-		var symbol_id := String(RunStateStore.get(symbol_field))
-		if symbol_id != "":
-			var symbol_tex := _load_texture("symbols/%s.png" % symbol_id, true)
-			if symbol_tex != null:
-				return symbol_tex
-	return _icon_for(String(boost["id"]))
-
 # ── power targeting ────────────────────────────────────────────────────────────────
 
 func _on_power_pressed(id: String) -> void:
@@ -5985,7 +5681,7 @@ func _refresh_consumable_fx() -> void:
 ## all three reels visible.
 func _refresh_tobacco_fx() -> void:
 	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
-		or _boost_zero_linger.has("pairBoostSpins")
+		or _boosts.lingering("pairBoostSpins")
 	var active := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
 	# Every reel the scoring ignores is covered, whatever took it away: Tobacco's smoke for
 	# its two spins, or Tunnel Vision for the whole run. Only Tobacco actually smokes —
@@ -6008,7 +5704,7 @@ func _blind_reel_count() -> int:
 	var hidden := _active_hidden_reel_count() # whatever the last scored result used
 	if Economy.has_tunnel_vision(RunStateStore.ownedUpgrades):
 		hidden = maxi(hidden, 1)
-	if RunStateStore.pairBoostSpins > 0 or _boost_zero_linger.has("pairBoostSpins"):
+	if RunStateStore.pairBoostSpins > 0 or _boosts.lingering("pairBoostSpins"):
 		hidden = maxi(hidden, clampi(RunStateStore.pairBoostHiddenReels, 0, 2))
 	return clampi(hidden, 0, 2)
 
@@ -6869,10 +6565,7 @@ func _build_wealth_screen(run: Dictionary) -> void:
 ## blocked while the wealth screen is visible).
 func _clear_wealth_presentation_fx() -> void:
 	_set_tv_progress_bars_visible(false)
-	for entry: Dictionary in _boost_indicator_slots:
-		var slot := entry.get("slot") as Control
-		if slot != null:
-			slot.visible = false
+	_boosts.hide_all()
 
 	_clear_targeting()
 	_close_score_table()

@@ -242,8 +242,8 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 	var target_goals := machine._wealth.goals_sprite() as CanvasItem
 	var target_bar_anim := machine._wealth.bar_anim_sprite() as CanvasItem
 	var boost_slot: CanvasItem = null
-	if not machine._boost_indicator_slots.is_empty():
-		boost_slot = (machine._boost_indicator_slots[0] as Dictionary)["slot"] as CanvasItem
+	if not machine._boosts.slots().is_empty():
+		boost_slot = (machine._boosts.slots()[0] as Dictionary)["slot"] as CanvasItem
 	if free_spin != null and free_spin.visible:
 		failures.append("TV callout priority: FREE SPIN banner showed without a credit")
 	if dealer_bar == null or not dealer_bar.visible or dealer_icon == null or not dealer_icon.visible:
@@ -354,7 +354,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 # the right count, and clear when the boost ends.
 func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Array) -> void:
 	run_store.reset_run_state()
-	var slots: Array = machine._boost_indicator_slots
+	var slots: Array = machine._boosts.slots()
 	if slots.size() < 2:
 		failures.append("issue76: boost indicator slots were not built")
 		return
@@ -435,13 +435,13 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	var p1: Vector2 = (slots[1]["slot"] as Control).position
 	if not is_equal_approx(p0.y, p1.y) or not (p0.x < p1.x):
 		failures.append("issue185: boost icons did not fill left to right (%s vs %s)" % [p0, p1])
-	if machine.BOOST_SLOT_POSITIONS.size() < 5:
+	if BoostIndicators.SLOT_POSITIONS.size() < 5:
 		failures.append("issue185: the badge row should hold more than the old two items (%d)"
-			% machine.BOOST_SLOT_POSITIONS.size())
+			% BoostIndicators.SLOT_POSITIONS.size())
 	var tv_left := float(machine.TV_SCREEN["left"])
 	var tv_top := float(machine.TV_SCREEN["top"])
 	var tv_bottom := tv_top + float(machine.TV_SCREEN["height"])
-	var icon_size: float = machine.BOOST_ICON_SIZE
+	var icon_size: float = BoostIndicators.ICON_SIZE
 	# Source item art is 32x32, so the badge must divide 32 exactly or the nearest-
 	# neighbour reduction drops source pixels unevenly and the icon reads as mush.
 	if not is_equal_approx(fmod(32.0, icon_size), 0.0):
@@ -458,8 +458,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	# the TV. Measured: y99..104 hold x36..115, y105..106 x37..114, y107 x39..112. The row
 	# occupies y100..107, so the corner row is the binding constraint: x39..112.
 	var screen_strip := Rect2(39.0, 100.0, 74.0, 8.0)
-	var slot_width: float = machine.BOOST_SLOT_WIDTH
-	for slot_pos: Vector2 in machine.BOOST_SLOT_POSITIONS:
+	var slot_width: float = BoostIndicators.SLOT_WIDTH
+	for slot_pos: Vector2 in BoostIndicators.SLOT_POSITIONS:
 		var rect := Rect2(slot_pos, Vector2(slot_width, icon_size))
 		if rect.position.x < tv_left or rect.position.y < tv_top or rect.end.y > tv_bottom:
 			failures.append("issue185: boost slot %s falls outside the TV" % rect)
@@ -473,8 +473,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	# Issue #185: the count is a bare turn number and its COLOUR carries polarity — green
 	# while the item is helping, red while it is costing. The badge is 8px and the sign
 	# glyphs that used to carry this crowded the art at that size.
-	var green: Color = machine.BOOST_COUNT_COLOR
-	var red: Color = machine.BOOST_NEGATIVE_COUNT_COLOR
+	var green: Color = BoostIndicators.COUNT_COLOR
+	var red: Color = BoostIndicators.NEGATIVE_COUNT_COLOR
 	for i in 2:
 		var badge_text: String = (slots[i]["count"] as Label).text
 		if not badge_text.is_valid_int():
