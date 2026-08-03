@@ -1496,3 +1496,108 @@ func _check_loss_visuals_161(machine: Node, run_store: Node, failures: Array) ->
 	run_store.pendingComboMultiplier = 1
 	machine._refresh_multiplier_fx(1)
 	machine._callouts.set_loss_display(0)
+
+## Art GEOMETRY, as opposed to art presence or visibility semantics, which the checks
+## above already cover.
+##
+## Added after two seams in a row (#207, #208) shipped geometry mistakes that this suite
+## could not have caught: a blur strip laid out vertically instead of horizontally, and
+## two invented placement constants. Both render garbage and pass every other check,
+## because nothing here ever asserted where a sprite actually IS.
+##
+## The numbers below are derived from the source constants rather than repeated as
+## literals, so a deliberate art change updates them and only a MISTAKE fails. What is
+## pinned is the relationship: the strip is centred on the reel window, its neighbours sit
+## one OFFSET away on each side, and every symbol is downscaled by its own texture height.
+##
+## Comparing rendered frames was tried first and does not work: the shot scripts are not
+## deterministic, so two runs of identical code differ.
+func _check_reel_strip_geometry(machine: Node, failures: Array) -> void:
+	var rs = machine._reel_symbols
+	var cy: float = float(machine.REEL_WINDOW["top"]) + float(machine.REEL_WINDOW["height"]) * 0.5
+	rs.set_symbol(0, "eye")
+	rs.set_visible(0, true)
+
+	var expected_y := {
+		"center": cy,
+		"top": cy - ReelSymbols.OFFSET,
+		"bottom": cy + ReelSymbols.OFFSET,
+	}
+	var expected_alpha := {
+		"center": 1.0, "top": ReelSymbols.STRIP_ADJ_ALPHA, "bottom": ReelSymbols.STRIP_ADJ_ALPHA,
+	}
+	var expected_h := {
+		"center": ReelSymbols.CENTER_H, "top": ReelSymbols.ADJ_H, "bottom": ReelSymbols.ADJ_H,
+	}
+	var sprites := { "center": rs.center(0), "top": rs.top(0), "bottom": rs.bottom(0) }
+	for slot in ["center", "top", "bottom"]:
+		var s := sprites[slot] as Sprite2D
+		if s == null:
+			failures.append("reel geometry: %s sprite is missing" % slot)
+			continue
+		var cx: float = float(machine.REEL_CELL_CENTERS[0])
+		if not is_equal_approx(s.position.x, cx):
+			failures.append("reel geometry: %s x is %.2f, expected the reel centre %.2f"
+				% [slot, s.position.x, cx])
+		if not is_equal_approx(s.position.y, float(expected_y[slot])):
+			failures.append("reel geometry: %s y is %.2f, expected %.2f"
+				% [slot, s.position.y, float(expected_y[slot])])
+		if not is_equal_approx(s.modulate.a, float(expected_alpha[slot])):
+			failures.append("reel geometry: %s alpha is %.2f, expected %.2f"
+				% [slot, s.modulate.a, float(expected_alpha[slot])])
+		if s.texture == null:
+			failures.append("reel geometry: %s has no texture" % slot)
+			continue
+		# Never scaled UP: the art is authored large and only ever shrinks to the slot.
+		var want_scale: float = minf(1.0,
+			float(expected_h[slot]) / float(s.texture.get_height()))
+		if not is_equal_approx(s.scale.y, want_scale):
+			failures.append("reel geometry: %s scale is %.4f, expected %.4f"
+				% [slot, s.scale.y, want_scale])
+		if not is_equal_approx(s.scale.x, s.scale.y):
+			failures.append("reel geometry: %s is not uniformly scaled (%.4f x %.4f)"
+				% [slot, s.scale.x, s.scale.y])
+
+	# The two neighbour rules that are not a plain cycle step. A heart strip shows one of
+	# each tier rather than nine of one, and book sits outside the cycle entirely.
+	var heart: Dictionary = rs.neighbours_of("heart_x2")
+	if String(heart.get("top", "")) != "heart_x1" or String(heart.get("bottom", "")) != "heart_x3":
+		failures.append("reel geometry: heart_x2 neighbours are %s, expected x1/x3" % str(heart))
+	var book: Dictionary = rs.neighbours_of("book")
+	var cycle: Array = Symbols.BASE_SYMBOL_CYCLE
+	if String(book.get("top", "")) != String(cycle[cycle.size() - 1]) \
+			or String(book.get("bottom", "")) != String(cycle[1]):
+		failures.append("reel geometry: book neighbours are %s, expected %s/%s"
+			% [str(book), str(cycle[cycle.size() - 1]), str(cycle[1])])
+
+## The spin blur's region rect. The sheet is ONE HORIZONTAL ROW of full-canvas frames, and
+## a version of this that stepped down the sheet instead of across it was written and
+## caught by hand during #207 — it renders a plausible-looking wrong thing.
+func _check_spin_blur_region(machine: Node, failures: Array) -> void:
+	var rb = machine._reel_blur
+	var scale: float = float(machine.ASSET_SCALE)
+	for reel in 3:
+		var hole: Dictionary = machine.REEL_HOLES[reel]
+		rb.set_spin_frame(reel, 0)
+		var first: Rect2 = rb.spin_region(reel)
+		if first == Rect2():
+			failures.append("blur region: reel %d has no strip sprite" % reel)
+			continue
+		if not is_equal_approx(first.position.x, float(hole["left"]) * scale) \
+				or not is_equal_approx(first.position.y, float(hole["top"]) * scale):
+			failures.append("blur region: reel %d frame 0 starts at %s, expected the hole origin"
+				% [reel, str(first.position)])
+		if not is_equal_approx(first.size.x, float(hole["width"]) * scale) \
+				or not is_equal_approx(first.size.y, float(hole["height"]) * scale):
+			failures.append("blur region: reel %d window is %s, expected the hole size"
+				% [reel, str(first.size)])
+		# Frame 1 steps ACROSS the sheet, never down it.
+		rb.set_spin_frame(reel, 1)
+		var second: Rect2 = rb.spin_region(reel)
+		if is_equal_approx(second.position.x, first.position.x):
+			failures.append("blur region: reel %d frame 1 did not advance horizontally" % reel)
+		if not is_equal_approx(second.position.y, first.position.y):
+			failures.append("blur region: reel %d frame 1 moved vertically (%.1f -> %.1f); "
+				% [reel, first.position.y, second.position.y]
+				+ "the sheet is one horizontal row of frames")
+		rb.set_spin_frame(reel, 0)

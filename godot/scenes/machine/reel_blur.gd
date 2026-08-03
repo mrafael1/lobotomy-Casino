@@ -169,3 +169,10 @@ func clear_blur() -> void:
 
 func spin_visible(index: int) -> bool:
 	return index >= 0 and index < _spin_sprites.size() and _spin_sprites[index].visible
+
+## The live region rect of one strip, so a check can assert where in the sheet a
+## frame actually lands rather than only that nothing crashed.
+func spin_region(index: int) -> Rect2:
+	if index < 0 or index >= _spin_sprites.size() or _spin_sprites[index] == null:
+		return Rect2()
+	return _spin_sprites[index].region_rect
