@@ -99,6 +99,12 @@ func score_label(parent: Control, text: String, pos: Vector2, size: int, color: 
 func show_neuron_spend_feedback(parent: Control, center: Vector2) -> void:
 	host._show_neuron_spend_feedback(parent, center)
 
+## A Control the .tscn already authored under this name, or null. Same reason as
+## full_canvas_sheet: a component that always built its own node would silently
+## orphan the authored one.
+func authored_control(node_name: String) -> Control:
+	return host._authored_control(node_name)
+
 func info_bubble(node_name: String, source: String, border: Color,
 		font_color: Color, max_width := 0.0) -> Control:
 	return host._make_info_bubble(node_name, source, border, font_color, max_width)

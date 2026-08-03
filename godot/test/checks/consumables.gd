@@ -63,8 +63,8 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	var previous_result: Variant = run_store.lastResult
 	var previous_display := int(machine._display_lucidity)
 	var previous_coin_prev := int(machine._coin_prev_lucidity)
-	var previous_burst_spin := int(machine._burst_prev_spin)
-	var previous_burst_score := int(machine._burst_prev_score)
+	var previous_burst_spin: int = machine._bursts.prev_spin()
+	var previous_burst_score: int = machine._bursts.prev_score()
 
 	run_store.runPhase = "running"
 	run_store.isSpinning = false
@@ -80,8 +80,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 		"scoreEarned": 20, "coinsEarned": 20, "winType": "pair",
 		"reels": ["eye", "eye", "vial"], "scoreMultiplier": 1.0,
 	}
-	machine._burst_prev_spin = 0
-	machine._burst_prev_score = 20
+	machine._bursts.remember(0, 20)
 	machine._set_sequence_lock(false)
 	machine._set_display_lucidity(20)
 	machine._coin_prev_lucidity = 20
@@ -95,7 +94,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 		failures.append("machine water: should add its 40 points to the run score")
 	if int((run_store.lastResult as Dictionary).get("scoreEarned", 0)) != 60:
 		failures.append("machine water: current result score was not advanced with the direct gain")
-	if int(machine._burst_prev_score) != 60:
+	if machine._bursts.prev_score() != 60:
 		failures.append("machine water: payout baseline did not advance past the direct score gain")
 	await create_timer(0.1).timeout
 	if int(machine._display_lucidity) != 60:
@@ -115,8 +114,7 @@ func _check_machine_water_feedback(machine: Node, run_store: Node, failures: Arr
 	run_store.spinCount = previous_spin_count
 	run_store.scoreEarned = previous_score
 	run_store.lastResult = previous_result
-	machine._burst_prev_spin = previous_burst_spin
-	machine._burst_prev_score = previous_burst_score
+	machine._bursts.remember(previous_burst_spin, previous_burst_score)
 
 func _check_water_wealth_169(machine: Node, run_store: Node, meta_store: Node,
 		failures: Array) -> void:
