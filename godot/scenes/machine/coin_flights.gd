@@ -13,14 +13,29 @@ extends RefCounted
 ##
 ## The power coin FLOW deliberately stays in the machine: which coins are owed,
 ## when a batch launches and what a landed coin restores is the power-bar
-## economy, not a flight path. It builds its coins through make_coin() here and
-## keeps its own tweens.
+## economy, not a flight path. Its CURVES are here — where a coin is at time t,
+## how the pop sheet plays — because those are the same kind of thing as the
+## fountain's arc and were the last motion left outside. The machine keeps the
+## tweens, because it owns the callbacks that fire when a coin lands.
 ##
 ## Nothing on this class decides anything. Hand it a position and it produces a
-## sprite; ask for a fountain and it sprays one.
+## sprite; hand it a `t` and two points and it puts the coin where it belongs;
+## ask for a fountain and it sprays one. It is never told WHY a coin is flying,
+## and the endpoints are always passed in — the cash tray mouth and the power
+## emplacements are the machine's geometry.
 
 const COIN_SIZE := 8.0
 const LUCIDITY_ASSET := "ui/coin.png"
+
+## The power chip: flies from the wealth odometer to the gauge when banked score
+## buys a restore, or from the cash tray to a power's emplacement on a direct one.
+const POWER_ASSET := "ui/power_coin.png"
+const POWER_SIZE := 8.0
+const POWER_FLIGHT_TIME := 0.64
+## The authored pop that plays at the odometer before the chip sets off.
+const POP_SHEET := "machine new view/power coin animation.png"
+const POP_FRAMES := 4
+const POP_FRAME_TIME := 0.06
 
 ## Casino-TV payout spray (issue #181): lucidity coins erupt out of the cash tray
 ## mouth and arc up through the cabinet while the wealth reels roll. Purely
@@ -39,13 +54,18 @@ const FADE_IN := 0.10
 const FADE_START := 0.74
 
 var _view: MachineView = null
+## The pop is authored cabinet art, so it uses the machine's art filter rather
+## than the coins' mipmapped one — those are round and downscaled, this is a sheet
+## meant to land on its pixel grid.
+var _art_filter := CanvasItem.TEXTURE_FILTER_NEAREST
 
 var _layer: Control = null
 var _jackpot_coins: Array[Sprite2D] = []
 var _jackpot_tween: Tween = null
 
-func _init(view: MachineView) -> void:
+func _init(view: MachineView, art_filter: int) -> void:
 	_view = view
+	_art_filter = art_filter as CanvasItem.TextureFilter
 
 ## `z_index` comes from the caller: this layer and the burst layer deliberately
 ## share one depth, and that is a fact about the machine's layer stack.
@@ -80,6 +100,74 @@ func make_coin(pos: Vector2, asset: String) -> Sprite2D:
 	coin.modulate.a = 0.0
 	_layer.add_child(coin)
 	return coin
+
+## --- the power chip ------------------------------------------------------------
+
+func make_power_coin(pos: Vector2) -> Sprite2D:
+	return make_coin(pos, POWER_ASSET)
+
+## The pop sheet, parented into the coin layer at the origin and starting
+## invisible. Uncentered and unpositioned on purpose: it is full-canvas art whose
+## frames already sit where the odometer is.
+func make_power_pop() -> Sprite2D:
+	if _layer == null:
+		return null
+	var tex := _view.texture(POP_SHEET, true)
+	if tex == null:
+		return null
+	var pop := Sprite2D.new()
+	pop.texture = tex
+	pop.hframes = POP_FRAMES
+	pop.vframes = 1
+	pop.frame = 0
+	pop.centered = false
+	pop.position = Vector2.ZERO
+	pop.texture_filter = _art_filter
+	pop.modulate.a = 0.0
+	_layer.add_child(pop)
+	return pop
+
+func power_pop_time() -> float:
+	return float(POP_FRAMES) * POP_FRAME_TIME
+
+## Steps the pop sheet, fading in over the first tenth and out over the last fifth
+## so it blooms and dissolves rather than cutting.
+func drive_power_pop(t: float, pop: Sprite2D) -> void:
+	if not is_instance_valid(pop):
+		return
+	var progress := clampf(t, 0.0, 1.0)
+	pop.frame = mini(POP_FRAMES - 1, floori(progress * float(POP_FRAMES)))
+	if progress < 0.1:
+		pop.modulate.a = progress / 0.1
+	elif progress < 0.82:
+		pop.modulate.a = 1.0
+	else:
+		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
+
+## The chip lifts before it travels: straight up for the first third, then across
+## to the target. It grows as it leaves and shrinks as it arrives, which reads as
+## the coin coming toward the player and then away into the cabinet.
+func drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vector2) -> void:
+	if not is_instance_valid(coin):
+		return
+	var lift := Vector2(from_pos.x, from_pos.y - 26.0)
+	var p: Vector2
+	if t < 0.35:
+		p = from_pos.lerp(lift, t / 0.35)
+	else:
+		p = lift.lerp(to_pos, (t - 0.35) / 0.65)
+	coin.position = p
+	var base_scale := POWER_SIZE / float(maxi(1, coin.texture.get_width()))
+	var s := lerpf(0.4, 1.15, minf(t / 0.18, 1.0)) if t < 0.18 else lerpf(1.15, 0.9, (t - 0.18) / 0.82)
+	coin.scale = Vector2(base_scale * s, base_scale * s)
+	if t < 0.12:
+		coin.modulate.a = t / 0.12
+	elif t < 0.9:
+		coin.modulate.a = 1.0
+	else:
+		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
+
+## --- the payout fountain --------------------------------------------------------
 
 ## Sprays the payout fountain from `tray` — the cash tray mouth, which is the
 ## machine's geometry and so is asked for. Returns how long the spray runs, so

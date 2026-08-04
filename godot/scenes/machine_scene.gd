@@ -278,14 +278,10 @@ const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # frame (x70..77, y241..249), so the flying coin appears exactly where the animation left it
 # instead of teleporting. The art moved up 3px in its latest export and this followed it.
 const WEALTH_COIN_ORIGIN := Vector2(74.0, 245.5)
-const POWER_COIN_SIZE := 8.0
-const POWER_COIN_ASSET := "ui/power_coin.png"
-# The jackpot pays in the machine's own currency, so its spray is lucidity coins —
-# the same coin the dealer and upgrade screens count credits in — not power chips.
-const POWER_COIN_FLIGHT_TIME := 0.64
-const POWER_COIN_POP_SHEET := "machine new view/power coin animation.png"
-const POWER_COIN_POP_FRAMES := 4
-const POWER_COIN_POP_FRAME_TIME := 0.06
+# The chip's own size, asset, flight time and pop sheet are CoinFlights' — they
+# describe the flight, not where it starts. The jackpot pays in the machine's own
+# currency, so its spray is lucidity coins — the same coin the dealer and upgrade
+# screens count credits in — not power chips.
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
 # six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
@@ -779,7 +775,7 @@ func _ready() -> void:
 	_dealer_bar = DealerBar.new(_view)
 	_boosts = BoostIndicators.new(_view, DURATION_BOOSTS, TV_SCREEN,
 		_icon_for, _item_info_popup_text)
-	_coins = CoinFlights.new(_view)
+	_coins = CoinFlights.new(_view, MACHINE_ART_TEXTURE_FILTER)
 	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
 	_reel_symbols = ReelSymbols.new(_view, REEL_CELL_CENTERS, REEL_WINDOW,
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
@@ -3199,7 +3195,7 @@ func _resolve_direct_restore() -> void:
 		return
 	var power_id := String(RunStateStore.pendingPowerRestores[0])
 	RunStateStore.commit_power_restore(power_id)
-	var coin := _make_power_coin(_cash_tray_pos())
+	var coin := _coins.make_power_coin(_cash_tray_pos())
 	if coin == null:
 		_advance_power_bar()
 		return
@@ -3207,7 +3203,8 @@ func _resolve_direct_restore() -> void:
 	_power_coins_in_flight += 1
 	var target := _power_center(power_id)
 	var tw := create_tween()
-	tw.tween_method(_drive_power_coin.bind(coin, _cash_tray_pos(), target), 0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+	tw.tween_method(_coins.drive_power_coin.bind(coin, _cash_tray_pos(), target),
+		0.0, 1.0, CoinFlights.POWER_FLIGHT_TIME)
 	tw.tween_callback(_on_restore_coin_arrived.bind(coin))
 
 func _launch_power_coin_batch(steps: Array) -> void:
@@ -3222,8 +3219,8 @@ func _launch_power_coin_batch(steps: Array) -> void:
 ## power coin flies from that same point to the gauge. A batch staggers the pop starts so
 ## several threshold hits read as a quick succession rather than one blended burst.
 func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> bool:
-	var pop := _make_power_coin_pop()
-	var power_tex := _load_texture("ui/power_coin.png", true)
+	var pop := _coins.make_power_pop()
+	var power_tex := _load_texture(CoinFlights.POWER_ASSET, true)
 	if pop == null and power_tex == null:
 		_apply_power_bank_step(stepd)
 		return false
@@ -3235,8 +3232,7 @@ func _launch_power_bank_coin(stepd: Dictionary, delay: float) -> bool:
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(
-			_drive_power_coin_pop.bind(pop), 0.0, 1.0,
-			float(POWER_COIN_POP_FRAMES) * POWER_COIN_POP_FRAME_TIME)
+			_coins.drive_power_pop.bind(pop), 0.0, 1.0, _coins.power_pop_time())
 	tw.tween_callback(_on_power_coin_pop_finished.bind(pop, stepd))
 	return true
 
@@ -3246,7 +3242,7 @@ func _on_power_coin_pop_finished(pop: Sprite2D, stepd: Dictionary) -> void:
 	_start_power_bank_coin_flight(stepd, 0.0)
 
 func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
-	var coin := _make_power_coin(WEALTH_COIN_ORIGIN)
+	var coin := _coins.make_power_coin(WEALTH_COIN_ORIGIN)
 	if coin == null:
 		_apply_power_bank_step(stepd)
 		_on_power_coin_landed()
@@ -3255,8 +3251,8 @@ func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(
-			_drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
-			0.0, 1.0, POWER_COIN_FLIGHT_TIME)
+			_coins.drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
+			0.0, 1.0, CoinFlights.POWER_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
 
 func _on_power_bank_coin_arrived(coin: Node, stepd: Dictionary) -> void:
@@ -3362,37 +3358,6 @@ func _on_power_coin_landed() -> void:
 		_power_batch_running = false
 		_advance_power_bar() # more lucidity? else presents any queued dealer offer
 
-func _make_power_coin_pop() -> Sprite2D:
-	if _coins.layer() == null:
-		return null
-	var tex := _load_texture(POWER_COIN_POP_SHEET, true)
-	if tex == null:
-		return null
-	var pop := Sprite2D.new()
-	pop.texture = tex
-	pop.hframes = POWER_COIN_POP_FRAMES
-	pop.vframes = 1
-	pop.frame = 0
-	pop.centered = false
-	pop.position = Vector2.ZERO
-	pop.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	pop.modulate.a = 0.0
-	_coins.layer().add_child(pop)
-	return pop
-
-func _drive_power_coin_pop(t: float, pop: Sprite2D) -> void:
-	if not is_instance_valid(pop):
-		return
-	var progress := clampf(t, 0.0, 1.0)
-	pop.frame = mini(POWER_COIN_POP_FRAMES - 1,
-		floori(progress * float(POWER_COIN_POP_FRAMES)))
-	if progress < 0.1:
-		pop.modulate.a = progress / 0.1
-	elif progress < 0.82:
-		pop.modulate.a = 1.0
-	else:
-		pop.modulate.a = 1.0 - ((progress - 0.82) / 0.18)
-
 ## Joker Water: the gauge is emptied and the points that filled it are written off, so the
 ## next restore starts from scratch. `_power_seen_lucidity` catches up to the run's current
 ## total in the same breath — otherwise the discarded progress would simply be re-planned
@@ -3411,12 +3376,6 @@ func _snap_power_bar() -> void:
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
 
-func _make_power_coin(pos: Vector2) -> Sprite2D:
-	return _coins.make_coin(pos, POWER_COIN_ASSET)
-
-## Shared builder for the coins that fly around the cabinet. `asset` picks which
-## currency is in flight: the power chip that restores a power, or the lucidity coin
-## the machine actually pays out.
 ## The cash tray mouth is the machine's geometry, so the fountain is told where to
 ## spray from rather than reaching for it.
 func _spawn_jackpot_coin_fountain() -> float:
@@ -3438,25 +3397,6 @@ func _power_center(power_id: String) -> Vector2:
 	var hit: Dictionary = POWER_HITS.get(power_id, POWER_HITS["reroll"])
 	return Vector2(float(hit["left"]) + float(hit["width"]) * 0.5, float(hit["top"]) + float(hit["height"]) * 0.5)
 
-func _drive_power_coin(t: float, coin: Sprite2D, from_pos: Vector2, to_pos: Vector2) -> void:
-	if not is_instance_valid(coin):
-		return
-	var lift := Vector2(from_pos.x, from_pos.y - 26.0)
-	var p: Vector2
-	if t < 0.35:
-		p = from_pos.lerp(lift, t / 0.35)
-	else:
-		p = lift.lerp(to_pos, (t - 0.35) / 0.65)
-	coin.position = p
-	var base_scale := POWER_COIN_SIZE / float(maxi(1, coin.texture.get_width()))
-	var s := lerpf(0.4, 1.15, minf(t / 0.18, 1.0)) if t < 0.18 else lerpf(1.15, 0.9, (t - 0.18) / 0.82)
-	coin.scale = Vector2(base_scale * s, base_scale * s)
-	if t < 0.12:
-		coin.modulate.a = t / 0.12
-	elif t < 0.9:
-		coin.modulate.a = 1.0
-	else:
-		coin.modulate.a = 1.0 - ((t - 0.9) / 0.1)
 
 
 # ── frenzy gauge / powers / stash controls ────────────────────────────────────────
