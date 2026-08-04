@@ -126,9 +126,8 @@ const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
 # Water's on-use pour: an authored full-canvas sheet (3 x 160x320), played once.
-const WATER_SHEET := "machine new view/water.png"
-const WATER_SHEET_FRAMES := 3
-const WATER_FX_Z_INDEX := 30      # over the cabinet and the TV, under the overlays
+# Water's pour sheet and its z_index are ConsumableFx's — it is one of that layer's
+# effects, built on first use.
 # Issue #155: the dealer countdown is an authored 13-frame progress bar. Frame 0
 # is the empty bar at the start of the active cycle (12 steps normally, 24 for
 # Club/Joker); the last frame means the dealer arrives after the current spin. The
@@ -627,6 +626,7 @@ var _swap_overlay: SwapTargetOverlay = null
 var _swap_shake: SwapShake = null
 var _targeting: TargetingLayer = null
 var _cheat: CheatMiniReel = null
+var _consumable_fx: ConsumableFx = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -736,20 +736,28 @@ var _reveal_reel_next_spin := -1
 # Spin-gain fly-ins in flight (issue #66): the spins-left counter is held back by
 # this amount until each "+N" popup lands, so the number ticks up in sync.
 var _pending_spin_gain := 0
-# Consumable visuals (issue #34).
-var _fx_layer: Control = null              # host for all consumable effect nodes
-var _tobacco_covers: Array = []            # per-reel dark cover while smoked out
-var _tobacco_smoke: Array = []             # per-reel CPUParticles2D smoke
-var _energy_edges: Control = null          # burning-edges frame (Energy Drink)
-var _energy_pulse_tween: Tween = null
-var _energy_fx_active := false
+# Consumable visuals (issue #34). The effects themselves are ConsumableFx's; these
+# two shake and jump the machine NODE, which is not on that layer.
 var _cocktail_shake_tween: Tween = null
-var _water_fx_sprite: Sprite2D = null
-var _water_fx_tween: Tween = null
 var _potion_jump_tween: Tween = null
+
+## Views onto ConsumableFx, under the names the smoke checks read the effects by.
+var _fx_layer: Control:
+	get: return _consumable_fx.layer() if _consumable_fx != null else null
+var _tobacco_covers: Array:
+	get: return _consumable_fx.tobacco_covers() if _consumable_fx != null else []
+var _tobacco_smoke: Array:
+	get: return _consumable_fx.tobacco_smoke() if _consumable_fx != null else []
+var _hidden_covers: Array:
+	get: return _consumable_fx.hidden_covers() if _consumable_fx != null else []
+var _energy_edges: Control:
+	get: return _consumable_fx.energy_edges() if _consumable_fx != null else null
+var _water_fx_sprite: Sprite2D:
+	get: return _consumable_fx.water_sprite() if _consumable_fx != null else null
+
+func _hide_water_animation() -> void:
+	_consumable_fx.hide_water()
 var _close_call_heartbeat_tween: Tween = null
-var _white_powder_distortion_tween: Tween = null
-var _hidden_covers: Array = []             # per-reel "?" cover (White Powder)
 var _hide_result_active := false           # the displayed result is hidden
 var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
 var _book_choice_overlay: Control = null
@@ -780,6 +788,8 @@ func _ready() -> void:
 	_targeting = TargetingLayer.new(_view, Vector2(SRC_W, SRC_H))
 	_cheat = CheatMiniReel.new(_view, _reel_symbols, MACHINE_ART_TEXTURE_FILTER,
 		_make_hit_button, _on_cheat_symbol_pick)
+	_consumable_fx = ConsumableFx.new(_view, REEL_HOLES, Vector2(SRC_W, SRC_H),
+		WHITE_POWDER_DISTORTION_SHADER)
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -4666,126 +4676,24 @@ func _on_copy_pick(reel_index: int) -> void:
 # The cabinet's transparent reel holes are y169-203 in the art (measured with
 # pngjs), 1px taller above and 3px below REEL_HOLES — full-reel covers must span
 # the real hole or the symbol strip peeks out underneath.
-const FX_COVER_PAD_TOP := 1.0
-const FX_COVER_PAD_BOTTOM := 3.0
-
-func _fx_cover_rect(hole: Dictionary) -> Rect2:
-	return Rect2(
-		float(hole["left"]),
-		float(hole["top"]) - FX_COVER_PAD_TOP,
-		float(hole["width"]),
-		float(hole["height"]) + FX_COVER_PAD_TOP + FX_COVER_PAD_BOTTOM
-	)
-
 func _build_fx_layer() -> void:
-	_fx_layer = _authored_control("ConsumableFxLayer")
-	if _fx_layer == null:
-		_fx_layer = Control.new()
-		_fx_layer.name = "ConsumableFxLayer"
-		add_child(_fx_layer)
-	_fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_build_tobacco_fx()
-	_build_energy_edges()
-	_build_hidden_covers()
+	_consumable_fx.build({
+		"tobacco_cover": tobacco_cover_color,
+		"tobacco_smoke": tobacco_smoke_color,
+		"energy_edge": energy_edge_color,
+		"energy_thickness": energy_edge_thickness,
+		"hidden_cover": hidden_cover_color,
+		"hidden_glyph": hidden_glyph_color,
+	})
+	# The blur covers are ReelBlur's but share this layer, so they are built here
+	# and to the same full-reel rect the consumable covers use.
 	var blur_rects: Array = []
 	for i in 3:
-		blur_rects.append(_fx_cover_rect(REEL_HOLES[i]))
-	_reel_blur.build_blur_covers(_fx_layer, blur_rects, blur_cover_color)
-
-## Serum frost (issue #53): translucent per-reel covers — symbols show through but
-## read harder. Reuses the hidden-cover geometry.
-func _build_tobacco_fx() -> void:
-	_tobacco_covers.clear()
-	_tobacco_smoke.clear()
-	for i in 3:
-		var hole: Dictionary = REEL_HOLES[i]
-		var cover := ColorRect.new()
-		cover.name = "TobaccoCover%d" % i
-		cover.color = tobacco_cover_color
-		var rect := _fx_cover_rect(hole)
-		cover.position = rect.position
-		cover.size = rect.size
-		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cover.visible = false
-		_fx_layer.add_child(cover)
-		_tobacco_covers.append(cover)
-		var smoke := CPUParticles2D.new()
-		smoke.name = "TobaccoSmoke%d" % i
-		smoke.amount = 14
-		smoke.lifetime = 1.8
-		smoke.preprocess = 1.2 # already smoking when it first appears
-		smoke.position = Vector2(
-			float(hole["left"]) + float(hole["width"]) * 0.5,
-			float(hole["top"]) + float(hole["height"]) * 0.75
-		)
-		smoke.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-		smoke.emission_rect_extents = Vector2(float(hole["width"]) * 0.3, 2.0)
-		smoke.direction = Vector2(0, -1)
-		smoke.spread = 18.0
-		smoke.gravity = Vector2(0, -10)
-		smoke.initial_velocity_min = 2.0
-		smoke.initial_velocity_max = 6.0
-		smoke.scale_amount_min = 1.0
-		smoke.scale_amount_max = 2.6
-		smoke.color = tobacco_smoke_color
-		smoke.emitting = false
-		smoke.visible = false
-		_fx_layer.add_child(smoke)
-		_tobacco_smoke.append(smoke)
-
-func _build_energy_edges() -> void:
-	_energy_edges = Control.new()
-	_energy_edges.name = "EnergyEdges"
-	_energy_edges.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_energy_edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_energy_edges.visible = false
-	var t := energy_edge_thickness
-	var rects := [
-		Rect2(0.0, 0.0, SRC_W, t),           # top
-		Rect2(0.0, SRC_H - t, SRC_W, t),     # bottom
-		Rect2(0.0, t, t, SRC_H - 2.0 * t),   # left
-		Rect2(SRC_W - t, t, t, SRC_H - 2.0 * t), # right
-	]
-	for r in rects:
-		var edge := ColorRect.new()
-		edge.color = energy_edge_color
-		edge.position = r.position
-		edge.size = r.size
-		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_energy_edges.add_child(edge)
-	_fx_layer.add_child(_energy_edges)
-
-func _build_hidden_covers() -> void:
-	_hidden_covers.clear()
-	for i in 3:
-		var hole: Dictionary = REEL_HOLES[i]
-		var cover := ColorRect.new()
-		cover.name = "HiddenResultCover%d" % i
-		cover.color = hidden_cover_color
-		var rect := _fx_cover_rect(hole)
-		cover.position = rect.position
-		cover.size = rect.size
-		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cover.visible = false
-		var glyph := Label.new()
-		glyph.text = "?"
-		glyph.set_anchors_preset(Control.PRESET_FULL_RECT)
-		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		glyph.add_theme_font_size_override("font_size", 12)
-		if _font != null:
-			glyph.add_theme_font_override("font", _font)
-		glyph.add_theme_color_override("font_color", hidden_glyph_color)
-		glyph.add_theme_color_override("font_outline_color", Color.BLACK)
-		glyph.add_theme_constant_override("outline_size", 1)
-		cover.add_child(glyph)
-		_fx_layer.add_child(cover)
-		_hidden_covers.append(cover)
+		blur_rects.append(_consumable_fx.cover_rect(REEL_HOLES[i]))
+	_reel_blur.build_blur_covers(_consumable_fx.layer(), blur_rects, blur_cover_color)
 
 func _refresh_consumable_fx() -> void:
-	if _fx_layer == null:
+	if _consumable_fx.layer() == null:
 		return
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
@@ -4796,20 +4704,8 @@ func _refresh_consumable_fx() -> void:
 func _refresh_tobacco_fx() -> void:
 	var tobacco_active := RunStateStore.pairBoostSpins > 0 \
 		or _boosts.lingering("pairBoostSpins")
-	var active := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
-	# Every reel the scoring ignores is covered, whatever took it away: Tobacco's smoke for
-	# its two spins, or Tunnel Vision for the whole run. Only Tobacco actually smokes —
-	# Tunnel Vision blinds the reel silently (issue #181).
-	var hidden := _blind_reel_count()
-	for i in 3:
-		var smoked: bool = i >= 3 - hidden
-		if i < _tobacco_covers.size():
-			(_tobacco_covers[i] as ColorRect).visible = smoked
-		if i < _tobacco_smoke.size():
-			var smoke := _tobacco_smoke[i] as CPUParticles2D
-			var emits_smoke := smoked and active
-			smoke.visible = emits_smoke
-			smoke.emitting = emits_smoke
+	var smoking := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
+	_consumable_fx.set_tobacco(_blind_reel_count(), smoking)
 
 ## Reels currently out of the scoring, read from live state rather than the last result so a
 ## run that owns Tunnel Vision is blind from its first frame, before any spin has landed.
@@ -4823,24 +4719,13 @@ func _blind_reel_count() -> int:
 	return clampi(hidden, 0, 2)
 
 func _refresh_energy_fx() -> void:
-	if _energy_edges == null:
-		return
 	var active := consumable_fx_enabled and energy_fx_enabled and RunStateStore.decaySkips > 0
-	if active == _energy_fx_active:
+	if not _consumable_fx.set_energy(active, energy_pulse_time):
 		return
-	_energy_fx_active = active
-	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
-		_energy_pulse_tween.kill()
-		_energy_pulse_tween = null
-	_energy_edges.visible = active
-	if active:
-		_energy_edges.modulate.a = 0.35
-		_energy_pulse_tween = create_tween().set_loops()
-		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 1.0, energy_pulse_time * 0.5)
-		_energy_pulse_tween.tween_property(_energy_edges, "modulate:a", 0.35, energy_pulse_time * 0.5)
 	# The drink used to fade the spins tube out for its duration. It stays up now — the
 	# rush is told by the edges alone, and hiding the tube took away the one readout the
-	# player still needs while it runs. Any fade left mid-flight is returned here.
+	# player still needs while it runs. Any fade left mid-flight is returned here. The
+	# tube is the machine's, which is why this half did not move with the edges.
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for node in _spins_bar_nodes():
@@ -4868,31 +4753,8 @@ func _play_use_fx(id: String) -> void:
 		# drink's absence rather than a celebration of it (issue #111).
 		_play_water_animation()
 
-## The authored WATER_SHEET_FRAMES-frame pour, stepped once and then cleared. Built on
-## first use rather than at startup: most runs never see a Water, and an unused
-## full-canvas sheet is the kind of thing that quietly costs a frame on a phone.
 func _play_water_animation() -> void:
-	if _water_fx_sprite == null or not is_instance_valid(_water_fx_sprite):
-		_water_fx_sprite = _build_full_canvas_sheet(WATER_SHEET, WATER_SHEET_FRAMES)
-		if _water_fx_sprite == null:
-			return
-		_water_fx_sprite.name = "WaterFx"
-		_water_fx_sprite.z_index = WATER_FX_Z_INDEX
-	if _water_fx_tween != null and _water_fx_tween.is_valid():
-		_water_fx_tween.kill()
-	_water_fx_sprite.modulate.a = 1.0
-	_water_fx_sprite.visible = true
-	_set_sheet_frame(_water_fx_sprite, 0)
-	_water_fx_tween = create_tween()
-	for frame in range(1, WATER_SHEET_FRAMES):
-		_water_fx_tween.tween_interval(water_frame_time)
-		_water_fx_tween.tween_callback(_set_sheet_frame.bind(_water_fx_sprite, frame))
-	_water_fx_tween.tween_interval(water_frame_time)
-	_water_fx_tween.tween_callback(_hide_water_animation)
-
-func _hide_water_animation() -> void:
-	if _water_fx_sprite != null and is_instance_valid(_water_fx_sprite):
-		_water_fx_sprite.visible = false
+	_consumable_fx.pour_water(water_frame_time)
 
 func _play_cocktail_shake() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
@@ -4928,60 +4790,13 @@ func _play_potion_jump() -> void:
 		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 
 func _play_tea_sakura_fx() -> void:
-	if _fx_layer == null:
-		return
-	var petals := CPUParticles2D.new()
-	petals.name = "TeaSakuraPetals"
-	petals.z_index = 65
-	petals.amount = tea_petal_count
-	petals.lifetime = tea_petal_time
-	petals.one_shot = true
-	petals.explosiveness = 0.35
-	petals.position = Vector2(-8.0, SRC_H * 0.45)
-	petals.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	petals.emission_rect_extents = Vector2(4.0, SRC_H * 0.32)
-	petals.direction = Vector2(1.0, 0.08)
-	petals.spread = 10.0
-	petals.gravity = Vector2(0.0, 1.5)
-	petals.initial_velocity_min = 48.0
-	petals.initial_velocity_max = 70.0
-	petals.angular_velocity_min = -90.0
-	petals.angular_velocity_max = 90.0
-	petals.scale_amount_min = 0.7
-	petals.scale_amount_max = 1.25
-	petals.color = tea_petal_color
-	var tex := _load_texture("ui/sakura_petal.png", false)
-	if tex != null:
-		petals.texture = tex
-		petals.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_fx_layer.add_child(petals)
-	petals.emitting = true
-	var tw := create_tween()
-	tw.tween_interval(tea_petal_time + 0.2)
-	tw.tween_callback(petals.queue_free)
+	_consumable_fx.tea_petals(tea_petal_count, tea_petal_time, tea_petal_color)
 
 func _play_white_powder_distortion() -> void:
-	if _fx_layer == null or not (consumable_fx_enabled and white_powder_fx_enabled):
+	if not (consumable_fx_enabled and white_powder_fx_enabled):
 		return
-	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
-		_white_powder_distortion_tween.kill()
-	var ripple := ColorRect.new()
-	ripple.name = "WhitePowderDistortion"
-	ripple.size = Vector2(SRC_W, SRC_H)
-	ripple.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ripple.z_index = 70
-	var mat := ShaderMaterial.new()
-	mat.shader = WHITE_POWDER_DISTORTION_SHADER
-	mat.set_shader_parameter("amount", white_powder_distortion_strength)
-	mat.set_shader_parameter("ripple_time", 0.0)
-	ripple.material = mat
-	_fx_layer.add_child(ripple)
-	_white_powder_distortion_tween = create_tween()
-	_white_powder_distortion_tween.set_parallel(true)
-	_white_powder_distortion_tween.tween_property(mat, "shader_parameter/ripple_time", 1.0, white_powder_distortion_time)
-	_white_powder_distortion_tween.tween_property(mat, "shader_parameter/amount", 0.0, white_powder_distortion_time)
-	_white_powder_distortion_tween.set_parallel(false)
-	_white_powder_distortion_tween.tween_callback(ripple.queue_free)
+	_consumable_fx.white_powder_ripple(
+		white_powder_distortion_strength, white_powder_distortion_time)
 
 func _potion_effect_text(pick: Dictionary) -> String:
 	match String(pick.get("kind", "")):
@@ -5006,7 +4821,8 @@ func _potion_effect_color(pick: Dictionary) -> Color:
 	return potion_popup_color
 
 func _show_potion_popup(text: String, color: Color) -> void:
-	if text.is_empty() or _fx_layer == null:
+	var fx_layer := _consumable_fx.layer()
+	if text.is_empty() or fx_layer == null:
 		return
 	var label := Label.new()
 	label.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
@@ -5025,7 +4841,7 @@ func _show_potion_popup(text: String, color: Color) -> void:
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
-	_fx_layer.add_child(label)
+	fx_layer.add_child(label)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(label, "position:y", label.position.y - 10.0, potion_popup_time)
@@ -5036,12 +4852,10 @@ func _show_potion_popup(text: String, color: Color) -> void:
 func _set_hidden_result_active(active: bool) -> void:
 	_hide_result_active = active
 	# Covers are (re)shown per reel as each reveal lands; toggling always clears.
-	for c in _hidden_covers:
-		(c as ColorRect).visible = false
+	_consumable_fx.hide_hidden_covers()
 
 func _set_hidden_cover(index: int, visible_now: bool) -> void:
-	if index >= 0 and index < _hidden_covers.size():
-		(_hidden_covers[index] as ColorRect).visible = visible_now
+	_consumable_fx.set_hidden_cover(index, visible_now)
 
 # Serum downside: after the guaranteed-symbol spins, hide the strip neighbours above
 # and below each center symbol so only the actual result remains readable.
@@ -5684,21 +5498,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_power_coins_in_flight = 0
 	_power_batch_running = false
 
-	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
-		_energy_pulse_tween.kill()
-	_energy_pulse_tween = null
-	_energy_fx_active = false
-	if _energy_edges != null:
-		_energy_edges.visible = false
-	for cover: CanvasItem in _tobacco_covers:
-		cover.visible = false
-	for smoke_node: Node in _tobacco_smoke:
-		var smoke := smoke_node as CPUParticles2D
-		if smoke != null:
-			smoke.emitting = false
-			smoke.visible = false
-	for cover: CanvasItem in _hidden_covers:
-		cover.visible = false
+	_consumable_fx.reset()
 	_reel_blur.clear_blur()
 	_hide_result_active = false
 	_reel_symbols.set_adjacent_hidden(false)
@@ -5706,10 +5506,6 @@ func _clear_wealth_presentation_fx() -> void:
 	if _cocktail_shake_tween != null and _cocktail_shake_tween.is_valid():
 		_cocktail_shake_tween.kill()
 	_cocktail_shake_tween = null
-	if _water_fx_tween != null and _water_fx_tween.is_valid():
-		_water_fx_tween.kill()
-	_water_fx_tween = null
-	_hide_water_animation()
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
 		_potion_jump_tween.kill()
 	_potion_jump_tween = null
@@ -5725,9 +5521,6 @@ func _clear_wealth_presentation_fx() -> void:
 	_clear_close_call_heartbeat()
 	position = Vector2.ZERO
 
-	if _white_powder_distortion_tween != null and _white_powder_distortion_tween.is_valid():
-		_white_powder_distortion_tween.kill()
-	_white_powder_distortion_tween = null
 	_wealth.stop_roll()
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
 	# wealth digits — the group sweep below only hides nodes, it restores nothing.
@@ -5742,19 +5535,16 @@ func _clear_wealth_presentation_fx() -> void:
 			if item != null:
 				item.visible = false
 				item.modulate.a = 0.0
-	if _fx_layer != null:
+	var fx_layer := _consumable_fx.layer()
+	if fx_layer != null:
+		# The covers, smoke and edges are run STATE, not flourishes: sweeping them
+		# away would leave a smoked reel uncoverable for the rest of the run. The
+		# blur covers are ReelBlur's and share the layer for the same reason.
 		var persistent_fx: Array[Node] = []
-		for node: Node in _tobacco_covers:
-			persistent_fx.append(node)
-		for node: Node in _tobacco_smoke:
-			persistent_fx.append(node)
-		if _energy_edges != null:
-			persistent_fx.append(_energy_edges)
-		for node: Node in _hidden_covers:
-			persistent_fx.append(node)
+		persistent_fx.append_array(_consumable_fx.persistent_nodes())
 		for node: Node in _reel_blur.blur_covers():
 			persistent_fx.append(node)
-		for child: Node in _fx_layer.get_children():
+		for child: Node in fx_layer.get_children():
 			if not persistent_fx.has(child):
 				var item := child as CanvasItem
 				if item != null:

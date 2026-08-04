@@ -219,9 +219,7 @@ func _check_machine_consumable_feedback(machine: Node, run_store: Node, failures
 	var distortion := fx_layer.get_node_or_null("WhitePowderDistortion") if fx_layer != null else null
 	if distortion == null:
 		failures.append("issue34: White Powder did not spawn distortion")
-	if machine._white_powder_distortion_tween != null and machine._white_powder_distortion_tween.is_valid():
-		machine._white_powder_distortion_tween.kill()
-	machine._white_powder_distortion_tween = null
+	machine._consumable_fx.stop_ripple()
 	if distortion != null and is_instance_valid(distortion):
 		distortion.free()
 
@@ -722,7 +720,7 @@ func _check_hallucination_machine_reaction_185(machine: Node, run_store: Node,
 ## Issue #185: Water used to land as a bare number. It now plays the authored 3-frame
 ## pour, which must live in godot/assets and clear itself when the run tears down.
 func _check_water_animation_185(machine: Node, run_store: Node, failures: Array) -> void:
-	var sheet := "res://assets/images/%s" % machine.WATER_SHEET
+	var sheet := "res://assets/images/%s" % ConsumableFx.WATER_SHEET
 	if not ResourceLoader.exists(sheet):
 		failures.append("issue185: the Water animation sheet is missing from godot/assets (%s)"
 			% sheet)
@@ -732,7 +730,7 @@ func _check_water_animation_185(machine: Node, run_store: Node, failures: Array)
 		failures.append("issue185: the Water sheet did not load as a texture")
 		return
 	# A full-canvas sheet: WATER_SHEET_FRAMES frames of the 160x320 virtual canvas.
-	var frames: int = machine.WATER_SHEET_FRAMES
+	var frames: int = ConsumableFx.WATER_SHEET_FRAMES
 	if frames != 3:
 		failures.append("issue185: the Water animation should be 3 frames, declared %d" % frames)
 	if tex.get_width() != int(machine.SRC_W) * frames or tex.get_height() != int(machine.SRC_H):
