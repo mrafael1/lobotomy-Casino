@@ -136,18 +136,9 @@ const MULTIPLIER_FRAME_COUNT := 6
 const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
 const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
 const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
-const FREE_SPIN_SHEET := "machine new view/free_spin.png"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
-const FREE_SPIN_OVERLAY_BLINK_PERIOD := 0.18
-# One authored placement again (issue #185 follow-up). The banner briefly carried a
-# second, lowered frame for when the item badges still sat in the y81..93 band and it had
-# to duck under them. Moving that row below the target bar retired the problem, and the
-# banner's own text moved UP to y84..89 instead — into the band the goal number vacates
-# while free spins are lit — so it now clears the fill bar at y94..98 outright and the
-# bar can keep running underneath it.
-const FREE_SPIN_FRAMES := 1
 # Water's on-use pour: an authored full-canvas sheet (3 x 160x320), played once.
 const WATER_SHEET := "machine new view/water.png"
 const WATER_SHEET_FRAMES := 3
@@ -212,17 +203,11 @@ const WEALTH_ENDING_SCENE := preload("res://scenes/wealth_ending_overlay.tscn")
 const GAME_OVER_ENDING_SCENE := preload("res://scenes/game_over_ending_overlay.tscn")
 const ENDING_OVERLAY_Z_INDEX := 150
 const WEALTH_TARGET_FX_Z_INDEX := 140
-# The payout screen shuts the TV down behind itself (issue #181). The rect sits above
-# everything the TV draws — boost icons (12), dealer bar (11), augment row (40) — and
-# below the targeting layer (97) and the overlay itself.
-const TV_BLACKOUT_Z_INDEX := 45
 # Flying rewards — the score bursts and the coin/lucidity FX — are the front-most thing
 # the machine itself draws: above the augment row and its popup (40/41), which in turn sit
-# above the cabinet art, and still under the TV blackout so the payout screen buries them.
+# above the cabinet art, and still under the TV blackout (TvOwnership.BLACKOUT_Z_INDEX,
+# 45) so the payout screen buries them.
 const REWARD_FX_Z_INDEX := 42
-const TV_BLACKOUT_COLOR := Color(0.004, 0.008, 0.016, 1.0)
-const TV_BLACKOUT_ALPHA := 0.94 # not opaque: the CRT keeps a faint presence
-const TV_BLACKOUT_SOURCE := &"wealth_target"
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
@@ -625,23 +610,17 @@ var _mult_fx_time := 0.0
 var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
 var _dealer_icon: TextureRect = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
-var _free_spin_sprite: Sprite2D = null
-var _free_spin_blink_time := 0.0
-var _free_spin_overlay_active := false
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
 ## Set once CONTINUE on the target screen starts the hand-off to the between-run flow: the
 ## machine is on its way out, so nothing new may take the screen here.
 var _target_round_handoff := false
-var _tv_blackout_rect: ColorRect = null
-var _tv_blackout_tween: Tween = null
 var _unlock_popup: UnlockCardPopup = null
 var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
 var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
 var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
 var _cheat_selection_sprite: Sprite2D = null
-var _tv_info_pop_sources: Dictionary = {}
 
 ## First component split out of this file (see scenes/machine/augment_display.gd).
 ## It reaches back through a MachineView rather than through this node, so what it
@@ -661,8 +640,21 @@ var _reel_symbols: ReelSymbols = null
 var _power_callout: PowerCallout = null
 var _swap_overlay: SwapTargetOverlay = null
 var _stash: StashTray = null
-var _tv_info_pop_restore_dealer_bar_visible := false
-var _tv_info_pop_restore_dealer_icon_visible := false
+var _tv: TvOwnership = null
+
+## The TV's state moved into TvOwnership, but these three names are the contract the
+## smoke checks read it through — kept as views onto the component rather than
+## rewritten across three check files, because the checks are what pin the priority
+## rules and churning them alongside the code they guard proves less.
+var _tv_info_pop_sources: Dictionary:
+	get: return _tv.sources() if _tv != null else {}
+var _free_spin_overlay_active: bool:
+	get: return _tv != null and _tv.banner_active()
+var _free_spin_sprite: Sprite2D:
+	get: return _tv.banner_sprite() if _tv != null else null
+var _tv_blackout_rect: ColorRect:
+	get: return _tv.blackout_rect() if _tv != null else null
+
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
 var _coin_anim_active := false
 var _coin_anim_elapsed := 0.0
@@ -801,6 +793,11 @@ func _ready() -> void:
 	_power_callout = PowerCallout.new(_view, SRC_W)
 	_swap_overlay = SwapTargetOverlay.new(_view, REEL_HOLES, REEL_WINDOW)
 	_stash = StashTray.new(_view, _on_stash_input)
+	# Last in the block: it arbitrates over the components above it, so they have to
+	# exist first. An arbiter's contenders are its constructor arguments.
+	_tv = TvOwnership.new(_view, TV_SCREEN, WEALTH_TRANSIENT_FX_GROUP,
+		_augments, _callouts, _dealer_bar, _boosts,
+		_refresh_dealer_countdown, _refresh_target_readout, _spin_in_flight)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -1452,9 +1449,6 @@ func _refresh_boost_indicators() -> void:
 func _boost_indicators_showing() -> bool:
 	return _boosts.showing()
 
-func _hide_boost_indicators(first := 0) -> void:
-	_boosts.hide_all(first)
-
 func _hide_item_info_popup() -> void:
 	_boosts.hide_popup()
 
@@ -1604,7 +1598,7 @@ func _build_machine_control_art() -> void:
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
 	_dealer_bar.build()
 	_build_dealer_tip_steps()
-	_free_spin_sprite = _build_full_canvas_sheet(FREE_SPIN_SHEET, FREE_SPIN_FRAMES)
+	_tv.build_banner()
 	# The four callout sheets are built here, at the point in the layer stack they
 	# have always occupied: the win sheet keeps the machine's default z_index, so
 	# the tree order at this line IS its layer (issue #195, seam 4.2).
@@ -1612,8 +1606,7 @@ func _build_machine_control_art() -> void:
 	_power_callout.build()
 	_cheat_selection_sprite = _build_full_canvas_sheet(
 		CHEAT_SELECTION_SHEET, CHEAT_SELECTION_FRAMES)
-	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _free_spin_sprite,
-			_cheat_selection_sprite]:
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _cheat_selection_sprite]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
 	if _cheat_selection_sprite != null:
@@ -1720,11 +1713,14 @@ func _build_dealer_icon() -> void:
 	icon.z_index = 12
 	_dealer_icon = icon
 	add_child(icon)
+	# Built in the HUD pass, long after the component block — so it is handed to the
+	# arbiter here rather than passed in at construction.
+	_tv.set_dealer_icon(icon)
 
 
 ## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own
 ## visibility is driven from four unrelated places (the callout mute, the losing-state
-## re-show, _restore_tv_info_layers, and the ending's name-based sweep in
+## re-show, TvOwnership.restore_layers, and the ending's name-based sweep in
 ## _set_tv_progress_bars_visible), and a sibling would have to be remembered in every one
 ## of them. As a child it simply never draws when the bar doesn't. Both are native 1:1
 ## full-canvas art at the origin, so the child needs no transform of its own.
@@ -2166,7 +2162,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	_wealth.stop_roll()
 	if _wealth.odometer() != null:
 		snapshot = WealthOdometer.make_snapshot(score)
-	_begin_tv_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
+	_tv.begin_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
 	# The final target is not paid out of the score and banks nothing, so it shows no
 	# receipt — the Wealth ending takes the whole score from here.
@@ -2180,38 +2176,10 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 func _on_wealth_target_digits_lifted() -> void:
 	_wealth.set_digits_hidden(true)
 
-## Fades the TV to black behind the payout screen. Reuses the shared content mute for
-## the layers that already know how to step aside (dealer bar, combo, free spins) and
-## covers everything else — boost icons, augment row, callout sheets — with one rect,
-## rather than enumerating a node list that would rot.
-func _begin_tv_blackout(fade_time: float) -> void:
-	_begin_tv_info_pop(TV_BLACKOUT_SOURCE)
-	if _tv_blackout_rect == null or not is_instance_valid(_tv_blackout_rect):
-		_tv_blackout_rect = ColorRect.new()
-		_tv_blackout_rect.name = "TvBlackout"
-		_tv_blackout_rect.position = Vector2(TV_SCREEN["left"], TV_SCREEN["top"])
-		_tv_blackout_rect.size = Vector2(TV_SCREEN["width"], TV_SCREEN["height"])
-		_tv_blackout_rect.color = TV_BLACKOUT_COLOR
-		_tv_blackout_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_tv_blackout_rect.z_index = TV_BLACKOUT_Z_INDEX
-		_tv_blackout_rect.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
-		add_child(_tv_blackout_rect)
-	_tv_blackout_rect.visible = true
-	_tv_blackout_rect.modulate.a = 0.0
-	if _tv_blackout_tween != null and _tv_blackout_tween.is_valid():
-		_tv_blackout_tween.kill()
-	_tv_blackout_tween = create_tween()
-	_tv_blackout_tween.tween_property(_tv_blackout_rect, "modulate:a",
-		TV_BLACKOUT_ALPHA, fade_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-
 func _end_tv_blackout() -> void:
-	if _tv_blackout_tween != null and _tv_blackout_tween.is_valid():
-		_tv_blackout_tween.kill()
-	_tv_blackout_tween = null
-	if _tv_blackout_rect != null and is_instance_valid(_tv_blackout_rect):
-		_tv_blackout_rect.visible = false
-		_tv_blackout_rect.modulate.a = 0.0
-	_end_tv_info_pop(TV_BLACKOUT_SOURCE)
+	_tv.end_blackout()
+	# Not TvOwnership's: the digits are the odometer's, and lifting them is a payout
+	# beat rather than part of who owns the screen.
 	_wealth.set_digits_hidden(false)
 
 func _finish_wealth_target_transition() -> void:
@@ -2380,7 +2348,7 @@ func _process(delta: float) -> void:
 	_augments.step_glitch(delta)
 	_wealth.step_bar_animation(delta)
 	_dealer_bar.step_beep(delta)
-	_step_free_spin_blink(delta)
+	_tv.step_banner_blink(delta)
 	_boosts.step_popup(delta)
 	_try_start_power_coin_flow()
 	if not _spinning_anim:
@@ -2621,103 +2589,24 @@ func _maybe_cancel_combo_defeat_warning(was_pending: bool) -> void:
 	if was_pending and not RunStateStore.comboDefeatPending:
 		_close_pending_combo_defeat()
 
-## Full-screen TV callouts take visual priority over persistent TV information.
-## Multiple callouts can overlap (for example a power callout over a win callout),
-## so each owner holds a source until its own presentation has finished.
+## Who may draw on the TV is TvOwnership's question; these forward to it because the
+## smoke checks and MachineView call them under these names. See that class for the
+## two-tier model (a callout owns the screen outright, the FREE SPINS banner is a
+## weaker owner that leaves the dealer interface lit beside it).
 func _begin_tv_info_pop(source: StringName) -> void:
-	_capture_tv_restore_state()
-	_tv_info_pop_sources[source] = true
-	_augments.hide_pacte_popup()
-	_augments.refresh_pacte_badges()
-	_refresh_target_readout()
-	_hide_tv_info_layers()
-
-## Remembers whether the dealer strip was actually on screen before the TV was muted,
-## so an ending that hid it wholesale (_set_tv_progress_bars_visible) does not get it
-## back when the mute lifts. Only the FIRST owner captures: a later one would snapshot
-## the already-hidden state and the strip would never return.
-func _capture_tv_restore_state() -> void:
-	if _tv_content_muted():
-		return
-	_tv_info_pop_restore_dealer_bar_visible = _dealer_bar.bar_sprite() != null \
-		and _dealer_bar.bar_sprite().visible
-	_tv_info_pop_restore_dealer_icon_visible = _dealer_icon != null \
-		and _dealer_icon.visible
+	_tv.begin_pop(source)
 
 func _end_tv_info_pop(source: StringName) -> void:
-	if not _tv_info_pop_sources.has(source):
-		return
-	_tv_info_pop_sources.erase(source)
-	if not _tv_info_pop_sources.is_empty():
-		return
-	_restore_tv_info_layers()
-	_augments.refresh_pacte_badges()
-	_refresh_target_readout()
+	_tv.end_pop(source)
 
-## Anything that takes the TV over. Two kinds of owner: a full-screen callout held
-## through _tv_info_pop_sources (PAIR/TRIPLE win, power, target blackout), and the
-## blinking FREE SPIN banner, which owns the screen for as long as it is lit. While
-## either is up, the objective readout and the COMBO stage step aside. The item badges
-## are the exception: only a callout clears them (issue #185).
 func _tv_content_muted() -> bool:
-	return not _tv_info_pop_sources.is_empty() or _free_spin_overlay_active
+	return _tv.content_muted()
 
-## A full-screen callout — the only owner that clears the TV outright. The FREE SPIN
-## banner is deliberately weaker: it keeps the dealer interface (bar, warning lights,
-## icon) lit beside it, because how close the dealer is stays worth reading while the
-## free spins are being spent. Everything else on the TV, the objective readout included,
-## still steps aside for the banner (issue #181).
 func _tv_callout_active() -> bool:
-	return not _tv_info_pop_sources.is_empty()
-
-## Re-applies the mute after the set of TV owners changes.
-func _apply_tv_content_mute() -> void:
-	if _tv_content_muted():
-		_hide_tv_info_layers()
-	else:
-		_restore_tv_info_layers()
+	return _tv.callout_active()
 
 func _hide_tv_info_layers() -> void:
-	# The FREE SPIN banner is an owner in its own right, so it hides only for a
-	# callout — never for its own mute. The item badges follow the same rule now
-	# (issue #185): a callout clears them, the banner beside them does not.
-	if _free_spin_sprite != null and not _tv_info_pop_sources.is_empty():
-		_free_spin_sprite.visible = false
-	_callouts.hide_combo()
-	if not _tv_callout_active():
-		_refresh_boost_indicators()
-		return
-	_hide_item_info_popup()
-	_hide_boost_indicators()
-	# Past this point a callout owns the TV, so the dealer interface clears with
-	# everything else; under the banner alone it stayed readable and returned above.
-	var dealer_nodes: Array = _dealer_bar.overlays()
-	dealer_nodes.append(_dealer_icon)
-	for node in dealer_nodes:
-		var info := node as CanvasItem
-		if info != null:
-			info.visible = false
-
-func _restore_tv_info_layers() -> void:
-	_refresh_free_spin_banner()
-	if _free_spin_sprite != null:
-		_free_spin_sprite.visible = _free_spin_overlay_active \
-			and _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
-	# The callout is gone but the banner is lit: the COMBO stage keeps waiting it out,
-	# while the dealer interface comes back with the objective. The item badges come back
-	# too (issue #185) — the banner drops a frame for them rather than blanking them.
-	_refresh_boost_indicators()
-	if _free_spin_overlay_active:
-		_callouts.hide_combo()
-	_refresh_dealer_countdown()
-	if _dealer_bar.bar_sprite() != null:
-		_dealer_bar.bar_sprite().visible = _tv_info_pop_restore_dealer_bar_visible \
-			or RunStateStore.comboDefeatPending
-	if _dealer_icon != null:
-		_dealer_icon.visible = _tv_info_pop_restore_dealer_icon_visible \
-			or RunStateStore.comboDefeatPending
-	if not _free_spin_overlay_active:
-		_callouts.refresh_combo()
+	_tv.hide_layers()
 
 func _queue_compulsive_spin() -> void:
 	if _compulsive_queued or RunStateStore.runPhase != "running":
@@ -2954,7 +2843,7 @@ func _refresh_tv_indicators() -> void:
 	_refresh_boost_indicators()
 	# COMBO is a persistent TV component whenever the Pacte augment is active. Its
 	# frame follows the recoverable streak, while higher-priority callouts hide it
-	# through _begin_tv_info_pop/_restore_tv_info_layers.
+	# through TvOwnership's begin_pop/restore_layers.
 	if not _hud_delta_hold:
 		_callouts.refresh_combo()
 	# The wealth odometer is a score total. Hold it (with the multiplier badge and
@@ -3635,48 +3524,18 @@ func _step_multiplier_fx(delta: float) -> void:
 	if loss_3_active:
 		_callouts.step_loss_3_frame()
 
-## FREE SPINS TV banner: blinks for as long as the NEXT spin is free (banked
-## free spins or an Energy Drink no-decay rush) and holds until the lever is
-## pulled — the spin's own state commit consumes the credit and clears it. It is
-## a passive indicator: it never blocks input.
-func _step_free_spin_blink(delta: float) -> void:
-	if _free_spin_sprite == null or not _free_spin_overlay_active:
-		return
-	if not _tv_info_pop_sources.is_empty():
-		_free_spin_sprite.visible = false
-		return
-	_free_spin_blink_time = fmod(
-		_free_spin_blink_time + delta, FREE_SPIN_OVERLAY_BLINK_PERIOD)
-	_free_spin_sprite.visible = _free_spin_blink_time < FREE_SPIN_OVERLAY_BLINK_PERIOD * 0.72
+## The FREE SPINS banner is a TV owner, so it lives with the arbitration
+## (TvOwnership). What the machine still answers is whether a spin is on the way —
+## a free-spin grant made by the reveal must not light the banner before the reward
+## has landed and spoil the result.
+func _spin_in_flight() -> bool:
+	return _spinning_anim or _spin_launch_pending or _hud_delta_hold
 
 func _refresh_free_spin_banner() -> void:
-	var active := RunStateStore.runPhase == "running" \
-		and (int(RunStateStore.freeSpinsRemaining) > 0 \
-			or int(RunStateStore.decaySkips) > 0 or RunStateStore.heartPowerArmed)
-	# Never turn the banner ON while a spin is in flight or its reward is still
-	# held — a grant made by the spin being revealed must not spoil the result.
-	# Turning it OFF mid-spin is fine (pressing spin consumed the last credit).
-	if active and not _free_spin_overlay_active \
-			and (_spinning_anim or _spin_launch_pending or _hud_delta_hold):
-		active = false
-	if not _tv_info_pop_sources.is_empty():
-		if _free_spin_sprite != null:
-			_free_spin_sprite.visible = false
-		return
-	_set_free_spin_display(active)
+	_tv.refresh_banner()
 
 func _set_free_spin_display(active: bool) -> void:
-	if active == _free_spin_overlay_active:
-		return
-	if active:
-		_capture_tv_restore_state()
-	_free_spin_overlay_active = active
-	_free_spin_blink_time = 0.0
-	if _free_spin_sprite != null:
-		_free_spin_sprite.visible = active
-	# Lighting the banner takes the TV; letting it go out hands it back. Either way
-	# every other readout has to re-evaluate its mute right here.
-	_apply_tv_content_mute()
+	_tv.set_banner_display(active)
 
 func _build_power_buttons() -> void:
 	for id in POWER_IDS:
@@ -6163,9 +6022,12 @@ func _stop_flatline_countdown() -> void:
 # The stash tray (z 50) would draw over full-screen ending overlays; hide it while
 # one is up and restore it when the run visuals resync.
 func _set_tv_progress_bars_visible(visible: bool) -> void:
+	# An ending is a TV owner too, and the crudest one: it sweeps the persistent
+	# layers away by node name rather than holding a source. Telling the arbiter to
+	# forget its snapshot is what stops a mute taken BEFORE the ending from handing
+	# back what the ending hid.
 	if not visible and _tv_content_muted():
-		_tv_info_pop_restore_dealer_bar_visible = false
-		_tv_info_pop_restore_dealer_icon_visible = false
+		_tv.forget_restore_state()
 	for node_name: String in [
 		"WealthOdometer", "HealthBar", "DealerBar", "DealerBarOverlay1",
 		"DealerBarOverlay2", "DealerBarOverlay3", "DealerIcon"]:
@@ -6177,8 +6039,8 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 	if not visible:
 		_cancel_coin_insert()
 		_set_free_spin_display(false)
-	elif not _tv_info_pop_sources.is_empty():
-		_hide_tv_info_layers()
+	elif _tv.callout_active():
+		_tv.hide_layers()
 
 func _end_run_lucidity_kept_fraction() -> float:
 	# Asks the store rather than reading ownedPermanents directly, so a Pacte-granted

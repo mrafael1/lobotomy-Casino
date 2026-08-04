@@ -34,8 +34,7 @@ func _run() -> void:
 		" muted=", scene._tv_content_muted(), " callout=", scene._tv_callout_active())
 	# The banner blinks, so pin it to the lit half of its duty cycle for the shot rather
 	# than racing it: _process would otherwise flip a forced-visible sprite straight back.
-	scene._free_spin_blink_time = 0.0
-	scene._free_spin_sprite.visible = true
+	scene._tv.pin_banner_lit()
 	# Render the forced state: get_texture() reads the frame already drawn, so without
 	# this the shot captures the blink's dark half regardless of what was just set.
 	await process_frame
