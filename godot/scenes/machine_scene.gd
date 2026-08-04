@@ -76,21 +76,11 @@ const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever t
 # Swap talks about whole reels, so its cues cover the whole visible reel: the hole plus the
 # strip symbols above and below it, not just the centre window.
 
-# Cheat's mini-reel overlay (on the picked reel's hole): up/down arrows step the
-# candidate symbol, tapping the symbol commits it.
-# The arrows themselves are authored into cheat_selection.png. These are the measured
-# pixel bounds of that art relative to the picked reel's hole (x35..52 / y156..165 and
-# y207..216 against hole 33,170 21x30), so the invisible hit buttons land ON the arrows —
-# the old hole+gap guess sat 3px above the top arrow and 4px above the bottom one, which
-# left the lower half of the down arrow dead (issue #181).
-const CHEAT_ARROW_SIZE := Vector2(17.0, 9.0)
-const CHEAT_ARROW_UP_RISE := 14.0 # arrow top above the hole's top edge
-const CHEAT_ARROW_DOWN_DROP := 7.0 # arrow top below the hole's bottom edge
-# Grown a little past the art on every side: 9px of height is a small target on a
-# 160x320 canvas, and the gaps around the arrows are dead space anyway.
-const CHEAT_ARROW_TOUCH_PAD := Vector2(1.5, 2.0)
-const CHEAT_SELECTION_SHEET := "machine new view/cheat_selection.png"
-const CHEAT_SELECTION_FRAMES := 9
+# Cheat's mini-reel overlay (on the picked reel's hole) is CheatMiniReel's, arrow
+# geometry and selection sheet included — they describe the overlay, not the cabinet.
+# The arrow bounds are measured off the authored art rather than guessed from the
+# hole: the old hole+gap guess sat 3px above the top arrow and 4px above the bottom
+# one, which left the lower half of the down arrow dead (issue #181).
 
 # Machine-mounted power button hit rects (source px). Every chip is painted 11x11 at y225
 # in its own sheet (POWER_ART_LEFT below), so each rect is that chip grown 1px sideways and
@@ -612,7 +602,10 @@ var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remain
 var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
 var _reserve_glow_tween: Tween = null
 var _spins_left_label: Label = null # numeric spins-left readout under the tube
-var _cheat_selection_sprite: Sprite2D = null
+## The mini-reel's authored sheet, as a view onto CheatMiniReel — the smoke checks
+## reach it under this name.
+var _cheat_selection_sprite: Sprite2D:
+	get: return _cheat.selection_sprite() if _cheat != null else null
 
 ## First component split out of this file (see scenes/machine/augment_display.gd).
 ## It reaches back through a MachineView rather than through this node, so what it
@@ -633,6 +626,7 @@ var _power_callout: PowerCallout = null
 var _swap_overlay: SwapTargetOverlay = null
 var _swap_shake: SwapShake = null
 var _targeting: TargetingLayer = null
+var _cheat: CheatMiniReel = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -665,9 +659,6 @@ var _targeting_layer: Control:
 var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
 var _cheat_reel := -1
-var _cheat_symbol_pool: Array[String] = [] # cheat mini-reel: cycle order (+book)
-var _cheat_symbol_index := 0
-var _cheat_preview_sprite: Sprite2D = null # candidate symbol in the mini-reel
 var _swap_source := -1
 var _swap_drag_active := false
 var _swap_dragging := false
@@ -787,6 +778,8 @@ func _ready() -> void:
 	_swap_overlay = SwapTargetOverlay.new(_view, REEL_HOLES, REEL_WINDOW)
 	_swap_shake = SwapShake.new(_view)
 	_targeting = TargetingLayer.new(_view, Vector2(SRC_W, SRC_H))
+	_cheat = CheatMiniReel.new(_view, _reel_symbols, MACHINE_ART_TEXTURE_FILTER,
+		_make_hit_button, _on_cheat_symbol_pick)
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -1599,13 +1592,11 @@ func _build_machine_control_art() -> void:
 	# the tree order at this line IS its layer (issue #195, seam 4.2).
 	_callouts.build()
 	_power_callout.build()
-	_cheat_selection_sprite = _build_full_canvas_sheet(
-		CHEAT_SELECTION_SHEET, CHEAT_SELECTION_FRAMES)
-	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire, _cheat_selection_sprite]:
+	# Hides itself and sets its own z_index — the sheet is the mini-reel's art.
+	_cheat.build_sheet()
+	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
-	if _cheat_selection_sprite != null:
-		_cheat_selection_sprite.z_index = 98
 	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_bursts.build_jackpot_lamp()
 	for i in 3:
@@ -3770,86 +3761,29 @@ func _on_cheat_reel_pick(reel_index: int) -> void:
 	_clear_targeting()
 	_targeting_power_id = "cheat"
 	_power_callout.show_power("cheat")
-	_set_cheat_selection_state(0)
-	_cheat_symbol_pool.clear()
+	# What may be chosen is the machine's: the base cycle, plus a Book only once the
+	# run has earned one.
+	var pool: Array[String] = []
 	for symbol in Symbols.BASE_SYMBOL_CYCLE:
-		_cheat_symbol_pool.append(String(symbol))
+		pool.append(String(symbol))
 	if Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0:
-		_cheat_symbol_pool.append("book")
+		pool.append("book")
 	# Start the mini-reel on the symbol currently in the hole.
 	var current := ""
 	if RunStateStore.lastResult != null:
 		var reels: Array = RunStateStore.lastResult["reels"] as Array
 		if reel_index >= 0 and reel_index < reels.size():
 			current = String(reels[reel_index])
-	_cheat_symbol_index = maxi(0, _cheat_symbol_pool.find(current))
 	# STOP, not IGNORE: tapping anywhere off the mini-reel backs out of Cheat, so the
 	# layer itself has to receive the miss.
 	var layer := _targeting.open("CheatReelOverlay", Control.MOUSE_FILTER_STOP,
 		_on_power_picker_input)
 	var hole: Dictionary = REEL_HOLES[reel_index]
-	var hole_rect := Rect2(float(hole["left"]), float(hole["top"]),
-		float(hole["width"]), float(hole["height"]))
-	_cheat_preview_sprite = Sprite2D.new()
-	_cheat_preview_sprite.name = "CheatPreviewSymbol"
-	_cheat_preview_sprite.centered = true
-	_cheat_preview_sprite.position = hole_rect.get_center()
-	_cheat_preview_sprite.z_index = 2
-	_cheat_preview_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	layer.add_child(_cheat_preview_sprite)
-	_refresh_cheat_preview(false)
-	var confirm := _make_hit_button({
-		"left": hole_rect.position.x, "top": hole_rect.position.y,
-		"width": hole_rect.size.x, "height": hole_rect.size.y,
-	}, func() -> void: _on_cheat_symbol_pick(_cheat_symbol_pool[_cheat_symbol_index]))
-	confirm.name = "CheatConfirmButton"
-	layer.add_child(confirm)
-	_build_cheat_arrow(hole_rect, true)
-	_build_cheat_arrow(hole_rect, false)
-
-## Transparent up/down hit targets flank the mini-reel; the authored
-## cheat_selection sheet supplies their visible arrows and selected-reel frame.
-func _build_cheat_arrow(hole_rect: Rect2, up: bool) -> void:
-	var cx := hole_rect.get_center().x
-	var top := hole_rect.position.y - CHEAT_ARROW_UP_RISE if up \
-		else hole_rect.end.y + CHEAT_ARROW_DOWN_DROP
-	var b := _make_hit_button({
-		"left": cx - CHEAT_ARROW_SIZE.x * 0.5 - CHEAT_ARROW_TOUCH_PAD.x,
-		"top": top - CHEAT_ARROW_TOUCH_PAD.y,
-		"width": CHEAT_ARROW_SIZE.x + CHEAT_ARROW_TOUCH_PAD.x * 2.0,
-		"height": CHEAT_ARROW_SIZE.y + CHEAT_ARROW_TOUCH_PAD.y * 2.0,
-	}, func() -> void: _cycle_cheat_symbol(-1 if up else 1))
-	b.name = "CheatArrowUp" if up else "CheatArrowDown"
-	var selection_state := 2 if up else 1
-	b.button_down.connect(_set_cheat_selection_state.bind(selection_state))
-	b.button_up.connect(_set_cheat_selection_state.bind(0))
-	_targeting.node().add_child(b)
+	_cheat.open(layer, reel_index, Rect2(float(hole["left"]), float(hole["top"]),
+		float(hole["width"]), float(hole["height"])), pool, current)
 
 func _set_cheat_selection_state(state: int) -> void:
-	if _cheat_selection_sprite == null or _cheat_reel < 0:
-		return
-	var frame := clampi(_cheat_reel * 3 + state, 0, CHEAT_SELECTION_FRAMES - 1)
-	_set_sheet_frame(_cheat_selection_sprite, frame)
-	_cheat_selection_sprite.visible = true
-
-## Steps match the strip: the up arrow rolls toward the symbol shown above the
-## hole (cycle -1), the down arrow toward the one below (+1).
-func _cycle_cheat_symbol(step: int) -> void:
-	if _cheat_symbol_pool.is_empty():
-		return
-	_cheat_symbol_index = posmod(_cheat_symbol_index + step, _cheat_symbol_pool.size())
-	_refresh_cheat_preview(true)
-
-func _refresh_cheat_preview(pop: bool) -> void:
-	if _cheat_preview_sprite == null or not is_instance_valid(_cheat_preview_sprite):
-		return
-	_reel_symbols.apply_symbol(_cheat_preview_sprite, _cheat_symbol_pool[_cheat_symbol_index], ReelSymbols.CENTER_H)
-	if pop:
-		var rest := _cheat_preview_sprite.scale
-		_cheat_preview_sprite.scale = rest * 1.25
-		var tw := create_tween()
-		tw.tween_property(_cheat_preview_sprite, "scale", rest, 0.1) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_cheat.show_selection(state)
 
 func _on_cheat_symbol_pick(symbol_id: String) -> void:
 	var source := _cheat_reel
@@ -4335,10 +4269,7 @@ func _clear_targeting() -> void:
 	_cancel_swap_drag_gesture()
 	_targeting.close()
 	_swap_overlay.forget() # the frames were children of the layer just freed
-	_cheat_preview_sprite = null # freed with the targeting layer
-	if _cheat_selection_sprite != null:
-		_cheat_selection_sprite.visible = false
-		_set_sheet_frame(_cheat_selection_sprite, 0)
+	_cheat.close() # its preview and buttons were children of the layer just freed
 	_targeting_power_id = ""
 	_power_callout.stop()
 
