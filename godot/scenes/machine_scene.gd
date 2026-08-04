@@ -629,6 +629,7 @@ var _cheat: CheatMiniReel = null
 var _consumable_fx: ConsumableFx = null
 var _choices: ChoiceOverlays = null
 var _reactions: ReactionFlash = null
+var _hints: HintPopups = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -729,7 +730,10 @@ var _spin_label: Label = null
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
 var _flatline_transition_active: bool = false
 var _neuron_spend_label: Label = null
-var _hint_layer: Control = null  # transient on-use +/- HintLabels (issue #33)
+## Transient on-use +/- HintLabels (issue #33), as a view onto HintPopups — the
+## smoke checks read the layer under this name.
+var _hint_layer: Control:
+	get: return _hints.layer() if _hints != null else null
 # Machine reactions (issue #35): dedupe key so one reel configuration reacts once,
 # and a pending eye-triple reveal for the next spin.
 var _last_reacted_reels: Array = []
@@ -799,6 +803,7 @@ func _ready() -> void:
 		REEL_WINDOW)
 	_reactions = ReactionFlash.new(_view, Vector2(SRC_W, SRC_H),
 		WEALTH_TRANSIENT_FX_GROUP)
+	_hints = HintPopups.new(_view, MACHINE_HINT_CENTER)
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -1974,19 +1979,7 @@ func _build_spin_label() -> void:
 	# machine HUD's empty anchor is explicitly named for the run's spin counter.
 
 func _build_hint_layer() -> void:
-	var bottom_hud := get_node_or_null("BottomHudLayer") as Control
-	if bottom_hud == null:
-		return
-	_hint_layer = bottom_hud.get_node_or_null("HintLayer") as Control
-	if _hint_layer == null:
-		_hint_layer = Control.new()
-		_hint_layer.name = "HintLayer"
-		bottom_hud.add_child(_hint_layer)
-		# Consumable popups originate from the machine centre (the reel window's
-		# midpoint), not the HUD anchor.
-		_hint_layer.position = MACHINE_HINT_CENTER
-		_hint_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_hint_layer.z_index = 20
+	_hints.build(get_node_or_null("BottomHudLayer") as Control)
 
 func _build_spin_button() -> void:
 	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
@@ -4474,18 +4467,12 @@ func _spawn_hint(id: String, negative_only: bool, positive_only: bool) -> HintLa
 	var hint := _hint_for(id)
 	if hint.is_empty():
 		return null
-	if _hint_layer == null or not is_instance_valid(_hint_layer):
+	if not _hints.has_layer():
 		_build_hint_layer()
-	if _hint_layer == null:
-		return null
-	var hint_label := HintLabel.new()
-	hint_label.grow_time = hint_grow_time
-	hint_label.set_font(_font)
-	_hint_layer.add_child(hint_label)
-	var pos := "" if negative_only else String(hint["pos"])
-	var neg := "" if positive_only else String(hint["neg"])
-	hint_label.play(pos, neg, _item_display_name(id), _item_reads_corrupted(id))
-	return hint_label
+	return _hints.spawn(
+		"" if negative_only else String(hint["pos"]),
+		"" if positive_only else String(hint["neg"]),
+		_item_display_name(id), _item_reads_corrupted(id), hint_grow_time)
 
 ## The +/- vocabulary for an item, which on a joker run is the inverted one (issue #111).
 func _hint_for(id: String) -> Dictionary:
@@ -5196,16 +5183,6 @@ func _cleanup_transient_presentation() -> void:
 
 # Fallback ending overlay (used when no authored ending scene answers). Both the copy
 # column and the button are centred bands, so each is parametric on its own inset.
-const ENDING_TEXT_INSET := 20.0
-const ENDING_TEXT_W := SRC_W - ENDING_TEXT_INSET * 2.0 # 120
-const ENDING_TITLE_H := 28.0
-const ENDING_LABEL_H := 20.0
-const ENDING_FLATLINE_TITLE_Y := 58.0
-const ENDING_TITLE_Y := 120.0
-const ENDING_WALLET_Y := 145.0
-const ENDING_BUTTON_SIZE := Vector2(100.0, 20.0)
-const ENDING_BUTTON_FLATLINE_Y := 238.0
-const ENDING_BUTTON_Y := 175.0
 
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_cleanup_transient_presentation()
@@ -5235,67 +5212,24 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 
 	# The stash tray draws at z 50 and would float over the ending presentation.
 	_stash.set_tray_visible(false)
-	if resolved_ending == "wealth":
-		_build_wealth_screen(run)
-		return
-	if resolved_ending == "game_over":
-		_build_game_over_screen(run)
-		return
-	if resolved_ending == "flatline":
-		_build_flatline_screen(run)
-		return
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.7)
-	dim.size = Vector2(SRC_W, SRC_H)
-	_overlay.add_child(dim)
-
-	var title := Label.new()
-	if resolved_ending == "flatline":
-		# The fatal copy only applies when the campaign is truly over — a routine
-		# flatline with neurons left just reads FLATLINE.
-		var fatal := not _has_campaign_neurons_remaining()
-		title.text = fatal_flatline_text if fatal else "FLATLINE"
-		title.position = Vector2(ENDING_TEXT_INSET, ENDING_FLATLINE_TITLE_Y)
-		title.size = Vector2(ENDING_TEXT_W, ENDING_TITLE_H)
-		title.autowrap_mode = TextServer.AUTOWRAP_WORD
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.add_theme_font_size_override("font_size", 9 if fatal else 14)
-	else:
-		title.text = resolved_ending.to_upper()
-		title.position = Vector2(ENDING_TEXT_INSET, ENDING_TITLE_Y)
-		title.size = Vector2(ENDING_TEXT_W, ENDING_LABEL_H)
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.add_theme_font_size_override("font_size", 16)
-	if _font != null:
-		title.add_theme_font_override("font", _font)
-	title.add_theme_color_override("font_color", Color(1, 0.4, 0.5) if resolved_ending == "flatline" else Color(0.5, 1, 0.6))
-	_overlay.add_child(title)
-
-	if resolved_ending == "flatline":
-		_flatline.build_countdown(run)
-	else:
-		var wallet := Label.new()
-		wallet.position = Vector2(ENDING_TEXT_INSET, ENDING_WALLET_Y)
-		wallet.add_theme_font_size_override("font_size", 9)
-		if _font != null:
-			wallet.add_theme_font_override("font", _font)
-		wallet.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-		wallet.text = tr("CREDITS %d") % MetaStateStore.lucidityWallet
-		_overlay.add_child(wallet)
-
-	var to_menu := Button.new()
-	to_menu.text = _flatline_action_text()
-	to_menu.size = ENDING_BUTTON_SIZE
-	to_menu.position = Vector2(
-		(SRC_W - ENDING_BUTTON_SIZE.x) * 0.5,
-		ENDING_BUTTON_FLATLINE_Y if resolved_ending == "flatline" else ENDING_BUTTON_Y)
-	to_menu.add_theme_font_size_override("font_size", 9)
-	if _font != null:
-		to_menu.add_theme_font_override("font", _font)
-	ButtonKit.skin_negative_button(to_menu)
-	to_menu.pressed.connect(_on_flatline_action_pressed)
-	_overlay.add_child(to_menu)
+	# Three endings, three authored screens. A generic dim/title/wallet/button
+	# fallback used to sit below this and was UNREACHABLE: check_ending only ever
+	# yields "wealth" or "flatline", and the neuron check above turns the second into
+	# "game_over", so all three returned before reaching it. Worse, half of it was
+	# written for a flatline that had already been handled — a fatal-copy title and a
+	# countdown branch nothing could run.
+	#
+	# The default arm replaces it. A fourth ending now fails the smoke suite through
+	# the engine-error gate instead of silently drawing a screen nobody has seen.
+	match resolved_ending:
+		"wealth":
+			_build_wealth_screen(run)
+		"game_over":
+			_build_game_over_screen(run)
+		"flatline":
+			_build_flatline_screen(run)
+		_:
+			push_error("machine: no ending screen for '%s'" % resolved_ending)
 
 ## Dedicated issue #140 flatline presentation. The visual layer owns the focused
 ## message, animated trace, and action; MachineScene retains countdown state,
@@ -5387,12 +5321,7 @@ func _clear_wealth_presentation_fx() -> void:
 	_clear_jackpot_coins()
 	_bursts.hide_pending()
 	_coins.hide_pending()
-	if _hint_layer != null:
-		for child: Node in _hint_layer.get_children():
-			var item := child as CanvasItem
-			if item != null:
-				item.visible = false
-				item.modulate.a = 0.0
+	_hints.hide_pending()
 	var fx_layer := _consumable_fx.layer()
 	if fx_layer != null:
 		# The covers, smoke and edges are run STATE, not flourishes: sweeping them
