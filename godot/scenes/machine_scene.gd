@@ -632,6 +632,7 @@ var _reel_symbols: ReelSymbols = null
 var _power_callout: PowerCallout = null
 var _swap_overlay: SwapTargetOverlay = null
 var _swap_shake: SwapShake = null
+var _targeting: TargetingLayer = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -657,7 +658,10 @@ var _lock_sprites: Array = []
 var _lock_count_labels: Array[Label] = []
 var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
-var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
+## The armed picker layer, as a view onto TargetingLayer — the smoke checks and the
+## lock debug shot reach the node under this name.
+var _targeting_layer: Control:
+	get: return _targeting.node() if _targeting != null else null
 var _targeting_power_id := ""
 var _copy_source := -1               # white-powder copy: chosen source reel (-1 = none)
 var _cheat_reel := -1
@@ -782,6 +786,7 @@ func _ready() -> void:
 	_power_callout = PowerCallout.new(_view, SRC_W)
 	_swap_overlay = SwapTargetOverlay.new(_view, REEL_HOLES, REEL_WINDOW)
 	_swap_shake = SwapShake.new(_view)
+	_targeting = TargetingLayer.new(_view, Vector2(SRC_W, SRC_H))
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -3631,7 +3636,7 @@ func _on_power_pressed(id: String) -> void:
 		return
 	if not RunStateStore._can_use_ability():
 		return
-	if _targeting_layer != null:
+	if _targeting.is_open():
 		_clear_targeting()
 		_refresh_controls()
 		return
@@ -3778,13 +3783,10 @@ func _on_cheat_reel_pick(reel_index: int) -> void:
 		if reel_index >= 0 and reel_index < reels.size():
 			current = String(reels[reel_index])
 	_cheat_symbol_index = maxi(0, _cheat_symbol_pool.find(current))
-	_targeting_layer = Control.new()
-	_targeting_layer.name = "CheatReelOverlay"
-	_targeting_layer.size = Vector2(SRC_W, SRC_H)
-	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_STOP
-	_targeting_layer.z_index = 97
-	_targeting_layer.gui_input.connect(_on_power_picker_input)
-	add_child(_targeting_layer)
+	# STOP, not IGNORE: tapping anywhere off the mini-reel backs out of Cheat, so the
+	# layer itself has to receive the miss.
+	var layer := _targeting.open("CheatReelOverlay", Control.MOUSE_FILTER_STOP,
+		_on_power_picker_input)
 	var hole: Dictionary = REEL_HOLES[reel_index]
 	var hole_rect := Rect2(float(hole["left"]), float(hole["top"]),
 		float(hole["width"]), float(hole["height"]))
@@ -3794,14 +3796,14 @@ func _on_cheat_reel_pick(reel_index: int) -> void:
 	_cheat_preview_sprite.position = hole_rect.get_center()
 	_cheat_preview_sprite.z_index = 2
 	_cheat_preview_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	_targeting_layer.add_child(_cheat_preview_sprite)
+	layer.add_child(_cheat_preview_sprite)
 	_refresh_cheat_preview(false)
 	var confirm := _make_hit_button({
 		"left": hole_rect.position.x, "top": hole_rect.position.y,
 		"width": hole_rect.size.x, "height": hole_rect.size.y,
 	}, func() -> void: _on_cheat_symbol_pick(_cheat_symbol_pool[_cheat_symbol_index]))
 	confirm.name = "CheatConfirmButton"
-	_targeting_layer.add_child(confirm)
+	layer.add_child(confirm)
 	_build_cheat_arrow(hole_rect, true)
 	_build_cheat_arrow(hole_rect, false)
 
@@ -3821,7 +3823,7 @@ func _build_cheat_arrow(hole_rect: Rect2, up: bool) -> void:
 	var selection_state := 2 if up else 1
 	b.button_down.connect(_set_cheat_selection_state.bind(selection_state))
 	b.button_up.connect(_set_cheat_selection_state.bind(0))
-	_targeting_layer.add_child(b)
+	_targeting.node().add_child(b)
 
 func _set_cheat_selection_state(state: int) -> void:
 	if _cheat_selection_sprite == null or _cheat_reel < 0:
@@ -3867,17 +3869,12 @@ func _arm_swap_source() -> void:
 	_clear_targeting()
 	_targeting_power_id = "swap"
 	_power_callout.show_power("swap")
-	_targeting_layer = Control.new()
-	_targeting_layer.name = "SwapSymbolDragLayer"
-	_targeting_layer.size = Vector2(SRC_W, SRC_H)
-	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_targeting_layer.z_index = 97
-	add_child(_targeting_layer)
+	var layer := _targeting.open("SwapSymbolDragLayer", Control.MOUSE_FILTER_IGNORE)
 	_swap_overlay.forget()
 	# A blinded reel is neither grabbable nor droppable: no hint, no drag button, and
 	# _swap_target_at() will not return it.
 	for i in _power_reel_count():
-		_swap_overlay.build_slot_hint(_targeting_layer, i)
+		_swap_overlay.build_slot_hint(layer, i)
 		var hole: Dictionary = REEL_HOLES[i]
 		var button := Button.new()
 		button.name = "SwapSymbol%d" % i
@@ -3890,7 +3887,7 @@ func _arm_swap_source() -> void:
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 		button.gui_input.connect(_on_swap_symbol_gui_input.bind(i, button))
-		_targeting_layer.add_child(button)
+		layer.add_child(button)
 	# Issue #181: one cue per idea, and no words. The reel frames breathe (these are the
 	# places that take part) and the reels shake (these are the things you can grab); the
 	# instruction line the power used to carry is gone.
@@ -3980,7 +3977,7 @@ func _swap_symbol_at(reel_index: int, slot: int) -> String:
 	return String(neighbours["top"] if slot == 0 else neighbours["bottom"])
 
 func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2) -> void:
-	if _swap_drag_active or _targeting_layer == null:
+	if _swap_drag_active or not _targeting.is_open():
 		return
 	var result: Variant = RunStateStore.lastResult
 	if not result is Dictionary:
@@ -4021,9 +4018,9 @@ func _begin_swap_drag(reel_index: int, button: Button, global_position: Vector2)
 	ghost_shadow.modulate = Color(0.0, 0.0, 0.0, 0.5)
 	ghost_shadow.show_behind_parent = true
 	_swap_drag_ghost.add_child(ghost_shadow)
-	_swap_overlay.build_destination_cues(_targeting_layer, reel_index)
+	_swap_overlay.build_destination_cues(_targeting.node(), reel_index)
 	_swap_drag_ghost.visible = true
-	_targeting_layer.add_child(_swap_drag_ghost)
+	_targeting.node().add_child(_swap_drag_ghost)
 	_swap_drag_button.modulate.a = 0.35
 
 ## Builds both destination cues for a Swap drag: a green frame that follows whichever
@@ -4066,6 +4063,15 @@ func _cancel_swap_drag_gesture() -> void:
 	_swap_source_slot = 1
 	_swap_source_symbol = ""
 
+## A pointer position in the armed layer's space. The fallback when nothing is
+## armed is the machine's OWN local space, which is why this stays here rather
+## than in TargetingLayer — that class has no opinion about where a point lives
+## when it holds no layer.
+func _targeting_local_position(global_position: Vector2) -> Vector2:
+	if not _targeting.is_open():
+		return to_local(global_position)
+	return _targeting.local_position(global_position)
+
 func _swap_symbol_position(reel_index: int, slot: int) -> Vector2:
 	if reel_index < 0 or reel_index >= _reel_symbols.count():
 		return Vector2.ZERO
@@ -4075,10 +4081,6 @@ func _swap_symbol_position(reel_index: int, slot: int) -> Vector2:
 		return _reel_symbols.bottom(reel_index).position
 	return _reel_symbols.center(reel_index).position
 
-func _targeting_local_position(global_position: Vector2) -> Vector2:
-	if _targeting_layer == null:
-		return to_local(global_position)
-	return _targeting_layer.get_global_transform_with_canvas().affine_inverse() * global_position
 
 func _swap_target_at(global_position: Vector2) -> int:
 	var local_position := to_local(global_position)
@@ -4141,12 +4143,9 @@ func _flash_power_rubble() -> void:
 # get no button — see _power_reel_count().
 func _arm_reel_picker(cb: Callable) -> void:
 	_clear_targeting()
-	_targeting_layer = Control.new()
-	_targeting_layer.size = Vector2(SRC_W, SRC_H)
-	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
-	_targeting_layer.z_index = 97
-	add_child(_targeting_layer)
-	var selection := _build_control_grid_sheet_on(_targeting_layer, "machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
+	# IGNORE: only its buttons capture clicks.
+	var layer := _targeting.open("ReelPickerOverlay", Control.MOUSE_FILTER_IGNORE)
+	var selection := _build_control_grid_sheet_on(layer, "machine new view/reel_selection.png", REEL_SELECT_COLUMNS, REEL_SELECT_ROWS)
 	var cy := REEL_WINDOW["top"]
 	for i in _power_reel_count():
 		var reel := i
@@ -4158,16 +4157,12 @@ func _arm_reel_picker(cb: Callable) -> void:
 		}, func() -> void: cb.call(reel))
 		if selection != null:
 			b.button_down.connect(_set_sheet_frame.bind(selection, reel + 1))
-		_targeting_layer.add_child(b)
+		layer.add_child(b)
 
 func _arm_shift_targets() -> void:
 	_clear_targeting()
-	_targeting_layer = Control.new()
-	_targeting_layer.size = Vector2(SRC_W, SRC_H)
-	_targeting_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons capture clicks
-	_targeting_layer.z_index = 97
-	add_child(_targeting_layer)
-	var arrows := _build_control_grid_sheet_on(_targeting_layer, "machine new view/shift_power.png", SHIFT_POWER_COLUMNS, SHIFT_POWER_ROWS)
+	var layer := _targeting.open("ShiftArrowOverlay", Control.MOUSE_FILTER_IGNORE)
+	var arrows := _build_control_grid_sheet_on(layer, "machine new view/shift_power.png", SHIFT_POWER_COLUMNS, SHIFT_POWER_ROWS)
 	for i in _power_reel_count():   # no arrows on a blinded reel
 		for dir_key in ["up", "down"]:
 			var hit: Dictionary = SHIFT_ARROW_HITS[i][dir_key]
@@ -4176,7 +4171,7 @@ func _arm_shift_targets() -> void:
 			if arrows != null:
 				var frame := 1 + i * 2 + (1 if dir_key == "up" else 0)
 				b.button_down.connect(_set_sheet_frame.bind(arrows, frame))
-			_targeting_layer.add_child(b)
+			layer.add_child(b)
 
 func _apply_reel_power(power_id: String, reel_index: int) -> void:
 	if _reel_is_dead(reel_index):
@@ -4338,9 +4333,7 @@ func _clear_targeting() -> void:
 	_swap_overlay.stop_pulse()
 	_stop_swap_symbol_shake()
 	_cancel_swap_drag_gesture()
-	if _targeting_layer != null:
-		_targeting_layer.queue_free()
-		_targeting_layer = null
+	_targeting.close()
 	_swap_overlay.forget() # the frames were children of the layer just freed
 	_cheat_preview_sprite = null # freed with the targeting layer
 	if _cheat_selection_sprite != null:
