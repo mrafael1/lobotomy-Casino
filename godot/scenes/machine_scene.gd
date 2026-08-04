@@ -264,11 +264,9 @@ const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 # Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
-# offer (100) → dealer-interactive stash (110, only while his offer is up; 50
-# otherwise) → HUD/options (BottomHudLayer 120).
+# offer (100) → dealer-interactive stash (StashTray, 110 while his offer is up
+# and 50 otherwise) → HUD/options (BottomHudLayer 120).
 const DEALER_OVERLAY_Z_INDEX := 100
-const STASH_TRAY_Z_INDEX := 50
-const DEALER_STASH_Z_INDEX := 110
 # Augmented Run badge (issue #111): active-suit indicator, hold to peek at the
 # run's restrictions.
 # Left of the wealth bar, on its plate's own line: the plate's art starts at x39 and runs
@@ -662,6 +660,7 @@ var _reel_blur: ReelBlur = null
 var _reel_symbols: ReelSymbols = null
 var _power_callout: PowerCallout = null
 var _swap_overlay: SwapTargetOverlay = null
+var _stash: StashTray = null
 var _tv_info_pop_restore_dealer_bar_visible := false
 var _tv_info_pop_restore_dealer_icon_visible := false
 var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
@@ -671,7 +670,6 @@ var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
 var _lock_count_labels: Array[Label] = []
-var _stash_icons: Array[TextureRect] = []  # bottom-right tap-to-use stash (issue #26)
 var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
 var _targeting_layer: Control = null # reel/arrow target buttons while a power is armed
@@ -802,6 +800,7 @@ func _ready() -> void:
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
 	_power_callout = PowerCallout.new(_view, SRC_W)
 	_swap_overlay = SwapTargetOverlay.new(_view, REEL_HOLES, REEL_WINDOW)
+	_stash = StashTray.new(_view, _on_stash_input)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
 	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
@@ -820,7 +819,7 @@ func _ready() -> void:
 	_build_hud()
 	_build_spin_button()
 	_build_power_buttons()
-	_build_stash()
+	_stash.build(max_consumable_slots)
 	_build_sfx_players()
 	_build_fx_layer() # before the burst/coin layers so rewards draw above effects
 	_bursts.build_layer(REWARD_FX_Z_INDEX)
@@ -851,9 +850,9 @@ func tutorial_ready_for(id: String) -> bool:
 		"stash":
 			if _dealer_offer_popup != null:
 				return false
-			if _stash_icons.is_empty():
+			if _stash.icons().is_empty():
 				return false
-			var icon: Control = _stash_icons[0] as Control
+			var icon: Control = _stash.icons()[0] as Control
 			return icon != null and is_instance_valid(icon) and icon.visible
 	return true
 
@@ -901,8 +900,8 @@ func tutorial_anchor(id: String) -> Rect2:
 			# are authored in the .tscn, so Assets.stash_slot_pos describes where they would
 			# have gone rather than where they are — which put the ring in the middle of the
 			# stash instead of on the first slot the beat asks the player to tap.
-			if not _stash_icons.is_empty():
-				var icon: Control = _stash_icons[0] as Control
+			if not _stash.icons().is_empty():
+				var icon: Control = _stash.icons()[0] as Control
 				if icon != null and is_instance_valid(icon):
 					return Rect2(_canvas_position_of(icon), icon.size).grow(1.0)
 			var slot := Assets.stash_slot_pos(0, max_consumable_slots)
@@ -2033,7 +2032,7 @@ func _sync_visuals() -> void:
 	if _overlay != null:
 		_overlay.queue_free()
 		_overlay = null
-	_set_stash_tray_visible(true)
+	_stash.set_tray_visible(true)
 	_set_tv_progress_bars_visible(true)
 	_close_pending_combo_defeat()
 	_pending_combo_power_flow = false
@@ -3691,63 +3690,6 @@ func _build_power_buttons() -> void:
 		}, _on_power_pressed.bind(id))
 		_power_buttons[id] = b
 
-func _build_stash() -> void:
-	# Bottom-right corner, shared layout + scale so the stash matches the dealer, shop,
-	# and in-run overlay stashes (issue #26). Bare TextureRects (tap to use) keep the
-	# icons crisp and the same size as the drag stashes in the other scenes.
-	_stash_icons.clear()
-	for i in maxi(1, max_consumable_slots):
-		var slot := _stash_slot_node(i)
-		var icon := _stash_icon_for_slot(slot, i)
-		var authored := slot != null
-		if icon == null:
-			icon = TextureRect.new()
-			icon.name = "StashSlot%d" % i
-			add_child(icon)
-		if not authored:
-			icon.position = Assets.stash_slot_pos(i, max_consumable_slots)
-			icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		elif icon.has_meta("_machine_generated_stash_icon"):
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon.mouse_filter = Control.MOUSE_FILTER_STOP
-		var cb := _on_stash_input.bind(icon, i)
-		if not icon.gui_input.is_connected(cb):
-			icon.gui_input.connect(cb)
-		_stash_icons.append(icon)
-
-func _stash_slot_node(index: int) -> Control:
-	var one_based := index + 1
-	for path in [
-		"stash/StashSlot%d" % one_based,
-		"CoinLayer/stash/StashSlot%d" % one_based,
-		"StashSlot%d" % index,
-		"StashSlot%d" % one_based,
-	]:
-		var slot := get_node_or_null(path) as Control
-		if slot != null:
-			return slot
-	return null
-
-func _stash_icon_for_slot(slot: Control, index: int) -> TextureRect:
-	if slot == null:
-		return null
-	if slot is TextureRect:
-		return slot as TextureRect
-	var icon := slot.get_node_or_null("Icon") as TextureRect
-	if icon == null:
-		icon = TextureRect.new()
-		icon.name = "Icon"
-		icon.set_meta("_machine_generated_stash_icon", true)
-		icon.position = Vector2.ZERO
-		icon.size = slot.size
-		slot.add_child(icon)
-	return icon
-
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
 # stash). Gated by the same can-act check the refresh uses, so disabled slots ignore taps.
 func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
@@ -3772,10 +3714,6 @@ func _on_stash_input(event: InputEvent, node: Control, slot_index: int) -> void:
 
 # Hidden while the in-run dealer overlay is up so its stash is the only one on screen
 # (no duplicate, issue #26).
-func _set_stash_visible(v: bool) -> void:
-	for icon in _stash_icons:
-		icon.visible = v
-
 # Snapshot of the stash expanded to one entry per copy (matches buildStashSlots).
 func _stash_slots() -> Array:
 	var slots: Array = []
@@ -3833,8 +3771,9 @@ func _refresh_controls() -> void:
 	var usable := (RunStateStore._can_use_consumable() and not _spin_launch_pending and not _reroll_anim_active \
 			and not _rewind_anim_active and (not _sequence_lock_active or combo_pending)) \
 		or _dealer_offer_popup != null
-	for i in _stash_icons.size():
-		var icon := _stash_icons[i]
+	var stash_icons: Array = _stash.icons()
+	for i in stash_icons.size():
+		var icon: TextureRect = stash_icons[i]
 		if i < slots.size():
 			icon.texture = _icon_for(slots[i])
 			icon.modulate = Color.WHITE if usable else Color(1.0, 1.0, 1.0, 0.4)
@@ -5902,7 +5841,7 @@ func _cleanup_transient_presentation() -> void:
 			(fx as Sprite2D).visible = false
 	_hide_compulsive_overlay()
 	_clear_targeting()
-	_set_stash_elevated(false)
+	_stash.set_elevated(false)
 
 # Fallback ending overlay (used when no authored ending scene answers). Both the copy
 # column and the button are centred bands, so each is parametric on its own inset.
@@ -5944,7 +5883,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 		MetaStateStore.bank_run(run, resolved_ending)
 
 	# The stash tray draws at z 50 and would float over the ending presentation.
-	_set_stash_tray_visible(false)
+	_stash.set_tray_visible(false)
 	if resolved_ending == "wealth":
 		_build_wealth_screen(run)
 		return
@@ -6163,7 +6102,7 @@ func _show_campaign_failed() -> void:
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
 	add_child(_overlay)
-	_set_stash_tray_visible(false)
+	_stash.set_tray_visible(false)
 	_build_game_over_screen()
 
 func _start_fresh_again() -> void:
@@ -6223,19 +6162,6 @@ func _stop_flatline_countdown() -> void:
 
 # The stash tray (z 50) would draw over full-screen ending overlays; hide it while
 # one is up and restore it when the run visuals resync.
-func _set_stash_tray_visible(v: bool) -> void:
-	var tray := get_node_or_null("stash") as Control
-	if tray != null:
-		tray.visible = v
-	_set_stash_visible(v)
-
-# While the dealer offer is open the stash must draw (and receive drags) above his
-# overlay; every close path drops it back to its normal slot under the HUD.
-func _set_stash_elevated(elevated: bool) -> void:
-	var tray := get_node_or_null("stash") as Control
-	if tray != null:
-		tray.z_index = DEALER_STASH_Z_INDEX if elevated else STASH_TRAY_Z_INDEX
-
 func _set_tv_progress_bars_visible(visible: bool) -> void:
 	if not visible and _tv_content_muted():
 		_tv_info_pop_restore_dealer_bar_visible = false
@@ -6356,14 +6282,14 @@ func _show_dealer_offers() -> void:
 	# machine stash rides above him while his offer is up so it stays draggable.
 	_dealer_offer_popup.z_index = DEALER_OVERLAY_Z_INDEX
 	add_child(_dealer_offer_popup)
-	_set_stash_elevated(true)
+	_stash.set_elevated(true)
 	_refresh_score_button_lock()
 	_dealer_offer_popup.item_selected.connect(_dealer_take)
 	_dealer_offer_popup.item_forced.connect(_dealer_forced_take)
 	_dealer_offer_popup.item_discarded.connect(_dealer_discard_stash)
 	_dealer_offer_popup.dealer_ignored.connect(_dealer_leave)
 	_dealer_offer_popup.offer_finished.connect(_on_dealer_offer_finished)
-	_set_stash_visible(true)
+	_stash.set_icons_visible(true)
 	# Joker (issue #111): the visit is a delivery, not an offer — the overlay plays the
 	# buy and the use, and the store names the item so both ends force the same one.
 	_dealer_offer_popup.start_offer((offers as Array).duplicate(), [],
@@ -6519,8 +6445,8 @@ func _close_dealer(restore_sequence: bool = true) -> void:
 	_dealer_drag_node = null
 	_dealer_drag_id = ""
 	_dealer_drag_kind = ""
-	_set_stash_visible(true) # overlay gone — restore the machine's own stash (issue #26)
-	_set_stash_elevated(false)
+	_stash.set_icons_visible(true) # overlay gone — restore the machine's own stash (issue #26)
+	_stash.set_elevated(false)
 	if not restore_sequence:
 		return
 	# The dealer can appear over a live losing state: closing him returns to the

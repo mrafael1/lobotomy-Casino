@@ -1253,7 +1253,7 @@ func _check_options_spin_lock_77(machine: Node, run_store: Node, failures: Array
 	if int(run_store.lockedReelSpins[0]) != 2:
 		failures.append("issue77: idle re-entry wrongly decremented a locked reel")
 
-	machine._set_stash_tray_visible(true)
+	machine._stash.set_tray_visible(true)
 	run_store.runPhase = prev_phase
 	run_store.campaignNeuronPending = prev_campaign_pending
 	run_store.isSpinning = prev_spinning
