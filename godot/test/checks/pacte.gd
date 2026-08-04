@@ -1599,6 +1599,17 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	if machine.get_node_or_null("PowerRubbleAnimation") == null:
 		failures.append("pacte powers: Cheat did not show the rubble overlay")
 	machine._on_cheat_reel_pick(1)
+	# Cheat is the one picker whose LAYER takes the clicks: tapping anywhere off the
+	# mini-reel backs out. Every other picker leaves its layer transparent so a miss
+	# falls through to the cabinet. Nothing else pins that difference, and getting it
+	# wrong strands the player in an armed Cheat with no way out but using it.
+	var cheat_layer: Control = machine._targeting_layer
+	if cheat_layer == null:
+		failures.append("pacte powers: Cheat did not arm a picker layer")
+	elif cheat_layer.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("pacte powers: Cheat's layer must swallow a miss so tapping off it cancels")
+	elif not cheat_layer.gui_input.get_connections().size() > 0:
+		failures.append("pacte powers: Cheat's layer swallows a miss but nothing listens for it")
 	if machine._cheat_selection_sprite == null \
 			or machine._cheat_selection_sprite.hframes != 9 \
 			or not bool(machine._cheat_selection_sprite.visible) \
