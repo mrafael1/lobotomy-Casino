@@ -574,6 +574,36 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue63: Serum picker should not offer brain")
 	machine._close_serum_picker()
 
+	# Book's triple choice: the other in-run modal, and until now the only one with no
+	# check at all. It offers one button per choice, and "flatline" is in the row
+	# despite not being a triple — picking it registers a flatline result instead.
+	var previous_flatlines := int(run_store.flatlineResultCount)
+	machine._show_book_triple_choice(0, false)
+	var book: Control = machine._book_choice_overlay
+	if book == null:
+		failures.append("book choice: picking a Book triple opened no overlay")
+	else:
+		var buttons := 0
+		for child in book.get_children():
+			if child is Button:
+				buttons += 1
+		if buttons != machine.BOOK_TRIPLE_CHOICES.size():
+			failures.append("book choice: should offer one button per choice, got %d of %d"
+				% [buttons, machine.BOOK_TRIPLE_CHOICES.size()])
+		if not machine._sequence_lock_active:
+			failures.append("book choice: the overlay must hold the sequence lock while it is up")
+		# The flatline entry is the one that is not a triple.
+		machine._on_book_triple_choice("flatline", 0, false)
+		if machine._book_choice_overlay != null:
+			failures.append("book choice: picking did not close the overlay")
+		if machine._sequence_lock_active:
+			failures.append("book choice: picking did not release the sequence lock")
+		if int(run_store.flatlineResultCount) != previous_flatlines + 1:
+			failures.append("book choice: picking flatline should register a flatline result, not a triple")
+	machine._close_book_choice_overlay()
+	machine._set_sequence_lock(false)
+	run_store.flatlineResultCount = previous_flatlines
+
 	# Potion popup uses normal popup text size and green/red by effect sign.
 	if machine._potion_effect_color({ "kind": "lucidity", "amount": -5 }) != machine.potion_popup_negative_color:
 		failures.append("issue92: negative Potion popup should use negative color")
