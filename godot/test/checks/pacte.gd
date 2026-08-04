@@ -1610,6 +1610,12 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 		failures.append("pacte powers: Cheat's layer must swallow a miss so tapping off it cancels")
 	elif not cheat_layer.gui_input.get_connections().size() > 0:
 		failures.append("pacte powers: Cheat's layer swallows a miss but nothing listens for it")
+	# The mini-reel starts on the symbol ALREADY in the hole — reel 1 of
+	# brain/eye/pill is "eye". Starting anywhere else means one tap commits a symbol
+	# the player never chose, and the arrows step from the wrong place.
+	if String(machine._cheat.selected_symbol()) != "eye":
+		failures.append("pacte powers: Cheat's mini-reel should start on the reel's current symbol, got '%s'"
+			% String(machine._cheat.selected_symbol()))
 	if machine._cheat_selection_sprite == null \
 			or machine._cheat_selection_sprite.hframes != 9 \
 			or not bool(machine._cheat_selection_sprite.visible) \
