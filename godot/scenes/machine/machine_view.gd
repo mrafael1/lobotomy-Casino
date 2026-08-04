@@ -95,6 +95,14 @@ func score_label(parent: Control, text: String, pos: Vector2, size: int, color: 
 		width := 0.0, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	return host._score_label(parent, text, pos, size, color, width, align)
 
+## A full-width centred label with a black outline — the machine's voice when it
+## announces something over the whole cabinet. Shared by the reaction flashes, the
+## Book choice title and the Eye reveal fallback, which is why it is here rather
+## than on any one of them.
+func reaction_label(parent: Control, text: String, pos: Vector2, font_size: int,
+		color: Color) -> Label:
+	return host._reaction_label(parent, text, pos, font_size, color)
+
 ## The "-1 NEURON" flyaway. Only ever one at a time, which the machine enforces
 ## by freeing the previous label — so it stays on that side.
 func show_neuron_spend_feedback(parent: Control, center: Vector2) -> void:

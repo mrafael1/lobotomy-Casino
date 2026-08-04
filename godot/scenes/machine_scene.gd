@@ -627,6 +627,8 @@ var _swap_shake: SwapShake = null
 var _targeting: TargetingLayer = null
 var _cheat: CheatMiniReel = null
 var _consumable_fx: ConsumableFx = null
+var _choices: ChoiceOverlays = null
+var _reactions: ReactionFlash = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -759,8 +761,11 @@ func _hide_water_animation() -> void:
 	_consumable_fx.hide_water()
 var _close_call_heartbeat_tween: Tween = null
 var _hide_result_active := false           # the displayed result is hidden
-var _serum_picker: Control = null          # Serum symbol-pick overlay (issue #53)
-var _book_choice_overlay: Control = null
+## Views onto ChoiceOverlays, under the names the smoke checks read them by.
+var _serum_picker: Control:
+	get: return _choices.serum_node() if _choices != null else null
+var _book_choice_overlay: Control:
+	get: return _choices.book_node() if _choices != null else null
 var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
@@ -790,6 +795,10 @@ func _ready() -> void:
 		_make_hit_button, _on_cheat_symbol_pick)
 	_consumable_fx = ConsumableFx.new(_view, REEL_HOLES, Vector2(SRC_W, SRC_H),
 		WHITE_POWDER_DISTORTION_SHADER)
+	_choices = ChoiceOverlays.new(_view, Vector2(SRC_W, SRC_H), REEL_CELL_CENTERS,
+		REEL_WINDOW)
+	_reactions = ReactionFlash.new(_view, Vector2(SRC_W, SRC_H),
+		WEALTH_TRANSIENT_FX_GROUP)
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -4505,36 +4514,22 @@ func _play_consumable_lucidity_feedback(lucidity_before: int) -> void:
 # picked one is guaranteed to appear at least once next spin (the charge is only
 # consumed on pick — tapping anywhere else cancels).
 
-const SERUM_PICKER_RECT := Rect2(12.0, 132.0, 136.0, 58.0)
-
 func _begin_serum() -> void:
-	if _serum_picker != null \
+	if _choices.serum_open() \
 			or (_sequence_lock_active and not RunStateStore.comboDefeatPending):
 		return
 	if not RunStateStore._can_use_consumable():
 		return
 	_build_serum_picker()
 
+## Every reel symbol except brain — Serum guarantees a symbol, and guaranteeing the
+## one the machine is named after is not a choice worth offering.
 func _build_serum_picker() -> void:
-	_serum_picker = Control.new()
-	_serum_picker.name = "SerumPicker"
-	_serum_picker.size = Vector2(SRC_W, SRC_H)
-	_serum_picker.mouse_filter = Control.MOUSE_FILTER_STOP
-	_serum_picker.z_index = 95
-	_serum_picker.gui_input.connect(_on_serum_picker_input)
-	add_child(_serum_picker)
-
 	var pool: Array[String] = []
 	for s in Symbols.BASE_SYMBOL_CYCLE:
 		if String(s) != "brain":
 			pool.append(String(s))
-	SymbolPicker.build_symbol_picker_panel(_serum_picker, pool, "PICK A SYMBOL", SERUM_PICKER_RECT,
-		Callable(self, "_on_serum_pick"), Callable(self, "_close_serum_picker"), true)
-
-func _on_serum_picker_input(event: InputEvent) -> void:
-	# Any tap that no symbol button consumed cancels the pick (charge kept).
-	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-		_close_serum_picker()
+	_choices.open_serum(pool, _on_serum_pick, _close_serum_picker)
 
 func _on_serum_pick(symbol_id: String) -> void:
 	_close_serum_picker()
@@ -4548,9 +4543,7 @@ func _on_serum_pick(symbol_id: String) -> void:
 	_play_consumable_lucidity_feedback(lucidity_before)
 
 func _close_serum_picker() -> void:
-	if _serum_picker != null and is_instance_valid(_serum_picker):
-		_serum_picker.queue_free()
-	_serum_picker = null
+	_choices.close_serum()
 
 # Centre of the spins tube on the canvas (the authored art spans x 3..18,
 # y 47..105 in its native full-canvas frame): spin-restore fly-ins land here.
@@ -4969,56 +4962,16 @@ func _apply_symbol_triple(symbol: String, free_spins_granted: int, _power_trigge
 	_spawn_reaction_flash(color, label)
 	_update_hud()
 
-## Centre of the reel window — where triple-grant "+N" fly-ins spawn (issue #66).
-const BOOK_CHOICE_RECT := Rect2(11.0, 130.0, 138.0, 54.0)
+## "flatline" is in the row with the five symbols but is not a triple — picking it
+## registers a flatline result instead, which is why the choice list is the
+## machine's and the overlay only draws what it is handed.
+const BOOK_TRIPLE_CHOICES := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
 
 func _show_book_triple_choice(free_spins_granted: int, power_triggered: bool) -> void:
-	_close_book_choice_overlay()
 	_set_sequence_lock(true)
-	_book_choice_overlay = Control.new()
-	_book_choice_overlay.name = "BookTripleChoice"
-	_book_choice_overlay.size = Vector2(SRC_W, SRC_H)
-	_book_choice_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	_book_choice_overlay.z_index = 96
-	add_child(_book_choice_overlay)
-
-	var panel := ColorRect.new()
-	panel.color = Color(0.05, 0.03, 0.1, 0.94)
-	panel.position = BOOK_CHOICE_RECT.position
-	panel.size = BOOK_CHOICE_RECT.size
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_book_choice_overlay.add_child(panel)
-
-	var title := _reaction_label(_book_choice_overlay, "BOOK EFFECT",
-		Vector2(BOOK_CHOICE_RECT.position.x, BOOK_CHOICE_RECT.position.y + 3.0),
-		7, Color(1.0, 0.82, 0.28))
-	title.size = Vector2(BOOK_CHOICE_RECT.size.x, 9.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	var choices := ["brain", "eye", "pill", "syringe", "vial", "flatline"]
-	var cell_w := BOOK_CHOICE_RECT.size.x / float(choices.size())
-	for i in choices.size():
-		var sym := String(choices[i])
-		var b := Button.new()
-		b.flat = true
-		b.focus_mode = Control.FOCUS_NONE
-		b.position = Vector2(BOOK_CHOICE_RECT.position.x + float(i) * cell_w,
-			BOOK_CHOICE_RECT.position.y + 17.0)
-		b.size = Vector2(cell_w, 30.0)
-		b.pressed.connect(_on_book_triple_choice.bind(sym, free_spins_granted, power_triggered))
-		_book_choice_overlay.add_child(b)
-		var tex := _load_texture("symbols/%s.png" % sym, true)
-		if tex != null:
-			var icon := TextureRect.new()
-			icon.texture = tex
-			const BOOK_ICON := 16.0
-			icon.size = Vector2(BOOK_ICON, BOOK_ICON)
-			icon.position = Vector2((cell_w - BOOK_ICON) * 0.5, 3.0)
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			b.add_child(icon)
+	_choices.open_book(BOOK_TRIPLE_CHOICES,
+		func(symbol_id: String) -> void:
+			_on_book_triple_choice(symbol_id, free_spins_granted, power_triggered))
 
 func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_triggered: bool) -> void:
 	_close_book_choice_overlay()
@@ -5030,9 +4983,7 @@ func _on_book_triple_choice(symbol_id: String, free_spins_granted: int, power_tr
 		_apply_symbol_triple(symbol_id, free_spins_granted, power_triggered)
 
 func _close_book_choice_overlay() -> void:
-	if _book_choice_overlay != null:
-		_book_choice_overlay.queue_free()
-	_book_choice_overlay = null
+	_choices.close_book()
 
 func _reel_window_center() -> Vector2:
 	return Vector2(SRC_W * 0.5 - 6.0,
@@ -5042,9 +4993,6 @@ func _reel_window_center() -> Vector2:
 # Reuses the shared reel-selection UI. Tapping a reel reveals its NEXT-spin symbol
 # INSTANTLY (issue #53): the store rolls it through the normal weight pipeline and
 # commits it, so the next spin's evaluate() honours the revealed promise.
-
-const EYE_REVEAL_POPUP_TIME := 1.1
-const EYE_REVEAL_FRAME_ASSET := "ui/vision.png"
 
 func _arm_eye_reveal_picker() -> void:
 	_arm_reel_picker(func(reel_index: int) -> void: _on_eye_reveal_pick(reel_index))
@@ -5059,65 +5007,11 @@ func _on_eye_reveal_pick(reel_index: int) -> void:
 	_reveal_reel_next_spin = reel_index # that reel also stops early next spin
 	_show_eye_reveal_popup(reel_index, symbol)
 
-## Popup over the picked reel naming its revealed next-spin symbol.
+## Names the revealed symbol over the picked reel. The pointer takes the triple-eye
+## colour, which is the machine's palette rather than the overlay's.
 func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
-	var w := 32.0
-	var h := 32.0
-	var popup := Control.new()
-	popup.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
-	popup.z_index = 40
-	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cx := float(REEL_CELL_CENTERS[reel_index])
-	popup.position = Vector2(clampf(cx - w * 0.5, 2.0, SRC_W - w - 2.0), float(REEL_WINDOW["top"]) - h - 7.0)
-	popup.size = Vector2(w, h)
-	add_child(popup)
-
-	var frame_tex := _load_texture(EYE_REVEAL_FRAME_ASSET, true)
-	if frame_tex != null:
-		var frame := TextureRect.new()
-		frame.texture = frame_tex
-		frame.size = popup.size
-		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		popup.add_child(frame)
-	else:
-		var bg := ColorRect.new()
-		bg.color = Color(0.05, 0.03, 0.1, 0.92)
-		bg.size = popup.size
-		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		popup.add_child(bg)
-
-	var pointer := ColorRect.new()
-	pointer.color = triple_eye_color
-	pointer.position = Vector2(w * 0.5 - 1.0, h - 1.0)
-	pointer.size = Vector2(2.0, 8.0)
-	pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	popup.add_child(pointer)
-
-	var tex := _load_texture("symbols/%s.png" % symbol_id, true)
-	if tex != null:
-		var icon := Sprite2D.new()
-		icon.texture = tex
-		icon.position = popup.size * 0.5
-		icon.centered = true
-		var icon_scale := minf(1.0, ReelSymbols.CENTER_H / float(tex.get_height()))
-		icon.scale = Vector2(icon_scale, icon_scale)
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		popup.add_child(icon)
-	else:
-		var sym := _reaction_label(popup, symbol_id.to_upper(), Vector2(0.0, 8.0), 6, Color(0.1, 0.08, 0.2))
-		sym.size = Vector2(w, 14.0)
-		sym.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	popup.pivot_offset = popup.size * 0.5
-	popup.scale = Vector2(0.4, 0.4)
-	var tw := popup.create_tween()
-	tw.tween_property(popup, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(EYE_REVEAL_POPUP_TIME)
-	tw.tween_property(popup, "modulate:a", 0.0, 0.3)
-	tw.tween_callback(popup.queue_free)
+	_choices.show_eye_reveal(reel_index, symbol_id, triple_eye_color,
+		WEALTH_TRANSIENT_FX_GROUP)
 
 ## Instant death: too many flatline results ends THIS RUN through the normal
 ## flatline ending (banks lucidity, shows the #38 fatal text, offers CONTINUE
@@ -5147,35 +5041,18 @@ func _show_fatal_flatline_ending(run: Dictionary) -> void:
 	_show_ending("flatline", run)
 
 func _show_flatline_result_reaction(count: int) -> void:
-	var host := Control.new()
-	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
-	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	host.z_index = 30
-	add_child(host)
-	var cy := REEL_WINDOW["top"] + REEL_WINDOW["height"] * 0.5
-	var line := ColorRect.new()
-	line.color = flatline_result_color
-	line.size = Vector2(0.0, 2.0)
-	line.position = Vector2(0.0, cy - 1.0)
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	host.add_child(line)
-	var text := "CLOSE CALL" if count < fatal_flatline_count else "FLATLINE"
-	var label := _reaction_label(host, "%s  %d/%d" % [text, count, fatal_flatline_count],
-		Vector2(0.0, cy + 8.0), 10, flatline_result_color)
-	label.pivot_offset = Vector2(SRC_W * 0.5, 6.0)
+	var survived := count < fatal_flatline_count
 	# Issue #76: a non-fatal strike charges the next winning pair/triple — say so, since
-	# the payoff lands on a later spin and would otherwise feel disconnected. (A fatal
-	# strike ends the run, so there is no next win to charge.)
-	if count < fatal_flatline_count:
+	# the payoff lands on a later spin and would otherwise feel disconnected. A fatal
+	# strike ends the run, so there is no next win to charge and no heartbeat to feel.
+	var charge := ""
+	if survived:
 		_play_close_call_heartbeat()
-		var charge := _reaction_label(host, "NEXT WIN x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT,
-			Vector2(0.0, cy + 20.0), 8, flatline_result_color)
-		charge.pivot_offset = Vector2(SRC_W * 0.5, 5.0)
-	var tw := create_tween()
-	tw.tween_property(line, "size:x", float(SRC_W), reaction_flash_time * 0.5)
-	tw.tween_interval(reaction_flash_time * 0.3)
-	tw.tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.3)
-	tw.tween_callback(host.queue_free)
+		charge = "NEXT WIN x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT
+	var headline := "CLOSE CALL" if survived else "FLATLINE"
+	_reactions.play_flatline(REEL_WINDOW, flatline_result_color,
+		"%s  %d/%d" % [headline, count, fatal_flatline_count], charge,
+		reaction_flash_time)
 
 func _play_close_call_heartbeat() -> void:
 	if not (consumable_fx_enabled and close_call_fx_enabled):
@@ -5206,26 +5083,7 @@ func _clear_close_call_heartbeat() -> void:
 	position = Vector2.ZERO
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
-	var host := Control.new()
-	host.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
-	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	host.z_index = 30
-	add_child(host)
-	var flash := ColorRect.new()
-	flash.color = Color(color.r, color.g, color.b, 0.0)
-	flash.size = Vector2(SRC_W, SRC_H)
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	host.add_child(flash)
-	var label := _reaction_label(host, text, Vector2(0.0, 150.0), 14, color)
-	label.pivot_offset = Vector2(SRC_W * 0.5, 10.0)
-	label.scale = Vector2(0.7, 0.7)
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(flash, "color:a", 0.32, reaction_flash_time * 0.25)
-	tw.tween_property(label, "scale", Vector2.ONE, reaction_flash_time * 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.chain().tween_interval(reaction_flash_time * 0.4)
-	tw.chain().tween_property(host, "modulate:a", 0.0, reaction_flash_time * 0.35)
-	tw.chain().tween_callback(host.queue_free)
+	_reactions.play(color, text, reaction_flash_time)
 
 func _reaction_label(parent: Control, text: String, pos: Vector2, font_size: int, color: Color) -> Label:
 	var label := Label.new()
