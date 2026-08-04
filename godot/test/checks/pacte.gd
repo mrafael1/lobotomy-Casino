@@ -1539,40 +1539,40 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 					or machine._swap_drag_ghost == null \
 					or not bool(machine._swap_drag_ghost.visible):
 				failures.append("pacte powers: Swap did not pick up the whole reel")
-			if machine._swap_invalid_target_overlay == null \
-					or not bool(machine._swap_invalid_target_overlay.visible):
+			if machine._swap_overlay.invalid_overlay() == null \
+					or not bool(machine._swap_overlay.invalid_overlay().visible):
 				failures.append("pacte powers: Swap did not mark the source reel as a disabled destination")
 			# Issue #181: the rejection cue is silent until the player actually offends.
-			if machine._swap_invalid_target_overlay != null \
-					and machine._swap_invalid_target_overlay.modulate.a > 0.01:
+			if machine._swap_overlay.invalid_overlay() != null \
+					and machine._swap_overlay.invalid_overlay().modulate.a > 0.01:
 				failures.append("issue181: Swap showed the red cross before an invalid hover")
-			if machine._swap_invalid_target_overlay != null \
-					and machine._swap_invalid_target_overlay.get_node_or_null("InvalidMarker") != null:
+			if machine._swap_overlay.invalid_overlay() != null \
+					and machine._swap_overlay.invalid_overlay().get_node_or_null("InvalidMarker") != null:
 				failures.append("issue181: Swap still draws the font-glyph X marker")
 			machine._update_swap_drag(Vector2(43.5, 185.0))
-			if machine._swap_target_feedback_reel != 0 \
-					or machine._swap_invalid_target_overlay == null \
-					or machine._swap_invalid_target_overlay.modulate.a < 0.99:
+			if machine._swap_overlay.feedback_reel() != 0 \
+					or machine._swap_overlay.invalid_overlay() == null \
+					or machine._swap_overlay.invalid_overlay().modulate.a < 0.99:
 				failures.append("pacte powers: Swap did not show the red invalid state over the source reel")
-			if machine._swap_valid_target_overlay != null \
-					and bool(machine._swap_valid_target_overlay.visible):
+			if machine._swap_overlay.valid_overlay() != null \
+					and bool(machine._swap_overlay.valid_overlay().visible):
 				failures.append("issue181: Swap showed the green target cue over the forbidden source reel")
 			# Hovering a legal reel swaps the cues over: green on, red off.
 			machine._update_swap_drag(Vector2(75.5, 185.0))
-			if machine._swap_valid_target_overlay == null \
-					or not bool(machine._swap_valid_target_overlay.visible):
+			if machine._swap_overlay.valid_overlay() == null \
+					or not bool(machine._swap_overlay.valid_overlay().visible):
 				failures.append("issue181: Swap did not highlight the legal destination reel")
-			if machine._swap_invalid_target_overlay != null \
-					and machine._swap_invalid_target_overlay.modulate.a > 0.01:
+			if machine._swap_overlay.invalid_overlay() != null \
+					and machine._swap_overlay.invalid_overlay().modulate.a > 0.01:
 				failures.append("issue181: Swap kept the red cross up over a legal destination")
 			# The cues carry the whole message now — Swap has no instruction line.
 			if machine._targeting_layer.get_node_or_null("SwapInstruction") != null:
 				failures.append("issue181: Swap still draws an instruction line")
 			# The green cue sits on the reel exactly like the red one, not off its bottom.
-			if machine._swap_valid_target_overlay != null \
-					and machine._swap_invalid_target_overlay != null \
-					and not is_equal_approx(machine._swap_valid_target_overlay.position.y,
-						machine._swap_invalid_target_overlay.position.y):
+			if machine._swap_overlay.valid_overlay() != null \
+					and machine._swap_overlay.invalid_overlay() != null \
+					and not is_equal_approx(machine._swap_overlay.valid_overlay().position.y,
+						machine._swap_overlay.invalid_overlay().position.y):
 				failures.append("issue181: Swap's green and red cues sit at different heights")
 			machine._update_swap_drag(Vector2(43.5, 185.0))
 			var top_drag_start: Vector2 = machine._swap_drag_ghost.position \
