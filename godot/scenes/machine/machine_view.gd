@@ -3,7 +3,8 @@ extends RefCounted
 
 ## The contract between machine_scene.gd and the components being cut out of it.
 ##
-## machine_scene.gd is 8,800 lines and holds ~220 fields; the components carved
+## machine_scene.gd was 8,800 lines and held ~220 fields when this file was
+## written; the cuts have taken it under 6,400. The components carved
 ## from it still need a handful of things that genuinely belong to the whole
 ## machine — the node to parent into, the shared font, the helpers that build a
 ## texture or an info bubble the same way everywhere. Handing each component the
@@ -57,9 +58,9 @@ func full_canvas_sheet(rel: String, hframes: int, frame := 0) -> Sprite2D:
 func tween() -> Tween:
 	return host.create_tween()
 
-## The TV callout priority stack. A component that takes the screen over holds a
-## source for as long as its presentation runs; the machine restores the
-## persistent TV layers once the last source lets go.
+## The TV callout priority stack (TvOwnership). A component that takes the screen
+## over holds a source for as long as its presentation runs; the persistent TV
+## layers come back once the last source lets go.
 func begin_tv_info_pop(source: StringName) -> void:
 	host._begin_tv_info_pop(source)
 
@@ -112,7 +113,7 @@ func info_bubble(node_name: String, source: String, border: Color,
 ## True while the TV is showing a callout of its own. Components that open a
 ## description bubble step aside for one rather than stacking on top of it.
 func tv_callout_open() -> bool:
-	return not (host._tv_info_pop_sources as Dictionary).is_empty()
+	return host._tv_callout_active()
 
 ## A Sprite2D the .tscn already authored under this name, or null. The sprite twin
 ## of authored_control, and the same reason: a component that always built its own

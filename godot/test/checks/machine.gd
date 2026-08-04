@@ -271,7 +271,7 @@ func _check_tv_information_priority(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue185: FREE SPIN should keep the item icons lit beside it")
 	# One authored placement: the banner text sits at y84..89, in the band the goal number
 	# just vacated, so it clears the fill bar at y94..98 instead of being clipped by it.
-	if machine.FREE_SPIN_FRAMES != 1:
+	if TvOwnership.BANNER_FRAMES != 1:
 		failures.append("issue185: the FREE SPIN banner should be a single authored frame")
 	if (dealer_bar != null and not dealer_bar.visible) \
 			or (dealer_icon != null and not dealer_icon.visible):
