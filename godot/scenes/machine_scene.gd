@@ -72,10 +72,6 @@ const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
 # Swap presentation (issue #181). One cue per idea: the slot frames say where a symbol
 # may land, the symbol shake says what can be grabbed, the instruction says what to do,
 # and the red cross appears only when the pointer is over a reel that would be refused.
-const SWAP_SHAKE_STEP := 0.09
-const SWAP_SHAKE_OFFSETS: Array[Vector2] = [
-	Vector2(0.0, -1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0), Vector2(-1.0, 0.0),
-]
 const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever takes centre
 # Swap talks about whole reels, so its cues cover the whole visible reel: the hole plus the
 # strip symbols above and below it, not just the centre window.
@@ -639,6 +635,7 @@ var _reel_blur: ReelBlur = null
 var _reel_symbols: ReelSymbols = null
 var _power_callout: PowerCallout = null
 var _swap_overlay: SwapTargetOverlay = null
+var _swap_shake: SwapShake = null
 var _stash: StashTray = null
 var _tv: TvOwnership = null
 
@@ -678,10 +675,6 @@ var _swap_drag_button: Button = null
 var _swap_drag_ghost: Sprite2D = null
 var _swap_drag_press := Vector2.ZERO
 var _swap_drag_offset := Vector2.ZERO
-var _swap_shake_tween: Tween = null      # the reels shake while Swap is armed
-var _swap_shake_nodes: Array[CanvasItem] = [] # symbols + slot frames, grouped by reel
-var _swap_shake_base: Array[Vector2] = []
-var _swap_shake_reel: Array[int] = []    # which reel each shaken node belongs to
 var _swap_source_slot := 1 # 0 = above, 1 = centre, 2 = below
 var _swap_source_symbol := ""
 var _rubble_overlay: ColorRect = null
@@ -792,6 +785,7 @@ func _ready() -> void:
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
 	_power_callout = PowerCallout.new(_view, SRC_W)
 	_swap_overlay = SwapTargetOverlay.new(_view, REEL_HOLES, REEL_WINDOW)
+	_swap_shake = SwapShake.new(_view)
 	_stash = StashTray.new(_view, _on_stash_input)
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
@@ -3967,23 +3961,28 @@ func _arm_swap_source() -> void:
 ## symbols ride along, stuck to it, rather than the symbols jiggling in a still reel. The
 ## reels run on staggered phases so they read as three loose reels rather than one juddering
 ## screen.
+## The orbit itself is SwapShake's; what a reel is MADE of stays here, because
+## nothing owns "a reel" — it is a blur cover, three symbol sprites from
+## ReelSymbols and a slot frame from the swap overlay, and the rule for which reels
+## take part is the machine's too.
 func _start_swap_symbol_shake() -> void:
 	_stop_swap_symbol_shake()
-	_swap_shake_nodes.clear()
-	_swap_shake_base.clear()
-	_swap_shake_reel.clear()
 	# The shared backing draws the same three patches the covers do, so a cover moving over it
 	# is invisible — nothing appears to shake but the symbols. Hand the reel art to the covers
 	# for the duration: backing off, every cover on, and each cover free to move with its reel.
 	if _reel_backing_sprite != null:
 		_reel_backing_sprite.visible = false
 	_swap_shake_cover_state.clear()
+	var hints: Array = _swap_overlay.slot_hints()
+	# One group per reel, in reel order — the order IS the stagger.
+	var groups: Array = []
 	# Only the reels Swap can actually take part in move — a blinded reel is not grabbable,
 	# so shaking it would advertise a target the drag refuses. Its cover is still switched
 	# on, because the shared backing goes off for every reel and the cover is what draws
 	# the art in its place; it simply stays still.
 	for i in _reel_symbols.count():
 		var live: bool = not _reel_is_dead(i)
+		var group: Array = []
 		# The reel asset first — this is the thing that shakes.
 		if i < _reel_blur.cover_count():
 			var cover := _reel_blur.cover(i)
@@ -3991,71 +3990,28 @@ func _start_swap_symbol_shake() -> void:
 				_swap_shake_cover_state.append(cover.visible)
 				cover.visible = true
 				if live:
-					_swap_shake_nodes.append(cover)
-					_swap_shake_base.append(cover.position)
-					_swap_shake_reel.append(i)
-		if not live:
-			continue
-		for sprite in [_reel_symbols.top(i), _reel_symbols.center(i), _reel_symbols.bottom(i)]:
-			var symbol_sprite := sprite as Sprite2D
-			if symbol_sprite == null:
-				continue
-			_swap_shake_nodes.append(symbol_sprite)
-			_swap_shake_base.append(symbol_sprite.position)
-			_swap_shake_reel.append(i)
-		var hints: Array = _swap_overlay.slot_hints()
-		if i < hints.size():
-			var frame := hints[i] as Control
-			if frame != null:
-				_swap_shake_nodes.append(frame)
-				_swap_shake_base.append(frame.position)
-				_swap_shake_reel.append(i)
-	# A slow 1px orbit rather than a jitter: the reels should look loose in the cabinet,
-	# not broken (issue #181).
-	_swap_shake_tween = create_tween().set_loops()
-	for step in SWAP_SHAKE_OFFSETS.size():
-		_swap_shake_tween.tween_callback(_set_swap_shake_step.bind(step))
-		_swap_shake_tween.tween_interval(SWAP_SHAKE_STEP)
-
-## `step` walks the orbit; each reel is offset along it by its own index, which is what
-## staggers them.
-func _set_swap_shake_step(step: int) -> void:
-	var steps := SWAP_SHAKE_OFFSETS.size()
-	for i in mini(_swap_shake_nodes.size(), _swap_shake_base.size()):
-		var node := _swap_shake_nodes[i] as Node2D
-		var offset: Vector2 = SWAP_SHAKE_OFFSETS[posmod(step + _swap_shake_reel[i], steps)]
-		if node != null:
-			node.position = _swap_shake_base[i] + offset
-			continue
-		var control := _swap_shake_nodes[i] as Control
-		if control != null:
-			control.position = _swap_shake_base[i] + offset
+					group.append(cover)
+		if live:
+			group.append(_reel_symbols.top(i))
+			group.append(_reel_symbols.center(i))
+			group.append(_reel_symbols.bottom(i))
+			if i < hints.size():
+				group.append(hints[i])
+		groups.append(group)
+	_swap_shake.start(groups)
 
 func _stop_swap_symbol_shake() -> void:
-	if _swap_shake_tween != null and _swap_shake_tween.is_valid():
-		_swap_shake_tween.kill()
-	_swap_shake_tween = null
+	_swap_shake.stop()
 	# Give the reel art back to the shared backing and restore each cover's own state.
-	if not _swap_shake_cover_state.is_empty():
-		if _reel_backing_sprite != null:
-			_reel_backing_sprite.visible = true
-		for i in mini(_swap_shake_cover_state.size(), _reel_blur.cover_count()):
-			var cover := _reel_blur.cover(i)
-			if cover != null:
-				cover.visible = _swap_shake_cover_state[i]
-		_swap_shake_cover_state.clear()
-	if not _swap_shake_base.is_empty():
-		for i in mini(_swap_shake_nodes.size(), _swap_shake_base.size()):
-			var node := _swap_shake_nodes[i] as Node2D
-			if node != null:
-				node.position = _swap_shake_base[i]
-				continue
-			var control := _swap_shake_nodes[i] as Control
-			if control != null:
-				control.position = _swap_shake_base[i]
-		_swap_shake_base.clear()
-		_swap_shake_nodes.clear()
-		_swap_shake_reel.clear()
+	if _swap_shake_cover_state.is_empty():
+		return
+	if _reel_backing_sprite != null:
+		_reel_backing_sprite.visible = true
+	for i in mini(_swap_shake_cover_state.size(), _reel_blur.cover_count()):
+		var cover := _reel_blur.cover(i)
+		if cover != null:
+			cover.visible = _swap_shake_cover_state[i]
+	_swap_shake_cover_state.clear()
 
 func _on_swap_symbol_gui_input(event: InputEvent, reel_index: int, button: Button) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:

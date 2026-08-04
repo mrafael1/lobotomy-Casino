@@ -1495,30 +1495,32 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	if machine._targeting_layer == null \
 			or machine._targeting_layer.name != "SwapSymbolDragLayer":
 		failures.append("pacte powers: Swap did not arm its drag layer")
-	if machine._swap_shake_tween == null or not (machine._swap_shake_tween as Tween).is_valid():
+	if not machine._swap_shake.running():
 		failures.append("pacte powers: Swap targeting did not start the reel shake")
 	# The reel is the thing that moves: each one shakes its reel art, its three strip symbols
 	# and its slot frame together on its own phase, so the reel reads as loose and the symbols
 	# look stuck to it rather than jiggling inside a still reel.
-	if machine._swap_shake_nodes.size() != 15:
+	var shake_nodes: Array = machine._swap_shake.nodes()
+	var shake_bases: Array = machine._swap_shake.bases()
+	var shake_phases: Array = machine._swap_shake.phases()
+	if shake_nodes.size() != 15:
 		failures.append("pacte powers: Swap should shake three reels' art, symbols and frames, got %d nodes"
-			% machine._swap_shake_nodes.size())
-	elif machine._swap_shake_reel.size() != machine._swap_shake_nodes.size():
+			% shake_nodes.size())
+	elif shake_phases.size() != shake_nodes.size():
 		failures.append("pacte powers: Swap shake lost track of which reel a node belongs to")
 	else:
-		machine._set_swap_shake_step(0)
+		machine._swap_shake.set_step(0)
 		var reel_offsets := {}
-		for i in machine._swap_shake_nodes.size():
-			var node_offset: Vector2 = machine._swap_shake_nodes[i].position \
-				- machine._swap_shake_base[i]
-			var reel: int = machine._swap_shake_reel[i]
+		for i in shake_nodes.size():
+			var node_offset: Vector2 = shake_nodes[i].position - shake_bases[i]
+			var reel: int = shake_phases[i]
 			if reel_offsets.has(reel) and reel_offsets[reel] != node_offset:
 				failures.append("pacte powers: reel %d did not shake as one piece" % reel)
 			reel_offsets[reel] = node_offset
 		if reel_offsets.size() == 3 and reel_offsets[0] == reel_offsets[1] \
 				and reel_offsets[1] == reel_offsets[2]:
 			failures.append("pacte powers: the three reels shake in lockstep instead of staggered")
-		machine._set_swap_shake_step(0)
+		machine._swap_shake.set_step(0)
 	if machine._targeting_layer != null:
 		for reel_index in 3:
 			if machine._targeting_layer.get_node_or_null("SwapRubbleHint%d" % reel_index) == null \
@@ -1589,7 +1591,7 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 			elif machine._swap_drag_ghost.get_node_or_null("DragShadow") == null:
 				failures.append("pacte powers: Swap drag ghost has no drop shadow")
 		machine._clear_targeting()
-		if machine._swap_shake_tween != null:
+		if machine._swap_shake.running():
 			failures.append("pacte powers: Swap symbol shake survived targeting clear")
 	run_store.abilitiesUsed = []
 	run_store.lastResult = _pacte_power_result(["brain", "eye", "pill"])
