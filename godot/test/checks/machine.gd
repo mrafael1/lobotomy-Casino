@@ -603,7 +603,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 
 	if machine._power_bar_step() != 10:
 		failures.append("issue76: power-bar step should be 10, got %d" % machine._power_bar_step())
-	var pop: Sprite2D = machine._make_power_coin_pop() as Sprite2D
+	var pop: Sprite2D = machine._coins.make_power_pop() as Sprite2D
 	if pop == null:
 		failures.append("issue76: wealth power-coin pop animation asset is missing")
 	else:
@@ -612,6 +612,17 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		if not String(pop.texture.resource_path).ends_with("power coin animation.png"):
 			failures.append("issue76: wrong power-coin pop animation texture")
 		pop.queue_free()
+	# The chip that flies is a POWER chip, not a lucidity coin. The two are the same
+	# size and both come off the same factory, so swapping them renders a plausible
+	# wrong currency that every other check here passes — the gauge fills either way.
+	var chip: Sprite2D = machine._coins.make_power_coin(Vector2.ZERO) as Sprite2D
+	if chip == null:
+		failures.append("issue76: the power-bar chip could not be built")
+	else:
+		if not String(chip.texture.resource_path).ends_with("power_coin.png"):
+			failures.append("issue76: the power-bar chip flies the wrong currency (%s)"
+				% String(chip.texture.resource_path).get_file())
+		chip.queue_free()
 	if machine.WEALTH_COIN_ORIGIN == machine._cash_tray_pos():
 		failures.append("issue76: wealth power coins still start in the cash tray")
 	# The flight must begin where the pop's last frame leaves the coin, or the coin jumps at
