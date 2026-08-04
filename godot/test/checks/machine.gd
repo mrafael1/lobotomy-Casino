@@ -1553,6 +1553,58 @@ func _check_loss_visuals_161(machine: Node, run_store: Node, failures: Array) ->
 ##
 ## Comparing rendered frames was tried first and does not work: the shot scripts are not
 ## deterministic, so two runs of identical code differ.
+## Issue #224: the suite asserts that art exists and animates, rarely WHICH art it
+## is. #209 closed that for geometry; this closes the two identity facts that are
+## true of every sprite the machine builds, so a new one is covered the day it is
+## added rather than whenever someone remembers to write a check for it.
+##
+## Both are derived from the art itself, per #209's rule: a deliberate re-export or
+## a deliberate filter change updates what the check reads, and only mistakes fail.
+##
+## The sprites created mid-flight (coins, petals, the ripple) are not in the tree at
+## rest and are not walked. They are deliberately mipmapped anyway — see the
+## allowlist below for the same exception standing in the authored tree.
+const ART_FILTER_EXCEPTIONS := {
+	# The casino backdrop is the one non-pixel surface the machine draws: a large
+	# smooth image behind the cabinet, downscaled, where NEAREST would alias badly.
+	"NeonBackground": CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+}
+
+func _check_sheet_frame_integrity(machine: Node, failures: Array) -> void:
+	var walked := _walk_machine_sprites(machine, "", failures)
+	# A tree that stopped building its art would pass every assertion below by
+	# having nothing to assert, which is exactly the failure this file keeps
+	# finding. Pin the floor: the probe that motivated this check saw 66.
+	if walked < 50:
+		failures.append("art identity: only %d sprites in the machine tree, expected the full cabinet"
+			% walked)
+
+func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
+	var walked := 0
+	for child in node.get_children():
+		var here := path + "/" + String(child.name)
+		var sprite := child as Sprite2D
+		if sprite != null and sprite.texture != null:
+			walked += 1
+			var tex := sprite.texture
+			# A sheet whose texture does not divide by its declared frame count is a
+			# re-export that silently shifted EVERY frame: each one lands a fraction
+			# of a pixel off and the animation looks subtly wrong rather than broken.
+			if sprite.hframes > 1 and tex.get_width() % sprite.hframes != 0:
+				failures.append("art identity: %s is %dpx wide over %d frames — the sheet does not divide"
+					% [here, tex.get_width(), sprite.hframes])
+			if sprite.vframes > 1 and tex.get_height() % sprite.vframes != 0:
+				failures.append("art identity: %s is %dpx tall over %d rows — the sheet does not divide"
+					% [here, tex.get_height(), sprite.vframes])
+			# Pixel art that ends up LINEAR renders soft and passes everything else.
+			var wanted: int = ART_FILTER_EXCEPTIONS.get(String(child.name),
+				CanvasItem.TEXTURE_FILTER_NEAREST)
+			if sprite.texture_filter != wanted:
+				failures.append("art identity: %s draws with filter %d, expected %d (%s)"
+					% [here, sprite.texture_filter, wanted, String(tex.resource_path).get_file()])
+		walked += _walk_machine_sprites(child, here, failures)
+	return walked
+
 func _check_reel_strip_geometry(machine: Node, failures: Array) -> void:
 	var rs = machine._reel_symbols
 	var cy: float = float(machine.REEL_WINDOW["top"]) + float(machine.REEL_WINDOW["height"]) * 0.5
