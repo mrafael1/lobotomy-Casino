@@ -83,55 +83,35 @@ static func _highest_pair_symbol(symbols: Array) -> String:
 			selected_value = value
 	return selected
 
-static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
-		allow_free_spin_grant: bool, pattern23_triple: bool,
-		pair_score_mult: float, hidden_reel_count: int, visible_pair_as_triple: bool,
-		reward_scale: float, symbol_reward_bonuses: Dictionary,
-		solo_as_pair: bool, hallucination_reward_scale: float = 1.0) -> Dictionary:
+## Stage one of evaluation: classify the visible reels without assigning a value.
+## The classification records why a win exists so later modifiers can charge only
+## invented or joker-derived wins.
+static func resolve_outcome(reels: Array, pattern23_triple: bool = false,
+		hidden_reel_count: int = 0, visible_pair_as_triple: bool = false,
+		solo_as_pair: bool = false) -> Dictionary:
+	if reels.size() < 3:
+		return { "classification": "miss", "symbol": "" }
 	var a := String(reels[0])
 	var b := String(reels[1])
 	var c := String(reels[2])
-	# Hallucination's cut is charged ONLY to the triples it invents, exactly like
-	# Learning's book scale — a promoted pair pays a triple's price, and everything the
-	# reels earned on their own (natural triples, the syringe triple included, pairs,
-	# jokers) pays in full. It used to ride in reward_scale, which taxed every reward
-	# the run ever made just for owning the card.
-	var promoted_scale := reward_scale * hallucination_reward_scale
-
 	if hidden_reel_count > 0:
 		var visible: Array = reels.slice(0, maxi(1, reels.size() - hidden_reel_count))
-		var vmatch := ""
 		for i in range(visible.size() - 1):
 			if String(visible[i]) == String(visible[i + 1]):
-				vmatch = String(visible[i])
-				break
-		if vmatch != "":
-			if visible_pair_as_triple:
-				return _score_triple(vmatch, lucidity_multiplier, allow_free_spin_grant,
-					promoted_scale, symbol_reward_bonuses)
-			return _score_pair(vmatch, lucidity_multiplier, pair_score_mult,
-				reward_scale, symbol_reward_bonuses)
+				var visible_symbol := String(visible[i])
+				return { "classification": "hallucination_created_triple" if visible_pair_as_triple \
+					else "natural_pair", "symbol": visible_symbol }
 		if solo_as_pair:
-			var solo_symbol := _highest_pair_symbol(visible)
-			if solo_symbol != "":
-				var solo_result := _score_pair(solo_symbol, lucidity_multiplier,
-					pair_score_mult, reward_scale, symbol_reward_bonuses)
-				solo_result["soloAsPair"] = true
-				solo_result["soloAsPairSymbol"] = solo_symbol
-				return solo_result
-		return { "winType": "miss", "scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0 }
+			var hidden_solo := _highest_pair_symbol(visible)
+			if hidden_solo != "":
+				return { "classification": "cheat_solo_pair", "symbol": hidden_solo }
+		return { "classification": "miss", "symbol": "" }
 
 	if a == b and b == c:
-		return _score_triple(a, lucidity_multiplier, allow_free_spin_grant,
-			reward_scale, symbol_reward_bonuses)
-
-	# Hallucination keeps the third reel visible and promotes a visible pair to a
-	# triple. Every pair that would have paid counts, wherever it landed — the reels
-	# 2+3 pair is exactly as visible as the 1+2 one, and a power that forms either is
-	# no different from a spin that lands it. It does not invent a payout: reels 1+3
-	# only qualify while Pattern 23 is what makes that combination pay at all.
-	# Only THIS payout pays the card's cut: the natural triple above already returned
-	# at the full reward scale.
+		return {
+			"classification": "jackpot" if a == "brain" else "natural_triple",
+			"symbol": a,
+		}
 	if visible_pair_as_triple:
 		var hallucinated := ""
 		if a == b:
@@ -141,39 +121,63 @@ static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
 		elif pattern23_triple and a == c:
 			hallucinated = a
 		if hallucinated != "":
-			var promoted := _score_triple(hallucinated, lucidity_multiplier,
-				allow_free_spin_grant, promoted_scale, symbol_reward_bonuses)
-			promoted["hallucinatedTriple"] = true
-			return promoted
-
+			return { "classification": "hallucination_created_triple", "symbol": hallucinated }
 	if pattern23_triple:
-		var match_sym := ""
+		var pattern_symbol := ""
 		if a == b:
-			match_sym = a
+			pattern_symbol = a
 		elif b == c:
-			match_sym = b
+			pattern_symbol = b
 		elif a == c:
-			match_sym = a
-		if match_sym != "":
-			var pscore := _score_base(_pair_base(match_sym, 2.0 * pair_score_mult, symbol_reward_bonuses),
-				lucidity_multiplier, reward_scale)
-			return { "winType": "pair", "scoreEarned": pscore, "coinsEarned": pscore, "freeSpinsGranted": 0 }
-	else:
-		if a == b or b == c:
-			var match_symbol := a if a == b else b
-			return _score_pair(match_symbol, lucidity_multiplier, pair_score_mult,
-				reward_scale, symbol_reward_bonuses)
-
+			pattern_symbol = a
+		if pattern_symbol != "":
+			return { "classification": "pattern_recognition_pair", "symbol": pattern_symbol }
+	elif a == b or b == c:
+		return { "classification": "natural_pair", "symbol": a if a == b else b }
 	if solo_as_pair:
 		var solo_symbol := _highest_pair_symbol(reels)
 		if solo_symbol != "":
-			var solo_result := _score_pair(solo_symbol, lucidity_multiplier,
-				pair_score_mult, reward_scale, symbol_reward_bonuses)
-			solo_result["soloAsPair"] = true
-			solo_result["soloAsPairSymbol"] = solo_symbol
-			return solo_result
+			return { "classification": "cheat_solo_pair", "symbol": solo_symbol }
+	return { "classification": "miss", "symbol": "" }
 
+## Stage two of evaluation: apply the value modifiers to a classified outcome.
+static func value_outcome(outcome: Dictionary, lucidity_multiplier: float,
+		allow_free_spin_grant: bool, pair_score_mult: float = 1.0,
+		reward_scale: float = 1.0, symbol_reward_bonuses: Dictionary = {},
+		book_reward_scale: float = 1.0, hallucination_reward_scale: float = 1.0) -> Dictionary:
+	var classification := String(outcome.get("classification", "miss"))
+	var symbol := String(outcome.get("symbol", ""))
+	var pair_multiplier := pair_score_mult
+	if classification == "pattern_recognition_pair":
+		pair_multiplier *= 2.0
+	match classification:
+		"jackpot", "natural_triple":
+			return _score_triple(symbol, lucidity_multiplier, allow_free_spin_grant,
+				reward_scale, symbol_reward_bonuses)
+		"hallucination_created_triple":
+			var hallucinated := _score_triple(symbol, lucidity_multiplier,
+				allow_free_spin_grant, reward_scale * hallucination_reward_scale,
+				symbol_reward_bonuses)
+			hallucinated["hallucinatedTriple"] = true
+			return hallucinated
+		"natural_pair", "pattern_recognition_pair", "cheat_solo_pair":
+			var pair := _score_pair(symbol, lucidity_multiplier, pair_multiplier,
+				reward_scale, symbol_reward_bonuses)
+			if classification == "cheat_solo_pair":
+				pair["soloAsPair"] = true
+				pair["soloAsPairSymbol"] = symbol
+			return pair
 	return { "winType": "miss", "scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0 }
+
+static func _score_reels_without_book(reels: Array, lucidity_multiplier: float,
+		allow_free_spin_grant: bool, pattern23_triple: bool,
+		pair_score_mult: float, hidden_reel_count: int, visible_pair_as_triple: bool,
+		reward_scale: float, symbol_reward_bonuses: Dictionary,
+		solo_as_pair: bool, hallucination_reward_scale: float = 1.0) -> Dictionary:
+	return value_outcome(resolve_outcome(reels, pattern23_triple, hidden_reel_count,
+		visible_pair_as_triple, solo_as_pair), lucidity_multiplier, allow_free_spin_grant,
+		pair_score_mult, reward_scale, symbol_reward_bonuses, 1.0,
+		hallucination_reward_scale)
 
 static func _win_rank(win_type: String) -> int:
 	match win_type:

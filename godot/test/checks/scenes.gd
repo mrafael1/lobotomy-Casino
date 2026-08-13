@@ -20,6 +20,9 @@ func _check_scene_instantiation(failures: Array) -> void:
 		"res://scenes/collection_scene.tscn",
 		"res://scenes/options_overlay.tscn",
 		"res://scenes/pacte_scene.tscn",
+		"res://scenes/route_scene.tscn",
+		"res://scenes/route_shop_scene.tscn",
+		"res://scenes/route_dealer_scene.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
 		"res://scenes/game_over_ending_overlay.tscn",
 	]:
@@ -30,6 +33,75 @@ func _check_scene_instantiation(failures: Array) -> void:
 		var n := ps.instantiate()
 		get_root().add_child(n)
 		n.queue_free()
+
+## One native scene-smoke pass through the new machine -> route -> machine seam. The
+## rules-level route checks cover payment invariants; this check proves the actual route
+## panels and destination scenes can be entered with a live prepared offer.
+func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> void:
+	run_store.runPhase = "over"
+	run_store.lastEnding = null
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.lucidityCoins = 100
+	run_store.neurons = 11
+	run_store.selectedAugmentCardIds = []
+	run_store.selectedPowerCardIds = []
+	run_store.runConsumables = {}
+	if not run_store.prepare_route_offer("wealth_target", 0x515253):
+		failures.append("route: target offer did not prepare")
+		return
+	var route := (load("res://scenes/route_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(route)
+	await process_frame
+	if route.get_node_or_null("ContinueFreeButton") == null:
+		failures.append("route: free continuation button is missing")
+	var cards_layer := route.get_node_or_null("RouteCards") as Control
+	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
+		failures.append("route: selection scene does not render exactly three cards")
+	route.free()
+
+	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
+		failures.append("route: Shop card could not be selected")
+	else:
+		var shop := (load("res://scenes/route_shop_scene.tscn") as PackedScene).instantiate()
+		get_root().add_child(shop)
+		await process_frame
+		if shop.get_node_or_null("RunShopItems") == null:
+			failures.append("route: Shop destination has no run-item list")
+		shop.free()
+		if not run_store.finish_route_destination() or run_store.runPhase != "running":
+			failures.append("route: Shop did not return to a live machine segment")
+
+	run_store.runPhase = "over"
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.lucidityCoins = 100
+	if not run_store.prepare_route_offer("wealth_target", 0x535455):
+		failures.append("route: dealer offer setup failed")
+	else:
+		if not run_store.select_route(RouteCards.CARD_DEALER_ID):
+			failures.append("route: Dealer card could not be selected")
+		else:
+			var dealer := (load("res://scenes/route_dealer_scene.tscn") as PackedScene).instantiate()
+			get_root().add_child(dealer)
+			await process_frame
+			if dealer.get_node_or_null("ReturnButton") == null:
+				failures.append("route: Dealer destination has no return action")
+			dealer.free()
+			if not run_store.finish_route_destination() or run_store.runPhase != "running":
+				failures.append("route: Dealer did not return to a live machine segment")
+
+	# The machine segment is the destination of the refusal path. A final live state is
+	# enough here; the existing machine checks cover the machine's complete HUD/interaction
+	# surface and the route checks pin that refusal is free.
+	if run_store.runPhase != "running":
+		failures.append("route: machine segment was not live after route loop")
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")

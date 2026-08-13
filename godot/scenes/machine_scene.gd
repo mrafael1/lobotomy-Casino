@@ -181,6 +181,7 @@ const SHIFT_ARROW_HITS := [
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
+const ROUTE_SCENE := "res://scenes/route_scene.tscn"
 const IN_RUN_DEALER_OFFER_SCENE := preload("res://scenes/in_run_dealer_offer.tscn")
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const TARGET_REACHED_SCENE := preload("res://scenes/target_reached_overlay.tscn")
@@ -2209,10 +2210,9 @@ func _finish_wealth_target_transition() -> void:
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
-	# 500/1500 route through the threshold Pacte first; that scene then rejoins the
-	# shared between-run flow. Every other target enters it directly via
-	# begin_target_round -> the one between-run dealer (odds table -> shop), whose
-	# START begins a fresh run (issue #176).
+	# 500/1500 still visit the authored threshold Pacte first. Completing that
+	# visit now opens the same three-card route handoff as every other target;
+	# non-threshold targets enter it directly.
 	if RunStateStore.arm_pacte_for_wealth_target(target) \
 			and RunStateStore.open_threshold_pacte():
 		_set_sequence_lock(false)
@@ -2220,7 +2220,7 @@ func _finish_wealth_target_transition() -> void:
 		return
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
-		SceneNav.change_to(DEALER_SCENE)
+		SceneNav.change_to(ROUTE_SCENE)
 		return
 	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
@@ -5394,6 +5394,9 @@ func _on_flatline_action_pressed() -> void:
 		_flatline.attach_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
+		if RunStateStore.routeOfferPending:
+			SceneNav.change_to(ROUTE_SCENE)
+			return
 		# The campaign-neuron threshold Pacte is a post-flatline handoff. It must
 		# never interrupt a live machine spin or a reward sequence.
 		if RunStateStore.pacteThresholdPending \

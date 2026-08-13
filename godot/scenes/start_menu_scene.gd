@@ -21,6 +21,7 @@ extends Control
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
+const ROUTE_SCENE := "res://scenes/route_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const CANVAS_W := 160.0
@@ -797,6 +798,15 @@ func _current_coins() -> int:
 	return int(MetaStateStore.lucidityWallet)
 
 func _resume_run() -> void:
+	if RunStateStore.routeOfferPending:
+		SceneNav.change_to(ROUTE_SCENE)
+		return
+	if RunStateStore.routeDestination == RouteCards.ROUTE_SHOP:
+		SceneNav.change_to("res://scenes/route_shop_scene.tscn")
+		return
+	if RunStateStore.routeDestination == RouteCards.ROUTE_DEALER:
+		SceneNav.change_to("res://scenes/route_dealer_scene.tscn")
+		return
 	# A flatline threshold is saved while the ending screen is still resumable.
 	# Materialise the Pacte phase before entering the scene so the ritual does not
 	# appear as a closed screen after a reload.

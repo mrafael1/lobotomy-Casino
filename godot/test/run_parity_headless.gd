@@ -3,6 +3,7 @@ extends SceneTree
 const ParityChecks := preload("res://test/parity_checks.gd")
 const SacredRules := preload("res://test/sacred_rules.gd")
 const SaveChecks := preload("res://test/save_checks.gd")
+const RouteChecks := preload("res://test/route_checks.gd")
 
 ## No-dependency parity runner — verify the GDScript rules core against the golden
 ## vectors WITHOUT installing GUT.
@@ -14,6 +15,9 @@ const SaveChecks := preload("res://test/save_checks.gd")
 ## same checks for editor/CI integration.
 
 func _init() -> void:
+	call_deferred("_run_checks")
+
+func _run_checks() -> void:
 	print("Starting Godot parity harness...")
 	var failures: Array = []
 	print("Running parity vector checks...")
@@ -22,6 +26,8 @@ func _init() -> void:
 	failures.append_array(SacredRules.run_all())
 	print("Running save/migration checks...")
 	failures.append_array(SaveChecks.run_all())
+	print("Running route economy checks...")
+	failures.append_array(RouteChecks.run_all())
 
 	if failures.is_empty():
 		print("✓ Parity + sacred-rule checks PASSED (rules/content matches the golden vectors).")

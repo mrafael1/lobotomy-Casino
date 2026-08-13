@@ -771,7 +771,16 @@ func _preview_card(card_id: String) -> void:
 	var entry := PacteCards.card(card_id)
 	_description_bubble.visible = true
 	_description_title.text = String(entry.get("name", card_id))
-	_description_text.text = String(entry.get("description", ""))
+	var description := String(entry.get("description", ""))
+	if RunStateStore.pacteCostsActive:
+		var purchase_ids: Array[String] = []
+		if RunStateStore.pacteSelectedAugmentId != "":
+			purchase_ids.append(RunStateStore.pacteSelectedAugmentId)
+		purchase_ids.append(card_id)
+		var cost := RunStateStore.pacte_card_cost(card_id)
+		var remaining := RunStateStore.pacte_remaining_after(purchase_ids)
+		description += "\nCOST: %dG  LEFT: %dG" % [cost, remaining]
+	_description_text.text = description
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
 	# compact panel as well as their glyphs.
@@ -841,6 +850,7 @@ func _accept_card(card_id: String) -> void:
 		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	var route_visit := threshold_visit and RunStateStore.routePacteVisit
 	# A threshold visit armed by a Wealth target (issue #176) ends with the
 	# between-target dealer + a fresh run; a health-crossing visit resumes the
 	# post-flatline dealer. Capture it before the selection restores "running".
@@ -856,14 +866,24 @@ func _accept_card(card_id: String) -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
-	if target_round_visit:
+	if route_visit:
+		# A route Pacte is an investment stop, not one of the two campaign
+		# threshold visits. Once its paid/free selection lands, start the next
+		# machine without spending another campaign neuron.
+		if not RunStateStore.finish_route_destination():
+			_selection_locked = false
+			_instruction.text = "NEXT MACHINE UNAVAILABLE"
+			return
+		SceneNav.change_to("res://scenes/machine_scene.tscn")
+	elif target_round_visit:
 		# Wealth-target visit: end the run as a between-target break and hand off to
 		# the persistent dealer shop, whose START begins the next fresh run.
 		if not RunStateStore.begin_target_round():
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+			else "res://scenes/dealer_scene.tscn")
 	elif threshold_visit:
 		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
 		# dealer shop), the same one a plain flatline uses, instead of the mid-run
@@ -872,7 +892,8 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+			else "res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
 

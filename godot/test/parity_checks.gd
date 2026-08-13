@@ -279,6 +279,67 @@ static func check_issue176(out: Array) -> void:
 		_fail(out, "issue181 hallucination + pattern 23 on reels 1+3",
 			split_pattern23, "triple")
 
+## The staged evaluator keeps the reason for a win separate from its value. These probes
+## pin the precedence at the seams where cards compose: a natural result wins before a
+## promotion, Pattern Recognition supplies the non-adjacent pair, and How To Cheat only
+## claims a board that has no ordinary pair. The checks intentionally cover every pair and
+## the three-card composition used by the balance report without turning EV into a golden
+## number.
+static func check_composable_outcomes(out: Array) -> void:
+	var natural_pair := Evaluate.resolve_outcome(["eye", "eye", "vial"])
+	var natural_triple := Evaluate.resolve_outcome(["syringe", "syringe", "syringe"])
+	var jackpot := Evaluate.resolve_outcome(["brain", "brain", "brain"])
+	var pattern_pair := Evaluate.resolve_outcome(["eye", "brain", "eye"], true)
+	var hallucinated := Evaluate.resolve_outcome(["eye", "eye", "brain"], false, 0, true)
+	var cheated := Evaluate.resolve_outcome(["brain", "eye", "pill"], false, 0, false, true)
+	var miss := Evaluate.resolve_outcome(["eye", "vial", "pill"])
+	var cases := [
+		{ "name": "natural pair", "result": natural_pair, "want": "natural_pair" },
+		{ "name": "natural triple", "result": natural_triple, "want": "natural_triple" },
+		{ "name": "jackpot", "result": jackpot, "want": "jackpot" },
+		{ "name": "Pattern Recognition pair", "result": pattern_pair, "want": "pattern_recognition_pair" },
+		{ "name": "Hallucination triple", "result": hallucinated, "want": "hallucination_created_triple" },
+		{ "name": "How To Cheat solo pair", "result": cheated, "want": "cheat_solo_pair" },
+		{ "name": "miss", "result": miss, "want": "miss" },
+	]
+	for case in cases:
+		var result: Dictionary = case["result"]
+		if String(result.get("classification", "")) != String(case["want"]):
+			_fail(out, "composable classification %s" % case["name"], result, case["want"])
+
+	var pattern_hall := Evaluate.score_reels(["eye", "brain", "eye"], 1.0, true,
+		true, false, 1.0, 0, true, 1.0, {}, false, 1.0, 0.30)
+	if not bool(pattern_hall.get("hallucinatedTriple", false)) \
+			or int(pattern_hall["scoreEarned"]) != 15:
+		_fail(out, "composable Pattern + Hallucination precedence", pattern_hall,
+			"invented eye triple at 30%")
+	var natural_hall := Evaluate.score_reels(["syringe", "syringe", "syringe"], 1.0, true,
+		false, false, 1.0, 0, true, 1.0, {}, false, 1.0, 0.30)
+	if bool(natural_hall.get("hallucinatedTriple", false)) \
+			or int(natural_hall["scoreEarned"]) != 25:
+		_fail(out, "composable natural triple bypasses Hallucination cut", natural_hall,
+			"natural syringe triple at full value")
+	var pattern_cheat := Evaluate.score_reels(["brain", "eye", "brain"], 1.0, true,
+		true, false, Economy.compute_pair_score_multiplier(["pacte_how_to_cheat"]),
+		0, false, 1.0, {}, true)
+	if String(pattern_cheat["winType"]) != "pair" \
+			or bool(pattern_cheat.get("soloAsPair", false)) \
+			or int(pattern_cheat["scoreEarned"]) != 24:
+		_fail(out, "composable Pattern takes precedence over solo-pair", pattern_cheat,
+			"Pattern pair at x2 with How To Cheat pair scale")
+	var book_reward := Evaluate.score_reels(["book", "brain", "brain"], 1.0, true,
+		false, true, 1.0, 0, false, 1.0, { "brain": 0.15 }, false, 0.70)
+	if not bool(book_reward.get("bookJoker", false)) \
+			or int(book_reward["scoreEarned"]) != 161:
+		_fail(out, "composable Learning + Reward+ charges Book after symbol bonus",
+			book_reward, "brain book jackpot at 70%")
+	var tunnel_hall := Evaluate.score_reels(["eye", "eye", "brain"], 1.0, true,
+		false, false, 1.0, 1, true, 1.50, {}, false, 1.0, 0.30)
+	if not bool(tunnel_hall.get("hallucinatedTriple", false)) \
+			or int(tunnel_hall["scoreEarned"]) != 22:
+		_fail(out, "composable Tunnel + Hallucination applies both explicit scales",
+			tunnel_hall, "eye triple at 1.5 x 0.3 with project rounding")
+
 
 ## Issue #185: the Cocktail pays rarity points for every VISIBLE reel and is blind to what
 ## the reels did. A pair or a triple must never be the one result that loses the bonus —
@@ -469,6 +530,7 @@ static func run_all() -> Array:
 	check_lucidity(out)
 	check_endings(out)
 	check_issue176(out)
+	check_composable_outcomes(out)
 	check_cocktail_bonus(out)
 	check_hallucination_scope(out)
 	check_pacte_deck_and_powers(out)
