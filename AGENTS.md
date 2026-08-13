@@ -437,7 +437,10 @@ Resources and currencies:
 - `route_scene` — the persisted five-card Shop/Augment/Power/Bonus/Sacrifice Later
   offer. Sacrifice Later is the free continuation and does not spend spins.
 - `route_build_scene` — a single augment or single power selection with run-Gold
-  pricing and save/resume support.
+  pricing and save/resume support. It reuses the authored Pacte room art, showing
+  only the matching deck and emplacement: Augment hides the power side, and Power
+  hides the augment side. The selectable route cards remain separate from Pacte's
+  full ritual UI.
 - `route_bonus_scene` — the persisted one-time +10 run-Lucidity bonus claim.
 - `route_shop_scene` — run-scoped machine investments and single-use consumable shop.
 - `route_dealer_scene` — retained as a compatibility shell for older route saves;

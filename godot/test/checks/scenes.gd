@@ -102,6 +102,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			await process_frame
 			if build.get_node_or_null("RouteBuildCards") == null:
 				failures.append("route: augment destination has no build-card list")
+			_check_route_build_artwork(build, "augment", failures)
 			var build_ids: Array = run_store.routeBuildOfferIds as Array
 			if build_ids.is_empty():
 				failures.append("route: augment destination has no cards")
@@ -114,11 +115,62 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 					failures.append("route: Augment did not return to a live machine segment")
 			build.free()
 
+	# The Power route reuses the same Pacte artwork, but must swap the visible deck
+	# and emplacement so the augment side never leaks into a power-only choice.
+	run_store.runPhase = "over"
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.lucidityCoins = 100
+	if not run_store.prepare_route_offer("wealth_target", 0x565758):
+		failures.append("route: power artwork offer setup failed")
+	elif not run_store.select_route(RouteCards.CARD_POWER_ID):
+		failures.append("route: power artwork card could not be selected")
+	else:
+		var power_build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
+		get_root().add_child(power_build)
+		await process_frame
+		_check_route_build_artwork(power_build, "power", failures)
+		var power_ids: Array = run_store.routeBuildOfferIds as Array
+		if power_ids.is_empty():
+			failures.append("route: power destination has no cards")
+		else:
+			var power_id := String(power_ids[0])
+			if not run_store.complete_route_build_selection(power_id):
+				failures.append("route: power artwork card could not be selected")
+			if not run_store.finish_route_destination() or run_store.runPhase != "running":
+				failures.append("route: Power did not return to a live machine segment")
+		power_build.free()
+
 	# The machine segment is the destination of the refusal path. A final live state is
 	# enough here; the existing machine checks cover the machine's complete HUD/interaction
 	# surface and the route checks pin that refusal is free.
 	if run_store.runPhase != "running":
 		failures.append("route: machine segment was not live after route loop")
+
+func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
+	var artwork := build.get_node_or_null("PacteArtwork") as Control
+	if artwork == null:
+		failures.append("route: %s build scene is missing Pacte artwork" % kind)
+		return
+	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
+	var power_deck := artwork.get_node_or_null("PowerDeck") as Sprite2D
+	var augment_slot := artwork.get_node_or_null("SelectedCardEmplacement") as Sprite2D
+	var power_slot := artwork.get_node_or_null("PowerCardEmplacement") as Sprite2D
+	if augment_deck == null or power_deck == null or augment_slot == null or power_slot == null:
+		failures.append("route: %s build scene is missing Pacte deck/emplacement art" % kind)
+		return
+	var show_augment := kind == "augment"
+	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible) != show_augment:
+		failures.append("route: %s build scene has the wrong augment art visibility" % kind)
+	if bool(power_deck.visible) == show_augment or bool(power_slot.visible) == show_augment:
+		failures.append("route: %s build scene has the wrong power art visibility" % kind)
+	if artwork.process_mode != Node.PROCESS_MODE_DISABLED:
+		failures.append("route: %s build scene left Pacte interaction processing" % kind)
+	if artwork.get_node_or_null("TutorialOverlay") != null:
+		failures.append("route: %s build scene attached the Pacte tutorial overlay" % kind)
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")

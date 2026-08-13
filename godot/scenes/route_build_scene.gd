@@ -23,19 +23,28 @@ var _message: Label = null
 var _list: Control = null
 var _pending_card_id := ""
 var _symbol_picker: Control = null
+var _pacte_artwork: Control = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pacte_artwork = get_node_or_null("PacteArtwork") as Control
+	_configure_pacte_artwork()
 	_font = Assets.font()
 	_build()
 	_refresh()
 
+func _configure_pacte_artwork() -> void:
+	if _pacte_artwork == null:
+		return
+	var kind := ""
+	if RunStateStore.routeDestination == RouteCards.ROUTE_AUGMENT:
+		kind = "augment"
+	elif RunStateStore.routeDestination == RouteCards.ROUTE_POWER:
+		kind = "power"
+	_pacte_artwork.call("configure_route_artwork", kind)
+	_pacte_artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 func _build() -> void:
-	var background := ColorRect.new()
-	background.color = Color(0.035, 0.025, 0.08, 1.0)
-	background.size = CANVAS_SIZE
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(background)
 	_title = _label("BUILD ROUTE", Rect2(5.0, 7.0, 150.0, 14.0), 9, CYAN)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_title)
@@ -50,6 +59,7 @@ func _build() -> void:
 	_list.name = "RouteBuildCards"
 	_list.size = CANVAS_SIZE
 	_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_list.z_index = 20
 	add_child(_list)
 	_message = _label("", Rect2(5.0, 238.0, 150.0, 18.0), 5, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -167,6 +177,7 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color, \
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 1)
+	label.z_index = 10
 	if _font != null:
 		label.add_theme_font_override("font", _font)
 	if parent != null:
@@ -179,6 +190,7 @@ func _button(text_value: String, rect: Rect2, size: int) -> Button:
 	button.position = rect.position
 	button.size = rect.size
 	button.focus_mode = Control.FOCUS_NONE
+	button.z_index = 20
 	button.add_theme_font_size_override("font_size", size)
 	button.add_theme_color_override("font_outline_color", Color.BLACK)
 	button.add_theme_constant_override("outline_size", 1)

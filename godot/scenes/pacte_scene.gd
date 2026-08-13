@@ -123,15 +123,60 @@ var _selection_locked := false
 var _reveal_generation := 0
 var _deck_tween: Tween = null
 
+## Reuse the authored Pacte room for a between-machine single-deck route without
+## bringing the full two-pool ritual back. The route scene owns the selectable
+## cards; this scene contributes only its background, dealer, table and the
+## matching deck/emplacement art.
+func configure_route_artwork(kind: String) -> void:
+	var show_augment := kind == "augment"
+	var show_power := kind == "power"
+	if kind != "" and not show_augment and not show_power:
+		return
+	_close_reward_amp_picker()
+	if _augment_deck != null:
+		_augment_deck.visible = show_augment
+	if _power_deck != null:
+		_power_deck.visible = show_power
+	if _augment_emplacement != null:
+		_augment_emplacement.visible = show_augment
+	if _power_emplacement != null:
+		_power_emplacement.visible = show_power
+	if _dealer_bubble != null:
+		_dealer_bubble.frame = DEALER_AUGMENT_FRAME if show_augment else DEALER_POWER_FRAME
+		_dealer_bubble.visible = show_augment or show_power
+	if _chosen_cards_layer != null:
+		_chosen_cards_layer.visible = false
+	if _description_bubble != null:
+		_description_bubble.visible = false
+	if _phase_label != null:
+		_phase_label.visible = false
+	if _instruction != null:
+		_instruction.visible = false
+	if _augment_drop_label != null:
+		_augment_drop_label.visible = false
+	if _power_drop_label != null:
+		_power_drop_label.visible = false
+	for value in _card_buttons.values():
+		var card_button := value as CanvasItem
+		if card_button != null:
+			card_button.visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
 	# Inert unless the played tutorial is running (issue #105). The autoload is not a
-	# @tool script, so it does not exist in an editor preview of this scene.
-	if not Engine.is_editor_hint():
+	# @tool script, so it does not exist in an editor preview of this scene. A
+	# route-build instance is artwork only and must not attach a blocking tutorial
+	# overlay to the selectable route cards.
+	if not Engine.is_editor_hint() and not _is_route_artwork_context():
 		Tutorial.attach(self, "pacte")
+
+func _is_route_artwork_context() -> bool:
+	var destination := String(RunStateStore.routeDestination)
+	return destination == "augment" or destination == "power"
 
 ## Tutorial anchors (issue #105) — see machine_scene.tutorial_anchor.
 func tutorial_anchor(id: String) -> Rect2:
