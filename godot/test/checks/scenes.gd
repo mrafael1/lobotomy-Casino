@@ -23,6 +23,8 @@ func _check_scene_instantiation(failures: Array) -> void:
 		"res://scenes/route_scene.tscn",
 		"res://scenes/route_shop_scene.tscn",
 		"res://scenes/route_dealer_scene.tscn",
+		"res://scenes/route_build_scene.tscn",
+		"res://scenes/route_bonus_scene.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
 		"res://scenes/game_over_ending_overlay.tscn",
 	]:
@@ -45,6 +47,13 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.routeOfferCards = null
 	run_store.routeDestination = ""
 	run_store.routeContext = ""
+	run_store.routeSelectedCardId = ""
+	run_store.routeBuildKind = ""
+	run_store.routeBuildOfferIds = null
+	run_store.routeBuildFreeTier = false
+	run_store.routeBuildSelectedId = ""
+	run_store.routeBonusClaimed = false
+	run_store.sacrificeLaterPending = false
 	run_store.lucidityCoins = 100
 	run_store.neurons = 11
 	run_store.selectedAugmentCardIds = []
@@ -56,11 +65,11 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route := (load("res://scenes/route_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
-	if route.get_node_or_null("ContinueFreeButton") == null:
-		failures.append("route: free continuation button is missing")
+	if route.get_node_or_null("ContinueFreeButton") != null:
+		failures.append("route: legacy free continuation button is still exposed")
 	var cards_layer := route.get_node_or_null("RouteCards") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
-		failures.append("route: selection scene does not render exactly three cards")
+		failures.append("route: selection scene does not render exactly five cards")
 	route.free()
 
 	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
@@ -83,19 +92,27 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.routeContext = ""
 	run_store.lucidityCoins = 100
 	if not run_store.prepare_route_offer("wealth_target", 0x535455):
-		failures.append("route: dealer offer setup failed")
+		failures.append("route: augment offer setup failed")
 	else:
-		if not run_store.select_route(RouteCards.CARD_DEALER_ID):
-			failures.append("route: Dealer card could not be selected")
+		if not run_store.select_route(RouteCards.CARD_AUGMENT_ID):
+			failures.append("route: Augment card could not be selected")
 		else:
-			var dealer := (load("res://scenes/route_dealer_scene.tscn") as PackedScene).instantiate()
-			get_root().add_child(dealer)
+			var build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
+			get_root().add_child(build)
 			await process_frame
-			if dealer.get_node_or_null("ReturnButton") == null:
-				failures.append("route: Dealer destination has no return action")
-			dealer.free()
-			if not run_store.finish_route_destination() or run_store.runPhase != "running":
-				failures.append("route: Dealer did not return to a live machine segment")
+			if build.get_node_or_null("RouteBuildCards") == null:
+				failures.append("route: augment destination has no build-card list")
+			var build_ids: Array = run_store.routeBuildOfferIds as Array
+			if build_ids.is_empty():
+				failures.append("route: augment destination has no cards")
+			else:
+				var build_id := String(build_ids[0])
+				var reward_symbol := "brain" if run_store.route_build_card_requires_symbol(build_id) else ""
+				if not run_store.complete_route_build_selection(build_id, reward_symbol):
+					failures.append("route: augment card could not be selected")
+				if not run_store.finish_route_destination() or run_store.runPhase != "running":
+					failures.append("route: Augment did not return to a live machine segment")
+			build.free()
 
 	# The machine segment is the destination of the refusal path. A final live state is
 	# enough here; the existing machine checks cover the machine's complete HUD/interaction

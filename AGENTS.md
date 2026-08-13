@@ -69,13 +69,13 @@ Resources and currencies:
   intermediate target briefly presents that target in the centre of the machine,
   drains its displayed number to zero while the target payment rolls off the wealth
   readout, subtracts it from the run score, shows the remaining money, and hands the
-  run to the between-machine route offer. The route Pacte choice now owns the next
-  build investment; target and loss breaks no longer open a separate dealer handoff.
+  run to the between-machine route offer. Target and loss breaks use the same route
+  choices; the full Pacte ritual is only available when a run starts.
 - **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 50 coins
   restores one random spent power (30 with Adrenaline). Gold pays for route cards,
-  route Pacte cards, Shop investments, Shop consumables, and tactical Dealer services;
-  it also pays for live-dealer offer rerolls. On a non-Wealth ending, 10% is kept (20%
-  with Smart Save, halved by the spade modifier) and banked into the wallet.
+  Augment/Power build cards, Shop investments, and Shop consumables; it also pays for
+  live-dealer offer rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save,
+  halved by the spade modifier) and banked into the wallet.
 - **Wallet Lucidity (credits)** — the persistent meta currency. Buys Lab upgrades
   and persistent progression between runs.
 
@@ -101,14 +101,13 @@ Resources and currencies:
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
 6. When an intermediate target is reached, finish its target/remainder presentation
-   and receive exactly three deterministic route cards: **Pacte**, **Shop**, and
-   **Dealer**. A survivable flatline receives the same offer. Paid routes spend run
-   Lucidity before opening their destination; refusing all routes is always free and
-   starts the next machine. Pacte charges its route fee plus the selected augment and
-   power card costs, while a loss recovery Pacte is free and capped at the lowest card
-   tier. Shop buys run-scoped machine upgrades or single-use consumables. Dealer offers
-   run-scoped tactical services. The route offer and selected destination persist
-   through save/resume; no normal route purchase spends spins.
+   and receive five deterministic route cards: **Shop**, **Augment**, **Power**, **Bonus**,
+   and **Sacrifice Later**. A survivable flatline receives the same offer. Shop, Augment,
+   and Power spend run Lucidity before opening their destination; Bonus and Sacrifice
+   Later are free. Augment opens only an augment card pool, and Power opens only a power
+   card pool. Sacrifice Later preserves spins and defers that tradeoff. The route offer,
+   build choice, and bonus claim persist through save/resume; no normal route purchase
+   spends spins.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
    for x1/x2/x3 each spin, so lower gauges pull him in faster; Glitch 2 makes every
    spin advance three steps.
@@ -123,28 +122,27 @@ Resources and currencies:
 ### Routes and between-machine economy
 
 - After every intermediate Wealth target and every survivable flatline, the run stores
-  an exact three-card offer: one Pacte, one Shop, and one Dealer route. The offer is
-  seed-identified, deterministic, and persisted through close/resume. Event routes are
-  reserved for a later milestone.
-- Run Lucidity is the route investment currency. The current route fees are **5G for
-  Pacte**, **8G for Shop**, and **5G for Dealer**. Selecting a paid route charges it
-  immediately; refusing all three cards costs neither gold nor spins and starts the next
-  machine segment.
-- The initial Pacte ritual remains free and explicitly grants the selected power. A
-  normal route Pacte charges the route fee plus each selected card's Lucidity price;
-  card prices are tiered from the shared Pacte card metadata. The free Pacte offered
-  after a loss is restricted to tier 0 and cannot be used to buy the strongest cards by
-  deliberately losing.
+  an exact five-card offer: **Shop**, **Augment**, **Power**, **Bonus**, and **Sacrifice
+  Later**. The offer is seed-identified, deterministic, and persisted through
+  close/resume. Event routes remain reserved for a later milestone.
+- The full Pacte scene is the run-start ritual only: it is free and explicitly grants
+  one selected augment and one selected power. End-of-segment Augment and Power routes
+  use the shared card metadata and pricing but each asks for only one card, never both.
+- The current route fees are **5G for Augment**, **5G for Power**, and **8G for Shop**.
+  Bonus grants **10 run Lucidity** and Sacrifice Later costs neither gold nor spins.
+  Selecting a paid route charges it immediately; selecting a build card charges its
+  card price when confirmed. After a loss, both the Augment and Power build pools are
+  capped at tier 0 and free, so deliberately losing cannot buy the strongest cards.
 - The route Shop is run-scoped machine investment. It sells odds/reward pushes, pair
   consistency, spin protection/capacity, and the existing consumables. Buying a
   consumable adds one stash copy; using it removes that copy. Shop upgrades do not
   become Lab permanents or campaign Chip Augments; the club modifier marks these
   Shop prices up by 50% like the existing shop economy.
-- The route Dealer is run-scoped tactical manipulation: power recovery, tactical spin
-  services, and reroll-style help. It does not duplicate Pacte build identity or the
-  Shop's machine-investment inventory. The live machine Dealer countdown and its
-  interruption/save behavior remain unchanged. Paid Dealer spin protection and time
-  services are applied to the next machine segment.
+- Sacrifice Later is the free refusal path: it starts the next machine with the normal
+  spin budget and records a deferred sacrifice choice without consuming spins now.
+- The live Dealer remains a tactical interruption with power services, rerolls, and
+  run-item offers, but it is no longer an end-of-segment route card. It does not
+  duplicate Pacte build identity or the Shop's machine-investment inventory.
 
 ### Reels and scoring
 
@@ -404,7 +402,7 @@ Resources and currencies:
 - **Augmented Runs** — post-Wealth difficulty modifiers picked on the start menu,
   one per axis: heart/health (a paid spin costs 2 health, the last chip still
   costs 1), spade/power tempo (a restore charge refills only every other spin),
-  diamond/choice (two power uses per spin, and the route Pacte deals no
+  diamond/choice (two power uses per spin, and the Augment route deals no
   augment), club/economy (shop prices +50% and a HOUSE ANGER row on every target
   payout — the dealer reroll price is deliberately untouched), joker (all four at
   once). Free, compulsive and Energy-Drink spins are exempt from heart's cost.
@@ -413,8 +411,8 @@ Resources and currencies:
 
 - `start_menu_scene` — campaign hub: start/continue, Augmented Run selector,
   first-launch tutorial.
-- `pacte_scene` — reusable initial/route card ritual: deterministic three-card
-  augment and power offers, previews, drag-to-emplacement selection, and resumable
+- `pacte_scene` — run-start-only card ritual: deterministic three-card augment and
+  power offers, previews, drag-to-emplacement selection, and resumable
   partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
   emplacement assets are composed at native resolution in bg -> dealer -> table ->
   overlay order. The one-frame augment and power decks stay visible at their
@@ -432,13 +430,18 @@ Resources and currencies:
   is drawn. The drag instruction sits below the offer-card row, and card dragging
   maps mobile viewport touches into the native canvas while preserving the point
   grabbed under the finger, and remains bounded to the native 160x320 canvas.
-  Once the machine has started, a reopened Pacte presents a clean table: the
-  initial visit's cards keep their effects in the run but are not re-shown. A paid
-  route Pacte displays each card's Lucidity cost and the remaining run gold, then
-  hands the completed run to the next machine segment.
-- `route_scene` — the persisted three-card Pacte/Shop/Dealer offer and free refusal.
+  The full Pacte scene is available only at run start; it is never reopened by a
+  target or loss route. End-of-segment Augment and Power choices use separate
+  single-deck build scenes and save their selected card before returning to the
+  next machine.
+- `route_scene` — the persisted five-card Shop/Augment/Power/Bonus/Sacrifice Later
+  offer. Sacrifice Later is the free continuation and does not spend spins.
+- `route_build_scene` — a single augment or single power selection with run-Gold
+  pricing and save/resume support.
+- `route_bonus_scene` — the persisted one-time +10 run-Lucidity bonus claim.
 - `route_shop_scene` — run-scoped machine investments and single-use consumable shop.
-- `route_dealer_scene` — run-scoped tactical services between machine segments.
+- `route_dealer_scene` — retained as a compatibility shell for older route saves;
+  new end-of-segment offers use the live Dealer only through its interruption flow.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — live in-run dealer visits and the post-run odds phase (gateway to the Lab).
 - `upgrades_scene` — the Lab: permanent upgrades.

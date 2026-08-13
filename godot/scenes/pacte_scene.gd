@@ -266,9 +266,8 @@ func _restore_saved_selection() -> void:
 	# their effects in the active run. Only this visit's staged augment returns.
 	var saved_augment := String(RunStateStore.pacteSelectedAugmentId)
 	var augment_offer := _offer_array(RunStateStore.pacteOfferAugmentIds)
-	# Diamond (issue #111) suppresses the threshold visit's augment offer entirely, so
-	# there is no augment stage to run: the ritual is the power row alone, and the
-	# augment emplacement stays hidden rather than presenting an empty table.
+	# Diamond (issue #111) suppresses the augment pool when this run-start ritual
+	# resolves its card rules; an empty pool is still a deliberate modifier state.
 	if saved_augment != "" or augment_offer.is_empty():
 		if saved_augment != "":
 			_chosen_augment_id = saved_augment
@@ -851,9 +850,8 @@ func _accept_card(card_id: String) -> void:
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
 	var route_visit := threshold_visit and RunStateStore.routePacteVisit
-	# A threshold visit armed by a Wealth target (issue #176) ends with the
-	# between-target dealer + a fresh run; a health-crossing visit resumes the
-	# post-flatline dealer. Capture it before the selection restores "running".
+	# These branches only decode legacy snapshots. New route build scenes never
+	# enter Pacte and therefore never take a threshold or route visit branch.
 	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
@@ -867,9 +865,7 @@ func _accept_card(card_id: String) -> void:
 	if not is_inside_tree():
 		return
 	if route_visit:
-		# A route Pacte is an investment stop, not one of the two campaign
-		# threshold visits. Once its paid/free selection lands, start the next
-		# machine without spending another campaign neuron.
+		# Legacy route Pacte snapshots complete directly into the next machine.
 		if not RunStateStore.finish_route_destination():
 			_selection_locked = false
 			_instruction.text = "NEXT MACHINE UNAVAILABLE"

@@ -2206,18 +2206,12 @@ func _finish_wealth_target_transition() -> void:
 		}
 		_show_ending("wealth", final_run)
 		return
-	var target := int(completed.get("target", 0))
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
-	# 500/1500 still visit the authored threshold Pacte first. Completing that
-	# visit now opens the same three-card route handoff as every other target;
-	# non-threshold targets enter it directly.
-	if RunStateStore.arm_pacte_for_wealth_target(target) \
-			and RunStateStore.open_threshold_pacte():
-		_set_sequence_lock(false)
-		SceneNav.change_to(PACTE_SCENE)
-		return
+	# Every intermediate target now opens the same route offer. Pacte is the
+	# run-start ceremony; the between-machine AUGMENT and POWER cards are smaller
+	# single-deck investments and never reopen the full Pacte scene.
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
 		SceneNav.change_to(ROUTE_SCENE)
@@ -5394,15 +5388,10 @@ func _on_flatline_action_pressed() -> void:
 		_flatline.attach_meter(Vector2(80.0, 286.0), Vector2(80.0, 270.0))
 	await get_tree().create_timer(NeuronMeter.LOSS_ANIM_DELAY + 0.38).timeout
 	if _has_campaign_neurons_remaining():
+		if not RunStateStore.routeOfferPending:
+			RunStateStore.prepare_route_offer("flatline")
 		if RunStateStore.routeOfferPending:
 			SceneNav.change_to(ROUTE_SCENE)
-			return
-		# The campaign-neuron threshold Pacte is a post-flatline handoff. It must
-		# never interrupt a live machine spin or a reward sequence.
-		if RunStateStore.pacteThresholdPending \
-				and RunStateStore.pacteAfterFlatlinePending \
-				and RunStateStore.open_threshold_pacte():
-			SceneNav.change_to(PACTE_SCENE)
 			return
 		_to_dealer()
 	else:
@@ -5526,7 +5515,7 @@ func _show_dealer_incoming() -> void:
 func _dealer_visit() -> void:
 	RunStateStore.reveal_dealer()
 	# Ordinary in-run dealer visits stay inline (issue #22); the full dealer scene
-	# is also used after the threshold Pacte completion and for post-Wealth odds.
+	# is used for tactical interruptions and the post-Wealth odds phase.
 	_show_dealer_offers()
 
 func _show_dealer_offers() -> void:

@@ -22,6 +22,8 @@ const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const ROUTE_SCENE := "res://scenes/route_scene.tscn"
+const ROUTE_BUILD_SCENE := "res://scenes/route_build_scene.tscn"
+const ROUTE_BONUS_SCENE := "res://scenes/route_bonus_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const CANVAS_W := 160.0
@@ -793,25 +795,36 @@ func _hide_continue_modal() -> void:
 func _current_coins() -> int:
 	# The active machine owns the live run balance. Dealer and post-run states
 	# show the persistent wallet that the dealer actually spends and displays.
-	if RunStateStore.runPhase in ["pacte_initial", "pacte_threshold", "running"]:
+	if RunStateStore.runPhase in ["pacte_initial", "pacte_threshold", "running"] \
+			or RunStateStore.routeOfferPending or RunStateStore.routeDestination != "":
 		return int(RunStateStore.lucidityCoins)
 	return int(MetaStateStore.lucidityWallet)
 
 func _resume_run() -> void:
+	if RunStateStore.runPhase == "pacte_threshold" \
+			or RunStateStore.pacteThresholdPending \
+			or RunStateStore.pacteAfterFlatlinePending:
+		RunStateStore.migrate_legacy_pacte_to_route()
 	if RunStateStore.routeOfferPending:
 		SceneNav.change_to(ROUTE_SCENE)
 		return
 	if RunStateStore.routeDestination == RouteCards.ROUTE_SHOP:
 		SceneNav.change_to("res://scenes/route_shop_scene.tscn")
 		return
+	if RunStateStore.routeDestination == RouteCards.ROUTE_AUGMENT \
+			or RunStateStore.routeDestination == RouteCards.ROUTE_POWER:
+		SceneNav.change_to(ROUTE_BUILD_SCENE)
+		return
+	if RunStateStore.routeDestination == RouteCards.ROUTE_BONUS:
+		SceneNav.change_to(ROUTE_BONUS_SCENE)
+		return
 	if RunStateStore.routeDestination == RouteCards.ROUTE_DEALER:
 		SceneNav.change_to("res://scenes/route_dealer_scene.tscn")
 		return
-	# A flatline threshold is saved while the ending screen is still resumable.
-	# Materialise the Pacte phase before entering the scene so the ritual does not
-	# appear as a closed screen after a reload.
-	if RunStateStore.runPhase == "over" and RunStateStore.pacteAfterFlatlinePending:
-		RunStateStore.open_threshold_pacte()
+	if RunStateStore.routeDestination == RouteCards.ROUTE_SACRIFICE:
+		if RunStateStore.finish_route_destination():
+			SceneNav.change_to(MACHINE_SCENE)
+		return
 	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \
 		or (RunStateStore.runPhase == "over" and str(RunStateStore.lastEnding) == "flatline") \

@@ -357,9 +357,11 @@ func _build_report() -> Dictionary:
 		"powers": power_values,
 		"simulations": simulations,
 		"route_costs": {
-			"pacte": RouteCards.PACTE_ROUTE_COST,
+			"augment": RouteCards.AUGMENT_ROUTE_COST,
+			"power": RouteCards.POWER_ROUTE_COST,
 			"shop": RouteCards.SHOP_ROUTE_COST,
-			"dealer": RouteCards.DEALER_ROUTE_COST,
+			"bonus": RouteCards.BONUS_ROUTE_COST,
+			"sacrifice": RouteCards.SACRIFICE_ROUTE_COST,
 			"pacte_card_costs": {
 				"augment_pattern_recognition": PacteCards.cost_for("augment_pattern_recognition"),
 				"augment_hallucination": PacteCards.cost_for("augment_hallucination"),
@@ -412,11 +414,12 @@ func _print_report(report: Dictionary) -> void:
 	for card in REPORT_CARDS:
 		var card_id := String(card["id"])
 		var card_profile: Dictionary = report["single"][card_id]
+		var route_cost := RouteCards.AUGMENT_ROUTE_COST
 		var marginal := (float(card_profile["free_ev"]) - float(baseline["free_ev"])) \
 			* float(EconomyConst.STARTING_NEURONS) - float(card_profile["route_card_cost"]) \
-			- float(RouteCards.PACTE_ROUTE_COST)
-		print("  %-18s net segment score after %dG route + %dG card: %7.2f" % [
-			String(card["label"]), RouteCards.PACTE_ROUTE_COST, int(card_profile["route_card_cost"]), marginal])
+			- float(route_cost)
+		print("  %-18s net segment score after %dG Augment route + %dG card: %7.2f" % [
+			String(card["label"]), route_cost, int(card_profile["route_card_cost"]), marginal])
 	print("")
 	print("WEALTH TARGET REACH AND FLATLINE PROBABILITY")
 	for build_name in report["simulations"]:
@@ -440,8 +443,10 @@ func _print_report(report: Dictionary) -> void:
 			int(simulation["median_target"]), int(simulation["median_lucidity"])])
 	print("")
 	print("ROUTE COSTS / SHOP INVENTORY")
-	print("  Route cards: PACTE %dG, SHOP %dG, DEALER %dG; refusal is free." % [
-		RouteCards.PACTE_ROUTE_COST, RouteCards.SHOP_ROUTE_COST, RouteCards.DEALER_ROUTE_COST])
+	print("  Route cards: AUGMENT %dG, POWER %dG, SHOP %dG, BONUS %dG, SACRIFICE %dG; refusal is free." % [
+		RouteCards.AUGMENT_ROUTE_COST, RouteCards.POWER_ROUTE_COST,
+		RouteCards.SHOP_ROUTE_COST, RouteCards.BONUS_ROUTE_COST,
+		RouteCards.SACRIFICE_ROUTE_COST])
 	for item_id in report["route_costs"]["shop_items"]:
 		var item: Dictionary = report["route_costs"]["shop_items"][item_id]
 		print("  Shop %-24s %dG" % [String(item.get("name", item_id)), int(item.get("cost", 0))])
