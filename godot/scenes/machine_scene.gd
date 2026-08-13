@@ -808,7 +808,7 @@ func _ready() -> void:
 	# Last in the block: it arbitrates over the components above it, so they have to
 	# exist first. An arbiter's contenders are its constructor arguments.
 	_tv = TvOwnership.new(_view, TV_SCREEN, WEALTH_TRANSIENT_FX_GROUP,
-		_augments, _callouts, _dealer_bar, _boosts,
+		_augments, _dealer_bar, _boosts,
 		_refresh_dealer_countdown, _refresh_target_readout, _spin_in_flight)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
@@ -2487,8 +2487,9 @@ func _run_post_reveal_sequence() -> void:
 		return
 	if RunStateStore.comboDefeatPending:
 		if not _discard_moot_combo_defeat():
-			# Keep the pre-loss combo visible while the player decides whether to spend
-			# a current-reveal power. The ending check waits until that decision lands,
+			# The combo pop has already disappeared; keep the loss art visible while the
+			# player decides whether to spend a current-reveal power. The ending check waits
+			# until that decision lands,
 			# but the dealer does NOT wait for the confirming spin — he walks in over
 			# the beeping warning and the rescue window resumes when his offer closes.
 			_show_pending_combo_defeat()
@@ -2839,9 +2840,8 @@ func _refresh_tv_indicators() -> void:
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
 	_refresh_boost_indicators()
-	# COMBO is a persistent TV component whenever the Pacte augment is active. Its
-	# frame follows the recoverable streak, while higher-priority callouts hide it
-	# through TvOwnership's begin_pop/restore_layers.
+	# COMBO is a transient Wealth-bar pop. Refreshing the HUD must not leave an old
+	# stage mounted after its bonus has landed; an active pop protects itself.
 	if not _hud_delta_hold:
 		_callouts.refresh_combo()
 	# The wealth odometer is a score total. Hold it (with the multiplier badge and
@@ -2849,7 +2849,7 @@ func _refresh_tv_indicators() -> void:
 	if _hud_delta_hold:
 		return
 	# COMBO has a second payout beat. Keep the base PAIR/TRIPLE total visible until
-	# the persistent indicator's bonus lands, then release the final total.
+	# the Wealth-bar pop's bonus lands, then release the final total.
 	if _callouts.pending_score() >= 0:
 		return
 	if RunStateStore.scoreEarned < _wealth.display_score():

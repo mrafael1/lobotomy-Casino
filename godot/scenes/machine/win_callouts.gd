@@ -1,8 +1,8 @@
 class_name WinCallouts
 extends RefCounted
 
-## The TV's win callouts: the PAIR/TRIPLE announcement, the persistent COMBO
-## component and its bonus beat, and the combo-loss warning art.
+## The TV's win callouts, the wealth-bar COMBO bonus pop, and the combo-loss
+## warning art.
 ##
 ## Second seam cut out of machine_scene.gd, and like the first it was drawn by
 ## measuring rather than by the shape of the plan. The plan called this seam
@@ -41,10 +41,14 @@ const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose few
 const COMBO_EFFECT_DELAY := 2.55
 const COMBO_EFFECT_TIME := 1.05
 const COMBO_EFFECT_Z_INDEX := 9
+## The authored COMBO art sits around y94 in its full-canvas frame. Offset the
+## sprite onto the upper part of the Wealth plate (y242..278), above the rolling
+## digits, so the bonus belongs to the score it is paying.
+const COMBO_EFFECT_POSITION := Vector2(0.0, 150.0)
 
-## The combo sheet already contains COMBO x1..x9 at y63..92. Keep the bonus line
-## below that authored title so the two payouts read as separate beats.
-const COMBO_PAYOUT_RECT := Rect2(35.0, 94.0, 82.0, 12.0)
+## The bonus line briefly sits over the odometer's digit windows. It is a transient
+## payout pop, so the wealth total is readable again as soon as the line fades.
+const COMBO_PAYOUT_RECT := Rect2(35.0, 107.0, 82.0, 10.0)
 const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the combo-loss warning ----------------------------------------------------
@@ -74,6 +78,7 @@ var _combo_effect_tween: Tween = null
 var _combo_payout_tween: Tween = null
 var _combo_payout_label: Label = null
 var _combo_effect_frame_count := COMBO_EFFECT_FRAMES
+var _combo_pop_active := false
 var _combo_score_pending := -1 # final score held until the COMBO bonus beat lands
 var _combo_loss_2_sprite: Sprite2D = null
 var _combo_loss_3_sprite: Sprite2D = null
@@ -104,6 +109,7 @@ func build() -> void:
 			roundi(float(combo_texture.get_width()) / SRC_W), 1, COMBO_EFFECT_FRAMES)
 	_combo_effect_sprite = _view.full_canvas_sheet(COMBO_EFFECT_SHEET, _combo_effect_frame_count)
 	if _combo_effect_sprite != null:
+		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
 		_combo_effect_sprite.z_index = COMBO_EFFECT_Z_INDEX
 		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 8, COMBO_PAYOUT_COLOR)
 		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -171,9 +177,9 @@ func win_sprite() -> Sprite2D:
 
 ## --- the COMBO component -------------------------------------------------------
 
-## COMBO is a persistent TV component, but a paying PAIR/TRIPLE result gives it
-## a second beat: the authored stage shakes and its separate bonus flies out after
-## the base payout callout. The component remains at the new stage afterward.
+## A paying PAIR/TRIPLE result gives COMBO a second beat: the authored stage pops
+## on the Wealth bar and its separate bonus flies out after the base payout callout.
+## The pop is transient and disappears when the bonus has landed.
 ## Returns how long that beat occupies the machine.
 func queue_combo(combo_number: int, bonus: int, percent: int) -> float:
 	if _combo_effect_sprite == null:
@@ -190,6 +196,7 @@ func show_combo(frame: int, bonus: int, percent: int) -> void:
 	if _combo_effect_sprite == null or not RunStateStore.winBoostEnabled:
 		return
 	stop_win()
+	_combo_pop_active = true
 	_view.set_sheet_frame(_combo_effect_sprite,
 		clampi(frame, 0, maxi(0, _combo_effect_frame_count - 1)))
 	if _combo_payout_label != null:
@@ -198,7 +205,7 @@ func show_combo(frame: int, bonus: int, percent: int) -> void:
 		_combo_payout_label.modulate.a = 1.0
 		_combo_payout_label.visible = true
 	_combo_effect_sprite.modulate.a = 1.0
-	_combo_effect_sprite.visible = not _view.tv_content_muted()
+	_combo_effect_sprite.visible = true
 	flush_held_score()
 	if _combo_effect_tween != null and _combo_effect_tween.is_valid():
 		_combo_effect_tween.kill()
@@ -222,12 +229,13 @@ func show_combo(frame: int, bonus: int, percent: int) -> void:
 
 func _finish_combo() -> void:
 	_combo_effect_tween = null
+	_combo_pop_active = false
 	if _combo_effect_sprite != null:
-		_combo_effect_sprite.position = Vector2.ZERO
+		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
 		_combo_effect_sprite.modulate.a = 1.0
+		_combo_effect_sprite.visible = false
 	_reset_combo_payout_label()
 	flush_held_score()
-	refresh_combo()
 
 func stop_combo() -> void:
 	for tween in [_combo_effect_delay_tween, _combo_effect_tween, _combo_payout_tween]:
@@ -236,17 +244,13 @@ func stop_combo() -> void:
 	_combo_effect_delay_tween = null
 	_combo_effect_tween = null
 	_combo_payout_tween = null
+	_combo_pop_active = false
 	if _combo_effect_sprite != null:
-		_combo_effect_sprite.position = Vector2.ZERO
+		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
 		_combo_effect_sprite.modulate.a = 1.0
+		_combo_effect_sprite.visible = false
 	_reset_combo_payout_label()
 	flush_held_score()
-	if _combo_effect_sprite != null:
-		_combo_effect_sprite.visible = RunStateStore.winBoostEnabled \
-			and not _view.tv_content_muted()
-		if _combo_effect_sprite.visible:
-			_view.set_sheet_frame(_combo_effect_sprite,
-				combo_frame(int(RunStateStore.winBoostCombo)))
 
 func _reset_combo_payout_label() -> void:
 	if _combo_payout_label == null:
@@ -260,23 +264,19 @@ func combo_frame(stage: int) -> int:
 	var zero_based := maxi(0, stage - 1) if stage > 0 else 0
 	return clampi(zero_based, 0, maxi(0, _combo_effect_frame_count - 1))
 
-## COMBO is part of the normal TV HUD while the augment is owned. Transient
-## announcements own the TV priority stack and temporarily hide this sprite;
-## the sprite itself is never destroyed, so its stage survives every popup.
+## COMBO is hidden between bonus payouts. This refresh hook only clears a stale pop
+## when the HUD is rebuilt; an active pop owns its own short animation.
 func refresh_combo() -> void:
 	if _combo_effect_sprite == null:
 		return
 	if not RunStateStore.winBoostEnabled:
 		stop_combo()
-		_combo_effect_sprite.visible = false
 		return
-	if _view.tv_content_muted():
-		_combo_effect_sprite.visible = false
+	if _combo_pop_active:
 		return
-	_view.set_sheet_frame(_combo_effect_sprite, combo_frame(int(RunStateStore.winBoostCombo)))
-	_combo_effect_sprite.visible = true
+	_combo_effect_sprite.visible = false
 
-## Taken over by whoever owns the TV, which hides the stage without disturbing it.
+## Explicitly hides an in-flight Wealth-bar pop without changing the combo state.
 func hide_combo() -> void:
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.visible = false
@@ -322,33 +322,23 @@ func set_loss_display(multiplier: int) -> void:
 
 func start_loss_beep() -> void:
 	stop_loss_beep()
-	# The COMBO streak is recoverable while the warning is open, so its persistent
-	# TV component beeps at every multiplier. The authored x2 loss marker keeps its
-	# existing pulse; x3 remains a steady diminished-fire sheet.
+	# The authored x2 loss marker keeps its existing pulse; x3 remains a steady
+	# diminished-fire sheet. COMBO has already disappeared after its payout pop.
 	var loss_sprite: Sprite2D = _combo_loss_2_sprite \
 		if int(RunStateStore.pendingComboMultiplier) == 2 else null
-	var combo_sprite := _combo_effect_sprite if RunStateStore.winBoostEnabled else null
-	if loss_sprite == null and combo_sprite == null:
+	if loss_sprite == null:
 		return
 	if loss_sprite != null:
 		loss_sprite.modulate = Color.WHITE
-	if combo_sprite != null:
-		combo_sprite.modulate = Color.WHITE
 	_combo_loss_beep_tween = _view.tween().set_loops()
 	_combo_loss_beep_tween.set_parallel(true)
 	if loss_sprite != null:
 		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 0.18,
 			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if combo_sprite != null:
-		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 0.18,
-			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_combo_loss_beep_tween.set_parallel(false)
 	_combo_loss_beep_tween.set_parallel(true)
 	if loss_sprite != null:
 		_combo_loss_beep_tween.tween_property(loss_sprite, "modulate:a", 1.0,
-			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	if combo_sprite != null:
-		_combo_loss_beep_tween.tween_property(combo_sprite, "modulate:a", 1.0,
 			CalloutCadence.BEEP_FADE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_combo_loss_beep_tween.set_parallel(false)
 	_combo_loss_beep_tween.tween_interval(CalloutCadence.BEEP_PAUSE)
@@ -356,8 +346,8 @@ func start_loss_beep() -> void:
 func stop_loss_beep() -> void:
 	if _combo_loss_beep_tween != null and _combo_loss_beep_tween.is_valid():
 		_combo_loss_beep_tween.kill()
-	_combo_loss_beep_tween = null
-	for sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite, _combo_effect_sprite]:
+		_combo_loss_beep_tween = null
+	for sprite in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
 		if sprite != null:
 			(sprite as Sprite2D).modulate = Color.WHITE
 
