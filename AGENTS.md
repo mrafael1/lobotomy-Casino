@@ -443,8 +443,10 @@ Resources and currencies:
 - `route_build_scene` — a single augment or single power selection with run-Gold
   pricing and save/resume support. It reuses the authored Pacte room art, showing
   only the matching deck and emplacement: Augment hides the power side, and Power
-  hides the augment side. The selectable route cards remain separate from Pacte's
-  full ritual UI.
+  hides the augment side. Its three-card offer is presented in Pacte's authored
+  card row; tapping inspects a card, dragging it into the matching slot shows the
+  selected card there, and only then does the route commit. The selectable route
+  cards remain separate from Pacte's full ritual UI.
 - `route_bonus_scene` — the persisted one-time +10 run-Lucidity bonus claim.
 - `route_shop_scene` — run-scoped machine investments and single-use consumable shop.
 - `route_dealer_scene` — retained as a compatibility shell for older route saves;
