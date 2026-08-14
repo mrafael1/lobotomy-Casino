@@ -1,10 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/dealer_choice_scene.gd" id="1_choice"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_portrait.png" id="3_dealer"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_shop/dealer_shop_counter_base_x8.png" id="4_counter"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="5_doors"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_shop/dealer_shop_reroll_BUTTON_x8.png" id="6_reroll"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_portrait.png" id="2_dealer"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="3_doors"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_shop/dealer_shop_reroll_BUTTON_x8.png" id="4_reroll"]
 
 [node name="DealerChoiceScene" type="Control"]
 layout_mode = 3
@@ -20,15 +19,7 @@ script = ExtResource("1_choice")
 z_index = 1
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
-texture = ExtResource("3_dealer")
-centered = false
-hframes = 2
-
-[node name="DealerCounter" type="Sprite2D" parent="."]
-z_index = 2
-texture_filter = 1
-scale = Vector2(0.125, 0.125)
-texture = ExtResource("4_counter")
+texture = ExtResource("2_dealer")
 centered = false
 hframes = 2
 
@@ -36,7 +27,7 @@ hframes = 2
 z_index = 3
 texture_filter = 1
 scale = Vector2(0.125, 0.125)
-texture = ExtResource("6_reroll")
+texture = ExtResource("4_reroll")
 centered = false
 hframes = 2
 
@@ -59,7 +50,7 @@ mouse_filter = 0
 texture_filter = 1
 position = Vector2(0.5, 0)
 scale = Vector2(1.125, 1)
-texture = ExtResource("5_doors")
+texture = ExtResource("3_doors")
 centered = false
 hframes = 5
 
@@ -75,7 +66,7 @@ mouse_filter = 0
 texture_filter = 1
 position = Vector2(0.5, 0)
 scale = Vector2(1.125, 1)
-texture = ExtResource("5_doors")
+texture = ExtResource("3_doors")
 centered = false
 hframes = 5
 

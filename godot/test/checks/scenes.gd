@@ -83,11 +83,10 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer selection scene does not render exactly two doors")
 	if route.get_node_or_null("DealerBackground") != null:
 		failures.append("route: dealer offer still includes the shop background")
+	if route.get_node_or_null("DealerCounter") != null:
+		failures.append("route: dealer offer still includes the shop counter")
 	if route.get_node_or_null("DealerSprite") == null:
 		failures.append("route: dealer offer is missing DealerSprite art")
-	for node_name in ["DealerCounter"]:
-		if route.get_node_or_null(node_name) == null:
-			failures.append("route: dealer offer is missing %s art" % node_name)
 	route.free()
 
 	if not run_store.select_route(RouteCards.CARD_SHOP_ID):

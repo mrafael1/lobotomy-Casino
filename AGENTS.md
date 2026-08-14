@@ -440,8 +440,9 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice Later. The shop background layer is
-  intentionally omitted for now; the scene keeps the dealer, doors, and route controls.
+  doors for Shop/Augment/Power/Bonus/Sacrifice Later. The shop background and counter
+  layers are intentionally omitted for now; the scene keeps the dealer, doors, and
+  route controls.
   Each door switches its authored
   door asset to match the route card; paying the dealer reshuffles both doors at an
   escalating **5G / 10G / 15G** price. Selecting a door commits the route and there is
