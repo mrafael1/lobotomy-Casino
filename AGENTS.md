@@ -68,9 +68,11 @@ Resources and currencies:
   the run's current Wealth objective as a single "TARGET: n" line. Reaching an
   intermediate target briefly presents that target in the centre of the machine,
   drains its displayed number to zero while the target payment rolls off the wealth
-  readout, subtracts it from the run score, shows the remaining money, and hands the
-  run to the between-machine route offer. Target and loss breaks use the same route
-  choices; the full Pacte ritual is only available when a run starts.
+  readout. During the drain, shortened target values stay anchored to the units slot
+  (`_90`, not `90_`), then the remainder is shown and the target is subtracted from
+  the run score before handing the run to the between-machine route offer. Target and
+  loss breaks use the same route choices; the full Pacte ritual is only available when
+  a run starts.
 - **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 50 coins
   restores one random spent power (30 with Adrenaline). Gold pays for route cards,
   Augment/Power build cards, Shop investments, and Shop consumables; it also pays for

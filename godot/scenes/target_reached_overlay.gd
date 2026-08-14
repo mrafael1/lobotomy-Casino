@@ -316,8 +316,8 @@ func _build_target_glyphs() -> void:
 
 
 ## Keeps the target's authored digit slots stable while its amount drains away. Empty
-## slots remain centred around the original number, so 500 becomes 250 and then 0
-## without re-laying out the group during the tween.
+## slots stay on the left so the units slot remains anchored: 90 reads `_90`, not
+## `90_`, without re-laying out the group during the tween.
 func _set_target_display_value(value: int) -> void:
 	_target_display_value = maxi(0, value)
 	if _target_glyphs.is_empty():
@@ -326,7 +326,7 @@ func _set_target_display_value(value: int) -> void:
 	var slot_count := _target_glyphs.size()
 	if text.length() > slot_count:
 		text = text.right(slot_count)
-	var first_active := maxi(0, floori(float(slot_count - text.length()) / 2.0))
+	var first_active := maxi(0, slot_count - text.length())
 	for i in slot_count:
 		var glyph: Label = _target_glyphs[i]
 		var text_index := i - first_active
