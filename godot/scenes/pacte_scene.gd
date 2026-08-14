@@ -942,7 +942,7 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
 			else "res://scenes/dealer_scene.tscn")
 	elif threshold_visit:
 		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
@@ -952,7 +952,7 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
 			else "res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")

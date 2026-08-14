@@ -125,8 +125,9 @@ Resources and currencies:
 - After every intermediate Wealth target and every survivable flatline, the dealer stores
   exactly two seed-identified route cards drawn from **Shop**, **Augment**, **Power**,
   **Bonus**, and **Sacrifice Later**. The pair is deterministic and persisted through
-  close/resume; the player may refuse both with the free **CONTINUE** action. Event routes
-  remain reserved for a later milestone.
+  close/resume; the player may pay the dealer to reshuffle both doors for **5G**, then
+  **10G**, then **15G** and so on. The player may refuse both with the free **CONTINUE**
+  action. Event routes remain reserved for a later milestone.
 - The full Pacte scene is the run-start ritual only: it is free and explicitly grants
   one selected augment and one selected power. End-of-segment Augment and Power routes
   use the shared card metadata and pricing but each asks for only one card, never both.
@@ -436,17 +437,26 @@ Resources and currencies:
   target or loss route. End-of-segment Augment and Power choices use separate
   single-deck build scenes and save their selected card before returning to the
   next machine.
+- `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
+  doors for Shop/Augment/Power/Bonus/Sacrifice Later. Each door switches its authored
+  door asset to match the route card; paying the dealer reshuffles both doors at an
+  escalating **5G / 10G / 15G** price. Selecting a door commits the route and there is
+  no return to this selection screen. **CONTINUE** refuses both doors for free;
+  Sacrifice Later remains a free card when it is offered. `route_scene` remains only
+  as a compatibility shell for older direct scene references.
 - `route_scene` — the persisted dealer presentation of exactly two
   Shop/Augment/Power/Bonus/Sacrifice Later cards, using the authored dealer shop art.
   **CONTINUE** refuses both cards for free; Sacrifice Later remains a free card when it
-  is offered.
+  is offered. This legacy scene is retained only for older direct references;
+  active route navigation uses `dealer_choice_scene`.
 - `route_build_scene` — a single augment or single power selection with run-Gold
   pricing and save/resume support. It reuses the authored Pacte room art, showing
   only the matching deck and emplacement: Augment hides the power side, and Power
   hides the augment side. Its three-card offer is presented in Pacte's authored
   card row; tapping inspects a card, dragging it into the matching slot shows the
-  selected card there, and only then does the route commit. The selectable route
-  cards remain separate from Pacte's full ritual UI.
+  selected card there, and only then does the route commit. Its route door is already
+  final, so it has no action that returns to dealer choice. The selectable route cards
+  remain separate from Pacte's full ritual UI.
 - `route_bonus_scene` — the persisted one-time +10 run-Lucidity bonus claim.
 - `route_shop_scene` — run-scoped machine investments and single-use consumable shop.
 - `route_dealer_scene` — retained as a compatibility shell for older route saves;

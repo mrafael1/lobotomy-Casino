@@ -2,7 +2,8 @@ extends Control
 
 ## Single-deck between-machine build route. It uses Pacte's authored room and
 ## card presentation, but keeps route pricing and selection state local to this
-## scene so a route never reopens the full run-start ritual.
+## scene so a route never reopens the full run-start ritual. The dealer door was
+## already chosen before this scene opens, so this scene has no route-selection exit.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
@@ -126,9 +127,7 @@ func _build() -> void:
 	_message = _label("", Rect2(5.0, 249.0, 150.0, 15.0), 4, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var back := _button("BACK TO ROUTES", Rect2(20.0, 274.0, 120.0, 25.0), 7)
-	back.name = "BackToRoutesButton"
-	back.pressed.connect(_on_back_pressed)
+	_instruction.text = "SELECTED DOOR CANNOT BE REOPENED"
 
 func _refresh() -> void:
 	_clear_cards()
@@ -447,14 +446,6 @@ func _close_symbol_picker() -> void:
 		_symbol_picker.queue_free()
 		_symbol_picker = null
 
-func _on_back_pressed() -> void:
-	if _symbol_picker != null or _selection_locked:
-		return
-	if not RunStateStore.cancel_route_destination():
-		_message.text = "ROUTE OFFER UNAVAILABLE"
-		return
-	SceneNav.change_to("res://scenes/route_scene.tscn")
-
 func _clear_cards() -> void:
 	if _list != null:
 		for child in _list.get_children():
@@ -482,20 +473,3 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color,
 	label.position = rect.position
 	label.size = rect.size
 	return label
-
-func _button(text_value: String, rect: Rect2, size: int,
-		parent: Node = null) -> Button:
-	var button := Button.new()
-	button.text = text_value
-	button.position = rect.position
-	button.size = rect.size
-	button.focus_mode = Control.FOCUS_NONE
-	button.z_index = 20
-	button.add_theme_font_size_override("font_size", size)
-	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
-	if _font != null:
-		button.add_theme_font_override("font", _font)
-	var owner := parent if parent != null else self
-	owner.add_child(button)
-	return button

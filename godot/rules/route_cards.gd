@@ -127,6 +127,29 @@ static func offer(seed: int, context: String = "wealth_target") -> Array[Diction
 		result.append(_copy_card(_CARDS[catalog_index], identity, free_loss_route))
 	return result
 
+static func _offer_signature(cards: Array) -> String:
+	var ids: Array[String] = []
+	for value in cards:
+		if value is Dictionary:
+			ids.append(String((value as Dictionary).get("id", "")))
+	return "|".join(ids)
+
+## Returns the next deterministic pair for a route-door reroll. The original
+## offer seed remains the save anchor; the reroll index and a small collision
+## walk derive a new pair without introducing runtime randomness. A reroll is
+## guaranteed to change the visible route pair whenever the catalogue permits it.
+static func reroll_offer(seed: int, context: String, reroll_index: int,
+		previous: Array = []) -> Array[Dictionary]:
+	var step := maxi(1, reroll_index)
+	var candidate_seed := (seed ^ 0x5245524F ^ (step * 0x9E3779B9)) & 0xFFFFFFFF
+	var previous_signature := _offer_signature(previous)
+	for attempt in 8:
+		var candidate := offer(candidate_seed, context)
+		if _offer_signature(candidate) != previous_signature:
+			return candidate
+		candidate_seed = (candidate_seed + 0x45D9F3B) & 0xFFFFFFFF
+	return offer(candidate_seed, context)
+
 static func card(card_id: String) -> Dictionary:
 	for card_entry in _CARDS:
 		if String(card_entry["id"]) == card_id:

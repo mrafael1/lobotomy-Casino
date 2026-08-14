@@ -18,7 +18,7 @@ const M32 := 0xFFFFFFFF
 ## unlike JSON) and removed only when no resumable session remains.
 const RUN_SAVE_PATH := "user://lobotomy-run.save"
 const RUN_SAVE_SCHEMA_VERSION := 2
-const ROUTE_SCENE := "res://scenes/route_scene.tscn"
+const ROUTE_SCENE := "res://scenes/dealer_choice_scene.tscn"
 
 ## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
 ## reroll adds the base again (5, 10, 15, …).
@@ -231,6 +231,7 @@ var wealthContinued := false
 var routeOfferPending := false
 var routeOfferCards: Variant = null
 var routeOfferSeed := 0
+var routeOfferRerollCount := 0
 var routeContext := "" # "wealth_target" | "flatline"
 var routeDestination := "" # "shop" | "augment" | "power" | "bonus" | "sacrifice"
 var routeSelectedCardId := ""
@@ -645,7 +646,9 @@ func _normalise_route_offer_after_load() -> void:
 	if routeContext != "wealth_target" and routeContext != "flatline":
 		routeOfferPending = false
 		routeOfferCards = null
+		routeOfferRerollCount = 0
 		return
+	routeOfferRerollCount = maxi(0, int(routeOfferRerollCount))
 	if _route_offer_array().size() == RouteCards.OFFER_COUNT:
 		return
 	# Older saves contain the previous five-card catalogue offer. Rebuild from
@@ -653,6 +656,7 @@ func _normalise_route_offer_after_load() -> void:
 	# route remains resumable instead of leaving a stale five-card state behind.
 	routeOfferCards = RouteCards.offer(routeOfferSeed, routeContext)
 	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
+	routeOfferRerollCount = 0
 
 func _normalise_power_ids(values: Array) -> Array:
 	var result: Array = []
@@ -1402,6 +1406,7 @@ func reset_run_state() -> void:
 	routeOfferPending = false
 	routeOfferCards = null
 	routeOfferSeed = 0
+	routeOfferRerollCount = 0
 	routeContext = ""
 	routeDestination = ""
 	routeSelectedCardId = ""
@@ -1524,6 +1529,33 @@ func route_card_affordable(card_id: String) -> bool:
 			return true
 	return false
 
+## The next route-door reroll costs the same escalating Lucidity price as the
+## dealer's painting: 5G, then 10G, then 15G. It belongs to this prepared offer
+## and is persisted beside the two doors until one door is selected or refused.
+func route_offer_reroll_price() -> int:
+	return DEALER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
+
+func route_offer_reroll_affordable() -> bool:
+	return routeOfferPending and int(lucidityCoins) >= route_offer_reroll_price()
+
+func reroll_route_offer() -> bool:
+	if not routeOfferPending or routeContext == "":
+		return false
+	var price := route_offer_reroll_price()
+	if int(lucidityCoins) < price:
+		return false
+	var previous := _route_offer_array()
+	var next_count := int(routeOfferRerollCount) + 1
+	var rerolled := RouteCards.reroll_offer(routeOfferSeed, routeContext,
+		next_count, previous)
+	if rerolled.size() != RouteCards.OFFER_COUNT:
+		return false
+	lucidityCoins -= price
+	routeOfferRerollCount = next_count
+	routeOfferCards = rerolled
+	_commit()
+	return true
+
 func _route_build_offers(kind: String) -> Array[String]:
 	var max_tier := 0 if routeContext == "flatline" else -1
 	var draw_seed := (routeOfferSeed ^ 0x524F5554 ^ spinCount \
@@ -1574,6 +1606,7 @@ func prepare_route_offer(context: String, seed_override := -1) -> bool:
 		0x524F5554 ^ (wealthTargetIndex * 0x9E3779B9) ^ spinCount)
 	routeOfferSeed = seed & M32
 	routeOfferCards = RouteCards.offer(routeOfferSeed, context)
+	routeOfferRerollCount = 0
 	routeContext = context
 	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
 	routeDestination = ""
@@ -1662,9 +1695,12 @@ func select_route(card_id: String) -> bool:
 		return false
 	var card := route_offer_card(card_id)
 	var cost := RouteCards.card_cost(card)
+	var offered_cards := _route_offer_array()
+	var offered_reroll_count := int(routeOfferRerollCount)
 	lucidityCoins -= cost
 	routeOfferPending = false
 	routeOfferCards = null
+	routeOfferRerollCount = 0
 	routeSelectedCardId = card_id
 	var route_type := String(card.get("routeType", ""))
 	var opened := false
@@ -1687,7 +1723,8 @@ func select_route(card_id: String) -> bool:
 	if not opened:
 		lucidityCoins += cost
 		routeOfferPending = true
-		routeOfferCards = RouteCards.offer(routeOfferSeed, routeContext)
+		routeOfferCards = offered_cards
+		routeOfferRerollCount = offered_reroll_count
 		routeSelectedCardId = ""
 		routeDestination = ""
 		routePacteVisit = false
@@ -1710,35 +1747,10 @@ func refuse_routes() -> bool:
 		return false
 	routeOfferPending = false
 	routeOfferCards = null
+	routeOfferRerollCount = 0
 	routeSelectedCardId = ""
 	_open_route_sacrifice()
 	return finish_route_destination()
-
-## Restores the paid route card and the deterministic offer when a player backs
-## out of a build screen before buying its augment/power card.
-func cancel_route_destination() -> bool:
-	if routeOfferPending or routeDestination == "":
-		return false
-	if routeDestination != RouteCards.ROUTE_AUGMENT \
-			and routeDestination != RouteCards.ROUTE_POWER:
-		return false
-	var selected_route := RouteCards.card(routeSelectedCardId)
-	var refund := 0 if routeContext == "flatline" else RouteCards.card_cost(selected_route)
-	lucidityCoins += refund
-	routeOfferCards = RouteCards.offer(routeOfferSeed, routeContext)
-	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
-	routeDestination = ""
-	routeSelectedCardId = ""
-	routePacteVisit = false
-	routePacteFreeTier = false
-	pacteCostsActive = false
-	routeBuildKind = ""
-	routeBuildOfferIds = null
-	routeBuildFreeTier = false
-	routeBuildSelectedId = ""
-	routeBonusClaimed = false
-	_commit()
-	return routeOfferPending
 
 func complete_route_build_selection(card_id: String, reward_symbol := "") -> bool:
 	if routeBuildKind != RouteCards.ROUTE_AUGMENT and routeBuildKind != RouteCards.ROUTE_POWER:
@@ -2057,6 +2069,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	routeOfferPending = false
 	routeOfferCards = null
 	routeOfferSeed = 0
+	routeOfferRerollCount = 0
 	routeContext = ""
 	routeDestination = ""
 	routeSelectedCardId = ""

@@ -30,6 +30,7 @@ static func _prepare_target(lucidity: int) -> void:
 	_store().roundContinuationPending = true
 	_store().routeOfferPending = false
 	_store().routeOfferCards = null
+	_store().routeOfferRerollCount = 0
 	_store().routeDestination = ""
 	_store().routeContext = ""
 	_store().routeSelectedCardId = ""
@@ -109,6 +110,11 @@ static func run_all() -> Array:
 	_check(out, not first_offer.any(func(card: Dictionary) -> bool:
 		return bool(card.get("freeLossRoute", false))),
 		"target offers do not expose the loss-only free flag")
+	var rerolled_offer := RouteCards.reroll_offer(0x12345678, "wealth_target", 1,
+		first_offer)
+	_check(out, rerolled_offer.size() == RouteCards.OFFER_COUNT \
+		and str(rerolled_offer) != str(first_offer),
+		"route rerolls change both visible door data and their identities")
 
 	_prepare_target(40)
 	_check(out, _store().prepare_route_offer("wealth_target", 0xCAFE),
@@ -119,11 +125,29 @@ static func run_all() -> Array:
 		"a pending route offer remains resumable after loading the run save")
 	_check(out, _store().current_route_offer() == persisted_offer,
 		"loading a saved route restores the exact offered choices")
+	var lucidity_before_reroll := int(_store().lucidityCoins)
+	var first_reroll_offer: Array[Dictionary] = _store().current_route_offer()
+	_check(out, _store().route_offer_reroll_price() == 5,
+		"the first route-door reroll costs the base dealer price")
+	_check(out, _store().reroll_route_offer(),
+		"the dealer can reshuffle a funded route offer")
+	_check(out, _store().routeOfferRerollCount == 1 \
+		and _store().lucidityCoins == lucidity_before_reroll - 5 \
+		and _store().current_route_offer() != first_reroll_offer,
+		"a route reroll charges Lucidity and replaces the doors")
+	_check(out, _store().route_offer_reroll_price() == 10,
+		"route-door reroll price escalates after each payment")
+	var rerolled_persisted_offer: Array[Dictionary] = _store().current_route_offer()
+	_store().load_run_state()
+	_check(out, _store().routeOfferRerollCount == 1 \
+		and _store().current_route_offer() == rerolled_persisted_offer,
+		"the rerolled route doors persist through save and resume")
 	var serialized: Dictionary = {}
 	for property_name in _store()._run_state_properties():
 		serialized[property_name] = _store().get(property_name)
-	_check(out, serialized.has("routeOfferPending") and serialized.has("routeBuildOfferIds"),
-		"route offer and build state are included in run persistence")
+	_check(out, serialized.has("routeOfferPending") and serialized.has("routeOfferRerollCount") \
+		and serialized.has("routeBuildOfferIds"),
+		"route offer, reroll and build state are included in run persistence")
 	var round_trip: Variant = str_to_var(var_to_str(serialized))
 	_check(out, round_trip is Dictionary and bool((round_trip as Dictionary).get("routeOfferPending", false)),
 		"route state survives the save value round trip")
@@ -239,8 +263,9 @@ static func run_all() -> Array:
 	_check(out, _store().routeDestination == RouteCards.ROUTE_POWER \
 			and (_store().routeBuildOfferIds as Array) == build_ids_before_save,
 		"power route offers persist through save and resume")
-	_check(out, _store().cancel_route_destination() and _store().routeOfferPending,
-		"backing out of a build refunds the route card and restores the offer")
+	_check(out, not _store().routeOfferPending \
+		and _store().routeDestination == RouteCards.ROUTE_POWER,
+		"selecting a door keeps the route committed while its build screen is open")
 
 	_check(out, not _store().pacte_active() if _store().runPhase == "pacte_threshold" else true,
 		"threshold state cannot reopen the full Pacte scene")
