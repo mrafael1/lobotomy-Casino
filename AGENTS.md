@@ -101,11 +101,12 @@ Resources and currencies:
 5. Use powers and consumables to manipulate revealed reels, protect resources, or
    alter future spins.
 6. When an intermediate target is reached, finish its target/remainder presentation
-   and receive five deterministic route cards: **Shop**, **Augment**, **Power**, **Bonus**,
-   and **Sacrifice Later**. A survivable flatline receives the same offer. Shop, Augment,
-   and Power spend run Lucidity before opening their destination; Bonus and Sacrifice
-   Later are free. Augment opens only an augment card pool, and Power opens only a power
-   card pool. Sacrifice Later preserves spins and defers that tradeoff. The route offer,
+   and receive two deterministic route cards from the dealer: **Shop**, **Augment**,
+   **Power**, **Bonus**, or **Sacrifice Later**. A survivable flatline receives the same
+   two-card offer, with at least one free tier-capped build route. Shop, Augment, and
+   Power spend run Lucidity before opening their destination; Bonus and Sacrifice Later
+   are free. Augment opens only an augment card pool, and Power opens only a power card
+   pool. The player may press **CONTINUE** to refuse both cards for free. The route offer,
    build choice, and bonus claim persist through save/resume; no normal route purchase
    spends spins.
 7. Handle automatic dealer interruptions: his 12-step countdown advances by 3/2/1
@@ -121,10 +122,11 @@ Resources and currencies:
 
 ### Routes and between-machine economy
 
-- After every intermediate Wealth target and every survivable flatline, the run stores
-  an exact five-card offer: **Shop**, **Augment**, **Power**, **Bonus**, and **Sacrifice
-  Later**. The offer is seed-identified, deterministic, and persisted through
-  close/resume. Event routes remain reserved for a later milestone.
+- After every intermediate Wealth target and every survivable flatline, the dealer stores
+  exactly two seed-identified route cards drawn from **Shop**, **Augment**, **Power**,
+  **Bonus**, and **Sacrifice Later**. The pair is deterministic and persisted through
+  close/resume; the player may refuse both with the free **CONTINUE** action. Event routes
+  remain reserved for a later milestone.
 - The full Pacte scene is the run-start ritual only: it is free and explicitly grants
   one selected augment and one selected power. End-of-segment Augment and Power routes
   use the shared card metadata and pricing but each asks for only one card, never both.
@@ -138,8 +140,8 @@ Resources and currencies:
   consumable adds one stash copy; using it removes that copy. Shop upgrades do not
   become Lab permanents or campaign Chip Augments; the club modifier marks these
   Shop prices up by 50% like the existing shop economy.
-- Sacrifice Later is the free refusal path: it starts the next machine with the normal
-  spin budget and records a deferred sacrifice choice without consuming spins now.
+- Sacrifice Later is one possible free route card: it starts the next machine with the
+  normal spin budget and records a deferred sacrifice choice without consuming spins now.
 - The live Dealer remains a tactical interruption with power services, rerolls, and
   run-item offers, but it is no longer an end-of-segment route card. It does not
   duplicate Pacte build identity or the Shop's machine-investment inventory.
@@ -434,8 +436,10 @@ Resources and currencies:
   target or loss route. End-of-segment Augment and Power choices use separate
   single-deck build scenes and save their selected card before returning to the
   next machine.
-- `route_scene` — the persisted five-card Shop/Augment/Power/Bonus/Sacrifice Later
-  offer. Sacrifice Later is the free continuation and does not spend spins.
+- `route_scene` — the persisted dealer presentation of exactly two
+  Shop/Augment/Power/Bonus/Sacrifice Later cards, using the authored dealer shop art.
+  **CONTINUE** refuses both cards for free; Sacrifice Later remains a free card when it
+  is offered.
 - `route_build_scene` — a single augment or single power selection with run-Gold
   pricing and save/resume support. It reuses the authored Pacte room art, showing
   only the matching deck and emplacement: Augment hides the power side, and Power

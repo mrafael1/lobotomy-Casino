@@ -628,6 +628,7 @@ func load_run_state() -> void:
 			wealthTargetIndex += 1
 	wealthTargetIndex = clampi(int(wealthTargetIndex), 0, EconomyConst.WEALTH_TARGETS.size() - 1)
 	wealthTargetPendingValue = maxi(0, int(wealthTargetPendingValue))
+	_normalise_route_offer_after_load()
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
 	selectedPowerCardIds = _normalise_power_ids(selectedPowerCardIds)
 	pacteSelectedPowerId = PacteCards.normalise_card_id(pacteSelectedPowerId)
@@ -637,6 +638,21 @@ func load_run_state() -> void:
 	_reapply_pacte_runtime_effects()
 	_clamp_neurons()
 	_commit()
+
+func _normalise_route_offer_after_load() -> void:
+	if not routeOfferPending:
+		return
+	if routeContext != "wealth_target" and routeContext != "flatline":
+		routeOfferPending = false
+		routeOfferCards = null
+		return
+	if _route_offer_array().size() == RouteCards.OFFER_COUNT:
+		return
+	# Older saves contain the previous five-card catalogue offer. Rebuild from
+	# the persisted seed so the new dealer pair is deterministic and the held
+	# route remains resumable instead of leaving a stale five-card state behind.
+	routeOfferCards = RouteCards.offer(routeOfferSeed, routeContext)
+	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
 
 func _normalise_power_ids(values: Array) -> Array:
 	var result: Array = []
@@ -1545,8 +1561,8 @@ func route_build_card_affordable(card_id: String) -> bool:
 			and _route_build_offer_array().has(PacteCards.normalise_card_id(card_id)) \
 			and int(lucidityCoins) >= route_build_card_cost(card_id)
 
-## Creates the exact five-card offer after a target or a survivable loss. A
-## prepared offer is never rerolled on scene re-entry or save/resume.
+## Creates the exact two-card dealer offer after a target or a survivable loss.
+## A prepared offer is never rerolled on scene re-entry or save/resume.
 func prepare_route_offer(context: String, seed_override := -1) -> bool:
 	if routeOfferPending:
 		return true

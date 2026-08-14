@@ -36,6 +36,13 @@ func _check_scene_instantiation(failures: Array) -> void:
 		get_root().add_child(n)
 		n.queue_free()
 
+func _route_seed_for_card(context: String, card_id: String, seed_start: int) -> int:
+	for offset in 64:
+		for card in RouteCards.offer(seed_start + offset, context):
+			if String(card.get("id", "")) == card_id:
+				return seed_start + offset
+	return -1
+
 ## One native scene-smoke pass through the new machine -> route -> machine seam. The
 ## rules-level route checks cover payment invariants; this check proves the actual route
 ## panels and destination scenes can be entered with a live prepared offer.
@@ -59,17 +66,21 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.selectedAugmentCardIds = []
 	run_store.selectedPowerCardIds = []
 	run_store.runConsumables = {}
-	if not run_store.prepare_route_offer("wealth_target", 0x515253):
+	var shop_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_SHOP_ID, 0x515253)
+	if shop_seed < 0 or not run_store.prepare_route_offer("wealth_target", shop_seed):
 		failures.append("route: target offer did not prepare")
 		return
 	var route := (load("res://scenes/route_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
-	if route.get_node_or_null("ContinueFreeButton") != null:
-		failures.append("route: legacy free continuation button is still exposed")
+	if route.get_node_or_null("ContinueButton") == null:
+		failures.append("route: dealer offer is missing its free continue action")
 	var cards_layer := route.get_node_or_null("RouteCards") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
-		failures.append("route: selection scene does not render exactly five cards")
+		failures.append("route: dealer selection scene does not render exactly two cards")
+	for node_name in ["DealerBackground", "DealerPortrait", "DealerCounter"]:
+		if route.get_node_or_null(node_name) == null:
+			failures.append("route: dealer offer is missing %s art" % node_name)
 	route.free()
 
 	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
@@ -91,7 +102,8 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.routeDestination = ""
 	run_store.routeContext = ""
 	run_store.lucidityCoins = 100
-	if not run_store.prepare_route_offer("wealth_target", 0x535455):
+	var augment_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_AUGMENT_ID, 0x535455)
+	if augment_seed < 0 or not run_store.prepare_route_offer("wealth_target", augment_seed):
 		failures.append("route: augment offer setup failed")
 	else:
 		if not run_store.select_route(RouteCards.CARD_AUGMENT_ID):
@@ -124,7 +136,8 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.routeDestination = ""
 	run_store.routeContext = ""
 	run_store.lucidityCoins = 100
-	if not run_store.prepare_route_offer("wealth_target", 0x565758):
+	var power_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_POWER_ID, 0x565758)
+	if power_seed < 0 or not run_store.prepare_route_offer("wealth_target", power_seed):
 		failures.append("route: power artwork offer setup failed")
 	elif not run_store.select_route(RouteCards.CARD_POWER_ID):
 		failures.append("route: power artwork card could not be selected")

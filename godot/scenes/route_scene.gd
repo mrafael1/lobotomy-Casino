@@ -1,15 +1,13 @@
 extends Control
 
-## Between-machine route selection. The five choices are the only end-of-segment
-## destinations: Shop, a single augment, a single power, Bonus, or Sacrifice Later.
+## Between-machine route selection. The dealer presents two deterministic route
+## cards after each target or survivable loss. The player may also decline both
+## cards and continue for free.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_RECTS: Array[Rect2] = [
-	Rect2(5.0, 49.0, 150.0, 42.0),
-	Rect2(5.0, 94.0, 150.0, 42.0),
-	Rect2(5.0, 139.0, 150.0, 42.0),
-	Rect2(5.0, 184.0, 150.0, 42.0),
-	Rect2(5.0, 229.0, 150.0, 42.0),
+	Rect2(5.0, 171.0, 73.0, 84.0),
+	Rect2(82.0, 171.0, 73.0, 84.0),
 ]
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
@@ -28,33 +26,36 @@ func _ready() -> void:
 	_refresh()
 
 func _build() -> void:
-	var background := ColorRect.new()
-	background.color = Color(0.035, 0.025, 0.08, 1.0)
-	background.size = CANVAS_SIZE
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(background)
-
-	var title := _label("ROUTE / NEXT MACHINE", Rect2(5.0, 7.0, 150.0, 14.0), 9, CYAN)
+	var title := _label("THE DEALER OFFERS", Rect2(5.0, 7.0, 150.0, 14.0), 8, CYAN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.z_index = 10
 	add_child(title)
-	_gold_label = _label("", Rect2(5.0, 24.0, 150.0, 12.0), 7, GOLD)
+	_gold_label = _label("", Rect2(5.0, 24.0, 150.0, 12.0), 6, GOLD)
 	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_gold_label.z_index = 10
 	add_child(_gold_label)
-	var subtitle := _label("SHOP / AUGMENT / POWER / BONUS / SACRIFICE", \
-			Rect2(3.0, 36.0, 154.0, 9.0), 4, MUTED)
+	var subtitle := _label("CHOOSE ONE OF TWO PATHS", Rect2(3.0, 36.0, 154.0, 9.0), 4, MUTED)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.z_index = 10
 	add_child(subtitle)
 
 	_cards_layer = Control.new()
 	_cards_layer.name = "RouteCards"
 	_cards_layer.size = CANVAS_SIZE
 	_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cards_layer.z_index = 10
 	add_child(_cards_layer)
 
-	_message = _label("", Rect2(5.0, 278.0, 150.0, 18.0), 5, RED)
+	_message = _label("", Rect2(5.0, 258.0, 150.0, 14.0), 5, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_message.z_index = 10
 	add_child(_message)
+	var continue_button := _button("CONTINUE", Rect2(42.0, 278.0, 76.0, 20.0), 6)
+	continue_button.name = "ContinueButton"
+	continue_button.z_index = 20
+	continue_button.pressed.connect(_on_continue_pressed)
+	add_child(continue_button)
 
 func _refresh() -> void:
 	for child in _cards_layer.get_children():
@@ -77,17 +78,17 @@ func _refresh() -> void:
 			GOLD if affordable else RED))
 		_cards_layer.add_child(panel)
 		var name_label := _label(String(card.get("displayName", "ROUTE")), \
-				Rect2(4.0, 3.0, 103.0, 10.0), 6, GOLD, panel)
+			Rect2(4.0, 4.0, 65.0, 11.0), 5, GOLD, panel)
 		var cost := int(card.get("lucidityCost", 0))
 		var cost_label := _label(("FREE" if cost <= 0 else "%dG" % cost) \
-				+ (" / READY" if affordable else " / LOCKED"), \
-				Rect2(104.0, 3.0, 42.0, 10.0), 5, CYAN if affordable else RED, panel)
-		cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			+ (" / READY" if affordable else " / LOCKED"), \
+			Rect2(4.0, 16.0, 65.0, 9.0), 4, CYAN if affordable else RED, panel)
 		var description := _label(String(card.get("description", "")), \
-				Rect2(4.0, 16.0, 105.0, 22.0), 4, MUTED, panel)
+			Rect2(4.0, 28.0, 65.0, 36.0), 4, MUTED, panel)
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		var button := _button("CHOOSE", Rect2(112.0, 24.0, 34.0, 14.0), 4, panel)
+		var button := _button("CHOOSE", Rect2(9.0, 66.0, 55.0, 13.0), 4, panel)
 		button.name = "SelectButton"
+		button.z_index = 20
 		button.disabled = not affordable
 		button.pressed.connect(_on_card_pressed.bind(card_id))
 	_message.text = ""
@@ -111,6 +112,12 @@ func _on_card_pressed(card_id: String) -> void:
 				_message.text = "NEXT MACHINE UNAVAILABLE"
 		_:
 			_message.text = "ROUTE UNAVAILABLE"
+
+func _on_continue_pressed() -> void:
+	if not RunStateStore.refuse_routes():
+		_message.text = "ROUTE OFFER UNAVAILABLE"
+		return
+	SceneNav.change_to("res://scenes/machine_scene.tscn")
 
 func _label(text_value: String, rect: Rect2, size: int, color: Color, \
 		parent: Node = null) -> Label:

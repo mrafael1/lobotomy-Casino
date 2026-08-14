@@ -50,6 +50,21 @@ static func _prepare_target(lucidity: int) -> void:
 	_store().selectedAugmentCardIds = []
 	_store().selectedPowerCardIds = []
 
+static func _offer_has_card(card_id: String) -> bool:
+	for card in _store().current_route_offer():
+		if String(card.get("id", "")) == card_id:
+			return true
+	return false
+
+static func _prepare_offer_with_card(lucidity: int, context: String, card_id: String,
+		seed_start: int) -> bool:
+	for offset in 64:
+		_prepare_target(lucidity)
+		if _store().prepare_route_offer(context, seed_start + offset) \
+			and _offer_has_card(card_id):
+			return true
+	return false
+
 static func _build_card_id(store: Node) -> String:
 	var offers: Array = store.routeBuildOfferIds as Array
 	return String(offers[0]) if not offers.is_empty() else ""
@@ -67,7 +82,7 @@ static func run_all() -> Array:
 	var first_offer := RouteCards.offer(0x12345678, "wealth_target")
 	var repeated_offer := RouteCards.offer(0x12345678, "wealth_target")
 	_check(out, first_offer.size() == RouteCards.OFFER_COUNT,
-		"every route offer contains exactly five choices")
+		"every dealer offer contains exactly two choices")
 	_check(out, str(first_offer) == str(repeated_offer),
 		"route offers are deterministic for seed and context")
 	_check(out, first_offer.all(func(card: Dictionary) -> bool: return card.has("seedIdentity")),
@@ -75,20 +90,24 @@ static func run_all() -> Array:
 	var route_types: Array[String] = []
 	for card in first_offer:
 		route_types.append(String(card.get("routeType", "")))
-	_check(out, route_types.has(RouteCards.ROUTE_SHOP) \
-			and route_types.has(RouteCards.ROUTE_AUGMENT) \
-			and route_types.has(RouteCards.ROUTE_POWER) \
-			and route_types.has(RouteCards.ROUTE_BONUS) \
-			and route_types.has(RouteCards.ROUTE_SACRIFICE),
-		"offers contain Shop, Augment, Power, Bonus, and Sacrifice Later")
+	_check(out, route_types.size() == 2 and route_types[0] != route_types[1],
+		"dealer offers contain two distinct route types")
+	_check(out, route_types.any(func(route_type: String) -> bool:
+		return route_type == RouteCards.ROUTE_SHOP \
+			or route_type == RouteCards.ROUTE_AUGMENT \
+			or route_type == RouteCards.ROUTE_POWER),
+		"target dealer offers include an investment route")
 	_check(out, not route_types.has(RouteCards.ROUTE_PACTE) \
 			and not route_types.has(RouteCards.ROUTE_DEALER),
 		"full Pacte and between-machine Dealer are not offered")
 	var loss_offer := RouteCards.offer(0x12345678, "flatline")
-	_check(out, loss_offer[1].get("freeLossRoute", false) \
-			and loss_offer[2].get("freeLossRoute", false),
-		"flatline marks the augment and power routes free")
-	_check(out, not first_offer[1].get("freeLossRoute", false),
+	_check(out, loss_offer.any(func(card: Dictionary) -> bool:
+		return bool(card.get("freeLossRoute", false)) \
+			and (String(card.get("routeType", "")) == RouteCards.ROUTE_AUGMENT \
+			or String(card.get("routeType", "")) == RouteCards.ROUTE_POWER)),
+		"flatline dealer offers include a free tier-capped build route")
+	_check(out, not first_offer.any(func(card: Dictionary) -> bool:
+		return bool(card.get("freeLossRoute", false))),
 		"target offers do not expose the loss-only free flag")
 
 	_prepare_target(40)
@@ -121,8 +140,7 @@ static func run_all() -> Array:
 	_check(out, neurons_before_refusal != _store().neurons,
 		"the refusal assertion exercised a real machine transition")
 
-	_prepare_target(80)
-	_store().prepare_route_offer("wealth_target", 0xBEEF)
+	_prepare_offer_with_card(80, "wealth_target", RouteCards.CARD_AUGMENT_ID, 0xBEEF)
 	var has_affordable_route := false
 	for card in _store().current_route_offer():
 		if _store().route_card_affordable(String(card.get("id", ""))):
@@ -153,8 +171,7 @@ static func run_all() -> Array:
 	_check(out, neurons_before_augment != _store().neurons,
 		"augment route test exercised a machine transition")
 
-	_prepare_target(80)
-	_store().prepare_route_offer("wealth_target", 0xBEEF)
+	_prepare_offer_with_card(80, "wealth_target", RouteCards.CARD_POWER_ID, 0xBEEF)
 	var neurons_before_power := int(_store().neurons)
 	_check(out, _store().select_route(RouteCards.CARD_POWER_ID),
 		"selecting Power opens the single power deck")
@@ -173,8 +190,7 @@ static func run_all() -> Array:
 			and neurons_before_power != _store().neurons,
 		"power route payment does not sacrifice spins")
 
-	_prepare_target(100)
-	_store().prepare_route_offer("wealth_target", 0xFACE)
+	_prepare_offer_with_card(100, "wealth_target", RouteCards.CARD_SHOP_ID, 0xFACE)
 	_check(out, _store().select_route(RouteCards.CARD_SHOP_ID), "selecting Shop opens the run Shop")
 	var shop_neurons := int(_store().neurons)
 	_check(out, _store().buy_route_shop_item("cons_tea"),
@@ -190,8 +206,7 @@ static func run_all() -> Array:
 	_check(out, not _meta().ownedPermanents.has("shop_spin_reserve"),
 		"run Shop upgrades do not leak into persistent Lab state")
 
-	_prepare_target(20)
-	_store().prepare_route_offer("wealth_target", 0xD00D)
+	_prepare_offer_with_card(20, "wealth_target", RouteCards.CARD_BONUS_ID, 0xD00D)
 	var bonus_before := int(_store().lucidityCoins)
 	_check(out, _store().select_route(RouteCards.CARD_BONUS_ID),
 		"selecting Bonus opens the bonus scene")
@@ -202,8 +217,7 @@ static func run_all() -> Array:
 	_check(out, _store().finish_route_destination() and _store().runPhase == "running",
 		"the bonus scene returns to the next machine")
 
-	_prepare_target(20)
-	_store().prepare_route_offer("flatline", 0xF00D)
+	_prepare_offer_with_card(20, "flatline", RouteCards.CARD_AUGMENT_ID, 0xF00D)
 	var loss_before_spins := int(_store().neurons)
 	_check(out, _store().select_route(RouteCards.CARD_AUGMENT_ID),
 		"a survivable loss opens the free Augment route")
@@ -217,8 +231,7 @@ static func run_all() -> Array:
 	_check(out, loss_before_spins != _store().neurons,
 		"loss recovery exercised a real machine transition")
 
-	_prepare_target(80)
-	_store().prepare_route_offer("wealth_target", 0xABCD)
+	_prepare_offer_with_card(80, "wealth_target", RouteCards.CARD_POWER_ID, 0xABCD)
 	_check(out, _store().select_route(RouteCards.CARD_POWER_ID),
 		"power route can be saved before card selection")
 	var build_ids_before_save: Array = (_store().routeBuildOfferIds as Array).duplicate()

@@ -7,7 +7,7 @@ extends RefCounted
 ## between-machine augment or power stop opens only the relevant card pool, so
 ## the player never has to repeat the full two-part Pacte ceremony mid-run.
 
-const OFFER_COUNT := 5
+const OFFER_COUNT := 2
 
 const ROUTE_SHOP := "shop"
 const ROUTE_AUGMENT := "augment"
@@ -92,15 +92,39 @@ static func _copy_card(card: Dictionary, seed_identity: int, free_loss_route: bo
 		result["tier"] = 0
 	return result
 
-## Returns exactly five deterministic choices. The catalogue order is stable so
-## every choice is always visible; the seed still gives each card a stable identity
-## for save/debug/replay tooling.
+## Returns exactly two deterministic choices from the route catalogue. A target
+## offer always includes one investment route; a loss offer always includes one
+## free tier-capped build route. The second card is drawn from the remaining
+## catalogue, so Bonus and Sacrifice Later remain possible without presenting the
+## whole catalogue at once.
 static func offer(seed: int, context: String = "wealth_target") -> Array[Dictionary]:
 	var free_loss_route := context == "flatline"
-	var result: Array[Dictionary] = []
+	var rng := LobRNG.new((seed ^ 0x524F5554) & 0xFFFFFFFF)
+	var first_pool: Array[int] = []
+	if free_loss_route:
+		first_pool.append(1)
+		first_pool.append(2)
+	else:
+		first_pool.append(0)
+		first_pool.append(1)
+		first_pool.append(2)
+	var first_index := first_pool[mini(first_pool.size() - 1,
+		int(rng.next() * float(first_pool.size())))]
+	var remaining_indices: Array[int] = []
 	for index in _CARDS.size():
-		var identity := (seed ^ ((index + 1) * 0x9E3779B9)) & 0xFFFFFFFF
-		result.append(_copy_card(_CARDS[index], identity, free_loss_route))
+		if index != first_index:
+			remaining_indices.append(index)
+	var second_index := remaining_indices[mini(remaining_indices.size() - 1,
+		int(rng.next() * float(remaining_indices.size())))]
+	var selected_indices: Array[int] = []
+	selected_indices.append(first_index)
+	selected_indices.append(second_index)
+	var result: Array[Dictionary] = []
+	for offer_index in selected_indices.size():
+		var catalog_index := selected_indices[offer_index]
+		var identity := (seed ^ ((catalog_index + 1) * 0x9E3779B9) \
+			^ ((offer_index + 1) * 0x45D9F3B)) & 0xFFFFFFFF
+		result.append(_copy_card(_CARDS[catalog_index], identity, free_loss_route))
 	return result
 
 static func card(card_id: String) -> Dictionary:
