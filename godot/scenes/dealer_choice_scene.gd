@@ -5,11 +5,11 @@ extends Control
 ## is intentionally no back action once a door has been opened.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
-const DOOR_ASSET := "dealer_choice/dealer_choice_doors.svg"
 const DOOR_PATHS: Array[NodePath] = [
 	NodePath("DoorChoices/DoorLeft"),
 	NodePath("DoorChoices/DoorRight"),
 ]
+const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
@@ -31,7 +31,7 @@ const DOOR_FRAMES := {
 }
 
 var _font: FontFile = null
-var _dealer_sprite: Sprite2D = null
+var _reroll_art: Sprite2D = null
 var _gold_label: Label = null
 var _reroll_price: Label = null
 var _message: Label = null
@@ -43,22 +43,22 @@ var _selection_locked := false
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_font = Assets.font()
-	_dealer_sprite = get_node_or_null("DealerSprite") as Sprite2D
+	_reroll_art = get_node_or_null("RerollArt") as Sprite2D
 	_build_header()
 	_configure_doors()
 	_configure_actions()
 	_refresh()
 
 func _build_header() -> void:
-	var title := _label("THE DEALER OPENS TWO DOORS",
-		Rect2(4.0, 7.0, 152.0, 12.0), 6, CYAN)
+	var title := _label("CHOOSE A ROUTE",
+		Rect2(4.0, 16.0, 152.0, 10.0), 5, CYAN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.z_index = 20
-	_gold_label = _label("", Rect2(4.0, 23.0, 152.0, 11.0), 5, GOLD)
+	_gold_label = _label("", Rect2(4.0, 27.0, 152.0, 9.0), 4, GOLD)
 	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gold_label.z_index = 20
 	var subtitle := _label("PAY TO RESHUFFLE  /  OPEN ONE DOOR",
-		Rect2(3.0, 36.0, 154.0, 9.0), 4, MUTED)
+		Rect2(3.0, 36.0, 154.0, 8.0), 3, MUTED)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.z_index = 20
 	_message = _label("", Rect2(4.0, 253.0, 152.0, 16.0), 5, RED)
@@ -66,7 +66,7 @@ func _build_header() -> void:
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 30
-	_reroll_price = _label("", Rect2(2.0, 104.0, 29.0, 9.0), 4, GOLD)
+	_reroll_price = _label("", Rect2(4.0, 217.0, 42.0, 9.0), 4, GOLD)
 	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_reroll_price.z_index = 20
 
@@ -79,22 +79,19 @@ func _configure_doors() -> void:
 		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		button.text = ""
 		button.flat = true
+		button.tooltip_text = ""
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 		button.pressed.connect(_on_door_pressed.bind(index))
-		var title := _label("", Rect2(3.0, 6.0, 67.0, 11.0), 5, GOLD, button)
+		var title := _label("", Rect2(1.0, 104.0, 62.0, 12.0), 4,
+			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.clip_text = true
-		var cost := _label("", Rect2(3.0, 19.0, 67.0, 9.0), 4, CYAN, button)
+		var cost := _label("", Rect2(1.0, 116.0, 62.0, 9.0), 4, CYAN, button)
 		cost.name = "DoorCost"
 		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var description := _label("", Rect2(5.0, 61.0, 63.0, 28.0), 3, TEXT_COLOR, button)
-		description.name = "DoorDescription"
-		description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		description.clip_text = true
 		_door_buttons.append(button)
 
 func _configure_actions() -> void:
@@ -103,9 +100,13 @@ func _configure_actions() -> void:
 		_reroll_button.text = ""
 		_reroll_button.flat = true
 		_reroll_button.focus_mode = Control.FOCUS_NONE
+		_reroll_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			_reroll_button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 		_reroll_button.pressed.connect(_on_reroll_pressed)
+		_reroll_button.button_down.connect(_on_reroll_button_down)
+		_reroll_button.button_up.connect(_on_reroll_button_up)
+		_set_reroll_art_frame(0)
 	_continue_button = get_node_or_null("ContinueButton") as Button
 	if _continue_button != null:
 		_continue_button.focus_mode = Control.FOCUS_NONE
@@ -130,6 +131,8 @@ func _refresh() -> void:
 		_reroll_button.visible = pending
 		_reroll_button.disabled = _selection_locked or not \
 			RunStateStore.route_offer_reroll_affordable()
+	if _reroll_art != null:
+		_reroll_art.visible = pending
 	if _reroll_price != null:
 		_reroll_price.visible = pending
 		_reroll_price.text = "%dG" % RunStateStore.route_offer_reroll_price()
@@ -151,17 +154,15 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	var title := button.get_node_or_null("DoorTitle") as Label
 	if title != null:
 		title.text = String(card.get("displayName", "ROUTE"))
-		title.add_theme_color_override(&"font_color", color if affordable else RED)
+		title.add_theme_color_override(&"font_color",
+			TITLE_TEXT_COLOR if affordable else RED)
 	var cost := button.get_node_or_null("DoorCost") as Label
 	if cost != null:
 		var price := int(card.get("lucidityCost", 0))
 		cost.text = ("FREE" if price <= 0 else "%dG" % price) + \
 			(" / OPEN" if affordable else " / LOCKED")
-		cost.add_theme_color_override(&"font_color", CYAN if affordable else RED)
-	var description := button.get_node_or_null("DoorDescription") as Label
-	if description != null:
-		description.text = String(card.get("description", ""))
-		description.add_theme_color_override(&"font_color", TEXT_COLOR if affordable else MUTED)
+		cost.add_theme_color_override(&"font_color", color if affordable else RED)
+	button.tooltip_text = String(card.get("description", ""))
 	button.disabled = _selection_locked or not affordable
 
 func _on_door_pressed(index: int) -> void:
@@ -179,7 +180,6 @@ func _on_door_pressed(index: int) -> void:
 		_message.text = "DOOR PAYMENT REFUSED"
 		_refresh()
 		return
-	_react_dealer()
 	_open_destination()
 
 func _on_reroll_pressed() -> void:
@@ -189,7 +189,6 @@ func _on_reroll_pressed() -> void:
 		_message.text = "NOT ENOUGH GOLD TO RESHUFFLE"
 		_refresh()
 		return
-	_react_dealer()
 	_refresh()
 	_message.text = "THE DEALER CHANGES THE DOORS"
 
@@ -234,9 +233,16 @@ func _open_destination() -> void:
 			_set_interaction_locked(false)
 			_message.text = "DOOR UNAVAILABLE"
 
-func _react_dealer() -> void:
-	if _dealer_sprite != null:
-		_dealer_sprite.frame = 1 - _dealer_sprite.frame
+func _on_reroll_button_down() -> void:
+	_set_reroll_art_frame(1)
+
+func _on_reroll_button_up() -> void:
+	_set_reroll_art_frame(0)
+
+func _set_reroll_art_frame(frame: int) -> void:
+	if _reroll_art == null or not is_instance_valid(_reroll_art):
+		return
+	_reroll_art.frame = clampi(frame, 0, maxi(0, _reroll_art.hframes - 1))
 
 func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		parent: Node = null) -> Label:
