@@ -70,12 +70,3 @@ offset_top = 168.0
 offset_right = 46.0
 offset_bottom = 219.0
 mouse_filter = 0
-
-[node name="ContinueButton" type="Button" parent="."]
-layout_mode = 0
-offset_left = 42.0
-offset_top = 278.0
-offset_right = 118.0
-offset_bottom = 298.0
-mouse_filter = 0
-text = "CONTINUE"

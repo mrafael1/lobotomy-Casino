@@ -10,10 +10,16 @@ const DOOR_PATHS: Array[NodePath] = [
 	NodePath("DoorChoices/DoorRight"),
 ]
 const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
+const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const COIN_ASSET := "ui/coin.png"
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
+const SPEECH_BUBBLE_ASSET := "ui/speech_bubble_normal.png"
+const SPEECH_BUBBLE_RECT := Rect2(72.0, 157.0, 82.0, 32.0)
+const SPEECH_BUBBLE_BODY_RECT := Rect2(4.0, 2.0, 74.0, 24.0)
+const SPEECH_BUBBLE_TEXT := "CHOOSE\nADEQUATELY"
+const SPEECH_BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
-const TEXT_COLOR := Color(0.88, 0.98, 1.0)
-const MUTED := Color(0.62, 0.70, 0.78)
 const RED := Color(1.0, 0.35, 0.42)
 const DOOR_COLORS := {
 	RouteCards.ROUTE_SHOP: Color(1.0, 0.84, 0.38),
@@ -32,11 +38,15 @@ const DOOR_FRAMES := {
 
 var _font: FontFile = null
 var _reroll_art: Sprite2D = null
-var _gold_label: Label = null
 var _reroll_price: Label = null
+var _reroll_caption: Label = null
 var _message: Label = null
 var _reroll_button: Button = null
-var _continue_button: Button = null
+var _credits_row: HBoxContainer = null
+var _credits_label: Label = null
+var _credits_coin: TextureRect = null
+var _speech_bubble: Control = null
+var _speech_label: Label = null
 var _door_buttons: Array[Button] = []
 var _selection_locked := false
 
@@ -45,8 +55,13 @@ func _ready() -> void:
 	_font = Assets.font()
 	_reroll_art = get_node_or_null("RerollArt") as Sprite2D
 	_build_header()
+	_build_credits_display()
+	_build_speech_bubble()
 	_configure_doors()
 	_configure_actions()
+	if not Engine.is_editor_hint() \
+			and not RunStateStore.state_changed.is_connected(_refresh):
+		RunStateStore.state_changed.connect(_refresh)
 	_refresh()
 
 func _build_header() -> void:
@@ -54,21 +69,79 @@ func _build_header() -> void:
 		Rect2(4.0, 16.0, 152.0, 10.0), 5, CYAN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.z_index = 20
-	_gold_label = _label("", Rect2(4.0, 27.0, 152.0, 9.0), 4, GOLD)
-	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_gold_label.z_index = 20
-	var subtitle := _label("PAY TO RESHUFFLE  /  OPEN ONE DOOR",
-		Rect2(3.0, 36.0, 154.0, 8.0), 3, MUTED)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.z_index = 20
 	_message = _label("", Rect2(4.0, 253.0, 152.0, 16.0), 5, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 30
-	_reroll_price = _label("", Rect2(4.0, 217.0, 42.0, 9.0), 4, GOLD)
+	_reroll_price = _label("", Rect2(2.0, 216.0, 48.0, 12.0), 6, GOLD)
 	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_reroll_price.z_index = 20
+	_reroll_caption = _label("PAY TO RESHUFFLE",
+		Rect2(0.0, 228.0, 52.0, 11.0), 4, GOLD)
+	_reroll_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_reroll_caption.z_index = 20
+
+func _build_credits_display() -> void:
+	_credits_row = HBoxContainer.new()
+	_credits_row.name = "CreditsRow"
+	_credits_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_credits_row.offset_left = 7.0
+	_credits_row.offset_top = -20.0
+	_credits_row.offset_right = 30.0
+	_credits_row.offset_bottom = -8.0
+	_credits_row.add_theme_constant_override("separation", 2)
+	_credits_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_credits_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.z_index = 20
+	add_child(_credits_row)
+
+	_credits_label = Label.new()
+	_credits_label.name = "CreditsLabel"
+	_credits_label.add_theme_font_size_override("font_size", 7)
+	_credits_label.add_theme_color_override("font_color", LUCIDITY_COLOR)
+	_credits_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_credits_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if _font != null:
+		_credits_label.add_theme_font_override("font", _font)
+	_credits_row.add_child(_credits_label)
+
+	_credits_coin = TextureRect.new()
+	_credits_coin.name = "Coin"
+	_credits_coin.texture = Assets.texture(COIN_ASSET, true)
+	_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
+	_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_credits_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.add_child(_credits_coin)
+
+func _build_speech_bubble() -> void:
+	_speech_bubble = Control.new()
+	_speech_bubble.name = "DealerSpeechBubble"
+	_speech_bubble.position = SPEECH_BUBBLE_RECT.position
+	_speech_bubble.size = SPEECH_BUBBLE_RECT.size
+	_speech_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_speech_bubble.z_index = 25
+	add_child(_speech_bubble)
+
+	var graphic := TextureRect.new()
+	graphic.name = "BubbleGraphic"
+	graphic.texture = Assets.texture(SPEECH_BUBBLE_ASSET, true)
+	graphic.size = SPEECH_BUBBLE_RECT.size
+	graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	graphic.stretch_mode = TextureRect.STRETCH_SCALE
+	graphic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_speech_bubble.add_child(graphic)
+
+	_speech_label = _label(SPEECH_BUBBLE_TEXT,
+		SPEECH_BUBBLE_BODY_RECT, 4, SPEECH_BUBBLE_TEXT_COLOR, _speech_bubble)
+	_speech_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_speech_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_speech_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _configure_doors() -> void:
 	for index in DOOR_PATHS.size():
@@ -107,18 +180,13 @@ func _configure_actions() -> void:
 		_reroll_button.button_down.connect(_on_reroll_button_down)
 		_reroll_button.button_up.connect(_on_reroll_button_up)
 		_set_reroll_art_frame(0)
-	_continue_button = get_node_or_null("ContinueButton") as Button
-	if _continue_button != null:
-		_continue_button.focus_mode = Control.FOCUS_NONE
-		_continue_button.add_theme_font_size_override("font_size", 6)
-		if _font != null:
-			_continue_button.add_theme_font_override("font", _font)
-		_continue_button.add_theme_color_override("font_color", TEXT_COLOR)
-		_continue_button.pressed.connect(_on_continue_pressed)
 
 func _refresh() -> void:
 	var pending := bool(RunStateStore.routeOfferPending)
-	_gold_label.text = "RUN LUCIDITY / GOLD: %d" % int(RunStateStore.lucidityCoins)
+	if _credits_label != null:
+		_credits_label.text = str(int(RunStateStore.lucidityCoins))
+	if _speech_bubble != null:
+		_speech_bubble.visible = pending
 	var cards := RunStateStore.current_route_offer()
 	for index in _door_buttons.size():
 		var button := _door_buttons[index]
@@ -138,8 +206,8 @@ func _refresh() -> void:
 		_reroll_price.text = "%dG" % RunStateStore.route_offer_reroll_price()
 		_reroll_price.add_theme_color_override(&"font_color",
 			GOLD if RunStateStore.route_offer_reroll_affordable() else RED)
-	if _continue_button != null:
-		_continue_button.disabled = _selection_locked or not pending
+	if _reroll_caption != null:
+		_reroll_caption.visible = pending
 	if not pending and _message != null and _message.text == "":
 		_message.text = "ROUTE OFFER CLOSED"
 
@@ -192,26 +260,11 @@ func _on_reroll_pressed() -> void:
 	_refresh()
 	_message.text = "THE DEALER CHANGES THE DOORS"
 
-func _on_continue_pressed() -> void:
-	if _selection_locked or not RunStateStore.routeOfferPending:
-		return
-	_selection_locked = true
-	_set_interaction_locked(true)
-	if not RunStateStore.refuse_routes():
-		_selection_locked = false
-		_set_interaction_locked(false)
-		_message.text = "ROUTE OFFER UNAVAILABLE"
-		_refresh()
-		return
-	SceneNav.change_to("res://scenes/machine_scene.tscn")
-
 func _set_interaction_locked(locked: bool) -> void:
 	for button in _door_buttons:
 		button.disabled = locked
 	if _reroll_button != null:
 		_reroll_button.disabled = locked
-	if _continue_button != null:
-		_continue_button.disabled = locked
 
 func _open_destination() -> void:
 	match RunStateStore.routeDestination:

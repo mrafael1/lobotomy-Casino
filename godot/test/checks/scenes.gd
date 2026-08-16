@@ -74,10 +74,14 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
-	if route.get_node_or_null("ContinueButton") == null:
-		failures.append("route: dealer offer is missing its free continue action")
+	if route.get_node_or_null("ContinueButton") != null:
+		failures.append("route: dealer offer still exposes the removed continue action")
 	if route.get_node_or_null("RerollButton") == null:
 		failures.append("route: dealer offer is missing its door reroll action")
+	if route.get_node_or_null("CreditsRow") == null:
+		failures.append("route: dealer offer is missing its run-gold display")
+	if route.get_node_or_null("DealerSpeechBubble") == null:
+		failures.append("route: dealer offer is missing the dealer route prompt")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
