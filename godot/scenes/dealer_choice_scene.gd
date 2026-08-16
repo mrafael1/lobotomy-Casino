@@ -14,8 +14,9 @@ const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const SPEECH_BUBBLE_ASSET := "ui/speech_bubble_normal.png"
-const SPEECH_BUBBLE_RECT := Rect2(72.0, 157.0, 82.0, 32.0)
-const SPEECH_BUBBLE_BODY_RECT := Rect2(4.0, 2.0, 74.0, 24.0)
+const SPEECH_BUBBLE_RECT := Rect2(50.0, 157.0, 70.0, 29.0)
+const SPEECH_BUBBLE_BODY_RECT := Rect2(3.0, 2.0, 64.0, 21.0)
+const SPEECH_BUBBLE_FONT_SIZE := 6
 const SPEECH_BUBBLE_TEXT := "CHOOSE\nADEQUATELY"
 const SPEECH_BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
 const GOLD := Color(1.0, 0.84, 0.38)
@@ -137,8 +138,10 @@ func _build_speech_bubble() -> void:
 	graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_speech_bubble.add_child(graphic)
 
+	var text_rect := SPEECH_BUBBLE_BODY_RECT
+	text_rect.position.y += Assets.centered_text_nudge(SPEECH_BUBBLE_FONT_SIZE)
 	_speech_label = _label(SPEECH_BUBBLE_TEXT,
-		SPEECH_BUBBLE_BODY_RECT, 4, SPEECH_BUBBLE_TEXT_COLOR, _speech_bubble)
+		text_rect, SPEECH_BUBBLE_FONT_SIZE, SPEECH_BUBBLE_TEXT_COLOR, _speech_bubble)
 	_speech_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_speech_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_speech_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
