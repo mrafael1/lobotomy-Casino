@@ -1,9 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/dealer_choice_scene.gd" id="1_choice"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/choice_scene.png" id="2_choice_scene"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="3_doors"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/reroll.png" id="4_reroll"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/bubble_text.png" id="5_bubble_text"]
 
 [node name="DealerChoiceScene" type="Control"]
 layout_mode = 3
@@ -27,6 +28,13 @@ texture_filter = 1
 texture = ExtResource("4_reroll")
 centered = false
 hframes = 2
+
+[node name="BubbleText" type="Sprite2D" parent="."]
+z_index = 25
+texture_filter = 1
+texture = ExtResource("5_bubble_text")
+centered = false
+visible = false
 
 [node name="DoorChoices" type="Control" parent="."]
 z_index = 20

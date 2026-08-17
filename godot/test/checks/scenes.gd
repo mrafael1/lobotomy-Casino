@@ -85,6 +85,10 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer offer is missing the path prompt")
 	if route.get_node_or_null("DealerSpeechBubble") != null:
 		failures.append("route: dealer offer still includes the removed speech bubble")
+	if route.get_node_or_null("BubbleText") == null:
+		failures.append("route: dealer offer is missing the authored hover bubble")
+	if route.get_node_or_null("BubbleTextLabel") == null:
+		failures.append("route: dealer offer is missing the hover explanation label")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
@@ -101,6 +105,18 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			confirmation_door = door_button
 			break
 	if confirmation_door != null:
+		confirmation_door.mouse_entered.emit()
+		await process_frame
+		var bubble := route.get_node_or_null("BubbleText") as Sprite2D
+		var bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+		if bubble == null or not bubble.visible or bubble_label == null \
+				or bubble_label.text.is_empty() or not bubble_label.visible:
+			failures.append("route: hovering a door does not show its dealer explanation")
+		confirmation_door.mouse_exited.emit()
+		await process_frame
+		if (bubble != null and bubble.visible) \
+				or (bubble_label != null and bubble_label.visible):
+			failures.append("route: leaving a door does not hide its dealer explanation")
 		confirmation_door.pressed.emit()
 		await process_frame
 		var confirmation := route.get_node_or_null("DoorConfirmation") as Control
