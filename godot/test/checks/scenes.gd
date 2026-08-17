@@ -91,7 +91,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if default_bubble_label == null:
 		failures.append("route: dealer offer is missing the hover explanation label")
 	elif not default_bubble.visible or not default_bubble_label.visible \
-			or default_bubble_label.text != "CHOOSE\nYOUR PATH":
+			or default_bubble_label.text != "CHOOSE\nYOUR PATH" \
+			or default_bubble_label.position != Vector2(103.0, 173.0) \
+			or default_bubble_label.size != Vector2(39.0, 21.0):
 		failures.append("route: dealer bubble is missing the default path prompt")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
@@ -105,13 +107,26 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position.y < 105.0:
+		if door_title == null or door_title.position != Vector2(1.0, 106.0) \
+				or door_title.size != Vector2(62.0, 8.0):
 			failures.append("route: %s title is not inside its blue name plate" % door)
-	var reroll_price := route.get_node_or_null("RerollPrice") as Label
+	var reroll_row := route.get_node_or_null("RerollPriceRow") as HBoxContainer
+	if reroll_row == null or reroll_row.position != Vector2(7.0, 216.0) \
+			or reroll_row.size != Vector2(38.0, 12.0):
+		failures.append("route: reroll price row is not centered under the art")
+	var reroll_price := route.get_node_or_null("RerollPriceRow/RerollPrice") as Label
 	if reroll_price == null or reroll_price.text != "10":
 		failures.append("route: reroll price is not shown as a bare 10")
-	if route.get_node_or_null("RerollCoin") == null:
+	var reroll_coin := route.get_node_or_null("RerollPriceRow/RerollCoin") as TextureRect
+	if reroll_coin == null:
 		failures.append("route: reroll price is missing its Lucidity coin icon")
+	elif reroll_price != null:
+		var price_center_y := reroll_price.position.y + reroll_price.size.y * 0.5
+		var coin_center_y := reroll_coin.position.y + reroll_coin.size.y * 0.5
+		if absf(price_center_y - coin_center_y) > 0.5:
+			failures.append("route: reroll number and Lucidity coin are not vertically aligned")
+	if reroll_price != null and reroll_price.get_theme_font_size("font_size") < 7:
+		failures.append("route: reroll number is still too small")
 	var confirmation_door: Button = null
 	for door_button in [
 		route.get_node_or_null("DoorChoices/DoorLeft") as Button,

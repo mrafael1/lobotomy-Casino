@@ -13,10 +13,12 @@ const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
+const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
+const REROLL_PRICE_FONT_SIZE := 7
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
 const CONFIRM_MODAL_RECT := Rect2(12.0, 118.0, 136.0, 84.0)
 const CONFIRM_BUTTON_SIZE := Vector2(54.0, 18.0)
-const BUBBLE_TEXT_RECT := Rect2(104.0, 172.0, 37.0, 23.0)
+const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
 const BUBBLE_TEXT_FONT_SIZE := 3
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_HOVER_SCALE := 1.06
@@ -50,6 +52,7 @@ var _font: FontFile = null
 var _reroll_art: Sprite2D = null
 var _bubble_sprite: Sprite2D = null
 var _bubble_label: Label = null
+var _reroll_price_row: HBoxContainer = null
 var _reroll_price: Label = null
 var _reroll_coin: TextureRect = null
 var _message: Label = null
@@ -87,23 +90,39 @@ func _build_header() -> void:
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 30
-	_reroll_price = _label("", Rect2(9.0, 216.0, 17.0, 12.0), 6, GOLD)
+	_reroll_price_row = HBoxContainer.new()
+	_reroll_price_row.name = "RerollPriceRow"
+	_reroll_price_row.position = REROLL_PRICE_RECT.position
+	_reroll_price_row.size = REROLL_PRICE_RECT.size
+	_reroll_price_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_reroll_price_row.add_theme_constant_override("separation", 1)
+	_reroll_price_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reroll_price_row.z_index = 20
+	add_child(_reroll_price_row)
+	_reroll_price = Label.new()
 	_reroll_price.name = "RerollPrice"
-	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_reroll_price.custom_minimum_size = Vector2(0.0, REROLL_PRICE_RECT.size.y)
+	_reroll_price.add_theme_font_size_override("font_size", REROLL_PRICE_FONT_SIZE)
+	_reroll_price.add_theme_color_override("font_color", GOLD)
+	_reroll_price.add_theme_color_override("font_outline_color", Color.BLACK)
+	_reroll_price.add_theme_constant_override("outline_size", 1)
+	if _font != null:
+		_reroll_price.add_theme_font_override("font", _font)
+	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_reroll_price.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_reroll_price.position.y += Assets.centered_text_nudge(6)
-	_reroll_price.z_index = 20
+	_reroll_price.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_reroll_price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reroll_price_row.add_child(_reroll_price)
 	_reroll_coin = TextureRect.new()
 	_reroll_coin.name = "RerollCoin"
-	_reroll_coin.position = Vector2(27.0, 217.0)
-	_reroll_coin.size = CREDITS_COIN_SIZE
 	_reroll_coin.texture = Assets.texture(COIN_ASSET, true)
+	_reroll_coin.custom_minimum_size = CREDITS_COIN_SIZE
 	_reroll_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_reroll_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_reroll_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_reroll_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_reroll_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_reroll_coin.z_index = 20
-	add_child(_reroll_coin)
+	_reroll_price_row.add_child(_reroll_coin)
 
 func _build_credits_display() -> void:
 	_credits_row = HBoxContainer.new()
@@ -156,7 +175,7 @@ func _configure_doors() -> void:
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
-		var title := _label("", Rect2(1.0, 105.0, 62.0, 10.0), 4,
+		var title := _label("", Rect2(1.0, 106.0, 62.0, 8.0), 4,
 			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -207,8 +226,9 @@ func _refresh() -> void:
 			RunStateStore.route_offer_reroll_affordable()
 	if _reroll_art != null:
 		_reroll_art.visible = pending
+	if _reroll_price_row != null:
+		_reroll_price_row.visible = pending
 	if _reroll_price != null:
-		_reroll_price.visible = pending
 		_reroll_price.text = "%d" % RunStateStore.route_offer_reroll_price()
 		_reroll_price.add_theme_color_override(&"font_color",
 			GOLD if RunStateStore.route_offer_reroll_affordable() else RED)
@@ -420,8 +440,6 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		parent: Node = null) -> Label:
 	var label := Label.new()
 	label.text = text_value
-	label.position = rect.position
-	label.size = rect.size
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
@@ -431,6 +449,11 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		label.add_theme_font_override("font", _font)
 	var owner := parent if parent != null else self
 	owner.add_child(label)
+	# Parent first so the authored font override is part of the label's minimum-size
+	# calculation. Applying size before parenting makes Godot clamp it to the default
+	# theme font and leaves dynamic text larger than its authored pixel box.
+	label.position = rect.position
+	label.size = rect.size
 	return label
 
 func _build_bubble_text() -> void:
