@@ -127,15 +127,15 @@ static func run_all() -> Array:
 		"loading a saved route restores the exact offered choices")
 	var lucidity_before_reroll := int(_store().lucidityCoins)
 	var first_reroll_offer: Array[Dictionary] = _store().current_route_offer()
-	_check(out, _store().route_offer_reroll_price() == 5,
-		"the first route-door reroll costs the base dealer price")
+	_check(out, _store().route_offer_reroll_price() == 10,
+		"the first route-door reroll costs 10G")
 	_check(out, _store().reroll_route_offer(),
 		"the dealer can reshuffle a funded route offer")
 	_check(out, _store().routeOfferRerollCount == 1 \
-		and _store().lucidityCoins == lucidity_before_reroll - 5 \
+		and _store().lucidityCoins == lucidity_before_reroll - 10 \
 		and _store().current_route_offer() != first_reroll_offer,
 		"a route reroll charges Lucidity and replaces the doors")
-	_check(out, _store().route_offer_reroll_price() == 10,
+	_check(out, _store().route_offer_reroll_price() == 20,
 		"route-door reroll price escalates after each payment")
 	var rerolled_persisted_offer: Array[Dictionary] = _store().current_route_offer()
 	_store().load_run_state()

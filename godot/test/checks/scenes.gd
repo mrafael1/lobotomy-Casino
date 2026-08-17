@@ -80,11 +80,43 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer offer is missing its door reroll action")
 	if route.get_node_or_null("CreditsRow") == null:
 		failures.append("route: dealer offer is missing its run-gold display")
-	if route.get_node_or_null("DealerSpeechBubble") == null:
-		failures.append("route: dealer offer is missing the dealer route prompt")
+	var path_prompt := route.get_node_or_null("PathPrompt") as Label
+	if path_prompt == null or path_prompt.text != "CHOOSE YOUR PATH":
+		failures.append("route: dealer offer is missing the path prompt")
+	if route.get_node_or_null("DealerSpeechBubble") != null:
+		failures.append("route: dealer offer still includes the removed speech bubble")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
+	for door in ["DoorLeft", "DoorRight"]:
+		var door_button := route.get_node_or_null("DoorChoices/" + door) as Button
+		if door_button != null and not door_button.tooltip_text.is_empty():
+			failures.append("route: %s still exposes a hover description" % door)
+	var confirmation_door: Button = null
+	for door_button in [
+		route.get_node_or_null("DoorChoices/DoorLeft") as Button,
+		route.get_node_or_null("DoorChoices/DoorRight") as Button,
+	]:
+		if door_button != null and not door_button.disabled:
+			confirmation_door = door_button
+			break
+	if confirmation_door != null:
+		confirmation_door.pressed.emit()
+		await process_frame
+		var confirmation := route.get_node_or_null("DoorConfirmation") as Control
+		if confirmation == null or not confirmation.visible:
+			failures.append("route: clicking a door does not open confirmation")
+		if not run_store.routeOfferPending or run_store.routeDestination != "":
+			failures.append("route: clicking a door commits the route before confirmation")
+		var cancel_confirmation := route.get_node_or_null(
+			"DoorConfirmation/Panel/CancelButton") as Button
+		if cancel_confirmation == null:
+			failures.append("route: door confirmation has no cancel action")
+		else:
+			cancel_confirmation.pressed.emit()
+			await process_frame
+			if confirmation.visible or not run_store.routeOfferPending:
+				failures.append("route: cancelling door confirmation did not restore the offer")
 	if route.get_node_or_null("DealerBackground") != null:
 		failures.append("route: dealer offer still includes the shop background")
 	if route.get_node_or_null("DealerCounter") != null:
