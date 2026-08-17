@@ -174,9 +174,17 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position != Vector2(1.0, 106.0) \
-				or door_title.size != Vector2(62.0, 8.0):
+		if door_title == null or door_title.position != Vector2(1.0, 107.0) \
+				or door_title.size != Vector2(62.0, 9.0) \
+				or door_title.get_theme_font_size("font_size") < 5:
 			failures.append("route: %s title is not inside its blue name plate" % door)
+	for index in RouteCards.OFFER_COUNT:
+		var gap_glow := route.get_node_or_null("DoorGapGlow%d" % index) as ColorRect
+		if gap_glow == null or gap_glow.color == Color.WHITE:
+			failures.append("route: door %d gap does not use the colored glow" % index)
+	if default_bubble_label != null \
+			and default_bubble_label.get_theme_font_size("font_size") < 4:
+		failures.append("route: dealer bubble text is still too small")
 	var reroll_row := route.get_node_or_null("RerollPriceRow") as HBoxContainer
 	if reroll_row == null or reroll_row.position != Vector2(7.0, 216.0) \
 			or reroll_row.size != Vector2(38.0, 12.0):
@@ -380,6 +388,35 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: machine segment was not live after route loop")
 
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
+	var credits_row := build.get_node_or_null("CreditsRow") as HBoxContainer
+	var credits_label := build.get_node_or_null("CreditsRow/CreditsLabel") as Label
+	var credits_coin := build.get_node_or_null("CreditsRow/Coin") as TextureRect
+	if credits_row == null or credits_label == null or credits_coin == null:
+		failures.append("route: %s build scene is missing its Lucidity display" % kind)
+	elif credits_label.get_theme_font_size("font_size") < 7:
+		failures.append("route: %s build scene Lucidity number is too small" % kind)
+	var card_list := build.get_node_or_null("RouteBuildCards") as Control
+	var first_card: Button = null
+	if card_list != null:
+		for child in card_list.get_children():
+			if child is Button:
+				first_card = child as Button
+				break
+	if first_card != null:
+		var card_id := first_card.name.trim_prefix("BuildCard_")
+		var cost := RunStateStore.route_build_card_cost(card_id)
+		var cost_row := first_card.get_node_or_null("CardCost") as HBoxContainer
+		var amount := first_card.get_node_or_null("CardCost/Amount") as Label
+		var coin := first_card.get_node_or_null("CardCost/Coin") as TextureRect
+		if cost_row == null or amount == null:
+			failures.append("route: %s build card is missing its Lucidity cost" % kind)
+		else:
+			if amount.get_theme_font_size("font_size") < 7:
+				failures.append("route: %s build card cost is still too small" % kind)
+			if cost > 0 and (coin == null or amount.text == "%dG" % cost):
+				failures.append("route: %s build card cost is not using a Lucidity coin" % kind)
+			if cost <= 0 and amount.text != "FREE":
+				failures.append("route: %s free build card has the wrong cost label" % kind)
 	var artwork := build.get_node_or_null("PacteArtwork") as Control
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
@@ -509,6 +546,12 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
 	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
+	var machine_credits_row := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow") as HBoxContainer
+	var machine_credits_label := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/CreditsLabel") as Label
+	var machine_credits_coin := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/Coin") as TextureRect
 	var health_bar := machine.get_node_or_null("HealthBar") as Sprite2D
 	var health_coin := machine.get_node_or_null("HealthCoin") as Sprite2D
 	if bottom_hud == null:
@@ -535,6 +578,11 @@ func _check_global_options_layout(failures: Array) -> void:
 		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
 		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
 			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
+	if machine_credits_row == null or machine_credits_label == null \
+			or machine_credits_coin == null:
+		failures.append("machine: bottom-left Lucidity display is missing its label or coin")
+	elif machine_credits_label.get_theme_font_size("font_size") < 7:
+		failures.append("machine: Lucidity number is too small")
 	# The spins readout left the TV: it is now the native 20-frame tube sheet
 	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
 	# plays while a spin launches.

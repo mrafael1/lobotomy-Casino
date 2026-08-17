@@ -22,6 +22,11 @@ const DESCRIPTION_TITLE_FONT_SIZE := 4
 const DESCRIPTION_FONT_SIZE := 3
 const DESCRIPTION_BUBBLE_GAP := 1.0
 const DRAG_SLOP := 4.0
+const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const COIN_ASSET := "ui/coin.png"
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
+const CARD_COST_FONT_SIZE := 7
+const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
 
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
@@ -30,10 +35,11 @@ const MUTED := Color(0.62, 0.70, 0.78)
 const RED := Color(1.0, 0.35, 0.42)
 
 var _font: FontFile = null
-var _title: Label = null
-var _gold_label: Label = null
 var _instruction: Label = null
 var _message: Label = null
+var _credits_row: HBoxContainer = null
+var _credits_label: Label = null
+var _credits_coin: TextureRect = null
 var _list: Control = null
 var _chosen_cards_layer: Control = null
 var _chosen_card_view: Control = null
@@ -78,12 +84,8 @@ func _configure_pacte_artwork() -> void:
 	_pacte_artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _build() -> void:
-	# Keep the room's OPEN sign and dealer bubble visible; the compact route title
-	# occupies the quiet centre of the top panel instead of covering either one.
-	_title = _label("", Rect2(39.0, 7.0, 50.0, 12.0), 6, CYAN)
-	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_gold_label = _label("", Rect2(39.0, 21.0, 50.0, 11.0), 5, GOLD)
-	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# The authored OPEN sign identifies this destination. Keep the top panel clear
+	# instead of adding a duplicate destination title over the room art.
 	var subtitle := _label("ONE CARD / ONE SLOT", Rect2(39.0, 34.0, 50.0, 9.0), 4, MUTED)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -128,18 +130,17 @@ func _build() -> void:
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_instruction.text = "SELECTED DOOR CANNOT BE REOPENED"
+	_build_credits_display()
 
 func _refresh() -> void:
 	_clear_cards()
 	_clear_selected_card()
 	if _pool_kind != "augment" and _pool_kind != "power":
-		_title.text = "BUILD ROUTE CLOSED"
-		_gold_label.text = ""
+		_credits_label.text = ""
 		_instruction.text = ""
 		_message.text = "BUILD ROUTE CLOSED"
 		return
-	_title.text = "AUGMENT ROUTE" if _pool_kind == "augment" else "POWER ROUTE"
-	_gold_label.text = "RUN LUCIDITY / GOLD: %d" % int(RunStateStore.lucidityCoins)
+	_credits_label.text = str(int(RunStateStore.lucidityCoins))
 	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	_message.text = ""
 	_set_drop_hint_visible(false)
@@ -179,12 +180,48 @@ func _build_card(card_id: String, index: int) -> void:
 
 	var cost := RunStateStore.route_build_card_cost(card_id)
 	var affordable := RunStateStore.route_build_card_affordable(card_id)
-	var cost_label := _label("FREE" if cost <= 0 else "%dG" % cost,
-		Rect2(0.0, -9.0, CARD_SIZE.x, 8.0), 4, GOLD if affordable else RED, button)
-	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cost_label.z_index = 6
+	_build_card_cost(button, cost, affordable)
 	if card_view != null and not affordable:
 		card_view.modulate = Color(0.62, 0.62, 0.72, 1.0)
+
+func _build_card_cost(button: Button, cost: int, affordable: bool) -> void:
+	var row := HBoxContainer.new()
+	row.name = "CardCost"
+	row.position = Vector2(0.0, -10.0)
+	row.size = Vector2(CARD_SIZE.x, 10.0)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 1)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.z_index = 6
+	button.add_child(row)
+
+	var amount := Label.new()
+	amount.name = "Amount"
+	amount.text = "FREE" if cost <= 0 else str(cost)
+	amount.add_theme_font_size_override("font_size", CARD_COST_FONT_SIZE)
+	amount.add_theme_color_override("font_color", GOLD if affordable else RED)
+	amount.add_theme_color_override("font_outline_color", Color.BLACK)
+	amount.add_theme_constant_override("outline_size", 1)
+	amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		amount.add_theme_font_override("font", _font)
+	row.add_child(amount)
+
+	if cost <= 0:
+		return
+	var coin := TextureRect.new()
+	coin.name = "Coin"
+	coin.texture = Assets.texture(COIN_ASSET, true)
+	coin.custom_minimum_size = CARD_COST_COIN_SIZE
+	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(coin)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
 		button: Button) -> void:
@@ -301,7 +338,7 @@ func _preview_card(card_id: String) -> void:
 	var cost := RunStateStore.route_build_card_cost(card_id)
 	var remaining := RunStateStore.route_build_remaining_after(card_id)
 	_description_text.text = String(entry.get("description", "")) + \
-		"\nCOST: %s  LEFT: %dG" % [("FREE" if cost <= 0 else "%dG" % cost), remaining]
+		"\nCOST: %s  LEFT: %d" % [("FREE" if cost <= 0 else str(cost)), remaining]
 	_layout_description()
 	_instruction.text = "DRAG TO THE SLOT"
 	for id in _offer_ids:
@@ -344,7 +381,7 @@ func _accept_card(card_id: String) -> void:
 	if _selection_locked:
 		return
 	if not RunStateStore.route_build_card_affordable(card_id):
-		_message.text = "NOT ENOUGH GOLD FOR THIS CARD"
+		_message.text = "NOT ENOUGH LUCIDITY FOR THIS CARD"
 		return
 	_selection_locked = true
 	_pending_card_id = card_id
@@ -455,6 +492,45 @@ func _clear_cards() -> void:
 	_preview_id = ""
 	if _description_bubble != null:
 		_description_bubble.visible = false
+
+func _build_credits_display() -> void:
+	_credits_row = HBoxContainer.new()
+	_credits_row.name = "CreditsRow"
+	_credits_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_credits_row.offset_left = 7.0
+	_credits_row.offset_top = -20.0
+	_credits_row.offset_right = 30.0
+	_credits_row.offset_bottom = -8.0
+	_credits_row.add_theme_constant_override("separation", 2)
+	_credits_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_credits_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.z_index = 40
+	add_child(_credits_row)
+
+	_credits_label = Label.new()
+	_credits_label.name = "CreditsLabel"
+	_credits_label.add_theme_font_size_override("font_size", 7)
+	_credits_label.add_theme_color_override("font_color", LUCIDITY_COLOR)
+	_credits_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_credits_label.add_theme_constant_override("outline_size", 1)
+	_credits_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_credits_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		_credits_label.add_theme_font_override("font", _font)
+	_credits_row.add_child(_credits_label)
+
+	_credits_coin = TextureRect.new()
+	_credits_coin.name = "Coin"
+	_credits_coin.texture = Assets.texture(COIN_ASSET, true)
+	_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
+	_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_credits_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.add_child(_credits_coin)
 
 func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		parent: Node = null) -> Label:

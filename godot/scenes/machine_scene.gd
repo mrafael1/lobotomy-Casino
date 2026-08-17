@@ -234,6 +234,9 @@ const MULT_COLORS := {
 const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
+const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const COIN_ASSET := "ui/coin.png"
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 # Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
 # offer (100) → dealer-interactive stash (StashTray, 110 while his offer is up
 # and 50 otherwise) → HUD/options (BottomHudLayer 120).
@@ -727,6 +730,9 @@ var _rewind_anim_active := false
 var _rewind_elapsed := 0.0
 var _rewind_accum := 0.0
 var _spin_label: Label = null
+var _credits_row: HBoxContainer = null
+var _credits_label: Label = null
+var _credits_coin: TextureRect = null
 ## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
 var _flatline_transition_active: bool = false
@@ -1978,6 +1984,57 @@ func _build_spin_label() -> void:
 	_spin_label.text = ""
 	# The campaign neuron meter belongs to the menu and flatline overlay. The
 	# machine HUD's empty anchor is explicitly named for the run's spin counter.
+	_build_machine_credits_display(bottom_hud)
+	_refresh_machine_credits()
+
+func _build_machine_credits_display(bottom_hud: Control) -> void:
+	_credits_row = bottom_hud.get_node_or_null("CreditsRow") as HBoxContainer
+	if _credits_row == null:
+		_credits_row = HBoxContainer.new()
+		_credits_row.name = "CreditsRow"
+		bottom_hud.add_child(_credits_row)
+	_credits_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_credits_row.offset_left = 7.0
+	_credits_row.offset_top = -20.0
+	_credits_row.offset_right = 30.0
+	_credits_row.offset_bottom = -8.0
+	_credits_row.add_theme_constant_override("separation", 2)
+	_credits_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_credits_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.z_index = 20
+
+	_credits_label = _credits_row.get_node_or_null("CreditsLabel") as Label
+	if _credits_label == null:
+		_credits_label = Label.new()
+		_credits_label.name = "CreditsLabel"
+		_credits_row.add_child(_credits_label)
+	_credits_label.add_theme_font_size_override("font_size", 7)
+	_credits_label.add_theme_color_override("font_color", LUCIDITY_COLOR)
+	_credits_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_credits_label.add_theme_constant_override("outline_size", 1)
+	_credits_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_credits_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		_credits_label.add_theme_font_override("font", _font)
+
+	_credits_coin = _credits_row.get_node_or_null("Coin") as TextureRect
+	if _credits_coin == null:
+		_credits_coin = TextureRect.new()
+		_credits_coin.name = "Coin"
+		_credits_row.add_child(_credits_coin)
+	_credits_coin.texture = Assets.texture(COIN_ASSET, true)
+	_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
+	_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_credits_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _refresh_machine_credits() -> void:
+	if _credits_label != null:
+		_credits_label.text = str(int(RunStateStore.lucidityCoins))
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
@@ -2698,6 +2755,7 @@ func _update_hud() -> void:
 		return
 	_refresh_tv_indicators()
 	_refresh_spin_label()
+	_refresh_machine_credits()
 	_augments.refresh_pacte_badges()
 	_refresh_controls()
 	_refresh_consumable_fx()

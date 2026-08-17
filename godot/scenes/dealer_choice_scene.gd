@@ -17,13 +17,14 @@ const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
 const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
-const BUBBLE_TEXT_FONT_SIZE := 3
+const BUBBLE_TEXT_FONT_SIZE := 4
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
 const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
 const DOOR_OPEN_GAP_LOCAL_X := 58.0
 const DOOR_OPEN_GAP_LOCAL_TOP := 2.0
 const DOOR_OPEN_GAP_LOCAL_BOTTOM := 92.0
+const DOOR_GAP_COLOR := Color(0.30, 0.82, 0.92, 1.0)
 const DOOR_SUCTION_PARTICLE_LIFETIME := 1.4
 const DOOR_SUCTION_MIN_SPAWN_DELAY := 0.055
 const DOOR_SUCTION_MAX_SPAWN_DELAY := 0.095
@@ -98,11 +99,29 @@ func _ready() -> void:
 	_build_credits_display()
 	_build_bubble_text()
 	_configure_doors()
+	_build_door_gap_backdrops()
 	_configure_actions()
 	if not Engine.is_editor_hint() \
 			and not RunStateStore.state_changed.is_connected(_refresh):
 		RunStateStore.state_changed.connect(_refresh)
 	_refresh()
+
+func _build_door_gap_backdrops() -> void:
+	for index in _door_buttons.size():
+		var sprite := _door_buttons[index].get_node_or_null("DoorSprite") as Sprite2D
+		if sprite == null:
+			continue
+		var gap := ColorRect.new()
+		gap.name = "DoorGapGlow%d" % index
+		gap.position = sprite.to_global(Vector2(
+			DOOR_OPEN_GAP_LOCAL_X - 3.0, DOOR_OPEN_GAP_LOCAL_TOP))
+		gap.size = Vector2(7.0,
+			DOOR_OPEN_GAP_LOCAL_BOTTOM - DOOR_OPEN_GAP_LOCAL_TOP)
+		gap.color = DOOR_GAP_COLOR
+		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gap.visible = false
+		gap.z_index = 21
+		add_child(gap)
 
 func _process(delta: float) -> void:
 	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
@@ -209,13 +228,13 @@ func _configure_doors() -> void:
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
-		var title := _label("", Rect2(1.0, 106.0, 62.0, 8.0), 4,
+		var title := _label("", Rect2(1.0, 106.0, 62.0, 9.0), 5,
 			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.clip_text = true
-		title.position.y += Assets.centered_text_nudge(4)
+		title.position.y += Assets.centered_text_nudge(5)
 		_door_buttons.append(button)
 
 func _configure_actions() -> void:
@@ -503,6 +522,9 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 	if sprite == null:
 		return
 	var hover_frame := int(HOVER_DOOR_FRAMES.get(route_type, -1))
+	var gap := get_node_or_null("DoorGapGlow%d" % index) as ColorRect
+	if gap != null:
+		gap.visible = hovered and hover_frame >= 0
 	if hover_doors_texture != null and hover_frame >= 0:
 		sprite.texture = hover_doors_texture
 		sprite.hframes = HOVER_DOOR_HFRAMES
