@@ -13,12 +13,13 @@ const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
-const PATH_PROMPT_RECT := Rect2(4.0, 249.0, 152.0, 12.0)
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
 const CONFIRM_MODAL_RECT := Rect2(12.0, 118.0, 136.0, 84.0)
 const CONFIRM_BUTTON_SIZE := Vector2(54.0, 18.0)
 const BUBBLE_TEXT_RECT := Rect2(104.0, 172.0, 37.0, 23.0)
 const BUBBLE_TEXT_FONT_SIZE := 3
+const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
+const DOOR_HOVER_SCALE := 1.06
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
 const RED := Color(1.0, 0.35, 0.42)
@@ -50,8 +51,8 @@ var _reroll_art: Sprite2D = null
 var _bubble_sprite: Sprite2D = null
 var _bubble_label: Label = null
 var _reroll_price: Label = null
+var _reroll_coin: TextureRect = null
 var _message: Label = null
-var _path_prompt: Label = null
 var _reroll_button: Button = null
 var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
@@ -81,20 +82,28 @@ func _ready() -> void:
 	_refresh()
 
 func _build_header() -> void:
-	_path_prompt = _label("CHOOSE YOUR PATH", PATH_PROMPT_RECT, 5, CYAN)
-	_path_prompt.name = "PathPrompt"
-	_path_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_path_prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_path_prompt.z_index = 20
 	_message = _label("", MESSAGE_RECT, 4, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 30
-	_reroll_price = _label("", Rect2(2.0, 216.0, 48.0, 12.0), 6, GOLD)
+	_reroll_price = _label("", Rect2(9.0, 216.0, 17.0, 12.0), 6, GOLD)
 	_reroll_price.name = "RerollPrice"
-	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_reroll_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_reroll_price.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_reroll_price.position.y += Assets.centered_text_nudge(6)
 	_reroll_price.z_index = 20
+	_reroll_coin = TextureRect.new()
+	_reroll_coin.name = "RerollCoin"
+	_reroll_coin.position = Vector2(27.0, 217.0)
+	_reroll_coin.size = CREDITS_COIN_SIZE
+	_reroll_coin.texture = Assets.texture(COIN_ASSET, true)
+	_reroll_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_reroll_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_reroll_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_reroll_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reroll_coin.z_index = 20
+	add_child(_reroll_coin)
 
 func _build_credits_display() -> void:
 	_credits_row = HBoxContainer.new()
@@ -147,18 +156,13 @@ func _configure_doors() -> void:
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
-		var title := _label("", Rect2(1.0, 104.0, 62.0, 10.0), 4,
+		var title := _label("", Rect2(1.0, 105.0, 62.0, 10.0), 4,
 			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.clip_text = true
 		title.position.y += Assets.centered_text_nudge(4)
-		var cost := _label("", Rect2(1.0, 114.0, 62.0, 9.0), 4, CYAN, button)
-		cost.name = "DoorCost"
-		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		cost.position.y += Assets.centered_text_nudge(4)
 		_door_buttons.append(button)
 
 func _configure_actions() -> void:
@@ -189,9 +193,14 @@ func _refresh() -> void:
 		_set_door_card(button, cards[index])
 	if not pending:
 		_hovered_door_index = -1
-		_hide_door_explanation()
+		_set_all_door_hovered(false)
+		_hide_bubble()
+	elif _selection_locked:
+		_hide_bubble()
 	elif _hovered_door_index >= 0 and _hovered_door_index < cards.size():
 		_show_door_explanation(cards[_hovered_door_index])
+	else:
+		_show_default_bubble()
 	if _reroll_button != null:
 		_reroll_button.visible = pending
 		_reroll_button.disabled = _selection_locked or not \
@@ -200,9 +209,11 @@ func _refresh() -> void:
 		_reroll_art.visible = pending
 	if _reroll_price != null:
 		_reroll_price.visible = pending
-		_reroll_price.text = "%dG" % RunStateStore.route_offer_reroll_price()
+		_reroll_price.text = "%d" % RunStateStore.route_offer_reroll_price()
 		_reroll_price.add_theme_color_override(&"font_color",
 			GOLD if RunStateStore.route_offer_reroll_affordable() else RED)
+	if _reroll_coin != null:
+		_reroll_coin.visible = pending
 	if not pending and _door_confirm_modal != null:
 		_door_confirm_modal.visible = false
 	if not pending and _message != null and _message.text == "":
@@ -210,22 +221,17 @@ func _refresh() -> void:
 
 func _set_door_card(button: Button, card: Dictionary) -> void:
 	var route_type := String(card.get("routeType", ""))
-	var color: Color = DOOR_COLORS.get(route_type, CYAN)
 	var affordable := RunStateStore.route_card_affordable(String(card.get("id", "")))
 	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 	if sprite != null:
 		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 		sprite.self_modulate = Color.WHITE if affordable else Color(0.55, 0.55, 0.64, 1.0)
+		_set_door_hovered(_door_buttons.find(button), _door_buttons.find(button) == _hovered_door_index)
 	var title := button.get_node_or_null("DoorTitle") as Label
 	if title != null:
 		title.text = String(card.get("displayName", "ROUTE"))
 		title.add_theme_color_override(&"font_color",
 			TITLE_TEXT_COLOR if affordable else RED)
-	var cost := button.get_node_or_null("DoorCost") as Label
-	if cost != null:
-		var price := int(card.get("lucidityCost", 0))
-		cost.text = "FREE" if price <= 0 else "%dG" % price
-		cost.add_theme_color_override(&"font_color", color if affordable else RED)
 	# Route descriptions are intentionally not tooltips: Godot's default tooltip is a
 	# large hover panel that obscures the authored door artwork on this tiny canvas.
 	button.tooltip_text = ""
@@ -241,7 +247,8 @@ func _on_door_pressed(index: int) -> void:
 	if not RunStateStore.route_card_affordable(String(card.get("id", ""))):
 		return
 	_hovered_door_index = -1
-	_hide_door_explanation()
+	_set_door_hovered(index, false)
+	_hide_bubble()
 	_pending_door_index = index
 	_selection_locked = true
 	_set_interaction_locked(true)
@@ -289,11 +296,12 @@ func _build_door_confirmation_modal() -> Control:
 		ButtonKit.neon_panel_style(CYAN))
 	modal.add_child(_door_confirm_panel)
 
-	var prompt := _label("ENTER THIS PATH?", Rect2(4.0, 7.0, 128.0, 12.0),
+	var prompt := _label("ENTER THIS PATH?", Rect2(0.0, 7.0, 136.0, 13.0),
 		6, Color(0.85, 0.95, 1.0), _door_confirm_panel)
 	prompt.name = "Prompt"
 	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	prompt.position.y += Assets.centered_text_nudge(6)
 	var route := _label("ROUTE", Rect2(4.0, 22.0, 128.0, 13.0), 5, CYAN,
 		_door_confirm_panel)
 	route.name = "Route"
@@ -380,7 +388,7 @@ func _set_interaction_locked(locked: bool) -> void:
 func _open_destination() -> void:
 	match RunStateStore.routeDestination:
 		RouteCards.ROUTE_SHOP:
-			SceneNav.change_to("res://scenes/route_shop_scene.tscn")
+			SceneNav.change_to("res://scenes/dealer_scene.tscn")
 		RouteCards.ROUTE_AUGMENT, RouteCards.ROUTE_POWER:
 			SceneNav.change_to("res://scenes/route_build_scene.tscn")
 		RouteCards.ROUTE_BONUS:
@@ -426,7 +434,7 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color,
 	return label
 
 func _build_bubble_text() -> void:
-	_bubble_label = _label("", BUBBLE_TEXT_RECT, BUBBLE_TEXT_FONT_SIZE,
+	_bubble_label = _label(DEFAULT_BUBBLE_TEXT, BUBBLE_TEXT_RECT, BUBBLE_TEXT_FONT_SIZE,
 		BUBBLE_TEXT_COLOR)
 	_bubble_label.name = "BubbleTextLabel"
 	_bubble_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -446,27 +454,58 @@ func _on_door_mouse_entered(index: int) -> void:
 	if index < 0 or index >= cards.size():
 		return
 	_hovered_door_index = index
+	_set_door_hovered(index, true)
 	_show_door_explanation(cards[index])
 
 func _on_door_mouse_exited(index: int) -> void:
 	if _hovered_door_index != index:
 		return
 	_hovered_door_index = -1
-	_hide_door_explanation()
+	_set_door_hovered(index, false)
+	_show_default_bubble()
 
 func _show_door_explanation(card: Dictionary) -> void:
 	if _bubble_label == null:
 		return
 	var route_type := String(card.get("routeType", ""))
 	var fallback := String(card.get("description", ""))
-	_bubble_label.text = String(DOOR_EXPLANATIONS.get(route_type, fallback))
-	_bubble_label.visible = true
+	_show_bubble_text(String(DOOR_EXPLANATIONS.get(route_type, fallback)))
+
+func _show_default_bubble() -> void:
+	_show_bubble_text(DEFAULT_BUBBLE_TEXT)
+
+func _show_bubble_text(text_value: String) -> void:
+	if _bubble_label != null:
+		_bubble_label.text = text_value
+		_bubble_label.visible = true
 	if _bubble_sprite != null:
 		_bubble_sprite.visible = true
 
-func _hide_door_explanation() -> void:
+func _hide_bubble() -> void:
 	if _bubble_label != null:
-		_bubble_label.text = ""
 		_bubble_label.visible = false
 	if _bubble_sprite != null:
 		_bubble_sprite.visible = false
+
+func _set_all_door_hovered(hovered: bool) -> void:
+	for index in _door_buttons.size():
+		_set_door_hovered(index, hovered)
+
+func _set_door_hovered(index: int, hovered: bool) -> void:
+	if index < 0 or index >= _door_buttons.size():
+		return
+	var sprite := _door_buttons[index].get_node_or_null("DoorSprite") as Sprite2D
+	if sprite == null:
+		return
+	if not hovered:
+		sprite.scale = Vector2.ONE
+		sprite.position = Vector2.ZERO
+		return
+	var frame_size := Vector2.ZERO
+	if sprite.texture != null:
+		frame_size = Vector2(
+			float(sprite.texture.get_width()) / float(maxi(sprite.hframes, 1)),
+			float(sprite.texture.get_height()))
+	var hover_scale := Vector2.ONE * DOOR_HOVER_SCALE
+	sprite.scale = hover_scale
+	sprite.position = frame_size * (Vector2.ONE - hover_scale) * 0.5

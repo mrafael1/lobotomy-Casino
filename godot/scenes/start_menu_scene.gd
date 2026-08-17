@@ -809,7 +809,7 @@ func _resume_run() -> void:
 		SceneNav.change_to(ROUTE_SCENE)
 		return
 	if RunStateStore.routeDestination == RouteCards.ROUTE_SHOP:
-		SceneNav.change_to("res://scenes/route_shop_scene.tscn")
+		SceneNav.change_to("res://scenes/dealer_scene.tscn")
 		return
 	if RunStateStore.routeDestination == RouteCards.ROUTE_AUGMENT \
 			or RunStateStore.routeDestination == RouteCards.ROUTE_POWER:
