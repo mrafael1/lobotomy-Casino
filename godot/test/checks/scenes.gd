@@ -199,10 +199,21 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	for index in 2:
 		var door_path := "DoorChoices/DoorLeft" if index == 0 else "DoorChoices/DoorRight"
 		var door_button := route.get_node_or_null(door_path) as Button
-		if door_button != null and not door_button.disabled:
+		var route_type := String(route_cards[index].get("routeType", "")) \
+			if index < route_cards.size() else ""
+		if door_button != null and not door_button.disabled \
+				and route_type == RouteCards.ROUTE_SHOP:
 			confirmation_door = door_button
 			confirmation_index = index
 			break
+	if confirmation_door == null:
+		for index in 2:
+			var door_path := "DoorChoices/DoorLeft" if index == 0 else "DoorChoices/DoorRight"
+			var door_button := route.get_node_or_null(door_path) as Button
+			if door_button != null and not door_button.disabled:
+				confirmation_door = door_button
+				confirmation_index = index
+				break
 	if confirmation_door != null:
 		var hover_index := authored_hover_index if authored_hover_index >= 0 else confirmation_index
 		var hover_door := confirmation_door
@@ -238,37 +249,50 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			failures.append("route: leaving a door does not restore its art size or position")
 		if hover_normal_frame >= 0 and (hover_sprite == null or hover_sprite.frame != hover_normal_frame):
 			failures.append("route: %s door does not restore its normal frame" % hover_route_type)
+		var confirmation_card: Dictionary = route_cards[confirmation_index]
+		var confirmation_route_type := String(confirmation_card.get("routeType", ""))
+		var confirmation_normal_frame := _authored_door_normal_frame(confirmation_route_type)
+		var confirmation_sprite := confirmation_door.get_node_or_null("DoorSprite") as Sprite2D
+		var confirmation_position := confirmation_sprite.position \
+			if confirmation_sprite != null else Vector2.ZERO
 		confirmation_door.pressed.emit()
 		await process_frame
-		var confirmation := route.get_node_or_null("DoorConfirmation") as Control
-		if confirmation == null or not confirmation.visible:
-			failures.append("route: clicking a door does not open confirmation")
+		if route.get_node_or_null("DoorConfirmation") != null:
+			failures.append("route: old door confirmation modal is still present")
 		if not run_store.routeOfferPending or run_store.routeDestination != "":
-			failures.append("route: clicking a door commits the route before confirmation")
-		var cancel_confirmation := route.get_node_or_null(
-			"DoorConfirmation/Panel/CancelButton") as Button
-		if cancel_confirmation == null:
-			failures.append("route: door confirmation has no cancel action")
-		else:
-			cancel_confirmation.pressed.emit()
-			await process_frame
-			if confirmation.visible or not run_store.routeOfferPending:
-				failures.append("route: cancelling door confirmation did not restore the offer")
+			failures.append("route: first door click committed the route")
+		var confirmation_label := route.get_node_or_null("BubbleTextLabel") as Label
+		var expected_confirmation := "TAKING THE\n%s DOOR?" % String(
+			confirmation_card.get("displayName", "ROUTE"))
+		if confirmation_label == null or confirmation_label.text != expected_confirmation:
+			failures.append("route: opened door did not ask for confirmation")
+		if route.get_node_or_null("DoorSuctionParticles") == null:
+			failures.append("route: opening a door did not play the gap suction effect")
+		if confirmation_door.disabled:
+			failures.append("route: opened door is disabled before the confirmation click")
+		if confirmation_sprite == null or confirmation_sprite.position != confirmation_position:
+			failures.append("route: opening a door changed its authored position")
+		if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+				or confirmation_sprite.frame != confirmation_normal_frame + 1):
+			failures.append("route: opened door did not keep its open frame")
+		confirmation_door.pressed.emit()
+		await process_frame
+		if run_store.routeOfferPending or run_store.routeDestination != RouteCards.ROUTE_SHOP:
+			failures.append("route: second door click did not enter the Shop route")
+		elif not run_store.finish_route_destination() or run_store.runPhase != "running":
+			failures.append("route: confirmed Shop door did not return to a live machine segment")
 	if route.get_node_or_null("DealerBackground") != null:
 		failures.append("route: dealer offer still includes the shop background")
 	if route.get_node_or_null("DealerCounter") != null:
 		failures.append("route: dealer offer still includes the shop counter")
 	if route.get_node_or_null("DealerSprite") == null:
 		failures.append("route: dealer offer is missing DealerSprite art")
-	route.free()
-
-	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
-		failures.append("route: Shop card could not be selected")
-	else:
-		if not ResourceLoader.exists("res://scenes/dealer_scene.tscn"):
-			failures.append("route: Shop destination is missing dealer_scene")
-		if not run_store.finish_route_destination() or run_store.runPhase != "running":
-			failures.append("route: Shop did not return to a live machine segment")
+	var destination_scene: Node = tree.current_scene
+	if destination_scene != null and destination_scene != route:
+		destination_scene.queue_free()
+	if is_instance_valid(route):
+		route.queue_free()
+	await process_frame
 
 	run_store.runPhase = "over"
 	run_store.roundContinuationPending = true

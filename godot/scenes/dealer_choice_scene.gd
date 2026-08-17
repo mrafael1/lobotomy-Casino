@@ -16,11 +16,14 @@ const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
-const CONFIRM_MODAL_RECT := Rect2(12.0, 118.0, 136.0, 84.0)
-const CONFIRM_BUTTON_SIZE := Vector2(54.0, 18.0)
 const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
 const BUBBLE_TEXT_FONT_SIZE := 3
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
+const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
+const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
+const DOOR_SUCTION_PARTICLE_COUNT := 24
+const DOOR_SUCTION_LIFETIME := 0.75
+const DOOR_SUCTION_PARTICLE_SIZE := 2.0
 const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 2
 const GOLD := Color(1.0, 0.84, 0.38)
@@ -69,10 +72,7 @@ var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
 var _credits_coin: TextureRect = null
 var _door_buttons: Array[Button] = []
-var _door_confirm_modal: Control = null
-var _door_confirm_panel: Panel = null
-var _door_confirm_route: Label = null
-var _door_confirm_cost: Label = null
+var _door_suction_fx: Control = null
 var _pending_door_index := -1
 var _hovered_door_index := -1
 var _selection_locked := false
@@ -223,10 +223,14 @@ func _refresh() -> void:
 		_set_door_card(button, cards[index])
 	if not pending:
 		_hovered_door_index = -1
+		_pending_door_index = -1
+		_selection_locked = false
 		_set_all_door_hovered(false)
 		_hide_bubble()
-	elif _selection_locked:
-		_hide_bubble()
+		_clear_door_suction()
+	elif _selection_locked and _pending_door_index >= 0 \
+			and _pending_door_index < cards.size():
+		_show_door_confirmation_prompt(cards[_pending_door_index])
 	elif _hovered_door_index >= 0 and _hovered_door_index < cards.size():
 		_show_door_explanation(cards[_hovered_door_index])
 	else:
@@ -245,8 +249,6 @@ func _refresh() -> void:
 			GOLD if RunStateStore.route_offer_reroll_affordable() else RED)
 	if _reroll_coin != null:
 		_reroll_coin.visible = pending
-	if not pending and _door_confirm_modal != null:
-		_door_confirm_modal.visible = false
 	if not pending and _message != null and _message.text == "":
 		_message.text = "ROUTE OFFER CLOSED"
 
@@ -254,7 +256,8 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	var route_type := String(card.get("routeType", ""))
 	var affordable := RunStateStore.route_card_affordable(String(card.get("id", "")))
 	var index := _door_buttons.find(button)
-	_set_door_visual(index, route_type, index == _hovered_door_index)
+	_set_door_visual(index, route_type,
+		index == _hovered_door_index or index == _pending_door_index)
 	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 	if sprite != null:
 		sprite.self_modulate = Color.WHITE if affordable else Color(0.55, 0.55, 0.64, 1.0)
@@ -266,10 +269,15 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	# Route descriptions are intentionally not tooltips: Godot's default tooltip is a
 	# large hover panel that obscures the authored door artwork on this tiny canvas.
 	button.tooltip_text = ""
-	button.disabled = _selection_locked or not affordable
+	button.disabled = not affordable or (_selection_locked and index != _pending_door_index)
 
 func _on_door_pressed(index: int) -> void:
-	if _selection_locked or index < 0 or index >= _door_buttons.size():
+	if index < 0 or index >= _door_buttons.size():
+		return
+	if index == _pending_door_index:
+		_confirm_door_selection()
+		return
+	if _selection_locked:
 		return
 	var cards := RunStateStore.current_route_offer()
 	if index >= cards.size():
@@ -277,115 +285,29 @@ func _on_door_pressed(index: int) -> void:
 	var card := cards[index]
 	if not RunStateStore.route_card_affordable(String(card.get("id", ""))):
 		return
-	_hovered_door_index = -1
-	_set_door_hovered(index, false)
-	_hide_bubble()
 	_pending_door_index = index
+	_hovered_door_index = -1
 	_selection_locked = true
 	_set_interaction_locked(true)
-	_show_door_confirmation(card)
-
-func _show_door_confirmation(card: Dictionary) -> void:
-	if _door_confirm_modal == null:
-		_door_confirm_modal = _build_door_confirmation_modal()
+	_set_door_hovered(index, true)
+	_show_door_confirmation_prompt(card)
 	var route_type := String(card.get("routeType", ""))
-	var route_color: Color = DOOR_COLORS.get(route_type, CYAN)
-	if _door_confirm_panel != null:
-		_door_confirm_panel.add_theme_stylebox_override("panel",
-			ButtonKit.neon_panel_style(route_color))
-	if _door_confirm_route != null:
-		_door_confirm_route.text = String(card.get("displayName", "ROUTE"))
-		_door_confirm_route.add_theme_color_override(&"font_color", route_color)
-	if _door_confirm_cost != null:
-		var price := int(card.get("lucidityCost", 0))
-		_door_confirm_cost.text = "FREE" if price <= 0 else "COST: %dG" % price
-	_door_confirm_modal.visible = true
-	_door_confirm_modal.move_to_front()
+	_play_door_suction(DOOR_COLORS.get(route_type, CYAN))
 
-func _build_door_confirmation_modal() -> Control:
-	var modal := Control.new()
-	modal.name = "DoorConfirmation"
-	modal.position = Vector2.ZERO
-	modal.size = CANVAS_SIZE
-	modal.z_index = 200
-	modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(modal)
-
-	var dim := ColorRect.new()
-	dim.name = "Dim"
-	dim.color = Color(0.0, 0.0, 0.0, 0.66)
-	dim.size = CANVAS_SIZE
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	modal.add_child(dim)
-
-	_door_confirm_panel = Panel.new()
-	_door_confirm_panel.name = "Panel"
-	_door_confirm_panel.position = CONFIRM_MODAL_RECT.position
-	_door_confirm_panel.size = CONFIRM_MODAL_RECT.size
-	_door_confirm_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_door_confirm_panel.add_theme_stylebox_override("panel",
-		ButtonKit.neon_panel_style(CYAN))
-	modal.add_child(_door_confirm_panel)
-
-	var prompt := _label("ENTER THIS PATH?", Rect2(0.0, 7.0, 136.0, 13.0),
-		6, Color(0.85, 0.95, 1.0), _door_confirm_panel)
-	prompt.name = "Prompt"
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	prompt.position.y += Assets.centered_text_nudge(6)
-	var route := _label("ROUTE", Rect2(4.0, 22.0, 128.0, 13.0), 5, CYAN,
-		_door_confirm_panel)
-	route.name = "Route"
-	route.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	route.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_door_confirm_route = route
-	var cost := _label("", Rect2(4.0, 36.0, 128.0, 10.0), 4, GOLD,
-		_door_confirm_panel)
-	cost.name = "Cost"
-	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_door_confirm_cost = cost
-
-	var cancel := _confirm_button(_door_confirm_panel, "CancelButton", "CANCEL",
-		Vector2(10.0, 57.0), RED)
-	cancel.pressed.connect(_cancel_door_confirmation)
-	var confirm := _confirm_button(_door_confirm_panel, "ConfirmButton", "ENTER",
-		Vector2(72.0, 57.0), CYAN)
-	confirm.pressed.connect(_confirm_door_selection)
-	modal.visible = false
-	return modal
-
-func _confirm_button(parent: Control, node_name: String, text_value: String,
-		position_value: Vector2, color: Color) -> Button:
-	var button := Button.new()
-	button.name = node_name
-	button.text = text_value
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_filter = Control.MOUSE_FILTER_STOP
-	ButtonKit.small_neon_button_style(button, color, 5)
-	parent.add_child(button)
-	button.position = position_value
-	button.size = CONFIRM_BUTTON_SIZE
-	return button
-
-func _cancel_door_confirmation() -> void:
-	if _door_confirm_modal != null:
-		_door_confirm_modal.visible = false
-	_pending_door_index = -1
-	_selection_locked = false
-	_set_interaction_locked(false)
-	_refresh()
+func _show_door_confirmation_prompt(card: Dictionary) -> void:
+	var display_name := String(card.get("displayName", "ROUTE"))
+	_show_bubble_text(DOOR_CONFIRMATION_TEXT % display_name)
 
 func _confirm_door_selection() -> void:
 	var index := _pending_door_index
 	if index < 0 or index >= _door_buttons.size():
-		_cancel_door_confirmation()
+		_selection_locked = false
+		_set_interaction_locked(false)
+		_refresh()
 		return
-	if _door_confirm_modal != null:
-		_door_confirm_modal.visible = false
-	_pending_door_index = -1
 	var cards := RunStateStore.current_route_offer()
 	if index >= cards.size():
+		_pending_door_index = -1
 		_selection_locked = false
 		_set_interaction_locked(false)
 		_message.text = "DOOR UNAVAILABLE"
@@ -393,11 +315,13 @@ func _confirm_door_selection() -> void:
 		return
 	var card_id := String(cards[index].get("id", ""))
 	if not RunStateStore.select_route(card_id):
+		_pending_door_index = -1
 		_selection_locked = false
 		_set_interaction_locked(false)
 		_message.text = "DOOR PAYMENT REFUSED"
 		_refresh()
 		return
+	_pending_door_index = -1
 	_open_destination()
 
 func _on_reroll_pressed() -> void:
@@ -411,8 +335,8 @@ func _on_reroll_pressed() -> void:
 	_message.text = "DOORS CHANGED"
 
 func _set_interaction_locked(locked: bool) -> void:
-	for button in _door_buttons:
-		button.disabled = locked
+	for index in _door_buttons.size():
+		_door_buttons[index].disabled = locked and index != _pending_door_index
 	if _reroll_button != null:
 		_reroll_button.disabled = locked
 
@@ -482,16 +406,31 @@ func _build_bubble_text() -> void:
 		_bubble_sprite.visible = false
 
 func _on_door_mouse_entered(index: int) -> void:
-	if _selection_locked or not RunStateStore.routeOfferPending:
+	if not RunStateStore.routeOfferPending:
 		return
 	var cards := RunStateStore.current_route_offer()
 	if index < 0 or index >= cards.size():
+		return
+	if _selection_locked:
+		if index != _pending_door_index:
+			return
+		_hovered_door_index = index
+		_set_door_hovered(index, true)
+		_show_door_confirmation_prompt(cards[index])
 		return
 	_hovered_door_index = index
 	_set_door_hovered(index, true)
 	_show_door_explanation(cards[index])
 
 func _on_door_mouse_exited(index: int) -> void:
+	if _selection_locked:
+		if index == _pending_door_index:
+			_hovered_door_index = -1
+			_set_door_hovered(index, false)
+			var cards := RunStateStore.current_route_offer()
+			if index >= 0 and index < cards.size():
+				_show_door_confirmation_prompt(cards[index])
+		return
 	if _hovered_door_index != index:
 		return
 	_hovered_door_index = -1
@@ -532,7 +471,7 @@ func _set_door_hovered(index: int, hovered: bool) -> void:
 	var route_type := ""
 	if index < cards.size():
 		route_type = String(cards[index].get("routeType", ""))
-	_set_door_visual(index, route_type, hovered)
+	_set_door_visual(index, route_type, hovered or index == _pending_door_index)
 
 func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 	if index < 0 or index >= _door_buttons.size():
@@ -552,3 +491,53 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 		sprite.vframes = 1
 		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 	sprite.scale = Vector2.ONE
+
+func _play_door_suction(color: Color) -> void:
+	_clear_door_suction()
+	var fx := Control.new()
+	fx.name = "DoorSuctionParticles"
+	fx.position = Vector2.ZERO
+	fx.size = CANVAS_SIZE
+	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx.z_index = 40
+	add_child(fx)
+	_door_suction_fx = fx
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xD00F
+	for index in DOOR_SUCTION_PARTICLE_COUNT:
+		var particle := ColorRect.new()
+		var particle_size: float = DOOR_SUCTION_PARTICLE_SIZE if index % 3 == 0 else 1.0
+		particle.size = Vector2.ONE * particle_size
+		var side := -1.0 if index % 2 == 0 else 1.0
+		particle.position = Vector2(
+			DOOR_GAP_CENTER.x + side * rng.randf_range(9.0, 32.0),
+			rng.randf_range(54.0, 138.0)) - Vector2.ONE * particle_size * 0.5
+		var particle_color := color
+		particle_color.a = 0.95
+		particle.color = particle_color
+		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fx.add_child(particle)
+		var target := Vector2(
+			DOOR_GAP_CENTER.x + rng.randf_range(-1.0, 1.0),
+			DOOR_GAP_CENTER.y + rng.randf_range(-12.0, 12.0)) \
+			- Vector2.ONE * particle_size * 0.5
+		var delay := rng.randf_range(0.0, 0.18)
+		var duration := rng.randf_range(0.38, 0.64)
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(particle, "position", target, duration).set_delay(delay) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_property(particle, "modulate:a", 0.0, duration * 0.55) \
+			.set_delay(delay + duration * 0.45)
+		tween.set_parallel(false)
+		tween.tween_callback(particle.queue_free)
+
+	var cleanup := create_tween()
+	cleanup.tween_interval(DOOR_SUCTION_LIFETIME)
+	cleanup.tween_callback(_clear_door_suction)
+
+func _clear_door_suction() -> void:
+	if _door_suction_fx != null and is_instance_valid(_door_suction_fx):
+		_door_suction_fx.queue_free()
+	_door_suction_fx = null
