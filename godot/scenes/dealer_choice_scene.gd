@@ -552,4 +552,3 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 		sprite.vframes = 1
 		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 	sprite.scale = Vector2.ONE
-	sprite.position = Vector2.ZERO

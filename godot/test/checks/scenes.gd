@@ -150,6 +150,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
+	var left_door_sprite := route.get_node_or_null("DoorChoices/DoorLeft/DoorSprite") as Sprite2D
+	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0):
+		failures.append("route: left door art is not offset by one pixel")
 	var authored_hover_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
 		var route_type := String(route_cards[index].get("routeType", ""))
@@ -207,6 +210,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			hover_door = route.get_node_or_null(
 				"DoorChoices/" + ("DoorLeft" if hover_index == 0 else "DoorRight")) as Button
 		var hover_sprite := hover_door.get_node_or_null("DoorSprite") as Sprite2D
+		var hover_position := hover_sprite.position if hover_sprite != null else Vector2.ZERO
 		var hover_route_type := String(route_cards[hover_index].get("routeType", "")) \
 			if hover_index >= 0 and hover_index < route_cards.size() else ""
 		var hover_normal_frame := _authored_door_normal_frame(hover_route_type)
@@ -219,7 +223,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 				or bubble_label.text == "CHOOSE\nYOUR PATH":
 			failures.append("route: hovering a door does not show its dealer explanation")
 		if hover_sprite == null or not is_equal_approx(hover_sprite.scale.x, 1.0) \
-				or hover_sprite.position != Vector2.ZERO:
+				or hover_sprite.position != hover_position:
 			failures.append("route: hovering a door changes its art size or position")
 		if hover_normal_frame >= 0 and (hover_sprite == null \
 				or hover_sprite.frame != hover_normal_frame + 1):
@@ -230,7 +234,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 				or not bubble_label.visible or bubble_label.text != "CHOOSE\nYOUR PATH":
 			failures.append("route: leaving a door does not restore the dealer path prompt")
 		if hover_sprite != null and (not is_equal_approx(hover_sprite.scale.x, 1.0) \
-				or hover_sprite.position != Vector2.ZERO):
+				or hover_sprite.position != hover_position):
 			failures.append("route: leaving a door does not restore its art size or position")
 		if hover_normal_frame >= 0 and (hover_sprite == null or hover_sprite.frame != hover_normal_frame):
 			failures.append("route: %s door does not restore its normal frame" % hover_route_type)

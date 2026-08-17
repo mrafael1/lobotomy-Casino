@@ -315,9 +315,9 @@ func _build_target_glyphs() -> void:
 	_set_target_display_value(_target)
 
 
-## Keeps the target's authored digit slots stable while its amount drains away. Empty
-## slots stay on the left so the units slot remains anchored: 90 reads `_90`, not
-## `90_`, without re-laying out the group during the tween.
+## Keeps the target's amount centred while it drains away. Shortened values are
+## re-laid out around TARGET_CENTER so 90 remains centred instead of sliding to the
+## units slot.
 func _set_target_display_value(value: int) -> void:
 	_target_display_value = maxi(0, value)
 	if _target_glyphs.is_empty():
@@ -327,10 +327,18 @@ func _set_target_display_value(value: int) -> void:
 	if text.length() > slot_count:
 		text = text.right(slot_count)
 	var first_active := maxi(0, slot_count - text.length())
+	var glyph_width := float(TARGET_FONT_SIZE) * 0.62
+	var active_total := glyph_width * float(text.length())
+	var active_start := TARGET_CENTER.x - active_total * 0.5
+	var slot_total := glyph_width * float(slot_count)
+	var slot_start := TARGET_CENTER.x - slot_total * 0.5
 	for i in slot_count:
 		var glyph: Label = _target_glyphs[i]
 		var text_index := i - first_active
 		var active := text_index >= 0 and text_index < text.length()
+		glyph.position.x = active_start + float(text_index) * glyph_width \
+			if active else slot_start + float(i) * glyph_width
+		glyph.position.y = TARGET_CENTER.y - float(TARGET_FONT_SIZE) * 0.5
 		glyph.text = text[text_index] if active else ""
 		glyph.visible = active
 
