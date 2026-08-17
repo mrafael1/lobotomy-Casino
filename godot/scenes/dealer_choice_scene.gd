@@ -21,9 +21,12 @@ const BUBBLE_TEXT_FONT_SIZE := 3
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
 const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
+const DOOR_OPEN_GAP_LOCAL_X := 58.0
+const DOOR_OPEN_GAP_LOCAL_TOP := 2.0
+const DOOR_OPEN_GAP_LOCAL_BOTTOM := 92.0
 const DOOR_SUCTION_PARTICLE_COUNT := 24
-const DOOR_SUCTION_LIFETIME := 0.75
-const DOOR_SUCTION_WAVE_INTERVAL := 0.42
+const DOOR_SUCTION_LIFETIME := 1.4
+const DOOR_SUCTION_WAVE_INTERVAL := 0.58
 const DOOR_SUCTION_PARTICLE_SIZE := 2.0
 const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 2
@@ -293,7 +296,7 @@ func _on_door_pressed(index: int) -> void:
 	_set_door_hovered(index, true)
 	_show_door_confirmation_prompt(card)
 	var route_type := String(card.get("routeType", ""))
-	_play_door_suction(DOOR_COLORS.get(route_type, CYAN))
+	_play_door_suction(DOOR_COLORS.get(route_type, CYAN), index)
 
 func _show_door_confirmation_prompt(card: Dictionary) -> void:
 	var display_name := String(card.get("displayName", "ROUTE"))
@@ -493,26 +496,60 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 	sprite.scale = Vector2.ONE
 
-func _play_door_suction(color: Color) -> void:
+func _play_door_suction(color: Color, index: int) -> void:
 	_clear_door_suction()
+	var line := _door_suction_line(index)
+	var gap_center: Vector2 = line["center"]
+	var line_start: Vector2 = line["start"]
+	var line_end: Vector2 = line["end"]
 	var fx := Control.new()
 	fx.name = "DoorSuctionParticles"
 	fx.position = Vector2.ZERO
 	fx.size = CANVAS_SIZE
 	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fx.z_index = 40
+	fx.set_meta(&"suction_line_start", line_start)
+	fx.set_meta(&"suction_line_end", line_end)
 	add_child(fx)
 	_door_suction_fx = fx
 	var wave_timer := Timer.new()
 	wave_timer.name = "WaveTimer"
 	wave_timer.wait_time = DOOR_SUCTION_WAVE_INTERVAL
 	wave_timer.one_shot = false
-	wave_timer.timeout.connect(_spawn_door_suction_wave.bind(color))
+	wave_timer.timeout.connect(_spawn_door_suction_wave.bind(
+		color, gap_center, line_start, line_end))
 	fx.add_child(wave_timer)
-	_spawn_door_suction_wave(color)
+	_spawn_door_suction_wave(color, gap_center, line_start, line_end)
 	wave_timer.start()
 
-func _spawn_door_suction_wave(color: Color) -> void:
+func _door_suction_line(index: int) -> Dictionary:
+	var fallback_start := DOOR_GAP_CENTER + Vector2(0.0, -44.0)
+	var fallback_end := DOOR_GAP_CENTER + Vector2(0.0, 44.0)
+	if index < 0 or index >= _door_buttons.size() or hover_doors_texture == null:
+		return {
+			"center": DOOR_GAP_CENTER,
+			"start": fallback_start,
+			"end": fallback_end,
+		}
+	var sprite := _door_buttons[index].get_node_or_null("DoorSprite") as Sprite2D
+	if sprite == null:
+		return {
+			"center": DOOR_GAP_CENTER,
+			"start": fallback_start,
+			"end": fallback_end,
+		}
+	var line_start: Vector2 = sprite.to_global(Vector2(
+		DOOR_OPEN_GAP_LOCAL_X, DOOR_OPEN_GAP_LOCAL_TOP))
+	var line_end: Vector2 = sprite.to_global(Vector2(
+		DOOR_OPEN_GAP_LOCAL_X, DOOR_OPEN_GAP_LOCAL_BOTTOM))
+	return {
+		"center": (line_start + line_end) * 0.5,
+		"start": line_start,
+		"end": line_end,
+	}
+
+func _spawn_door_suction_wave(color: Color, gap_center: Vector2,
+		line_start: Vector2, line_end: Vector2) -> void:
 	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
 		return
 	var rng := RandomNumberGenerator.new()
@@ -521,40 +558,42 @@ func _spawn_door_suction_wave(color: Color) -> void:
 		var particle := ColorRect.new()
 		var particle_size: float = DOOR_SUCTION_PARTICLE_SIZE if index % 3 == 0 else 1.0
 		particle.size = Vector2.ONE * particle_size
-		var phase := rng.randf_range(0.0, TAU)
-		var radius_x := rng.randf_range(9.0, 32.0)
-		var radius_y := rng.randf_range(22.0, 48.0)
+		var line_progress := float(index) / float(DOOR_SUCTION_PARTICLE_COUNT - 1)
+		line_progress = clampf(line_progress + rng.randf_range(-0.025, 0.025), 0.0, 1.0)
+		var source := line_start.lerp(line_end, line_progress)
+		source.x += rng.randf_range(-3.0, 3.0)
+		var source_offset := source - gap_center
+		var turns := rng.randf_range(0.45, 0.7)
 		particle.position = _door_suction_particle_position(
-			0.0, phase, radius_x, radius_y, 1.0, particle_size)
+			0.0, gap_center, source_offset, turns, particle_size)
 		var particle_color := color
 		particle_color.a = 0.95
 		particle.color = particle_color
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_door_suction_fx.add_child(particle)
-		var duration := rng.randf_range(0.58, DOOR_SUCTION_LIFETIME)
+		var duration := rng.randf_range(1.15, DOOR_SUCTION_LIFETIME)
 		var tween := create_tween()
 		tween.set_parallel(true)
 		tween.tween_method(_animate_door_suction_particle.bind(
-			particle, phase, radius_x, radius_y, 1.0, particle_size), 0.0, 1.0, duration)
-		tween.tween_property(particle, "modulate:a", 0.0, duration * 0.55) \
-			.set_delay(duration * 0.45)
+			particle, gap_center, source_offset, turns, particle_size), 0.0, 1.0, duration)
+		tween.tween_property(particle, "modulate:a", 0.0, duration * 0.35) \
+			.set_delay(duration * 0.65)
 		tween.set_parallel(false)
 		tween.tween_callback(_queue_door_suction_particle.bind(particle))
 
-func _door_suction_particle_position(progress: float, phase: float, radius_x: float,
-		radius_y: float, turns: float, particle_size: float) -> Vector2:
-	var eased := 1.0 - pow(1.0 - progress, 1.6)
-	var radius := 1.0 - eased
-	var angle := phase + eased * TAU * turns
-	return DOOR_GAP_CENTER + Vector2(cos(angle) * radius_x * radius,
-		sin(angle) * radius_y * radius) - Vector2.ONE * particle_size * 0.5
+func _door_suction_particle_position(progress: float, gap_center: Vector2,
+		source_offset: Vector2, turns: float, particle_size: float) -> Vector2:
+	var eased := 1.0 - pow(1.0 - progress, 1.2)
+	var angle := eased * TAU * turns
+	return gap_center + source_offset.rotated(angle) * (1.0 - eased) \
+		- Vector2.ONE * particle_size * 0.5
 
-func _animate_door_suction_particle(progress: float, particle, phase: float,
-		radius_x: float, radius_y: float, turns: float, particle_size: float) -> void:
+func _animate_door_suction_particle(progress: float, particle, gap_center: Vector2,
+		source_offset: Vector2, turns: float, particle_size: float) -> void:
 	if not is_instance_valid(particle):
 		return
-	particle.position = _door_suction_particle_position(progress, phase, radius_x,
-		radius_y, turns, particle_size)
+	particle.position = _door_suction_particle_position(progress, gap_center,
+		source_offset, turns, particle_size)
 
 func _queue_door_suction_particle(particle) -> void:
 	if is_instance_valid(particle):
