@@ -24,8 +24,6 @@ const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
 const DOOR_OPEN_GAP_LOCAL_X := 58.0
 const DOOR_OPEN_GAP_LOCAL_TOP := 2.0
 const DOOR_OPEN_GAP_LOCAL_BOTTOM := 92.0
-const DOOR_OPEN_EDGE_LOCAL_WIDTH := 55.0
-const DOOR_OPEN_EDGE_THICKNESS := 2.0
 const DOOR_GAP_COLOR := Color(0.30, 0.82, 0.92, 1.0)
 const DOOR_SUCTION_PARTICLE_LIFETIME := 1.4
 const DOOR_SUCTION_MIN_SPAWN_DELAY := 0.055
@@ -124,27 +122,6 @@ func _build_door_gap_backdrops() -> void:
 		gap.visible = false
 		gap.z_index = 21
 		add_child(gap)
-		var top_edge := ColorRect.new()
-		top_edge.name = "DoorGapGlowTop%d" % index
-		top_edge.position = sprite.to_global(Vector2(0.0, 0.0))
-		top_edge.size = Vector2(DOOR_OPEN_EDGE_LOCAL_WIDTH,
-			DOOR_OPEN_EDGE_THICKNESS)
-		top_edge.color = DOOR_GAP_COLOR
-		top_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		top_edge.visible = false
-		top_edge.z_index = 21
-		add_child(top_edge)
-		var bottom_edge := ColorRect.new()
-		bottom_edge.name = "DoorGapGlowBottom%d" % index
-		bottom_edge.position = sprite.to_global(Vector2(
-			0.0, DOOR_OPEN_GAP_LOCAL_BOTTOM))
-		bottom_edge.size = Vector2(DOOR_OPEN_EDGE_LOCAL_WIDTH,
-			DOOR_OPEN_EDGE_THICKNESS)
-		bottom_edge.color = DOOR_GAP_COLOR
-		bottom_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bottom_edge.visible = false
-		bottom_edge.z_index = 21
-		add_child(bottom_edge)
 
 func _process(delta: float) -> void:
 	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
@@ -545,15 +522,9 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 	if sprite == null:
 		return
 	var hover_frame := int(HOVER_DOOR_FRAMES.get(route_type, -1))
-	var gap_visible := hovered and hover_frame >= 0
-	for glow_name in [
-		"DoorGapGlow%d" % index,
-		"DoorGapGlowTop%d" % index,
-		"DoorGapGlowBottom%d" % index,
-	]:
-		var glow := get_node_or_null(glow_name) as ColorRect
-		if glow != null:
-			glow.visible = gap_visible
+	var gap := get_node_or_null("DoorGapGlow%d" % index) as ColorRect
+	if gap != null:
+		gap.visible = hovered and hover_frame >= 0
 	if hover_doors_texture != null and hover_frame >= 0:
 		sprite.texture = hover_doors_texture
 		sprite.hframes = HOVER_DOOR_HFRAMES

@@ -179,14 +179,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 				or door_title.get_theme_font_size("font_size") < 5:
 			failures.append("route: %s title is not inside its blue name plate" % door)
 	for index in RouteCards.OFFER_COUNT:
-		for glow_name in [
-			"DoorGapGlow%d" % index,
-			"DoorGapGlowTop%d" % index,
-			"DoorGapGlowBottom%d" % index,
-		]:
-			var gap_glow := route.get_node_or_null(glow_name) as ColorRect
-			if gap_glow == null or gap_glow.color == Color.WHITE:
-				failures.append("route: %s does not use the colored glow" % glow_name)
+		var gap_glow := route.get_node_or_null("DoorGapGlow%d" % index) as ColorRect
+		if gap_glow == null or gap_glow.color == Color.WHITE:
+			failures.append("route: door %d gap does not use the colored glow" % index)
 	if default_bubble_label != null \
 			and default_bubble_label.get_theme_font_size("font_size") < 4:
 		failures.append("route: dealer bubble text is still too small")
