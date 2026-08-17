@@ -266,8 +266,16 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			confirmation_card.get("displayName", "ROUTE"))
 		if confirmation_label == null or confirmation_label.text != expected_confirmation:
 			failures.append("route: opened door did not ask for confirmation")
-		if route.get_node_or_null("DoorSuctionParticles") == null:
+		var suction := route.get_node_or_null("DoorSuctionParticles") as Control
+		if suction == null:
 			failures.append("route: opening a door did not play the gap suction effect")
+		else:
+			var wave_timer := suction.get_node_or_null("WaveTimer") as Timer
+			if wave_timer == null or wave_timer.is_stopped():
+				failures.append("route: door suction effect is not running continuously")
+			await create_timer(0.9).timeout
+			if not is_instance_valid(suction) or suction.get_node_or_null("WaveTimer") == null:
+				failures.append("route: door suction effect stopped instead of looping")
 		if confirmation_door.disabled:
 			failures.append("route: opened door is disabled before the confirmation click")
 		if confirmation_sprite == null or confirmation_sprite.position != confirmation_position:

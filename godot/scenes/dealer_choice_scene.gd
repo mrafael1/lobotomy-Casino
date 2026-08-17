@@ -23,6 +23,7 @@ const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
 const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
 const DOOR_SUCTION_PARTICLE_COUNT := 24
 const DOOR_SUCTION_LIFETIME := 0.75
+const DOOR_SUCTION_WAVE_INTERVAL := 0.42
 const DOOR_SUCTION_PARTICLE_SIZE := 2.0
 const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 2
@@ -502,40 +503,62 @@ func _play_door_suction(color: Color) -> void:
 	fx.z_index = 40
 	add_child(fx)
 	_door_suction_fx = fx
+	var wave_timer := Timer.new()
+	wave_timer.name = "WaveTimer"
+	wave_timer.wait_time = DOOR_SUCTION_WAVE_INTERVAL
+	wave_timer.one_shot = false
+	wave_timer.timeout.connect(_spawn_door_suction_wave.bind(color))
+	fx.add_child(wave_timer)
+	_spawn_door_suction_wave(color)
+	wave_timer.start()
 
+func _spawn_door_suction_wave(color: Color) -> void:
+	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
+		return
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 0xD00F
+	rng.seed = 0xD00F + Time.get_ticks_msec()
 	for index in DOOR_SUCTION_PARTICLE_COUNT:
 		var particle := ColorRect.new()
 		var particle_size: float = DOOR_SUCTION_PARTICLE_SIZE if index % 3 == 0 else 1.0
 		particle.size = Vector2.ONE * particle_size
-		var side := -1.0 if index % 2 == 0 else 1.0
-		particle.position = Vector2(
-			DOOR_GAP_CENTER.x + side * rng.randf_range(9.0, 32.0),
-			rng.randf_range(54.0, 138.0)) - Vector2.ONE * particle_size * 0.5
+		var phase := rng.randf_range(0.0, TAU)
+		var radius_x := rng.randf_range(9.0, 32.0)
+		var radius_y := rng.randf_range(22.0, 48.0)
+		particle.position = _door_suction_particle_position(
+			0.0, phase, radius_x, radius_y, 1.0, particle_size)
 		var particle_color := color
 		particle_color.a = 0.95
 		particle.color = particle_color
 		particle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fx.add_child(particle)
-		var target := Vector2(
-			DOOR_GAP_CENTER.x + rng.randf_range(-1.0, 1.0),
-			DOOR_GAP_CENTER.y + rng.randf_range(-12.0, 12.0)) \
-			- Vector2.ONE * particle_size * 0.5
-		var delay := rng.randf_range(0.0, 0.18)
-		var duration := rng.randf_range(0.38, 0.64)
+		_door_suction_fx.add_child(particle)
+		var duration := rng.randf_range(0.58, DOOR_SUCTION_LIFETIME)
 		var tween := create_tween()
 		tween.set_parallel(true)
-		tween.tween_property(particle, "position", target, duration).set_delay(delay) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_method(_animate_door_suction_particle.bind(
+			particle, phase, radius_x, radius_y, 1.0, particle_size), 0.0, 1.0, duration)
 		tween.tween_property(particle, "modulate:a", 0.0, duration * 0.55) \
-			.set_delay(delay + duration * 0.45)
+			.set_delay(duration * 0.45)
 		tween.set_parallel(false)
-		tween.tween_callback(particle.queue_free)
+		tween.tween_callback(_queue_door_suction_particle.bind(particle))
 
-	var cleanup := create_tween()
-	cleanup.tween_interval(DOOR_SUCTION_LIFETIME)
-	cleanup.tween_callback(_clear_door_suction)
+func _door_suction_particle_position(progress: float, phase: float, radius_x: float,
+		radius_y: float, turns: float, particle_size: float) -> Vector2:
+	var eased := 1.0 - pow(1.0 - progress, 1.6)
+	var radius := 1.0 - eased
+	var angle := phase + eased * TAU * turns
+	return DOOR_GAP_CENTER + Vector2(cos(angle) * radius_x * radius,
+		sin(angle) * radius_y * radius) - Vector2.ONE * particle_size * 0.5
+
+func _animate_door_suction_particle(progress: float, particle, phase: float,
+		radius_x: float, radius_y: float, turns: float, particle_size: float) -> void:
+	if not is_instance_valid(particle):
+		return
+	particle.position = _door_suction_particle_position(progress, phase, radius_x,
+		radius_y, turns, particle_size)
+
+func _queue_door_suction_particle(particle) -> void:
+	if is_instance_valid(particle):
+		particle.queue_free()
 
 func _clear_door_suction() -> void:
 	if _door_suction_fx != null and is_instance_valid(_door_suction_fx):
