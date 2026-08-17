@@ -44,6 +44,57 @@ func _route_seed_for_card(context: String, card_id: String, seed_start: int) -> 
 				return seed_start + offset
 	return -1
 
+func _authored_door_normal_frame(route_type: String) -> int:
+	if route_type == RouteCards.ROUTE_SHOP:
+		return 0
+	if route_type == RouteCards.ROUTE_POWER:
+		return 2
+	return -1
+
+func _check_authored_door_sprite(button: Button, route_type: String,
+		expected_frame: int, failures: Array) -> void:
+	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
+	if sprite == null:
+		failures.append("route: %s door is missing its authored hover sprite" % route_type)
+		return
+	if sprite.texture == null or sprite.texture.resource_path != \
+			"res://assets/images/dealer_choice/doors.png":
+		failures.append("route: %s door is not using the authored hover sheet" % route_type)
+	if sprite.hframes != 2 or sprite.vframes != 2:
+		failures.append("route: %s door has the wrong hover-sheet grid" % route_type)
+	if sprite.frame != expected_frame:
+		failures.append("route: %s door does not start on its normal frame" % route_type)
+
+func _check_power_door_hover(run_store: Node, failures: Array) -> void:
+	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(route)
+	await process_frame
+	var route_cards: Array = run_store.current_route_offer()
+	var power_index := -1
+	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
+		if String(route_cards[index].get("routeType", "")) == RouteCards.ROUTE_POWER:
+			power_index = index
+			break
+	if power_index < 0:
+		failures.append("route: power offer did not include its power door")
+	else:
+		var path := "DoorChoices/DoorLeft" if power_index == 0 else "DoorChoices/DoorRight"
+		var button := route.get_node_or_null(path) as Button
+		if button == null:
+			failures.append("route: power door button is missing")
+		else:
+			_check_authored_door_sprite(button, RouteCards.ROUTE_POWER, 2, failures)
+			var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
+			button.mouse_entered.emit()
+			await process_frame
+			if sprite == null or sprite.frame != 3:
+				failures.append("route: power door does not switch to its hover frame")
+			button.mouse_exited.emit()
+			await process_frame
+			if sprite == null or sprite.frame != 2:
+				failures.append("route: power door does not restore its normal frame")
+	route.free()
+
 ## One native scene-smoke pass through the new machine -> route -> machine seam. The
 ## rules-level route checks cover payment invariants; this check proves the actual route
 ## panels and destination scenes can be entered with a live prepared offer.
@@ -74,6 +125,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
+	var route_cards: Array = run_store.current_route_offer()
 	if route.get_node_or_null("ContinueButton") != null:
 		failures.append("route: dealer offer still exposes the removed continue action")
 	if route.get_node_or_null("RerollButton") == null:
@@ -98,6 +150,18 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
+	var authored_hover_index := -1
+	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
+		var route_type := String(route_cards[index].get("routeType", ""))
+		var normal_frame := _authored_door_normal_frame(route_type)
+		if normal_frame < 0:
+			continue
+		if authored_hover_index < 0:
+			authored_hover_index = index
+		var authored_button := route.get_node_or_null(
+			"DoorChoices/" + ("DoorLeft" if index == 0 else "DoorRight")) as Button
+		if authored_button != null:
+			_check_authored_door_sprite(authored_button, route_type, normal_frame, failures)
 	for door in ["DoorLeft", "DoorRight"]:
 		var door_button := route.get_node_or_null("DoorChoices/" + door) as Button
 		if door_button != null and not door_button.tooltip_text.is_empty():
@@ -128,16 +192,25 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if reroll_price != null and reroll_price.get_theme_font_size("font_size") < 7:
 		failures.append("route: reroll number is still too small")
 	var confirmation_door: Button = null
-	for door_button in [
-		route.get_node_or_null("DoorChoices/DoorLeft") as Button,
-		route.get_node_or_null("DoorChoices/DoorRight") as Button,
-	]:
+	var confirmation_index := -1
+	for index in 2:
+		var door_path := "DoorChoices/DoorLeft" if index == 0 else "DoorChoices/DoorRight"
+		var door_button := route.get_node_or_null(door_path) as Button
 		if door_button != null and not door_button.disabled:
 			confirmation_door = door_button
+			confirmation_index = index
 			break
 	if confirmation_door != null:
-		var confirmation_sprite := confirmation_door.get_node_or_null("DoorSprite") as Sprite2D
-		confirmation_door.mouse_entered.emit()
+		var hover_index := authored_hover_index if authored_hover_index >= 0 else confirmation_index
+		var hover_door := confirmation_door
+		if hover_index >= 0:
+			hover_door = route.get_node_or_null(
+				"DoorChoices/" + ("DoorLeft" if hover_index == 0 else "DoorRight")) as Button
+		var hover_sprite := hover_door.get_node_or_null("DoorSprite") as Sprite2D
+		var hover_route_type := String(route_cards[hover_index].get("routeType", "")) \
+			if hover_index >= 0 and hover_index < route_cards.size() else ""
+		var hover_normal_frame := _authored_door_normal_frame(hover_route_type)
+		hover_door.mouse_entered.emit()
 		await process_frame
 		var bubble := route.get_node_or_null("BubbleText") as Sprite2D
 		var bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
@@ -145,15 +218,20 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 				or bubble_label.text.is_empty() or not bubble_label.visible \
 				or bubble_label.text == "CHOOSE\nYOUR PATH":
 			failures.append("route: hovering a door does not show its dealer explanation")
-		if confirmation_sprite == null or confirmation_sprite.scale.x <= 1.0:
+		if hover_sprite == null or hover_sprite.scale.x <= 1.0:
 			failures.append("route: hovering a door does not scale its art up")
-		confirmation_door.mouse_exited.emit()
+		if hover_normal_frame >= 0 and (hover_sprite == null \
+				or hover_sprite.frame != hover_normal_frame + 1):
+			failures.append("route: %s door does not switch to its hover frame" % hover_route_type)
+		hover_door.mouse_exited.emit()
 		await process_frame
 		if bubble == null or not bubble.visible or bubble_label == null \
 				or not bubble_label.visible or bubble_label.text != "CHOOSE\nYOUR PATH":
 			failures.append("route: leaving a door does not restore the dealer path prompt")
-		if confirmation_sprite != null and not is_equal_approx(confirmation_sprite.scale.x, 1.0):
+		if hover_sprite != null and not is_equal_approx(hover_sprite.scale.x, 1.0):
 			failures.append("route: leaving a door does not restore its art scale")
+		if hover_normal_frame >= 0 and (hover_sprite == null or hover_sprite.frame != hover_normal_frame):
+			failures.append("route: %s door does not restore its normal frame" % hover_route_type)
 		confirmation_door.pressed.emit()
 		await process_frame
 		var confirmation := route.get_node_or_null("DoorConfirmation") as Control
@@ -232,23 +310,25 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var power_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_POWER_ID, 0x565758)
 	if power_seed < 0 or not run_store.prepare_route_offer("wealth_target", power_seed):
 		failures.append("route: power artwork offer setup failed")
-	elif not run_store.select_route(RouteCards.CARD_POWER_ID):
-		failures.append("route: power artwork card could not be selected")
 	else:
-		var power_build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
-		get_root().add_child(power_build)
-		await process_frame
-		_check_route_build_artwork(power_build, "power", failures)
-		var power_ids: Array = run_store.routeBuildOfferIds as Array
-		if power_ids.is_empty():
-			failures.append("route: power destination has no cards")
+		await _check_power_door_hover(run_store, failures)
+		if not run_store.select_route(RouteCards.CARD_POWER_ID):
+			failures.append("route: power artwork card could not be selected")
 		else:
-			var power_id := String(power_ids[0])
-			if not run_store.complete_route_build_selection(power_id):
-				failures.append("route: power artwork card could not be selected")
-			if not run_store.finish_route_destination() or run_store.runPhase != "running":
-				failures.append("route: Power did not return to a live machine segment")
-		power_build.free()
+			var power_build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
+			get_root().add_child(power_build)
+			await process_frame
+			_check_route_build_artwork(power_build, "power", failures)
+			var power_ids: Array = run_store.routeBuildOfferIds as Array
+			if power_ids.is_empty():
+				failures.append("route: power destination has no cards")
+			else:
+				var power_id := String(power_ids[0])
+				if not run_store.complete_route_build_selection(power_id):
+					failures.append("route: power artwork card could not be selected")
+				if not run_store.finish_route_destination() or run_store.runPhase != "running":
+					failures.append("route: Power did not return to a live machine segment")
+			power_build.free()
 
 	# The machine segment is the destination of the refusal path. A final live state is
 	# enough here; the existing machine checks cover the machine's complete HUD/interaction

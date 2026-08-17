@@ -22,6 +22,8 @@ const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
 const BUBBLE_TEXT_FONT_SIZE := 3
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_HOVER_SCALE := 1.06
+const HOVER_DOOR_HFRAMES := 2
+const HOVER_DOOR_VFRAMES := 2
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
 const RED := Color(1.0, 0.35, 0.42)
@@ -47,8 +49,15 @@ const DOOR_FRAMES := {
 	RouteCards.ROUTE_BONUS: 3,
 	RouteCards.ROUTE_SACRIFICE: 4,
 }
+const HOVER_DOOR_FRAMES := {
+	RouteCards.ROUTE_SHOP: 0,
+	RouteCards.ROUTE_POWER: 2,
+}
+
+@export var hover_doors_texture: Texture2D = null
 
 var _font: FontFile = null
+var _default_doors_texture: Texture2D = null
 var _reroll_art: Sprite2D = null
 var _bubble_sprite: Sprite2D = null
 var _bubble_label: Label = null
@@ -172,6 +181,9 @@ func _configure_doors() -> void:
 		button.tooltip_text = ""
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
+		if _default_doors_texture == null and sprite != null:
+			_default_doors_texture = sprite.texture
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
@@ -242,11 +254,11 @@ func _refresh() -> void:
 func _set_door_card(button: Button, card: Dictionary) -> void:
 	var route_type := String(card.get("routeType", ""))
 	var affordable := RunStateStore.route_card_affordable(String(card.get("id", "")))
+	var index := _door_buttons.find(button)
+	_set_door_visual(index, route_type, index == _hovered_door_index)
 	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 	if sprite != null:
-		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 		sprite.self_modulate = Color.WHITE if affordable else Color(0.55, 0.55, 0.64, 1.0)
-		_set_door_hovered(_door_buttons.find(button), _door_buttons.find(button) == _hovered_door_index)
 	var title := button.get_node_or_null("DoorTitle") as Label
 	if title != null:
 		title.text = String(card.get("displayName", "ROUTE"))
@@ -517,9 +529,29 @@ func _set_all_door_hovered(hovered: bool) -> void:
 func _set_door_hovered(index: int, hovered: bool) -> void:
 	if index < 0 or index >= _door_buttons.size():
 		return
+	var cards := RunStateStore.current_route_offer()
+	var route_type := ""
+	if index < cards.size():
+		route_type = String(cards[index].get("routeType", ""))
+	_set_door_visual(index, route_type, hovered)
+
+func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
+	if index < 0 or index >= _door_buttons.size():
+		return
 	var sprite := _door_buttons[index].get_node_or_null("DoorSprite") as Sprite2D
 	if sprite == null:
 		return
+	var hover_frame := int(HOVER_DOOR_FRAMES.get(route_type, -1))
+	if hover_doors_texture != null and hover_frame >= 0:
+		sprite.texture = hover_doors_texture
+		sprite.hframes = HOVER_DOOR_HFRAMES
+		sprite.vframes = HOVER_DOOR_VFRAMES
+		sprite.frame = hover_frame + (1 if hovered else 0)
+	else:
+		sprite.texture = _default_doors_texture
+		sprite.hframes = 5
+		sprite.vframes = 1
+		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
 	if not hovered:
 		sprite.scale = Vector2.ONE
 		sprite.position = Vector2.ZERO
@@ -528,7 +560,7 @@ func _set_door_hovered(index: int, hovered: bool) -> void:
 	if sprite.texture != null:
 		frame_size = Vector2(
 			float(sprite.texture.get_width()) / float(maxi(sprite.hframes, 1)),
-			float(sprite.texture.get_height()))
+			float(sprite.texture.get_height()) / float(maxi(sprite.vframes, 1)))
 	var hover_scale := Vector2.ONE * DOOR_HOVER_SCALE
 	sprite.scale = hover_scale
 	sprite.position = frame_size * (Vector2.ONE - hover_scale) * 0.5
