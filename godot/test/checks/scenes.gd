@@ -218,8 +218,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 				or bubble_label.text.is_empty() or not bubble_label.visible \
 				or bubble_label.text == "CHOOSE\nYOUR PATH":
 			failures.append("route: hovering a door does not show its dealer explanation")
-		if hover_sprite == null or hover_sprite.scale.x <= 1.0:
-			failures.append("route: hovering a door does not scale its art up")
+		if hover_sprite == null or not is_equal_approx(hover_sprite.scale.x, 1.0) \
+				or hover_sprite.position != Vector2.ZERO:
+			failures.append("route: hovering a door changes its art size or position")
 		if hover_normal_frame >= 0 and (hover_sprite == null \
 				or hover_sprite.frame != hover_normal_frame + 1):
 			failures.append("route: %s door does not switch to its hover frame" % hover_route_type)
@@ -228,8 +229,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		if bubble == null or not bubble.visible or bubble_label == null \
 				or not bubble_label.visible or bubble_label.text != "CHOOSE\nYOUR PATH":
 			failures.append("route: leaving a door does not restore the dealer path prompt")
-		if hover_sprite != null and not is_equal_approx(hover_sprite.scale.x, 1.0):
-			failures.append("route: leaving a door does not restore its art scale")
+		if hover_sprite != null and (not is_equal_approx(hover_sprite.scale.x, 1.0) \
+				or hover_sprite.position != Vector2.ZERO):
+			failures.append("route: leaving a door does not restore its art size or position")
 		if hover_normal_frame >= 0 and (hover_sprite == null or hover_sprite.frame != hover_normal_frame):
 			failures.append("route: %s door does not restore its normal frame" % hover_route_type)
 		confirmation_door.pressed.emit()

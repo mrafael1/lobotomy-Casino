@@ -21,7 +21,6 @@ const CONFIRM_BUTTON_SIZE := Vector2(54.0, 18.0)
 const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
 const BUBBLE_TEXT_FONT_SIZE := 3
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
-const DOOR_HOVER_SCALE := 1.06
 const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 2
 const GOLD := Color(1.0, 0.84, 0.38)
@@ -552,15 +551,5 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 		sprite.hframes = 5
 		sprite.vframes = 1
 		sprite.frame = int(DOOR_FRAMES.get(route_type, 0))
-	if not hovered:
-		sprite.scale = Vector2.ONE
-		sprite.position = Vector2.ZERO
-		return
-	var frame_size := Vector2.ZERO
-	if sprite.texture != null:
-		frame_size = Vector2(
-			float(sprite.texture.get_width()) / float(maxi(sprite.hframes, 1)),
-			float(sprite.texture.get_height()) / float(maxi(sprite.vframes, 1)))
-	var hover_scale := Vector2.ONE * DOOR_HOVER_SCALE
-	sprite.scale = hover_scale
-	sprite.position = frame_size * (Vector2.ONE - hover_scale) * 0.5
+	sprite.scale = Vector2.ONE
+	sprite.position = Vector2.ZERO
