@@ -294,6 +294,27 @@ func _refresh() -> void:
 	if not pending and _message != null and _message.text == "":
 		_message.text = "ROUTE OFFER CLOSED"
 
+func _input(event: InputEvent) -> void:
+	if not _selection_locked or _pending_door_index < 0:
+		return
+	var is_left_press := false
+	var pointer_position := Vector2.INF
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		is_left_press = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+		pointer_position = make_canvas_position_local(mouse_event.position)
+	elif event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		is_left_press = touch_event.index == 0 and touch_event.pressed
+		pointer_position = make_canvas_position_local(touch_event.position)
+	if not is_left_press:
+		return
+	for button in _door_buttons:
+		if button.visible and button.get_global_rect().has_point(pointer_position):
+			return
+	_clear_pending_door_selection()
+	get_viewport().set_input_as_handled()
+
 func _set_door_card(button: Button, card: Dictionary) -> void:
 	var route_type := String(card.get("routeType", ""))
 	var affordable := RunStateStore.route_card_affordable(String(card.get("id", "")))
@@ -311,7 +332,7 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	# Route descriptions are intentionally not tooltips: Godot's default tooltip is a
 	# large hover panel that obscures the authored door artwork on this tiny canvas.
 	button.tooltip_text = ""
-	button.disabled = not affordable or (_selection_locked and index != _pending_door_index)
+	button.disabled = not affordable
 
 func _on_door_pressed(index: int) -> void:
 	if index < 0 or index >= _door_buttons.size():
@@ -319,14 +340,17 @@ func _on_door_pressed(index: int) -> void:
 	if index == _pending_door_index:
 		_confirm_door_selection()
 		return
-	if _selection_locked:
-		return
 	var cards := RunStateStore.current_route_offer()
 	if index >= cards.size():
 		return
 	var card := cards[index]
 	if not RunStateStore.route_card_affordable(String(card.get("id", ""))):
 		return
+	if _selection_locked and _pending_door_index != index:
+		var previous_index := _pending_door_index
+		_pending_door_index = -1
+		_set_door_hovered(previous_index, false)
+		_clear_door_suction()
 	_pending_door_index = index
 	_hovered_door_index = -1
 	_selection_locked = true
@@ -335,6 +359,16 @@ func _on_door_pressed(index: int) -> void:
 	_show_door_confirmation_prompt(card)
 	var route_type := String(card.get("routeType", ""))
 	_play_door_suction(DOOR_COLORS.get(route_type, CYAN), index)
+
+func _clear_pending_door_selection() -> void:
+	var previous_index := _pending_door_index
+	_pending_door_index = -1
+	_hovered_door_index = -1
+	_selection_locked = false
+	_set_door_hovered(previous_index, false)
+	_set_interaction_locked(false)
+	_clear_door_suction()
+	_show_default_bubble()
 
 func _show_door_confirmation_prompt(card: Dictionary) -> void:
 	var display_name := String(card.get("displayName", "ROUTE"))
@@ -377,10 +411,8 @@ func _on_reroll_pressed() -> void:
 	_message.text = "DOORS CHANGED"
 
 func _set_interaction_locked(locked: bool) -> void:
-	for index in _door_buttons.size():
-		_door_buttons[index].disabled = locked and index != _pending_door_index
 	if _reroll_button != null:
-		_reroll_button.disabled = locked
+		_reroll_button.disabled = locked or not RunStateStore.route_offer_reroll_affordable()
 
 func _open_destination() -> void:
 	match RunStateStore.routeDestination:

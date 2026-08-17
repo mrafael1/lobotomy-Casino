@@ -296,6 +296,40 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
 				or confirmation_sprite.frame != confirmation_normal_frame + 1):
 			failures.append("route: opened door did not keep its open frame")
+		var outside_click := InputEventMouseButton.new()
+		outside_click.button_index = MOUSE_BUTTON_LEFT
+		outside_click.pressed = true
+		outside_click.position = Vector2(80.0, 230.0)
+		route.call("_input", outside_click)
+		await process_frame
+		if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+				or confirmation_sprite.frame != confirmation_normal_frame):
+			failures.append("route: outside click did not close the semi-open door")
+		var outside_bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+		if outside_bubble_label == null or outside_bubble_label.text != "CHOOSE\nYOUR PATH":
+			failures.append("route: outside click did not restore the dealer path prompt")
+		if route.get_node_or_null("DoorSuctionParticles") != null:
+			failures.append("route: outside click did not clear the door suction effect")
+		confirmation_door.pressed.emit()
+		await process_frame
+		var other_index := 1 - confirmation_index
+		var other_door := route.get_node_or_null(
+			"DoorChoices/" + ("DoorLeft" if other_index == 0 else "DoorRight")) as Button
+		var other_card: Dictionary = route_cards[other_index] \
+			if other_index < route_cards.size() else {}
+		var other_route_type := String(other_card.get("routeType", ""))
+		var other_normal_frame := _authored_door_normal_frame(other_route_type)
+		if other_door != null and not other_door.disabled and other_normal_frame >= 0:
+			var other_sprite := other_door.get_node_or_null("DoorSprite") as Sprite2D
+			other_door.pressed.emit()
+			await process_frame
+			if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+					or confirmation_sprite.frame != confirmation_normal_frame):
+				failures.append("route: switching doors did not close the previous door")
+			if other_sprite == null or other_sprite.frame != other_normal_frame + 1:
+				failures.append("route: clicking the other door did not open it")
+			confirmation_door.pressed.emit()
+			await process_frame
 		confirmation_door.pressed.emit()
 		await process_frame
 		if run_store.routeOfferPending or run_store.routeDestination != RouteCards.ROUTE_SHOP:
