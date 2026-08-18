@@ -69,6 +69,7 @@ offset_bottom = 159.0
 mouse_filter = 0
 
 [node name="DoorSprite" type="Sprite2D" parent="DoorChoices/DoorRight"]
+position = Vector2(1, 1)
 texture_filter = 1
 texture = ExtResource("3_doors")
 centered = false

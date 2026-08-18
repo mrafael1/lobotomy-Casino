@@ -159,6 +159,9 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var left_door_sprite := route.get_node_or_null("DoorChoices/DoorLeft/DoorSprite") as Sprite2D
 	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0):
 		failures.append("route: left door art is not offset by one pixel")
+	var right_door_sprite := route.get_node_or_null("DoorChoices/DoorRight/DoorSprite") as Sprite2D
+	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0):
+		failures.append("route: right door art is not offset by one pixel")
 	var authored_hover_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
 		var route_type := String(route_cards[index].get("routeType", ""))
