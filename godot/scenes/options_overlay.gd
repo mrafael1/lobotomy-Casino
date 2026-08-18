@@ -16,6 +16,7 @@ const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)
 const NEON_YELLOW := Color(1.0, 0.86, 0.36)
+const MODAL_Z_INDEX := 1000
 ## px from the LANGUAGE row's right edge to the flag, matching the row's own text inset.
 const LANGUAGE_FLAG_INSET := 8.0
 const MENU_BUTTON_SIZE := Vector2(104.0, 20.0)
@@ -44,7 +45,20 @@ const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the panel's top-right c
 
 func _ready() -> void:
 	size = Vector2(160.0, 320.0)
+	z_index = MODAL_Z_INDEX
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# Keep the modal contract explicit instead of relying on each scene's
+	# inherited defaults. The root captures the full canvas; the panel and every
+	# action control stop GUI propagation inside it.
+	if _panel != null:
+		_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	for button in [_scores_button, _settings_button, _collection_button,
+			_tutorial_button, _language_button, _menu_button, _close_button]:
+		if button != null:
+			button.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := get_node_or_null("Dim") as ColorRect
+	if dim != null:
+		dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	UiKit.apply_font(self)
 	_style_panel()
 	_style_menu_button(_scores_button, NEON_PINK)
@@ -70,6 +84,8 @@ func show_overlay() -> void:
 	# between one opening of this menu and the next.
 	_refresh_tutorial_button()
 	_refresh_language_button()
+	z_index = MODAL_Z_INDEX
+	move_to_front()
 	visible = true
 
 func hide_overlay() -> void:

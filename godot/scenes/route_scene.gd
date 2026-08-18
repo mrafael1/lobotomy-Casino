@@ -79,7 +79,7 @@ func _refresh() -> void:
 		_cards_layer.add_child(panel)
 		var name_label := _label(String(card.get("displayName", "ROUTE")), \
 			Rect2(4.0, 4.0, 65.0, 11.0), 5, GOLD, panel)
-		var cost := int(card.get("lucidityCost", 0))
+		var cost := RouteCards.card_cost(card)
 		var cost_label := _label(("FREE" if cost <= 0 else "%dG" % cost) \
 			+ (" / READY" if affordable else " / LOCKED"), \
 			Rect2(4.0, 16.0, 65.0, 9.0), 4, CYAN if affordable else RED, panel)

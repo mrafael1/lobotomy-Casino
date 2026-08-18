@@ -379,7 +379,7 @@ func _confirm_door_selection() -> void:
 		_pending_door_index = -1
 		_selection_locked = false
 		_set_interaction_locked(false)
-		_message.text = "DOOR PAYMENT REFUSED"
+		_message.text = "DOOR UNAVAILABLE"
 		_refresh()
 		return
 	_pending_door_index = -1

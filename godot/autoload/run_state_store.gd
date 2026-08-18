@@ -1697,10 +1697,8 @@ func select_route(card_id: String) -> bool:
 	if not routeOfferPending or not route_card_affordable(card_id):
 		return false
 	var card := route_offer_card(card_id)
-	var cost := RouteCards.card_cost(card)
 	var offered_cards := _route_offer_array()
 	var offered_reroll_count := int(routeOfferRerollCount)
-	lucidityCoins -= cost
 	routeOfferPending = false
 	routeOfferCards = null
 	routeOfferRerollCount = 0
@@ -1724,7 +1722,6 @@ func select_route(card_id: String) -> bool:
 		_:
 			opened = false
 	if not opened:
-		lucidityCoins += cost
 		routeOfferPending = true
 		routeOfferCards = offered_cards
 		routeOfferRerollCount = offered_reroll_count
@@ -2132,6 +2129,15 @@ func complete_wealth_target() -> Dictionary:
 		return {}
 	_commit()
 	return settled
+
+## Commit the Run Wallet after a machine segment's payout screen has finished. The
+## machine calculates the net remainder first; this setter is the only handoff point
+## that rewrites the spendable run balance, so score-derived Lucidity is never moved
+## into the wallet early and deducted afterward.
+func settle_run_lucidity_after_deductions(amount: int) -> int:
+	lucidityCoins = maxi(0, amount)
+	_commit()
+	return lucidityCoins
 
 
 ## The payout itself, without the commit — the money changing hands. Shared with

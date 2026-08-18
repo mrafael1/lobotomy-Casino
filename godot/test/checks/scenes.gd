@@ -591,9 +591,22 @@ func _check_global_options_layout(failures: Array) -> void:
 	elif machine_options.position.x > 20.0:
 		failures.append("options: machine options button is not top-left")
 	_check_settings_icon(machine_options, "machine", failures)
+	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
 	if machine.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: machine scene missing shared OptionsOverlay")
-	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
+	else:
+		var machine_overlay := machine.get_node("OptionsOverlay") as OptionsOverlay
+		if machine_overlay.z_index <= bottom_hud.z_index:
+			failures.append("options: machine overlay is not above the gameplay HUD")
+		if machine_overlay.mouse_filter != Control.MOUSE_FILTER_STOP:
+			failures.append("options: machine overlay does not stop pointer input")
+		machine_overlay.show_overlay()
+		var underlying_motion := InputEventMouseMotion.new()
+		underlying_motion.position = Vector2(105.0, 228.0)
+		machine._input(underlying_motion)
+		if bool(machine._swap_drag_active) or bool(machine._dealer_drag_active):
+			failures.append("options: machine input leaked through the visible modal")
+		machine_overlay.hide_overlay()
 	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
 	var machine_credits_row := machine.get_node_or_null(
 		"BottomHudLayer/CreditsRow") as HBoxContainer
@@ -651,6 +664,12 @@ func _check_global_options_layout(failures: Array) -> void:
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
 	get_root().add_child(overlay)
+	await process_frame
+	if overlay.z_index < 1000 or overlay.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: overlay is not a topmost full-canvas modal")
+	var dim := overlay.get_node_or_null("Dim") as ColorRect
+	if dim == null or dim.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: modal dimmer does not capture outside-panel input")
 	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
 	var options_contour := overlay.get_node_or_null("Contour") as Panel
 	if options_contour == null:
@@ -666,12 +685,16 @@ func _check_global_options_layout(failures: Array) -> void:
 		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
 		else:
+			if option_button.mouse_filter != Control.MOUSE_FILTER_STOP:
+				failures.append("options: %s does not stop modal input" % path)
 			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxTexture
 			if button_style == null or button_style.texture == null:
 				failures.append("options: %s is not using start-menu button art" % path)
 	var close_button := overlay.get_node_or_null("CloseButton") as Button
 	if close_button == null or close_button.text != "X":
 		failures.append("options: overlay close button is not the pixel X control")
+	elif close_button.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: close button does not stop modal input")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
 	# The panel grew to make room for the fifth row; the contour drawn behind it has to
@@ -685,6 +708,8 @@ func _check_global_options_layout(failures: Array) -> void:
 	if options_panel != null \
 			and options_panel.size.y < options_rows.get_combined_minimum_size().y:
 		failures.append("options: the panel is too short for its own rows")
+	if options_panel != null and options_panel.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: panel does not stop modal input")
 	overlay.queue_free()
 
 	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
@@ -706,6 +731,7 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 	var previous_lucidity := int(run_store.lucidityCoins)
 	var previous_score := int(run_store.scoreEarned)
 	var previous_before := int(machine._machine_scene_lucidity_before)
+	var previous_score_before := int(machine._machine_scene_score_before)
 	var previous_ready := bool(machine._machine_scene_lucidity_snapshot_ready)
 	run_store.runPhase = "running"
 	run_store.lucidityCoins = 40
@@ -715,14 +741,28 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 		failures.append("machine: Lucidity display did not use the segment's previous balance")
 	run_store.lucidityCoins = 73 # net machine Lucidity after gains and deductions
 	machine._update_hud()
-	if credits_label.text != "73":
-		failures.append("machine: Lucidity display did not use the net balance after deductions")
+	if credits_label.text != "40":
+		failures.append("machine: Lucidity display updated during the machine segment")
 	if int(machine._machine_lucidity_after_deductions()) != 73:
 		failures.append("machine: end-of-scene Lucidity used the full score instead of net Lucidity")
+	# The segment handoff removes the score-derived balance before applying the
+	# settled remainder. This is the 100 - 83 = 17 case with a carried wallet of 42.
+	run_store.lucidityCoins = 42
+	run_store.scoreEarned = 0
+	machine._begin_machine_lucidity_segment()
+	run_store.scoreEarned = 100
+	run_store.lucidityCoins = 142
+	var settled: int = machine._settle_machine_lucidity_after_deductions(
+		{"banked": 17}, 100)
+	if settled != 59 or int(run_store.lucidityCoins) != 59:
+		failures.append("machine: Run Wallet did not receive only the post-deduction remainder")
+	if credits_label.text != "59":
+		failures.append("machine: Run Wallet did not update at segment handoff")
 	run_store.runPhase = previous_phase
 	run_store.lucidityCoins = previous_lucidity
 	run_store.scoreEarned = previous_score
 	machine._machine_scene_lucidity_before = previous_before
+	machine._machine_scene_score_before = previous_score_before
 	machine._machine_scene_lucidity_snapshot_ready = previous_ready
 
 
