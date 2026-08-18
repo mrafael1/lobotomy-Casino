@@ -24,7 +24,6 @@ const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
 const DOOR_OPEN_GAP_LOCAL_X := 58.0
 const DOOR_OPEN_GAP_LOCAL_TOP := 2.0
 const DOOR_OPEN_GAP_LOCAL_BOTTOM := 92.0
-const DOOR_GAP_COLOR := Color(0.30, 0.82, 0.92, 1.0)
 const DOOR_SUCTION_PARTICLE_LIFETIME := 1.4
 const DOOR_SUCTION_MIN_SPAWN_DELAY := 0.055
 const DOOR_SUCTION_MAX_SPAWN_DELAY := 0.095
@@ -102,29 +101,11 @@ func _ready() -> void:
 	_build_credits_display()
 	_build_bubble_text()
 	_configure_doors()
-	_build_door_gap_backdrops()
 	_configure_actions()
 	if not Engine.is_editor_hint() \
 			and not RunStateStore.state_changed.is_connected(_refresh):
 		RunStateStore.state_changed.connect(_refresh)
 	_refresh()
-
-func _build_door_gap_backdrops() -> void:
-	for index in _door_buttons.size():
-		var sprite := _door_buttons[index].get_node_or_null("DoorSprite") as Sprite2D
-		if sprite == null:
-			continue
-		var gap := ColorRect.new()
-		gap.name = "DoorGapGlow%d" % index
-		gap.position = sprite.to_global(Vector2(
-			DOOR_OPEN_GAP_LOCAL_X - 3.0, DOOR_OPEN_GAP_LOCAL_TOP))
-		gap.size = Vector2(7.0,
-			DOOR_OPEN_GAP_LOCAL_BOTTOM - DOOR_OPEN_GAP_LOCAL_TOP)
-		gap.color = DOOR_GAP_COLOR
-		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		gap.visible = false
-		gap.z_index = 21
-		add_child(gap)
 
 func _process(delta: float) -> void:
 	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
@@ -557,9 +538,6 @@ func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:
 	if sprite == null:
 		return
 	var hover_frame := int(HOVER_DOOR_FRAMES.get(route_type, -1))
-	var gap := get_node_or_null("DoorGapGlow%d" % index) as ColorRect
-	if gap != null:
-		gap.visible = hovered and hover_frame >= 0
 	if hover_doors_texture != null and hover_frame >= 0:
 		sprite.texture = hover_doors_texture
 		sprite.hframes = HOVER_DOOR_HFRAMES
