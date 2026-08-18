@@ -44,6 +44,15 @@ func configure(kind: int, door_side: int = -1) -> void:
 
 
 func play_exit(kind: int, door_side: int = -1) -> void:
+	# SceneNav owns the request lock, but the presentation is also deliberately
+	# idempotent. A second caller joining the same phase must not kill the running
+	# tween and restart the shutter from frame zero.
+	if _phase == &"covered":
+		return
+	if _phase == &"exit":
+		if _tween != null and _tween.is_valid():
+			await _tween.finished
+		return
 	configure(kind, door_side)
 	_kill_tween()
 	_phase = &"exit"
@@ -57,9 +66,16 @@ func play_exit(kind: int, door_side: int = -1) -> void:
 	_tween.tween_method(Callable(self, "_set_progress"), 0.0, 1.0, duration)
 	await _tween.finished
 	_set_progress(1.0)
-
+	_tween = null
+	_phase = &"covered"
 
 func play_entrance() -> void:
+	if _phase == &"hidden":
+		return
+	if _phase == &"entrance":
+		if _tween != null and _tween.is_valid():
+			await _tween.finished
+		return
 	_kill_tween()
 	_phase = &"entrance"
 	_progress = 1.0
@@ -72,6 +88,7 @@ func play_entrance() -> void:
 	_tween.tween_method(Callable(self, "_set_progress"), 1.0, 0.0, duration)
 	await _tween.finished
 	_set_progress(0.0)
+	_tween = null
 	_phase = &"hidden"
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -109,7 +126,15 @@ func _kill_tween() -> void:
 
 
 func _cover_progress() -> float:
-	return _progress if _phase == &"exit" else 1.0 - _progress
+	match _phase:
+		&"exit":
+			return _progress
+		&"covered":
+			return 1.0
+		&"entrance":
+			return 1.0 - _progress
+		_:
+			return 0.0
 
 
 func _draw() -> void:

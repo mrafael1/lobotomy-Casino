@@ -795,6 +795,20 @@ func _check_scene_nav(failures: Array) -> void:
 	if not nav.peek_back_restores_options():
 		failures.append("scene nav: did not retain options restore flag")
 	nav.clear()
+	var transition_script: Script = load("res://autoload/scene_transition.gd")
+	var transition := transition_script.new() as Control
+	get_root().add_child(transition)
+	await transition.play_exit(0)
+	var exit_progress := float(transition.get("_progress"))
+	transition.play_exit(0)
+	if transition.get("_phase") != &"covered" or not is_equal_approx(
+		exit_progress, float(transition.get("_progress"))):
+		failures.append("scene nav: repeated exit request restarted the transition")
+	await transition.play_entrance()
+	transition.play_entrance()
+	if transition.get("_phase") != &"hidden":
+		failures.append("scene nav: repeated entrance request restarted the transition")
+	transition.free()
 
 
 func _check_issue232_wallet_transfer(run_store: Node, failures: Array) -> void:
