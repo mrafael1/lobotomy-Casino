@@ -733,6 +733,8 @@ var _spin_label: Label = null
 var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
 var _credits_coin: TextureRect = null
+var _machine_scene_lucidity_before := 0
+var _machine_scene_lucidity_snapshot_ready := false
 ## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
 var _flatline_transition_active: bool = false
@@ -2034,7 +2036,28 @@ func _build_machine_credits_display(bottom_hud: Control) -> void:
 
 func _refresh_machine_credits() -> void:
 	if _credits_label != null:
-		_credits_label.text = str(int(RunStateStore.lucidityCoins))
+		var displayed := int(RunStateStore.lucidityCoins)
+		if _machine_scene_lucidity_snapshot_ready:
+			displayed = _machine_scene_lucidity_before
+		_credits_label.text = str(displayed)
+
+## The machine HUD shows the carried run-Lucidity balance from the start of this
+## machine segment. Score and Lucidity can change underneath it, but the number only
+## changes when the segment is handed off to the next scene.
+func _begin_machine_lucidity_segment() -> void:
+	_machine_scene_lucidity_before = int(RunStateStore.lucidityCoins)
+	_machine_scene_lucidity_snapshot_ready = true
+	_refresh_machine_credits()
+
+## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
+## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
+## have been applied. Express the handoff as the carried value plus that net machine
+## delta so the ending path can never accidentally substitute the full score.
+func _machine_lucidity_after_deductions() -> int:
+	if not _machine_scene_lucidity_snapshot_ready:
+		return maxi(0, int(RunStateStore.lucidityCoins))
+	var machine_delta := int(RunStateStore.lucidityCoins) - _machine_scene_lucidity_before
+	return maxi(0, _machine_scene_lucidity_before + machine_delta)
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
@@ -2056,6 +2079,7 @@ func _enter_run() -> void:
 		if not _begin_fresh_run():
 			_show_campaign_failed()
 			return
+	_begin_machine_lucidity_segment()
 	_sync_visuals()
 	# The "-1 NEURON" popup belongs to the flatline overlay only — it no longer
 	# fires during normal machine play (the pending flag is just cleared here).
@@ -2259,7 +2283,7 @@ func _finish_wealth_target_transition() -> void:
 		var final_run := {
 			"neurons": RunStateStore.neurons,
 			"scoreEarned": RunStateStore.scoreEarned,
-			"lucidityCoins": RunStateStore.lucidityCoins,
+			"lucidityCoins": _machine_lucidity_after_deductions(),
 		}
 		_show_ending("wealth", final_run)
 		return
@@ -5061,7 +5085,7 @@ func _check_flatline_instant_death() -> bool:
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	}
 	# The killing strike gets to play: the FLATLINE line-sweep and its 3/3 count run to the
 	# end before the ending screen takes over, instead of being cut off the frame they land.
@@ -5189,7 +5213,7 @@ func _check_ending() -> bool:
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	}
 	var ending: Variant = Endings.check_ending(run, {}, campaign_goal_score)
 	if ending == null:
@@ -5504,6 +5528,7 @@ func _can_resume_after_wealth() -> bool:
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
 	if _can_resume_after_wealth():
+		_begin_machine_lucidity_segment()
 		_sync_visuals()
 		return
 	# Defensive: no spin can follow, so end the run through the flatline flow
@@ -5515,7 +5540,7 @@ func _continue_from_wealth() -> void:
 	_show_ending("flatline", {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	})
 
 ## Wealth screen Start Again: bank the run and return to the menu hub.

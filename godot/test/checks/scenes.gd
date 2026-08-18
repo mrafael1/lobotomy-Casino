@@ -688,6 +688,37 @@ func _check_global_options_layout(failures: Array) -> void:
 	settings.queue_free()
 
 
+func _check_machine_lucidity_display(machine: Node, run_store: Node,
+		failures: Array) -> void:
+	var credits_label := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/CreditsLabel") as Label
+	if credits_label == null:
+		failures.append("machine: Lucidity display regression check is missing its label")
+		return
+	var previous_phase := String(run_store.runPhase)
+	var previous_lucidity := int(run_store.lucidityCoins)
+	var previous_score := int(run_store.scoreEarned)
+	var previous_before := int(machine._machine_scene_lucidity_before)
+	var previous_ready := bool(machine._machine_scene_lucidity_snapshot_ready)
+	run_store.runPhase = "running"
+	run_store.lucidityCoins = 40
+	run_store.scoreEarned = 9000
+	machine._begin_machine_lucidity_segment()
+	if credits_label.text != "40":
+		failures.append("machine: Lucidity display did not use the segment's previous balance")
+	run_store.lucidityCoins = 73 # net machine Lucidity after gains and deductions
+	machine._update_hud()
+	if credits_label.text != "40":
+		failures.append("machine: Lucidity display updated during the machine scene")
+	if int(machine._machine_lucidity_after_deductions()) != 73:
+		failures.append("machine: end-of-scene Lucidity used the full score instead of net Lucidity")
+	run_store.runPhase = previous_phase
+	run_store.lucidityCoins = previous_lucidity
+	run_store.scoreEarned = previous_score
+	machine._machine_scene_lucidity_before = previous_before
+	machine._machine_scene_lucidity_snapshot_ready = previous_ready
+
+
 func _check_scene_nav(failures: Array) -> void:
 	var nav: Node = get_root().get_node("SceneNav")
 	nav.clear()
