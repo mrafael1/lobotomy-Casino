@@ -33,6 +33,7 @@ const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 5
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
+const ROSE := Color(1.0, 0.42, 0.88)
 const RED := Color(1.0, 0.35, 0.42)
 const BUBBLE_TEXT_COLOR := Color(0.96, 0.88, 0.77)
 const DOOR_EXPLANATIONS := {
@@ -44,8 +45,8 @@ const DOOR_EXPLANATIONS := {
 }
 const DOOR_COLORS := {
 	RouteCards.ROUTE_SHOP: Color(1.0, 0.84, 0.38),
-	RouteCards.ROUTE_AUGMENT: Color(0.42, 1.0, 0.95),
-	RouteCards.ROUTE_POWER: Color(1.0, 0.42, 0.88),
+	RouteCards.ROUTE_AUGMENT: ROSE,
+	RouteCards.ROUTE_POWER: CYAN,
 	RouteCards.ROUTE_BONUS: Color(1.0, 0.91, 0.42),
 	RouteCards.ROUTE_SACRIFICE: Color(0.67, 0.49, 1.0),
 }

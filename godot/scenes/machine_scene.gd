@@ -2036,14 +2036,12 @@ func _build_machine_credits_display(bottom_hud: Control) -> void:
 
 func _refresh_machine_credits() -> void:
 	if _credits_label != null:
-		var displayed := int(RunStateStore.lucidityCoins)
-		if _machine_scene_lucidity_snapshot_ready:
-			displayed = _machine_scene_lucidity_before
-		_credits_label.text = str(displayed)
+		# This is the spendable run balance, not the wealth score. Keep it live so
+		# dealer, item, reroll, and route deductions are reflected immediately.
+		_credits_label.text = str(maxi(0, int(RunStateStore.lucidityCoins)))
 
-## The machine HUD shows the carried run-Lucidity balance from the start of this
-## machine segment. Score and Lucidity can change underneath it, but the number only
-## changes when the segment is handed off to the next scene.
+## Keep the lifecycle hook for scene rebuilds and compatibility callers. The HUD
+## itself reads the current net run-Lucidity balance on every refresh.
 func _begin_machine_lucidity_segment() -> void:
 	_machine_scene_lucidity_before = int(RunStateStore.lucidityCoins)
 	_machine_scene_lucidity_snapshot_ready = true
@@ -2051,13 +2049,9 @@ func _begin_machine_lucidity_segment() -> void:
 
 ## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
 ## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
-## have been applied. Express the handoff as the carried value plus that net machine
-## delta so the ending path can never accidentally substitute the full score.
+## have been applied. Never substitute the wealth score for this handoff.
 func _machine_lucidity_after_deductions() -> int:
-	if not _machine_scene_lucidity_snapshot_ready:
-		return maxi(0, int(RunStateStore.lucidityCoins))
-	var machine_delta := int(RunStateStore.lucidityCoins) - _machine_scene_lucidity_before
-	return maxi(0, _machine_scene_lucidity_before + machine_delta)
+	return maxi(0, int(RunStateStore.lucidityCoins))
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)

@@ -75,6 +75,13 @@ func _check_power_door_hover(run_store: Node, failures: Array) -> void:
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
+	var door_colors: Dictionary = route.DOOR_COLORS
+	if not (door_colors[RouteCards.ROUTE_POWER] as Color).is_equal_approx(
+		route.CYAN as Color):
+		failures.append("route: power door suction particles are not blue")
+	if not (door_colors[RouteCards.ROUTE_AUGMENT] as Color).is_equal_approx(
+		route.ROSE as Color):
+		failures.append("route: augment door suction particles are not rose")
 	var route_cards: Array = run_store.current_route_offer()
 	var power_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
@@ -708,8 +715,8 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 		failures.append("machine: Lucidity display did not use the segment's previous balance")
 	run_store.lucidityCoins = 73 # net machine Lucidity after gains and deductions
 	machine._update_hud()
-	if credits_label.text != "40":
-		failures.append("machine: Lucidity display updated during the machine scene")
+	if credits_label.text != "73":
+		failures.append("machine: Lucidity display did not use the net balance after deductions")
 	if int(machine._machine_lucidity_after_deductions()) != 73:
 		failures.append("machine: end-of-scene Lucidity used the full score instead of net Lucidity")
 	run_store.runPhase = previous_phase
