@@ -190,10 +190,20 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position != Vector2(1.0, 107.0) \
+		if door_title == null or door_title.position != Vector2(2.0, 107.0) \
 				or door_title.size != Vector2(62.0, 9.0) \
 				or door_title.get_theme_font_size("font_size") < 5:
 			failures.append("route: %s title is not inside its blue name plate" % door)
+		if door_title != null and door_button != null:
+			var title_route_type := String(route_cards[0 if door == "DoorLeft" else 1].get(
+				"routeType", ""))
+			var expected_title_color := route.DOOR_COLORS.get(title_route_type,
+				route.CYAN) as Color
+			if door_button.disabled:
+				expected_title_color = expected_title_color.darkened(0.45)
+			if not door_title.get_theme_color("font_color").is_equal_approx(
+					expected_title_color):
+				failures.append("route: %s title does not use its door color" % door)
 	for index in RouteCards.OFFER_COUNT:
 		if route.get_node_or_null("DoorGapGlow%d" % index) != null:
 			failures.append("route: door %d still has a runtime gap overlay" % index)
@@ -789,6 +799,9 @@ func _check_scene_nav(failures: Array) -> void:
 			failures.append("scene nav: destination is not loaded under the transition cover")
 		if not source.contains("PROCESS_MODE_DISABLED"):
 			failures.append("scene nav: source scene is not suspended during loading")
+		if not source.contains("begin_wallet_transfer") \
+				or not source.contains("wait_for_wallet_transfer"):
+			failures.append("scene nav: wallet handoff is not persistent across scene load")
 	nav.push_scene("res://scenes/dealer_scene.tscn", true)
 	if nav.peek_back_scene() != "res://scenes/dealer_scene.tscn":
 		failures.append("scene nav: did not retain dealer as return scene")
@@ -808,6 +821,23 @@ func _check_scene_nav(failures: Array) -> void:
 	transition.play_entrance()
 	if transition.get("_phase") != &"hidden":
 		failures.append("scene nav: repeated entrance request restarted the transition")
+	transition.play_exit(SceneNav.TransitionKind.WALLET, -1, 42, 59)
+	var wallet_handoff := transition.get_node_or_null("WalletHandoff") as HBoxContainer
+	if transition.get("_phase") != &"covered" or not transition.visible \
+			or wallet_handoff == null or not wallet_handoff.visible:
+		failures.append("scene nav: wallet handoff did not hold a black cover and wallet row")
+	transition.begin_wallet_transfer(42, 59)
+	await transition.play_entrance()
+	if not transition.visible or transition.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("scene nav: wallet row did not survive the scene reveal")
+	await transition.wait_for_wallet_transfer()
+	var wallet_handoff_label := transition.get_node_or_null(
+		"WalletHandoff/WalletValue") as Label
+	if wallet_handoff_label == null or wallet_handoff_label.text != "59":
+		failures.append("scene nav: wallet handoff did not reach the settled balance")
+	transition.finish_wallet_handoff()
+	if transition.visible:
+		failures.append("scene nav: wallet handoff did not clear after settlement")
 	transition.free()
 
 
@@ -824,10 +854,18 @@ func _check_issue232_wallet_transfer(run_store: Node, failures: Array) -> void:
 	var wallet_row := overlay.get_node_or_null("RunWalletDuringDeduction") as HBoxContainer
 	var wallet_label := overlay.get_node_or_null(
 		"RunWalletDuringDeduction/WalletValue") as Label
+	var wallet_coin := overlay.get_node_or_null(
+		"RunWalletDuringDeduction/WalletCoin") as TextureRect
 	if wallet_row == null or wallet_row.z_index < 50:
 		failures.append("issue232: Run Wallet is not on the deduction presentation layer")
 	if wallet_label == null or wallet_label.text != "42":
 		failures.append("issue232: Run Wallet changed during deductions")
+	if wallet_label != null and wallet_coin != null:
+		await process_frame
+		var wallet_gap := wallet_coin.position.x \
+			- (wallet_label.position.x + wallet_label.size.x)
+		if wallet_gap > 3.0:
+			failures.append("issue232: Run Wallet coin is detached from its value")
 	if not overlay.continue_button.disabled:
 		failures.append("issue232: CONTINUE was available before deductions finished")
 	overlay.call("_skip_to_end")
@@ -855,6 +893,10 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 		failures.append("machine ending flow: wealth screen is missing continuation gating")
 	if not source.contains("GAME_OVER_ENDING_SCENE"):
 		failures.append("machine ending flow: dedicated game-over scene is missing")
+	if not source.contains("SceneNav.TransitionKind.WALLET"):
+		failures.append("machine ending flow: target route does not use wallet handoff")
+	if source.contains("await _wealth_target_transition.animate_wallet_transfer"):
+		failures.append("machine ending flow: wallet still settles before the route transition")
 	if source.contains("EXIT CASINO"):
 		failures.append("machine ending flow: old EXIT CASINO wealth action still present")
 	if source.contains("BANK & LAB"):

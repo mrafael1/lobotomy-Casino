@@ -280,7 +280,9 @@ func _build_wallet_display() -> void:
 
 	_wallet_label = Label.new()
 	_wallet_label.name = "WalletValue"
-	_wallet_label.custom_minimum_size = Vector2(25.0, WALLET_ROW_SIZE.y)
+	# Keep the icon immediately after the number, matching the machine and route
+	# wallet rows. A fixed horizontal minimum made short balances look detached.
+	_wallet_label.custom_minimum_size = Vector2(0.0, WALLET_ROW_SIZE.y)
 	_wallet_label.add_theme_font_size_override("font_size", 7)
 	_wallet_label.add_theme_color_override("font_color", CREDIT_GOLD)
 	_wallet_label.add_theme_color_override("font_outline_color", Color("#03060c"))

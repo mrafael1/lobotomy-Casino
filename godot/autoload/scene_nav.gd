@@ -10,6 +10,7 @@ enum TransitionKind {
 	NORMAL,
 	DOOR,
 	FLATLINE,
+	WALLET,
 }
 
 signal transition_started(kind: int, target_scene: String)
@@ -71,8 +72,10 @@ func cached_scene(scene_path: String) -> PackedScene:
 	return ps
 
 ## Central scene-change API. Existing callers remain valid; priority paths can pass a
-## TransitionKind and the selected route-door side (0 = left, 1 = right).
-func change_to(scene_path: String, kind: int = -1, door_side: int = -1) -> void:
+## TransitionKind and the selected route-door side (0 = left, 1 = right). A WALLET
+## transition also carries the visible balance before and after machine deductions.
+func change_to(scene_path: String, kind: int = -1, door_side: int = -1,
+		wallet_start: int = -1, wallet_end: int = -1) -> void:
 	if scene_path.is_empty() or _transition_active:
 		return
 	_transition_kind = _resolve_transition_kind(scene_path, kind)
@@ -81,7 +84,8 @@ func change_to(scene_path: String, kind: int = -1, door_side: int = -1) -> void:
 	_transition_serial += 1
 	var serial := _transition_serial
 	transition_started.emit(_transition_kind, scene_path)
-	_run_transition(scene_path, _transition_kind, door_side, serial)
+	_run_transition(scene_path, _transition_kind, door_side, wallet_start, wallet_end,
+		serial)
 
 
 func _resolve_transition_kind(scene_path: String, requested_kind: int) -> int:
@@ -98,19 +102,21 @@ func _resolve_transition_kind(scene_path: String, requested_kind: int) -> int:
 
 
 func _run_transition(scene_path: String, kind: int, door_side: int,
-		serial: int) -> void:
+		wallet_start: int, wallet_end: int, serial: int) -> void:
 	if _transition_overlay != null and is_instance_valid(_transition_overlay):
-		await _transition_overlay.play_exit(kind, door_side)
+		await _transition_overlay.play_exit(kind, door_side, wallet_start, wallet_end)
 	if serial != _transition_serial:
 		return
+	if kind == TransitionKind.WALLET and _transition_overlay != null \
+			and is_instance_valid(_transition_overlay):
+		_transition_overlay.begin_wallet_transfer(wallet_start, wallet_end)
 	_suspend_current_scene()
 	var packed_scene := await _load_scene(scene_path)
 	if serial != _transition_serial:
 		return
 	if packed_scene == null:
 		_restore_suspended_scene()
-		if _transition_overlay != null and is_instance_valid(_transition_overlay):
-			await _transition_overlay.play_entrance()
+		await _play_entrance(kind)
 		if serial != _transition_serial:
 			return
 		_finish_transition(serial)
@@ -118,8 +124,7 @@ func _run_transition(scene_path: String, kind: int, door_side: int,
 	var change_error := get_tree().change_scene_to_packed(packed_scene)
 	if change_error != OK:
 		_restore_suspended_scene()
-		if _transition_overlay != null and is_instance_valid(_transition_overlay):
-			await _transition_overlay.play_entrance()
+		await _play_entrance(kind)
 		if serial != _transition_serial:
 			return
 		_finish_transition(serial)
@@ -131,11 +136,20 @@ func _run_transition(scene_path: String, kind: int, door_side: int,
 	await get_tree().process_frame
 	if serial != _transition_serial:
 		return
-	if _transition_overlay != null and is_instance_valid(_transition_overlay):
-		await _transition_overlay.play_entrance()
+	await _play_entrance(kind)
 	if serial != _transition_serial:
 		return
 	_finish_transition(serial)
+
+
+func _play_entrance(kind: int) -> void:
+	if _transition_overlay == null or not is_instance_valid(_transition_overlay):
+		return
+	await _transition_overlay.play_entrance()
+	if kind != TransitionKind.WALLET:
+		return
+	await _transition_overlay.wait_for_wallet_transfer()
+	_transition_overlay.finish_wallet_handoff()
 
 
 func _suspend_current_scene() -> void:

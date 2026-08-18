@@ -14,6 +14,15 @@ const DOOR_EXIT_TIME := 0.52
 const DOOR_ENTER_TIME := 0.44
 const FLATLINE_EXIT_TIME := 0.92
 const FLATLINE_ENTER_TIME := 0.66
+const WALLET_KIND := 3
+const WALLET_ROW_POSITION := Vector2(7.0, 294.0)
+const WALLET_ROW_SIZE := Vector2(42.0, 12.0)
+const WALLET_COIN_SIZE := Vector2(9.0, 9.0)
+const WALLET_TRANSFER_MIN_TIME := 0.35
+const WALLET_TRANSFER_PER_CREDIT := 0.012
+const WALLET_TRANSFER_MAX_TIME := 1.5
+const WALLET_COIN_ASSET := "ui/coin.png"
+const WALLET_COLOR := Color(0.92, 0.86, 0.56, 1.0)
 
 const DARK := Color(0.008, 0.012, 0.026, 1.0)
 const DEEP_BLUE := Color(0.04, 0.10, 0.18, 1.0)
@@ -26,6 +35,13 @@ var _door_side := -1
 var _progress := 0.0
 var _phase: StringName = &"hidden"
 var _tween: Tween = null
+var _wallet_row: HBoxContainer = null
+var _wallet_label: Label = null
+var _wallet_coin: TextureRect = null
+var _wallet_tween: Tween = null
+var _wallet_transfer_active := false
+var _wallet_transfer_start := 0
+var _wallet_transfer_end := 0
 
 
 func _ready() -> void:
@@ -34,16 +50,27 @@ func _ready() -> void:
 	size = CANVAS_SIZE
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_mode = Control.FOCUS_NONE
+	_build_wallet_display()
 	visible = false
 
 
-func configure(kind: int, door_side: int = -1) -> void:
+func configure(kind: int, door_side: int = -1, wallet_start: int = -1,
+		wallet_end: int = -1) -> void:
 	_kind = kind
 	_door_side = -1 if door_side <= 0 else 1
+	_kill_wallet_tween()
+	_wallet_transfer_active = false
+	_wallet_transfer_start = maxi(0, wallet_start)
+	_wallet_transfer_end = maxi(0, wallet_end)
+	if _wallet_row != null:
+		_wallet_row.visible = kind == WALLET_KIND
+	if kind == WALLET_KIND and wallet_start >= 0:
+		_set_wallet_display(_wallet_transfer_start)
 	queue_redraw()
 
 
-func play_exit(kind: int, door_side: int = -1) -> void:
+func play_exit(kind: int, door_side: int = -1, wallet_start: int = -1,
+		wallet_end: int = -1) -> void:
 	# SceneNav owns the request lock, but the presentation is also deliberately
 	# idempotent. A second caller joining the same phase must not kill the running
 	# tween and restart the shutter from frame zero.
@@ -53,13 +80,18 @@ func play_exit(kind: int, door_side: int = -1) -> void:
 		if _tween != null and _tween.is_valid():
 			await _tween.finished
 		return
-	configure(kind, door_side)
+	configure(kind, door_side, wallet_start, wallet_end)
 	_kill_tween()
 	_phase = &"exit"
 	_progress = 0.0
 	visible = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
+	if _kind == WALLET_KIND:
+		_set_progress(1.0)
+		_tween = null
+		_phase = &"covered"
+		return
 	var duration := _duration(false)
 	_tween = create_tween()
 	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -75,6 +107,14 @@ func play_entrance() -> void:
 	if _phase == &"entrance":
 		if _tween != null and _tween.is_valid():
 			await _tween.finished
+		return
+	if _kind == WALLET_KIND:
+		_phase = &"hidden"
+		_progress = 0.0
+		visible = _wallet_transfer_active
+		mouse_filter = Control.MOUSE_FILTER_STOP if _wallet_transfer_active \
+			else Control.MOUSE_FILTER_IGNORE
+		queue_redraw()
 		return
 	_kill_tween()
 	_phase = &"entrance"
@@ -97,11 +137,124 @@ func play_entrance() -> void:
 
 func cancel() -> void:
 	_kill_tween()
+	_kill_wallet_tween()
+	_wallet_transfer_active = false
+	if _wallet_row != null:
+		_wallet_row.visible = false
 	_phase = &"hidden"
 	_progress = 0.0
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	queue_redraw()
+
+
+func begin_wallet_transfer(start_value: int, end_value: int) -> void:
+	if _kind != WALLET_KIND:
+		return
+	_kill_wallet_tween()
+	_wallet_transfer_start = maxi(0, start_value)
+	_wallet_transfer_end = maxi(0, end_value)
+	_wallet_transfer_active = true
+	_wallet_row.visible = true
+	_set_wallet_display(_wallet_transfer_start)
+	var amount := absi(_wallet_transfer_end - _wallet_transfer_start)
+	if amount == 0:
+		_finish_wallet_transfer()
+		return
+	var duration := clampf(WALLET_TRANSFER_MIN_TIME
+			+ float(amount) * WALLET_TRANSFER_PER_CREDIT,
+			WALLET_TRANSFER_MIN_TIME, WALLET_TRANSFER_MAX_TIME)
+	_wallet_tween = create_tween()
+	_wallet_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_wallet_tween.tween_method(
+		Callable(self, "_drive_wallet_transfer"), 0.0, 1.0, duration)
+	_wallet_tween.finished.connect(_finish_wallet_transfer)
+
+
+func wait_for_wallet_transfer() -> void:
+	while _wallet_transfer_active:
+		await get_tree().process_frame
+
+
+func finish_wallet_handoff() -> void:
+	_kill_wallet_tween()
+	_wallet_transfer_active = false
+	if _wallet_row != null:
+		_wallet_row.visible = false
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	queue_redraw()
+
+
+func _build_wallet_display() -> void:
+	_wallet_row = HBoxContainer.new()
+	_wallet_row.name = "WalletHandoff"
+	_wallet_row.position = WALLET_ROW_POSITION
+	_wallet_row.size = WALLET_ROW_SIZE
+	_wallet_row.add_theme_constant_override("separation", 2)
+	_wallet_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_wallet_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet_row.z_index = 20
+	_wallet_row.visible = false
+	add_child(_wallet_row)
+
+	_wallet_label = Label.new()
+	_wallet_label.name = "WalletValue"
+	_wallet_label.custom_minimum_size = Vector2(0.0, WALLET_ROW_SIZE.y)
+	_wallet_label.add_theme_font_size_override("font_size", 7)
+	_wallet_label.add_theme_color_override("font_color", WALLET_COLOR)
+	_wallet_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_wallet_label.add_theme_constant_override("outline_size", 1)
+	_wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_wallet_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_wallet_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_wallet_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var assets := get_node_or_null("/root/Assets")
+	var shared_font: FontFile = null
+	if assets != null:
+		shared_font = assets.call("font") as FontFile
+	if shared_font != null:
+		_wallet_label.add_theme_font_override("font", shared_font)
+		_wallet_row.add_child(_wallet_label)
+
+	_wallet_coin = TextureRect.new()
+	_wallet_coin.name = "WalletCoin"
+	if assets != null:
+		_wallet_coin.texture = assets.call("texture", WALLET_COIN_ASSET, true) as Texture2D
+	else:
+		_wallet_coin.texture = load("res://assets/images/ui/coin.png") as Texture2D
+	_wallet_coin.custom_minimum_size = WALLET_COIN_SIZE
+	_wallet_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_wallet_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_wallet_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_wallet_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_wallet_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet_row.add_child(_wallet_coin)
+
+
+func _set_wallet_display(value: int) -> void:
+	if _wallet_label != null and is_instance_valid(_wallet_label):
+		_wallet_label.text = str(maxi(0, value))
+
+
+func _drive_wallet_transfer(progress: float) -> void:
+	var clamped := clampf(progress, 0.0, 1.0)
+	_set_wallet_display(roundi(lerpf(float(_wallet_transfer_start),
+		float(_wallet_transfer_end), clamped)))
+
+
+func _finish_wallet_transfer() -> void:
+	_set_wallet_display(_wallet_transfer_end)
+	_wallet_transfer_active = false
+	_wallet_tween = null
+	if _phase == &"hidden":
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _kill_wallet_tween() -> void:
+	if _wallet_tween != null and _wallet_tween.is_valid():
+		_wallet_tween.kill()
+	_wallet_tween = null
 
 
 func _duration(entrance: bool) -> float:
@@ -110,6 +263,8 @@ func _duration(entrance: bool) -> float:
 			return DOOR_ENTER_TIME if entrance else DOOR_EXIT_TIME
 		2:
 			return FLATLINE_ENTER_TIME if entrance else FLATLINE_EXIT_TIME
+		WALLET_KIND:
+			return 0.0
 		_:
 			return NORMAL_ENTER_TIME if entrance else NORMAL_EXIT_TIME
 
@@ -144,8 +299,15 @@ func _draw() -> void:
 			_draw_door(cover)
 		2:
 			_draw_flatline(cover)
+		WALLET_KIND:
+			_draw_wallet(cover)
 		_:
 			_draw_normal(cover)
+
+
+func _draw_wallet(cover: float) -> void:
+	if cover > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, CANVAS_SIZE), Color.BLACK)
 
 
 func _draw_normal(cover: float) -> void:

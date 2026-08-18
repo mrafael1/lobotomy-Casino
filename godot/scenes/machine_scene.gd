@@ -2311,14 +2311,6 @@ func _finish_wealth_target_transition() -> void:
 		return
 	var wallet_after_deductions := _settle_machine_lucidity_after_deductions(
 		completed, score_before_settlement)
-	if _wealth_target_transition != null \
-			and is_instance_valid(_wealth_target_transition):
-		# Gameplay state is already persisted above. This tween is only the readable
-		# transfer of the post-deduction remainder into the visible Run Wallet.
-		await _wealth_target_transition.animate_wallet_transfer(
-			wallet_before_transfer, wallet_after_deductions)
-		if not is_inside_tree():
-			return
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
@@ -2327,7 +2319,11 @@ func _finish_wealth_target_transition() -> void:
 	# single-deck investments and never reopen the full Pacte scene.
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
-		SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.NORMAL)
+		# The route offer is revealed under a solid black handoff while the net wallet
+		# remainder keeps counting up. The persistent transition layer carries the row
+		# across the scene swap, so the choice screen appears before the count finishes.
+		SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.WALLET, -1,
+			wallet_before_transfer, wallet_after_deductions)
 		return
 	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
