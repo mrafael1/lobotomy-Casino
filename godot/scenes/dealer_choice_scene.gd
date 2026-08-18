@@ -31,7 +31,7 @@ const DOOR_SUCTION_MAX_SPAWN_DELAY := 0.095
 const DOOR_SUCTION_PARTICLE_SIZE := 2.0
 const DOOR_SUCTION_FADE_IN := 0.12
 const HOVER_DOOR_HFRAMES := 2
-const HOVER_DOOR_VFRAMES := 2
+const HOVER_DOOR_VFRAMES := 5
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
 const RED := Color(1.0, 0.35, 0.42)
@@ -59,7 +59,10 @@ const DOOR_FRAMES := {
 }
 const HOVER_DOOR_FRAMES := {
 	RouteCards.ROUTE_SHOP: 0,
-	RouteCards.ROUTE_POWER: 2,
+	RouteCards.ROUTE_AUGMENT: 2,
+	RouteCards.ROUTE_POWER: 4,
+	RouteCards.ROUTE_BONUS: 6,
+	RouteCards.ROUTE_SACRIFICE: 8,
 }
 
 @export var hover_doors_texture: Texture2D = null

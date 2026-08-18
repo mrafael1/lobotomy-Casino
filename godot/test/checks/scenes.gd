@@ -47,8 +47,14 @@ func _route_seed_for_card(context: String, card_id: String, seed_start: int) -> 
 func _authored_door_normal_frame(route_type: String) -> int:
 	if route_type == RouteCards.ROUTE_SHOP:
 		return 0
-	if route_type == RouteCards.ROUTE_POWER:
+	if route_type == RouteCards.ROUTE_AUGMENT:
 		return 2
+	if route_type == RouteCards.ROUTE_POWER:
+		return 4
+	if route_type == RouteCards.ROUTE_BONUS:
+		return 6
+	if route_type == RouteCards.ROUTE_SACRIFICE:
+		return 8
 	return -1
 
 func _check_authored_door_sprite(button: Button, route_type: String,
@@ -60,7 +66,7 @@ func _check_authored_door_sprite(button: Button, route_type: String,
 	if sprite.texture == null or sprite.texture.resource_path != \
 			"res://assets/images/dealer_choice/doors.png":
 		failures.append("route: %s door is not using the authored hover sheet" % route_type)
-	if sprite.hframes != 2 or sprite.vframes != 2:
+	if sprite.hframes != 2 or sprite.vframes != 5:
 		failures.append("route: %s door has the wrong hover-sheet grid" % route_type)
 	if sprite.frame != expected_frame:
 		failures.append("route: %s door does not start on its normal frame" % route_type)
@@ -83,15 +89,15 @@ func _check_power_door_hover(run_store: Node, failures: Array) -> void:
 		if button == null:
 			failures.append("route: power door button is missing")
 		else:
-			_check_authored_door_sprite(button, RouteCards.ROUTE_POWER, 2, failures)
+			_check_authored_door_sprite(button, RouteCards.ROUTE_POWER, 4, failures)
 			var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 			button.mouse_entered.emit()
 			await process_frame
-			if sprite == null or sprite.frame != 3:
+			if sprite == null or sprite.frame != 5:
 				failures.append("route: power door does not switch to its hover frame")
 			button.mouse_exited.emit()
 			await process_frame
-			if sprite == null or sprite.frame != 2:
+			if sprite == null or sprite.frame != 4:
 				failures.append("route: power door does not restore its normal frame")
 	route.free()
 
