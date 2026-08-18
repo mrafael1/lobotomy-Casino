@@ -280,6 +280,8 @@ func _refresh() -> void:
 		_message.text = "ROUTE OFFER CLOSED"
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if not _selection_locked or _pending_door_index < 0:
 		return
 	var is_left_press := false
@@ -383,7 +385,7 @@ func _confirm_door_selection() -> void:
 		_refresh()
 		return
 	_pending_door_index = -1
-	_open_destination()
+	_open_destination(index)
 
 func _on_reroll_pressed() -> void:
 	if _selection_locked or not RunStateStore.routeOfferPending:
@@ -399,17 +401,22 @@ func _set_interaction_locked(locked: bool) -> void:
 	if _reroll_button != null:
 		_reroll_button.disabled = locked or not RunStateStore.route_offer_reroll_affordable()
 
-func _open_destination() -> void:
+func _open_destination(door_index: int = -1) -> void:
+	var door_side := 0 if door_index <= 0 else 1
 	match RunStateStore.routeDestination:
 		RouteCards.ROUTE_SHOP:
-			SceneNav.change_to("res://scenes/dealer_scene.tscn")
+			SceneNav.change_to("res://scenes/dealer_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_AUGMENT, RouteCards.ROUTE_POWER:
-			SceneNav.change_to("res://scenes/route_build_scene.tscn")
+			SceneNav.change_to("res://scenes/route_build_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_BONUS:
-			SceneNav.change_to("res://scenes/route_bonus_scene.tscn")
+			SceneNav.change_to("res://scenes/route_bonus_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_SACRIFICE:
 			if RunStateStore.finish_route_destination():
-				SceneNav.change_to("res://scenes/machine_scene.tscn")
+				SceneNav.change_to("res://scenes/machine_scene.tscn",
+					SceneNav.TransitionKind.DOOR, door_side)
 			else:
 				_selection_locked = false
 				_set_interaction_locked(false)

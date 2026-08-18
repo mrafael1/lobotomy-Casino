@@ -2232,11 +2232,11 @@ func _resolve_interrupted_spin() -> void:
 		_present_dealer_or_defer()
 	_update_hud()
 
-func _to_menu() -> void:
-	SceneNav.change_to(MENU_SCENE)
+func _to_menu(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(MENU_SCENE, transition_kind)
 
-func _to_dealer() -> void:
-	SceneNav.change_to(DEALER_SCENE)
+func _to_dealer(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(DEALER_SCENE, transition_kind)
 
 ## The beaten intermediate target now takes over the screen with a focused payout
 ## overlay (issue #176), styled like the flatline screen but without the trace or
@@ -2267,7 +2267,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	# The final target is not paid out of the score and banks nothing, so it shows no
 	# receipt — the Wealth ending takes the whole score from here.
 	overlay.present(score, target, snapshot, "CONTINUE",
-		bool(info.get("final", false)))
+		bool(info.get("final", false)), _machine_scene_lucidity_before)
 	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
 
@@ -2290,6 +2290,7 @@ func _finish_wealth_target_transition() -> void:
 	# unlock gate would otherwise open for those few frames and beat the scene change. It is
 	# presented after the odds table instead, by the dealer (issue #52 / #176).
 	_target_round_handoff = true
+	var wallet_before_transfer := _machine_scene_lucidity_before
 	var score_before_settlement := int(RunStateStore.scoreEarned)
 	var completed := RunStateStore.complete_wealth_target()
 	if completed.is_empty():
@@ -2308,7 +2309,16 @@ func _finish_wealth_target_transition() -> void:
 		}
 		_show_ending("wealth", final_run)
 		return
-	_settle_machine_lucidity_after_deductions(completed, score_before_settlement)
+	var wallet_after_deductions := _settle_machine_lucidity_after_deductions(
+		completed, score_before_settlement)
+	if _wealth_target_transition != null \
+			and is_instance_valid(_wealth_target_transition):
+		# Gameplay state is already persisted above. This tween is only the readable
+		# transfer of the post-deduction remainder into the visible Run Wallet.
+		await _wealth_target_transition.animate_wallet_transfer(
+			wallet_before_transfer, wallet_after_deductions)
+		if not is_inside_tree():
+			return
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
@@ -2317,7 +2327,7 @@ func _finish_wealth_target_transition() -> void:
 	# single-deck investments and never reopen the full Pacte scene.
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
-		SceneNav.change_to(ROUTE_SCENE)
+		SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.NORMAL)
 		return
 	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
@@ -5462,7 +5472,7 @@ func _show_campaign_failed() -> void:
 func _start_fresh_again() -> void:
 	MetaStateStore.start_new_campaign()
 	RunStateStore.reset_run_state()
-	_to_menu()
+	_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _flatline_action_text() -> String:
 	return "CONTINUE" if _has_campaign_neurons_remaining() else "TRY AGAIN"
@@ -5495,11 +5505,11 @@ func _on_flatline_action_pressed() -> void:
 		if not RunStateStore.routeOfferPending:
 			RunStateStore.prepare_route_offer("flatline")
 		if RunStateStore.routeOfferPending:
-			SceneNav.change_to(ROUTE_SCENE)
+			SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.FLATLINE)
 			return
-		_to_dealer()
+		_to_dealer(SceneNav.TransitionKind.FLATLINE)
 	else:
-		_to_menu()
+		_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
@@ -5665,6 +5675,8 @@ func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	node.modulate = Color(1.2, 1.2, 1.2)
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	# OptionsOverlay is a modal. Parent _input handlers run before Control GUI
 	# dispatch, so returning here prevents a click meant for the menu from also
 	# starting a power, spin, or drag underneath it.

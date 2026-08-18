@@ -235,6 +235,8 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
 		_begin_drag(card_id, index, button, button.get_global_transform() * touch_event.position)
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:

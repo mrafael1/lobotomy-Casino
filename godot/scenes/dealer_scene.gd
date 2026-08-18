@@ -1502,6 +1502,8 @@ func _update_drag_position(pos: Vector2) -> void:
 func _input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
 		return
+	if SceneNav.is_transition_active():
+		return
 	# The shared options menu is modal. This scene has drag handling in _input,
 	# which otherwise runs before the overlay's button GUI events and can leak a
 	# touch/mouse release into the dealer underneath.

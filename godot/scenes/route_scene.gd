@@ -90,24 +90,28 @@ func _refresh() -> void:
 		button.name = "SelectButton"
 		button.z_index = 20
 		button.disabled = not affordable
-		button.pressed.connect(_on_card_pressed.bind(card_id))
+		button.pressed.connect(_on_card_pressed.bind(card_id, index))
 	_message.text = ""
 
-func _on_card_pressed(card_id: String) -> void:
+func _on_card_pressed(card_id: String, card_index: int) -> void:
 	if not RunStateStore.select_route(card_id):
 		_message.text = "NOT ENOUGH GOLD / NO VALID CARD"
 		_refresh()
 		return
 	match RunStateStore.routeDestination:
 		RouteCards.ROUTE_SHOP:
-			SceneNav.change_to("res://scenes/route_shop_scene.tscn")
+			SceneNav.change_to("res://scenes/route_shop_scene.tscn",
+				SceneNav.TransitionKind.DOOR, card_index)
 		RouteCards.ROUTE_AUGMENT, RouteCards.ROUTE_POWER:
-			SceneNav.change_to("res://scenes/route_build_scene.tscn")
+			SceneNav.change_to("res://scenes/route_build_scene.tscn",
+				SceneNav.TransitionKind.DOOR, card_index)
 		RouteCards.ROUTE_BONUS:
-			SceneNav.change_to("res://scenes/route_bonus_scene.tscn")
+			SceneNav.change_to("res://scenes/route_bonus_scene.tscn",
+				SceneNav.TransitionKind.DOOR, card_index)
 		RouteCards.ROUTE_SACRIFICE:
 			if RunStateStore.finish_route_destination():
-				SceneNav.change_to("res://scenes/machine_scene.tscn")
+				SceneNav.change_to("res://scenes/machine_scene.tscn",
+					SceneNav.TransitionKind.DOOR, card_index)
 			else:
 				_message.text = "NEXT MACHINE UNAVAILABLE"
 		_:
@@ -117,7 +121,7 @@ func _on_continue_pressed() -> void:
 	if not RunStateStore.refuse_routes():
 		_message.text = "ROUTE OFFER UNAVAILABLE"
 		return
-	SceneNav.change_to("res://scenes/machine_scene.tscn")
+	SceneNav.change_to("res://scenes/machine_scene.tscn", SceneNav.TransitionKind.NORMAL)
 
 func _label(text_value: String, rect: Rect2, size: int, color: Color, \
 		parent: Node = null) -> Label:

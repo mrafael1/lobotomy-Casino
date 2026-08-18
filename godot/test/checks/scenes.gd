@@ -769,12 +769,62 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 func _check_scene_nav(failures: Array) -> void:
 	var nav: Node = get_root().get_node("SceneNav")
 	nav.clear()
+	var transition_overlay := nav.call("transition_overlay") as Control
+	if transition_overlay == null:
+		failures.append("scene nav: global transition overlay is missing")
+	else:
+		var transition_layer := transition_overlay.get_parent() as CanvasLayer
+		if transition_layer == null or transition_layer.layer < 1000:
+			failures.append("scene nav: transition cover is not on the top CanvasLayer")
+		if transition_overlay.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("scene nav: inactive transition cover still captures input")
+		if transition_overlay.size != Vector2(160.0, 320.0):
+			failures.append("scene nav: transition cover is not native-canvas sized")
+	var nav_source := FileAccess.open("res://autoload/scene_nav.gd", FileAccess.READ)
+	if nav_source == null:
+		failures.append("scene nav: centralized transition source is unreadable")
+	else:
+		var source := nav_source.get_as_text()
+		if not source.contains("await _load_scene(scene_path)"):
+			failures.append("scene nav: destination is not loaded under the transition cover")
+		if not source.contains("PROCESS_MODE_DISABLED"):
+			failures.append("scene nav: source scene is not suspended during loading")
 	nav.push_scene("res://scenes/dealer_scene.tscn", true)
 	if nav.peek_back_scene() != "res://scenes/dealer_scene.tscn":
 		failures.append("scene nav: did not retain dealer as return scene")
 	if not nav.peek_back_restores_options():
 		failures.append("scene nav: did not retain options restore flag")
 	nav.clear()
+
+
+func _check_issue232_wallet_transfer(run_store: Node, failures: Array) -> void:
+	var ps := load("res://scenes/target_reached_overlay.tscn") as PackedScene
+	if ps == null:
+		failures.append("issue232: target overlay failed to load")
+		return
+	var overlay := ps.instantiate() as TargetReachedOverlay
+	get_root().add_child(overlay)
+	await process_frame
+	run_store.lucidityCoins = 42
+	overlay.present(100, 50, null, "CONTINUE", false, 42)
+	var wallet_row := overlay.get_node_or_null("RunWalletDuringDeduction") as HBoxContainer
+	var wallet_label := overlay.get_node_or_null(
+		"RunWalletDuringDeduction/WalletValue") as Label
+	if wallet_row == null or wallet_row.z_index < 50:
+		failures.append("issue232: Run Wallet is not on the deduction presentation layer")
+	if wallet_label == null or wallet_label.text != "42":
+		failures.append("issue232: Run Wallet changed during deductions")
+	if not overlay.continue_button.disabled:
+		failures.append("issue232: CONTINUE was available before deductions finished")
+	overlay.call("_skip_to_end")
+	if overlay.continue_button.disabled:
+		failures.append("issue232: CONTINUE did not unlock after deductions")
+	await overlay.animate_wallet_transfer(42, 59)
+	if wallet_label == null or wallet_label.text != "59":
+		failures.append("issue232: Run Wallet did not animate to the final retained value")
+	if run_store.lucidityCoins != 42:
+		failures.append("issue232: presentation animation mutated logical wallet state")
+	overlay.free()
 
 
 func _check_machine_ending_flow_source(failures: Array) -> void:
