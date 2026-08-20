@@ -53,6 +53,24 @@ const EMPLACEMENT_DROP_FRAME := 1
 const FACE_DOWN_SHUFFLE_TIME := 0.24
 const FACE_DOWN_SHUFFLE_OFFSET := 2.0
 const DEALER_PROMPT_FONT_SIZE := 5
+const TITLE_LIGHT_REGION := Rect2(30.0, 40.0, 66.0, 28.0)
+const TITLE_FLICKER_IDLE := 1.15
+const TITLE_FLICKER_BRIGHT_ALPHA := 0.72
+const TITLE_LIGHT_SHADER_CODE := """
+shader_type canvas_item;
+render_mode blend_add;
+
+void fragment() {
+	vec4 source = texture(TEXTURE, UV);
+	float cyan = smoothstep(0.30, 0.55, source.g)
+		* smoothstep(0.30, 0.55, source.b)
+		* (1.0 - smoothstep(0.30, 0.55, source.r));
+	COLOR = vec4(source.rgb, source.a * cyan);
+}
+"""
+const CARD_BREATH_SCALE := 1.025
+const CARD_BREATH_HALF_DURATION := 0.72
+const CARD_BREATH_STAGGER := 0.12
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
@@ -88,6 +106,7 @@ const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _title_light: Sprite2D = null
 var _table: Sprite2D = null
 var _augment_deck: Sprite2D = null
 var _power_deck: Sprite2D = null
@@ -108,6 +127,7 @@ var _power_drop_label: Label = null
 
 var _card_buttons: Dictionary = {}
 var _card_views: Dictionary = {}
+var _card_breath_tweens: Dictionary = {}
 var _chosen_card_views: Dictionary = {}
 var _revealed: Dictionary = {}
 var _offer_ids: Array[String] = []
@@ -126,6 +146,7 @@ var _drag_origin_z := 0
 var _selection_locked := false
 var _reveal_generation := 0
 var _deck_tween: Tween = null
+var _title_flicker_tween: Tween = null
 
 ## Reuse the authored Pacte room for a between-machine single-deck route without
 ## bringing the full two-pool ritual back. The route scene owns the selectable
@@ -235,6 +256,8 @@ func _build_background() -> void:
 	_background.name = "PacteBackground"
 	add_child(_background)
 	move_child(_background, 0)
+	_title_light = _build_title_light()
+	add_child(_title_light)
 	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, DEALER_Z_INDEX)
 	_dealer_sprite.name = "PacteDealer"
 	add_child(_dealer_sprite)
@@ -271,6 +294,45 @@ func _build_background() -> void:
 	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chosen_cards_layer.z_index = SELECTED_CARDS_Z_INDEX
 	add_child(_chosen_cards_layer)
+	_start_title_flicker()
+
+func _build_title_light() -> Sprite2D:
+	var light := Sprite2D.new()
+	light.name = "PacteTitleLight"
+	light.texture = _background.texture if _background != null else Assets.texture(BG_ASSET)
+	light.centered = false
+	light.region_enabled = true
+	light.region_rect = TITLE_LIGHT_REGION
+	light.position = (_background.position if _background != null else Vector2.ZERO) \
+		+ TITLE_LIGHT_REGION.position
+	light.z_index = BACKGROUND_Z_INDEX + 1
+	light.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var shader := Shader.new()
+	shader.code = TITLE_LIGHT_SHADER_CODE
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	light.material = material
+	light.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	return light
+
+func _start_title_flicker() -> void:
+	if _title_light == null:
+		return
+	if _title_flicker_tween != null:
+		_title_flicker_tween.kill()
+	_title_light.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_title_flicker_tween = create_tween().set_loops()
+	_title_flicker_tween.tween_interval(TITLE_FLICKER_IDLE)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.42, 0.05) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.10, 0.08) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_interval(0.045)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a",
+		TITLE_FLICKER_BRIGHT_ALPHA, 0.045).set_trans(Tween.TRANS_SINE) \
+		.set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.0, 0.18) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	var sprite := Sprite2D.new()
@@ -745,6 +807,28 @@ func _set_face_up(card_id: String) -> void:
 	var button := _card_buttons.get(card_id, null) as Button
 	if button != null:
 		button.disabled = false
+		_start_card_breathing(card_id, view, _offer_ids.find(card_id))
+
+func _start_card_breathing(card_id: String, card_view: Control, index: int) -> void:
+	if card_view == null:
+		return
+	_stop_card_breathing(card_id)
+	card_view.pivot_offset = CARD_SIZE * 0.5
+	card_view.set_meta("breathing_enabled", true)
+	card_view.scale = Vector2.ONE
+	var tween := create_tween().set_loops()
+	tween.tween_interval(float(maxi(index, 0)) * CARD_BREATH_STAGGER)
+	tween.tween_property(card_view, "scale", Vector2.ONE * CARD_BREATH_SCALE,
+		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(card_view, "scale", Vector2.ONE,
+		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_card_breath_tweens[card_id] = tween
+
+func _stop_card_breathing(card_id: String) -> void:
+	var tween := _card_breath_tweens.get(card_id, null) as Tween
+	if tween != null:
+		tween.kill()
+	_card_breath_tweens.erase(card_id)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: Button) -> void:
 	if not bool(_revealed.get(card_id, false)):
@@ -1056,6 +1140,8 @@ func _cancel_power_replacement() -> void:
 	_instruction.text = "DRAG TO THE SLOT"
 
 func _clear_cards() -> void:
+	for card_id in _card_breath_tweens.keys():
+		_stop_card_breathing(String(card_id))
 	for child in get_children():
 		if child is Button and String(child.name).begins_with("Card_"):
 			child.queue_free()

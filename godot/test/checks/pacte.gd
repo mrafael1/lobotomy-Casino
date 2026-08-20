@@ -880,7 +880,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
 			"PowerCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
-			"PacteDealer", "DealerBubble"]:
+			"PacteDealer", "DealerBubble", "PacteTitleLight"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
 	if pacte._background == null or pacte._dealer_sprite == null or pacte._table == null \
@@ -998,6 +998,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: emplacement did not start on its centered selecting frame")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
+	var first_card_art := pacte._card_views.get(first_augment, null) as Control
+	if first_card_art == null or not bool(first_card_art.get_meta("breathing_enabled", false)) \
+			or first_card_art.pivot_offset != pacte.CARD_SIZE * 0.5:
+		failures.append("pacte: revealed cards do not have a centred breathing animation")
 	pacte._preview_card(first_augment)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card preview did not show the description bubble")

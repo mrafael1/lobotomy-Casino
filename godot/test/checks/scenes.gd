@@ -447,6 +447,10 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: machine segment was not live after route loop")
 
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
+	for label_node in build.find_children("*", "Label", true, false):
+		var label := label_node as Label
+		if label != null and label.text == "ONE CARD / ONE SLOT":
+			failures.append("route: %s build scene still shows the redundant one-card subtitle" % kind)
 	var credits_row := build.get_node_or_null("CreditsRow") as HBoxContainer
 	var credits_label := build.get_node_or_null("CreditsRow/CreditsLabel") as Label
 	var credits_coin := build.get_node_or_null("CreditsRow/Coin") as TextureRect
@@ -454,6 +458,10 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing its Lucidity display" % kind)
 	elif credits_label.get_theme_font_size("font_size") < 7:
 		failures.append("route: %s build scene Lucidity number is too small" % kind)
+	else:
+		if not is_equal_approx(credits_row.offset_top, -14.0) \
+				or not is_equal_approx(credits_row.offset_bottom, -2.0):
+			failures.append("route: %s Lucidity row still covers the authored slot caption" % kind)
 	var card_list := build.get_node_or_null("RouteBuildCards") as Control
 	var first_card: Button = null
 	if card_list != null:
@@ -472,10 +480,19 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		else:
 			if amount.get_theme_font_size("font_size") < 7:
 				failures.append("route: %s build card cost is still too small" % kind)
+			if cost_row.position.y < first_card.size.y:
+				failures.append("route: %s build card cost is still above the card" % kind)
 			if cost > 0 and (coin == null or amount.text == "%dG" % cost):
 				failures.append("route: %s build card cost is not using a Lucidity coin" % kind)
+			if coin != null and not bool(coin.get_meta("skip_drag_shadow", false)):
+				failures.append("route: %s card price coin still receives a drag shadow" % kind)
 			if cost <= 0 and amount.text != "FREE":
 				failures.append("route: %s free build card has the wrong cost label" % kind)
+			var card_art := first_card.get_node_or_null("CardArt") as Control
+			if card_art == null or not bool(card_art.get_meta("breathing_enabled", false)):
+				failures.append("route: %s build cards have no breathing animation" % kind)
+			elif card_art.pivot_offset != first_card.size * 0.5:
+				failures.append("route: %s card breathing does not pivot around the card" % kind)
 	var artwork := build.get_node_or_null("PacteArtwork") as Control
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
@@ -496,6 +513,11 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene left Pacte interaction processing" % kind)
 	if artwork.get_node_or_null("TutorialOverlay") != null:
 		failures.append("route: %s build scene attached the Pacte tutorial overlay" % kind)
+	var title_light := artwork.get_node_or_null("PacteTitleLight") as Sprite2D
+	if title_light == null or not title_light.region_enabled \
+			or not (title_light.material is ShaderMaterial) \
+			or (title_light.material as ShaderMaterial).shader == null:
+		failures.append("route: %s build scene is missing the additive title flicker" % kind)
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
