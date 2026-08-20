@@ -91,6 +91,8 @@ static func run_all() -> Array:
 	var route_types: Array[String] = []
 	for card in first_offer:
 		route_types.append(String(card.get("routeType", "")))
+		_check(out, RouteCards.card_cost(card) == 0,
+			"route-door entry is free for every offered card")
 	_check(out, route_types.size() == 2 and route_types[0] != route_types[1],
 		"dealer offers contain two distinct route types")
 	_check(out, route_types.any(func(route_type: String) -> bool:
@@ -177,6 +179,8 @@ static func run_all() -> Array:
 	var lucidity_before_augment := int(_store().lucidityCoins)
 	_check(out, _store().select_route(RouteCards.CARD_AUGMENT_ID),
 		"selecting Augment opens the single augment deck")
+	_check(out, int(_store().lucidityCoins) == lucidity_before_augment,
+		"selecting Augment does not charge a route-entry fee")
 	_check(out, _store().routeDestination == RouteCards.ROUTE_AUGMENT \
 			and not _store().pacte_active() and not _store().pacteCostsActive,
 		"the augment route never enters the full Pacte scene")
@@ -191,14 +195,17 @@ static func run_all() -> Array:
 	_check(out, _store().neurons == EconomyConst.STARTING_NEURONS,
 		"augment route payment does not sacrifice spins")
 	_check(out, int(_store().lucidityCoins) < lucidity_before_augment,
-		"augment route and card costs use run Lucidity")
+		"the selected augment card, not route entry, uses run Lucidity")
 	_check(out, neurons_before_augment != _store().neurons,
 		"augment route test exercised a machine transition")
 
 	_prepare_offer_with_card(80, "wealth_target", RouteCards.CARD_POWER_ID, 0xBEEF)
 	var neurons_before_power := int(_store().neurons)
+	var lucidity_before_power := int(_store().lucidityCoins)
 	_check(out, _store().select_route(RouteCards.CARD_POWER_ID),
 		"selecting Power opens the single power deck")
+	_check(out, int(_store().lucidityCoins) == lucidity_before_power,
+		"selecting Power does not charge a route-entry fee")
 	_check(out, _store().routeDestination == RouteCards.ROUTE_POWER \
 			and not _store().pacte_active(),
 		"the power route is separate from Pacte")

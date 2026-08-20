@@ -87,6 +87,7 @@ func _initialize() -> void:
 ##           has_resume_state() is false. Required by anything that may not run with a
 ##           run already held, i.e. Tutorial.can_start().
 func _isolate(previous: Node, run_store: Node, meta_store: Node, start_run := true) -> Node:
+	_reset_global_navigation()
 	if previous != null:
 		previous.free()
 	_reap_strays()
@@ -104,11 +105,18 @@ func _isolate(previous: Node, run_store: Node, meta_store: Node, start_run := tr
 ## just-reset store it reads zero neurons and drives the run to a flatline ending,
 ## which then locks the start menu's augmented selector behind has_resume_state().
 func _isolate_stores(previous: Node, run_store: Node, meta_store: Node) -> Node:
+	_reset_global_navigation()
 	if previous != null:
 		previous.free()
 	_reap_strays()
 	_reset_stores(run_store, meta_store)
 	return null
+
+
+func _reset_global_navigation() -> void:
+	var scene_nav := get_root().get_node_or_null("SceneNav")
+	if scene_nav != null:
+		scene_nav.call("clear")
 
 ## Everything the suite left standing in the root, other than the autoloads.
 ##
@@ -191,6 +199,7 @@ const CHECKS: Array = [
 	{"fn": "_check_base_scene_parity", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_first_launch_tutorial", "file": "meta", "iso": ISO_STORES, "args": ["meta_store", "failures"]},
 	{"fn": "_check_scene_nav", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_issue232_wallet_transfer", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_machine_ending_flow_source", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_flatline_action_text", "file": "flatline", "iso": ISO_MACHINE, "args": ["machine", "meta_store", "failures"]},
 	{"fn": "_check_global_options_layout", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},

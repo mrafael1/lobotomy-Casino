@@ -726,6 +726,8 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:

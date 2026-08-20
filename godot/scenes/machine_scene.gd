@@ -734,6 +734,7 @@ var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
 var _credits_coin: TextureRect = null
 var _machine_scene_lucidity_before := 0
+var _machine_scene_score_before := 0
 var _machine_scene_lucidity_snapshot_ready := false
 ## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
@@ -2036,28 +2037,47 @@ func _build_machine_credits_display(bottom_hud: Control) -> void:
 
 func _refresh_machine_credits() -> void:
 	if _credits_label != null:
+		# The Run Wallet is the balance carried into this machine segment. Score is
+		# accumulated on the wealth readout and is handed off only after the segment's
+		# deduction/settlement sequence completes.
 		var displayed := int(RunStateStore.lucidityCoins)
 		if _machine_scene_lucidity_snapshot_ready:
 			displayed = _machine_scene_lucidity_before
-		_credits_label.text = str(displayed)
+		_credits_label.text = str(maxi(0, displayed))
 
-## The machine HUD shows the carried run-Lucidity balance from the start of this
-## machine segment. Score and Lucidity can change underneath it, but the number only
-## changes when the segment is handed off to the next scene.
+## Capture the balance at the start of this machine segment. The HUD stays on this
+## snapshot while score and in-segment effects are being resolved.
 func _begin_machine_lucidity_segment() -> void:
 	_machine_scene_lucidity_before = int(RunStateStore.lucidityCoins)
+	_machine_scene_score_before = int(RunStateStore.scoreEarned)
 	_machine_scene_lucidity_snapshot_ready = true
 	_refresh_machine_credits()
 
-## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
-## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
-## have been applied. Express the handoff as the carried value plus that net machine
-## delta so the ending path can never accidentally substitute the full score.
-func _machine_lucidity_after_deductions() -> int:
+## Replace the live score-derived Lucidity with the net remainder after an
+## intermediate target. In-segment purchases/effects are retained as the delta that
+## did not come from score; the target's `banked` value is the only score amount
+## handed into the next segment.
+func _settle_machine_lucidity_after_deductions(completed: Dictionary,
+		score_before_settlement: int) -> int:
 	if not _machine_scene_lucidity_snapshot_ready:
 		return maxi(0, int(RunStateStore.lucidityCoins))
-	var machine_delta := int(RunStateStore.lucidityCoins) - _machine_scene_lucidity_before
-	return maxi(0, _machine_scene_lucidity_before + machine_delta)
+	var score_gain := maxi(0, score_before_settlement - _machine_scene_score_before)
+	var non_score_delta := int(RunStateStore.lucidityCoins) \
+			- _machine_scene_lucidity_before - score_gain
+	var settled_score := maxi(0, int(completed.get("banked", 0)))
+	var settled := maxi(0, _machine_scene_lucidity_before \
+			+ non_score_delta + settled_score)
+	RunStateStore.settle_run_lucidity_after_deductions(settled)
+	_machine_scene_lucidity_before = settled
+	_machine_scene_score_before = int(RunStateStore.scoreEarned)
+	_refresh_machine_credits()
+	return settled
+
+## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
+## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
+## have been applied. Never substitute the wealth score for this handoff.
+func _machine_lucidity_after_deductions() -> int:
+	return maxi(0, int(RunStateStore.lucidityCoins))
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
@@ -2212,11 +2232,11 @@ func _resolve_interrupted_spin() -> void:
 		_present_dealer_or_defer()
 	_update_hud()
 
-func _to_menu() -> void:
-	SceneNav.change_to(MENU_SCENE)
+func _to_menu(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(MENU_SCENE, transition_kind)
 
-func _to_dealer() -> void:
-	SceneNav.change_to(DEALER_SCENE)
+func _to_dealer(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(DEALER_SCENE, transition_kind)
 
 ## The beaten intermediate target now takes over the screen with a focused payout
 ## overlay (issue #176), styled like the flatline screen but without the trace or
@@ -2247,7 +2267,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	# The final target is not paid out of the score and banks nothing, so it shows no
 	# receipt — the Wealth ending takes the whole score from here.
 	overlay.present(score, target, snapshot, "CONTINUE",
-		bool(info.get("final", false)))
+		bool(info.get("final", false)), _machine_scene_lucidity_before)
 	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
 
@@ -2270,6 +2290,8 @@ func _finish_wealth_target_transition() -> void:
 	# unlock gate would otherwise open for those few frames and beat the scene change. It is
 	# presented after the odds table instead, by the dealer (issue #52 / #176).
 	_target_round_handoff = true
+	var wallet_before_transfer := _machine_scene_lucidity_before
+	var score_before_settlement := int(RunStateStore.scoreEarned)
 	var completed := RunStateStore.complete_wealth_target()
 	if completed.is_empty():
 		_stop_wealth_target_transition()
@@ -2287,6 +2309,8 @@ func _finish_wealth_target_transition() -> void:
 		}
 		_show_ending("wealth", final_run)
 		return
+	var wallet_after_deductions := _settle_machine_lucidity_after_deductions(
+		completed, score_before_settlement)
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
@@ -2295,7 +2319,11 @@ func _finish_wealth_target_transition() -> void:
 	# single-deck investments and never reopen the full Pacte scene.
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
-		SceneNav.change_to(ROUTE_SCENE)
+		# The route offer is revealed under a solid black handoff while the net wallet
+		# remainder keeps counting up. The persistent transition layer carries the row
+		# across the scene swap, so the choice screen appears before the count finishes.
+		SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.WALLET, -1,
+			wallet_before_transfer, wallet_after_deductions)
 		return
 	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
@@ -5440,7 +5468,7 @@ func _show_campaign_failed() -> void:
 func _start_fresh_again() -> void:
 	MetaStateStore.start_new_campaign()
 	RunStateStore.reset_run_state()
-	_to_menu()
+	_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _flatline_action_text() -> String:
 	return "CONTINUE" if _has_campaign_neurons_remaining() else "TRY AGAIN"
@@ -5473,11 +5501,11 @@ func _on_flatline_action_pressed() -> void:
 		if not RunStateStore.routeOfferPending:
 			RunStateStore.prepare_route_offer("flatline")
 		if RunStateStore.routeOfferPending:
-			SceneNav.change_to(ROUTE_SCENE)
+			SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.FLATLINE)
 			return
-		_to_dealer()
+		_to_dealer(SceneNav.TransitionKind.FLATLINE)
 	else:
-		_to_menu()
+		_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
@@ -5643,6 +5671,17 @@ func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	node.modulate = Color(1.2, 1.2, 1.2)
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
+	# OptionsOverlay is a modal. Parent _input handlers run before Control GUI
+	# dispatch, so returning here prevents a click meant for the menu from also
+	# starting a power, spin, or drag underneath it.
+	if _options_overlay != null and is_instance_valid(_options_overlay) \
+			and _options_overlay.visible:
+		if event.is_action_pressed("ui_cancel"):
+			_options_overlay.hide_overlay()
+			get_viewport().set_input_as_handled()
+		return
 	# Points table (issue #119): back/cancel closes the overlay from keyboard
 	# (Esc) or controller (B) without needing to focus the CLOSE button.
 	if _score_table.is_open() and event.is_action_pressed("ui_cancel"):
