@@ -1,29 +1,61 @@
 extends Control
 
-## Single-deck between-machine build route. It deliberately shares Pacte card
-## metadata and pricing, but never enters pacte_initial/pacte_threshold or asks
-## for the other card type.
+## Single-deck between-machine build route. It uses Pacte's authored room and
+## card presentation, but keeps route pricing and selection state local to this
+## scene so a route never reopens the full run-start ritual. The dealer door was
+## already chosen before this scene opens, so this scene has no route-selection exit.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
-const CARD_RECTS: Array[Rect2] = [
-	Rect2(5.0, 58.0, 150.0, 54.0),
-	Rect2(5.0, 117.0, 150.0, 54.0),
-	Rect2(5.0, 176.0, 150.0, 54.0),
+const CARD_SIZE := Vector2(39.0, 61.0)
+const CARD_POSITIONS: Array[Vector2] = [
+	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
 ]
+const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
+const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
+const SELECTION_PREVIEW_TIME := 0.24
 const SYMBOL_PICKER_RECT := Rect2(4.0, 100.0, 152.0, 102.0)
+const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
+const DESCRIPTION_TITLE_RECT := Rect2(2.0, 3.0, 46.0, 7.0)
+const DESCRIPTION_TEXT_RECT := Rect2(3.0, 10.0, 44.0, 16.0)
+const DESCRIPTION_TITLE_FONT_SIZE := 4
+const DESCRIPTION_FONT_SIZE := 3
+const DESCRIPTION_BUBBLE_GAP := 1.0
+const DRAG_SLOP := 4.0
+
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
+const TEXT_COLOR := Color(0.88, 0.98, 1.0)
 const MUTED := Color(0.62, 0.70, 0.78)
 const RED := Color(1.0, 0.35, 0.42)
 
 var _font: FontFile = null
 var _title: Label = null
 var _gold_label: Label = null
+var _instruction: Label = null
 var _message: Label = null
 var _list: Control = null
+var _chosen_cards_layer: Control = null
+var _chosen_card_view: Control = null
+var _description_bubble: Panel = null
+var _description_title: Label = null
+var _description_text: Label = null
+var _pacte_artwork: Control = null
+
+var _card_buttons: Dictionary = {}
+var _offer_ids: Array[String] = []
+var _pool_kind := "augment"
+var _preview_id := ""
 var _pending_card_id := ""
 var _symbol_picker: Control = null
-var _pacte_artwork: Control = null
+var _selection_locked := false
+var _dragging := false
+var _drag_id := ""
+var _drag_index := -1
+var _drag_origin := Vector2.ZERO
+var _press_position := Vector2.ZERO
+var _drag_offset := Vector2.ZERO
+var _drag_origin_z := 0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -36,92 +68,336 @@ func _ready() -> void:
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:
 		return
-	var kind := ""
 	if RunStateStore.routeDestination == RouteCards.ROUTE_AUGMENT:
-		kind = "augment"
+		_pool_kind = "augment"
 	elif RunStateStore.routeDestination == RouteCards.ROUTE_POWER:
-		kind = "power"
-	_pacte_artwork.call("configure_route_artwork", kind)
+		_pool_kind = "power"
+	else:
+		_pool_kind = ""
+	_pacte_artwork.call("configure_route_artwork", _pool_kind)
 	_pacte_artwork.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _build() -> void:
-	_title = _label("BUILD ROUTE", Rect2(5.0, 7.0, 150.0, 14.0), 9, CYAN)
+	# Keep the room's OPEN sign and dealer bubble visible; the compact route title
+	# occupies the quiet centre of the top panel instead of covering either one.
+	_title = _label("", Rect2(39.0, 7.0, 50.0, 12.0), 6, CYAN)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_title)
-	_gold_label = _label("", Rect2(5.0, 25.0, 150.0, 12.0), 7, GOLD)
+	_gold_label = _label("", Rect2(39.0, 21.0, 50.0, 11.0), 5, GOLD)
 	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_gold_label)
-	var subtitle := _label("CHOOSE ONE CARD / NO SECOND DECK", \
-			Rect2(5.0, 39.0, 150.0, 9.0), 5, MUTED)
+	var subtitle := _label("ONE CARD / ONE SLOT", Rect2(39.0, 34.0, 50.0, 9.0), 4, MUTED)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(subtitle)
+
 	_list = Control.new()
 	_list.name = "RouteBuildCards"
 	_list.size = CANVAS_SIZE
 	_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_list.z_index = 20
 	add_child(_list)
-	_message = _label("", Rect2(5.0, 238.0, 150.0, 18.0), 5, RED)
+
+	_chosen_cards_layer = Control.new()
+	_chosen_cards_layer.name = "ChosenCardInSlot"
+	_chosen_cards_layer.size = CANVAS_SIZE
+	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chosen_cards_layer.z_index = 25
+	add_child(_chosen_cards_layer)
+
+	_description_bubble = Panel.new()
+	_description_bubble.name = "RouteCardDescriptionBubble"
+	_description_bubble.position = DESCRIPTION_BUBBLE_RECT.position
+	_description_bubble.size = DESCRIPTION_BUBBLE_RECT.size
+	_description_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_description_bubble.z_index = 30
+	_description_bubble.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(GOLD))
+	add_child(_description_bubble)
+	_description_title = _label("", DESCRIPTION_TITLE_RECT, DESCRIPTION_TITLE_FONT_SIZE,
+		GOLD, _description_bubble)
+	_description_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_description_title.clip_text = true
+	_description_text = _label("", DESCRIPTION_TEXT_RECT, DESCRIPTION_FONT_SIZE,
+		TEXT_COLOR, _description_bubble)
+	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_description_text.clip_text = true
+	_description_bubble.visible = false
+
+	_instruction = _label("TAP TO INSPECT  /  DRAG TO THE SLOT",
+		Rect2(5.0, 238.0, 150.0, 10.0), 5, TEXT_COLOR)
+	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_message = _label("", Rect2(5.0, 249.0, 150.0, 15.0), 4, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_child(_message)
-	var back := _button("BACK TO ROUTES", Rect2(20.0, 274.0, 120.0, 25.0), 7)
-	back.name = "BackToRoutesButton"
-	back.pressed.connect(_on_back_pressed)
-	add_child(back)
+	_instruction.text = "SELECTED DOOR CANNOT BE REOPENED"
 
 func _refresh() -> void:
-	for child in _list.get_children():
-		child.queue_free()
-	if RunStateStore.routeDestination != RouteCards.ROUTE_AUGMENT \
-			and RunStateStore.routeDestination != RouteCards.ROUTE_POWER:
+	_clear_cards()
+	_clear_selected_card()
+	if _pool_kind != "augment" and _pool_kind != "power":
+		_title.text = "BUILD ROUTE CLOSED"
+		_gold_label.text = ""
+		_instruction.text = ""
 		_message.text = "BUILD ROUTE CLOSED"
 		return
-	var kind := RunStateStore.routeDestination
-	_title.text = "AUGMENT ROUTE" if kind == RouteCards.ROUTE_AUGMENT else "POWER ROUTE"
+	_title.text = "AUGMENT ROUTE" if _pool_kind == "augment" else "POWER ROUTE"
 	_gold_label.text = "RUN LUCIDITY / GOLD: %d" % int(RunStateStore.lucidityCoins)
-	var offer_ids := _offer_ids()
-	for index in range(mini(offer_ids.size(), CARD_RECTS.size())):
-		var card_id := offer_ids[index]
-		var entry := PacteCards.card(card_id)
-		var cost := RunStateStore.route_build_card_cost(card_id)
-		var affordable := RunStateStore.route_build_card_affordable(card_id)
-		var button := _button("", CARD_RECTS[index], 5)
-		button.name = "BuildCard_%s" % card_id
-		button.text = "%s  %s\n%s\n%s" % [
-			String(entry.get("name", card_id)),
-			("FREE" if cost <= 0 else "%dG" % cost),
-			String(entry.get("description", "")),
-			("LEFT: %dG" % RunStateStore.route_build_remaining_after(card_id))]
-		button.disabled = not affordable
-		button.add_theme_color_override("font_color", GOLD if affordable else RED)
-		button.add_theme_color_override("font_hover_color", CYAN)
-		button.pressed.connect(_on_card_pressed.bind(card_id))
-		_list.add_child(button)
+	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
 	_message.text = ""
+	_set_drop_hint_visible(false)
+	var offer_ids := _offer_ids_from_store()
+	for index in range(mini(offer_ids.size(), CARD_POSITIONS.size())):
+		_build_card(offer_ids[index], index)
+	_offer_ids = offer_ids
 
-func _offer_ids() -> Array[String]:
+func _offer_ids_from_store() -> Array[String]:
 	var result: Array[String] = []
 	if RunStateStore.routeBuildOfferIds is Array:
 		for value in RunStateStore.routeBuildOfferIds as Array:
 			result.append(PacteCards.normalise_card_id(String(value)))
 	return result
 
-func _on_card_pressed(card_id: String) -> void:
+func _build_card(card_id: String, index: int) -> void:
+	var button := Button.new()
+	button.name = "BuildCard_%s" % card_id
+	button.position = CARD_POSITIONS[index]
+	button.size = CARD_SIZE
+	button.custom_minimum_size = CARD_SIZE
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.z_index = 5
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	button.gui_input.connect(_on_card_gui_input.bind(card_id, index, button))
+	_list.add_child(button)
+	_card_buttons[card_id] = button
+
+	var card_view: Control = null
+	if _pacte_artwork != null:
+		card_view = _pacte_artwork.call("make_route_card_view", card_id, _pool_kind) as Control
+	if card_view != null:
+		button.add_child(card_view)
+
+	var cost := RunStateStore.route_build_card_cost(card_id)
+	var affordable := RunStateStore.route_build_card_affordable(card_id)
+	var cost_label := _label("FREE" if cost <= 0 else "%dG" % cost,
+		Rect2(0.0, -9.0, CARD_SIZE.x, 8.0), 4, GOLD if affordable else RED, button)
+	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost_label.z_index = 6
+	if card_view != null and not affordable:
+		card_view.modulate = Color(0.62, 0.62, 0.72, 1.0)
+
+func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
+		button: Button) -> void:
+	if _selection_locked:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_begin_drag(card_id, index, button, get_global_mouse_position())
+	elif event is InputEventScreenTouch and event.index == 0 and event.pressed:
+		var touch_event := event as InputEventScreenTouch
+		_begin_drag(card_id, index, button, button.get_global_transform() * touch_event.position)
+
+func _input(event: InputEvent) -> void:
+	if _drag_id == "":
+		return
+	if event is InputEventMouseMotion:
+		_update_drag(get_global_mouse_position())
+	elif event is InputEventMouseButton \
+			and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_finish_drag(get_global_mouse_position())
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and event.index == 0:
+		var drag_event := event as InputEventScreenDrag
+		_update_drag(_input_canvas_position(drag_event.position))
+	elif event is InputEventScreenTouch and event.index == 0 and not event.pressed:
+		var release_event := event as InputEventScreenTouch
+		_finish_drag(_input_canvas_position(release_event.position))
+		get_viewport().set_input_as_handled()
+
+func _begin_drag(card_id: String, index: int, button: Button,
+		global_position: Vector2) -> void:
+	_press_position = global_position
+	_drag_origin = button.position
+	_drag_origin_z = button.z_index
+	button.z_index = 30
+	button.move_to_front()
+	var parent := button.get_parent() as CanvasItem
+	var parent_position := global_position
+	if parent != null:
+		parent_position = parent.get_global_transform().affine_inverse() * global_position
+	_drag_offset = parent_position - button.position
+	_drag_id = card_id
+	_drag_index = index
+	_dragging = false
+
+func _update_drag(global_position: Vector2) -> void:
+	var button := _card_buttons.get(_drag_id, null) as Button
+	if button == null:
+		return
+	if not _dragging and global_position.distance_to(_press_position) <= DRAG_SLOP:
+		return
+	if not _dragging:
+		DragShadow.add_drag_shadow(button)
+	_dragging = true
+	_description_bubble.visible = false
+	_instruction.text = "DROP THE CARD IN THE SLOT"
+	_set_drop_hint_visible(true)
+	button.position = _clamp_drag_position(button, _global_to_local(global_position) - _drag_offset)
+
+func _finish_drag(global_position: Vector2) -> void:
+	var card_id := _drag_id
+	var button := _card_buttons.get(card_id, null) as Button
+	var local_position: Vector2 = _global_to_local(global_position)
+	var dragged_card_position := button.position if button != null else local_position - _drag_offset
+	var was_dragging := _dragging
+	_dragging = false
+	_drag_id = ""
+	_drag_index = -1
+	_set_drop_hint_visible(false)
+	if button == null:
+		return
+	DragShadow.remove_drag_shadow(button)
+	button.position = _drag_origin
+	button.z_index = _drag_origin_z
+	if not was_dragging:
+		_preview_card(card_id)
+		return
+	_description_bubble.visible = false
+	var drop_rect := AUGMENT_DROP_RECT if _pool_kind == "augment" else POWER_DROP_RECT
+	var dragged_rect := Rect2(dragged_card_position, CARD_SIZE)
+	var drop_area := drop_rect.grow(4.0)
+	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
+		_accept_card(card_id)
+	else:
+		_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
+
+func _global_to_local(global_position: Vector2) -> Vector2:
+	return get_global_transform().affine_inverse() * global_position
+
+func _input_canvas_position(viewport_position: Vector2) -> Vector2:
+	return make_canvas_position_local(viewport_position)
+
+func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
+	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
+	var visual_size := button.size * scale
+	var pivot_offset := button.pivot_offset * (scale - Vector2.ONE)
+	var minimum := pivot_offset
+	var maximum := CANVAS_SIZE - visual_size + pivot_offset
+	return Vector2(
+		clampf(desired_position.x, minimum.x, maximum.x),
+		clampf(desired_position.y, minimum.y, maximum.y))
+
+func _set_drop_hint_visible(visible: bool) -> void:
+	if _pacte_artwork != null:
+		_pacte_artwork.call("set_route_emplacement_frame", _pool_kind, visible)
+
+func _preview_card(card_id: String) -> void:
+	if _selection_locked or not _offer_ids.has(card_id):
+		return
+	_preview_id = card_id
+	var entry := PacteCards.card(card_id)
+	_description_bubble.visible = true
+	_description_title.text = String(entry.get("name", card_id))
+	var cost := RunStateStore.route_build_card_cost(card_id)
+	var remaining := RunStateStore.route_build_remaining_after(card_id)
+	_description_text.text = String(entry.get("description", "")) + \
+		"\nCOST: %s  LEFT: %dG" % [("FREE" if cost <= 0 else "%dG" % cost), remaining]
+	_layout_description()
+	_instruction.text = "DRAG TO THE SLOT"
+	for id in _offer_ids:
+		var candidate := _card_buttons.get(id, null) as Button
+		if candidate != null:
+			candidate.scale = Vector2.ONE * (1.08 if id == card_id else 1.0)
+			candidate.pivot_offset = CARD_SIZE * 0.5
+	_position_description_bubble(card_id)
+
+func _layout_description() -> void:
+	var title_h := DESCRIPTION_TITLE_RECT.size.y
+	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - title_h - 2.0
+	_description_title.size = DESCRIPTION_TITLE_RECT.size
+	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, max_body_h)
+	var font := _description_text.get_theme_font(&"font")
+	var row_h := font.get_height(DESCRIPTION_FONT_SIZE) \
+		+ float(_description_text.get_theme_constant(&"line_spacing"))
+	var body_h := minf(max_body_h, float(maxi(1, _description_text.get_line_count())) * row_h)
+	var top := roundf((DESCRIPTION_BUBBLE_RECT.size.y - (title_h + body_h)) * 0.5)
+	_description_title.position = Vector2(DESCRIPTION_TITLE_RECT.position.x, top)
+	_description_text.position = Vector2(DESCRIPTION_TEXT_RECT.position.x, top + title_h)
+	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, body_h)
+
+func _position_description_bubble(card_id: String) -> void:
+	var button := _card_buttons.get(card_id, null) as Button
+	if button == null:
+		_description_bubble.position = DESCRIPTION_BUBBLE_RECT.position
+		return
+	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
+	var visual_top_left := button.position - button.pivot_offset * (scale - Vector2.ONE)
+	var visual_size := button.size * scale
+	var desired := Vector2(
+		visual_top_left.x + (visual_size.x - DESCRIPTION_BUBBLE_RECT.size.x) * 0.5,
+		visual_top_left.y - DESCRIPTION_BUBBLE_RECT.size.y - DESCRIPTION_BUBBLE_GAP)
+	var maximum := CANVAS_SIZE - DESCRIPTION_BUBBLE_RECT.size
+	_description_bubble.position = Vector2(
+		clampf(desired.x, 0.0, maximum.x), clampf(desired.y, 0.0, maximum.y))
+
+func _accept_card(card_id: String) -> void:
+	if _selection_locked:
+		return
+	if not RunStateStore.route_build_card_affordable(card_id):
+		_message.text = "NOT ENOUGH GOLD FOR THIS CARD"
+		return
+	_selection_locked = true
+	_pending_card_id = card_id
+	_description_bubble.visible = false
+	_instruction.text = "CARD SELECTED"
+	_show_selected_card(card_id)
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if RunStateStore.route_build_card_requires_symbol(card_id):
 		_show_symbol_picker(card_id)
+	else:
+		_complete_after_preview(card_id)
+
+func _complete_after_preview(card_id: String, reward_symbol := "") -> void:
+	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
+	if not is_inside_tree():
 		return
-	_complete_card(card_id)
+	_complete_card(card_id, reward_symbol)
 
 func _complete_card(card_id: String, reward_symbol := "") -> void:
 	if not RunStateStore.complete_route_build_selection(card_id, reward_symbol):
+		_selection_locked = false
+		_pending_card_id = ""
+		_clear_selected_card()
 		_message.text = "CARD PURCHASE REFUSED"
 		_refresh()
 		return
 	if not RunStateStore.finish_route_destination():
+		_selection_locked = false
 		_message.text = "NEXT MACHINE UNAVAILABLE"
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
+
+func _show_selected_card(card_id: String) -> void:
+	_clear_selected_card()
+	if _chosen_cards_layer == null or _pacte_artwork == null:
+		return
+	_chosen_card_view = _pacte_artwork.call(
+		"make_route_selected_card_view", card_id, _pool_kind) as Control
+	if _chosen_card_view == null:
+		return
+	_chosen_card_view.name = "Selected%sCard" % _pool_kind.capitalize()
+	var drop_rect := AUGMENT_DROP_RECT if _pool_kind == "augment" else POWER_DROP_RECT
+	_chosen_card_view.position = drop_rect.position + \
+		(drop_rect.size - CHOSEN_CARD_SIZE) * 0.5
+	_chosen_cards_layer.add_child(_chosen_card_view)
+
+func _clear_selected_card() -> void:
+	if _chosen_card_view != null and is_instance_valid(_chosen_card_view):
+		_chosen_card_view.queue_free()
+	_chosen_card_view = null
 
 func _show_symbol_picker(card_id: String) -> void:
 	if _symbol_picker != null:
@@ -143,36 +419,48 @@ func _show_symbol_picker(card_id: String) -> void:
 		var symbol_id := String(raw_symbol)
 		if symbol_id != "flatline":
 			symbols.append(symbol_id)
-	SymbolPicker.build_symbol_picker_panel(_symbol_picker, symbols, "CHOOSE SYMBOL", \
-			SYMBOL_PICKER_RECT, Callable(self, "_on_symbol_picked"), \
-			Callable(self, "_cancel_symbol_picker"), true, true, false)
+	SymbolPicker.build_symbol_picker_panel(_symbol_picker, symbols, "CHOOSE SYMBOL",
+		SYMBOL_PICKER_RECT, Callable(self, "_on_symbol_picked"),
+		Callable(self, "_cancel_symbol_picker"), true, true, false)
 
 func _on_symbol_picked(symbol_id: String) -> void:
 	var card_id := _pending_card_id
-	_cancel_symbol_picker()
-	_complete_card(card_id, symbol_id)
+	_close_symbol_picker()
+	_pending_card_id = ""
+	if card_id != "":
+		_complete_after_preview(card_id, symbol_id)
 
 func _cancel_symbol_picker() -> void:
+	_close_symbol_picker()
 	_pending_card_id = ""
+	_selection_locked = false
+	_clear_selected_card()
+	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_STOP
+
+func _close_symbol_picker() -> void:
 	if _symbol_picker != null:
 		_symbol_picker.queue_free()
-	_symbol_picker = null
+		_symbol_picker = null
 
-func _on_back_pressed() -> void:
-	if _symbol_picker != null:
-		return
-	if not RunStateStore.cancel_route_destination():
-		_message.text = "ROUTE OFFER UNAVAILABLE"
-		return
-	SceneNav.change_to("res://scenes/route_scene.tscn")
+func _clear_cards() -> void:
+	if _list != null:
+		for child in _list.get_children():
+			child.queue_free()
+	_card_buttons.clear()
+	_offer_ids.clear()
+	_preview_id = ""
+	if _description_bubble != null:
+		_description_bubble.visible = false
 
-func _label(text_value: String, rect: Rect2, size: int, color: Color, \
+func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		parent: Node = null) -> Label:
 	var label := Label.new()
 	label.text = text_value
-	label.position = rect.position
-	label.size = rect.size
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -180,20 +468,8 @@ func _label(text_value: String, rect: Rect2, size: int, color: Color, \
 	label.z_index = 10
 	if _font != null:
 		label.add_theme_font_override("font", _font)
-	if parent != null:
-		parent.add_child(label)
+	var owner := parent if parent != null else self
+	owner.add_child(label)
+	label.position = rect.position
+	label.size = rect.size
 	return label
-
-func _button(text_value: String, rect: Rect2, size: int) -> Button:
-	var button := Button.new()
-	button.text = text_value
-	button.position = rect.position
-	button.size = rect.size
-	button.focus_mode = Control.FOCUS_NONE
-	button.z_index = 20
-	button.add_theme_font_size_override("font_size", size)
-	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
-	if _font != null:
-		button.add_theme_font_override("font", _font)
-	return button

@@ -21,7 +21,7 @@ extends Control
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
 const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
-const ROUTE_SCENE := "res://scenes/route_scene.tscn"
+const ROUTE_SCENE := "res://scenes/dealer_choice_scene.tscn"
 const ROUTE_BUILD_SCENE := "res://scenes/route_build_scene.tscn"
 const ROUTE_BONUS_SCENE := "res://scenes/route_bonus_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"

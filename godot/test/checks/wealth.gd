@@ -376,6 +376,12 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			if overlay.target_text() != "250":
 				failures.append("issue181: target number did not drain with the payout roll (%s)"
 					% overlay.target_text())
+			overlay._set_target_display_value(90)
+			if overlay._target_glyphs.size() != 3 \
+				or overlay._target_glyphs[0].text != "" \
+				or overlay._target_glyphs[1].text != "9" \
+				or overlay._target_glyphs[2].text != "0":
+				failures.append("issue176: two-digit drain did not stay anchored to the units slot")
 			overlay._set_target_display_value(500)
 			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
 				failures.append("issue176: target overlay is missing its TARGET REACHED title")

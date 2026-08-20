@@ -20,6 +20,7 @@ func _check_scene_instantiation(failures: Array) -> void:
 		"res://scenes/collection_scene.tscn",
 		"res://scenes/options_overlay.tscn",
 		"res://scenes/pacte_scene.tscn",
+		"res://scenes/dealer_choice_scene.tscn",
 		"res://scenes/route_scene.tscn",
 		"res://scenes/route_shop_scene.tscn",
 		"res://scenes/route_dealer_scene.tscn",
@@ -70,17 +71,22 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if shop_seed < 0 or not run_store.prepare_route_offer("wealth_target", shop_seed):
 		failures.append("route: target offer did not prepare")
 		return
-	var route := (load("res://scenes/route_scene.tscn") as PackedScene).instantiate()
+	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
 	if route.get_node_or_null("ContinueButton") == null:
 		failures.append("route: dealer offer is missing its free continue action")
-	var cards_layer := route.get_node_or_null("RouteCards") as Control
+	if route.get_node_or_null("RerollButton") == null:
+		failures.append("route: dealer offer is missing its door reroll action")
+	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
-		failures.append("route: dealer selection scene does not render exactly two cards")
-	for node_name in ["DealerBackground", "DealerPortrait", "DealerCounter"]:
-		if route.get_node_or_null(node_name) == null:
-			failures.append("route: dealer offer is missing %s art" % node_name)
+		failures.append("route: dealer selection scene does not render exactly two doors")
+	if route.get_node_or_null("DealerBackground") != null:
+		failures.append("route: dealer offer still includes the shop background")
+	if route.get_node_or_null("DealerCounter") != null:
+		failures.append("route: dealer offer still includes the shop counter")
+	if route.get_node_or_null("DealerSprite") == null:
+		failures.append("route: dealer offer is missing DealerSprite art")
 	route.free()
 
 	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
@@ -114,6 +120,8 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			await process_frame
 			if build.get_node_or_null("RouteBuildCards") == null:
 				failures.append("route: augment destination has no build-card list")
+			if build.get_node_or_null("BackToRoutesButton") != null:
+				failures.append("route: build destination still exposes a return to door selection")
 			_check_route_build_artwork(build, "augment", failures)
 			var build_ids: Array = run_store.routeBuildOfferIds as Array
 			if build_ids.is_empty():

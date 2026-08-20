@@ -141,6 +141,9 @@ func configure_route_artwork(kind: String) -> void:
 		_augment_emplacement.visible = show_augment
 	if _power_emplacement != null:
 		_power_emplacement.visible = show_power
+	_emplacement = _augment_emplacement if show_augment else _power_emplacement
+	if _emplacement != null:
+		_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
 	if _dealer_bubble != null:
 		_dealer_bubble.frame = DEALER_AUGMENT_FRAME if show_augment else DEALER_POWER_FRAME
 		_dealer_bubble.visible = show_augment or show_power
@@ -161,6 +164,21 @@ func configure_route_artwork(kind: String) -> void:
 		if card_button != null:
 			card_button.visible = false
 	process_mode = Node.PROCESS_MODE_DISABLED
+
+## Route build scenes use the same authored card faces as Pacte while keeping
+## their selection state in the route scene. These helpers let the route scene
+## compose cards above this artwork without reopening Pacte's run ritual.
+func make_route_card_view(card_id: String, kind: String) -> Control:
+	return _make_card_view(card_id, kind, true)
+
+func make_route_selected_card_view(card_id: String, kind: String) -> Control:
+	return _make_minimized_card_view(card_id, kind)
+
+func set_route_emplacement_frame(kind: String, drop_hint: bool) -> void:
+	var target := _augment_emplacement if kind == "augment" else _power_emplacement
+	if target == null:
+		return
+	target.frame = EMPLACEMENT_DROP_FRAME if drop_hint else EMPLACEMENT_SELECTING_FRAME
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -437,7 +455,7 @@ func _build_card(card_id: String, index: int) -> void:
 	_card_views[card_id] = view
 	_revealed[card_id] = false
 
-func _make_card_view(card_id: String, kind: String) -> Control:
+func _make_card_view(card_id: String, kind: String, face_up := false) -> Control:
 	var view := Control.new()
 	view.name = "CardArt"
 	view.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -448,6 +466,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.visible = not face_up
 	view.add_child(back)
 	var front := TextureRect.new()
 	front.name = "Front"
@@ -456,7 +475,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	front.visible = false
+	front.visible = face_up
 	view.add_child(front)
 	var entry := PacteCards.card(card_id)
 	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
@@ -466,7 +485,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 			(CARD_SIZE.y - icon_rect.size.y) * 0.5))
 		if icon is Control:
 			(icon as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-		(icon as CanvasItem).visible = false
+		(icon as CanvasItem).visible = face_up
 		view.add_child(icon)
 	_attach_glitch_card_fx(view, card_id)
 	return view
@@ -923,7 +942,7 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
 			else "res://scenes/dealer_scene.tscn")
 	elif threshold_visit:
 		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
@@ -933,7 +952,7 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/route_scene.tscn" if RunStateStore.routeOfferPending \
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
 			else "res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
