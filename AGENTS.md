@@ -67,8 +67,9 @@ Resources and currencies:
   authored Wealth bar frame sits above them. The white box below the odometer shows
   the run's current Wealth objective as a single "TARGET: n" line. Reaching an
   intermediate target briefly presents that target in the centre of the machine,
-  subtracts it from the run score, shows the remaining money, and hands the run to
-  the dealer scene. The 500 and 1,500 target handoffs use the two threshold Pacte
+  drains its displayed number to zero while the target payment rolls off the wealth
+  readout, subtracts it from the run score, shows the remaining money, and hands the
+  run to the dealer scene. The 500 and 1,500 target handoffs use the two threshold Pacte
   visits; each visit is consumed by whichever happens first, its target or the
   matching campaign-health crossing.
 - **Run Lucidity (coins)** — earned alongside score during the run. Every 50 coins
@@ -128,12 +129,12 @@ Resources and currencies:
 - A pair or triple win also flashes its authored PAIR/TRIPLE TV callout, beeping
   (alpha pulse) four times after the win is identified, with a teal "+ score"
   payout line beneath the word showing the base payout. When the COMBO augment is
-  active, its authored COMBO x1..x9 indicator stays mounted in the machine TV at
-  the current streak. The base payout lands first, then the COMBO indicator shakes
-  and sends out its separate bonus amount. Any transient TV callout temporarily
-  hides COMBO, the FREE SPIN banner, the active-item icons, the whole target
-  readout, and dealer countdown information so the pop remains readable; those
-  indicators return when the callout ends.
+  active, its authored COMBO x1..x9 indicator stays hidden between payouts and
+  belongs on the Wealth bar. The base payout lands first, then the COMBO indicator
+  pops and shakes over the Wealth readout while sending out its separate bonus
+  amount, before disappearing. TV callouts continue to hide the TV-only target
+  readout, active-item icons, and dealer countdown information; the Wealth-bar
+  COMBO pop is independent of that TV priority.
 - Active multi-spin items show as small 8px duration icons in a row under the
   target bar, filling left to right, each with the number of turns it has left
   beside it. That number is coloured by what the item is doing right now: green
@@ -208,10 +209,11 @@ Resources and currencies:
 	the choices cannot dismiss the mandatory picker.
 - **COMBO** — successive paying pair/triple/jackpot results form a streak and add
   5%, 10%, 15%, …, 45% of that result's base payout (x1 through x9, capped at
-  45%). The base payout is shown first, then the persistent COMBO xN indicator
-  shakes and emits its separate bonus. A miss opens the same rescuable losing
-  state used by the frenzy gauge; while that warning is pending, COMBO beeps and
-  a corrective power can recover the streak. Confirming the loss clears it.
+  45%). The base payout is shown first, then the Wealth-bar COMBO xN indicator
+  pops, shakes, emits its separate bonus, and disappears. A miss opens the same
+  rescuable losing state used by the frenzy gauge; while that warning is pending,
+  only the loss art beeps and a corrective power can recover the streak.
+  Confirming the loss clears it.
 - **Glitch 2** — the dealer countdown always advances by 3 steps per spin, even
   while the machine is at x2 or x3. Its dealer warning bar always shows all three
   warning overlays. Its Pacte card has no icon and occasionally tears visually.

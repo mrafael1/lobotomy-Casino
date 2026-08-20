@@ -372,6 +372,11 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 				failures.append("issue181: target overlay did not lift the running score")
 			if overlay.target_text() != "500":
 				failures.append("issue181: target overlay did not show the beaten target")
+			overlay._drive_target_drain(0.5)
+			if overlay.target_text() != "250":
+				failures.append("issue181: target number did not drain with the payout roll (%s)"
+					% overlay.target_text())
+			overlay._set_target_display_value(500)
 			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
 				failures.append("issue176: target overlay is missing its TARGET REACHED title")
 			# The TV shuts down behind the payout, and the live reels blank the moment

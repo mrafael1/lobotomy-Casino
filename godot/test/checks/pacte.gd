@@ -727,17 +727,21 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 			or int(combo_effect.hframes) > WinCallouts.COMBO_EFFECT_FRAMES:
 		failures.append("pacte augment: COMBO effect sheet has an invalid frame count")
 	else:
+		if combo_effect.position != WinCallouts.COMBO_EFFECT_POSITION:
+			failures.append("pacte augment: COMBO pop is not mounted on the Wealth bar")
 		run_store.winBoostEnabled = true
 		var last_combo_frame := int(combo_effect.hframes) - 1
 		machine._callouts.show_combo(last_combo_frame, 45, 45)
 		if not combo_effect.visible or int(combo_effect.frame) != last_combo_frame \
-				or machine._callouts.combo_payout_label() == null \
-				or String(machine._callouts.combo_payout_label().text) != "+ 45 (45%)":
+			or machine._callouts.combo_payout_label() == null \
+			or String(machine._callouts.combo_payout_label().text) != "+ 45 (45%)":
 			failures.append("pacte augment: COMBO did not show its frame and bonus")
 		machine._callouts.stop_combo()
+		if combo_effect.visible:
+			failures.append("pacte augment: COMBO stayed visible after its payout pop")
 
 	# Win Boost uses the 5/10/15...45% steps on successive paying results and
-	# exposes the stage/bonus separately for the machine's second TV beat.
+	# exposes the stage/bonus separately for the machine's second Wealth-bar beat.
 	run_store.reset_run_state()
 	run_store.start_new_run([], {}, false)
 	run_store.runPhase = "running"
@@ -780,8 +784,8 @@ func _check_pacte_augment_effects(machine: Node, run_store: Node, failures: Arra
 	run_store.pendingComboMultiplier = 2
 	machine._callouts.refresh_combo()
 	machine._show_pending_combo_defeat()
-	if not combo_effect.visible or not machine._callouts.loss_beeping():
-		failures.append("pacte augment: COMBO did not beep during its recoverable loss")
+	if combo_effect.visible or not machine._callouts.loss_beeping():
+		failures.append("pacte augment: COMBO reappeared during its recoverable loss")
 	run_store.resolve_pending_combo_defeat(false)
 	machine._close_pending_combo_defeat()
 	if int(run_store.winBoostCombo) != 0:

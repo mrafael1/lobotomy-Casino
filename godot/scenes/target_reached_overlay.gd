@@ -158,6 +158,7 @@ var _snapshot: WealthOdometer = null
 var _snapshot_to := Vector2.ZERO
 var _snapshot_scale := 1.0
 var _target_glyphs: Array[Label] = []
+var _target_display_value := 0
 var _shards: Array[Dictionary] = []
 var _drain_motes: Array[Dictionary] = []
 var _sequence_tween: Tween = null
@@ -311,6 +312,27 @@ func _build_target_glyphs() -> void:
 		glyph.add_theme_constant_override(&"outline_size", 1)
 		target_group.add_child(glyph)
 		_target_glyphs.append(glyph)
+	_set_target_display_value(_target)
+
+
+## Keeps the target's authored digit slots stable while its amount drains away. Empty
+## slots remain centred around the original number, so 500 becomes 250 and then 0
+## without re-laying out the group during the tween.
+func _set_target_display_value(value: int) -> void:
+	_target_display_value = maxi(0, value)
+	if _target_glyphs.is_empty():
+		return
+	var text := str(_target_display_value)
+	var slot_count := _target_glyphs.size()
+	if text.length() > slot_count:
+		text = text.right(slot_count)
+	var first_active := maxi(0, floori(float(slot_count - text.length()) / 2.0))
+	for i in slot_count:
+		var glyph: Label = _target_glyphs[i]
+		var text_index := i - first_active
+		var active := text_index >= 0 and text_index < text.length()
+		glyph.text = text[text_index] if active else ""
+		glyph.visible = active
 
 
 ## Current text of the target line, so a caller (and the scene smoke) can read what is
@@ -460,11 +482,13 @@ func _play() -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence_tween.tween_interval(PHASE_TARGET_HOLD)
 	# The target starts raining into the score, and a beat later the reels answer it and
-	# roll down. The target still hangs there, so the number being taken is on screen for
-	# the whole drain...
+	# roll down. Its own number counts down in parallel, so the amount being taken stays
+	# on screen for the whole drain...
 	_sequence_tween.tween_callback(_play_drain_stream)
 	_sequence_tween.tween_interval(DRAIN_LEAD)
 	_sequence_tween.tween_callback(_start_drain)
+	_sequence_tween.parallel().tween_method(_drive_target_drain, 0.0, 1.0, PHASE_DRAIN) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	_sequence_tween.tween_interval(PHASE_DRAIN)
 	_sequence_tween.tween_callback(_clear_drain_stream)
 	# ...and only once the reels have settled on the remainder does it disintegrate. The
@@ -502,6 +526,11 @@ func _play() -> void:
 func _start_drain() -> void:
 	if _snapshot != null and is_instance_valid(_snapshot):
 		_snapshot.set_value(_remaining, true, PHASE_DRAIN)
+
+
+func _drive_target_drain(progress: float) -> void:
+	var clamped := clampf(progress, 0.0, 1.0)
+	_set_target_display_value(roundi(lerpf(float(_target), 0.0, clamped)))
 
 
 ## The money falling out of the target and into the score: it starts DRAIN_LEAD before the
@@ -571,7 +600,7 @@ func _shatter_target() -> void:
 	rng.seed = SHARD_RNG_SEED
 	for glyph_index in _target_glyphs.size():
 		var glyph: Label = _target_glyphs[glyph_index]
-		if not is_instance_valid(glyph):
+		if not is_instance_valid(glyph) or glyph.text.is_empty():
 			continue
 		for _s in SHARD_PER_GLYPH:
 			var shard := ColorRect.new()
@@ -646,6 +675,7 @@ func _skip_to_end() -> void:
 	# what banked. Without a bill (the final target) _net IS the remainder.
 	if _snapshot != null and is_instance_valid(_snapshot):
 		_snapshot.set_value(_net, false)
+	_set_target_display_value(0)
 	target_group.modulate.a = 0.0
 	_settle_bill_rows()
 	subtitle_label.modulate.a = 1.0
