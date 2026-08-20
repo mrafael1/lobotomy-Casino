@@ -45,6 +45,7 @@ const DEALER_TEXT_FRAME_COUNT := 2
 const DEALER_AUGMENT_FRAME := 0
 const DEALER_POWER_FRAME := 1
 const TABLE_ASSET := "pacte_scene/table.png"
+const PROPOSITION_ASSET := "pacte_scene/proposition.png"
 const DECK_FRAME_COUNT := 1
 const DECK_FRAME := 0
 const EMPLACEMENT_FRAME_COUNT := 2
@@ -108,6 +109,7 @@ const DRAG_SLOP := 4.0
 var _background: Sprite2D = null
 var _title_light: Sprite2D = null
 var _table: Sprite2D = null
+var _proposition: Sprite2D = null
 var _augment_deck: Sprite2D = null
 var _power_deck: Sprite2D = null
 var _dealer_sprite: Sprite2D = null
@@ -264,6 +266,9 @@ func _build_background() -> void:
 	_table = _full_canvas_sprite(TABLE_ASSET, TABLE_Z_INDEX)
 	_table.name = "PacteTable"
 	add_child(_table)
+	_proposition = _full_canvas_sprite(PROPOSITION_ASSET, ART_Z_INDEX)
+	_proposition.name = "PacteProposition"
+	add_child(_proposition)
 	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
 	_augment_deck.name = "AugmentDeck"
 	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)

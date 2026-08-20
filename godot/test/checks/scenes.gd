@@ -497,6 +497,11 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
 		return
+	var proposition := artwork.get_node_or_null("PacteProposition") as Sprite2D
+	if proposition == null or not proposition.visible:
+		failures.append("route: %s build scene is missing the table proposition placeholder" % kind)
+	elif first_card != null and first_card.z_index <= proposition.z_index:
+		failures.append("route: %s proposition placeholder is not beneath the cards" % kind)
 	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
 	var power_deck := artwork.get_node_or_null("PowerDeck") as Sprite2D
 	var augment_slot := artwork.get_node_or_null("SelectedCardEmplacement") as Sprite2D
@@ -803,10 +808,19 @@ func _check_scene_nav(failures: Array) -> void:
 	nav.clear()
 	var root_view := get_root()
 	if root_view.content_scale_mode != Window.CONTENT_SCALE_MODE_CANVAS_ITEMS \
-			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND \
+			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP \
 			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_INTEGER \
 			or root_view.content_scale_size != Vector2i(160, 320):
-		failures.append("scene nav: native content scale is not explicit and expanded")
+		failures.append("scene nav: ordinary scenes are not using the centered 160x320 canvas")
+	nav.call("_configure_content_scale", "res://scenes/pacte_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: Pacte did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/route_build_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: Augment/Power build did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
+		failures.append("scene nav: non-Pacte scene kept the expanded artwork viewport")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")

@@ -880,7 +880,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
 			"PowerCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
-			"PacteDealer", "DealerBubble", "PacteTitleLight"]:
+			"PacteDealer", "DealerBubble", "PacteTitleLight", "PacteProposition"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
 	if pacte._background == null or pacte._dealer_sprite == null or pacte._table == null \
@@ -892,8 +892,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: background/dealer/table draw order is incorrect")
 	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
 		failures.append("pacte: dealer text does not draw above the table")
-	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) != "expand":
-		failures.append("pacte: phone viewport is not allowed to expose decorative bleed")
+	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) == "expand":
+		failures.append("pacte: expanded artwork viewport was applied globally")
 	if pacte._native_canvas_origin(Vector2(180.0, 320.0)) != Vector2(10.0, 0.0) \
 		or pacte._native_canvas_origin(Vector2(160.0, 360.0)) != Vector2(0.0, 20.0):
 		failures.append("pacte: native gameplay canvas is not centred in an expanded phone viewport")
@@ -905,6 +905,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		{"name": "background", "node": pacte._background, "frames": 1},
 		{"name": "dealer", "node": pacte._dealer_sprite, "frames": 1},
 		{"name": "table", "node": pacte._table, "frames": 1},
+		{"name": "proposition", "node": pacte._proposition, "frames": 1},
 		{"name": "augment deck", "node": pacte._augment_deck, "frames": pacte.DECK_FRAME_COUNT},
 		{"name": "power deck", "node": pacte._power_deck, "frames": pacte.DECK_FRAME_COUNT},
 		{"name": "dealer bubble", "node": pacte._dealer_bubble, "frames": pacte.DEALER_TEXT_FRAME_COUNT},
@@ -976,6 +977,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._power_deck.frame != pacte.DECK_FRAME \
 			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
 		failures.append("pacte: fixed dual-deck state is not initialized")
+	if pacte._proposition == null or pacte._proposition.z_index <= pacte.TABLE_Z_INDEX:
+		failures.append("pacte: proposition placeholder is not drawn above the table")
+	for card_button in pacte._card_buttons.values():
+		if pacte._proposition != null and (card_button as Button).z_index <= pacte._proposition.z_index:
+			failures.append("pacte: proposition placeholder is not beneath the cards")
+			break
 	if PacteCards.POWER_FRONT_RECT != Rect2(39.0, 0.0, 39.0, 61.0):
 		failures.append("pacte: power proposition does not use the full authored 39x61 front")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.

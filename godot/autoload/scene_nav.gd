@@ -39,17 +39,26 @@ func _ready() -> void:
 	_layout_transition_overlay()
 
 
-## Keep the native pixel layout explicit on every platform. Android exports can
-## otherwise retain a stale window stretch value from an older APK/project
-## preset, which reintroduces a keep/aspect letterbox around the 160x320 game.
-## Expand changes only the visible logical bounds; integer keeps the original
-## source-pixel scale intact.
-func _configure_content_scale() -> void:
+## Keep ordinary scenes on the original 160x320 canvas. Pacte's new room exports
+## are 200x380 and are the one deliberate exception: their decorative bleed may
+## occupy the extra phone viewport while their gameplay controls remain native.
+## Switching this at the scene boundary prevents the expanded logical bounds from
+## moving every other scene's authored controls away from the old canvas.
+func _configure_content_scale(scene_path: String = "") -> void:
 	var root_view := get_tree().root
 	root_view.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-	root_view.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	var target_path := scene_path
+	if target_path.is_empty():
+		var current := get_tree().current_scene
+		target_path = String(current.scene_file_path) if current != null else ""
+	root_view.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND \
+		if _uses_expanded_pacte_canvas(target_path) else Window.CONTENT_SCALE_ASPECT_KEEP
 	root_view.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
 	root_view.content_scale_size = Vector2i(160, 320)
+
+func _uses_expanded_pacte_canvas(scene_path: String) -> bool:
+	return scene_path.ends_with("pacte_scene.tscn") \
+		or scene_path.ends_with("route_build_scene.tscn")
 
 
 func _build_transition_layer() -> void:
@@ -146,6 +155,7 @@ func _run_transition(scene_path: String, kind: int, door_side: int,
 		return
 	var change_error := get_tree().change_scene_to_packed(packed_scene)
 	if change_error != OK:
+		_configure_content_scale()
 		_restore_suspended_scene()
 		await _play_entrance(kind)
 		if serial != _transition_serial:
@@ -155,6 +165,7 @@ func _run_transition(scene_path: String, kind: int, door_side: int,
 	# change_scene_to_packed() swaps at the frame boundary. Waiting twice keeps the
 	# entrance transition from revealing a scene before its _ready() and deferred HUD
 	# setup have completed.
+	_configure_content_scale(scene_path)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	if serial != _transition_serial:
