@@ -33,8 +33,10 @@ const GLITCH_CARD_CHANCE := 0.42
 static var REWARD_AMP_CARD_IDS: Array[String] = PacteCards.reward_amp_ids()
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
 # Pacte's authored split art is intentionally kept as full-canvas pieces. The
-# table, decks, dealer, and prompt bubble can then animate independently while
-# retaining native 160x320 pixel alignment.
+# current exports include decorative bleed around the old 160x320 play area, so
+# each frame is centered around the native canvas and kept at source-pixel scale.
+# The viewport/phone is responsible for trimming that bleed; gameplay geometry
+# remains in the original 160x320 coordinate space.
 const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
 const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
 const DEALER_ASSET := "pacte_scene/dealer.png"
@@ -258,7 +260,7 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	var sprite := Sprite2D.new()
 	sprite.texture = Assets.texture(asset)
 	sprite.centered = false
-	sprite.position = Vector2.ZERO
+	sprite.position = _native_art_position(sprite.texture, 1)
 	sprite.z_index = z
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return sprite
@@ -268,13 +270,27 @@ func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
 		return
 	var safe_frame_count := maxi(frame_count, 1)
 	sprite.centered = false
-	sprite.position = Vector2.ZERO
 	sprite.hframes = safe_frame_count
 	sprite.vframes = 1
 	sprite.frame = 0
-	var frame_width := float(sprite.texture.get_width()) / float(safe_frame_count)
-	sprite.scale = Vector2(CANVAS_SIZE.x / frame_width,
-		CANVAS_SIZE.y / float(sprite.texture.get_height()))
+	# Do not resize a bleed-aware export to the gameplay canvas. Its central
+	# 160x320 area must retain the authored pixel scale, while the extra artwork
+	# is allowed to fall outside the phone's viewport naturally.
+	sprite.scale = Vector2.ONE
+	sprite.position = _native_art_position(sprite.texture, safe_frame_count)
+
+func _native_art_position(texture: Texture2D, frame_count: int) -> Vector2:
+	if texture == null:
+		return Vector2.ZERO
+	var safe_frame_count := maxi(frame_count, 1)
+	var frame_size := Vector2(
+		float(texture.get_width()) / float(safe_frame_count),
+		float(texture.get_height()))
+	# Source art is authored on whole pixels. Round the centering offset so an
+	# odd-sized future bleed never introduces a half-pixel filter/blur shift.
+	return Vector2(
+		roundf((CANVAS_SIZE.x - frame_size.x) * 0.5),
+		roundf((CANVAS_SIZE.y - frame_size.y) * 0.5))
 
 func _build_overlay_ui() -> void:
 	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, DEALER_PROMPT_FONT_SIZE,
@@ -658,12 +674,13 @@ func _shuffle_active_deck() -> void:
 		return
 	if _deck_tween != null and _deck_tween.is_valid():
 		_deck_tween.kill()
-	deck.position = Vector2.ZERO
+	var native_position := _native_art_position(deck.texture, maxi(int(deck.hframes), 1))
+	deck.position = native_position
 	deck.rotation = 0.0
 	_deck_tween = create_tween()
-	_deck_tween.tween_property(deck, "position", Vector2(-1.0, 0.0), 0.05)
-	_deck_tween.tween_property(deck, "position", Vector2(1.0, 0.0), 0.05)
-	_deck_tween.tween_property(deck, "position", Vector2.ZERO, 0.05)
+	_deck_tween.tween_property(deck, "position", native_position + Vector2(-1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", native_position + Vector2(1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", native_position, 0.05)
 
 func _shuffle_face_down_cards(generation: int) -> void:
 	if _offer_ids.is_empty():

@@ -892,6 +892,37 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: background/dealer/table draw order is incorrect")
 	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
 		failures.append("pacte: dealer text does not draw above the table")
+	# The updated room exports include decorative bleed around the native canvas.
+	# Every frame must retain source-pixel scale and be centred around the same
+	# 160x320 gameplay coordinates; the phone viewport, not an art-layer resize,
+	# is what trims the outer pixels.
+	var native_art_nodes: Array[Dictionary] = [
+		{"name": "background", "node": pacte._background, "frames": 1},
+		{"name": "dealer", "node": pacte._dealer_sprite, "frames": 1},
+		{"name": "table", "node": pacte._table, "frames": 1},
+		{"name": "augment deck", "node": pacte._augment_deck, "frames": pacte.DECK_FRAME_COUNT},
+		{"name": "power deck", "node": pacte._power_deck, "frames": pacte.DECK_FRAME_COUNT},
+		{"name": "dealer bubble", "node": pacte._dealer_bubble, "frames": pacte.DEALER_TEXT_FRAME_COUNT},
+		{"name": "augment emplacement", "node": pacte._augment_emplacement,
+			"frames": pacte.EMPLACEMENT_FRAME_COUNT},
+		{"name": "power emplacement", "node": pacte._power_emplacement,
+			"frames": pacte.EMPLACEMENT_FRAME_COUNT},
+	]
+	for art_spec in native_art_nodes:
+		var art := art_spec["node"] as Sprite2D
+		var frame_count := int(art_spec["frames"])
+		if art == null or art.texture == null:
+			failures.append("pacte: %s artwork is missing" % String(art_spec["name"]))
+			continue
+		var expected_art_position: Vector2 = pacte._native_art_position(art.texture, frame_count)
+		var position_tolerance := 1.1 if art == pacte._augment_deck \
+			or art == pacte._power_deck else 0.01
+		if art.position.distance_to(expected_art_position) > position_tolerance:
+			failures.append("pacte: %s artwork is not centred around the native canvas" \
+				% String(art_spec["name"]))
+		if art.scale != Vector2.ONE:
+			failures.append("pacte: %s artwork was resized instead of preserving source pixels" \
+				% String(art_spec["name"]))
 	if pacte._dealer_bubble == null \
 			or pacte._dealer_bubble.hframes != pacte.DEALER_TEXT_FRAME_COUNT \
 			or pacte._dealer_bubble.frame != pacte.DEALER_AUGMENT_FRAME \
