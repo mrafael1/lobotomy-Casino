@@ -27,6 +27,7 @@ const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const CARD_COST_FONT_SIZE := 7
 const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
+const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
@@ -54,6 +55,7 @@ var _pool_kind := "augment"
 var _preview_id := ""
 var _pending_card_id := ""
 var _symbol_picker: Control = null
+var _power_replacement_picker: Variant = null
 var _selection_locked := false
 var _dragging := false
 var _drag_id := ""
@@ -70,6 +72,7 @@ func _ready() -> void:
 	_font = Assets.font()
 	_build()
 	_refresh()
+	call_deferred("_restore_power_replacement")
 
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:
@@ -340,7 +343,9 @@ func _preview_card(card_id: String) -> void:
 	var cost := RunStateStore.route_build_card_cost(card_id)
 	var remaining := RunStateStore.route_build_remaining_after(card_id)
 	_description_text.text = String(entry.get("description", "")) + \
-		"\nCOST: %s  LEFT: %d" % [("FREE" if cost <= 0 else str(cost)), remaining]
+		"\nCOST: %s  LEFT: %d\n%s" % [
+			("FREE" if cost <= 0 else str(cost)), remaining,
+			("FREE LOSS ROUTE" if cost <= 0 else RunStateStore.run_price_label())]
 	_layout_description()
 	_instruction.text = "DRAG TO THE SLOT"
 	for id in _offer_ids:
@@ -394,6 +399,13 @@ func _accept_card(card_id: String) -> void:
 		var card_button := value as Button
 		if card_button != null:
 			card_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _pool_kind == "power" and RunStateStore.power_requires_replacement(card_id):
+		if not RunStateStore.begin_power_replacement(card_id, "route_build"):
+			_selection_locked = false
+			_message.text = "POWER REPLACEMENT UNAVAILABLE"
+			return
+		_show_power_replacement_picker()
+		return
 	if RunStateStore.route_build_card_requires_symbol(card_id):
 		_show_symbol_picker(card_id)
 	else:
@@ -405,8 +417,9 @@ func _complete_after_preview(card_id: String, reward_symbol := "") -> void:
 		return
 	_complete_card(card_id, reward_symbol)
 
-func _complete_card(card_id: String, reward_symbol := "") -> void:
-	if not RunStateStore.complete_route_build_selection(card_id, reward_symbol):
+func _complete_card(card_id: String, reward_symbol := "", replacement_power_id := "") -> void:
+	if not RunStateStore.complete_route_build_selection(card_id, reward_symbol,
+		replacement_power_id):
 		_selection_locked = false
 		_pending_card_id = ""
 		_clear_selected_card()
@@ -418,6 +431,55 @@ func _complete_card(card_id: String, reward_symbol := "") -> void:
 		_message.text = "NEXT MACHINE UNAVAILABLE"
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
+
+func _restore_power_replacement() -> void:
+	if _pool_kind != "power" or RunStateStore.pendingPowerReplacement.is_empty():
+		return
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if candidate == "" or not _offer_ids.has(candidate):
+		RunStateStore.cancel_power_replacement()
+		return
+	_selection_locked = true
+	_pending_card_id = candidate
+	_instruction.text = "CHOOSE A POWER TO REMOVE"
+	_show_selected_card(candidate)
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_show_power_replacement_picker()
+
+func _show_power_replacement_picker() -> void:
+	if _power_replacement_picker != null and is_instance_valid(_power_replacement_picker):
+		return
+	_power_replacement_picker = POWER_REPLACEMENT_PICKER_SCRIPT.new()
+	add_child(_power_replacement_picker)
+	_power_replacement_picker.power_selected.connect(_on_power_replacement_selected)
+	_power_replacement_picker.cancelled.connect(_cancel_power_replacement)
+	_power_replacement_picker.present(
+		String(RunStateStore.pendingPowerReplacement.get("cardId", "")),
+		RunStateStore.power_replacement_options())
+
+func _on_power_replacement_selected(removed_power_id: String) -> void:
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if _power_replacement_picker != null:
+		_power_replacement_picker.queue_free()
+		_power_replacement_picker = null
+	if candidate == "":
+		_cancel_power_replacement()
+		return
+	_complete_card(candidate, "", removed_power_id)
+
+func _cancel_power_replacement() -> void:
+	RunStateStore.cancel_power_replacement()
+	_selection_locked = false
+	_pending_card_id = ""
+	_clear_selected_card()
+	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_STOP
 
 func _show_selected_card(card_id: String) -> void:
 	_clear_selected_card()

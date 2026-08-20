@@ -10,6 +10,7 @@ static func _check(out: Array, cond: bool, label: String) -> void:
 static func run_all() -> Array:
 	var out: Array = []
 	var store := MetaStoreScript.new()
+	_check_fresh_card_save(out)
 	var old_save := {
 		"schemaVersion": 1,
 		"lucidityWallet": 17,
@@ -56,6 +57,30 @@ static func run_all() -> Array:
 	_check_card_unlock_rules_52(store, out)
 	store.free()
 	return out
+
+## A first PC launch has no progression history. Defaults are known content,
+## every metric is explicitly zero, and the popup queue remains empty after a
+## canonical save round trip.
+static func _check_fresh_card_save(out: Array) -> void:
+	var fresh := MetaStoreScript.new()
+	fresh._apply({})
+	_check(out, fresh.unlockedAugmentCardIds == CardUnlocks.default_ids("augment"),
+		"fresh save owns only default augment cards")
+	_check(out, fresh.unlockedPowerCardIds == CardUnlocks.default_ids("power"),
+		"fresh save owns only default power cards")
+	for metric in CardUnlocks.metric_ids():
+		_check(out, fresh.cardUnlockProgress.has(metric)
+			and int(fresh.cardUnlockProgress[metric]) == 0,
+			"fresh save initializes card metric %s to zero" % metric)
+	_check(out, fresh.pending_card_unlocks().is_empty(),
+		"fresh save does not queue default cards for presentation")
+	var round_trip: Dictionary = fresh._as_dict()
+	fresh._apply(round_trip)
+	_check(out, fresh.pending_card_unlocks().is_empty(),
+		"fresh save round trip does not create an unlock event")
+	_check(out, not fresh.unlock_card("reroll", "power", false),
+		"default power cards cannot create a fake unlock event")
+	fresh.free()
 
 ## Issue #52: the pending card-unlock queue is persisted meta state, so it has to
 ## survive the JSON round trip that save_state()/load_state() perform and it has

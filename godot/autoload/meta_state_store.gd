@@ -98,11 +98,17 @@ signal meta_changed
 signal card_unlocked(card_id: String, pool: String)
 
 func _ready() -> void:
-	if unlockedAugmentCardIds.is_empty():
-		unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
-	if unlockedPowerCardIds.is_empty():
-		unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	_initialise_fresh_card_state()
 	load_state()
+
+## Canonical first-install state.  Defaults are known content, not achievements:
+## they must never enter the pending presentation queue.  Keeping this reset in one
+## helper also makes a missing save and reset_to_defaults() behave identically.
+func _initialise_fresh_card_state() -> void:
+	unlockedAugmentCardIds = CardUnlocks.default_ids("augment")
+	unlockedPowerCardIds = CardUnlocks.default_ids("power")
+	cardUnlockProgress = CardUnlocks.fresh_progress()
+	pendingCardUnlocks = []
 
 func _process(delta: float) -> void:
 	_playtime_accum_ms += delta * 1000.0
@@ -194,13 +200,17 @@ func _apply(meta: Dictionary) -> void:
 	meta_changed.emit()
 
 func _normalise_card_progress(value: Variant) -> Dictionary:
-	var result: Dictionary = {}
+	var result := CardUnlocks.fresh_progress()
+	var known := CardUnlocks.metric_ids()
 	if not (value is Dictionary):
 		return result
 	for key in value as Dictionary:
-		var amount := int((value as Dictionary)[key])
-		if amount > 0:
-			result[String(key)] = amount
+		var metric := String(key)
+		var amount := maxi(0, int((value as Dictionary)[key]))
+		# Keep unknown positive metrics for forward-compatible saves, while every
+		# metric known by this build is always present and starts at zero.
+		if known.has(metric) or amount > 0:
+			result[metric] = amount
 	return result
 
 func _normalise_card_unlocks(value: Variant, fallback: Array[String]) -> Array:
@@ -241,6 +251,10 @@ func unlock_card(card_id: String, pool: String = "", save_immediately := true) -
 	# the progression rule, not a reason to unlock the card under the other pool.
 	if pool != "" and pool != resolved_pool:
 		return false
+	# The starting roster is already known.  Treat a malformed save that omitted a
+	# default as repairable content, never as a newly earned card that should pop up.
+	if CardUnlocks.is_default(normalised):
+		return false
 	var unlocked := unlockedAugmentCardIds if resolved_pool == "augment" else unlockedPowerCardIds
 	if unlocked.has(normalised):
 		return false
@@ -258,6 +272,8 @@ func unlock_card(card_id: String, pool: String = "", save_immediately := true) -
 	return true
 
 func _queue_card_unlock(card_id: String, pool: String) -> void:
+	if CardUnlocks.is_default(card_id):
+		return
 	for entry in pendingCardUnlocks:
 		if String((entry as Dictionary).get("cardId", "")) == card_id:
 			return
@@ -380,6 +396,10 @@ func _normalise_pending_card_unlocks(value: Variant) -> Array:
 		var card_id := PacteCards.normalise_card_id(String(record.get("cardId", "")))
 		var pool := PacteCards.pool_of(card_id)
 		if pool == "" or seen.has(card_id):
+			continue
+		# Defaults have no unlock condition and therefore can never be a real
+		# acknowledgement event.  Drop stale entries from pre-queue/legacy saves.
+		if CardUnlocks.is_default(card_id):
 			continue
 		var unlocked := unlockedAugmentCardIds if pool == "augment" else unlockedPowerCardIds
 		if not unlocked.has(card_id):
@@ -764,6 +784,10 @@ func start_new_campaign(save_immediately := true) -> void:
 	for card_id in CardUnlocks.DEFAULT_POWER_IDS:
 		if not unlockedPowerCardIds.has(card_id):
 			unlockedPowerCardIds.append(card_id)
+	# Acknowledged entries are removed by acknowledge_card_unlock(); this second
+	# normalization protects a fresh campaign from malformed/default queue records
+	# while preserving genuine earned cards across campaigns.
+	pendingCardUnlocks = _normalise_pending_card_unlocks(pendingCardUnlocks)
 	_campaign_neuron_spend_feedback_pending = false
 	meta_changed.emit()
 	if save_immediately:
@@ -823,6 +847,10 @@ func load_state() -> void:
 	# silently starting the player over on a fresh campaign.
 	var txt := SaveIO.read_text(SAVE_PATH, _save_text_is_readable)
 	if txt.is_empty():
+		# Materialize the canonical first save. Defaults are known content, so a
+		# first PC launch cannot resurrect a pending card presentation.
+		_initialise_fresh_card_state()
+		save_state()
 		return # fresh install (or nothing usable) — keep canonical defaults
 	var parsed: Variant = JSON.parse_string(txt)
 	if typeof(parsed) != TYPE_DICTIONARY:

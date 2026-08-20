@@ -277,6 +277,48 @@ static func run_all() -> Array:
 	_check(out, not _store().pacte_active() if _store().runPhase == "pacte_threshold" else true,
 		"threshold state cannot reopen the full Pacte scene")
 
+	# Shared progression pricing: every run-scoped price reads the same curve, while
+	# the route door itself remains free at every round.
+	var previous_round := int(_store().wealthTargetIndex)
+	var previous_pacte_costs := bool(_store().pacteCostsActive)
+	var previous_route_context := String(_store().routeContext)
+	var previous_route_kind := String(_store().routeBuildKind)
+	var previous_dealer_reroll_count := int(_store().dealerRerollCount)
+	_store().pacteCostsActive = true
+	_store().routePacteFreeTier = false
+	_store().routeBuildFreeTier = false
+	_store().routeContext = "wealth_target"
+	_store().routeBuildKind = RouteCards.ROUTE_POWER
+	_store().dealerRerollCount = 0
+	_store().wealthTargetIndex = 0
+	var round_one_card: int = int(_store().pacte_card_cost("reroll"))
+	var round_one_shop: int = int(_store().route_shop_item_cost("shop_pair_guard"))
+	var round_one_dealer: int = int(_store().dealer_reroll_price())
+	_store().wealthTargetIndex = 1
+	var round_two_card: int = int(_store().pacte_card_cost("reroll"))
+	var round_two_shop: int = int(_store().route_shop_item_cost("shop_pair_guard"))
+	var round_two_dealer: int = int(_store().dealer_reroll_price())
+	_store().wealthTargetIndex = 2
+	var round_three_card: int = int(_store().pacte_card_cost("reroll"))
+	_check(out, round_one_card == RunPricing.calculate_run_price(8, 1)
+		and round_two_card == RunPricing.calculate_run_price(8, 2)
+		and round_three_card == RunPricing.calculate_run_price(8, 3),
+		"Pacte card prices use the centralized round curve")
+	_check(out, round_one_card < round_two_card and round_two_card < round_three_card,
+		"Pacte card prices increase with each round")
+	_check(out, round_one_shop < round_two_shop,
+		"Shop prices increase with each round")
+	_check(out, round_one_dealer < round_two_dealer,
+		"Dealer service prices increase with each round")
+	_check(out, _store().run_price_label(3).contains("ROUND 3")
+		and _store().run_price_label(3).contains("+30%"),
+		"progression pricing exposes its round markup to the UI")
+	_store().wealthTargetIndex = previous_round
+	_store().pacteCostsActive = previous_pacte_costs
+	_store().routeContext = previous_route_context
+	_store().routeBuildKind = previous_route_kind
+	_store().dealerRerollCount = previous_dealer_reroll_count
+
 	_restore_run(run_snapshot)
 	_meta()._apply(meta_snapshot)
 	_meta().campaignNeuronsLeft = campaign_neurons

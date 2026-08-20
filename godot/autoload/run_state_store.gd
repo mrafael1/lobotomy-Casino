@@ -11,6 +11,7 @@ extends Node
 signal state_changed
 
 const M32 := 0xFFFFFFFF
+const RUN_PRICING_SCRIPT := preload("res://rules/run_pricing.gd")
 
 ## Run persistence (issue #111 follow-up): a live run and a resumable flatline
 ## dealer visit survive app restarts so the menu can offer CONTINUE. The whole
@@ -34,6 +35,9 @@ const PACTE_WEALTH_TARGETS: Array[int] = [500, 1500]
 const PACTE_INITIAL_DRAW_SEED := 0x50414354
 const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
 const HERO_POWER_IDS: Array[String] = []
+## The machine has three authored power positions.  Replacements are explicit
+## run-state transactions; a fourth card is never silently appended.
+const MAX_ACTIVE_POWERS := 3
 const ROUTE_BONUS_LUCIDITY := 10
 const WIN_BOOST_RATES := [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
 const JOKER_DEALER_HELP_CHANCE := 0.35
@@ -265,7 +269,20 @@ var wealthTargetPendingValue := 0
 var roundContinuationPending := false
 ## Legacy threshold marker retained only while older run snapshots migrate to routes.
 var pacteTargetRoundVisit := false
-var campaignNeuronPending := false # consumed when the machine run ends
+var campaignNeuronPending := false # reserved; consumed when the machine run ends
+## Explicit run-scoped ownership of the campaign-neuron reservation.  The pending
+## flag is cleared as soon as the loss commits, while this flag distinguishes a
+## wealth continuation/target break (which must not spend again) from a live paid run.
+var campaignNeuronRunActive := false
+## Ending settlement is a persisted transaction boundary.  Presentation callbacks
+## and save/resume may revisit an ending, but the same run must bank exactly once.
+var endingSettlementCommitted := false
+var endingBankCommitted := false
+## Frozen ending values.  The ending screens and the wallet transaction both read
+## these values after the first commit, so an animation callback can never re-read
+## a changing machine total or add it a second time.
+var endingScoreSnapshot := -1
+var endingLuciditySnapshot := -1
 var pendingPowerRestores: Array = []
 ## Restore charges left (0 .. EconomyConst.POWER_RESTORE_CHARGE_MAX). Every score-driven
 ## restore spends one — plan_gain crossings and the gauge's own completion — and each spin
@@ -292,6 +309,12 @@ var pacteSelectedPowerId := ""
 var selectedAugmentCardIds: Array = []
 var selectedPowerCardIds: Array = []
 var ownedPowerIds: Array = []
+## Persisted while a fourth power is awaiting the player's replacement choice.
+## The candidate is not charged or added to the loadout until confirmation.
+var pendingPowerReplacement: Dictionary = {}
+## Runtime powers deliberately removed by a replacement.  This keeps a replaced
+## permanent power from being re-granted when a target/flatline segment starts.
+var powerReplacementRemovedIds: Array = []
 var pacteThresholdPending := false
 var pacteThresholdOpened := false
 var pacteAfterFlatlinePending := false
@@ -384,13 +407,148 @@ func has_power(power_id: String) -> bool:
 func power_loadout() -> Array[String]:
 	var result: Array[String] = []
 	for id in HERO_POWER_IDS:
-		if not result.has(id):
-			result.append(id)
+		var hero_id := PacteCards.normalise_card_id(String(id))
+		if not result.has(hero_id):
+			result.append(hero_id)
 	for id in ownedPowerIds:
 		var normalised := PacteCards.normalise_card_id(String(id))
-		if not result.has(normalised):
+		if not result.has(normalised) and result.size() < MAX_ACTIVE_POWERS:
 			result.append(normalised)
 	return result
+
+func _cap_power_ids(values: Array) -> Array:
+	var result: Array = []
+	for value in values:
+		var power_id := PacteCards.normalise_card_id(String(value))
+		if power_id == "" or result.has(power_id):
+			continue
+		if result.size() >= MAX_ACTIVE_POWERS:
+			break
+		result.append(power_id)
+	return result
+
+func active_power_ids() -> Array[String]:
+	var result: Array[String] = []
+	for power_id in power_loadout():
+		result.append(power_id)
+	return result
+
+## True when a new power would exceed the three authored machine slots.
+func power_requires_replacement(card_id: String) -> bool:
+	var normalised := PacteCards.normalise_card_id(card_id)
+	var runtime_id := PacteCards.power_id(normalised)
+	return PacteCards.pool_of(normalised) == "power" \
+		and not active_power_ids().has(runtime_id) \
+		and active_power_ids().size() >= MAX_ACTIVE_POWERS
+
+func begin_power_replacement(card_id: String, source := "") -> bool:
+	var normalised := PacteCards.normalise_card_id(card_id)
+	if not power_requires_replacement(normalised):
+		return false
+	if not pendingPowerReplacement.is_empty():
+		return String(pendingPowerReplacement.get("cardId", "")) == normalised
+	var options := active_power_ids()
+	pendingPowerReplacement = {
+		"cardId": normalised,
+		"runtimeId": PacteCards.power_id(normalised),
+		"source": source,
+		"options": options,
+	}
+	_commit()
+	return true
+
+func power_replacement_state() -> Dictionary:
+	return pendingPowerReplacement.duplicate(true)
+
+func power_replacement_options() -> Array[String]:
+	if pendingPowerReplacement.is_empty():
+		return []
+	var result: Array[String] = []
+	var saved_options: Variant = pendingPowerReplacement.get("options", [])
+	if not (saved_options is Array):
+		return result
+	for value in saved_options as Array:
+		var power_id := PacteCards.normalise_card_id(String(value))
+		if active_power_ids().has(power_id) and not result.has(power_id):
+			result.append(power_id)
+	return result
+
+func cancel_power_replacement() -> bool:
+	if pendingPowerReplacement.is_empty():
+		return false
+	pendingPowerReplacement = {}
+	pacteSelectedPowerId = ""
+	_commit()
+	return true
+
+func _normalise_power_replacement(value: Variant) -> Dictionary:
+	if not (value is Dictionary):
+		return {}
+	var candidate := PacteCards.normalise_card_id(String((value as Dictionary).get("cardId", "")))
+	if candidate == "" or PacteCards.pool_of(candidate) != "power":
+		return {}
+	var options: Array[String] = []
+	var saved_options: Variant = (value as Dictionary).get("options", [])
+	if not (saved_options is Array):
+		return {}
+	for raw_id in saved_options as Array:
+		var power_id := PacteCards.normalise_card_id(String(raw_id))
+		if not options.has(power_id):
+			options.append(power_id)
+	if options.size() < MAX_ACTIVE_POWERS:
+		return {}
+	return {
+		"cardId": candidate,
+		"runtimeId": PacteCards.power_id(candidate),
+		"source": String((value as Dictionary).get("source", "")),
+		"options": options.slice(0, MAX_ACTIVE_POWERS),
+	}
+
+func _valid_power_replacement(card_id: String, removed_power_id: String) -> bool:
+	if pendingPowerReplacement.is_empty():
+		return false
+	var candidate := PacteCards.normalise_card_id(card_id)
+	var removed := PacteCards.normalise_card_id(removed_power_id)
+	if String(pendingPowerReplacement.get("cardId", "")) != candidate:
+		return false
+	if not power_replacement_options().has(removed):
+		return false
+	return active_power_ids().has(removed) \
+		and not active_power_ids().has(PacteCards.power_id(candidate))
+
+func _replace_active_power(card_id: String, removed_power_id: String) -> bool:
+	if not _valid_power_replacement(card_id, removed_power_id):
+		return false
+	var candidate := PacteCards.normalise_card_id(card_id)
+	var candidate_runtime := PacteCards.power_id(candidate)
+	var removed := PacteCards.normalise_card_id(removed_power_id)
+	var replacement_index := ownedPowerIds.find(removed)
+	if replacement_index < 0:
+		# A legacy hero can be represented by HERO_POWER_IDS instead of the owned
+		# array.  The normal loadout still has to be replaceable, so materialize the
+		# active order before replacing its slot.
+		ownedPowerIds = active_power_ids()
+		replacement_index = ownedPowerIds.find(removed)
+	if replacement_index < 0:
+		return false
+	ownedPowerIds = ownedPowerIds.duplicate()
+	ownedPowerIds[replacement_index] = candidate_runtime
+	ownedPowerIds = _cap_power_ids(ownedPowerIds)
+	var next_selected: Array = []
+	for value in selectedPowerCardIds:
+		var selected_id := PacteCards.normalise_card_id(String(value))
+		if PacteCards.power_id(selected_id) == removed:
+			continue
+		if not next_selected.has(selected_id):
+			next_selected.append(selected_id)
+	if not next_selected.has(candidate):
+		next_selected.append(candidate)
+	selectedPowerCardIds = next_selected
+	powerReplacementRemovedIds = powerReplacementRemovedIds.duplicate()
+	if not powerReplacementRemovedIds.has(removed):
+		powerReplacementRemovedIds.append(removed)
+	pendingPowerReplacement = {}
+	return true
 
 ## Powers that can rescue the current reveal, plus Heart's guaranteed next-spin
 ## rescue, are valid choices while a combo defeat is pending. Memory is also
@@ -634,7 +792,10 @@ func load_run_state() -> void:
 	wealthTargetPendingValue = maxi(0, int(wealthTargetPendingValue))
 	_normalise_route_offer_after_load()
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
+	ownedPowerIds = _cap_power_ids(ownedPowerIds)
 	selectedPowerCardIds = _normalise_power_ids(selectedPowerCardIds)
+	powerReplacementRemovedIds = _normalise_power_ids(powerReplacementRemovedIds)
+	pendingPowerReplacement = _normalise_power_replacement(pendingPowerReplacement)
 	pacteSelectedPowerId = PacteCards.normalise_card_id(pacteSelectedPowerId)
 	pacteOfferPowerIds = _normalise_power_array_or_null(pacteOfferPowerIds)
 	abilitiesUsed = _normalise_power_ids(abilitiesUsed)
@@ -1430,6 +1591,11 @@ func reset_run_state() -> void:
 	roundContinuationPending = false
 	pacteTargetRoundVisit = false
 	campaignNeuronPending = false
+	campaignNeuronRunActive = false
+	endingSettlementCommitted = false
+	endingBankCommitted = false
+	endingScoreSnapshot = -1
+	endingLuciditySnapshot = -1
 	augmentedTier = ""
 	powersUsedThisSpin = 0
 	powerRestoreCharges = EconomyConst.POWER_RESTORE_CHARGE_MAX
@@ -1442,6 +1608,8 @@ func reset_run_state() -> void:
 	selectedAugmentCardIds = []
 	selectedPowerCardIds = []
 	ownedPowerIds = []
+	pendingPowerReplacement = {}
+	powerReplacementRemovedIds = []
 	pacteThresholdPending = false
 	pacteThresholdOpened = false
 	pacteAfterFlatlinePending = false
@@ -1465,6 +1633,11 @@ func begin_pre_run() -> void:
 	runPhase = "pre_run"
 	lastEnding = null
 	campaignNeuronPending = false
+	campaignNeuronRunActive = false
+	endingSettlementCommitted = false
+	endingBankCommitted = false
+	endingScoreSnapshot = -1
+	endingLuciditySnapshot = -1
 	roundContinuationPending = false
 	pacteTargetRoundVisit = false
 	_commit()
@@ -1487,6 +1660,11 @@ func begin_target_round() -> bool:
 	# A survived target costs no campaign health; release the run's reservation so
 	# the next run re-reserves cleanly (health only drops when a run truly dies).
 	campaignNeuronPending = false
+	campaignNeuronRunActive = false
+	endingSettlementCommitted = false
+	endingBankCommitted = false
+	endingScoreSnapshot = -1
+	endingLuciditySnapshot = -1
 	dealerIncoming = false
 	dealerPending = false
 	dealerOfferIds = null
@@ -1532,11 +1710,29 @@ func route_card_affordable(card_id: String) -> bool:
 			return true
 	return false
 
+## The current machine segment determines all run-scoped purchase prices.  The
+## target index is zero-based, so a fresh run is round 1.
+func run_round_index() -> int:
+	return maxi(1, int(wealthTargetIndex) + 1)
+
+func calculate_run_price(base_price: int, round_index := -1) -> int:
+	var selected_round := run_round_index() if int(round_index) < 1 else int(round_index)
+	return RUN_PRICING_SCRIPT.calculate_run_price(base_price, selected_round)
+
+func run_price_markup_percent(round_index := -1) -> int:
+	var selected_round := run_round_index() if int(round_index) < 1 else int(round_index)
+	return RUN_PRICING_SCRIPT.markup_percent(selected_round)
+
+func run_price_label(round_index := -1) -> String:
+	var selected_round := run_round_index() if int(round_index) < 1 else int(round_index)
+	return RUN_PRICING_SCRIPT.progression_label(selected_round)
+
 ## The next route-door reroll costs 10G, then 20G, then 30G. It belongs to this
 ## prepared offer and is persisted beside the two doors until one door is selected
 ## or refused.
 func route_offer_reroll_price() -> int:
-	return ROUTE_OFFER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
+	var base := ROUTE_OFFER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
+	return calculate_run_price(base)
 
 func route_offer_reroll_affordable() -> bool:
 	return routeOfferPending and int(lucidityCoins) >= route_offer_reroll_price()
@@ -1583,7 +1779,7 @@ func _route_build_offer_array() -> Array[String]:
 func route_build_card_cost(card_id: String) -> int:
 	if routeBuildFreeTier or routeContext == "flatline":
 		return 0
-	return PacteCards.cost_for(card_id)
+	return calculate_run_price(PacteCards.cost_for(card_id))
 
 func route_build_card_requires_symbol(card_id: String) -> bool:
 	return PacteCards.reward_amp_ids().has(PacteCards.normalise_card_id(card_id))
@@ -1752,13 +1948,26 @@ func refuse_routes() -> bool:
 	_open_route_sacrifice()
 	return finish_route_destination()
 
-func complete_route_build_selection(card_id: String, reward_symbol := "") -> bool:
+func complete_route_build_selection(card_id: String, reward_symbol := "",
+		replacement_power_id := "") -> bool:
 	if routeBuildKind != RouteCards.ROUTE_AUGMENT and routeBuildKind != RouteCards.ROUTE_POWER:
 		return false
 	var normalised := PacteCards.normalise_card_id(card_id)
 	if not _route_build_offer_array().has(normalised) or routeBuildSelectedId != "":
 		return false
 	if not route_build_card_affordable(normalised):
+		return false
+	var runtime_power_id := PacteCards.power_id(normalised)
+	var removed_power_id := PacteCards.normalise_card_id(replacement_power_id)
+	var needs_replacement := routeBuildKind == RouteCards.ROUTE_POWER \
+		and power_requires_replacement(normalised)
+	if needs_replacement:
+		if removed_power_id == "":
+			begin_power_replacement(normalised, "route_build")
+			return false
+		if not _valid_power_replacement(normalised, removed_power_id):
+			return false
+	elif removed_power_id != "":
 		return false
 	if routeBuildKind == RouteCards.ROUTE_AUGMENT and route_build_card_requires_symbol(normalised):
 		if reward_symbol == "" or reward_symbol == "flatline" \
@@ -1777,11 +1986,16 @@ func complete_route_build_selection(card_id: String, reward_symbol := "") -> boo
 		selectedAugmentCardIds.append(normalised)
 	else:
 		selectedPowerCardIds = selectedPowerCardIds.duplicate()
-		selectedPowerCardIds.append(normalised)
-		ownedPowerIds = ownedPowerIds.duplicate()
-		var runtime_power_id := PacteCards.power_id(normalised)
-		if not ownedPowerIds.has(runtime_power_id):
-			ownedPowerIds.append(runtime_power_id)
+		if needs_replacement:
+			if not _replace_active_power(normalised, removed_power_id):
+				lucidityCoins += cost
+				return false
+		else:
+			selectedPowerCardIds.append(normalised)
+			ownedPowerIds = ownedPowerIds.duplicate()
+			if not ownedPowerIds.has(runtime_power_id):
+				ownedPowerIds.append(runtime_power_id)
+			ownedPowerIds = _cap_power_ids(ownedPowerIds)
 	routeBuildSelectedId = normalised
 	routeBuildOfferIds = null
 	_refresh_pacte_derivatives()
@@ -1879,6 +2093,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	var kept_dealer_services: Array = runDealerServices.duplicate() if continuing else []
 	var kept_augment_cards: Array = selectedAugmentCardIds.duplicate() if continuing else []
 	var kept_power_cards: Array = selectedPowerCardIds.duplicate() if continuing else []
+	var kept_removed_power_ids: Array = powerReplacementRemovedIds.duplicate() if continuing else []
 	var kept_abilities_used: Array = abilitiesUsed.duplicate() if continuing else []
 	var kept_guaranteed_win_spins := guaranteedWinSpins if continuing else 0
 	var kept_joker_active := pacteJokerActive if continuing else false
@@ -1891,6 +2106,11 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 			_commit()
 			return false
 	campaignNeuronPending = consume_campaign_neuron
+	campaignNeuronRunActive = consume_campaign_neuron
+	endingSettlementCommitted = false
+	endingBankCommitted = false
+	endingScoreSnapshot = -1
+	endingLuciditySnapshot = -1
 	startingNeurons = Economy.compute_starting_neurons(owned_permanents)
 	neurons = startingNeurons
 	# A claim that was made but never paid must be settled before the round rolls over,
@@ -1950,6 +2170,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	ownedUpgrades = owned_permanents.duplicate()
 	selectedAugmentCardIds = kept_augment_cards
 	selectedPowerCardIds = kept_power_cards
+	powerReplacementRemovedIds = kept_removed_power_ids
 	pacteThresholdVisits = kept_pacte_threshold_visits
 	runShopUpgrades = kept_shop_upgrades
 	runDealerServices = kept_dealer_services
@@ -1959,9 +2180,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# silently injected into a fresh loadout.
 	ownedPowerIds = HERO_POWER_IDS.duplicate()
 	if not open_pacte:
-		if ownedUpgrades.has("perm_shift"):
+		if ownedUpgrades.has("perm_shift") and not kept_removed_power_ids.has("shift"):
 			ownedPowerIds.append("shift")
-		if ownedUpgrades.has("perm_memory"):
+		if ownedUpgrades.has("perm_memory") and not kept_removed_power_ids.has("memory"):
 			ownedPowerIds.append("memory")
 	pacteJokerArmed = false
 	pacteJokerActive = kept_joker_active
@@ -1973,8 +2194,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# persistent augment effects re-apply for a flatline continuation.
 	for card_id in kept_power_cards:
 		var kept_power := PacteCards.power_id(String(card_id))
-		if not ownedPowerIds.has(kept_power):
+		if not kept_removed_power_ids.has(kept_power) and not ownedPowerIds.has(kept_power):
 			ownedPowerIds.append(kept_power)
+	ownedPowerIds = _cap_power_ids(ownedPowerIds)
 	for card_id in kept_augment_cards:
 		var kept_effect := PacteCards.card(String(card_id)).get("effect", {}) as Dictionary
 		if String(kept_effect.get("type", "")) == "owned_upgrade":
@@ -2055,6 +2277,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
 	pacteSelectedAugmentId = ""
 	pacteSelectedPowerId = ""
+	pendingPowerReplacement = {}
 	pacteThresholdPending = false
 	pacteThresholdOpened = false
 	pacteAfterFlatlinePending = false
@@ -2249,7 +2472,7 @@ func _apply_pacte_augment(card_id: String) -> bool:
 func pacte_card_cost(card_id: String) -> int:
 	if not pacteCostsActive or routePacteFreeTier:
 		return 0
-	return PacteCards.cost_for(card_id)
+	return calculate_run_price(PacteCards.cost_for(card_id))
 
 func pacte_remaining_after(card_ids: Array[String]) -> int:
 	var total := 0
@@ -2267,7 +2490,8 @@ func select_pacte_augment(card_id: String) -> bool:
 	_commit()
 	return true
 
-func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
+func complete_pacte_selection(augment_id: String, power_id: String,
+		replacement_power_id := "") -> bool:
 	if not pacte_active():
 		return false
 	var augment_card_id := augment_id if augment_id != "" else pacteSelectedAugmentId
@@ -2285,6 +2509,18 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	if not _pacte_offer_array(pacteOfferPowerIds).has(power_card_id):
 		return false
 	if selectedAugmentCardIds.has(augment_card_id) or selectedPowerCardIds.has(power_card_id):
+		return false
+	var removed_power_id := PacteCards.normalise_card_id(replacement_power_id)
+	var needs_replacement := power_requires_replacement(power_card_id)
+	if needs_replacement:
+		if removed_power_id == "":
+			begin_power_replacement(power_card_id, "pacte")
+			pacteSelectedPowerId = power_card_id
+			_commit()
+			return false
+		if not _valid_power_replacement(power_card_id, removed_power_id):
+			return false
+	elif removed_power_id != "":
 		return false
 	var purchase_ids: Array[String] = []
 	if not augment_skipped:
@@ -2305,10 +2541,17 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 		selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
 		selectedAugmentCardIds.append(augment_card_id)
 	selectedPowerCardIds = selectedPowerCardIds.duplicate()
-	selectedPowerCardIds.append(power_card_id)
-	ownedPowerIds = ownedPowerIds.duplicate()
 	if not ownedPowerIds.has(runtime_power_id):
-		ownedPowerIds.append(runtime_power_id)
+		if needs_replacement:
+			if not _replace_active_power(power_card_id, removed_power_id):
+				lucidityCoins += purchase_cost
+				return false
+		else:
+			ownedPowerIds = ownedPowerIds.duplicate()
+			ownedPowerIds.append(runtime_power_id)
+			ownedPowerIds = _cap_power_ids(ownedPowerIds)
+	if not needs_replacement and not selectedPowerCardIds.has(power_card_id):
+		selectedPowerCardIds.append(power_card_id)
 	pacteSelectedAugmentId = ""
 	pacteSelectedPowerId = ""
 	pacteOfferAugmentIds = null
@@ -2392,16 +2635,49 @@ func prepare_dealer_scene_visit() -> bool:
 		return dealerOfferIds is Array and not (dealerOfferIds as Array).is_empty()
 	return force_dealer_visit()
 
-func end_run(ending: String) -> void:
+## Returns true only when this ending was committed for the current run.  A queued
+## animation, a scene rebuild, or an app resume may call the entry point again; the
+## persisted transaction flag makes those repeats presentation-only.
+func end_run(ending: String, score_snapshot := -1, lucidity_snapshot := -1) -> bool:
+	if runPhase == "over" and String(lastEnding) == ending and endingSettlementCommitted:
+		return false
+	# Capture before any terminal cleanup changes the live run balance.  Callers
+	# pass the values they read from the authoritative machine state; direct
+	# callers fall back to the store itself.
+	endingScoreSnapshot = maxi(0, int(score_snapshot if score_snapshot >= 0 else scoreEarned))
+	endingLuciditySnapshot = maxi(0,
+		int(lucidity_snapshot if lucidity_snapshot >= 0 else lucidityCoins))
 	runPhase = "over"
 	lastEnding = ending
 	if ending == "game_over":
 		# A terminal campaign loss removes the run's remaining credits instead of
 		# carrying the normal flatline retention into the next campaign.
 		lucidityCoins = 0
-	if campaignNeuronPending:
+	# A normal run reserves one neuron at launch.  The explicit active flag also
+	# covers a live paid run whose reservation flag was lost by an older snapshot;
+	# wealth continuations and target breaks set it false, so neither can spend twice.
+	var should_consume_neuron := campaignNeuronPending
+	if not should_consume_neuron and campaignNeuronRunActive \
+			and (ending == "flatline" or ending == "game_over") \
+			and not wealthContinued:
+		should_consume_neuron = true
+	if should_consume_neuron:
 		MetaStateStore.finalize_campaign_neuron_for_run()
-		campaignNeuronPending = false
+		if ending == "game_over" and int(MetaStateStore.campaignNeuronsLeft) <= 0:
+			# The terminal loss is committed here, before any ending scene or route
+			# transition can run.  This keeps direct state/save-resume callers in the
+			# same campaign-failed state as the machine presentation path.
+			MetaStateStore.mark_campaign_failed()
+	campaignNeuronPending = false
+	campaignNeuronRunActive = false
+	endingSettlementCommitted = true
+	endingBankCommitted = false
+	# An in-run dealer is part of the segment that just ended.  Clear its persisted
+	# offer so a terminal/route resume cannot resurrect an intentionally dismissed UI.
+	dealerIncoming = false
+	dealerPending = false
+	dealerOfferIds = null
+	dealerAugmentOfferId = ""
 	var campaign_neurons_after := int(MetaStateStore.campaignNeuronsLeft)
 	# Campaign-health crossings no longer open a second Pacte ritual. The same
 	# between-machine offer is used after every survivable loss.
@@ -2414,6 +2690,17 @@ func end_run(ending: String) -> void:
 		# overlay gets time to present before the route scene opens.
 		prepare_route_offer("flatline")
 	_commit()
+	return true
+
+## Claims the one meta-bank transaction belonging to the committed ending.  The
+## machine calls this immediately for flatline/game-over and on START AGAIN for
+## Wealth, so the animation itself never mutates the authoritative amount.
+func claim_ending_bank() -> bool:
+	if not endingSettlementCommitted or endingBankCommitted:
+		return false
+	endingBankCommitted = true
+	_commit()
+	return true
 
 func continue_run() -> void:
 	if runPhase != "over" or lastEnding != "wealth":
@@ -2421,6 +2708,13 @@ func continue_run() -> void:
 	runPhase = "running"
 	lastEnding = null
 	wealthContinued = true
+	# Wealth continuation is the same paid run, not a second campaign-neuron claim.
+	campaignNeuronPending = false
+	campaignNeuronRunActive = false
+	endingSettlementCommitted = false
+	endingBankCommitted = false
+	endingScoreSnapshot = -1
+	endingLuciditySnapshot = -1
 	_commit()
 
 # ── machine reactions (issue #35) ────────────────────────────────────────────────
@@ -3558,7 +3852,7 @@ func accept_dealer_offer_with_limit(item_id: String, slot_limit: int) -> void:
 # Current price of the next offer reroll — shared by the pre-run shop and the
 # in-run dealer visit (one escalating counter per dealer/run cycle).
 func dealer_reroll_price() -> int:
-	return DEALER_REROLL_BASE_COST * (dealerRerollCount + 1)
+	return calculate_run_price(DEALER_REROLL_BASE_COST * (dealerRerollCount + 1))
 
 # Painting reroll (issue #117, repriced): replace the pending offer pair with a
 # fresh deterministic pick. Costs dealer_reroll_price() run Lucidity and the price
@@ -3651,7 +3945,8 @@ func chip_augment_price(augment_id: String) -> int:
 	var entry: Variant = ChipAugments.map().get(augment_id, null)
 	if entry == null:
 		return 0
-	return ChipAugments.discounted_price(_augmented_marked_up(int(entry["cost"])),
+	var progressed := calculate_run_price(int(entry["cost"]))
+	return ChipAugments.discounted_price(_augmented_marked_up(progressed),
 		int(MetaStateStore.chipAugmentsPurchased.get("aug_chip_discount", 0)))
 
 ## Consumable Discount applies to the (pre-run) consumable shop prices.
@@ -3659,8 +3954,9 @@ func consumable_price(consumable_id: String) -> int:
 	var cmap := Consumables.map()
 	if not cmap.has(consumable_id):
 		return 0
+	var progressed := calculate_run_price(int(cmap[consumable_id]["shopCost"]))
 	return ChipAugments.discounted_price(
-		_augmented_marked_up(int(cmap[consumable_id]["shopCost"])),
+		_augmented_marked_up(progressed),
 		int(MetaStateStore.chipAugmentsPurchased.get("aug_consumable_discount", 0)))
 
 func route_shop_items() -> Array[Dictionary]:
@@ -3672,7 +3968,7 @@ func route_shop_items() -> Array[Dictionary]:
 	return result
 
 func route_shop_item_cost(item_id: String) -> int:
-	return _augmented_marked_up(ShopItems.cost(item_id))
+	return _augmented_marked_up(calculate_run_price(ShopItems.cost(item_id)))
 
 func route_shop_item_purchased(item_id: String) -> bool:
 	return runShopUpgrades.has(item_id) if ShopItems.item(item_id).get("kind", "") == "upgrade" else false
@@ -3701,9 +3997,14 @@ func buy_route_shop_item(item_id: String) -> bool:
 
 func route_dealer_services() -> Array[Dictionary]:
 	return [
-		{ "id": "dealer_route_spins", "name": "BUY TIME", "description": "+3 SPINS.", "cost": 18 },
-		{ "id": "dealer_route_guard", "name": "STACK THE DECK", "description": "THE NEXT 2 PAID SPINS CANNOT MISS.", "cost": 16 },
-		{ "id": "dealer_route_power", "name": "POWER CHIP", "description": "RECOVER ONE RANDOM SPENT POWER.", "cost": 20 },
+		{ "id": "dealer_route_spins", "name": "BUY TIME", "description": "+3 SPINS.",
+			"baseCost": 18, "cost": calculate_run_price(18) },
+		{ "id": "dealer_route_guard", "name": "STACK THE DECK",
+			"description": "THE NEXT 2 PAID SPINS CANNOT MISS.",
+			"baseCost": 16, "cost": calculate_run_price(16) },
+		{ "id": "dealer_route_power", "name": "POWER CHIP",
+			"description": "RECOVER ONE RANDOM SPENT POWER.",
+			"baseCost": 20, "cost": calculate_run_price(20) },
 	]
 
 func buy_route_dealer_service(service_id: String) -> bool:

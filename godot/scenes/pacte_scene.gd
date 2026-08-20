@@ -68,6 +68,7 @@ const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
+const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
 const BACKGROUND_Z_INDEX := 0
 const DEALER_Z_INDEX := 1
@@ -112,6 +113,7 @@ var _pool_kind := "augment"
 var _chosen_augment_id := ""
 var _preview_id := ""
 var _reward_amp_picker: Control = null
+var _power_replacement_picker: Variant = null
 var _dragging := false
 var _drag_id := ""
 var _drag_index := -1
@@ -185,6 +187,7 @@ func _ready() -> void:
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
+	call_deferred("_restore_power_replacement")
 	# Inert unless the played tutorial is running (issue #105). The autoload is not a
 	# @tool script, so it does not exist in an editor preview of this scene. A
 	# route-build instance is artwork only and must not attach a blocking tutorial
@@ -844,7 +847,8 @@ func _preview_card(card_id: String) -> void:
 		purchase_ids.append(card_id)
 		var cost := RunStateStore.pacte_card_cost(card_id)
 		var remaining := RunStateStore.pacte_remaining_after(purchase_ids)
-		description += "\nCOST: %dG  LEFT: %dG" % [cost, remaining]
+		description += "\nCOST: %dG  LEFT: %dG\n%s" % [
+			cost, remaining, RunStateStore.run_price_label()]
 	_description_text.text = description
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
@@ -921,15 +925,25 @@ func _accept_card(card_id: String) -> void:
 	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
+		if not RunStateStore.pendingPowerReplacement.is_empty():
+			_instruction.text = "CHOOSE A POWER TO REMOVE"
+			_show_power_replacement_picker()
+			return
 		var chosen_power := _chosen_card_views.get("power", null) as Control
 		if chosen_power != null:
 			chosen_power.queue_free()
 		_chosen_card_views.erase("power")
 		_selection_locked = false
 		return
+	await _finish_power_selection()
+
+func _finish_power_selection() -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
+	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	var route_visit := threshold_visit and RunStateStore.routePacteVisit
+	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	if route_visit:
 		# Legacy route Pacte snapshots complete directly into the next machine.
 		if not RunStateStore.finish_route_destination():
@@ -958,6 +972,52 @@ func _accept_card(card_id: String) -> void:
 			else "res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
+
+func _restore_power_replacement() -> void:
+	if RunStateStore.pendingPowerReplacement.is_empty():
+		return
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if candidate == "" or not _offer_ids.has(candidate):
+		RunStateStore.cancel_power_replacement()
+		return
+	_selection_locked = true
+	_show_chosen_card(candidate, "power")
+	_instruction.text = "CHOOSE A POWER TO REMOVE"
+	_show_power_replacement_picker()
+
+func _show_power_replacement_picker() -> void:
+	if _power_replacement_picker != null and is_instance_valid(_power_replacement_picker):
+		return
+	_power_replacement_picker = POWER_REPLACEMENT_PICKER_SCRIPT.new()
+	add_child(_power_replacement_picker)
+	_power_replacement_picker.power_selected.connect(_on_power_replacement_selected)
+	_power_replacement_picker.cancelled.connect(_cancel_power_replacement)
+	_power_replacement_picker.present(
+		String(RunStateStore.pendingPowerReplacement.get("cardId", "")),
+		RunStateStore.power_replacement_options())
+
+func _on_power_replacement_selected(removed_power_id: String) -> void:
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if _power_replacement_picker != null:
+		_power_replacement_picker.queue_free()
+		_power_replacement_picker = null
+	if candidate == "":
+		_cancel_power_replacement()
+		return
+	if not RunStateStore.complete_pacte_selection("", candidate, removed_power_id):
+		_cancel_power_replacement()
+		_instruction.text = "POWER REPLACEMENT REFUSED"
+		return
+	await _finish_power_selection()
+
+func _cancel_power_replacement() -> void:
+	RunStateStore.cancel_power_replacement()
+	_selection_locked = false
+	var chosen_power := _chosen_card_views.get("power", null) as Control
+	if chosen_power != null:
+		chosen_power.queue_free()
+	_chosen_card_views.erase("power")
+	_instruction.text = "DRAG TO THE SLOT"
 
 func _clear_cards() -> void:
 	for child in get_children():

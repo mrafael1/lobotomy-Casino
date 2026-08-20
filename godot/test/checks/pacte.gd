@@ -1652,5 +1652,55 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	if not bool(run_store.heartPowerArmed) or bool(run_store.comboDefeatPending) \
 			or int(run_store.betMultiplier) != 2:
 		failures.append("pacte powers: Heart did not rescue the combo loss without lowering its gauge")
+
+	# Four-card progression must pause for an explicit replacement.  Starting the
+	# transaction does not charge Lucidity; only the chosen removal commits it.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x9911, true)
+	run_store.pacteOfferAugmentIds = []
+	run_store.pacteOfferPowerIds = ["heart"]
+	run_store.ownedPowerIds = ["reroll", "shift", "memory"]
+	run_store.selectedPowerCardIds = ["reroll", "shift", "memory"]
+	run_store.lucidityCoins = 0
+	if run_store.stage_pacte_power_selection("heart"):
+		failures.append("pacte powers: fourth card was silently accepted")
+	if run_store.pendingPowerReplacement.is_empty() \
+			or run_store.power_replacement_options().size() != 3:
+		failures.append("pacte powers: fourth card did not open all three replacement choices")
+	if int(run_store.lucidityCoins) != 0:
+		failures.append("pacte powers: replacement candidate charged before confirmation")
+	if not run_store.complete_pacte_selection("", "heart", "reroll"):
+		failures.append("pacte powers: explicit replacement was not committed")
+	if run_store.ownedPowerIds.size() != 3 or not run_store.ownedPowerIds.has("heart") \
+			or run_store.ownedPowerIds.has("reroll") \
+			or not run_store.pendingPowerReplacement.is_empty():
+		failures.append("pacte powers: committed replacement did not leave exactly three powers")
+
+	# Cancellation is resumable and leaves the original loadout and wallet intact.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x9912, true)
+	run_store.ownedPowerIds = ["reroll", "shift", "memory"]
+	run_store.selectedPowerCardIds = ["reroll", "shift", "memory"]
+	var coins_before_replacement := int(run_store.lucidityCoins)
+	if not run_store.begin_power_replacement("cheat", "pacte") \
+			or not run_store.cancel_power_replacement():
+		failures.append("pacte powers: replacement cancel/back was unavailable")
+	if run_store.ownedPowerIds.size() != 3 or run_store.ownedPowerIds.has("cheat") \
+			or int(run_store.lucidityCoins) != coins_before_replacement:
+		failures.append("pacte powers: cancelling replacement changed the loadout or price")
+
+	# The pending picker itself survives the run snapshot and can be reconstructed.
+	if not run_store.begin_power_replacement("swap", "pacte"):
+		failures.append("pacte powers: could not stage a resumable replacement")
+	var replacement_save: Dictionary = run_store.pendingPowerReplacement.duplicate(true)
+	run_store.pendingPowerReplacement = {}
+	run_store._commit()
+	run_store.pendingPowerReplacement = replacement_save
+	run_store._commit()
+	run_store.load_run_state()
+	if run_store.pendingPowerReplacement.is_empty() \
+			or String(run_store.pendingPowerReplacement.get("cardId", "")) != "swap" \
+			or run_store.ownedPowerIds.size() > 3:
+		failures.append("pacte powers: save/resume lost or duplicated the replacement decision")
 	run_store.reset_run_state()
 

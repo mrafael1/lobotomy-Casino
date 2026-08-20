@@ -159,6 +159,7 @@ var _start_confirm_modal: Control = null     # issue #84: machine-button misclic
 var _credits_row: Control = null
 var _credits_coin: TextureRect = null
 var _campaign_label: Label = null
+var _run_price_context: Label = null
 var _offer_slots := []
 var _stash_slot_nodes := []
 var _offer_slots_by_id := {}
@@ -626,6 +627,7 @@ func _stash_slots() -> Array:
 
 func _build_hud() -> void:
 	_build_campaign_label()
+	_build_run_price_context()
 	if _options_button != null or _start_button != null or _credits_row != null:
 		if _options_button != null:
 			ButtonKit.skin_icon_button(_options_button, SETTINGS_ASSET, 1)
@@ -711,6 +713,17 @@ func _build_campaign_label() -> void:
 	# The neuron meter no longer shows on the dealer HUD — it lives on the start
 	# menu and the flatline overlay. The label stays as an editor placeholder.
 	_refresh_campaign_label()
+
+func _build_run_price_context() -> void:
+	if _run_price_context != null:
+		return
+	_run_price_context = _mk_label(Vector2(35.0, 105.0), 3, Color(0.62, 0.70, 0.78))
+	_run_price_context.name = "RunPriceContext"
+	_run_price_context.size = Vector2(92.0, 8.0)
+	_run_price_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_run_price_context.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_run_price_context.text = RunStateStore.run_price_label() if not Engine.is_editor_hint() \
+		else "ROUND 1 PRICE"
 
 # ── authored dealer-canvas buttons (issue #55) ─────────────────────────────────────
 # The lab/machine buttons are full-canvas 2-frame sheets (0 default, 1 pressed) that
