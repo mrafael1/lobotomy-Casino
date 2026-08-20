@@ -69,7 +69,7 @@ void fragment() {
 }
 """
 const CARD_BREATH_SCALE := 1.025
-const CARD_BREATH_HALF_DURATION := 0.72
+const CARD_BREATH_HALF_DURATION := 1.10
 const CARD_BREATH_STAGGER := 0.12
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height

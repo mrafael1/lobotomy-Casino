@@ -30,7 +30,7 @@ const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const CARD_COST_FONT_SIZE := 7
 const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
 const CARD_BREATH_SCALE := 1.025
-const CARD_BREATH_HALF_DURATION := 0.72
+const CARD_BREATH_HALF_DURATION := 1.10
 const CARD_BREATH_STAGGER := 0.12
 const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
