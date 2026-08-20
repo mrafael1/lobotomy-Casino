@@ -20,9 +20,12 @@ const RUN_SAVE_PATH := "user://lobotomy-run.save"
 const RUN_SAVE_SCHEMA_VERSION := 2
 const ROUTE_SCENE := "res://scenes/dealer_choice_scene.tscn"
 
-## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
-## reroll adds the base again (5, 10, 15, …).
+## Live dealer offer reroll pricing: first reroll of a cycle costs the base, each
+## subsequent reroll adds the base again (5, 10, 15, …).
 const DEALER_REROLL_BASE_COST := 5
+## Between-machine route-door rerolls use their own starting price (10, 20, 30, …)
+## so the route choice does not share the live dealer's cheaper service.
+const ROUTE_OFFER_REROLL_BASE_COST := 10
 
 ## Pacte owns the run's power loadout. No power is granted by default; legacy
 ## callers that skip the ritual still receive only the permanent powers they own.
@@ -1529,11 +1532,11 @@ func route_card_affordable(card_id: String) -> bool:
 			return true
 	return false
 
-## The next route-door reroll costs the same escalating Lucidity price as the
-## dealer's painting: 5G, then 10G, then 15G. It belongs to this prepared offer
-## and is persisted beside the two doors until one door is selected or refused.
+## The next route-door reroll costs 10G, then 20G, then 30G. It belongs to this
+## prepared offer and is persisted beside the two doors until one door is selected
+## or refused.
 func route_offer_reroll_price() -> int:
-	return DEALER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
+	return ROUTE_OFFER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
 
 func route_offer_reroll_affordable() -> bool:
 	return routeOfferPending and int(lucidityCoins) >= route_offer_reroll_price()

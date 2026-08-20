@@ -80,11 +80,96 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer offer is missing its door reroll action")
 	if route.get_node_or_null("CreditsRow") == null:
 		failures.append("route: dealer offer is missing its run-gold display")
-	if route.get_node_or_null("DealerSpeechBubble") == null:
-		failures.append("route: dealer offer is missing the dealer route prompt")
+	if route.get_node_or_null("PathPrompt") != null:
+		failures.append("route: path prompt still sits outside the dealer bubble")
+	if route.get_node_or_null("DealerSpeechBubble") != null:
+		failures.append("route: dealer offer still includes the removed speech bubble")
+	var default_bubble := route.get_node_or_null("BubbleText") as Sprite2D
+	var default_bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+	if default_bubble == null:
+		failures.append("route: dealer offer is missing the authored hover bubble")
+	if default_bubble_label == null:
+		failures.append("route: dealer offer is missing the hover explanation label")
+	elif not default_bubble.visible or not default_bubble_label.visible \
+			or default_bubble_label.text != "CHOOSE\nYOUR PATH" \
+			or default_bubble_label.position != Vector2(103.0, 173.0) \
+			or default_bubble_label.size != Vector2(39.0, 21.0):
+		failures.append("route: dealer bubble is missing the default path prompt")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
+	for door in ["DoorLeft", "DoorRight"]:
+		var door_button := route.get_node_or_null("DoorChoices/" + door) as Button
+		if door_button != null and not door_button.tooltip_text.is_empty():
+			failures.append("route: %s still exposes a hover description" % door)
+		if door_button != null and door_button.get_node_or_null("DoorCost") != null:
+			failures.append("route: %s still shows a cost under the door" % door)
+		var door_title: Label = null
+		if door_button != null:
+			door_title = door_button.get_node_or_null("DoorTitle") as Label
+		if door_title == null or door_title.position != Vector2(1.0, 106.0) \
+				or door_title.size != Vector2(62.0, 8.0):
+			failures.append("route: %s title is not inside its blue name plate" % door)
+	var reroll_row := route.get_node_or_null("RerollPriceRow") as HBoxContainer
+	if reroll_row == null or reroll_row.position != Vector2(7.0, 216.0) \
+			or reroll_row.size != Vector2(38.0, 12.0):
+		failures.append("route: reroll price row is not centered under the art")
+	var reroll_price := route.get_node_or_null("RerollPriceRow/RerollPrice") as Label
+	if reroll_price == null or reroll_price.text != "10":
+		failures.append("route: reroll price is not shown as a bare 10")
+	var reroll_coin := route.get_node_or_null("RerollPriceRow/RerollCoin") as TextureRect
+	if reroll_coin == null:
+		failures.append("route: reroll price is missing its Lucidity coin icon")
+	elif reroll_price != null:
+		var price_center_y := reroll_price.position.y + reroll_price.size.y * 0.5
+		var coin_center_y := reroll_coin.position.y + reroll_coin.size.y * 0.5
+		if absf(price_center_y - coin_center_y) > 0.5:
+			failures.append("route: reroll number and Lucidity coin are not vertically aligned")
+	if reroll_price != null and reroll_price.get_theme_font_size("font_size") < 7:
+		failures.append("route: reroll number is still too small")
+	var confirmation_door: Button = null
+	for door_button in [
+		route.get_node_or_null("DoorChoices/DoorLeft") as Button,
+		route.get_node_or_null("DoorChoices/DoorRight") as Button,
+	]:
+		if door_button != null and not door_button.disabled:
+			confirmation_door = door_button
+			break
+	if confirmation_door != null:
+		var confirmation_sprite := confirmation_door.get_node_or_null("DoorSprite") as Sprite2D
+		confirmation_door.mouse_entered.emit()
+		await process_frame
+		var bubble := route.get_node_or_null("BubbleText") as Sprite2D
+		var bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+		if bubble == null or not bubble.visible or bubble_label == null \
+				or bubble_label.text.is_empty() or not bubble_label.visible \
+				or bubble_label.text == "CHOOSE\nYOUR PATH":
+			failures.append("route: hovering a door does not show its dealer explanation")
+		if confirmation_sprite == null or confirmation_sprite.scale.x <= 1.0:
+			failures.append("route: hovering a door does not scale its art up")
+		confirmation_door.mouse_exited.emit()
+		await process_frame
+		if bubble == null or not bubble.visible or bubble_label == null \
+				or not bubble_label.visible or bubble_label.text != "CHOOSE\nYOUR PATH":
+			failures.append("route: leaving a door does not restore the dealer path prompt")
+		if confirmation_sprite != null and not is_equal_approx(confirmation_sprite.scale.x, 1.0):
+			failures.append("route: leaving a door does not restore its art scale")
+		confirmation_door.pressed.emit()
+		await process_frame
+		var confirmation := route.get_node_or_null("DoorConfirmation") as Control
+		if confirmation == null or not confirmation.visible:
+			failures.append("route: clicking a door does not open confirmation")
+		if not run_store.routeOfferPending or run_store.routeDestination != "":
+			failures.append("route: clicking a door commits the route before confirmation")
+		var cancel_confirmation := route.get_node_or_null(
+			"DoorConfirmation/Panel/CancelButton") as Button
+		if cancel_confirmation == null:
+			failures.append("route: door confirmation has no cancel action")
+		else:
+			cancel_confirmation.pressed.emit()
+			await process_frame
+			if confirmation.visible or not run_store.routeOfferPending:
+				failures.append("route: cancelling door confirmation did not restore the offer")
 	if route.get_node_or_null("DealerBackground") != null:
 		failures.append("route: dealer offer still includes the shop background")
 	if route.get_node_or_null("DealerCounter") != null:
@@ -96,12 +181,8 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if not run_store.select_route(RouteCards.CARD_SHOP_ID):
 		failures.append("route: Shop card could not be selected")
 	else:
-		var shop := (load("res://scenes/route_shop_scene.tscn") as PackedScene).instantiate()
-		get_root().add_child(shop)
-		await process_frame
-		if shop.get_node_or_null("RunShopItems") == null:
-			failures.append("route: Shop destination has no run-item list")
-		shop.free()
+		if not ResourceLoader.exists("res://scenes/dealer_scene.tscn"):
+			failures.append("route: Shop destination is missing dealer_scene")
 		if not run_store.finish_route_destination() or run_store.runPhase != "running":
 			failures.append("route: Shop did not return to a live machine segment")
 
