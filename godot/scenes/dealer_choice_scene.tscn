@@ -5,6 +5,7 @@
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="3_doors"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/reroll.png" id="4_reroll"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/bubble_text.png" id="5_bubble_text"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/doors.png" id="6_hover_doors"]
 
 [node name="DealerChoiceScene" type="Control"]
 layout_mode = 3
@@ -15,6 +16,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 script = ExtResource("1_choice")
+hover_doors_texture = ExtResource("6_hover_doors")
 
 [node name="DealerSprite" type="Sprite2D" parent="."]
 z_index = 0
@@ -52,6 +54,7 @@ offset_bottom = 159.0
 mouse_filter = 0
 
 [node name="DoorSprite" type="Sprite2D" parent="DoorChoices/DoorLeft"]
+position = Vector2(1, 1)
 texture_filter = 1
 texture = ExtResource("3_doors")
 centered = false
@@ -66,6 +69,7 @@ offset_bottom = 159.0
 mouse_filter = 0
 
 [node name="DoorSprite" type="Sprite2D" parent="DoorChoices/DoorRight"]
+position = Vector2(1, 1)
 texture_filter = 1
 texture = ExtResource("3_doors")
 centered = false

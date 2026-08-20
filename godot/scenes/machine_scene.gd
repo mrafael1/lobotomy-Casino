@@ -234,6 +234,9 @@ const MULT_COLORS := {
 const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
+const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
+const COIN_ASSET := "ui/coin.png"
+const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 # Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
 # offer (100) → dealer-interactive stash (StashTray, 110 while his offer is up
 # and 50 otherwise) → HUD/options (BottomHudLayer 120).
@@ -727,6 +730,11 @@ var _rewind_anim_active := false
 var _rewind_elapsed := 0.0
 var _rewind_accum := 0.0
 var _spin_label: Label = null
+var _credits_row: HBoxContainer = null
+var _credits_label: Label = null
+var _credits_coin: TextureRect = null
+var _machine_scene_lucidity_before := 0
+var _machine_scene_lucidity_snapshot_ready := false
 ## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
 var _flatline_transition_active: bool = false
@@ -1978,6 +1986,78 @@ func _build_spin_label() -> void:
 	_spin_label.text = ""
 	# The campaign neuron meter belongs to the menu and flatline overlay. The
 	# machine HUD's empty anchor is explicitly named for the run's spin counter.
+	_build_machine_credits_display(bottom_hud)
+	_refresh_machine_credits()
+
+func _build_machine_credits_display(bottom_hud: Control) -> void:
+	_credits_row = bottom_hud.get_node_or_null("CreditsRow") as HBoxContainer
+	if _credits_row == null:
+		_credits_row = HBoxContainer.new()
+		_credits_row.name = "CreditsRow"
+		bottom_hud.add_child(_credits_row)
+	_credits_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_credits_row.offset_left = 7.0
+	_credits_row.offset_top = -20.0
+	_credits_row.offset_right = 30.0
+	_credits_row.offset_bottom = -8.0
+	_credits_row.add_theme_constant_override("separation", 2)
+	_credits_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_credits_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_credits_row.z_index = 20
+
+	_credits_label = _credits_row.get_node_or_null("CreditsLabel") as Label
+	if _credits_label == null:
+		_credits_label = Label.new()
+		_credits_label.name = "CreditsLabel"
+		_credits_row.add_child(_credits_label)
+	_credits_label.add_theme_font_size_override("font_size", 7)
+	_credits_label.add_theme_color_override("font_color", LUCIDITY_COLOR)
+	_credits_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_credits_label.add_theme_constant_override("outline_size", 1)
+	_credits_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_credits_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_credits_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		_credits_label.add_theme_font_override("font", _font)
+
+	_credits_coin = _credits_row.get_node_or_null("Coin") as TextureRect
+	if _credits_coin == null:
+		_credits_coin = TextureRect.new()
+		_credits_coin.name = "Coin"
+		_credits_row.add_child(_credits_coin)
+	_credits_coin.texture = Assets.texture(COIN_ASSET, true)
+	_credits_coin.custom_minimum_size = CREDITS_COIN_SIZE
+	_credits_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_credits_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_credits_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_credits_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_credits_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _refresh_machine_credits() -> void:
+	if _credits_label != null:
+		var displayed := int(RunStateStore.lucidityCoins)
+		if _machine_scene_lucidity_snapshot_ready:
+			displayed = _machine_scene_lucidity_before
+		_credits_label.text = str(displayed)
+
+## The machine HUD shows the carried run-Lucidity balance from the start of this
+## machine segment. Score and Lucidity can change underneath it, but the number only
+## changes when the segment is handed off to the next scene.
+func _begin_machine_lucidity_segment() -> void:
+	_machine_scene_lucidity_before = int(RunStateStore.lucidityCoins)
+	_machine_scene_lucidity_snapshot_ready = true
+	_refresh_machine_credits()
+
+## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
+## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
+## have been applied. Express the handoff as the carried value plus that net machine
+## delta so the ending path can never accidentally substitute the full score.
+func _machine_lucidity_after_deductions() -> int:
+	if not _machine_scene_lucidity_snapshot_ready:
+		return maxi(0, int(RunStateStore.lucidityCoins))
+	var machine_delta := int(RunStateStore.lucidityCoins) - _machine_scene_lucidity_before
+	return maxi(0, _machine_scene_lucidity_before + machine_delta)
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
@@ -1999,6 +2079,7 @@ func _enter_run() -> void:
 		if not _begin_fresh_run():
 			_show_campaign_failed()
 			return
+	_begin_machine_lucidity_segment()
 	_sync_visuals()
 	# The "-1 NEURON" popup belongs to the flatline overlay only — it no longer
 	# fires during normal machine play (the pending flag is just cleared here).
@@ -2202,7 +2283,7 @@ func _finish_wealth_target_transition() -> void:
 		var final_run := {
 			"neurons": RunStateStore.neurons,
 			"scoreEarned": RunStateStore.scoreEarned,
-			"lucidityCoins": RunStateStore.lucidityCoins,
+			"lucidityCoins": _machine_lucidity_after_deductions(),
 		}
 		_show_ending("wealth", final_run)
 		return
@@ -2698,6 +2779,7 @@ func _update_hud() -> void:
 		return
 	_refresh_tv_indicators()
 	_refresh_spin_label()
+	_refresh_machine_credits()
 	_augments.refresh_pacte_badges()
 	_refresh_controls()
 	_refresh_consumable_fx()
@@ -5003,7 +5085,7 @@ func _check_flatline_instant_death() -> bool:
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	}
 	# The killing strike gets to play: the FLATLINE line-sweep and its 3/3 count run to the
 	# end before the ending screen takes over, instead of being cut off the frame they land.
@@ -5131,7 +5213,7 @@ func _check_ending() -> bool:
 	var run := {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	}
 	var ending: Variant = Endings.check_ending(run, {}, campaign_goal_score)
 	if ending == null:
@@ -5446,6 +5528,7 @@ func _can_resume_after_wealth() -> bool:
 func _continue_from_wealth() -> void:
 	RunStateStore.continue_run()
 	if _can_resume_after_wealth():
+		_begin_machine_lucidity_segment()
 		_sync_visuals()
 		return
 	# Defensive: no spin can follow, so end the run through the flatline flow
@@ -5457,7 +5540,7 @@ func _continue_from_wealth() -> void:
 	_show_ending("flatline", {
 		"neurons": RunStateStore.neurons,
 		"scoreEarned": RunStateStore.scoreEarned,
-		"lucidityCoins": RunStateStore.lucidityCoins,
+		"lucidityCoins": _machine_lucidity_after_deductions(),
 	})
 
 ## Wealth screen Start Again: bank the run and return to the menu hub.

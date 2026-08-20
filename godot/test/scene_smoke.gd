@@ -194,6 +194,7 @@ const CHECKS: Array = [
 	{"fn": "_check_machine_ending_flow_source", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_flatline_action_text", "file": "flatline", "iso": ISO_MACHINE, "args": ["machine", "meta_store", "failures"]},
 	{"fn": "_check_global_options_layout", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_machine_lucidity_display", "file": "scenes", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
 	{"fn": "_check_painting_reroll_117", "file": "pacte", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_chip_augments", "file": "pacte", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_dealer_tip_132", "file": "dealer", "iso": ISO_STORES, "args": ["failures"]},
