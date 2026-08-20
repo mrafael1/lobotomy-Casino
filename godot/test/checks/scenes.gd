@@ -779,6 +779,12 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 func _check_scene_nav(failures: Array) -> void:
 	var nav: Node = get_root().get_node("SceneNav")
 	nav.clear()
+	var root_view := get_root()
+	if root_view.content_scale_mode != Window.CONTENT_SCALE_MODE_CANVAS_ITEMS \
+			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND \
+			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_INTEGER \
+			or root_view.content_scale_size != Vector2i(160, 320):
+		failures.append("scene nav: native content scale is not explicit and expanded")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")

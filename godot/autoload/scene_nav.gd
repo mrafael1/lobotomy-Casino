@@ -33,9 +33,23 @@ var _suspended_scene_process_mode := Node.PROCESS_MODE_INHERIT
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_configure_content_scale()
 	_build_transition_layer()
 	get_viewport().size_changed.connect(_layout_transition_overlay)
 	_layout_transition_overlay()
+
+
+## Keep the native pixel layout explicit on every platform. Android exports can
+## otherwise retain a stale window stretch value from an older APK/project
+## preset, which reintroduces a keep/aspect letterbox around the 160x320 game.
+## Expand changes only the visible logical bounds; integer keeps the original
+## source-pixel scale intact.
+func _configure_content_scale() -> void:
+	var root_view := get_tree().root
+	root_view.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	root_view.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	root_view.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+	root_view.content_scale_size = Vector2i(160, 320)
 
 
 func _build_transition_layer() -> void:
