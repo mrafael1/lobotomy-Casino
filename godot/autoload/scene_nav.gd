@@ -34,6 +34,8 @@ var _suspended_scene_process_mode := Node.PROCESS_MODE_INHERIT
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_transition_layer()
+	get_viewport().size_changed.connect(_layout_transition_overlay)
+	_layout_transition_overlay()
 
 
 func _build_transition_layer() -> void:
@@ -48,6 +50,13 @@ func _build_transition_layer() -> void:
 	_transition_overlay.size = NATIVE_CANVAS_SIZE
 	_transition_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_transition_layer.add_child(_transition_overlay)
+
+func _layout_transition_overlay() -> void:
+	if _transition_overlay == null or not is_instance_valid(_transition_overlay):
+		return
+	var extra_size: Vector2 = get_viewport().get_visible_rect().size - NATIVE_CANVAS_SIZE
+	_transition_overlay.position = Vector2(maxf(0.0, extra_size.x * 0.5),
+		maxf(0.0, extra_size.y * 0.5))
 
 
 ## True while the persistent transition cover owns the screen and gameplay input.

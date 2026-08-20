@@ -67,12 +67,23 @@ var _drag_origin_z := 0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_center_native_canvas()
+	get_viewport().size_changed.connect(_on_viewport_size_changed)
 	_pacte_artwork = get_node_or_null("PacteArtwork") as Control
 	_configure_pacte_artwork()
 	_font = Assets.font()
 	_build()
 	_refresh()
 	call_deferred("_restore_power_replacement")
+
+func _on_viewport_size_changed() -> void:
+	_center_native_canvas()
+
+func _center_native_canvas() -> void:
+	var viewport_size := get_viewport_rect().size
+	var extra_size := viewport_size - CANVAS_SIZE
+	position = Vector2(maxf(0.0, extra_size.x * 0.5),
+		maxf(0.0, extra_size.y * 0.5))
 
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:
@@ -317,7 +328,10 @@ func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform().affine_inverse() * global_position
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
-	return make_canvas_position_local(viewport_position)
+	# Drag helpers consume global canvas coordinates. The route build shares Pacte's
+	# expanded-phone layout, so converting through this Control would subtract its
+	# centering offset twice.
+	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))

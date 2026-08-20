@@ -790,6 +790,12 @@ func _check_scene_nav(failures: Array) -> void:
 			failures.append("scene nav: inactive transition cover still captures input")
 		if transition_overlay.size != Vector2(160.0, 320.0):
 			failures.append("scene nav: transition cover is not native-canvas sized")
+		var viewport_size: Vector2 = nav.get_viewport().get_visible_rect().size
+		var expected_overlay_position := Vector2(
+			maxf(0.0, (viewport_size.x - 160.0) * 0.5),
+			maxf(0.0, (viewport_size.y - 320.0) * 0.5))
+		if transition_overlay.position != expected_overlay_position:
+			failures.append("scene nav: transition cover is not centred in the expanded viewport")
 	var nav_source := FileAccess.open("res://autoload/scene_nav.gd", FileAccess.READ)
 	if nav_source == null:
 		failures.append("scene nav: centralized transition source is unreadable")

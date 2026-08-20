@@ -892,6 +892,11 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: background/dealer/table draw order is incorrect")
 	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
 		failures.append("pacte: dealer text does not draw above the table")
+	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) != "expand":
+		failures.append("pacte: phone viewport is not allowed to expose decorative bleed")
+	if pacte._native_canvas_origin(Vector2(180.0, 320.0)) != Vector2(10.0, 0.0) \
+		or pacte._native_canvas_origin(Vector2(160.0, 360.0)) != Vector2(0.0, 20.0):
+		failures.append("pacte: native gameplay canvas is not centred in an expanded phone viewport")
 	# The updated room exports include decorative bleed around the native canvas.
 	# Every frame must retain source-pixel scale and be centred around the same
 	# 160x320 gameplay coordinates; the phone viewport, not an art-layer resize,
@@ -1042,11 +1047,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var screen_drag := InputEventScreenDrag.new()
 	screen_drag.index = 0
 	# _input receives events the viewport has already mapped into canvas space.
-	screen_drag.position = Vector2(40.0, 270.0)
+	var screen_drag_position: Vector2 = pacte.get_global_transform() * Vector2(40.0, 270.0)
+	screen_drag.position = screen_drag_position
 	pacte._input(screen_drag)
 	# The grabbed point of the card must end up exactly under the reported finger.
 	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
-	if dragged_finger_position.distance_to(screen_drag.position) > 0.1:
+	if dragged_finger_position.distance_to(screen_drag_position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
@@ -1071,7 +1077,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	pacte._update_drag(Vector2(40.0, 270.0))
 	var screen_release := InputEventScreenTouch.new()
 	screen_release.index = 0
-	screen_release.position = Vector2(40.0, 270.0)
+	screen_release.position = screen_drag_position
 	screen_release.pressed = false
 	pacte._input(screen_release)
 	# The card button may be freed by the accepted drop; check the shadow removal

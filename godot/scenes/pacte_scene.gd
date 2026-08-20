@@ -186,6 +186,11 @@ func set_route_emplacement_frame(kind: String, drop_hint: bool) -> void:
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# A route build embeds this scene only as artwork; its parent owns the native
+	# canvas offset so the selectable cards and the room art move together.
+	if not _is_route_artwork_context():
+		_center_native_canvas()
+		get_viewport().size_changed.connect(_on_viewport_size_changed)
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
@@ -196,6 +201,17 @@ func _ready() -> void:
 	# overlay to the selectable route cards.
 	if not Engine.is_editor_hint() and not _is_route_artwork_context():
 		Tutorial.attach(self, "pacte")
+
+func _on_viewport_size_changed() -> void:
+	_center_native_canvas()
+
+func _center_native_canvas() -> void:
+	position = _native_canvas_origin(get_viewport_rect().size)
+
+func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
+	var extra_size := viewport_size - CANVAS_SIZE
+	return Vector2(maxf(0.0, extra_size.x * 0.5),
+		maxf(0.0, extra_size.y * 0.5))
 
 func _is_route_artwork_context() -> bool:
 	var destination := String(RunStateStore.routeDestination)
@@ -834,7 +850,10 @@ func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform().affine_inverse() * global_position
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
-	return make_canvas_position_local(viewport_position)
+	# Drag helpers consume global canvas coordinates. Do not convert through this
+	# Control as well: on an expanded phone viewport that would subtract the
+	# native-canvas centering offset twice.
+	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	# Screen-touch coordinates can briefly report outside the scaled viewport while
