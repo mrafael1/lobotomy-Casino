@@ -197,7 +197,12 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	_check_dealer_shop_light_art(dealer, failures)
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
-	for rel in ["dealer_scene_machine_BUTTON.png"]:
+	for rel in [
+		"dealer_shop/bg.png",
+		"dealer_shop/counter.png",
+		"dealer_shop/machine.png",
+		"dealer_shop/reroll.png",
+	]:
 		if not ResourceLoader.exists("res://assets/images/" + String(rel)):
 			failures.append("issue55: %s not in godot/assets/images — missing from exported builds (APK)" % rel)
 	var start_button := dealer.get_node_or_null("StartButton") as Button
@@ -207,8 +212,13 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	else:
 		if machine_art.hframes != 2:
 			failures.append("issue55: machine button art is not a 2-frame sheet")
-		if machine_art.position != Vector2.ZERO:
-			failures.append("issue55: machine art lost its dealer-canvas-relative position")
+		if machine_art.position != Vector2(-20.0, -30.0):
+			failures.append("issue55: machine art is not centred on the bleed-aware dealer canvas")
+		if machine_art.scale != Vector2.ONE:
+			failures.append("issue55: machine art is not kept at native source-pixel scale")
+		if machine_art.texture == null \
+				or not machine_art.texture.resource_path.ends_with("dealer_shop/machine.png"):
+			failures.append("issue55: machine art is not using the native dealer-shop asset")
 		# The hit area is the button's own art rect, wherever the sheet puts it — the art
 		# moved when it was re-exported unscaled, and the two must move together.
 		if start_button.position != dealer.MACHINE_BUTTON_RECT.position \
@@ -241,68 +251,51 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 
 func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 	var expected_sizes: Dictionary = {
-		"dealer_shop/dealer_shop_bg_x8.png": Vector2i(1280, 2560),
-		"dealer_shop/dealer_shop_counter_base_x8.png": Vector2i(2560, 2560),
-		"dealer_shop/dealer_shop_LAB_BUTTON_x8.png": Vector2i(2560, 2560),
-		"dealer_shop/dealer_shop_machine_BUTTON_x8.png": Vector2i(2560, 2560),
-		"dealer_shop/dealer_shop_reroll_BUTTON_x8.png": Vector2i(2560, 2560),
+		"dealer_shop/bg.png": Vector2i(200, 380),
+		"dealer_shop/counter.png": Vector2i(200, 380),
+		"dealer_shop/machine.png": Vector2i(400, 380),
+		"dealer_shop/reroll.png": Vector2i(400, 380),
 	}
 	for rel in expected_sizes:
 		var path := "res://assets/images/" + String(rel)
 		if not ResourceLoader.exists(path):
-			failures.append("dealer shop: missing scaled art %s" % rel)
+			failures.append("dealer shop: missing native art %s" % rel)
 			continue
 		var texture := load(path) as Texture2D
 		var expected: Vector2i = expected_sizes[rel]
 		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
-			failures.append("dealer shop: %s is not an NN 8x sheet at %s" % [rel, expected])
-	var counter_base := load("res://assets/images/dealer_shop/dealer_shop_counter_base.png") as Texture2D
-	var counter_image := counter_base.get_image() if counter_base != null else null
-	if counter_image == null:
-		failures.append("dealer shop: counter-only base art is missing")
-	else:
-		for button_filename in [
-			"dealer_shop_LAB_BUTTON.png",
-			"dealer_shop_machine_BUTTON.png",
-			"dealer_shop_reroll_BUTTON.png",
-		]:
-			var button_texture := load("res://assets/images/dealer_shop/" + button_filename) as Texture2D
-			var button_image := button_texture.get_image() if button_texture != null else null
-			var overlaps := false
-			if button_image != null:
-				for y in counter_image.get_height():
-					for x in counter_image.get_width():
-						if counter_image.get_pixel(x, y).a > 0.0 \
-								and button_image.get_pixel(x, y).a > 0.0:
-							overlaps = true
-							break
-					if overlaps:
-						break
-			if overlaps:
-				failures.append("dealer shop: counter base still contains %s" % button_filename)
-
+			failures.append("dealer shop: %s is not a native sheet at %s" % [rel, expected])
 	var background := dealer.get_node_or_null("Background") as Sprite2D
 	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("dealer shop: background is not nearest-neighbor filtered")
+	elif background.texture == null \
+			or not background.texture.resource_path.ends_with("dealer_shop/bg.png") \
+			or background.position != Vector2(-20.0, -30.0) \
+			or background.scale != Vector2.ONE:
+		failures.append("dealer shop: background is not the centred native sheet")
 	var counter := dealer.get_node_or_null("Counter") as Sprite2D
 	if counter == null:
 		failures.append("dealer shop: counter node is missing")
 	elif counter.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
-			or counter.hframes != 2 or counter.scale != Vector2(0.125, 0.125):
-		failures.append("dealer shop: counter is not a nearest-neighbor 2-frame 8x sheet")
+			or counter.hframes != 1 or counter.texture == null \
+			or not counter.texture.resource_path.ends_with("dealer_shop/counter.png") \
+			or counter.position != Vector2(-20.0, -30.0) \
+			or counter.scale != Vector2.ONE:
+		failures.append("dealer shop: counter is not the centred native sheet")
 	for art_name in ["MachineButtonArt", "RerollButtonArt"]:
 		var art := dealer.get_node_or_null(art_name) as Sprite2D
 		if art == null or art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 				or art.hframes != 2 or art.texture == null:
 			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
 			continue
-		# The sheets are exported at whatever scale suits the artist (the machine button is
-		# native now, the reroll one is still x8), so what is asserted is the result: one
-		# frame fitted across the whole canvas.
-		var button_frame_w := float(art.texture.get_width()) * 0.5
-		if not is_equal_approx(art.scale.x, 160.0 / button_frame_w) \
-				or not is_equal_approx(art.scale.y, 320.0 / float(art.texture.get_height())):
-			failures.append("dealer shop: %s frame is not fitted to the canvas" % art_name)
+		if Vector2i(art.texture.get_width(), art.texture.get_height()) != Vector2i(400, 380) \
+				or art.position != Vector2(-20.0, -30.0) \
+				or art.scale != Vector2.ONE:
+			failures.append("dealer shop: %s is not centred at native source-pixel scale" % art_name)
+		var expected_asset := "dealer_shop/machine.png" if art_name == "MachineButtonArt" \
+				else "dealer_shop/reroll.png"
+		if not art.texture.resource_path.ends_with(expected_asset):
+			failures.append("dealer shop: %s is using the wrong native asset" % art_name)
 
 func _find_label_with_text(node: Node, text: String) -> Label:
 	if node is Label and (node as Label).text == text:

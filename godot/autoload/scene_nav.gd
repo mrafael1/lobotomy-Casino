@@ -58,7 +58,8 @@ func _configure_content_scale(scene_path: String = "") -> void:
 
 func _uses_expanded_pacte_canvas(scene_path: String) -> bool:
 	return scene_path.ends_with("pacte_scene.tscn") \
-		or scene_path.ends_with("route_build_scene.tscn")
+		or scene_path.ends_with("route_build_scene.tscn") \
+		or scene_path.ends_with("dealer_scene.tscn")
 
 
 func _build_transition_layer() -> void:

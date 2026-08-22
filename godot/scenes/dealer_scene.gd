@@ -62,27 +62,29 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 # New UI assets (issue #25). The settings control uses one authored icon.
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const COIN_ASSET := "ui/coin.png"
-# Authored dealer-canvas button sheets (issue #55): full-canvas frames at 8x, so
-# they self-position on the 160x320 canvas. 2 hframes: 0 = default, 1 = pressed.
+# The dealer room now uses the same bleed-aware 200x380 native exports as Pacte.
+# Their central 160x320 area stays at source-pixel scale; the expanded viewport
+# trims the decorative 20px horizontal / 30px vertical bleed on a narrow phone.
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
-const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_counter_base_x8.png"
-# Unscaled export: _full_canvas_sprite reads the scale off the texture, so a native sheet
-# needs no code change beyond the name. The art also moved, hence the new rect.
-const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_machine_BUTTON.png"
+const DEALER_BACKGROUND_ASSET := DEALER_SHOP_ASSET_DIR + "bg.png"
+const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "counter.png"
+# 2 hframes: 0 = default, 1 = pressed. These are native source-pixel sheets,
+# not the retired 8x full-canvas exports.
+const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "machine.png"
 # Opaque bounds of each button's art (source px, measured off the sheet) — the invisible hit
 # buttons cover exactly these rects. The machine button's own rect is the cabinet icon
 # (x88..106, y13..43), not the "MACHINE" caption above it.
-const MACHINE_BUTTON_RECT := Rect2(88.0, 13.0, 19.0, 31.0)
+const MACHINE_BUTTON_RECT := Rect2(120.0, 5.0, 36.0, 42.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
-# dealer visit. Same full-canvas 2-frame sheet pattern (0 default, 1 pressed).
-const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "dealer_shop_reroll_BUTTON_x8.png"
-const PAINTING_BUTTON_RECT := Rect2(2.0, 78.0, 29.0, 25.0)
+# dealer visit. Same native 2-frame sheet pattern (0 default, 1 pressed).
+const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "reroll.png"
+const PAINTING_BUTTON_RECT := Rect2(0.0, 64.0, 34.0, 42.0)
 const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
 const PAINTING_SPENT_MESSAGE := "THE PAINTING HAS GONE DARK"
 const PAINTING_NO_CREDITS_MESSAGE := "NOT ENOUGH CREDITS"
 # Escalating reroll price tag, centred under the painting art (rect x 2..31).
-const REROLL_PRICE_TAG_POS := Vector2(-0.5, 104.0)
+const REROLL_PRICE_TAG_POS := Vector2(0.0, 107.0)
 const PRICE_WARN_COLOR := Color(0.94, 0.27, 0.27)
 # Chip Augment offer: presented like a consumable on the counter's far-right
 # slot — icon on the dot, price tag above (both phases), name/rarity/stock/effect
@@ -320,19 +322,60 @@ func _full_canvas_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 	add_child(spr)
 	return spr
 
+func _native_art_position(texture: Texture2D, hframes := 1) -> Vector2:
+	if texture == null:
+		return Vector2.ZERO
+	var safe_hframes := maxi(hframes, 1)
+	var frame_w := float(texture.get_width()) / float(safe_hframes)
+	return Vector2(
+		roundf((CANVAS_W - frame_w) * 0.5),
+		roundf((CANVAS_H - float(texture.get_height())) * 0.5))
+
+func _configure_native_art_sprite(
+	spr: Sprite2D, rel: String, hframes := 1, frame := 0) -> Sprite2D:
+	if spr == null:
+		return null
+	var tex := Assets.texture(rel, true)
+	if tex == null:
+		return spr
+	spr.texture = tex
+	spr.hframes = maxi(hframes, 1)
+	spr.vframes = 1
+	spr.frame = clampi(frame, 0, maxi(0, spr.hframes - 1))
+	spr.centered = false
+	spr.position = _native_art_position(tex, spr.hframes)
+	spr.scale = Vector2.ONE
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	return spr
+
+func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
+	var tex := Assets.texture(rel, true)
+	if tex == null:
+		return null
+	var spr := Sprite2D.new()
+	spr.texture = tex
+	spr.hframes = maxi(hframes, 1)
+	spr.vframes = 1
+	spr.frame = clampi(frame, 0, maxi(0, spr.hframes - 1))
+	spr.centered = false
+	spr.position = _native_art_position(tex, spr.hframes)
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(spr)
+	return spr
+
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_full_canvas_sprite(_background_sprite, DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
+		_configure_native_art_sprite(_background_sprite, DEALER_BACKGROUND_ASSET)
 		_portrait_sprite = _configure_full_canvas_sprite(_portrait_sprite, "dealer_portrait.png", 2, 0)
-		_configure_full_canvas_sprite(_counter_sprite, DEALER_COUNTER_ASSET, 2, 0)
+		_configure_native_art_sprite(_counter_sprite, DEALER_COUNTER_ASSET)
 		return
 	var bg := ColorRect.new() # wall colour behind any gap
 	bg.color = Color(0.055, 0.03, 0.11)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	_full_canvas_sprite(DEALER_SHOP_ASSET_DIR + "dealer_shop_bg_x8.png")
+	_native_art_sprite(DEALER_BACKGROUND_ASSET)
 	_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
-	_full_canvas_sprite(DEALER_COUNTER_ASSET, 2, 0)
+	_native_art_sprite(DEALER_COUNTER_ASSET)
 
 # Brief dealer reaction: swap the 2-frame portrait.
 func _dealer_react() -> void:
@@ -726,8 +769,8 @@ func _build_run_price_context() -> void:
 		else "ROUND 1 PRICE"
 
 # ── authored dealer-canvas buttons (issue #55) ─────────────────────────────────────
-# The lab/machine buttons are full-canvas 2-frame sheets (0 default, 1 pressed) that
-# self-position on the 160x320 canvas; the authored Buttons are invisible hit areas
+# The lab/machine buttons are native 2-frame sheets (0 default, 1 pressed) that
+# self-position on the bleed-aware dealer canvas; the authored Buttons are invisible hit areas
 # over the art's opaque bounds, driving the pressed frame while held.
 
 ## The lab is no longer reachable from the dealer scene: the authored LAB button
@@ -1175,8 +1218,8 @@ func _close_augment_picker() -> void:
 func _build_button_art(asset: String, node_name: String) -> Sprite2D:
 	var spr := get_node_or_null(node_name) as Sprite2D
 	if spr != null:
-		return _configure_full_canvas_sprite(spr, asset, 2, 0)
-	spr = _full_canvas_sprite(asset, 2, 0)
+		return _configure_native_art_sprite(spr, asset, 2, 0)
+	spr = _native_art_sprite(asset, 2, 0)
 	if spr != null:
 		spr.name = node_name
 	return spr

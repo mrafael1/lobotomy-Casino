@@ -820,9 +820,12 @@ func _check_scene_nav(failures: Array) -> void:
 	nav.call("_configure_content_scale", "res://scenes/route_build_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: Augment/Power build did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/dealer_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: dealer shop did not opt into the expanded artwork viewport")
 	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
-		failures.append("scene nav: non-Pacte scene kept the expanded artwork viewport")
+		failures.append("scene nav: machine scene kept the expanded artwork viewport")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")
