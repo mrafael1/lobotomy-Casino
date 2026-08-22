@@ -195,6 +195,15 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	_check_dealer_shop_light_art(dealer, failures)
+	if not dealer.has_method("_native_canvas_origin") \
+			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
+		failures.append("issue55: dealer native artwork canvas is not horizontally centred")
+	var expected_offer_tops := [190.0, 190.2, 190.0, 190.2, 190.2]
+	for index in expected_offer_tops.size():
+		var slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
+		if slot == null or not is_equal_approx(slot.position.y, expected_offer_tops[index]):
+			failures.append("issue55: OfferSlot%d is not resting on the updated counter line" \
+				% (index + 1))
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
 	for rel in [

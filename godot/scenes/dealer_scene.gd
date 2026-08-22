@@ -182,6 +182,8 @@ func _ready() -> void:
 	# A run just ended => this visit is the "what's next?" phase (issue #36).
 	_post_run = (not Engine.is_editor_hint()) and _pre_run and RunStateStore.runPhase == "over"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_center_native_canvas()
+	get_viewport().size_changed.connect(_on_viewport_size_changed)
 	_bind_scene_nodes()
 	if _options_overlay != null \
 			and not _options_overlay.return_to_menu_requested.is_connected(_on_options_return_to_menu):
@@ -212,6 +214,16 @@ func _ready() -> void:
 	# @tool script, so it does not exist in an editor preview of this scene.
 	if not Engine.is_editor_hint():
 		Tutorial.attach(self, "dealer")
+
+func _on_viewport_size_changed() -> void:
+	_center_native_canvas()
+
+func _center_native_canvas() -> void:
+	position = _native_canvas_origin(get_viewport_rect().size)
+
+func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
+	var extra_size := viewport_size - Vector2(CANVAS_W, CANVAS_H)
+	return Vector2(maxf(0.0, extra_size.x * 0.5), maxf(0.0, extra_size.y * 0.5))
 
 ## True while something the tutorial does not script owns this screen (issue #105). The
 ## odds table is the one that matters: every post-run visit opens with it — the target
