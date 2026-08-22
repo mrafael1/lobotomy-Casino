@@ -204,6 +204,16 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			if not door_title.get_theme_color("font_color").is_equal_approx(
 					expected_title_color):
 				failures.append("route: %s title does not use its door color" % door)
+	var lucidity_before_free_door_check := int(run_store.lucidityCoins)
+	run_store.lucidityCoins = 0
+	route.call("_refresh")
+	for index in RouteCards.OFFER_COUNT:
+		var free_door_path := "DoorChoices/" + ("DoorLeft" if index == 0 else "DoorRight")
+		var free_door := route.get_node_or_null(free_door_path) as Button
+		if free_door == null or free_door.disabled:
+			failures.append("route: door %d is blocked when run Lucidity is zero" % index)
+	run_store.lucidityCoins = lucidity_before_free_door_check
+	route.call("_refresh")
 	for index in RouteCards.OFFER_COUNT:
 		if route.get_node_or_null("DoorGapGlow%d" % index) != null:
 			failures.append("route: door %d still has a runtime gap overlay" % index)

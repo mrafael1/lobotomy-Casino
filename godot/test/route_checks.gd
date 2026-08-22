@@ -118,6 +118,13 @@ static func run_all() -> Array:
 		and str(rerolled_offer) != str(first_offer),
 		"route rerolls change both visible door data and their identities")
 
+	_prepare_target(0)
+	_check(out, _store().prepare_route_offer("wealth_target", 0xD00D),
+		"a zero-gold run still prepares its route doors")
+	for card in _store().current_route_offer():
+		_check(out, _store().route_card_affordable(String(card.get("id", ""))),
+			"route doors remain selectable without run Lucidity")
+
 	_prepare_target(40)
 	_check(out, _store().prepare_route_offer("wealth_target", 0xCAFE),
 		"the store prepares a target route offer")

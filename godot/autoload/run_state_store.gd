@@ -245,8 +245,8 @@ var routeSelectedCardId := ""
 var routePacteVisit := false
 var routePacteFreeTier := false
 var pacteCostsActive := false
-## Between-machine build state. The selected route card is paid before this
-## scene opens; the build card is paid only when the player confirms it.
+## Between-machine build state. Selecting a route door is free; the build card is
+## paid only when the player confirms it in the destination scene.
 var routeBuildKind := ""
 var routeBuildOfferIds: Variant = null
 var routeBuildFreeTier := false
@@ -1693,22 +1693,14 @@ func route_offer_card(card_id: String) -> Dictionary:
 	return {}
 
 func route_card_affordable(card_id: String) -> bool:
+	# Route doors are choices, not purchases. Any Lucidity check belongs to the
+	# destination itself: route build cards, Shop items, or a paid reroll.
 	if not routeOfferPending:
 		return false
 	var card := route_offer_card(card_id)
 	if card.is_empty():
 		return false
-	var available := int(lucidityCoins)
-	if not RouteCards.affordable(card, available):
-		return false
-	var route_type := String(card.get("routeType", ""))
-	if route_type != RouteCards.ROUTE_AUGMENT and route_type != RouteCards.ROUTE_POWER:
-		return true
-	var remaining := available - RouteCards.card_cost(card)
-	for build_card_id in _route_build_offers(route_type):
-		if route_build_card_cost(build_card_id) <= remaining:
-			return true
-	return false
+	return RouteCards.affordable(card, int(lucidityCoins))
 
 ## The current machine segment determines all run-scoped purchase prices.  The
 ## target index is zero-based, so a fresh run is round 1.
