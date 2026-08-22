@@ -69,9 +69,14 @@ void fragment() {
 	COLOR = vec4(source.rgb, source.a * cyan);
 }
 """
-const CARD_BREATH_SCALE := 1.025
-const CARD_BREATH_HALF_DURATION := 1.10
-const CARD_BREATH_STAGGER := 0.12
+# Resting cards stay still so the row reads as a set of physical objects. The
+# occasional sweep is the interaction cue; it is deliberately serialized so
+# the whole row never turns into three competing animations.
+const CARD_GLINT_DELAY := 3.20
+const CARD_GLINT_DURATION := 0.42
+const CARD_GLINT_ALPHA := 0.72
+const CARD_GLINT_START_X := -42.0
+const CARD_GLINT_END_X := 42.0
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
@@ -129,7 +134,6 @@ var _power_drop_label: Label = null
 
 var _card_buttons: Dictionary = {}
 var _card_views: Dictionary = {}
-var _card_breath_tweens: Dictionary = {}
 var _chosen_card_views: Dictionary = {}
 var _revealed: Dictionary = {}
 var _offer_ids: Array[String] = []
@@ -149,6 +153,10 @@ var _selection_locked := false
 var _reveal_generation := 0
 var _deck_tween: Tween = null
 var _title_flicker_tween: Tween = null
+var _card_glint_cycle_tween: Tween = null
+var _card_glint_sweep_tween: Tween = null
+var _card_glint_index := 0
+var _card_glint_generation := 0
 
 ## Reuse the authored Pacte room for a between-machine single-deck route without
 ## bringing the full two-pool ritual back. The route scene owns the selectable
@@ -590,7 +598,20 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 		(icon as CanvasItem).visible = face_up
 		view.add_child(icon)
 	_attach_glitch_card_fx(view, card_id)
+	_attach_card_glint(view)
 	return view
+
+func _attach_card_glint(view: Control) -> void:
+	view.clip_contents = true
+	var glint := Polygon2D.new()
+	glint.name = "GoldGlint"
+	glint.polygon = PackedVector2Array([
+		Vector2(-5.0, -4.0), Vector2(-1.0, -4.0),
+		Vector2(44.0, 65.0), Vector2(40.0, 65.0),
+	])
+	glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
+	glint.z_index = 4
+	view.add_child(glint)
 
 ## GLITCH 2 has no authored icon. Its card still occasionally tears for a few
 ## frames so the empty card face reads as intentional rather than unfinished.
@@ -812,28 +833,75 @@ func _set_face_up(card_id: String) -> void:
 	var button := _card_buttons.get(card_id, null) as Button
 	if button != null:
 		button.disabled = false
-		_start_card_breathing(card_id, view, _offer_ids.find(card_id))
+	if _all_cards_revealed():
+		_start_card_glint_cycle()
 
-func _start_card_breathing(card_id: String, card_view: Control, index: int) -> void:
-	if card_view == null:
+func _all_cards_revealed() -> bool:
+	if _offer_ids.is_empty():
+		return false
+	for card_id in _offer_ids:
+		if not bool(_revealed.get(card_id, false)):
+			return false
+	return true
+
+func _start_card_glint_cycle() -> void:
+	_stop_card_glint_cycle()
+	if _offer_ids.is_empty():
 		return
-	_stop_card_breathing(card_id)
-	card_view.pivot_offset = CARD_SIZE * 0.5
-	card_view.set_meta("breathing_enabled", true)
-	card_view.scale = Vector2.ONE
-	var tween := create_tween().set_loops()
-	tween.tween_interval(float(maxi(index, 0)) * CARD_BREATH_STAGGER)
-	tween.tween_property(card_view, "scale", Vector2.ONE * CARD_BREATH_SCALE,
-		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(card_view, "scale", Vector2.ONE,
-		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_card_breath_tweens[card_id] = tween
+	var generation := _card_glint_generation
+	_card_glint_index = 0
+	var cycle := create_tween().set_loops()
+	cycle.tween_interval(CARD_GLINT_DELAY)
+	cycle.tween_callback(_play_next_card_glint.bind(generation))
+	cycle.tween_interval(CARD_GLINT_DURATION)
+	_card_glint_cycle_tween = cycle
 
-func _stop_card_breathing(card_id: String) -> void:
-	var tween := _card_breath_tweens.get(card_id, null) as Tween
-	if tween != null:
-		tween.kill()
-	_card_breath_tweens.erase(card_id)
+func _play_next_card_glint(generation: int) -> void:
+	if generation != _card_glint_generation or _offer_ids.is_empty():
+		return
+	var offer_count := _offer_ids.size()
+	for _attempt in offer_count:
+		var index := _card_glint_index % offer_count
+		_card_glint_index = (_card_glint_index + 1) % offer_count
+		var card_id := _offer_ids[index]
+		if not bool(_revealed.get(card_id, false)):
+			continue
+		var card_view := _card_views.get(card_id, null) as Control
+		if card_view != null:
+			_play_card_glint(card_view)
+		return
+
+func _play_card_glint(card_view: Control) -> void:
+	var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+	if glint == null:
+		return
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	glint.position = Vector2(CARD_GLINT_START_X, 0.0)
+	glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
+	var sweep := create_tween()
+	sweep.tween_property(glint, "color:a", CARD_GLINT_ALPHA, 0.04)
+	sweep.parallel().tween_property(glint, "position:x", CARD_GLINT_END_X,
+		CARD_GLINT_DURATION)
+	sweep.tween_property(glint, "color:a", 0.0, 0.10)
+	_card_glint_sweep_tween = sweep
+
+func _stop_card_glint_cycle() -> void:
+	_card_glint_generation += 1
+	if _card_glint_cycle_tween != null and _card_glint_cycle_tween.is_valid():
+		_card_glint_cycle_tween.kill()
+	_card_glint_cycle_tween = null
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	_card_glint_sweep_tween = null
+	for value in _card_views.values():
+		var card_view := value as Control
+		if card_view == null:
+			continue
+		var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+		if glint != null:
+			glint.position = Vector2.ZERO
+			glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: Button) -> void:
 	if not bool(_revealed.get(card_id, false)):
@@ -1145,8 +1213,7 @@ func _cancel_power_replacement() -> void:
 	_instruction.text = "DRAG TO THE SLOT"
 
 func _clear_cards() -> void:
-	for card_id in _card_breath_tweens.keys():
-		_stop_card_breathing(String(card_id))
+	_stop_card_glint_cycle()
 	for child in get_children():
 		if child is Button and String(child.name).begins_with("Card_"):
 			child.queue_free()

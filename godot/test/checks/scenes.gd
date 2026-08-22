@@ -489,10 +489,12 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 			if cost <= 0 and amount.text != "FREE":
 				failures.append("route: %s free build card has the wrong cost label" % kind)
 			var card_art := first_card.get_node_or_null("CardArt") as Control
-			if card_art == null or not bool(card_art.get_meta("breathing_enabled", false)):
-				failures.append("route: %s build cards have no breathing animation" % kind)
-			elif card_art.pivot_offset != first_card.size * 0.5:
-				failures.append("route: %s card breathing does not pivot around the card" % kind)
+			var card_glint := card_art.get_node_or_null("GoldGlint") as Polygon2D \
+				if card_art != null else null
+			if card_art == null or card_art.scale != Vector2.ONE \
+					or bool(card_art.get_meta("breathing_enabled", false)) \
+					or card_glint == null:
+				failures.append("route: %s build cards are not static with an idle gold glint" % kind)
 	var artwork := build.get_node_or_null("PacteArtwork") as Control
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
