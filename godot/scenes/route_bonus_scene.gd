@@ -70,12 +70,12 @@ func _build() -> void:
 	_hint = _label("ONE TURN // NO TAKEBACKS", Rect2(8.0, 214.0, 144.0, 10.0), 4, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_hint)
-	_spin = _button("SPIN THE WHEEL", Rect2(25.0, 231.0, 110.0, 25.0), 7)
+	_spin = _button("SPIN THE WHEEL", _centered_rect(231.0, Vector2(96.0, 22.0)), 6)
 	_spin.name = "TakeBonusButton"
 	_spin.pressed.connect(_on_spin_pressed)
 	add_child(_spin)
 
-	_return = _button("RETURN TO MACHINE", Rect2(24.0, 286.0, 112.0, 20.0), 6)
+	_return = _button("RETURN TO MACHINE", _centered_rect(286.0, Vector2(100.0, 18.0)), 5)
 	_return.name = "ReturnButton"
 	_return.pressed.connect(_on_return_pressed)
 	add_child(_return)
@@ -173,6 +173,9 @@ func _on_return_pressed() -> void:
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
 
+func _centered_rect(top: float, dimensions: Vector2) -> Rect2:
+	return Rect2(Vector2(roundf((CANVAS_SIZE.x - dimensions.x) * 0.5), top), dimensions)
+
 func _panel(rect: Rect2, background: Color, border: Color) -> Panel:
 	var panel := Panel.new()
 	panel.position = rect.position
@@ -210,11 +213,14 @@ func _button(text_value: String, rect: Rect2, font_size: int) -> Button:
 	button.size = rect.size
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_font_size_override("font_size", font_size)
 	button.add_theme_color_override("font_color", CYAN)
 	button.add_theme_color_override("font_hover_color", HOT_GOLD)
 	button.add_theme_color_override("font_pressed_color", HOT_GOLD)
 	button.add_theme_color_override("font_disabled_color", MUTED)
+	button.add_theme_color_override("font_outline_color", Color.BLACK)
+	button.add_theme_constant_override("outline_size", 1)
 	if _font != null:
 		button.add_theme_font_override("font", _font)
 	button.add_theme_stylebox_override("normal", _button_style(Color(INK.r, INK.g, INK.b, 0.96), CYAN))
@@ -234,4 +240,7 @@ func _button_style(background: Color, border: Color) -> StyleBoxFlat:
 	style.corner_radius_bottom_right = 2
 	style.content_margin_left = 2.0
 	style.content_margin_right = 2.0
+	style.shadow_color = Color(border.r, border.g, border.b, 0.24)
+	style.shadow_size = 2
+	style.shadow_offset = Vector2(0.0, 1.0)
 	return style
