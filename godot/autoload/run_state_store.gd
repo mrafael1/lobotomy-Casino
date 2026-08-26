@@ -252,6 +252,10 @@ var routeBuildOfferIds: Variant = null
 var routeBuildFreeTier := false
 var routeBuildSelectedId := ""
 var routeBonusClaimed := false
+## Fortune Wheel outcome is selected before the animation and saved with the route,
+## so a close/resume can only reveal the same segment and can never duplicate its payout.
+var routeBonusRewardId := ""
+var routeBonusSpinSeed := 0
 var sacrificeLaterPending := false
 ## Run-scoped Shop purchases. These are neither persistent Lab upgrades nor
 ## campaign Chip Augments.
@@ -1582,6 +1586,8 @@ func reset_run_state() -> void:
 	routeBuildFreeTier = false
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	sacrificeLaterPending = false
 	runShopUpgrades = []
 	runDealerServices = []
@@ -1810,6 +1816,8 @@ func prepare_route_offer(context: String, seed_override := -1) -> bool:
 	routeBuildFreeTier = false
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	_commit()
 	return routeOfferPending
 
@@ -1845,6 +1853,8 @@ func _open_route_build(kind: String, card: Dictionary) -> bool:
 	routeBuildFreeTier = routePacteFreeTier
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	# This is a between-machine investment, not a second Pacte phase. Keeping
 	# runPhase over makes save/resume and the next machine use the existing lifecycle.
 	runPhase = "over"
@@ -1861,6 +1871,8 @@ func _open_route_bonus() -> bool:
 	routeBuildFreeTier = false
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
 	_commit()
@@ -1875,6 +1887,8 @@ func _open_route_sacrifice() -> bool:
 	routeBuildFreeTier = false
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	sacrificeLaterPending = true
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
@@ -1923,6 +1937,8 @@ func select_route(card_id: String) -> bool:
 		routeBuildFreeTier = false
 		routeBuildSelectedId = ""
 		routeBonusClaimed = false
+		routeBonusRewardId = ""
+		routeBonusSpinSeed = 0
 		_commit()
 		return false
 	_commit()
@@ -1994,13 +2010,63 @@ func complete_route_build_selection(card_id: String, reward_symbol := "",
 	_commit()
 	return true
 
-func claim_route_bonus() -> bool:
+## Returns the selected wheel reward, or an empty dictionary before the turn is
+## prepared.  The scene reads this instead of recreating reward data locally.
+func route_bonus_reward() -> Dictionary:
+	if not FortuneWheelRules.is_valid_reward(routeBonusRewardId):
+		return {}
+	return FortuneWheelRules.reward_for_id(routeBonusRewardId)
+
+## Locks one deterministic segment before the wheel animation starts.  The result
+## is saved immediately, which makes a mid-animation close safe to resume.
+func prepare_route_bonus_spin() -> Dictionary:
+	if routeDestination != RouteCards.ROUTE_BONUS or routeBonusClaimed:
+		return {}
+	if FortuneWheelRules.is_valid_reward(routeBonusRewardId):
+		return route_bonus_reward()
+	var seed := (int(routeOfferSeed) ^ (int(spinCount) * 0x9E3779B9) ^ 0x57484545) & 0xFFFFFFFF
+	var reward := FortuneWheelRules.roll(seed)
+	var reward_id := String(reward.get("id", ""))
+	if not FortuneWheelRules.is_valid_reward(reward_id):
+		return {}
+	routeBonusSpinSeed = seed
+	routeBonusRewardId = reward_id
+	_commit()
+	return reward
+
+## Pays the chosen wheel segment exactly once. Run Gold stays on the current run
+## and wallet credits go through MetaStateStore so the jackpot survives the next
+## machine and future campaigns.
+func claim_route_bonus_reward(reward_id: String = "") -> bool:
 	if routeDestination != RouteCards.ROUTE_BONUS or routeBonusClaimed:
 		return false
-	lucidityCoins += ROUTE_BONUS_LUCIDITY
+	var resolved_id := routeBonusRewardId if reward_id.is_empty() else reward_id
+	if not FortuneWheelRules.is_valid_reward(resolved_id):
+		return false
+	if not routeBonusRewardId.is_empty() and routeBonusRewardId != resolved_id:
+		return false
+	var reward := FortuneWheelRules.reward_for_id(resolved_id)
+	var run_lucidity := maxi(0, int(reward.get("runLucidity", 0)))
+	var wallet_credits := maxi(0, int(reward.get("walletCredits", 0)))
+	var meta := _meta_store()
+	if wallet_credits > 0 and (meta == null or not meta.has_method("grant_lucidity_wallet")):
+		return false
+	if run_lucidity > 0:
+		lucidityCoins += run_lucidity
+	if wallet_credits > 0:
+		meta.grant_lucidity_wallet(wallet_credits)
+	routeBonusRewardId = resolved_id
 	routeBonusClaimed = true
 	_commit()
 	return true
+
+## Compatibility entry point for older route checks and saves.  Direct callers
+## that do not use the wheel retain the original +10 run-Gold bonus; the scene
+## always uses prepare_route_bonus_spin() and claim_route_bonus_reward().
+func claim_route_bonus() -> bool:
+	if not FortuneWheelRules.is_valid_reward(routeBonusRewardId):
+		return claim_route_bonus_reward(FortuneWheelRules.REWARD_RUN_10)
+	return claim_route_bonus_reward()
 
 ## Leaves the selected route and starts the next machine without spending a
 ## campaign neuron. The selected route is cleared only after the new machine has
@@ -2296,6 +2362,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	routeBuildFreeTier = false
 	routeBuildSelectedId = ""
 	routeBonusClaimed = false
+	routeBonusRewardId = ""
+	routeBonusSpinSeed = 0
 	_commit()
 	return true
 

@@ -66,7 +66,7 @@ const _CARDS: Array[Dictionary] = [
 		"id": CARD_BONUS_ID,
 		"routeType": ROUTE_BONUS,
 		"displayName": "BONUS",
-		"description": "TAKE A SMALL LUCIDITY BONUS BEFORE THE NEXT MACHINE.",
+		"description": "SPIN THE FORTUNE WHEEL FOR RUN GOLD OR WALLET CREDITS.",
 		"lucidityCost": BONUS_ROUTE_COST,
 		"spinSacrificeCost": 0,
 		"tier": 0,
