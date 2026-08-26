@@ -897,3 +897,46 @@ func _check_dealer_gate_161(machine: Node, run_store: Node, failures: Array) -> 
 	run_store.dealerOfferIds = prev_offers
 	run_store.comboDefeatPending = prev_combo
 	run_store.compulsiveSpinSkips = prev_skips
+
+## A Dealer visit is persisted gameplay state.  Repeated HUD/TV refreshes and a
+## machine visual rebuild must recover the same overlay until the player dismisses it.
+func _check_dealer_overlay_persistence(machine: Node, run_store: Node,
+		failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_pending := bool(run_store.dealerPending)
+	var prev_offers: Variant = run_store.dealerOfferIds
+	var prev_incoming := bool(run_store.dealerIncoming)
+	var prev_neurons := int(run_store.neurons)
+	run_store.runPhase = "running"
+	run_store.neurons = 10
+	run_store.dealerIncoming = false
+	run_store.dealerPending = true
+	run_store.dealerOfferIds = ["item_water", "item_cocktail"]
+	machine._show_dealer_offers()
+	for _i in 4:
+		machine._refresh_tv_indicators()
+		machine._refresh_controls()
+		machine._refresh_consumable_fx()
+		machine._update_hud()
+	if machine._dealer_offer_popup == null or not machine._dealer_offer_popup.visible:
+		failures.append("dealer: HUD refresh hid an active overlay")
+	# A stale visual hide is recoverable from the authoritative offer state.
+	if machine._dealer_offer_popup != null:
+		machine._dealer_offer_popup.visible = false
+	machine._update_hud()
+	if machine._dealer_offer_popup == null or not machine._dealer_offer_popup.visible:
+		failures.append("dealer: HUD refresh did not recover a hidden active overlay")
+	# Simulate a scene teardown/resume: the Control is gone, but persisted state remains.
+	machine._close_dealer(false)
+	await machine.get_tree().process_frame
+	machine._sync_visuals()
+	if machine._dealer_offer_popup == null or not machine._dealer_offer_popup.visible \
+			or not bool(run_store.dealerPending):
+		failures.append("dealer: save/resume did not rebuild the active overlay")
+	# The normal close is an intentional dismissal and clears the state first.
+	machine._close_dealer()
+	run_store.runPhase = prev_phase
+	run_store.neurons = prev_neurons
+	run_store.dealerPending = prev_pending
+	run_store.dealerOfferIds = prev_offers
+	run_store.dealerIncoming = prev_incoming

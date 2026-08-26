@@ -33,19 +33,21 @@ const HOVER_DOOR_HFRAMES := 2
 const HOVER_DOOR_VFRAMES := 5
 const GOLD := Color(1.0, 0.84, 0.38)
 const CYAN := Color(0.42, 1.0, 0.95)
+const ROSE := Color(1.0, 0.42, 0.88)
 const RED := Color(1.0, 0.35, 0.42)
 const BUBBLE_TEXT_COLOR := Color(0.96, 0.88, 0.77)
+const DOOR_TITLE_RECT := Rect2(2.0, 106.0, 62.0, 9.0)
 const DOOR_EXPLANATIONS := {
 	RouteCards.ROUTE_SHOP: "I CAN TUNE\nTHE MACHINE.",
 	RouteCards.ROUTE_AUGMENT: "PICK AN\nAUGMENT.",
 	RouteCards.ROUTE_POWER: "PICK A\nPOWER.",
-	RouteCards.ROUTE_BONUS: "TAKE 10G.\nFREE.",
+	RouteCards.ROUTE_BONUS: "SPIN THE\nWHEEL.",
 	RouteCards.ROUTE_SACRIFICE: "KEEP SPINS.\nPAY LATER.",
 }
 const DOOR_COLORS := {
 	RouteCards.ROUTE_SHOP: Color(1.0, 0.84, 0.38),
-	RouteCards.ROUTE_AUGMENT: Color(0.42, 1.0, 0.95),
-	RouteCards.ROUTE_POWER: Color(1.0, 0.42, 0.88),
+	RouteCards.ROUTE_AUGMENT: ROSE,
+	RouteCards.ROUTE_POWER: CYAN,
 	RouteCards.ROUTE_BONUS: Color(1.0, 0.91, 0.42),
 	RouteCards.ROUTE_SACRIFICE: Color(0.67, 0.49, 1.0),
 }
@@ -106,6 +108,7 @@ func _ready() -> void:
 			and not RunStateStore.state_changed.is_connected(_refresh):
 		RunStateStore.state_changed.connect(_refresh)
 	_refresh()
+	_hold_wallet_row_during_transition()
 
 func _process(delta: float) -> void:
 	if _door_suction_fx == null or not is_instance_valid(_door_suction_fx):
@@ -212,7 +215,7 @@ func _configure_doors() -> void:
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
-		var title := _label("", Rect2(1.0, 106.0, 62.0, 9.0), 5,
+		var title := _label("", DOOR_TITLE_RECT, 5,
 			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -279,6 +282,8 @@ func _refresh() -> void:
 		_message.text = "ROUTE OFFER CLOSED"
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if not _selection_locked or _pending_door_index < 0:
 		return
 	var is_left_press := false
@@ -311,12 +316,31 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	var title := button.get_node_or_null("DoorTitle") as Label
 	if title != null:
 		title.text = String(card.get("displayName", "ROUTE"))
-		title.add_theme_color_override(&"font_color",
-			TITLE_TEXT_COLOR if affordable else RED)
+		var title_color := DOOR_COLORS.get(route_type, CYAN) as Color
+		if not affordable:
+			title_color = title_color.darkened(0.45)
+		title.add_theme_color_override(&"font_color", title_color)
 	# Route descriptions are intentionally not tooltips: Godot's default tooltip is a
 	# large hover panel that obscures the authored door artwork on this tiny canvas.
 	button.tooltip_text = ""
 	button.disabled = not affordable
+
+func _hold_wallet_row_during_transition() -> void:
+	if not SceneNav.is_transition_active() \
+			or SceneNav.active_transition_kind() != SceneNav.TransitionKind.WALLET:
+		return
+	if _credits_row != null:
+		_credits_row.visible = false
+	if not SceneNav.transition_finished.is_connected(_on_wallet_transition_finished):
+		SceneNav.transition_finished.connect(_on_wallet_transition_finished)
+
+func _on_wallet_transition_finished(kind: int, _target_scene: String) -> void:
+	if kind != SceneNav.TransitionKind.WALLET:
+		return
+	if _credits_row != null and is_instance_valid(_credits_row):
+		_credits_row.visible = true
+	if SceneNav.transition_finished.is_connected(_on_wallet_transition_finished):
+		SceneNav.transition_finished.disconnect(_on_wallet_transition_finished)
 
 func _on_door_pressed(index: int) -> void:
 	if index < 0 or index >= _door_buttons.size():
@@ -378,11 +402,11 @@ func _confirm_door_selection() -> void:
 		_pending_door_index = -1
 		_selection_locked = false
 		_set_interaction_locked(false)
-		_message.text = "DOOR PAYMENT REFUSED"
+		_message.text = "DOOR UNAVAILABLE"
 		_refresh()
 		return
 	_pending_door_index = -1
-	_open_destination()
+	_open_destination(index)
 
 func _on_reroll_pressed() -> void:
 	if _selection_locked or not RunStateStore.routeOfferPending:
@@ -398,17 +422,22 @@ func _set_interaction_locked(locked: bool) -> void:
 	if _reroll_button != null:
 		_reroll_button.disabled = locked or not RunStateStore.route_offer_reroll_affordable()
 
-func _open_destination() -> void:
+func _open_destination(door_index: int = -1) -> void:
+	var door_side := 0 if door_index <= 0 else 1
 	match RunStateStore.routeDestination:
 		RouteCards.ROUTE_SHOP:
-			SceneNav.change_to("res://scenes/dealer_scene.tscn")
+			SceneNav.change_to("res://scenes/dealer_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_AUGMENT, RouteCards.ROUTE_POWER:
-			SceneNav.change_to("res://scenes/route_build_scene.tscn")
+			SceneNav.change_to("res://scenes/route_build_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_BONUS:
-			SceneNav.change_to("res://scenes/route_bonus_scene.tscn")
+			SceneNav.change_to("res://scenes/route_bonus_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_SACRIFICE:
 			if RunStateStore.finish_route_destination():
-				SceneNav.change_to("res://scenes/machine_scene.tscn")
+				SceneNav.change_to("res://scenes/machine_scene.tscn",
+					SceneNav.TransitionKind.DOOR, door_side)
 			else:
 				_selection_locked = false
 				_set_interaction_locked(false)

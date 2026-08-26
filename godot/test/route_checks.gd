@@ -91,6 +91,8 @@ static func run_all() -> Array:
 	var route_types: Array[String] = []
 	for card in first_offer:
 		route_types.append(String(card.get("routeType", "")))
+		_check(out, RouteCards.card_cost(card) == 0,
+			"route-door entry is free for every offered card")
 	_check(out, route_types.size() == 2 and route_types[0] != route_types[1],
 		"dealer offers contain two distinct route types")
 	_check(out, route_types.any(func(route_type: String) -> bool:
@@ -115,6 +117,13 @@ static func run_all() -> Array:
 	_check(out, rerolled_offer.size() == RouteCards.OFFER_COUNT \
 		and str(rerolled_offer) != str(first_offer),
 		"route rerolls change both visible door data and their identities")
+
+	_prepare_target(0)
+	_check(out, _store().prepare_route_offer("wealth_target", 0xD00D),
+		"a zero-gold run still prepares its route doors")
+	for card in _store().current_route_offer():
+		_check(out, _store().route_card_affordable(String(card.get("id", ""))),
+			"route doors remain selectable without run Lucidity")
 
 	_prepare_target(40)
 	_check(out, _store().prepare_route_offer("wealth_target", 0xCAFE),
@@ -177,6 +186,8 @@ static func run_all() -> Array:
 	var lucidity_before_augment := int(_store().lucidityCoins)
 	_check(out, _store().select_route(RouteCards.CARD_AUGMENT_ID),
 		"selecting Augment opens the single augment deck")
+	_check(out, int(_store().lucidityCoins) == lucidity_before_augment,
+		"selecting Augment does not charge a route-entry fee")
 	_check(out, _store().routeDestination == RouteCards.ROUTE_AUGMENT \
 			and not _store().pacte_active() and not _store().pacteCostsActive,
 		"the augment route never enters the full Pacte scene")
@@ -191,14 +202,17 @@ static func run_all() -> Array:
 	_check(out, _store().neurons == EconomyConst.STARTING_NEURONS,
 		"augment route payment does not sacrifice spins")
 	_check(out, int(_store().lucidityCoins) < lucidity_before_augment,
-		"augment route and card costs use run Lucidity")
+		"the selected augment card, not route entry, uses run Lucidity")
 	_check(out, neurons_before_augment != _store().neurons,
 		"augment route test exercised a machine transition")
 
 	_prepare_offer_with_card(80, "wealth_target", RouteCards.CARD_POWER_ID, 0xBEEF)
 	var neurons_before_power := int(_store().neurons)
+	var lucidity_before_power := int(_store().lucidityCoins)
 	_check(out, _store().select_route(RouteCards.CARD_POWER_ID),
 		"selecting Power opens the single power deck")
+	_check(out, int(_store().lucidityCoins) == lucidity_before_power,
+		"selecting Power does not charge a route-entry fee")
 	_check(out, _store().routeDestination == RouteCards.ROUTE_POWER \
 			and not _store().pacte_active(),
 		"the power route is separate from Pacte")
@@ -269,6 +283,48 @@ static func run_all() -> Array:
 
 	_check(out, not _store().pacte_active() if _store().runPhase == "pacte_threshold" else true,
 		"threshold state cannot reopen the full Pacte scene")
+
+	# Shared progression pricing: every run-scoped price reads the same curve, while
+	# the route door itself remains free at every round.
+	var previous_round := int(_store().wealthTargetIndex)
+	var previous_pacte_costs := bool(_store().pacteCostsActive)
+	var previous_route_context := String(_store().routeContext)
+	var previous_route_kind := String(_store().routeBuildKind)
+	var previous_dealer_reroll_count := int(_store().dealerRerollCount)
+	_store().pacteCostsActive = true
+	_store().routePacteFreeTier = false
+	_store().routeBuildFreeTier = false
+	_store().routeContext = "wealth_target"
+	_store().routeBuildKind = RouteCards.ROUTE_POWER
+	_store().dealerRerollCount = 0
+	_store().wealthTargetIndex = 0
+	var round_one_card: int = int(_store().pacte_card_cost("reroll"))
+	var round_one_shop: int = int(_store().route_shop_item_cost("shop_pair_guard"))
+	var round_one_dealer: int = int(_store().dealer_reroll_price())
+	_store().wealthTargetIndex = 1
+	var round_two_card: int = int(_store().pacte_card_cost("reroll"))
+	var round_two_shop: int = int(_store().route_shop_item_cost("shop_pair_guard"))
+	var round_two_dealer: int = int(_store().dealer_reroll_price())
+	_store().wealthTargetIndex = 2
+	var round_three_card: int = int(_store().pacte_card_cost("reroll"))
+	_check(out, round_one_card == RunPricing.calculate_run_price(8, 1)
+		and round_two_card == RunPricing.calculate_run_price(8, 2)
+		and round_three_card == RunPricing.calculate_run_price(8, 3),
+		"Pacte card prices use the centralized round curve")
+	_check(out, round_one_card < round_two_card and round_two_card < round_three_card,
+		"Pacte card prices increase with each round")
+	_check(out, round_one_shop < round_two_shop,
+		"Shop prices increase with each round")
+	_check(out, round_one_dealer < round_two_dealer,
+		"Dealer service prices increase with each round")
+	_check(out, _store().run_price_label(3).contains("ROUND 3")
+		and _store().run_price_label(3).contains("+30%"),
+		"progression pricing exposes its round markup to the UI")
+	_store().wealthTargetIndex = previous_round
+	_store().pacteCostsActive = previous_pacte_costs
+	_store().routeContext = previous_route_context
+	_store().routeBuildKind = previous_route_kind
+	_store().dealerRerollCount = previous_dealer_reroll_count
 
 	_restore_run(run_snapshot)
 	_meta()._apply(meta_snapshot)

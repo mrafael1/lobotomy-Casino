@@ -33,8 +33,10 @@ const GLITCH_CARD_CHANCE := 0.42
 static var REWARD_AMP_CARD_IDS: Array[String] = PacteCards.reward_amp_ids()
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
 # Pacte's authored split art is intentionally kept as full-canvas pieces. The
-# table, decks, dealer, and prompt bubble can then animate independently while
-# retaining native 160x320 pixel alignment.
+# current exports include decorative bleed around the old 160x320 play area, so
+# each frame is centered around the native canvas and kept at source-pixel scale.
+# The viewport/phone is responsible for trimming that bleed; gameplay geometry
+# remains in the original 160x320 coordinate space.
 const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
 const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
 const DEALER_ASSET := "pacte_scene/dealer.png"
@@ -43,6 +45,7 @@ const DEALER_TEXT_FRAME_COUNT := 2
 const DEALER_AUGMENT_FRAME := 0
 const DEALER_POWER_FRAME := 1
 const TABLE_ASSET := "pacte_scene/table.png"
+const PROPOSITION_ASSET := "pacte_scene/proposition.png"
 const DECK_FRAME_COUNT := 1
 const DECK_FRAME := 0
 const EMPLACEMENT_FRAME_COUNT := 2
@@ -51,6 +54,29 @@ const EMPLACEMENT_DROP_FRAME := 1
 const FACE_DOWN_SHUFFLE_TIME := 0.24
 const FACE_DOWN_SHUFFLE_OFFSET := 2.0
 const DEALER_PROMPT_FONT_SIZE := 5
+const TITLE_LIGHT_REGION := Rect2(30.0, 40.0, 66.0, 28.0)
+const TITLE_FLICKER_IDLE := 1.15
+const TITLE_FLICKER_BRIGHT_ALPHA := 0.72
+const TITLE_LIGHT_SHADER_CODE := """
+shader_type canvas_item;
+render_mode blend_add;
+
+void fragment() {
+	vec4 source = texture(TEXTURE, UV);
+	float cyan = smoothstep(0.30, 0.55, source.g)
+		* smoothstep(0.30, 0.55, source.b)
+		* (1.0 - smoothstep(0.30, 0.55, source.r));
+	COLOR = vec4(source.rgb, source.a * cyan);
+}
+"""
+# Resting cards stay still so the row reads as a set of physical objects. The
+# occasional sweep is the interaction cue; it is deliberately serialized so
+# the whole row never turns into three competing animations.
+const CARD_GLINT_DELAY := 3.20
+const CARD_GLINT_DURATION := 0.42
+const CARD_GLINT_ALPHA := 0.72
+const CARD_GLINT_START_X := -42.0
+const CARD_GLINT_END_X := 42.0
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
@@ -68,6 +94,7 @@ const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
+const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
 const BACKGROUND_Z_INDEX := 0
 const DEALER_Z_INDEX := 1
@@ -85,7 +112,9 @@ const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _title_light: Sprite2D = null
 var _table: Sprite2D = null
+var _proposition: Sprite2D = null
 var _augment_deck: Sprite2D = null
 var _power_deck: Sprite2D = null
 var _dealer_sprite: Sprite2D = null
@@ -112,6 +141,7 @@ var _pool_kind := "augment"
 var _chosen_augment_id := ""
 var _preview_id := ""
 var _reward_amp_picker: Control = null
+var _power_replacement_picker: Variant = null
 var _dragging := false
 var _drag_id := ""
 var _drag_index := -1
@@ -122,6 +152,11 @@ var _drag_origin_z := 0
 var _selection_locked := false
 var _reveal_generation := 0
 var _deck_tween: Tween = null
+var _title_flicker_tween: Tween = null
+var _card_glint_cycle_tween: Tween = null
+var _card_glint_sweep_tween: Tween = null
+var _card_glint_index := 0
+var _card_glint_generation := 0
 
 ## Reuse the authored Pacte room for a between-machine single-deck route without
 ## bringing the full two-pool ritual back. The route scene owns the selectable
@@ -182,15 +217,32 @@ func set_route_emplacement_frame(kind: String, drop_hint: bool) -> void:
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# A route build embeds this scene only as artwork; its parent owns the native
+	# canvas offset so the selectable cards and the room art move together.
+	if not _is_route_artwork_context():
+		_center_native_canvas()
+		get_viewport().size_changed.connect(_on_viewport_size_changed)
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
+	call_deferred("_restore_power_replacement")
 	# Inert unless the played tutorial is running (issue #105). The autoload is not a
 	# @tool script, so it does not exist in an editor preview of this scene. A
 	# route-build instance is artwork only and must not attach a blocking tutorial
 	# overlay to the selectable route cards.
 	if not Engine.is_editor_hint() and not _is_route_artwork_context():
 		Tutorial.attach(self, "pacte")
+
+func _on_viewport_size_changed() -> void:
+	_center_native_canvas()
+
+func _center_native_canvas() -> void:
+	position = _native_canvas_origin(get_viewport_rect().size)
+
+func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
+	var extra_size := viewport_size - CANVAS_SIZE
+	return Vector2(maxf(0.0, extra_size.x * 0.5),
+		maxf(0.0, extra_size.y * 0.5))
 
 func _is_route_artwork_context() -> bool:
 	var destination := String(RunStateStore.routeDestination)
@@ -214,12 +266,17 @@ func _build_background() -> void:
 	_background.name = "PacteBackground"
 	add_child(_background)
 	move_child(_background, 0)
+	_title_light = _build_title_light()
+	add_child(_title_light)
 	_dealer_sprite = _full_canvas_sprite(DEALER_ASSET, DEALER_Z_INDEX)
 	_dealer_sprite.name = "PacteDealer"
 	add_child(_dealer_sprite)
 	_table = _full_canvas_sprite(TABLE_ASSET, TABLE_Z_INDEX)
 	_table.name = "PacteTable"
 	add_child(_table)
+	_proposition = _full_canvas_sprite(PROPOSITION_ASSET, ART_Z_INDEX)
+	_proposition.name = "PacteProposition"
+	add_child(_proposition)
 	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
 	_augment_deck.name = "AugmentDeck"
 	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
@@ -250,12 +307,51 @@ func _build_background() -> void:
 	_chosen_cards_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chosen_cards_layer.z_index = SELECTED_CARDS_Z_INDEX
 	add_child(_chosen_cards_layer)
+	_start_title_flicker()
+
+func _build_title_light() -> Sprite2D:
+	var light := Sprite2D.new()
+	light.name = "PacteTitleLight"
+	light.texture = _background.texture if _background != null else Assets.texture(BG_ASSET)
+	light.centered = false
+	light.region_enabled = true
+	light.region_rect = TITLE_LIGHT_REGION
+	light.position = (_background.position if _background != null else Vector2.ZERO) \
+		+ TITLE_LIGHT_REGION.position
+	light.z_index = BACKGROUND_Z_INDEX + 1
+	light.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var shader := Shader.new()
+	shader.code = TITLE_LIGHT_SHADER_CODE
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	light.material = material
+	light.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	return light
+
+func _start_title_flicker() -> void:
+	if _title_light == null:
+		return
+	if _title_flicker_tween != null:
+		_title_flicker_tween.kill()
+	_title_light.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_title_flicker_tween = create_tween().set_loops()
+	_title_flicker_tween.tween_interval(TITLE_FLICKER_IDLE)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.42, 0.05) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.10, 0.08) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_interval(0.045)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a",
+		TITLE_FLICKER_BRIGHT_ALPHA, 0.045).set_trans(Tween.TRANS_SINE) \
+		.set_ease(Tween.EASE_IN_OUT)
+	_title_flicker_tween.tween_property(_title_light, "modulate:a", 0.0, 0.18) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	var sprite := Sprite2D.new()
 	sprite.texture = Assets.texture(asset)
 	sprite.centered = false
-	sprite.position = Vector2.ZERO
+	sprite.position = _native_art_position(sprite.texture, 1)
 	sprite.z_index = z
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return sprite
@@ -265,13 +361,27 @@ func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
 		return
 	var safe_frame_count := maxi(frame_count, 1)
 	sprite.centered = false
-	sprite.position = Vector2.ZERO
 	sprite.hframes = safe_frame_count
 	sprite.vframes = 1
 	sprite.frame = 0
-	var frame_width := float(sprite.texture.get_width()) / float(safe_frame_count)
-	sprite.scale = Vector2(CANVAS_SIZE.x / frame_width,
-		CANVAS_SIZE.y / float(sprite.texture.get_height()))
+	# Do not resize a bleed-aware export to the gameplay canvas. Its central
+	# 160x320 area must retain the authored pixel scale, while the extra artwork
+	# is allowed to fall outside the phone's viewport naturally.
+	sprite.scale = Vector2.ONE
+	sprite.position = _native_art_position(sprite.texture, safe_frame_count)
+
+func _native_art_position(texture: Texture2D, frame_count: int) -> Vector2:
+	if texture == null:
+		return Vector2.ZERO
+	var safe_frame_count := maxi(frame_count, 1)
+	var frame_size := Vector2(
+		float(texture.get_width()) / float(safe_frame_count),
+		float(texture.get_height()))
+	# Source art is authored on whole pixels. Round the centering offset so an
+	# odd-sized future bleed never introduces a half-pixel filter/blur shift.
+	return Vector2(
+		roundf((CANVAS_SIZE.x - frame_size.x) * 0.5),
+		roundf((CANVAS_SIZE.y - frame_size.y) * 0.5))
 
 func _build_overlay_ui() -> void:
 	_phase_label = _label("PacteTitle", PHASE_LABEL_RECT, DEALER_PROMPT_FONT_SIZE,
@@ -488,7 +598,20 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 		(icon as CanvasItem).visible = face_up
 		view.add_child(icon)
 	_attach_glitch_card_fx(view, card_id)
+	_attach_card_glint(view)
 	return view
+
+func _attach_card_glint(view: Control) -> void:
+	view.clip_contents = true
+	var glint := Polygon2D.new()
+	glint.name = "GoldGlint"
+	glint.polygon = PackedVector2Array([
+		Vector2(-5.0, -4.0), Vector2(-1.0, -4.0),
+		Vector2(44.0, 65.0), Vector2(40.0, 65.0),
+	])
+	glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
+	glint.z_index = 4
+	view.add_child(glint)
 
 ## GLITCH 2 has no authored icon. Its card still occasionally tears for a few
 ## frames so the empty card face reads as intentional rather than unfinished.
@@ -655,12 +778,13 @@ func _shuffle_active_deck() -> void:
 		return
 	if _deck_tween != null and _deck_tween.is_valid():
 		_deck_tween.kill()
-	deck.position = Vector2.ZERO
+	var native_position := _native_art_position(deck.texture, maxi(int(deck.hframes), 1))
+	deck.position = native_position
 	deck.rotation = 0.0
 	_deck_tween = create_tween()
-	_deck_tween.tween_property(deck, "position", Vector2(-1.0, 0.0), 0.05)
-	_deck_tween.tween_property(deck, "position", Vector2(1.0, 0.0), 0.05)
-	_deck_tween.tween_property(deck, "position", Vector2.ZERO, 0.05)
+	_deck_tween.tween_property(deck, "position", native_position + Vector2(-1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", native_position + Vector2(1.0, 0.0), 0.05)
+	_deck_tween.tween_property(deck, "position", native_position, 0.05)
 
 func _shuffle_face_down_cards(generation: int) -> void:
 	if _offer_ids.is_empty():
@@ -709,6 +833,75 @@ func _set_face_up(card_id: String) -> void:
 	var button := _card_buttons.get(card_id, null) as Button
 	if button != null:
 		button.disabled = false
+	if _all_cards_revealed():
+		_start_card_glint_cycle()
+
+func _all_cards_revealed() -> bool:
+	if _offer_ids.is_empty():
+		return false
+	for card_id in _offer_ids:
+		if not bool(_revealed.get(card_id, false)):
+			return false
+	return true
+
+func _start_card_glint_cycle() -> void:
+	_stop_card_glint_cycle()
+	if _offer_ids.is_empty():
+		return
+	var generation := _card_glint_generation
+	_card_glint_index = 0
+	var cycle := create_tween().set_loops()
+	cycle.tween_interval(CARD_GLINT_DELAY)
+	cycle.tween_callback(_play_next_card_glint.bind(generation))
+	cycle.tween_interval(CARD_GLINT_DURATION)
+	_card_glint_cycle_tween = cycle
+
+func _play_next_card_glint(generation: int) -> void:
+	if generation != _card_glint_generation or _offer_ids.is_empty():
+		return
+	var offer_count := _offer_ids.size()
+	for _attempt in offer_count:
+		var index := _card_glint_index % offer_count
+		_card_glint_index = (_card_glint_index + 1) % offer_count
+		var card_id := _offer_ids[index]
+		if not bool(_revealed.get(card_id, false)):
+			continue
+		var card_view := _card_views.get(card_id, null) as Control
+		if card_view != null:
+			_play_card_glint(card_view)
+		return
+
+func _play_card_glint(card_view: Control) -> void:
+	var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+	if glint == null:
+		return
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	glint.position = Vector2(CARD_GLINT_START_X, 0.0)
+	glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
+	var sweep := create_tween()
+	sweep.tween_property(glint, "color:a", CARD_GLINT_ALPHA, 0.04)
+	sweep.parallel().tween_property(glint, "position:x", CARD_GLINT_END_X,
+		CARD_GLINT_DURATION)
+	sweep.tween_property(glint, "color:a", 0.0, 0.10)
+	_card_glint_sweep_tween = sweep
+
+func _stop_card_glint_cycle() -> void:
+	_card_glint_generation += 1
+	if _card_glint_cycle_tween != null and _card_glint_cycle_tween.is_valid():
+		_card_glint_cycle_tween.kill()
+	_card_glint_cycle_tween = null
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	_card_glint_sweep_tween = null
+	for value in _card_views.values():
+		var card_view := value as Control
+		if card_view == null:
+			continue
+		var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+		if glint != null:
+			glint.position = Vector2.ZERO
+			glint.color = Color(NEON_GOLD.r, NEON_GOLD.g, NEON_GOLD.b, 0.0)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: Button) -> void:
 	if not bool(_revealed.get(card_id, false)):
@@ -726,6 +919,8 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int, button: 
 # Card buttons stop receiving GUI events once the pointer leaves their rect. Keep
 # the drag on the scene root so releasing over either emplacement is reliable.
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:
@@ -812,7 +1007,10 @@ func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform().affine_inverse() * global_position
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
-	return make_canvas_position_local(viewport_position)
+	# Drag helpers consume global canvas coordinates. Do not convert through this
+	# Control as well: on an expanded phone viewport that would subtract the
+	# native-canvas centering offset twice.
+	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	# Screen-touch coordinates can briefly report outside the scaled viewport while
@@ -842,7 +1040,8 @@ func _preview_card(card_id: String) -> void:
 		purchase_ids.append(card_id)
 		var cost := RunStateStore.pacte_card_cost(card_id)
 		var remaining := RunStateStore.pacte_remaining_after(purchase_ids)
-		description += "\nCOST: %dG  LEFT: %dG" % [cost, remaining]
+		description += "\nCOST: %dG  LEFT: %dG\n%s" % [
+			cost, remaining, RunStateStore.run_price_label()]
 	_description_text.text = description
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
@@ -919,15 +1118,25 @@ func _accept_card(card_id: String) -> void:
 	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
+		if not RunStateStore.pendingPowerReplacement.is_empty():
+			_instruction.text = "CHOOSE A POWER TO REMOVE"
+			_show_power_replacement_picker()
+			return
 		var chosen_power := _chosen_card_views.get("power", null) as Control
 		if chosen_power != null:
 			chosen_power.queue_free()
 		_chosen_card_views.erase("power")
 		_selection_locked = false
 		return
+	await _finish_power_selection()
+
+func _finish_power_selection() -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
+	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
+	var route_visit := threshold_visit and RunStateStore.routePacteVisit
+	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	if route_visit:
 		# Legacy route Pacte snapshots complete directly into the next machine.
 		if not RunStateStore.finish_route_destination():
@@ -957,7 +1166,54 @@ func _accept_card(card_id: String) -> void:
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
 
+func _restore_power_replacement() -> void:
+	if RunStateStore.pendingPowerReplacement.is_empty():
+		return
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if candidate == "" or not _offer_ids.has(candidate):
+		RunStateStore.cancel_power_replacement()
+		return
+	_selection_locked = true
+	_show_chosen_card(candidate, "power")
+	_instruction.text = "CHOOSE A POWER TO REMOVE"
+	_show_power_replacement_picker()
+
+func _show_power_replacement_picker() -> void:
+	if _power_replacement_picker != null and is_instance_valid(_power_replacement_picker):
+		return
+	_power_replacement_picker = POWER_REPLACEMENT_PICKER_SCRIPT.new()
+	add_child(_power_replacement_picker)
+	_power_replacement_picker.power_selected.connect(_on_power_replacement_selected)
+	_power_replacement_picker.cancelled.connect(_cancel_power_replacement)
+	_power_replacement_picker.present(
+		String(RunStateStore.pendingPowerReplacement.get("cardId", "")),
+		RunStateStore.power_replacement_options())
+
+func _on_power_replacement_selected(removed_power_id: String) -> void:
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if _power_replacement_picker != null:
+		_power_replacement_picker.queue_free()
+		_power_replacement_picker = null
+	if candidate == "":
+		_cancel_power_replacement()
+		return
+	if not RunStateStore.complete_pacte_selection("", candidate, removed_power_id):
+		_cancel_power_replacement()
+		_instruction.text = "POWER REPLACEMENT REFUSED"
+		return
+	await _finish_power_selection()
+
+func _cancel_power_replacement() -> void:
+	RunStateStore.cancel_power_replacement()
+	_selection_locked = false
+	var chosen_power := _chosen_card_views.get("power", null) as Control
+	if chosen_power != null:
+		chosen_power.queue_free()
+	_chosen_card_views.erase("power")
+	_instruction.text = "DRAG TO THE SLOT"
+
 func _clear_cards() -> void:
+	_stop_card_glint_cycle()
 	for child in get_children():
 		if child is Button and String(child.name).begins_with("Card_"):
 			child.queue_free()

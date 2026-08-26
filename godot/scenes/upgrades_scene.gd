@@ -231,6 +231,16 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint() or _purchase_animating:
 		return
+	if SceneNav.is_transition_active():
+		return
+	# OptionsOverlay owns the whole viewport while visible. Do not let keyboard
+	# carousel navigation reach the Lab controls behind the modal.
+	if _options_overlay != null and is_instance_valid(_options_overlay) \
+			and _options_overlay.visible:
+		if event.is_action_pressed("ui_cancel"):
+			_options_overlay.hide_overlay()
+			get_viewport().set_input_as_handled()
+		return
 	# The reward-amp symbol picker is modal: while it is open, carousel
 	# navigation must not leak through underneath it.
 	if _reward_amp_picker != null:

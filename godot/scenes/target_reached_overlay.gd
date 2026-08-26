@@ -26,6 +26,7 @@ signal continue_pressed
 ## number is never on screen twice.
 signal digits_lifted
 signal sequence_finished
+signal wallet_transfer_finished
 
 const BLUE_NEON := Color(0.36, 0.74, 1.0)
 const SOFT_WHITE := Color(0.96, 0.98, 1.0)
@@ -126,6 +127,11 @@ const PHASE_BILL_TARGET := 0.60
 const PHASE_BILL_NET := 0.40
 # The rule is drawn left to right under the charges before the total lands.
 const PHASE_BILL_RULE := 0.22
+const WALLET_ROW_POSITION := Vector2(7.0, 294.0)
+const WALLET_ROW_SIZE := Vector2(42.0, 12.0)
+const WALLET_TRANSFER_MIN_TIME := 0.35
+const WALLET_TRANSFER_PER_CREDIT := 0.012
+const WALLET_TRANSFER_MAX_TIME := 1.5
 
 @onready var top_dim: ColorRect = %TopDim
 @onready var bottom_dim: ColorRect = %BottomDim
@@ -164,12 +170,19 @@ var _drain_motes: Array[Dictionary] = []
 var _sequence_tween: Tween = null
 var _shard_tween: Tween = null
 var _drain_tween: Tween = null
+var _wallet_row: HBoxContainer = null
+var _wallet_label: Label = null
+var _wallet_coin: TextureRect = null
+var _wallet_transfer_tween: Tween = null
+var _wallet_transfer_start := 0
+var _wallet_transfer_end := 0
 
 
 func _ready() -> void:
 	_font = Assets.font()
 	_style_text()
 	_style_button()
+	_build_wallet_display()
 	if not continue_button.pressed.is_connected(_on_continue_pressed):
 		continue_button.pressed.connect(_on_continue_pressed)
 	if not skip_catcher.pressed.is_connected(_skip_to_end):
@@ -203,7 +216,8 @@ func _ready() -> void:
 ## `final_target` is the last rung of the ladder, which is not paid out of the score at
 ## all — it belongs to the Wealth ending — so nothing is billed and no receipt is shown.
 func present(score: int, target: int, snapshot: WealthOdometer = null,
-		action_text: String = "CONTINUE", final_target: bool = false) -> void:
+		action_text: String = "CONTINUE", final_target: bool = false,
+		wallet_value: int = -1) -> void:
 	_score = score
 	_target = target
 	_remaining = maxi(0, score - target)
@@ -229,6 +243,8 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 			_bill_lines.append(row)
 	_net = int(bill.get("net", _remaining)) if _has_tax_rows() else _remaining
 	continue_button.text = action_text
+	continue_button.disabled = true
+	_set_wallet_display(int(RunStateStore.lucidityCoins) if wallet_value < 0 else wallet_value)
 	net_label.text = ""
 	net_label.modulate.a = 0.0
 	bill_rule.modulate.a = 0.0
@@ -249,6 +265,89 @@ func present(score: int, target: int, snapshot: WealthOdometer = null,
 		return
 	_presentation_started = true
 	_play()
+
+
+func _build_wallet_display() -> void:
+	_wallet_row = HBoxContainer.new()
+	_wallet_row.name = "RunWalletDuringDeduction"
+	_wallet_row.position = WALLET_ROW_POSITION
+	_wallet_row.size = WALLET_ROW_SIZE
+	_wallet_row.add_theme_constant_override("separation", 2)
+	_wallet_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_wallet_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet_row.z_index = 80
+	add_child(_wallet_row)
+
+	_wallet_label = Label.new()
+	_wallet_label.name = "WalletValue"
+	# Keep the icon immediately after the number, matching the machine and route
+	# wallet rows. A fixed horizontal minimum made short balances look detached.
+	_wallet_label.custom_minimum_size = Vector2(0.0, WALLET_ROW_SIZE.y)
+	_wallet_label.add_theme_font_size_override("font_size", 7)
+	_wallet_label.add_theme_color_override("font_color", CREDIT_GOLD)
+	_wallet_label.add_theme_color_override("font_outline_color", Color("#03060c"))
+	_wallet_label.add_theme_constant_override("outline_size", 1)
+	_wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_wallet_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_wallet_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		_wallet_label.add_theme_font_override("font", _font)
+	_wallet_row.add_child(_wallet_label)
+
+	_wallet_coin = TextureRect.new()
+	_wallet_coin.name = "WalletCoin"
+	_wallet_coin.texture = Assets.texture("ui/coin.png", true)
+	_wallet_coin.custom_minimum_size = Vector2(9.0, 9.0)
+	_wallet_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_wallet_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_wallet_coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_wallet_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_wallet_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet_row.add_child(_wallet_coin)
+
+
+func _set_wallet_display(value: int) -> void:
+	if _wallet_label != null and is_instance_valid(_wallet_label):
+		_wallet_label.text = str(maxi(0, value))
+
+
+## Animates only the presentation. The caller settles and saves the logical value before
+## awaiting this method, so a quit or scene interruption cannot lose the transaction.
+func animate_wallet_transfer(start_value: int, end_value: int) -> void:
+	if _wallet_transfer_tween != null and _wallet_transfer_tween.is_valid():
+		_wallet_transfer_tween.kill()
+	_wallet_transfer_start = maxi(0, start_value)
+	_wallet_transfer_end = maxi(0, end_value)
+	_set_wallet_display(_wallet_transfer_start)
+	var amount := absi(_wallet_transfer_end - _wallet_transfer_start)
+	if amount == 0:
+		_drive_wallet_transfer(1.0)
+		wallet_transfer_finished.emit()
+		return
+	var duration := clampf(WALLET_TRANSFER_MIN_TIME
+		+ float(amount) * WALLET_TRANSFER_PER_CREDIT,
+		WALLET_TRANSFER_MIN_TIME, WALLET_TRANSFER_MAX_TIME)
+	_wallet_transfer_tween = create_tween()
+	_wallet_transfer_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_wallet_transfer_tween.tween_method(
+		Callable(self, "_drive_wallet_transfer"), 0.0, 1.0, duration)
+	await _wallet_transfer_tween.finished
+	_drive_wallet_transfer(1.0)
+	wallet_transfer_finished.emit()
+
+
+func _drive_wallet_transfer(progress: float) -> void:
+	var clamped := clampf(progress, 0.0, 1.0)
+	var value := roundi(lerpf(float(_wallet_transfer_start),
+		float(_wallet_transfer_end), clamped))
+	_set_wallet_display(value)
+	var remaining := absi(_wallet_transfer_end - value)
+	if remaining > 0:
+		net_label.text = "+%d CREDITS" % remaining
+		net_label.modulate.a = 1.0
+	else:
+		net_label.text = ""
+		net_label.modulate.a = 0.0
 
 
 ## The four rects that black the cabinet out around the TV. The band beside the TV needs
@@ -724,6 +823,7 @@ func _on_sequence_finished() -> void:
 	# Stop swallowing presses, or the catcher would eat the real CONTINUE.
 	skip_catcher.disabled = true
 	skip_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	continue_button.disabled = false
 	sequence_finished.emit()
 
 
@@ -745,4 +845,7 @@ func _style_button() -> void:
 
 
 func _on_continue_pressed() -> void:
+	if continue_button.disabled:
+		return
+	continue_button.disabled = true
 	continue_pressed.emit()

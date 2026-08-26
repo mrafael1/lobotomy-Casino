@@ -32,6 +32,7 @@ var _countdown_elapsed := 0.0
 var _total := 0
 var _kept := 0
 var _display := 0
+var _authoritative_score_snapshot := 0
 var _score_label: Label = null
 var _lost_label: Label = null
 var _meter: NeuronMeter = null
@@ -59,6 +60,10 @@ func build_screen(run: Dictionary, action_text: String, fatal_copy: String,
 ## and gets its own labels and the neuron-loss treatment instead.
 func build_countdown(run: Dictionary, screen: FlatlineEndingOverlay = null) -> void:
 	var overlay := _view.ending_overlay()
+	# Score and Run Wallet are different currencies.  Keep the machine score as a
+	# frozen diagnostic snapshot while the visible deduction animates the retained
+	# Lucidity amount; neither value is read back from the animation.
+	_authoritative_score_snapshot = maxi(0, int(run.get("scoreEarned", 0)))
 	_total = int(run["lucidityCoins"])
 	_kept = floori(float(_total) * _kept_fraction())
 	_display = _total
@@ -143,6 +148,7 @@ func stop() -> void:
 	_total = 0
 	_kept = 0
 	_display = 0
+	_authoritative_score_snapshot = 0
 	_score_label = null
 	_lost_label = null
 	_meter = null
@@ -151,6 +157,9 @@ func stop() -> void:
 
 func score_label() -> Label:
 	return _score_label
+
+func authoritative_score_snapshot() -> int:
+	return _authoritative_score_snapshot
 
 func lost_label() -> Label:
 	return _lost_label

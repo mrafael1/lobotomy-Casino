@@ -734,6 +734,7 @@ var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
 var _credits_coin: TextureRect = null
 var _machine_scene_lucidity_before := 0
+var _machine_scene_score_before := 0
 var _machine_scene_lucidity_snapshot_ready := false
 ## Guards the CONTINUE/TRY AGAIN routing against a second press while the first
 ## is still awaiting its animation. Flow, not presentation, so it stays here.
@@ -2036,28 +2037,47 @@ func _build_machine_credits_display(bottom_hud: Control) -> void:
 
 func _refresh_machine_credits() -> void:
 	if _credits_label != null:
+		# The Run Wallet is the balance carried into this machine segment. Score is
+		# accumulated on the wealth readout and is handed off only after the segment's
+		# deduction/settlement sequence completes.
 		var displayed := int(RunStateStore.lucidityCoins)
 		if _machine_scene_lucidity_snapshot_ready:
 			displayed = _machine_scene_lucidity_before
-		_credits_label.text = str(displayed)
+		_credits_label.text = str(maxi(0, displayed))
 
-## The machine HUD shows the carried run-Lucidity balance from the start of this
-## machine segment. Score and Lucidity can change underneath it, but the number only
-## changes when the segment is handed off to the next scene.
+## Capture the balance at the start of this machine segment. The HUD stays on this
+## snapshot while score and in-segment effects are being resolved.
 func _begin_machine_lucidity_segment() -> void:
 	_machine_scene_lucidity_before = int(RunStateStore.lucidityCoins)
+	_machine_scene_score_before = int(RunStateStore.scoreEarned)
 	_machine_scene_lucidity_snapshot_ready = true
 	_refresh_machine_credits()
 
-## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
-## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
-## have been applied. Express the handoff as the carried value plus that net machine
-## delta so the ending path can never accidentally substitute the full score.
-func _machine_lucidity_after_deductions() -> int:
+## Replace the live score-derived Lucidity with the net remainder after an
+## intermediate target. In-segment purchases/effects are retained as the delta that
+## did not come from score; the target's `banked` value is the only score amount
+## handed into the next segment.
+func _settle_machine_lucidity_after_deductions(completed: Dictionary,
+		score_before_settlement: int) -> int:
 	if not _machine_scene_lucidity_snapshot_ready:
 		return maxi(0, int(RunStateStore.lucidityCoins))
-	var machine_delta := int(RunStateStore.lucidityCoins) - _machine_scene_lucidity_before
-	return maxi(0, _machine_scene_lucidity_before + machine_delta)
+	var score_gain := maxi(0, score_before_settlement - _machine_scene_score_before)
+	var non_score_delta := int(RunStateStore.lucidityCoins) \
+			- _machine_scene_lucidity_before - score_gain
+	var settled_score := maxi(0, int(completed.get("banked", 0)))
+	var settled := maxi(0, _machine_scene_lucidity_before \
+			+ non_score_delta + settled_score)
+	RunStateStore.settle_run_lucidity_after_deductions(settled)
+	_machine_scene_lucidity_before = settled
+	_machine_scene_score_before = int(RunStateStore.scoreEarned)
+	_refresh_machine_credits()
+	return settled
+
+## RunStateStore.lucidityCoins is already the net machine balance: its score-derived
+## gains and all machine-side deductions (dealer, items, rerolls, and potion effects)
+## have been applied. Never substitute the wealth score for this handoff.
+func _machine_lucidity_after_deductions() -> int:
+	return maxi(0, int(RunStateStore.lucidityCoins))
 
 func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
@@ -2142,6 +2162,11 @@ func _sync_visuals() -> void:
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp(false)
+	if _dealer_interaction_active():
+		# A pending Dealer visit is persisted gameplay state, not a transient HUD
+		# effect.  Rebuild it before any resume resolver can advance the machine.
+		_restore_dealer_overlay_from_state()
+		return
 	if resume_interrupted_spin:
 		_resolve_interrupted_spin()
 	elif RunStateStore.comboDefeatPending:
@@ -2212,11 +2237,11 @@ func _resolve_interrupted_spin() -> void:
 		_present_dealer_or_defer()
 	_update_hud()
 
-func _to_menu() -> void:
-	SceneNav.change_to(MENU_SCENE)
+func _to_menu(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(MENU_SCENE, transition_kind)
 
-func _to_dealer() -> void:
-	SceneNav.change_to(DEALER_SCENE)
+func _to_dealer(transition_kind: int = SceneNav.TransitionKind.NORMAL) -> void:
+	SceneNav.change_to(DEALER_SCENE, transition_kind)
 
 ## The beaten intermediate target now takes over the screen with a focused payout
 ## overlay (issue #176), styled like the flatline screen but without the trace or
@@ -2247,7 +2272,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	# The final target is not paid out of the score and banks nothing, so it shows no
 	# receipt — the Wealth ending takes the whole score from here.
 	overlay.present(score, target, snapshot, "CONTINUE",
-		bool(info.get("final", false)))
+		bool(info.get("final", false)), _machine_scene_lucidity_before)
 	overlay.continue_pressed.connect(_finish_wealth_target_transition)
 	return true
 
@@ -2270,6 +2295,8 @@ func _finish_wealth_target_transition() -> void:
 	# unlock gate would otherwise open for those few frames and beat the scene change. It is
 	# presented after the odds table instead, by the dealer (issue #52 / #176).
 	_target_round_handoff = true
+	var wallet_before_transfer := _machine_scene_lucidity_before
+	var score_before_settlement := int(RunStateStore.scoreEarned)
 	var completed := RunStateStore.complete_wealth_target()
 	if completed.is_empty():
 		_stop_wealth_target_transition()
@@ -2287,6 +2314,8 @@ func _finish_wealth_target_transition() -> void:
 		}
 		_show_ending("wealth", final_run)
 		return
+	var wallet_after_deductions := _settle_machine_lucidity_after_deductions(
+		completed, score_before_settlement)
 	_stop_wealth_target_transition()
 	_wealth_target_transition_active = false
 	_post_spin_sequence_active = false
@@ -2295,7 +2324,11 @@ func _finish_wealth_target_transition() -> void:
 	# single-deck investments and never reopen the full Pacte scene.
 	_set_sequence_lock(false)
 	if RunStateStore.begin_target_round():
-		SceneNav.change_to(ROUTE_SCENE)
+		# The route offer is revealed under a solid black handoff while the net wallet
+		# remainder keeps counting up. The persistent transition layer carries the row
+		# across the scene swap, so the choice screen appears before the count finishes.
+		SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.WALLET, -1,
+			wallet_before_transfer, wallet_after_deductions)
 		return
 	# A failed transition should not strand the run behind a visual lock. The
 	# target has already been paid out; the next HUD refresh can retry normally.
@@ -2784,6 +2817,30 @@ func _update_hud() -> void:
 	_refresh_controls()
 	_refresh_consumable_fx()
 	_maybe_present_card_unlocks()
+	_restore_dealer_overlay_from_state()
+
+func _dealer_interaction_active() -> bool:
+	return bool(RunStateStore.dealerPending)
+
+func _dealer_overlay_is_live() -> bool:
+	return _dealer_offer_popup != null \
+		and is_instance_valid(_dealer_offer_popup) \
+		and _dealer_offer_popup.is_inside_tree()
+
+## Restore the only presentation that may be reconstructed from run state.  HUD,
+## TV and score animations can hide individual layers, but none may clear a live
+## dealer interaction or make it rely on a stale Control reference.
+func _restore_dealer_overlay_from_state() -> void:
+	if not _dealer_interaction_active():
+		return
+	if _dealer_overlay_is_live():
+		_dealer_offer_popup.visible = true
+		_dealer_overlay = _dealer_offer_popup
+		_set_sequence_lock(true)
+		_stash.set_elevated(true)
+		_stash.set_icons_visible(true)
+		return
+	_show_dealer_offers()
 
 ## A card earned mid-spin waits for the reels, the power coins, the payout sequence
 ## and any ending screen to finish: the unlock popup takes over the whole scene, so
@@ -5263,6 +5320,9 @@ func _cleanup_transient_presentation() -> void:
 func _show_ending(ending: String, run: Dictionary) -> void:
 	_cleanup_transient_presentation()
 	_stop_flatline_countdown()
+	if _overlay != null and is_instance_valid(_overlay):
+		_overlay.queue_free()
+	_overlay = null
 	# The ending host is claimed before the state commits below, not after: end_run
 	# and mark_ending_reached are what earn this ending's cards, and a live _overlay
 	# is what tells the unlock popup to wait rather than beat the ending screen onto
@@ -5276,15 +5336,40 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	# pending spend while resolving the terminal presentation, then commit the
 	# resolved ending once so lastEnding and the persisted balance agree.
 	var neurons_after_run := int(MetaStateStore.campaignNeuronsLeft) \
-		- (1 if RunStateStore.campaignNeuronPending else 0)
+		- (1 if (RunStateStore.campaignNeuronPending \
+			or RunStateStore.campaignNeuronRunActive) \
+			and (ending == "flatline" or ending == "game_over") \
+			and not RunStateStore.wealthContinued else 0)
 	var resolved_ending := "game_over" if ending == "flatline" \
 		and neurons_after_run <= 0 else ending
-	RunStateStore.end_run(resolved_ending)
-	MetaStateStore.mark_ending_reached(resolved_ending)
+	# Freeze the values once, before end_run can clear terminal-only balances.  The
+	# scene that was responsible for the ending normally supplied these directly
+	# from RunStateStore; the fallback keeps a manually resumed/legacy presentation
+	# deterministic without ever adding to the machine score.
+	var requested_score := maxi(0, int(run.get("scoreEarned", RunStateStore.scoreEarned)))
+	var requested_lucidity := maxi(0,
+		int(run.get("lucidityCoins", RunStateStore.lucidityCoins)))
+	var committed := RunStateStore.end_run(resolved_ending, requested_score,
+		requested_lucidity)
+	if committed:
+		MetaStateStore.mark_ending_reached(resolved_ending)
+		# Wealth banking is deferred until the player chooses Start Again so the ending
+		# animation can show the full run total before the wallet is updated.  Flatline
+		# and game-over bank exactly this same frozen snapshot, once.
+		if resolved_ending != "wealth" and RunStateStore.claim_ending_bank():
+			MetaStateStore.bank_run({
+				"neurons": int(run.get("neurons", RunStateStore.neurons)),
+				"scoreEarned": RunStateStore.endingScoreSnapshot,
+				"lucidityCoins": RunStateStore.endingLuciditySnapshot,
+			}, resolved_ending)
+	var frozen_run := run.duplicate(true)
+	frozen_run["scoreEarned"] = maxi(0, int(requested_score if \
+		RunStateStore.endingScoreSnapshot < 0 else RunStateStore.endingScoreSnapshot))
+	frozen_run["lucidityCoins"] = maxi(0, int(requested_lucidity if \
+		RunStateStore.endingLuciditySnapshot < 0 else RunStateStore.endingLuciditySnapshot))
 	# Wealth banking is deferred until the player chooses Start Again so the ending
-	# animation can show the full run total before the wallet is updated.
-	if resolved_ending != "wealth":
-		MetaStateStore.bank_run(run, resolved_ending)
+	# animation can show the full run total before the wallet is updated.  The
+	# presentation is a read-only copy; it never writes scoreEarned or lucidityCoins.
 
 	# The stash tray draws at z 50 and would float over the ending presentation.
 	_stash.set_tray_visible(false)
@@ -5299,11 +5384,11 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	# the engine-error gate instead of silently drawing a screen nobody has seen.
 	match resolved_ending:
 		"wealth":
-			_build_wealth_screen(run)
+			_build_wealth_screen(frozen_run)
 		"game_over":
-			_build_game_over_screen(run)
+			_build_game_over_screen(frozen_run)
 		"flatline":
-			_build_flatline_screen(run)
+			_build_flatline_screen(frozen_run)
 		_:
 			push_error("machine: no ending screen for '%s'" % resolved_ending)
 
@@ -5440,7 +5525,7 @@ func _show_campaign_failed() -> void:
 func _start_fresh_again() -> void:
 	MetaStateStore.start_new_campaign()
 	RunStateStore.reset_run_state()
-	_to_menu()
+	_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _flatline_action_text() -> String:
 	return "CONTINUE" if _has_campaign_neurons_remaining() else "TRY AGAIN"
@@ -5473,11 +5558,11 @@ func _on_flatline_action_pressed() -> void:
 		if not RunStateStore.routeOfferPending:
 			RunStateStore.prepare_route_offer("flatline")
 		if RunStateStore.routeOfferPending:
-			SceneNav.change_to(ROUTE_SCENE)
+			SceneNav.change_to(ROUTE_SCENE, SceneNav.TransitionKind.FLATLINE)
 			return
-		_to_dealer()
+		_to_dealer(SceneNav.TransitionKind.FLATLINE)
 	else:
-		_to_menu()
+		_to_menu(SceneNav.TransitionKind.FLATLINE)
 
 func _has_campaign_neurons_remaining() -> bool:
 	return int(MetaStateStore.campaignNeuronsLeft) > 0
@@ -5545,7 +5630,15 @@ func _continue_from_wealth() -> void:
 
 ## Wealth screen Start Again: bank the run and return to the menu hub.
 func _start_again_from_wealth(run: Dictionary) -> void:
-	MetaStateStore.bank_run(run, "wealth")
+	if RunStateStore.claim_ending_bank():
+		var frozen_run := run.duplicate(true)
+		var score_snapshot: int = RunStateStore.endingScoreSnapshot \
+			if RunStateStore.endingScoreSnapshot >= 0 else int(run.get("scoreEarned", 0))
+		var lucidity_snapshot: int = RunStateStore.endingLuciditySnapshot \
+			if RunStateStore.endingLuciditySnapshot >= 0 else int(run.get("lucidityCoins", 0))
+		frozen_run["scoreEarned"] = maxi(0, int(score_snapshot))
+		frozen_run["lucidityCoins"] = maxi(0, int(lucidity_snapshot))
+		MetaStateStore.bank_run(frozen_run, "wealth")
 	_to_menu()
 
 # ── dealer flow ────────────────────────────────────────────────────────────────────
@@ -5593,6 +5686,13 @@ func _maybe_present_pending_dealer() -> void:
 		_show_dealer_incoming()
 
 func _show_dealer_incoming() -> void:
+	# A legacy/resumed incoming marker can survive without its offer array.  Roll a
+	# fresh deterministic visit rather than turning the marker into a softlock.
+	if RunStateStore.dealerOfferIds == null:
+		RunStateStore.dealerIncoming = false
+		if RunStateStore.force_dealer_visit():
+			_show_dealer_offers()
+		return
 	_dealer_visit()
 
 func _dealer_visit() -> void:
@@ -5603,13 +5703,41 @@ func _dealer_visit() -> void:
 
 func _show_dealer_offers() -> void:
 	var offers: Variant = RunStateStore.dealerOfferIds
-	if offers == null:
-		_close_dealer()
+	# A pending marker without its offer array is an incomplete older snapshot, not
+	# a reason to drop the interaction. Re-roll the same kind of visit so the
+	# authoritative pending flag still has a usable presentation to restore.
+	if RunStateStore.dealerPending and (not (offers is Array) \
+			or (offers as Array).is_empty()):
+		RunStateStore.dealerPending = false
+		RunStateStore.dealerOfferIds = null
+		RunStateStore.dealerIncoming = false
+		RunStateStore.force_dealer_visit()
+		offers = RunStateStore.dealerOfferIds
+	# Direct scene/test callers may restore the persisted offer array before the
+	# boolean marker.  Materialize the interaction once here; after that point the
+	# boolean is authoritative for every HUD refresh and save/resume.
+	if offers is Array and not (offers as Array).is_empty() \
+		and not RunStateStore.dealerPending:
+		RunStateStore.dealerPending = true
+		RunStateStore._commit()
+	if not _dealer_interaction_active():
+		if _dealer_offer_popup != null or _dealer_overlay != null:
+			_close_dealer(false)
+		return
+	if _dealer_overlay_is_live():
+		_dealer_offer_popup.visible = true
+		_dealer_overlay = _dealer_offer_popup
+		_set_sequence_lock(true)
+		_stash.set_elevated(true)
+		_stash.set_icons_visible(true)
+		_refresh_score_button_lock()
 		return
 	_set_sequence_lock(true)
 	_clear_targeting()
-	if _dealer_overlay != null:
+	if _dealer_overlay != null and is_instance_valid(_dealer_overlay):
 		_dealer_overlay.queue_free()
+	_dealer_overlay = null
+	_dealer_offer_popup = null
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
 	_dealer_overlay = _dealer_offer_popup
 	# The dealer draws above the loss overlays (97) but under the HUD (120); the
@@ -5643,6 +5771,17 @@ func _begin_dealer_drag(node: Control, id: String, kind: String) -> void:
 	node.modulate = Color(1.2, 1.2, 1.2)
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
+	# OptionsOverlay is a modal. Parent _input handlers run before Control GUI
+	# dispatch, so returning here prevents a click meant for the menu from also
+	# starting a power, spin, or drag underneath it.
+	if _options_overlay != null and is_instance_valid(_options_overlay) \
+			and _options_overlay.visible:
+		if event.is_action_pressed("ui_cancel"):
+			_options_overlay.hide_overlay()
+			get_viewport().set_input_as_handled()
+		return
 	# Points table (issue #119): back/cancel closes the overlay from keyboard
 	# (Esc) or controller (B) without needing to focus the CLOSE button.
 	if _score_table.is_open() and event.is_action_pressed("ui_cancel"):
@@ -5769,9 +5908,14 @@ func _on_dealer_offer_finished() -> void:
 	_close_dealer()
 
 func _close_dealer(restore_sequence: bool = true) -> void:
-	if _dealer_overlay != null:
+	# This entry point is the explicit player-facing dismissal.  Clear the
+	# authoritative offer before tearing down the Control; passive HUD refreshes
+	# never call _close_dealer and therefore cannot dismiss a Dealer by accident.
+	if restore_sequence and _dealer_interaction_active():
+		RunStateStore.decline_dealer_offer()
+	if _dealer_overlay != null and is_instance_valid(_dealer_overlay):
 		_dealer_overlay.queue_free()
-		_dealer_overlay = null
+	_dealer_overlay = null
 	_dealer_offer_popup = null
 	_dealer_message_label = null
 	_dealer_portrait_sprite = null
@@ -5782,6 +5926,12 @@ func _close_dealer(restore_sequence: bool = true) -> void:
 	_stash.set_icons_visible(true) # overlay gone — restore the machine's own stash (issue #26)
 	_stash.set_elevated(false)
 	if not restore_sequence:
+		return
+	if _dealer_interaction_active():
+		# UI teardown is allowed to be transient, but persisted Dealer state owns
+		# the interaction.  Recreate it immediately instead of returning a machine
+		# with an active offer and no way to act on it.
+		_restore_dealer_overlay_from_state()
 		return
 	# The dealer can appear over a live losing state: closing him returns to the
 	# pending rescue decision instead of unlocking the whole sequence.

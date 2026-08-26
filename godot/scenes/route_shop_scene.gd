@@ -57,8 +57,8 @@ func _refresh() -> void:
 		var purchased := RunStateStore.route_shop_item_purchased(item_id)
 		var row := _button("", Rect2(0.0, 0.0, 150.0, 34.0), 5)
 		row.name = "Item_%s" % item_id
-		row.text = "%s  %dG\n%s" % [String(item.get("name", item_id)), cost,
-			String(item.get("description", ""))]
+		row.text = "%s  %dG\n%s\n%s" % [String(item.get("name", item_id)), cost,
+			String(item.get("description", "")), RunStateStore.run_price_label()]
 		row.disabled = purchased or int(RunStateStore.lucidityCoins) < cost
 		if purchased:
 			row.text += "  / BOUGHT"

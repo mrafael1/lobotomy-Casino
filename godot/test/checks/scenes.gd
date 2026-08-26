@@ -75,6 +75,13 @@ func _check_power_door_hover(run_store: Node, failures: Array) -> void:
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
+	var door_colors: Dictionary = route.DOOR_COLORS
+	if not (door_colors[RouteCards.ROUTE_POWER] as Color).is_equal_approx(
+		route.CYAN as Color):
+		failures.append("route: power door suction particles are not blue")
+	if not (door_colors[RouteCards.ROUTE_AUGMENT] as Color).is_equal_approx(
+		route.ROSE as Color):
+		failures.append("route: augment door suction particles are not rose")
 	var route_cards: Array = run_store.current_route_offer()
 	var power_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
@@ -183,10 +190,30 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position != Vector2(1.0, 107.0) \
+		if door_title == null or door_title.position != Vector2(2.0, 107.0) \
 				or door_title.size != Vector2(62.0, 9.0) \
 				or door_title.get_theme_font_size("font_size") < 5:
 			failures.append("route: %s title is not inside its blue name plate" % door)
+		if door_title != null and door_button != null:
+			var title_route_type := String(route_cards[0 if door == "DoorLeft" else 1].get(
+				"routeType", ""))
+			var expected_title_color := route.DOOR_COLORS.get(title_route_type,
+				route.CYAN) as Color
+			if door_button.disabled:
+				expected_title_color = expected_title_color.darkened(0.45)
+			if not door_title.get_theme_color("font_color").is_equal_approx(
+					expected_title_color):
+				failures.append("route: %s title does not use its door color" % door)
+	var lucidity_before_free_door_check := int(run_store.lucidityCoins)
+	run_store.lucidityCoins = 0
+	route.call("_refresh")
+	for index in RouteCards.OFFER_COUNT:
+		var free_door_path := "DoorChoices/" + ("DoorLeft" if index == 0 else "DoorRight")
+		var free_door := route.get_node_or_null(free_door_path) as Button
+		if free_door == null or free_door.disabled:
+			failures.append("route: door %d is blocked when run Lucidity is zero" % index)
+	run_store.lucidityCoins = lucidity_before_free_door_check
+	route.call("_refresh")
 	for index in RouteCards.OFFER_COUNT:
 		if route.get_node_or_null("DoorGapGlow%d" % index) != null:
 			failures.append("route: door %d still has a runtime gap overlay" % index)
@@ -430,6 +457,10 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: machine segment was not live after route loop")
 
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
+	for label_node in build.find_children("*", "Label", true, false):
+		var label := label_node as Label
+		if label != null and label.text == "ONE CARD / ONE SLOT":
+			failures.append("route: %s build scene still shows the redundant one-card subtitle" % kind)
 	var credits_row := build.get_node_or_null("CreditsRow") as HBoxContainer
 	var credits_label := build.get_node_or_null("CreditsRow/CreditsLabel") as Label
 	var credits_coin := build.get_node_or_null("CreditsRow/Coin") as TextureRect
@@ -437,6 +468,10 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing its Lucidity display" % kind)
 	elif credits_label.get_theme_font_size("font_size") < 7:
 		failures.append("route: %s build scene Lucidity number is too small" % kind)
+	else:
+		if not is_equal_approx(credits_row.offset_top, -14.0) \
+				or not is_equal_approx(credits_row.offset_bottom, -2.0):
+			failures.append("route: %s Lucidity row still covers the authored slot caption" % kind)
 	var card_list := build.get_node_or_null("RouteBuildCards") as Control
 	var first_card: Button = null
 	if card_list != null:
@@ -455,14 +490,30 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		else:
 			if amount.get_theme_font_size("font_size") < 7:
 				failures.append("route: %s build card cost is still too small" % kind)
+			if cost_row.position.y < first_card.size.y:
+				failures.append("route: %s build card cost is still above the card" % kind)
 			if cost > 0 and (coin == null or amount.text == "%dG" % cost):
 				failures.append("route: %s build card cost is not using a Lucidity coin" % kind)
+			if coin != null and not bool(coin.get_meta("skip_drag_shadow", false)):
+				failures.append("route: %s card price coin still receives a drag shadow" % kind)
 			if cost <= 0 and amount.text != "FREE":
 				failures.append("route: %s free build card has the wrong cost label" % kind)
+			var card_art := first_card.get_node_or_null("CardArt") as Control
+			var card_glint := card_art.get_node_or_null("GoldGlint") as Polygon2D \
+				if card_art != null else null
+			if card_art == null or card_art.scale != Vector2.ONE \
+					or bool(card_art.get_meta("breathing_enabled", false)) \
+					or card_glint == null:
+				failures.append("route: %s build cards are not static with an idle gold glint" % kind)
 	var artwork := build.get_node_or_null("PacteArtwork") as Control
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
 		return
+	var proposition := artwork.get_node_or_null("PacteProposition") as Sprite2D
+	if proposition == null or not proposition.visible:
+		failures.append("route: %s build scene is missing the table proposition placeholder" % kind)
+	elif first_card != null and first_card.z_index <= proposition.z_index:
+		failures.append("route: %s proposition placeholder is not beneath the cards" % kind)
 	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
 	var power_deck := artwork.get_node_or_null("PowerDeck") as Sprite2D
 	var augment_slot := artwork.get_node_or_null("SelectedCardEmplacement") as Sprite2D
@@ -479,6 +530,11 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene left Pacte interaction processing" % kind)
 	if artwork.get_node_or_null("TutorialOverlay") != null:
 		failures.append("route: %s build scene attached the Pacte tutorial overlay" % kind)
+	var title_light := artwork.get_node_or_null("PacteTitleLight") as Sprite2D
+	if title_light == null or not title_light.region_enabled \
+			or not (title_light.material is ShaderMaterial) \
+			or (title_light.material as ShaderMaterial).shader == null:
+		failures.append("route: %s build scene is missing the additive title flicker" % kind)
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
@@ -584,9 +640,22 @@ func _check_global_options_layout(failures: Array) -> void:
 	elif machine_options.position.x > 20.0:
 		failures.append("options: machine options button is not top-left")
 	_check_settings_icon(machine_options, "machine", failures)
+	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
 	if machine.get_node_or_null("OptionsOverlay") == null:
 		failures.append("options: machine scene missing shared OptionsOverlay")
-	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
+	else:
+		var machine_overlay := machine.get_node("OptionsOverlay") as OptionsOverlay
+		if machine_overlay.z_index <= bottom_hud.z_index:
+			failures.append("options: machine overlay is not above the gameplay HUD")
+		if machine_overlay.mouse_filter != Control.MOUSE_FILTER_STOP:
+			failures.append("options: machine overlay does not stop pointer input")
+		machine_overlay.show_overlay()
+		var underlying_motion := InputEventMouseMotion.new()
+		underlying_motion.position = Vector2(105.0, 228.0)
+		machine._input(underlying_motion)
+		if bool(machine._swap_drag_active) or bool(machine._dealer_drag_active):
+			failures.append("options: machine input leaked through the visible modal")
+		machine_overlay.hide_overlay()
 	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
 	var machine_credits_row := machine.get_node_or_null(
 		"BottomHudLayer/CreditsRow") as HBoxContainer
@@ -644,6 +713,12 @@ func _check_global_options_layout(failures: Array) -> void:
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
 	get_root().add_child(overlay)
+	await process_frame
+	if overlay.z_index < 1000 or overlay.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: overlay is not a topmost full-canvas modal")
+	var dim := overlay.get_node_or_null("Dim") as ColorRect
+	if dim == null or dim.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: modal dimmer does not capture outside-panel input")
 	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
 	var options_contour := overlay.get_node_or_null("Contour") as Panel
 	if options_contour == null:
@@ -659,12 +734,16 @@ func _check_global_options_layout(failures: Array) -> void:
 		if option_button == null:
 			failures.append("options: overlay missing %s" % path)
 		else:
+			if option_button.mouse_filter != Control.MOUSE_FILTER_STOP:
+				failures.append("options: %s does not stop modal input" % path)
 			var button_style := option_button.get_theme_stylebox("normal") as StyleBoxTexture
 			if button_style == null or button_style.texture == null:
 				failures.append("options: %s is not using start-menu button art" % path)
 	var close_button := overlay.get_node_or_null("CloseButton") as Button
 	if close_button == null or close_button.text != "X":
 		failures.append("options: overlay close button is not the pixel X control")
+	elif close_button.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: close button does not stop modal input")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
 	# The panel grew to make room for the fifth row; the contour drawn behind it has to
@@ -678,6 +757,8 @@ func _check_global_options_layout(failures: Array) -> void:
 	if options_panel != null \
 			and options_panel.size.y < options_rows.get_combined_minimum_size().y:
 		failures.append("options: the panel is too short for its own rows")
+	if options_panel != null and options_panel.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("options: panel does not stop modal input")
 	overlay.queue_free()
 
 	var settings := (load("res://scenes/settings_scene.tscn") as PackedScene).instantiate()
@@ -699,6 +780,7 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 	var previous_lucidity := int(run_store.lucidityCoins)
 	var previous_score := int(run_store.scoreEarned)
 	var previous_before := int(machine._machine_scene_lucidity_before)
+	var previous_score_before := int(machine._machine_scene_score_before)
 	var previous_ready := bool(machine._machine_scene_lucidity_snapshot_ready)
 	run_store.runPhase = "running"
 	run_store.lucidityCoins = 40
@@ -709,25 +791,155 @@ func _check_machine_lucidity_display(machine: Node, run_store: Node,
 	run_store.lucidityCoins = 73 # net machine Lucidity after gains and deductions
 	machine._update_hud()
 	if credits_label.text != "40":
-		failures.append("machine: Lucidity display updated during the machine scene")
+		failures.append("machine: Lucidity display updated during the machine segment")
 	if int(machine._machine_lucidity_after_deductions()) != 73:
 		failures.append("machine: end-of-scene Lucidity used the full score instead of net Lucidity")
+	# The segment handoff removes the score-derived balance before applying the
+	# settled remainder. This is the 100 - 83 = 17 case with a carried wallet of 42.
+	run_store.lucidityCoins = 42
+	run_store.scoreEarned = 0
+	machine._begin_machine_lucidity_segment()
+	run_store.scoreEarned = 100
+	run_store.lucidityCoins = 142
+	var settled: int = machine._settle_machine_lucidity_after_deductions(
+		{"banked": 17}, 100)
+	if settled != 59 or int(run_store.lucidityCoins) != 59:
+		failures.append("machine: Run Wallet did not receive only the post-deduction remainder")
+	if credits_label.text != "59":
+		failures.append("machine: Run Wallet did not update at segment handoff")
 	run_store.runPhase = previous_phase
 	run_store.lucidityCoins = previous_lucidity
 	run_store.scoreEarned = previous_score
 	machine._machine_scene_lucidity_before = previous_before
+	machine._machine_scene_score_before = previous_score_before
 	machine._machine_scene_lucidity_snapshot_ready = previous_ready
 
 
 func _check_scene_nav(failures: Array) -> void:
 	var nav: Node = get_root().get_node("SceneNav")
 	nav.clear()
+	var root_view := get_root()
+	if root_view.content_scale_mode != Window.CONTENT_SCALE_MODE_CANVAS_ITEMS \
+			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP \
+			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_INTEGER \
+			or root_view.content_scale_size != Vector2i(160, 320):
+		failures.append("scene nav: ordinary scenes are not using the centered 160x320 canvas")
+	nav.call("_configure_content_scale", "res://scenes/pacte_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: Pacte did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/route_build_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: Augment/Power build did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/dealer_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: dealer shop did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
+		failures.append("scene nav: machine scene kept the expanded artwork viewport")
+	var transition_overlay := nav.call("transition_overlay") as Control
+	if transition_overlay == null:
+		failures.append("scene nav: global transition overlay is missing")
+	else:
+		var transition_layer := transition_overlay.get_parent() as CanvasLayer
+		if transition_layer == null or transition_layer.layer < 1000:
+			failures.append("scene nav: transition cover is not on the top CanvasLayer")
+		if transition_overlay.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("scene nav: inactive transition cover still captures input")
+		if transition_overlay.size != Vector2(160.0, 320.0):
+			failures.append("scene nav: transition cover is not native-canvas sized")
+		var viewport_size: Vector2 = nav.get_viewport().get_visible_rect().size
+		var expected_overlay_position := Vector2(
+			maxf(0.0, (viewport_size.x - 160.0) * 0.5),
+			maxf(0.0, (viewport_size.y - 320.0) * 0.5))
+		if transition_overlay.position != expected_overlay_position:
+			failures.append("scene nav: transition cover is not centred in the expanded viewport")
+	var nav_source := FileAccess.open("res://autoload/scene_nav.gd", FileAccess.READ)
+	if nav_source == null:
+		failures.append("scene nav: centralized transition source is unreadable")
+	else:
+		var source := nav_source.get_as_text()
+		if not source.contains("await _load_scene(scene_path)"):
+			failures.append("scene nav: destination is not loaded under the transition cover")
+		if not source.contains("PROCESS_MODE_DISABLED"):
+			failures.append("scene nav: source scene is not suspended during loading")
+		if not source.contains("begin_wallet_transfer") \
+				or not source.contains("wait_for_wallet_transfer"):
+			failures.append("scene nav: wallet handoff is not persistent across scene load")
 	nav.push_scene("res://scenes/dealer_scene.tscn", true)
 	if nav.peek_back_scene() != "res://scenes/dealer_scene.tscn":
 		failures.append("scene nav: did not retain dealer as return scene")
 	if not nav.peek_back_restores_options():
 		failures.append("scene nav: did not retain options restore flag")
 	nav.clear()
+	var transition_script: Script = load("res://autoload/scene_transition.gd")
+	var transition := transition_script.new() as Control
+	get_root().add_child(transition)
+	await transition.play_exit(0)
+	var exit_progress := float(transition.get("_progress"))
+	transition.play_exit(0)
+	if transition.get("_phase") != &"covered" or not is_equal_approx(
+		exit_progress, float(transition.get("_progress"))):
+		failures.append("scene nav: repeated exit request restarted the transition")
+	await transition.play_entrance()
+	transition.play_entrance()
+	if transition.get("_phase") != &"hidden":
+		failures.append("scene nav: repeated entrance request restarted the transition")
+	transition.play_exit(SceneNav.TransitionKind.WALLET, -1, 42, 59)
+	var wallet_handoff := transition.get_node_or_null("WalletHandoff") as HBoxContainer
+	if transition.get("_phase") != &"covered" or not transition.visible \
+			or wallet_handoff == null or not wallet_handoff.visible:
+		failures.append("scene nav: wallet handoff did not hold a black cover and wallet row")
+	transition.begin_wallet_transfer(42, 59)
+	await transition.play_entrance()
+	if not transition.visible or transition.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("scene nav: wallet row did not survive the scene reveal")
+	await transition.wait_for_wallet_transfer()
+	var wallet_handoff_label := transition.get_node_or_null(
+		"WalletHandoff/WalletValue") as Label
+	if wallet_handoff_label == null or wallet_handoff_label.text != "59":
+		failures.append("scene nav: wallet handoff did not reach the settled balance")
+	transition.finish_wallet_handoff()
+	if transition.visible:
+		failures.append("scene nav: wallet handoff did not clear after settlement")
+	transition.free()
+
+
+func _check_issue232_wallet_transfer(run_store: Node, failures: Array) -> void:
+	var ps := load("res://scenes/target_reached_overlay.tscn") as PackedScene
+	if ps == null:
+		failures.append("issue232: target overlay failed to load")
+		return
+	var overlay := ps.instantiate() as TargetReachedOverlay
+	get_root().add_child(overlay)
+	await process_frame
+	run_store.lucidityCoins = 42
+	overlay.present(100, 50, null, "CONTINUE", false, 42)
+	var wallet_row := overlay.get_node_or_null("RunWalletDuringDeduction") as HBoxContainer
+	var wallet_label := overlay.get_node_or_null(
+		"RunWalletDuringDeduction/WalletValue") as Label
+	var wallet_coin := overlay.get_node_or_null(
+		"RunWalletDuringDeduction/WalletCoin") as TextureRect
+	if wallet_row == null or wallet_row.z_index < 50:
+		failures.append("issue232: Run Wallet is not on the deduction presentation layer")
+	if wallet_label == null or wallet_label.text != "42":
+		failures.append("issue232: Run Wallet changed during deductions")
+	if wallet_label != null and wallet_coin != null:
+		await process_frame
+		var wallet_gap := wallet_coin.position.x \
+			- (wallet_label.position.x + wallet_label.size.x)
+		if wallet_gap > 3.0:
+			failures.append("issue232: Run Wallet coin is detached from its value")
+	if not overlay.continue_button.disabled:
+		failures.append("issue232: CONTINUE was available before deductions finished")
+	overlay.call("_skip_to_end")
+	if overlay.continue_button.disabled:
+		failures.append("issue232: CONTINUE did not unlock after deductions")
+	await overlay.animate_wallet_transfer(42, 59)
+	if wallet_label == null or wallet_label.text != "59":
+		failures.append("issue232: Run Wallet did not animate to the final retained value")
+	if run_store.lucidityCoins != 42:
+		failures.append("issue232: presentation animation mutated logical wallet state")
+	overlay.free()
 
 
 func _check_machine_ending_flow_source(failures: Array) -> void:
@@ -744,6 +956,10 @@ func _check_machine_ending_flow_source(failures: Array) -> void:
 		failures.append("machine ending flow: wealth screen is missing continuation gating")
 	if not source.contains("GAME_OVER_ENDING_SCENE"):
 		failures.append("machine ending flow: dedicated game-over scene is missing")
+	if not source.contains("SceneNav.TransitionKind.WALLET"):
+		failures.append("machine ending flow: target route does not use wallet handoff")
+	if source.contains("await _wealth_target_transition.animate_wallet_transfer"):
+		failures.append("machine ending flow: wallet still settles before the route transition")
 	if source.contains("EXIT CASINO"):
 		failures.append("machine ending flow: old EXIT CASINO wealth action still present")
 	if source.contains("BANK & LAB"):

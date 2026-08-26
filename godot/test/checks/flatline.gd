@@ -173,6 +173,91 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 	meta_store._apply(meta_before)
 	meta_store.save_state()
 
+## The ending commit owns both sides of the loss: one campaign neuron and one
+## frozen run-credit transaction.  Re-entering the presentation is harmless.
+func _check_flatline_commit_and_snapshot(machine: Node, run_store: Node,
+		meta_store: Node, failures: Array) -> void:
+	var meta_before: Dictionary = meta_store._as_dict()
+	var run_before: Dictionary = {}
+	for property_name in run_store._run_state_properties():
+		run_before[property_name] = run_store.get(property_name)
+	var wallet_before := int(meta_store.lucidityWallet)
+
+	# An exact-value ending must freeze the machine score once and animate the
+	# corresponding run-credit amount without writing back to scoreEarned.
+	run_store.reset_run_state()
+	run_store.runPhase = "running"
+	run_store.scoreEarned = 4500
+	run_store.lucidityCoins = 4500
+	run_store.campaignNeuronPending = true
+	meta_store.campaignNeuronsLeft = 3
+	meta_store.campaignActive = true
+	meta_store.campaignFailed = false
+	machine._show_ending("flatline", {
+		"neurons": run_store.neurons,
+		"scoreEarned": run_store.scoreEarned,
+		"lucidityCoins": run_store.lucidityCoins,
+	})
+	if int(run_store.endingScoreSnapshot) != 4500 \
+			or machine._flatline.authoritative_score_snapshot() != 4500:
+		failures.append("flatline: score snapshot changed 4500 before presentation")
+	var starting_label: Label = machine._flatline.score_label()
+	if starting_label == null or starting_label.text != "4500":
+		failures.append("flatline: deduction did not start at the frozen 4500 amount")
+	var score_during_presentation := int(run_store.scoreEarned)
+	machine._flatline.seek_to_end()
+	machine._flatline.step(0.0)
+	if int(run_store.scoreEarned) != score_during_presentation:
+		failures.append("flatline: deduction animation mutated authoritative score")
+	if int(meta_store.campaignNeuronsLeft) != 2:
+		failures.append("flatline: 3/3 did not become 2/3 at ending commit")
+	var wallet_after_first := int(meta_store.lucidityWallet)
+	if wallet_after_first != wallet_before + 450:
+		failures.append("flatline: 4500 credit snapshot transferred the wrong wallet amount")
+
+	# A rebuilt presentation reads the persisted transaction, but cannot bank or
+	# spend the same result again.
+	machine._show_ending("flatline", {
+		"neurons": run_store.neurons,
+		"scoreEarned": 4500,
+		"lucidityCoins": 4500,
+	})
+	if int(meta_store.campaignNeuronsLeft) != 2 \
+			or int(meta_store.lucidityWallet) != wallet_after_first \
+			or int(run_store.scoreEarned) != 4500:
+		failures.append("flatline: save/resume presentation repeated neuron, score, or bank")
+
+	# Exercise the remaining campaign-health crossings independently.
+	for starting_neurons in [2, 1]:
+		run_store.reset_run_state()
+		run_store.runPhase = "running"
+		run_store.campaignNeuronPending = true
+		meta_store.campaignNeuronsLeft = starting_neurons
+		meta_store.campaignActive = true
+		meta_store.campaignFailed = false
+		var ending := "game_over" if starting_neurons == 1 else "flatline"
+		run_store.end_run(ending, 4500, 4500)
+		var expected: int = starting_neurons - 1
+		if int(meta_store.campaignNeuronsLeft) != expected:
+			failures.append("flatline: %d/3 did not consume exactly one campaign neuron" \
+				% starting_neurons)
+		var after_commit := int(meta_store.campaignNeuronsLeft)
+		run_store.end_run(ending, 4500, 4500)
+		if int(meta_store.campaignNeuronsLeft) != after_commit:
+			failures.append("flatline: repeated ending commit consumed the same neuron twice")
+		if starting_neurons == 1 and not bool(meta_store.campaignFailed):
+			failures.append("flatline: 1/3 loss did not enter Game Over")
+
+	if machine._overlay != null and is_instance_valid(machine._overlay):
+		machine._overlay.queue_free()
+	machine._overlay = null
+	machine._stop_flatline_countdown()
+	for property_name in run_before:
+		run_store.set(String(property_name), run_before[property_name])
+	meta_store._apply(meta_before)
+	meta_store.lucidityWallet = wallet_before
+	meta_store.save_state()
+
 # Issue #75: neurons hitting 0 with banked free spins left must NOT flatline —
 # the SPINS LEFT counter (which includes free spins) still shows spins the player
 # can take; the flatline only resolves once both pools are empty.

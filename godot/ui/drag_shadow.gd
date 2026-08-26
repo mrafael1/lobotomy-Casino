@@ -41,7 +41,8 @@ static func _copy_shadow_textures(node: Control, base: Control, shadow: Control)
 	for child in node.get_children():
 		if not (child is Control) or not (child as Control).visible:
 			continue
-		if child is TextureRect and (child as TextureRect).texture != null:
+		if child is TextureRect and (child as TextureRect).texture != null \
+				and not bool(child.get_meta("skip_drag_shadow", false)):
 			var offset: Vector2 = (child as Control).global_position - base.global_position
 			shadow.add_child(_shadow_texture_copy(child as TextureRect, offset))
 		_copy_shadow_textures(child as Control, base, shadow)

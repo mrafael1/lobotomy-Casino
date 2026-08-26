@@ -15,8 +15,9 @@ const ROUTE_POWER := "power"
 const ROUTE_BONUS := "bonus"
 const ROUTE_SACRIFICE := "sacrifice"
 
-# Kept readable for older snapshots and callers. They are no longer included in
-# newly generated offers.
+# Route entry is always free. These named constants remain as compatibility
+# surfaces for older callers and saved card dictionaries; content selected after
+# entering a destination owns its own price.
 const ROUTE_PACTE := "pacte"
 const ROUTE_DEALER := "dealer"
 const ROUTE_EVENT := "event"
@@ -27,9 +28,9 @@ const CARD_POWER_ID := "route_power"
 const CARD_BONUS_ID := "route_bonus"
 const CARD_SACRIFICE_ID := "route_sacrifice"
 
-const SHOP_ROUTE_COST := 8
-const AUGMENT_ROUTE_COST := 5
-const POWER_ROUTE_COST := 5
+const SHOP_ROUTE_COST := 0
+const AUGMENT_ROUTE_COST := 0
+const POWER_ROUTE_COST := 0
 const BONUS_ROUTE_COST := 0
 const SACRIFICE_ROUTE_COST := 0
 
@@ -65,7 +66,7 @@ const _CARDS: Array[Dictionary] = [
 		"id": CARD_BONUS_ID,
 		"routeType": ROUTE_BONUS,
 		"displayName": "BONUS",
-		"description": "TAKE A SMALL LUCIDITY BONUS BEFORE THE NEXT MACHINE.",
+		"description": "SPIN THE FORTUNE WHEEL FOR RUN GOLD OR WALLET CREDITS.",
 		"lucidityCost": BONUS_ROUTE_COST,
 		"spinSacrificeCost": 0,
 		"tier": 0,
@@ -160,10 +161,14 @@ static func route_type(card_id: String) -> String:
 	return String(card(card_id).get("routeType", ""))
 
 static func card_cost(card: Dictionary) -> int:
-	return maxi(0, int(card.get("lucidityCost", 0)))
+	# Old saves may still carry the former 5G/8G field. Route cards are choices,
+	# not purchases, so never charge that serialized value at the door.
+	return 0
 
 static func affordable(card: Dictionary, lucidity: int) -> bool:
-	return lucidity >= card_cost(card) and int(card.get("spinSacrificeCost", 0)) <= 0
+	# `lucidity` is kept in the signature for callers compiled against the old
+	# route-economy API. Neither Lucidity nor spins are charged to enter a route.
+	return is_valid_route_type(String(card.get("routeType", "")))
 
 static func is_valid_route_type(route_type_value: String) -> bool:
 	return route_type_value == ROUTE_SHOP or route_type_value == ROUTE_AUGMENT \

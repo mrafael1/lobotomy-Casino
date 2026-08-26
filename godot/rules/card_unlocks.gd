@@ -36,6 +36,23 @@ const METRIC_CHEATS_USED := "cheats_used"              # total
 const MODE_TOTAL := "total"
 const MODE_BEST := "best"
 
+## Every metric has an explicit zero in a fresh save.  Keeping this list beside the
+## rules prevents a new unlock metric from accidentally inheriting a value from a
+## previous in-memory singleton or from being mistaken for a first-launch event.
+static func metric_ids() -> Array[String]:
+	var result: Array[String] = []
+	for rule in RULES:
+		var metric := String(rule["metric"])
+		if not result.has(metric):
+			result.append(metric)
+	return result
+
+static func fresh_progress() -> Dictionary:
+	var result: Dictionary = {}
+	for metric in metric_ids():
+		result[metric] = 0
+	return result
+
 ## card_id -> unlock rule. `hint` is safe to show on a locked card: it describes
 ## the condition only, never the card's own name, description, or effect.
 const RULES: Array[Dictionary] = [

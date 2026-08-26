@@ -22,16 +22,24 @@ const DESCRIPTION_TITLE_FONT_SIZE := 4
 const DESCRIPTION_FONT_SIZE := 3
 const DESCRIPTION_BUBBLE_GAP := 1.0
 const DRAG_SLOP := 4.0
+const INSTRUCTION_RECT := Rect2(5.0, 247.0, 150.0, 9.0)
+const MESSAGE_RECT := Rect2(5.0, 247.0, 150.0, 9.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const CARD_COST_FONT_SIZE := 7
 const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
+# Keep the build row still at rest. A serialized sweep gives the cards a
+# readable interaction cue without making every card pulse continuously.
+const CARD_GLINT_DELAY := 3.20
+const CARD_GLINT_DURATION := 0.42
+const CARD_GLINT_ALPHA := 0.72
+const CARD_GLINT_START_X := -42.0
+const CARD_GLINT_END_X := 42.0
+const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
 const GOLD := Color(1.0, 0.84, 0.38)
-const CYAN := Color(0.42, 1.0, 0.95)
 const TEXT_COLOR := Color(0.88, 0.98, 1.0)
-const MUTED := Color(0.62, 0.70, 0.78)
 const RED := Color(1.0, 0.35, 0.42)
 
 var _font: FontFile = null
@@ -54,6 +62,7 @@ var _pool_kind := "augment"
 var _preview_id := ""
 var _pending_card_id := ""
 var _symbol_picker: Control = null
+var _power_replacement_picker: Variant = null
 var _selection_locked := false
 var _dragging := false
 var _drag_id := ""
@@ -62,14 +71,30 @@ var _drag_origin := Vector2.ZERO
 var _press_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_origin_z := 0
+var _card_glint_cycle_tween: Tween = null
+var _card_glint_sweep_tween: Tween = null
+var _card_glint_index := 0
+var _card_glint_generation := 0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_center_native_canvas()
+	get_viewport().size_changed.connect(_on_viewport_size_changed)
 	_pacte_artwork = get_node_or_null("PacteArtwork") as Control
 	_configure_pacte_artwork()
 	_font = Assets.font()
 	_build()
 	_refresh()
+	call_deferred("_restore_power_replacement")
+
+func _on_viewport_size_changed() -> void:
+	_center_native_canvas()
+
+func _center_native_canvas() -> void:
+	var viewport_size := get_viewport_rect().size
+	var extra_size := viewport_size - CANVAS_SIZE
+	position = Vector2(maxf(0.0, extra_size.x * 0.5),
+		maxf(0.0, extra_size.y * 0.5))
 
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:
@@ -86,8 +111,6 @@ func _configure_pacte_artwork() -> void:
 func _build() -> void:
 	# The authored OPEN sign identifies this destination. Keep the top panel clear
 	# instead of adding a duplicate destination title over the room art.
-	var subtitle := _label("ONE CARD / ONE SLOT", Rect2(39.0, 34.0, 50.0, 9.0), 4, MUTED)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	_list = Control.new()
 	_list.name = "RouteBuildCards"
@@ -124,12 +147,13 @@ func _build() -> void:
 	_description_bubble.visible = false
 
 	_instruction = _label("TAP TO INSPECT  /  DRAG TO THE SLOT",
-		Rect2(5.0, 238.0, 150.0, 10.0), 5, TEXT_COLOR)
+		INSTRUCTION_RECT, 5, TEXT_COLOR)
 	_instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_message = _label("", Rect2(5.0, 249.0, 150.0, 15.0), 4, RED)
+	_message = _label("", MESSAGE_RECT, 4, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_instruction.text = "SELECTED DOOR CANNOT BE REOPENED"
+	_message.visible = false
+	_set_instruction_text("SELECTED DOOR CANNOT BE REOPENED")
 	_build_credits_display()
 
 func _refresh() -> void:
@@ -137,17 +161,16 @@ func _refresh() -> void:
 	_clear_selected_card()
 	if _pool_kind != "augment" and _pool_kind != "power":
 		_credits_label.text = ""
-		_instruction.text = ""
-		_message.text = "BUILD ROUTE CLOSED"
+		_set_message_text("BUILD ROUTE CLOSED")
 		return
 	_credits_label.text = str(int(RunStateStore.lucidityCoins))
-	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
-	_message.text = ""
+	_set_instruction_text("TAP TO INSPECT  /  DRAG TO THE SLOT")
 	_set_drop_hint_visible(false)
 	var offer_ids := _offer_ids_from_store()
 	for index in range(mini(offer_ids.size(), CARD_POSITIONS.size())):
 		_build_card(offer_ids[index], index)
 	_offer_ids = offer_ids
+	_start_card_glint_cycle()
 
 func _offer_ids_from_store() -> Array[String]:
 	var result: Array[String] = []
@@ -187,7 +210,7 @@ func _build_card(card_id: String, index: int) -> void:
 func _build_card_cost(button: Button, cost: int, affordable: bool) -> void:
 	var row := HBoxContainer.new()
 	row.name = "CardCost"
-	row.position = Vector2(0.0, -10.0)
+	row.position = Vector2(0.0, CARD_SIZE.y + 1.0)
 	row.size = Vector2(CARD_SIZE.x, 10.0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 1)
@@ -221,7 +244,73 @@ func _build_card_cost(button: Button, cost: int, affordable: bool) -> void:
 	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coin.set_meta("skip_drag_shadow", true)
 	row.add_child(coin)
+
+func _start_card_glint_cycle() -> void:
+	_stop_card_glint_cycle()
+	if _offer_ids.is_empty():
+		return
+	var generation := _card_glint_generation
+	_card_glint_index = 0
+	var cycle := create_tween().set_loops()
+	cycle.tween_interval(CARD_GLINT_DELAY)
+	cycle.tween_callback(_play_next_card_glint.bind(generation))
+	cycle.tween_interval(CARD_GLINT_DURATION)
+	_card_glint_cycle_tween = cycle
+
+func _play_next_card_glint(generation: int) -> void:
+	if generation != _card_glint_generation or _offer_ids.is_empty():
+		return
+	var offer_count := _offer_ids.size()
+	for _attempt in offer_count:
+		var index := _card_glint_index % offer_count
+		_card_glint_index = (_card_glint_index + 1) % offer_count
+		var card_id := _offer_ids[index]
+		var button := _card_buttons.get(card_id, null) as Button
+		if button == null:
+			continue
+		var card_view := button.get_node_or_null("CardArt") as Control
+		if card_view != null:
+			_play_card_glint(card_view)
+		return
+
+func _play_card_glint(card_view: Control) -> void:
+	var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+	if glint == null:
+		return
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	glint.position = Vector2(CARD_GLINT_START_X, 0.0)
+	glint.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.0)
+	var sweep := create_tween()
+	sweep.tween_property(glint, "color:a", CARD_GLINT_ALPHA, 0.04)
+	sweep.parallel().tween_property(glint, "position:x", CARD_GLINT_END_X,
+		CARD_GLINT_DURATION)
+	sweep.tween_property(glint, "color:a", 0.0, 0.10)
+	_card_glint_sweep_tween = sweep
+
+func _stop_card_glint_cycle() -> void:
+	_card_glint_generation += 1
+	if _card_glint_cycle_tween != null and _card_glint_cycle_tween.is_valid():
+		_card_glint_cycle_tween.kill()
+	_card_glint_cycle_tween = null
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	_card_glint_sweep_tween = null
+	if _list == null:
+		return
+	for child in _list.get_children():
+		var button := child as Button
+		if button == null:
+			continue
+		var card_view := button.get_node_or_null("CardArt") as Control
+		if card_view == null:
+			continue
+		var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+		if glint != null:
+			glint.position = Vector2.ZERO
+			glint.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.0)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
 		button: Button) -> void:
@@ -235,6 +324,8 @@ func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
 		_begin_drag(card_id, index, button, button.get_global_transform() * touch_event.position)
 
 func _input(event: InputEvent) -> void:
+	if SceneNav.is_transition_active():
+		return
 	if _drag_id == "":
 		return
 	if event is InputEventMouseMotion:
@@ -277,7 +368,7 @@ func _update_drag(global_position: Vector2) -> void:
 		DragShadow.add_drag_shadow(button)
 	_dragging = true
 	_description_bubble.visible = false
-	_instruction.text = "DROP THE CARD IN THE SLOT"
+	_set_instruction_text("DROP THE CARD IN THE SLOT")
 	_set_drop_hint_visible(true)
 	button.position = _clamp_drag_position(button, _global_to_local(global_position) - _drag_offset)
 
@@ -306,13 +397,16 @@ func _finish_drag(global_position: Vector2) -> void:
 	if drop_area.intersects(dragged_rect) or drop_area.has_point(local_position):
 		_accept_card(card_id)
 	else:
-		_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
+		_set_instruction_text("TAP TO INSPECT  /  DRAG TO THE SLOT")
 
 func _global_to_local(global_position: Vector2) -> Vector2:
 	return get_global_transform().affine_inverse() * global_position
 
 func _input_canvas_position(viewport_position: Vector2) -> Vector2:
-	return make_canvas_position_local(viewport_position)
+	# Drag helpers consume global canvas coordinates. The route build shares Pacte's
+	# expanded-phone layout, so converting through this Control would subtract its
+	# centering offset twice.
+	return get_viewport().get_canvas_transform().affine_inverse() * viewport_position
 
 func _clamp_drag_position(button: Control, desired_position: Vector2) -> Vector2:
 	var scale := Vector2(absf(button.scale.x), absf(button.scale.y))
@@ -338,9 +432,11 @@ func _preview_card(card_id: String) -> void:
 	var cost := RunStateStore.route_build_card_cost(card_id)
 	var remaining := RunStateStore.route_build_remaining_after(card_id)
 	_description_text.text = String(entry.get("description", "")) + \
-		"\nCOST: %s  LEFT: %d" % [("FREE" if cost <= 0 else str(cost)), remaining]
+		"\nCOST: %s  LEFT: %d\n%s" % [
+			("FREE" if cost <= 0 else str(cost)), remaining,
+			("FREE LOSS ROUTE" if cost <= 0 else RunStateStore.run_price_label())]
 	_layout_description()
-	_instruction.text = "DRAG TO THE SLOT"
+	_set_instruction_text("DRAG TO THE SLOT")
 	for id in _offer_ids:
 		var candidate := _card_buttons.get(id, null) as Button
 		if candidate != null:
@@ -381,17 +477,24 @@ func _accept_card(card_id: String) -> void:
 	if _selection_locked:
 		return
 	if not RunStateStore.route_build_card_affordable(card_id):
-		_message.text = "NOT ENOUGH LUCIDITY FOR THIS CARD"
+		_set_message_text("NOT ENOUGH LUCIDITY FOR THIS CARD")
 		return
 	_selection_locked = true
 	_pending_card_id = card_id
 	_description_bubble.visible = false
-	_instruction.text = "CARD SELECTED"
+	_set_instruction_text("CARD SELECTED")
 	_show_selected_card(card_id)
 	for value in _card_buttons.values():
 		var card_button := value as Button
 		if card_button != null:
 			card_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _pool_kind == "power" and RunStateStore.power_requires_replacement(card_id):
+		if not RunStateStore.begin_power_replacement(card_id, "route_build"):
+			_selection_locked = false
+			_set_message_text("POWER REPLACEMENT UNAVAILABLE")
+			return
+		_show_power_replacement_picker()
+		return
 	if RunStateStore.route_build_card_requires_symbol(card_id):
 		_show_symbol_picker(card_id)
 	else:
@@ -403,19 +506,69 @@ func _complete_after_preview(card_id: String, reward_symbol := "") -> void:
 		return
 	_complete_card(card_id, reward_symbol)
 
-func _complete_card(card_id: String, reward_symbol := "") -> void:
-	if not RunStateStore.complete_route_build_selection(card_id, reward_symbol):
+func _complete_card(card_id: String, reward_symbol := "", replacement_power_id := "") -> void:
+	if not RunStateStore.complete_route_build_selection(card_id, reward_symbol,
+			replacement_power_id):
 		_selection_locked = false
 		_pending_card_id = ""
 		_clear_selected_card()
-		_message.text = "CARD PURCHASE REFUSED"
+		_set_message_text("CARD PURCHASE REFUSED")
 		_refresh()
 		return
 	if not RunStateStore.finish_route_destination():
 		_selection_locked = false
-		_message.text = "NEXT MACHINE UNAVAILABLE"
+		_set_message_text("NEXT MACHINE UNAVAILABLE")
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
+
+func _restore_power_replacement() -> void:
+	if _pool_kind != "power" or RunStateStore.pendingPowerReplacement.is_empty():
+		return
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if candidate == "" or not _offer_ids.has(candidate):
+		RunStateStore.cancel_power_replacement()
+		return
+	_selection_locked = true
+	_pending_card_id = candidate
+	_set_instruction_text("CHOOSE A POWER TO REMOVE")
+	_show_selected_card(candidate)
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_show_power_replacement_picker()
+
+func _show_power_replacement_picker() -> void:
+	if _power_replacement_picker != null and is_instance_valid(_power_replacement_picker):
+		return
+	_power_replacement_picker = POWER_REPLACEMENT_PICKER_SCRIPT.new()
+	add_child(_power_replacement_picker)
+	_power_replacement_picker.power_selected.connect(_on_power_replacement_selected)
+	_power_replacement_picker.cancelled.connect(_cancel_power_replacement)
+	_power_replacement_picker.present(
+		String(RunStateStore.pendingPowerReplacement.get("cardId", "")),
+		RunStateStore.power_replacement_options())
+
+func _on_power_replacement_selected(removed_power_id: String) -> void:
+	var candidate := String(RunStateStore.pendingPowerReplacement.get("cardId", ""))
+	if _power_replacement_picker != null:
+		_power_replacement_picker.queue_free()
+		_power_replacement_picker = null
+	if candidate == "":
+		_cancel_power_replacement()
+		return
+	_complete_card(candidate, "", removed_power_id)
+
+func _cancel_power_replacement() -> void:
+	RunStateStore.cancel_power_replacement()
+	_selection_locked = false
+	_pending_card_id = ""
+	_clear_selected_card()
+	_set_instruction_text("TAP TO INSPECT  /  DRAG TO THE SLOT")
+	for value in _card_buttons.values():
+		var card_button := value as Button
+		if card_button != null:
+			card_button.mouse_filter = Control.MOUSE_FILTER_STOP
 
 func _show_selected_card(card_id: String) -> void:
 	_clear_selected_card()
@@ -472,7 +625,7 @@ func _cancel_symbol_picker() -> void:
 	_pending_card_id = ""
 	_selection_locked = false
 	_clear_selected_card()
-	_instruction.text = "TAP TO INSPECT  /  DRAG TO THE SLOT"
+	_set_instruction_text("TAP TO INSPECT  /  DRAG TO THE SLOT")
 	for value in _card_buttons.values():
 		var card_button := value as Button
 		if card_button != null:
@@ -484,6 +637,7 @@ func _close_symbol_picker() -> void:
 		_symbol_picker = null
 
 func _clear_cards() -> void:
+	_stop_card_glint_cycle()
 	if _list != null:
 		for child in _list.get_children():
 			child.queue_free()
@@ -498,9 +652,9 @@ func _build_credits_display() -> void:
 	_credits_row.name = "CreditsRow"
 	_credits_row.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_credits_row.offset_left = 7.0
-	_credits_row.offset_top = -20.0
+	_credits_row.offset_top = -14.0
 	_credits_row.offset_right = 30.0
-	_credits_row.offset_bottom = -8.0
+	_credits_row.offset_bottom = -2.0
 	_credits_row.add_theme_constant_override("separation", 2)
 	_credits_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_credits_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -531,6 +685,23 @@ func _build_credits_display() -> void:
 	_credits_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_credits_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_credits_row.add_child(_credits_coin)
+
+func _set_instruction_text(value: String) -> void:
+	if _instruction == null:
+		return
+	_instruction.text = value
+	_instruction.visible = true
+	if _message != null:
+		_message.text = ""
+		_message.visible = false
+
+func _set_message_text(value: String) -> void:
+	if _message == null:
+		return
+	_message.text = value
+	_message.visible = not value.is_empty()
+	if _instruction != null:
+		_instruction.visible = value.is_empty()
 
 func _label(text_value: String, rect: Rect2, size: int, color: Color,
 		parent: Node = null) -> Label:

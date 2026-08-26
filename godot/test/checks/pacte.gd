@@ -880,7 +880,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	for node_name in ["PacteBackground", "PacteTable", "SelectedCardEmplacement",
 			"PowerCardEmplacement",
 			"OddsTableDescriptionBubble", "DropHere", "AugmentDeck", "PowerDeck",
-			"PacteDealer", "DealerBubble"]:
+			"PacteDealer", "DealerBubble", "PacteTitleLight", "PacteProposition"]:
 		if pacte.get_node_or_null(node_name) == null:
 			failures.append("pacte: missing %s" % node_name)
 	if pacte._background == null or pacte._dealer_sprite == null or pacte._table == null \
@@ -892,6 +892,43 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: background/dealer/table draw order is incorrect")
 	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
 		failures.append("pacte: dealer text does not draw above the table")
+	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) == "expand":
+		failures.append("pacte: expanded artwork viewport was applied globally")
+	if pacte._native_canvas_origin(Vector2(180.0, 320.0)) != Vector2(10.0, 0.0) \
+		or pacte._native_canvas_origin(Vector2(160.0, 360.0)) != Vector2(0.0, 20.0):
+		failures.append("pacte: native gameplay canvas is not centred in an expanded phone viewport")
+	# The updated room exports include decorative bleed around the native canvas.
+	# Every frame must retain source-pixel scale and be centred around the same
+	# 160x320 gameplay coordinates; the phone viewport, not an art-layer resize,
+	# is what trims the outer pixels.
+	var native_art_nodes: Array[Dictionary] = [
+		{"name": "background", "node": pacte._background, "frames": 1},
+		{"name": "dealer", "node": pacte._dealer_sprite, "frames": 1},
+		{"name": "table", "node": pacte._table, "frames": 1},
+		{"name": "proposition", "node": pacte._proposition, "frames": 1},
+		{"name": "augment deck", "node": pacte._augment_deck, "frames": pacte.DECK_FRAME_COUNT},
+		{"name": "power deck", "node": pacte._power_deck, "frames": pacte.DECK_FRAME_COUNT},
+		{"name": "dealer bubble", "node": pacte._dealer_bubble, "frames": pacte.DEALER_TEXT_FRAME_COUNT},
+		{"name": "augment emplacement", "node": pacte._augment_emplacement,
+			"frames": pacte.EMPLACEMENT_FRAME_COUNT},
+		{"name": "power emplacement", "node": pacte._power_emplacement,
+			"frames": pacte.EMPLACEMENT_FRAME_COUNT},
+	]
+	for art_spec in native_art_nodes:
+		var art := art_spec["node"] as Sprite2D
+		var frame_count := int(art_spec["frames"])
+		if art == null or art.texture == null:
+			failures.append("pacte: %s artwork is missing" % String(art_spec["name"]))
+			continue
+		var expected_art_position: Vector2 = pacte._native_art_position(art.texture, frame_count)
+		var position_tolerance := 1.1 if art == pacte._augment_deck \
+			or art == pacte._power_deck else 0.01
+		if art.position.distance_to(expected_art_position) > position_tolerance:
+			failures.append("pacte: %s artwork is not centred around the native canvas" \
+				% String(art_spec["name"]))
+		if art.scale != Vector2.ONE:
+			failures.append("pacte: %s artwork was resized instead of preserving source pixels" \
+				% String(art_spec["name"]))
 	if pacte._dealer_bubble == null \
 			or pacte._dealer_bubble.hframes != pacte.DEALER_TEXT_FRAME_COUNT \
 			or pacte._dealer_bubble.frame != pacte.DEALER_AUGMENT_FRAME \
@@ -940,6 +977,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or pacte._power_deck.frame != pacte.DECK_FRAME \
 			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
 		failures.append("pacte: fixed dual-deck state is not initialized")
+	if pacte._proposition == null or pacte._proposition.z_index <= pacte.TABLE_Z_INDEX:
+		failures.append("pacte: proposition placeholder is not drawn above the table")
+	for card_button in pacte._card_buttons.values():
+		if pacte._proposition != null and (card_button as Button).z_index <= pacte._proposition.z_index:
+			failures.append("pacte: proposition placeholder is not beneath the cards")
+			break
 	if PacteCards.POWER_FRONT_RECT != Rect2(39.0, 0.0, 39.0, 61.0):
 		failures.append("pacte: power proposition does not use the full authored 39x61 front")
 	# The arrow selector overlay and the CANCEL/EXIT text buttons were removed.
@@ -962,6 +1005,13 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: emplacement did not start on its centered selecting frame")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
+	var first_card_art := pacte._card_views.get(first_augment, null) as Control
+	var first_card_glint := first_card_art.get_node_or_null("GoldGlint") as Polygon2D \
+		if first_card_art != null else null
+	if first_card_art == null or first_card_art.scale != Vector2.ONE \
+			or bool(first_card_art.get_meta("breathing_enabled", false)) \
+			or first_card_glint == null:
+		failures.append("pacte: revealed cards are not static with an idle gold glint")
 	pacte._preview_card(first_augment)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card preview did not show the description bubble")
@@ -1011,11 +1061,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var screen_drag := InputEventScreenDrag.new()
 	screen_drag.index = 0
 	# _input receives events the viewport has already mapped into canvas space.
-	screen_drag.position = Vector2(40.0, 270.0)
+	var screen_drag_position: Vector2 = pacte.get_global_transform() * Vector2(40.0, 270.0)
+	screen_drag.position = screen_drag_position
 	pacte._input(screen_drag)
 	# The grabbed point of the card must end up exactly under the reported finger.
 	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
-	if dragged_finger_position.distance_to(screen_drag.position) > 0.1:
+	if dragged_finger_position.distance_to(screen_drag_position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
 		failures.append("pacte: dragged card disappeared before drop")
@@ -1040,7 +1091,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	pacte._update_drag(Vector2(40.0, 270.0))
 	var screen_release := InputEventScreenTouch.new()
 	screen_release.index = 0
-	screen_release.position = Vector2(40.0, 270.0)
+	screen_release.position = screen_drag_position
 	screen_release.pressed = false
 	pacte._input(screen_release)
 	# The card button may be freed by the accepted drop; check the shadow removal
@@ -1652,5 +1703,55 @@ func _check_pacte_power_rules(machine: Node, run_store: Node, failures: Array) -
 	if not bool(run_store.heartPowerArmed) or bool(run_store.comboDefeatPending) \
 			or int(run_store.betMultiplier) != 2:
 		failures.append("pacte powers: Heart did not rescue the combo loss without lowering its gauge")
+
+	# Four-card progression must pause for an explicit replacement.  Starting the
+	# transaction does not charge Lucidity; only the chosen removal commits it.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x9911, true)
+	run_store.pacteOfferAugmentIds = []
+	run_store.pacteOfferPowerIds = ["heart"]
+	run_store.ownedPowerIds = ["reroll", "shift", "memory"]
+	run_store.selectedPowerCardIds = ["reroll", "shift", "memory"]
+	run_store.lucidityCoins = 0
+	if run_store.stage_pacte_power_selection("heart"):
+		failures.append("pacte powers: fourth card was silently accepted")
+	if run_store.pendingPowerReplacement.is_empty() \
+			or run_store.power_replacement_options().size() != 3:
+		failures.append("pacte powers: fourth card did not open all three replacement choices")
+	if int(run_store.lucidityCoins) != 0:
+		failures.append("pacte powers: replacement candidate charged before confirmation")
+	if not run_store.complete_pacte_selection("", "heart", "reroll"):
+		failures.append("pacte powers: explicit replacement was not committed")
+	if run_store.ownedPowerIds.size() != 3 or not run_store.ownedPowerIds.has("heart") \
+			or run_store.ownedPowerIds.has("reroll") \
+			or not run_store.pendingPowerReplacement.is_empty():
+		failures.append("pacte powers: committed replacement did not leave exactly three powers")
+
+	# Cancellation is resumable and leaves the original loadout and wallet intact.
+	run_store.reset_run_state()
+	run_store.start_new_run([], {}, false, 0x9912, true)
+	run_store.ownedPowerIds = ["reroll", "shift", "memory"]
+	run_store.selectedPowerCardIds = ["reroll", "shift", "memory"]
+	var coins_before_replacement := int(run_store.lucidityCoins)
+	if not run_store.begin_power_replacement("cheat", "pacte") \
+			or not run_store.cancel_power_replacement():
+		failures.append("pacte powers: replacement cancel/back was unavailable")
+	if run_store.ownedPowerIds.size() != 3 or run_store.ownedPowerIds.has("cheat") \
+			or int(run_store.lucidityCoins) != coins_before_replacement:
+		failures.append("pacte powers: cancelling replacement changed the loadout or price")
+
+	# The pending picker itself survives the run snapshot and can be reconstructed.
+	if not run_store.begin_power_replacement("swap", "pacte"):
+		failures.append("pacte powers: could not stage a resumable replacement")
+	var replacement_save: Dictionary = run_store.pendingPowerReplacement.duplicate(true)
+	run_store.pendingPowerReplacement = {}
+	run_store._commit()
+	run_store.pendingPowerReplacement = replacement_save
+	run_store._commit()
+	run_store.load_run_state()
+	if run_store.pendingPowerReplacement.is_empty() \
+			or String(run_store.pendingPowerReplacement.get("cardId", "")) != "swap" \
+			or run_store.ownedPowerIds.size() > 3:
+		failures.append("pacte powers: save/resume lost or duplicated the replacement decision")
 	run_store.reset_run_state()
 
