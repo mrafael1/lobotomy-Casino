@@ -6,6 +6,7 @@ extends Control
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const WHEEL_SCRIPT := preload("res://scenes/fortune_wheel.gd")
+const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 const CYAN := Color(0.42, 1.0, 0.95)
 const GOLD := Color(1.0, 0.84, 0.38)
 const HOT_GOLD := Color(1.0, 0.95, 0.62)
@@ -21,6 +22,7 @@ var _hint: Label = null
 var _message: Label = null
 var _spin: Button = null
 var _return: Button = null
+var _odds_overlay: Control = null
 var _animating_reward_id := ""
 var _spin_requesting := false
 
@@ -38,6 +40,7 @@ func _ready() -> void:
 	if not Engine.is_editor_hint() and not RunStateStore.state_changed.is_connected(_refresh):
 		RunStateStore.state_changed.connect(_refresh)
 	_refresh()
+	call_deferred("_open_odds_table_if_needed")
 
 func _build() -> void:
 	var header := _panel(Rect2(3.0, 3.0, 154.0, 32.0),
@@ -52,18 +55,19 @@ func _build() -> void:
 	_balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_balance)
 
-	var result_panel := _panel(Rect2(5.0, 150.0, 150.0, 30.0),
+	var result_panel := _panel(Rect2(5.0, 148.0, 150.0, 36.0),
 		Color(INK.r, INK.g, INK.b, 0.90), Color(GOLD.r, GOLD.g, GOLD.b, 0.55))
 	result_panel.z_index = 6
 	add_child(result_panel)
-	_status = _label("", Rect2(8.0, 152.0, 144.0, 12.0), 6, CYAN)
+	_status = _label("", Rect2(8.0, 150.0, 144.0, 12.0), 6, CYAN)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.z_index = 20
 	add_child(_status)
-	_message = _label("", Rect2(8.0, 165.0, 144.0, 12.0), 5, HOT_GOLD)
+	_message = _label("", Rect2(8.0, 163.0, 144.0, 20.0), 5, HOT_GOLD)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 20
 	add_child(_message)
 
@@ -82,7 +86,7 @@ func _build() -> void:
 
 func _refresh() -> void:
 	if _balance != null:
-		_balance.text = "CREDITS %d   RUN GOLD %d" % [
+		_balance.text = "CREDITS %d   RUN COINS %d" % [
 			int(MetaStateStore.lucidityWallet), int(RunStateStore.lucidityCoins)
 		]
 	if _status == null or _spin == null:
@@ -105,6 +109,9 @@ func _refresh() -> void:
 		_wheel.present_reward(reward_id)
 
 	var jackpot := reward_valid and bool(reward.get("jackpot", false))
+	var odds_reward := reward_valid and int(reward.get("oddsTokens", 0)) > 0
+	var odds_open := _odds_overlay != null and is_instance_valid(_odds_overlay) \
+			and _odds_overlay.visible
 	_status.add_theme_color_override("font_color", HOT_GOLD if jackpot else CYAN)
 	_message.add_theme_color_override("font_color", HOT_GOLD if jackpot else GOLD)
 	if RunStateStore.routeBonusClaimed and reward_valid:
@@ -112,8 +119,11 @@ func _refresh() -> void:
 		_message.text = String(reward.get("description", "BONUS PAID"))
 		_spin.disabled = true
 		_spin.text = "PRIZE CLAIMED"
-		_return.disabled = false
-		_hint.text = "THE MACHINE WILL REMEMBER"
+		_return.disabled = odds_reward and not RunStateStore.oddsPhaseCompleted
+		_hint.text = "UPGRADE THE ODDS" if odds_reward and not RunStateStore.oddsPhaseCompleted \
+			else "THE MACHINE WILL REMEMBER"
+		if odds_open:
+			_hint.text = "ODDS TABLE OPEN"
 	elif reward_valid:
 		_status.text = "FATE LOCKED // COLLECT"
 		_message.text = String(reward.get("description", "COLLECT YOUR PRIZE"))
@@ -123,7 +133,7 @@ func _refresh() -> void:
 		_hint.text = "ONE TURN // NO TAKEBACKS"
 	else:
 		_status.text = "SPIN FOR YOUR FATE"
-		_message.text = "DIFFERENT REWARDS // ONE JACKPOT"
+		_message.text = "FIVE REWARDS // ONE JACKPOT"
 		_spin.disabled = false
 		_spin.text = "SPIN THE WHEEL"
 		_return.disabled = true
@@ -163,10 +173,36 @@ func _collect_prize() -> void:
 		_message.text = "PRIZE COULD NOT BE CLAIMED"
 		return
 	_refresh()
+	call_deferred("_open_odds_table_if_needed")
+
+func _open_odds_table_if_needed() -> void:
+	if _odds_overlay != null and is_instance_valid(_odds_overlay):
+		return
+	var reward := RunStateStore.route_bonus_reward()
+	if not RunStateStore.routeBonusClaimed or int(reward.get("oddsTokens", 0)) <= 0 \
+			or RunStateStore.oddsPhaseCompleted:
+		return
+	_odds_overlay = ODDS_OVERLAY_SCENE.instantiate() as Control
+	_odds_overlay.name = "FortuneWheelOddsTable"
+	_odds_overlay.z_index = 100
+	add_child(_odds_overlay)
+	_odds_overlay.connect("closed", _on_odds_table_closed)
+	_odds_overlay.call_deferred("open_overlay")
+	_refresh()
+
+func _on_odds_table_closed() -> void:
+	if _odds_overlay != null and is_instance_valid(_odds_overlay):
+		_odds_overlay.queue_free()
+	_odds_overlay = null
+	_refresh()
 
 func _on_return_pressed() -> void:
 	if not RunStateStore.routeBonusClaimed:
 		_message.text = "COLLECT THE PRIZE FIRST"
+		return
+	var reward := RunStateStore.route_bonus_reward()
+	if int(reward.get("oddsTokens", 0)) > 0 and not RunStateStore.oddsPhaseCompleted:
+		_message.text = "FINISH THE ODDS TABLE FIRST"
 		return
 	if not RunStateStore.finish_route_destination():
 		_message.text = "NEXT MACHINE UNAVAILABLE"

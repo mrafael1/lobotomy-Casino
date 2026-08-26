@@ -42,7 +42,17 @@ static func _prepare_target(lucidity: int) -> void:
 	_store().routeBuildFreeTier = false
 	_store().routeBuildSelectedId = ""
 	_store().routeBonusClaimed = false
-	_store().sacrificeLaterPending = false
+	_store().routeBonusRewardId = ""
+	_store().routeBonusSpinSeed = 0
+	_store().sacrificeClaimed = false
+	_store().sacrificeSelectedId = ""
+	_store().nextRoundGainMultiplier = 1.0
+	_store().nextRoundStartingScore = 0
+	_store().nextRoundSpinBonus = 0
+	_store().oddsTokenBudgetOverride = 0
+	_store().oddsTokensRemaining = 0
+	_store().oddsPendingUpgrades = {}
+	_store().oddsPhaseCompleted = false
 	_store().lucidityCoins = lucidity
 	_store().neurons = 11
 	_store().runConsumables = {}
@@ -163,11 +173,11 @@ static func run_all() -> Array:
 
 	var lucidity_before_refusal := int(_store().lucidityCoins)
 	var neurons_before_refusal := int(_store().neurons)
-	_check(out, _store().refuse_routes(), "refusing an offer is the free Sacrifice Later path")
+	_check(out, _store().refuse_routes(), "refusing an offer is the free CONTINUE path")
 	_check(out, _store().lucidityCoins == lucidity_before_refusal,
 		"refusing routes spends no run Lucidity")
-	_check(out, _store().sacrificeLaterPending,
-		"the free refusal records Sacrifice Later without spending spins")
+	_check(out, _store().routeDestination == "",
+		"the free refusal does not silently enter Sacrifice")
 	_check(out, _store().neurons == EconomyConst.STARTING_NEURONS,
 		"refusal starts the next machine with its normal spin budget")
 	_check(out, neurons_before_refusal != _store().neurons,
@@ -249,11 +259,134 @@ static func run_all() -> Array:
 	_check(out, _store().select_route(RouteCards.CARD_BONUS_ID),
 		"selecting Bonus opens the bonus scene")
 	_check(out, _store().claim_route_bonus(), "the bonus can be claimed once")
-	_check(out, int(_store().lucidityCoins) == bonus_before + 10,
-		"Bonus pays run Lucidity")
+	_check(out, int(_store().lucidityCoins) == bonus_before + 50,
+		"Bonus pays 50 run coins")
 	_check(out, not _store().claim_route_bonus(), "Bonus cannot be claimed twice")
 	_check(out, _store().finish_route_destination() and _store().runPhase == "running",
 		"the bonus scene returns to the next machine")
+
+	_check(out, FortuneWheelRules.SEGMENT_IDS.size() == 5,
+		"the Fortune Wheel has exactly the five requested rewards")
+	_check(out, FortuneWheelRules.reward_for_id(FortuneWheelRules.REWARD_COINS_50).get(
+		"runLucidity", 0) == 50, "the wheel's coin prize is 50 run coins")
+	_check(out, is_equal_approx(float(FortuneWheelRules.reward_for_id(
+		FortuneWheelRules.REWARD_GAIN_125).get("gainMultiplier", 0.0)), 1.25),
+		"the wheel exposes the x1.25 gain prize")
+	var jackpot_reward := FortuneWheelRules.reward_for_id(FortuneWheelRules.REWARD_JACKPOT)
+	_check(out, bool(jackpot_reward.get("flatlineRestrictionRemoved", false)) \
+		and int(jackpot_reward.get("runLucidity", 0)) == 100 \
+		and is_equal_approx(float(jackpot_reward.get("startingScoreFraction", 0.0)), 0.5),
+		"the jackpot carries its no-cap, half-score and 100-coin effects")
+
+	_prepare_offer_with_card(20, "wealth_target", RouteCards.CARD_BONUS_ID, 0xD100)
+	_check(out, _store().select_route(RouteCards.CARD_BONUS_ID),
+		"the gain prize can open the bonus route")
+	_check(out, _store().claim_route_bonus_reward(FortuneWheelRules.REWARD_GAIN_125),
+		"the gain prize can be claimed")
+	_check(out, is_equal_approx(float(_store().nextRoundGainMultiplier), 1.25),
+		"the gain prize is stored for the next round")
+	var base_gain_multiplier := Economy.compute_lucidity_multiplier(_store().ownedUpgrades)
+	_check(out, _store().finish_route_destination() \
+		and is_equal_approx(float(_store().lucidityMultiplier), base_gain_multiplier * 1.25),
+		"the gain prize applies to the next machine round")
+
+	_prepare_offer_with_card(20, "wealth_target", RouteCards.CARD_BONUS_ID, 0xD200)
+	_check(out, _store().select_route(RouteCards.CARD_BONUS_ID),
+		"the jackpot can open the bonus route")
+	_store().wealthTargetIndex = 1
+	var jackpot_target: int = _store().current_wealth_target()
+	var jackpot_coins_before := int(_store().lucidityCoins)
+	_check(out, _store().claim_route_bonus_reward(FortuneWheelRules.REWARD_JACKPOT),
+		"the jackpot can be claimed")
+	_check(out, int(_store().lucidityCoins) == jackpot_coins_before + 100 \
+		and _store().flatlineRestrictionRemoved \
+		and int(_store().nextRoundStartingScore) == floori(float(jackpot_target) * 0.5),
+		"the jackpot stores all three next-round effects")
+	_check(out, _store().finish_route_destination() \
+		and int(_store().scoreEarned) == floori(float(jackpot_target) * 0.5) \
+		and _store().flatlineRestrictionRemoved,
+		"the jackpot starts the next round with half its target and no cap")
+
+	_prepare_offer_with_card(20, "wealth_target", RouteCards.CARD_BONUS_ID, 0xD300)
+	_check(out, _store().select_route(RouteCards.CARD_BONUS_ID),
+		"the eight-token odds prize can open the bonus route")
+	_check(out, _store().claim_route_bonus_reward(FortuneWheelRules.REWARD_ODDS_8),
+		"the eight-token odds prize can be claimed")
+	_check(out, int(_store().oddsTokenBudgetOverride) == 8,
+		"the odds prize stores an eight-token table override")
+	_store().begin_odds_phase()
+	_check(out, int(_store().oddsTokensRemaining) == 8,
+		"the eight-token odds table opens with eight tokens")
+	_store().finalize_odds_phase()
+	_check(out, _store().oddsPhaseCompleted and int(_store().oddsTokensRemaining) == 0,
+		"the odds prize closes as a completed phase")
+	_check(out, _store().finish_route_destination() and _store().runPhase == "running",
+		"the odds prize returns to the next machine")
+
+	_prepare_offer_with_card(200, "wealth_target", RouteCards.CARD_SACRIFICE_ID, 0xD400)
+	_store().selectedAugmentCardIds = ["augment_book"]
+	_store().selectedPowerCardIds = ["reroll"]
+	_store().ownedPowerIds = ["reroll"]
+	_store().ownedUpgrades = []
+	_check(out, _store().select_route(RouteCards.CARD_SACRIFICE_ID),
+		"selecting Sacrifice opens the resource trade scene")
+	_meta().campaignNeuronsLeft = 1
+	var sacrifice_options: Array = _store().sacrifice_options()
+	var has_neuron_option := false
+	for option in sacrifice_options:
+		if String(option.get("id", "")) == SacrificeRules.OPTION_NEURON:
+			has_neuron_option = true
+	_check(out, not has_neuron_option,
+		"Sacrifice hides the neuron choice when only one remains")
+	_meta().campaignNeuronsLeft = 3
+	sacrifice_options = _store().sacrifice_options()
+	_check(out, sacrifice_options.size() == 4,
+		"Sacrifice exposes augment, power, coin and neuron choices")
+	var sacrifice_coins_before := int(_store().lucidityCoins)
+	_check(out, _store().claim_sacrifice(SacrificeRules.OPTION_COINS),
+		"Sacrifice accepts the 100-coin trade")
+	_check(out, int(_store().lucidityCoins) == sacrifice_coins_before - 100 \
+		and int(_store().nextRoundSpinBonus) == SacrificeRules.BONUS_SPINS \
+		and int(_store().sacrificeCount) == 1,
+		"Sacrifice grants its next-round spin boon once")
+	_check(out, not _store().claim_sacrifice(SacrificeRules.OPTION_COINS),
+		"one Sacrifice route cannot be claimed twice")
+	_check(out, _store().finish_route_destination() and _store().runPhase == "running",
+		"Sacrifice returns to the next machine")
+	_check(out, int(_store().neurons) == mini(EconomyConst.STARTING_NEURONS +
+		SacrificeRules.BONUS_SPINS, Economy.compute_neuron_cap(_store().ownedUpgrades)),
+		"Sacrifice's spin boon is applied within the neuron cap")
+
+	_prepare_offer_with_card(0, "wealth_target", RouteCards.CARD_SACRIFICE_ID, 0xD500)
+	_store().selectedAugmentCardIds = ["augment_book"]
+	_store().ownedUpgrades = ["pos_learning"]
+	_store().selectedPowerCardIds = ["reroll"]
+	_store().ownedPowerIds = ["reroll"]
+	_check(out, _store().select_route(RouteCards.CARD_SACRIFICE_ID) \
+		and _store().claim_sacrifice(SacrificeRules.option_id_for_augment("augment_book")) \
+		and not _store().selectedAugmentCardIds.has("augment_book") \
+		and not _store().ownedUpgrades.has("pos_learning"),
+		"Sacrifice can remove an owned augment")
+	_check(out, _store().finish_route_destination(),
+		"the augment sacrifice can start its next machine")
+
+	_prepare_offer_with_card(0, "wealth_target", RouteCards.CARD_SACRIFICE_ID, 0xD600)
+	_store().selectedPowerCardIds = ["reroll"]
+	_store().ownedPowerIds = ["reroll"]
+	_check(out, _store().select_route(RouteCards.CARD_SACRIFICE_ID) \
+		and _store().claim_sacrifice(SacrificeRules.option_id_for_power("reroll")) \
+		and not _store().has_power("reroll"),
+		"Sacrifice can remove an owned power")
+	_check(out, _store().finish_route_destination(),
+		"the power sacrifice can start its next machine")
+	_prepare_offer_with_card(0, "wealth_target", RouteCards.CARD_SACRIFICE_ID, 0xD700)
+	_check(out, _store().select_route(RouteCards.CARD_SACRIFICE_ID),
+		"a fourth Sacrifice route can still be offered")
+	_check(out, _store().sacrifice_options().is_empty() \
+		and not _store().claim_sacrifice(SacrificeRules.OPTION_COINS),
+		"Sacrifice refuses every trade after its three-use cap")
+	_check(out, _store().refuse_sacrifice() and _store().runPhase == "running",
+		"a maxed Sacrifice route can be refused safely")
 
 	_prepare_offer_with_card(20, "flatline", RouteCards.CARD_AUGMENT_ID, 0xF00D)
 	var loss_before_spins := int(_store().neurons)

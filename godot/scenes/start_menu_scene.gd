@@ -24,6 +24,7 @@ const MACHINE_SCENE := "res://scenes/machine_scene.tscn"
 const ROUTE_SCENE := "res://scenes/dealer_choice_scene.tscn"
 const ROUTE_BUILD_SCENE := "res://scenes/route_build_scene.tscn"
 const ROUTE_BONUS_SCENE := "res://scenes/route_bonus_scene.tscn"
+const SACRIFICE_SCENE := "res://scenes/sacrifice_scene.tscn"
 const SCORES_SCENE := "res://scenes/scores_scene.tscn"
 const OPTIONS_OVERLAY_SCENE := preload("res://scenes/options_overlay.tscn")
 const CANVAS_W := 160.0
@@ -822,8 +823,7 @@ func _resume_run() -> void:
 		SceneNav.change_to("res://scenes/route_dealer_scene.tscn")
 		return
 	if RunStateStore.routeDestination == RouteCards.ROUTE_SACRIFICE:
-		if RunStateStore.finish_route_destination():
-			SceneNav.change_to(MACHINE_SCENE)
+		SceneNav.change_to(SACRIFICE_SCENE)
 		return
 	var resume_pacte := RunStateStore.pacte_active()
 	var resume_dealer := RunStateStore.runPhase == "pre_run" \

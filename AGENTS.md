@@ -104,9 +104,9 @@ Resources and currencies:
    alter future spins.
 6. When an intermediate target is reached, finish its target/remainder presentation
    and receive two deterministic route cards from the dealer: **Shop**, **Augment**,
-   **Power**, **Bonus**, or **Sacrifice Later**. A survivable flatline receives the same
+   **Power**, **Bonus**, or **Sacrifice**. A survivable flatline receives the same
    two-card offer, with at least one free tier-capped build route. Shop, Augment, and
-   Power spend run Lucidity before opening their destination; Bonus and Sacrifice Later
+   Power spend run Lucidity before opening their destination; Bonus and Sacrifice
    are free. Augment opens only an augment card pool, and Power opens only a power card
    pool. The player may press **CONTINUE** to refuse both cards for free. The route offer,
    build choice, and bonus claim persist through save/resume; no normal route purchase
@@ -126,7 +126,7 @@ Resources and currencies:
 
 - After every intermediate Wealth target and every survivable flatline, the dealer stores
   exactly two seed-identified route cards drawn from **Shop**, **Augment**, **Power**,
-  **Bonus**, and **Sacrifice Later**. The pair is deterministic and persisted through
+  **Bonus**, and **Sacrifice**. The pair is deterministic and persisted through
   close/resume; the player may pay the dealer to reshuffle both doors for **5G**, then
   **10G**, then **15G** and so on. The player may refuse both with the free **CONTINUE**
   action. Event routes remain reserved for a later milestone.
@@ -134,7 +134,12 @@ Resources and currencies:
   one selected augment and one selected power. End-of-segment Augment and Power routes
   use the shared card metadata and pricing but each asks for only one card, never both.
 - The current route fees are **5G for Augment**, **5G for Power**, and **8G for Shop**.
-  Bonus grants **10 run Lucidity** and Sacrifice Later costs neither gold nor spins.
+  Bonus spins the Fortune Wheel for **50 run coins**, **x1.25 next-round gains**, a
+  **jackpot** (no three-flatline cap, half the next target as starting score, and 100
+  run coins), or an **odds table with 8 or 4 tokens**. Sacrifice costs no route entry
+  fee and trades one augment, power, 100 run coins, or a campaign neuron (only when at
+  least 2 remain) for **+5 run spins next round**, up to three accepted sacrifices per
+  run.
   Selecting a paid route charges it immediately; selecting a build card charges its
   card price when confirmed. After a loss, both the Augment and Power build pools are
   capped at tier 0 and free, so deliberately losing cannot buy the strongest cards.
@@ -143,8 +148,8 @@ Resources and currencies:
   consumable adds one stash copy; using it removes that copy. Shop upgrades do not
   become Lab permanents or campaign Chip Augments; the club modifier marks these
   Shop prices up by 50% like the existing shop economy.
-- Sacrifice Later is one possible free route card: it starts the next machine with the
-  normal spin budget and records a deferred sacrifice choice without consuming spins now.
+- Sacrifice is one possible free route card: it opens the dedicated resource-trade
+  scene; refusing it continues normally without recording a deferred choice.
 - The live Dealer remains a tactical interruption with power services, rerolls, and
   run-item offers, but it is no longer an end-of-segment route card. It does not
   duplicate Pacte build identity or the Shop's machine-investment inventory.
@@ -440,18 +445,18 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice Later. The shop background and counter
+  doors for Shop/Augment/Power/Bonus/Sacrifice. The shop background and counter
   layers are intentionally omitted for now; the scene keeps the dealer, doors, and
   route controls.
   Each door switches its authored
   door asset to match the route card; paying the dealer reshuffles both doors at an
   escalating **5G / 10G / 15G** price. Selecting a door commits the route and there is
   no return to this selection screen. **CONTINUE** refuses both doors for free;
-  Sacrifice Later remains a free card when it is offered. `route_scene` remains only
+  Sacrifice remains a free card when it is offered. `route_scene` remains only
   as a compatibility shell for older direct scene references.
 - `route_scene` — the persisted dealer presentation of exactly two
-  Shop/Augment/Power/Bonus/Sacrifice Later cards, using the authored dealer shop art.
-  **CONTINUE** refuses both cards for free; Sacrifice Later remains a free card when it
+  Shop/Augment/Power/Bonus/Sacrifice cards, using the authored dealer shop art.
+  **CONTINUE** refuses both cards for free; Sacrifice remains a free card when it
   is offered. This legacy scene is retained only for older direct references;
   active route navigation uses `dealer_choice_scene`.
 - `route_build_scene` — a single augment or single power selection with run-Gold
@@ -462,7 +467,10 @@ Resources and currencies:
   selected card there, and only then does the route commit. Its route door is already
   final, so it has no action that returns to dealer choice. The selectable route cards
   remain separate from Pacte's full ritual UI.
-- `route_bonus_scene` — the persisted one-time +10 run-Lucidity bonus claim.
+- `route_bonus_scene` — the persisted one-time Fortune Wheel prize claim; odds prizes
+  open the existing odds table with their exact token budget.
+- `sacrifice_scene` — the persisted one-time-per-route resource trade, capped at three
+  accepted sacrifices per run and resumable before the next machine.
 - `route_shop_scene` — run-scoped machine investments and single-use consumable shop.
 - `route_dealer_scene` — retained as a compatibility shell for older route saves;
   new end-of-segment offers use the live Dealer only through its interruption flow.

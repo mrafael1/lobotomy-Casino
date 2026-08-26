@@ -750,6 +750,16 @@ func consume_neuron_spend_feedback() -> bool:
 	_campaign_neuron_spend_feedback_pending = false
 	return pending
 
+## Sacrifice spends a campaign neuron without reserving a machine run. One neuron
+## must remain so the route can never strand the campaign before its next attempt.
+func sacrifice_campaign_neuron() -> bool:
+	if campaignNeuronsLeft < 2 or not campaignActive or campaignFailed:
+		return false
+	campaignNeuronsLeft -= 1
+	meta_changed.emit()
+	save_state()
+	return true
+
 func mark_campaign_failed(save_immediately := true) -> void:
 	if wealthEndingReached:
 		return

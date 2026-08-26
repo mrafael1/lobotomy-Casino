@@ -42,7 +42,7 @@ const DOOR_EXPLANATIONS := {
 	RouteCards.ROUTE_AUGMENT: "PICK AN\nAUGMENT.",
 	RouteCards.ROUTE_POWER: "PICK A\nPOWER.",
 	RouteCards.ROUTE_BONUS: "SPIN THE\nWHEEL.",
-	RouteCards.ROUTE_SACRIFICE: "KEEP SPINS.\nPAY LATER.",
+	RouteCards.ROUTE_SACRIFICE: "TRADE ONE.\nTAKE A BOON.",
 }
 const DOOR_COLORS := {
 	RouteCards.ROUTE_SHOP: Color(1.0, 0.84, 0.38),
@@ -435,13 +435,8 @@ func _open_destination(door_index: int = -1) -> void:
 			SceneNav.change_to("res://scenes/route_bonus_scene.tscn",
 				SceneNav.TransitionKind.DOOR, door_side)
 		RouteCards.ROUTE_SACRIFICE:
-			if RunStateStore.finish_route_destination():
-				SceneNav.change_to("res://scenes/machine_scene.tscn",
-					SceneNav.TransitionKind.DOOR, door_side)
-			else:
-				_selection_locked = false
-				_set_interaction_locked(false)
-				_message.text = "NEXT MACHINE UNAVAILABLE"
+			SceneNav.change_to("res://scenes/sacrifice_scene.tscn",
+				SceneNav.TransitionKind.DOOR, door_side)
 		_:
 			_selection_locked = false
 			_set_interaction_locked(false)

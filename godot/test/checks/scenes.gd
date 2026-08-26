@@ -26,6 +26,7 @@ func _check_scene_instantiation(failures: Array) -> void:
 		"res://scenes/route_dealer_scene.tscn",
 		"res://scenes/route_build_scene.tscn",
 		"res://scenes/route_bonus_scene.tscn",
+		"res://scenes/sacrifice_scene.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
 		"res://scenes/game_over_ending_overlay.tscn",
 	]:
@@ -125,7 +126,6 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	run_store.routeBuildFreeTier = false
 	run_store.routeBuildSelectedId = ""
 	run_store.routeBonusClaimed = false
-	run_store.sacrificeLaterPending = false
 	run_store.lucidityCoins = 100
 	run_store.neurons = 11
 	run_store.selectedAugmentCardIds = []

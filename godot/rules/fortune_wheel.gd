@@ -1,104 +1,78 @@
 class_name FortuneWheelRules
 extends RefCounted
 
-## The Bonus route is a single persisted turn of the house wheel.  The segment
+## The Bonus route is a single persisted turn of the house wheel. The segment
 ## order is also the authored order used by the scene, so the visual and the
 ## deterministic outcome can never drift apart.
 
 const M32 := 0xFFFFFFFF
 
-const REWARD_RUN_5 := "run_5"
-const REWARD_RUN_10 := "run_10"
-const REWARD_CREDITS_15 := "credits_15"
-const REWARD_RUN_20 := "run_20"
-const REWARD_CREDITS_25 := "credits_25"
-const REWARD_RUN_30 := "run_30"
-const REWARD_CREDITS_50 := "credits_50"
+const REWARD_COINS_50 := "coins_50"
+const REWARD_GAIN_125 := "gain_125"
 const REWARD_JACKPOT := "jackpot"
+const REWARD_ODDS_8 := "odds_8"
+const REWARD_ODDS_4 := "odds_4"
 
 const SEGMENT_IDS: Array[String] = [
-	REWARD_RUN_5,
-	REWARD_RUN_10,
-	REWARD_CREDITS_15,
-	REWARD_RUN_20,
-	REWARD_CREDITS_25,
-	REWARD_RUN_30,
-	REWARD_CREDITS_50,
+	REWARD_COINS_50,
+	REWARD_GAIN_125,
 	REWARD_JACKPOT,
+	REWARD_ODDS_8,
+	REWARD_ODDS_4,
 ]
 
 const REWARDS := {
-	REWARD_RUN_5: {
-		"id": REWARD_RUN_5,
-		"wheelLabel": "+5G",
-		"description": "+5 RUN GOLD",
-		"runLucidity": 5,
+	REWARD_COINS_50: {
+		"id": REWARD_COINS_50,
+		"wheelLabel": "+50G",
+		"description": "+50 RUN COINS",
+		"runLucidity": 50,
 		"walletCredits": 0,
 	},
-	REWARD_RUN_10: {
-		"id": REWARD_RUN_10,
-		"wheelLabel": "+10G",
-		"description": "+10 RUN GOLD",
-		"runLucidity": 10,
-		"walletCredits": 0,
-	},
-	REWARD_CREDITS_15: {
-		"id": REWARD_CREDITS_15,
-		"wheelLabel": "+15C",
-		"description": "+15 WALLET CREDITS",
+	REWARD_GAIN_125: {
+		"id": REWARD_GAIN_125,
+		"wheelLabel": "x1.25",
+		"description": "x1.25 NEXT ROUND GAINS",
 		"runLucidity": 0,
-		"walletCredits": 15,
-	},
-	REWARD_RUN_20: {
-		"id": REWARD_RUN_20,
-		"wheelLabel": "+20G",
-		"description": "+20 RUN GOLD",
-		"runLucidity": 20,
 		"walletCredits": 0,
-	},
-	REWARD_CREDITS_25: {
-		"id": REWARD_CREDITS_25,
-		"wheelLabel": "+25C",
-		"description": "+25 WALLET CREDITS",
-		"runLucidity": 0,
-		"walletCredits": 25,
-	},
-	REWARD_RUN_30: {
-		"id": REWARD_RUN_30,
-		"wheelLabel": "+30G",
-		"description": "+30 RUN GOLD",
-		"runLucidity": 30,
-		"walletCredits": 0,
-	},
-	REWARD_CREDITS_50: {
-		"id": REWARD_CREDITS_50,
-		"wheelLabel": "+50C",
-		"description": "+50 WALLET CREDITS",
-		"runLucidity": 0,
-		"walletCredits": 50,
+		"gainMultiplier": 1.25,
 	},
 	REWARD_JACKPOT: {
 		"id": REWARD_JACKPOT,
 		"wheelLabel": "JACKPOT",
-		"description": "+100 CREDITS / +50 RUN GOLD",
-		"runLucidity": 50,
-		"walletCredits": 100,
+		"description": "NO FLATLINE CAP\nHALF SCORE / +100 COINS",
+		"runLucidity": 100,
+		"walletCredits": 0,
 		"jackpot": true,
+		"flatlineRestrictionRemoved": true,
+		"startingScoreFraction": 0.5,
+	},
+	REWARD_ODDS_8: {
+		"id": REWARD_ODDS_8,
+		"wheelLabel": "ODDS 8",
+		"description": "ODDS TABLE // 8 TOKENS",
+		"runLucidity": 0,
+		"walletCredits": 0,
+		"oddsTokens": 8,
+	},
+	REWARD_ODDS_4: {
+		"id": REWARD_ODDS_4,
+		"wheelLabel": "ODDS 4",
+		"description": "ODDS TABLE // 4 TOKENS",
+		"runLucidity": 0,
+		"walletCredits": 0,
+		"oddsTokens": 4,
 	},
 }
 
-## The jackpot is deliberately rare, but it is still a real segment rather than
-## a hidden multiplier.  A seed is stored before the animation starts, so closing
-## the route scene cannot reroll the player's result.
+## The five visible slices are equally likely. Keeping the weights explicit makes
+## future balance changes possible without changing the visual segment order.
 const ROLL_TABLE: Array[Dictionary] = [
-	{ "value": REWARD_RUN_5, "weight": 26.0 },
-	{ "value": REWARD_RUN_10, "weight": 20.0 },
-	{ "value": REWARD_CREDITS_15, "weight": 15.0 },
-	{ "value": REWARD_RUN_20, "weight": 13.0 },
-	{ "value": REWARD_CREDITS_25, "weight": 10.0 },
-	{ "value": REWARD_RUN_30, "weight": 8.0 },
-	{ "value": REWARD_CREDITS_50, "weight": 5.0 },
-	{ "value": REWARD_JACKPOT, "weight": 3.0 },
+	{ "value": REWARD_COINS_50, "weight": 1.0 },
+	{ "value": REWARD_GAIN_125, "weight": 1.0 },
+	{ "value": REWARD_JACKPOT, "weight": 1.0 },
+	{ "value": REWARD_ODDS_8, "weight": 1.0 },
+	{ "value": REWARD_ODDS_4, "weight": 1.0 },
 ]
 
 static func reward_for_id(reward_id: String) -> Dictionary:

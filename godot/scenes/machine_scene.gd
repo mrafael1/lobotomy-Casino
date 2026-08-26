@@ -487,6 +487,12 @@ var _pending_deferred_neg: Dictionary = {}
 @export var triple_brain_free_spins: int = 1
 @export var triple_vial_free_spins: int = 3
 
+func _flatline_restriction_limit() -> int:
+	return 2147483647 if RunStateStore.flatlineRestrictionRemoved else fatal_flatline_count
+
+func _flatline_restriction_limit_text() -> String:
+	return "INF" if RunStateStore.flatlineRestrictionRemoved else str(fatal_flatline_count)
+
 # ── consumable visuals (issue #34) ───────────────────────────────────────────────
 # Per-item temporary on-machine effects. All presentation-only: they read store
 # state (never write it) and revert when the driving counter hits 0. Effects that
@@ -4469,8 +4475,8 @@ func _triple_effect_text(symbol_id: String) -> String:
 		"vial":
 			return tr("+%d SPINS") % triple_vial_free_spins
 		"flatline":
-			return tr("CLOSE CALL %d/%d,\n2X REWARDS NEXT SPIN") % [
-				RunStateStore.flatlineResultCount, fatal_flatline_count]
+			return tr("CLOSE CALL %d/%s,\n2X REWARDS NEXT SPIN") % [
+				RunStateStore.flatlineResultCount, _flatline_restriction_limit_text()]
 	return ""
 
 ## Splits an info-blurb line into [text, color] segments. The flatline strike
@@ -4478,7 +4484,8 @@ func _triple_effect_text(symbol_id: String) -> String:
 func _info_line_segments(symbol_id: String, line: String) -> Array:
 	var base := Color(0.9, 0.94, 1.0)
 	if symbol_id == "flatline":
-		var count_text := "%d/%d" % [RunStateStore.flatlineResultCount, fatal_flatline_count]
+		var count_text := "%d/%s" % [RunStateStore.flatlineResultCount,
+			_flatline_restriction_limit_text()]
 		var idx := line.find(count_text)
 		if idx >= 0:
 			var count_color := base
@@ -5137,7 +5144,7 @@ func _show_eye_reveal_popup(reel_index: int, symbol_id: String) -> void:
 ## flatline ending (banks lucidity, shows the #38 fatal text, offers CONTINUE
 ## while campaign neurons remain) — it does not fail the whole campaign.
 func _check_flatline_instant_death() -> bool:
-	if RunStateStore.flatlineResultCount < fatal_flatline_count:
+	if RunStateStore.flatlineResultCount < _flatline_restriction_limit():
 		return false
 	var run := {
 		"neurons": RunStateStore.neurons,
@@ -5161,7 +5168,7 @@ func _show_fatal_flatline_ending(run: Dictionary) -> void:
 	_show_ending("flatline", run)
 
 func _show_flatline_result_reaction(count: int) -> void:
-	var survived := count < fatal_flatline_count
+	var survived := count < _flatline_restriction_limit()
 	# Issue #76: a non-fatal strike charges the next winning pair/triple — say so, since
 	# the payoff lands on a later spin and would otherwise feel disconnected. A fatal
 	# strike ends the run, so there is no next win to charge and no heartbeat to feel.
@@ -5171,7 +5178,7 @@ func _show_flatline_result_reaction(count: int) -> void:
 		charge = "NEXT WIN x%d" % EconomyConst.FLATLINE_WIN_BOOST_MULT
 	var headline := "CLOSE CALL" if survived else "FLATLINE"
 	_reactions.play_flatline(REEL_WINDOW, flatline_result_color,
-		"%s  %d/%d" % [headline, count, fatal_flatline_count], charge,
+		"%s  %d/%s" % [headline, count, _flatline_restriction_limit_text()], charge,
 		reaction_flash_time)
 
 func _play_close_call_heartbeat() -> void:
