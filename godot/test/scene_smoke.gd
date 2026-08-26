@@ -181,6 +181,7 @@ const CHECKS: Array = [
 	{"fn": "_check_scene_instantiation", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_jackpot_burst_hook", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_machine_art_mix", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
+	{"fn": "_check_sheet_frame_integrity", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_reel_strip_geometry", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_spin_blur_region", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_pacte_flow", "file": "pacte", "iso": ISO_MACHINE, "args": ["machine", "run_store", "meta_store", "failures"]},

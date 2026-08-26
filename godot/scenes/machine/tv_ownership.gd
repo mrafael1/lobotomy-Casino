@@ -3,10 +3,10 @@ extends RefCounted
 
 ## Who owns the TV screen, and what steps aside for them.
 ##
-## Six things want the CRT: the PAIR/TRIPLE win callout, the power callout, the
-## wealth-target blackout, the blinking FREE SPINS banner, the persistent
-## information layers (objective readout, COMBO stage, dealer strip, item badges),
-## and an ending that has swept the whole HUD away. They arrive in any order and
+## Five things want the CRT: the PAIR/TRIPLE win callout, the power callout, the
+## wealth-target blackout, the blinking FREE SPINS banner, and the persistent
+## information layers (objective readout, dealer strip, item badges). They arrive
+## in any order and
 ## overlap freely, so "is this allowed to draw" is never a local question — it is
 ## the answer to the same arbitration every time, which is why it lives in one
 ## place instead of being re-decided at each call site.
@@ -19,7 +19,7 @@ extends RefCounted
 ##            go, not the first. Which callout is on top is the scene tree's
 ##            business, not this class's.
 ##   tier 2 — the FREE SPINS BANNER is a weaker owner. It mutes the objective
-##            readout and the COMBO stage, but deliberately leaves the dealer
+##            readout, but deliberately leaves the dealer
 ##            interface and the item badges lit beside it (issues #181, #185):
 ##            how close the dealer is stays worth reading while free spins are
 ##            being spent.
@@ -61,7 +61,6 @@ var _screen: Dictionary = {}
 var _fx_group := &""
 
 var _augments: AugmentDisplay = null
-var _callouts: WinCallouts = null
 var _dealer_bar: DealerBar = null
 var _boosts: BoostIndicators = null
 var _dealer_icon: CanvasItem = null
@@ -89,14 +88,13 @@ var _blackout_rect: ColorRect = null
 var _blackout_tween: Tween = null
 
 func _init(view: MachineView, screen: Dictionary, fx_group: StringName,
-		augments: AugmentDisplay, callouts: WinCallouts, dealer_bar: DealerBar,
+		augments: AugmentDisplay, dealer_bar: DealerBar,
 		boosts: BoostIndicators, refresh_dealer_countdown: Callable,
 		refresh_target_readout: Callable, spin_in_flight: Callable) -> void:
 	_view = view
 	_screen = screen
 	_fx_group = fx_group
 	_augments = augments
-	_callouts = callouts
 	_dealer_bar = dealer_bar
 	_boosts = boosts
 	_refresh_dealer_countdown = refresh_dealer_countdown
@@ -179,7 +177,6 @@ func hide_layers() -> void:
 	# a callout clears them, the banner beside them does not.
 	if _banner_sprite != null and callout_active():
 		_banner_sprite.visible = false
-	_callouts.hide_combo()
 	if not callout_active():
 		_boosts.refresh(callout_active())
 		return
@@ -199,13 +196,11 @@ func restore_layers() -> void:
 	if _banner_sprite != null:
 		_banner_sprite.visible = _banner_active \
 			and _banner_blink_time < BANNER_BLINK_PERIOD * BANNER_LIT_FRACTION
-	# The callout is gone but the banner is lit: the COMBO stage keeps waiting it
-	# out, while the dealer interface comes back with the objective. The item badges
+	# The callout is gone but the banner is lit: the dealer interface comes back with
+	# the objective. The item badges
 	# come back too (issue #185) — the banner drops a frame for them rather than
 	# blanking them.
 	_boosts.refresh(callout_active())
-	if _banner_active:
-		_callouts.hide_combo()
 	_refresh_dealer_countdown.call()
 	if _dealer_bar.bar_sprite() != null:
 		_dealer_bar.bar_sprite().visible = _restore_dealer_bar_visible \
@@ -213,8 +208,6 @@ func restore_layers() -> void:
 	if _dealer_icon != null:
 		_dealer_icon.visible = _restore_dealer_icon_visible \
 			or RunStateStore.comboDefeatPending
-	if not _banner_active:
-		_callouts.refresh_combo()
 
 # --- tier 2: the FREE SPINS banner -------------------------------------------
 
