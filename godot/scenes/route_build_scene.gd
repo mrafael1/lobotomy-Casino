@@ -29,9 +29,13 @@ const COIN_ASSET := "ui/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const CARD_COST_FONT_SIZE := 7
 const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
-const CARD_BREATH_SCALE := 1.025
-const CARD_BREATH_HALF_DURATION := 1.10
-const CARD_BREATH_STAGGER := 0.12
+# Keep the build row still at rest. A serialized sweep gives the cards a
+# readable interaction cue without making every card pulse continuously.
+const CARD_GLINT_DELAY := 3.20
+const CARD_GLINT_DURATION := 0.42
+const CARD_GLINT_ALPHA := 0.72
+const CARD_GLINT_START_X := -42.0
+const CARD_GLINT_END_X := 42.0
 const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
 
 const GOLD := Color(1.0, 0.84, 0.38)
@@ -53,7 +57,6 @@ var _description_text: Label = null
 var _pacte_artwork: Control = null
 
 var _card_buttons: Dictionary = {}
-var _card_breath_tweens: Dictionary = {}
 var _offer_ids: Array[String] = []
 var _pool_kind := "augment"
 var _preview_id := ""
@@ -68,6 +71,10 @@ var _drag_origin := Vector2.ZERO
 var _press_position := Vector2.ZERO
 var _drag_offset := Vector2.ZERO
 var _drag_origin_z := 0
+var _card_glint_cycle_tween: Tween = null
+var _card_glint_sweep_tween: Tween = null
+var _card_glint_index := 0
+var _card_glint_generation := 0
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -163,6 +170,7 @@ func _refresh() -> void:
 	for index in range(mini(offer_ids.size(), CARD_POSITIONS.size())):
 		_build_card(offer_ids[index], index)
 	_offer_ids = offer_ids
+	_start_card_glint_cycle()
 
 func _offer_ids_from_store() -> Array[String]:
 	var result: Array[String] = []
@@ -196,7 +204,6 @@ func _build_card(card_id: String, index: int) -> void:
 	var cost := RunStateStore.route_build_card_cost(card_id)
 	var affordable := RunStateStore.route_build_card_affordable(card_id)
 	_build_card_cost(button, cost, affordable)
-	_start_card_breathing(card_id, card_view, index)
 	if card_view != null and not affordable:
 		card_view.modulate = Color(0.62, 0.62, 0.72, 1.0)
 
@@ -240,26 +247,70 @@ func _build_card_cost(button: Button, cost: int, affordable: bool) -> void:
 	coin.set_meta("skip_drag_shadow", true)
 	row.add_child(coin)
 
-func _start_card_breathing(card_id: String, card_view: Control, index: int) -> void:
-	if card_view == null:
+func _start_card_glint_cycle() -> void:
+	_stop_card_glint_cycle()
+	if _offer_ids.is_empty():
 		return
-	_stop_card_breathing(card_id)
-	card_view.pivot_offset = CARD_SIZE * 0.5
-	card_view.set_meta("breathing_enabled", true)
-	card_view.scale = Vector2.ONE
-	var tween := create_tween().set_loops()
-	tween.tween_interval(float(index) * CARD_BREATH_STAGGER)
-	tween.tween_property(card_view, "scale", Vector2.ONE * CARD_BREATH_SCALE,
-		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(card_view, "scale", Vector2.ONE,
-		CARD_BREATH_HALF_DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_card_breath_tweens[card_id] = tween
+	var generation := _card_glint_generation
+	_card_glint_index = 0
+	var cycle := create_tween().set_loops()
+	cycle.tween_interval(CARD_GLINT_DELAY)
+	cycle.tween_callback(_play_next_card_glint.bind(generation))
+	cycle.tween_interval(CARD_GLINT_DURATION)
+	_card_glint_cycle_tween = cycle
 
-func _stop_card_breathing(card_id: String) -> void:
-	var tween := _card_breath_tweens.get(card_id, null) as Tween
-	if tween != null:
-		tween.kill()
-	_card_breath_tweens.erase(card_id)
+func _play_next_card_glint(generation: int) -> void:
+	if generation != _card_glint_generation or _offer_ids.is_empty():
+		return
+	var offer_count := _offer_ids.size()
+	for _attempt in offer_count:
+		var index := _card_glint_index % offer_count
+		_card_glint_index = (_card_glint_index + 1) % offer_count
+		var card_id := _offer_ids[index]
+		var button := _card_buttons.get(card_id, null) as Button
+		if button == null:
+			continue
+		var card_view := button.get_node_or_null("CardArt") as Control
+		if card_view != null:
+			_play_card_glint(card_view)
+		return
+
+func _play_card_glint(card_view: Control) -> void:
+	var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+	if glint == null:
+		return
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	glint.position = Vector2(CARD_GLINT_START_X, 0.0)
+	glint.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.0)
+	var sweep := create_tween()
+	sweep.tween_property(glint, "color:a", CARD_GLINT_ALPHA, 0.04)
+	sweep.parallel().tween_property(glint, "position:x", CARD_GLINT_END_X,
+		CARD_GLINT_DURATION)
+	sweep.tween_property(glint, "color:a", 0.0, 0.10)
+	_card_glint_sweep_tween = sweep
+
+func _stop_card_glint_cycle() -> void:
+	_card_glint_generation += 1
+	if _card_glint_cycle_tween != null and _card_glint_cycle_tween.is_valid():
+		_card_glint_cycle_tween.kill()
+	_card_glint_cycle_tween = null
+	if _card_glint_sweep_tween != null and _card_glint_sweep_tween.is_valid():
+		_card_glint_sweep_tween.kill()
+	_card_glint_sweep_tween = null
+	if _list == null:
+		return
+	for child in _list.get_children():
+		var button := child as Button
+		if button == null:
+			continue
+		var card_view := button.get_node_or_null("CardArt") as Control
+		if card_view == null:
+			continue
+		var glint := card_view.get_node_or_null("GoldGlint") as Polygon2D
+		if glint != null:
+			glint.position = Vector2.ZERO
+			glint.color = Color(GOLD.r, GOLD.g, GOLD.b, 0.0)
 
 func _on_card_gui_input(event: InputEvent, card_id: String, index: int,
 		button: Button) -> void:
@@ -586,8 +637,7 @@ func _close_symbol_picker() -> void:
 		_symbol_picker = null
 
 func _clear_cards() -> void:
-	for card_id in _card_breath_tweens.keys():
-		_stop_card_breathing(String(card_id))
+	_stop_card_glint_cycle()
 	if _list != null:
 		for child in _list.get_children():
 			child.queue_free()

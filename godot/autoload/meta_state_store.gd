@@ -515,6 +515,17 @@ func bank_wealth_target_overflow(amount: int) -> int:
 	save_state()
 	return amount
 
+## Direct wallet payout used by between-run rewards such as the Fortune Wheel.
+## Keeping it here makes the persistent currency transaction explicit instead of
+## having a destination scene mutate campaign state itself.
+func grant_lucidity_wallet(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	lucidityWallet += amount
+	meta_changed.emit()
+	save_state()
+	return amount
+
 # Generic wallet spend (pre-run shop reroll etc.). Returns false without side
 # effects when the wallet can't cover it.
 func spend_lucidity(amount: int) -> bool:

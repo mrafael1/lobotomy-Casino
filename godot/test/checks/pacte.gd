@@ -1006,9 +1006,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	var first_card_art := pacte._card_views.get(first_augment, null) as Control
-	if first_card_art == null or not bool(first_card_art.get_meta("breathing_enabled", false)) \
-			or first_card_art.pivot_offset != pacte.CARD_SIZE * 0.5:
-		failures.append("pacte: revealed cards do not have a centred breathing animation")
+	var first_card_glint := first_card_art.get_node_or_null("GoldGlint") as Polygon2D \
+		if first_card_art != null else null
+	if first_card_art == null or first_card_art.scale != Vector2.ONE \
+			or bool(first_card_art.get_meta("breathing_enabled", false)) \
+			or first_card_glint == null:
+		failures.append("pacte: revealed cards are not static with an idle gold glint")
 	pacte._preview_card(first_augment)
 	if not bool(pacte._description_bubble.visible):
 		failures.append("pacte: card preview did not show the description bubble")

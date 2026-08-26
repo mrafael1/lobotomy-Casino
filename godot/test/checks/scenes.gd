@@ -204,6 +204,16 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			if not door_title.get_theme_color("font_color").is_equal_approx(
 					expected_title_color):
 				failures.append("route: %s title does not use its door color" % door)
+	var lucidity_before_free_door_check := int(run_store.lucidityCoins)
+	run_store.lucidityCoins = 0
+	route.call("_refresh")
+	for index in RouteCards.OFFER_COUNT:
+		var free_door_path := "DoorChoices/" + ("DoorLeft" if index == 0 else "DoorRight")
+		var free_door := route.get_node_or_null(free_door_path) as Button
+		if free_door == null or free_door.disabled:
+			failures.append("route: door %d is blocked when run Lucidity is zero" % index)
+	run_store.lucidityCoins = lucidity_before_free_door_check
+	route.call("_refresh")
 	for index in RouteCards.OFFER_COUNT:
 		if route.get_node_or_null("DoorGapGlow%d" % index) != null:
 			failures.append("route: door %d still has a runtime gap overlay" % index)
@@ -489,10 +499,12 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 			if cost <= 0 and amount.text != "FREE":
 				failures.append("route: %s free build card has the wrong cost label" % kind)
 			var card_art := first_card.get_node_or_null("CardArt") as Control
-			if card_art == null or not bool(card_art.get_meta("breathing_enabled", false)):
-				failures.append("route: %s build cards have no breathing animation" % kind)
-			elif card_art.pivot_offset != first_card.size * 0.5:
-				failures.append("route: %s card breathing does not pivot around the card" % kind)
+			var card_glint := card_art.get_node_or_null("GoldGlint") as Polygon2D \
+				if card_art != null else null
+			if card_art == null or card_art.scale != Vector2.ONE \
+					or bool(card_art.get_meta("breathing_enabled", false)) \
+					or card_glint == null:
+				failures.append("route: %s build cards are not static with an idle gold glint" % kind)
 	var artwork := build.get_node_or_null("PacteArtwork") as Control
 	if artwork == null:
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
@@ -818,9 +830,12 @@ func _check_scene_nav(failures: Array) -> void:
 	nav.call("_configure_content_scale", "res://scenes/route_build_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: Augment/Power build did not opt into the expanded artwork viewport")
+	nav.call("_configure_content_scale", "res://scenes/dealer_scene.tscn")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: dealer shop did not opt into the expanded artwork viewport")
 	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
-		failures.append("scene nav: non-Pacte scene kept the expanded artwork viewport")
+		failures.append("scene nav: machine scene kept the expanded artwork viewport")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")
