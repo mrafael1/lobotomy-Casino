@@ -66,7 +66,7 @@ const _CARDS: Array[Dictionary] = [
 		"id": CARD_BONUS_ID,
 		"routeType": ROUTE_BONUS,
 		"displayName": "BONUS",
-		"description": "SPIN THE FORTUNE WHEEL FOR RUN GOLD OR WALLET CREDITS.",
+		"description": "SPIN THE FORTUNE WHEEL FOR COINS, GAINS, OR ODDS TOKENS.",
 		"lucidityCost": BONUS_ROUTE_COST,
 		"spinSacrificeCost": 0,
 		"tier": 0,
@@ -74,8 +74,8 @@ const _CARDS: Array[Dictionary] = [
 	{
 		"id": CARD_SACRIFICE_ID,
 		"routeType": ROUTE_SACRIFICE,
-		"displayName": "SACRIFICE LATER",
-		"description": "KEEP YOUR SPINS. DEFER THE SACRIFICE DECISION TO A LATER MILESTONE.",
+		"displayName": "SACRIFICE",
+		"description": "TRADE AN AUGMENT, POWER, 100 COINS, OR A NEURON FOR A BOON.",
 		"lucidityCost": SACRIFICE_ROUTE_COST,
 		"spinSacrificeCost": 0,
 		"tier": 0,
@@ -96,7 +96,7 @@ static func _copy_card(card: Dictionary, seed_identity: int, free_loss_route: bo
 ## Returns exactly two deterministic choices from the route catalogue. A target
 ## offer always includes one investment route; a loss offer always includes one
 ## free tier-capped build route. The second card is drawn from the remaining
-## catalogue, so Bonus and Sacrifice Later remain possible without presenting the
+## catalogue, so Bonus and Sacrifice remain possible without presenting the
 ## whole catalogue at once.
 static func offer(seed: int, context: String = "wealth_target") -> Array[Dictionary]:
 	var free_loss_route := context == "flatline"

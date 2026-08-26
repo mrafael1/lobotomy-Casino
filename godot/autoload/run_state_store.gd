@@ -38,7 +38,7 @@ const HERO_POWER_IDS: Array[String] = []
 ## The machine has three authored power positions.  Replacements are explicit
 ## run-state transactions; a fourth card is never silently appended.
 const MAX_ACTIVE_POWERS := 3
-const ROUTE_BONUS_LUCIDITY := 10
+const ROUTE_BONUS_LUCIDITY := 50
 const WIN_BOOST_RATES := [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
 const JOKER_DEALER_HELP_CHANCE := 0.35
 const JOKER_DEALER_HELP_POWERS: Array[String] = ["cheat", "shift", "reroll", "memory"]
@@ -105,6 +105,12 @@ var emergencyReserveSerial := 0
 var maxFreeSpins := EconomyConst.BASE_MAX_FREE_SPINS
 var lucidityMultiplier := EconomyConst.BASE_LUCIDITY_MULTIPLIER
 var nextSpinLucidityMultiplier := 1.0
+## One-shot Fortune Wheel modifiers consumed by the next machine round.
+var nextRoundGainMultiplier := 1.0
+var nextRoundStartingScore := 0
+var nextRoundSpinBonus := 0
+## The jackpot removes the flatline strike cap for the continuing campaign run.
+var flatlineRestrictionRemoved := false
 var isSpinning := false
 var lastResult: Variant = null
 var lockedReels := [false, false, false]
@@ -228,6 +234,9 @@ var oddsWeightOverrides: Dictionary = {}
 var symbolRewardBonuses: Dictionary = {}
 var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until finalized
 var oddsPhaseCompleted := false           # closed screens stay closed until the next run
+## A Fortune Wheel odds prize opens a table with an exact token budget instead of
+## the normal fresh-run budget. It is consumed when that table is finalized.
+var oddsTokenBudgetOverride := 0
 
 # RunStore extras
 var runPhase := "idle" # idle | pre_run | pacte_initial | running | over (pacte_threshold is legacy)
@@ -256,7 +265,11 @@ var routeBonusClaimed := false
 ## so a close/resume can only reveal the same segment and can never duplicate its payout.
 var routeBonusRewardId := ""
 var routeBonusSpinSeed := 0
-var sacrificeLaterPending := false
+## Sacrifice is a one-resource route action. The count survives target breaks and
+## flatline continuations, but resets when the campaign starts a genuinely new run.
+var sacrificeCount := 0
+var sacrificeClaimed := false
+var sacrificeSelectedId := ""
 ## Run-scoped Shop purchases. These are neither persistent Lab upgrades nor
 ## campaign Chip Augments.
 var runShopUpgrades: Array = []
@@ -794,6 +807,11 @@ func load_run_state() -> void:
 			wealthTargetIndex += 1
 	wealthTargetIndex = clampi(int(wealthTargetIndex), 0, EconomyConst.WEALTH_TARGETS.size() - 1)
 	wealthTargetPendingValue = maxi(0, int(wealthTargetPendingValue))
+	nextRoundGainMultiplier = maxf(1.0, float(nextRoundGainMultiplier))
+	nextRoundStartingScore = maxi(0, int(nextRoundStartingScore))
+	nextRoundSpinBonus = maxi(0, int(nextRoundSpinBonus))
+	oddsTokenBudgetOverride = clampi(int(oddsTokenBudgetOverride), 0, odds_max_tokens)
+	sacrificeCount = clampi(int(sacrificeCount), 0, SacrificeRules.MAX_USES)
 	_normalise_route_offer_after_load()
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
 	ownedPowerIds = _cap_power_ids(ownedPowerIds)
@@ -1501,6 +1519,10 @@ func reset_run_state() -> void:
 	maxFreeSpins = EconomyConst.BASE_MAX_FREE_SPINS
 	lucidityMultiplier = EconomyConst.BASE_LUCIDITY_MULTIPLIER
 	nextSpinLucidityMultiplier = 1.0
+	nextRoundGainMultiplier = 1.0
+	nextRoundStartingScore = 0
+	nextRoundSpinBonus = 0
+	flatlineRestrictionRemoved = false
 	isSpinning = false
 	lastResult = null
 	lastPureWinScore = 0
@@ -1567,6 +1589,7 @@ func reset_run_state() -> void:
 	symbolRewardBonuses = {}
 	oddsPendingUpgrades = {}
 	oddsPhaseCompleted = false
+	oddsTokenBudgetOverride = 0
 	pendingPowerRestores = []
 	runPhase = "idle"
 	lastEnding = null
@@ -1588,7 +1611,9 @@ func reset_run_state() -> void:
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
-	sacrificeLaterPending = false
+	sacrificeCount = 0
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	runShopUpgrades = []
 	runDealerServices = []
 	wealthTargetIndex = 0
@@ -1818,6 +1843,8 @@ func prepare_route_offer(context: String, seed_override := -1) -> bool:
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	_commit()
 	return routeOfferPending
 
@@ -1855,6 +1882,8 @@ func _open_route_build(kind: String, card: Dictionary) -> bool:
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	# This is a between-machine investment, not a second Pacte phase. Keeping
 	# runPhase over makes save/resume and the next machine use the existing lifecycle.
 	runPhase = "over"
@@ -1873,6 +1902,8 @@ func _open_route_bonus() -> bool:
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
 	_commit()
@@ -1889,7 +1920,8 @@ func _open_route_sacrifice() -> bool:
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
-	sacrificeLaterPending = true
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
 	_commit()
@@ -1939,6 +1971,8 @@ func select_route(card_id: String) -> bool:
 		routeBonusClaimed = false
 		routeBonusRewardId = ""
 		routeBonusSpinSeed = 0
+		sacrificeClaimed = false
+		sacrificeSelectedId = ""
 		_commit()
 		return false
 	_commit()
@@ -1953,7 +1987,11 @@ func refuse_routes() -> bool:
 	routeOfferCards = null
 	routeOfferRerollCount = 0
 	routeSelectedCardId = ""
-	_open_route_sacrifice()
+	# CONTINUE is the free refusal action. It does not silently convert into a
+	# Sacrifice route; choosing the Sacrifice card is the explicit opt-in.
+	routeDestination = ""
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
 	return finish_route_destination()
 
 func complete_route_build_selection(card_id: String, reward_symbol := "",
@@ -2055,18 +2093,174 @@ func claim_route_bonus_reward(reward_id: String = "") -> bool:
 		lucidityCoins += run_lucidity
 	if wallet_credits > 0:
 		meta.grant_lucidity_wallet(wallet_credits)
+	var gain_multiplier := float(reward.get("gainMultiplier", 1.0))
+	if gain_multiplier > 1.0:
+		nextRoundGainMultiplier = maxf(nextRoundGainMultiplier, gain_multiplier)
+	if bool(reward.get("flatlineRestrictionRemoved", false)):
+		flatlineRestrictionRemoved = true
+	var starting_score_fraction := float(reward.get("startingScoreFraction", 0.0))
+	if starting_score_fraction > 0.0:
+		nextRoundStartingScore = maxi(nextRoundStartingScore,
+			floori(float(current_wealth_target()) * starting_score_fraction))
+	var odds_tokens := int(reward.get("oddsTokens", 0))
+	if odds_tokens > 0:
+		oddsTokenBudgetOverride = clampi(odds_tokens, 1, maxi(1, odds_max_tokens))
+		oddsTokensRemaining = 0
+		oddsPendingUpgrades = {}
+		oddsPhaseCompleted = false
 	routeBonusRewardId = resolved_id
 	routeBonusClaimed = true
 	_commit()
 	return true
 
-## Compatibility entry point for older route checks and saves.  Direct callers
-## that do not use the wheel retain the original +10 run-Gold bonus; the scene
-## always uses prepare_route_bonus_spin() and claim_route_bonus_reward().
+## Compatibility entry point for older route checks and saves. Direct callers
+## that do not use the wheel receive the new default coin prize; the scene always
+## uses prepare_route_bonus_spin() and claim_route_bonus_reward().
 func claim_route_bonus() -> bool:
 	if not FortuneWheelRules.is_valid_reward(routeBonusRewardId):
-		return claim_route_bonus_reward(FortuneWheelRules.REWARD_RUN_10)
+		return claim_route_bonus_reward(FortuneWheelRules.REWARD_COINS_50)
 	return claim_route_bonus_reward()
+
+func sacrifice_options() -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	if sacrificeClaimed or sacrificeCount >= SacrificeRules.MAX_USES:
+		return options
+	for raw_card_id in selectedAugmentCardIds:
+		var card_id := PacteCards.normalise_card_id(String(raw_card_id))
+		var card := PacteCards.card(card_id)
+		if card.is_empty():
+			continue
+		options.append({
+			"id": SacrificeRules.option_id_for_augment(card_id),
+			"kind": "augment",
+			"name": String(card.get("name", card_id)),
+			"description": "REMOVE THIS AUGMENT",
+		})
+	for raw_power_id in active_power_ids():
+		var power_id := PacteCards.normalise_card_id(String(raw_power_id))
+		if HERO_POWER_IDS.has(power_id):
+			continue
+		var power_card := PacteCards.card(power_id)
+		var power_name := String(power_card.get("name", power_id.to_upper()))
+		options.append({
+			"id": SacrificeRules.option_id_for_power(power_id),
+			"kind": "power",
+			"name": power_name,
+			"description": "REMOVE THIS POWER",
+		})
+	if lucidityCoins >= SacrificeRules.COIN_COST:
+		options.append({
+			"id": SacrificeRules.OPTION_COINS,
+			"kind": "coins",
+			"name": "100 RUN COINS",
+			"description": "PAY 100 RUN COINS",
+		})
+	if int(MetaStateStore.campaignNeuronsLeft) >= 2:
+		options.append({
+			"id": SacrificeRules.OPTION_NEURON,
+			"kind": "neuron",
+			"name": "1 CAMPAIGN NEURON",
+			"description": "KEEP AT LEAST ONE NEURON",
+		})
+	return options
+
+func _rebuild_pacte_runtime_effects_after_sacrifice() -> void:
+	var joker_was_active := pacteJokerActive
+	pacteJokerArmed = false
+	winBoostEnabled = false
+	glitchDealerStepActive = false
+	for raw_card_id in selectedAugmentCardIds:
+		var effect := PacteCards.card(String(raw_card_id)).get("effect", {}) as Dictionary
+		match String(effect.get("type", "")):
+			"joker":
+				pacteJokerArmed = true
+			"win_boost":
+				winBoostEnabled = true
+			"glitch_dealer":
+				glitchDealerStepActive = true
+	pacteJokerActive = joker_was_active and pacteJokerArmed
+	if not winBoostEnabled:
+		winBoostCombo = 0
+
+func _remove_sacrificed_augment(card_id: String) -> bool:
+	if not selectedAugmentCardIds.has(card_id):
+		return false
+	var effect := PacteCards.card(card_id).get("effect", {}) as Dictionary
+	selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
+	selectedAugmentCardIds.erase(card_id)
+	if String(effect.get("type", "")) == "owned_upgrade":
+		var upgrade_id := String(effect.get("upgrade_id", ""))
+		var still_selected := false
+		for raw_card_id in selectedAugmentCardIds:
+			var other_effect := PacteCards.card(String(raw_card_id)).get("effect", {}) as Dictionary
+			if String(other_effect.get("upgrade_id", "")) == upgrade_id:
+				still_selected = true
+				break
+		if not still_selected and not MetaStateStore.ownedPermanents.has(upgrade_id):
+			ownedUpgrades.erase(upgrade_id)
+	_rebuild_pacte_runtime_effects_after_sacrifice()
+	_refresh_pacte_derivatives()
+	freeSpinsRemaining = mini(freeSpinsRemaining, maxFreeSpins)
+	_clamp_neurons()
+	return true
+
+func _remove_sacrificed_power(power_id: String) -> bool:
+	if HERO_POWER_IDS.has(power_id) or not active_power_ids().has(power_id):
+		return false
+	ownedPowerIds = ownedPowerIds.duplicate()
+	while ownedPowerIds.has(power_id):
+		ownedPowerIds.erase(power_id)
+	var next_selected: Array = []
+	for raw_card_id in selectedPowerCardIds:
+		var card_id := PacteCards.normalise_card_id(String(raw_card_id))
+		if PacteCards.power_id(card_id) != power_id and not next_selected.has(card_id):
+			next_selected.append(card_id)
+	selectedPowerCardIds = next_selected
+	powerReplacementRemovedIds = powerReplacementRemovedIds.duplicate()
+	if not powerReplacementRemovedIds.has(power_id):
+		powerReplacementRemovedIds.append(power_id)
+	while abilitiesUsed.has(power_id):
+		abilitiesUsed.erase(power_id)
+	while pendingPowerRestores.has(power_id):
+		pendingPowerRestores.erase(power_id)
+	if String(pendingPowerReplacement.get("runtimeId", "")) == power_id:
+		pendingPowerReplacement = {}
+	return true
+
+func claim_sacrifice(option_id: String) -> bool:
+	if routeDestination != RouteCards.ROUTE_SACRIFICE or sacrificeClaimed \
+			or sacrificeCount >= SacrificeRules.MAX_USES:
+		return false
+	var accepted := false
+	if option_id.begins_with(SacrificeRules.OPTION_AUGMENT_PREFIX):
+		var augment_id := PacteCards.normalise_card_id(option_id.substr(
+			SacrificeRules.OPTION_AUGMENT_PREFIX.length()))
+		accepted = _remove_sacrificed_augment(augment_id)
+	elif option_id.begins_with(SacrificeRules.OPTION_POWER_PREFIX):
+		var power_id := PacteCards.normalise_card_id(option_id.substr(
+			SacrificeRules.OPTION_POWER_PREFIX.length()))
+		accepted = _remove_sacrificed_power(power_id)
+	elif option_id == SacrificeRules.OPTION_COINS:
+		if lucidityCoins >= SacrificeRules.COIN_COST:
+			lucidityCoins -= SacrificeRules.COIN_COST
+			accepted = true
+	elif option_id == SacrificeRules.OPTION_NEURON:
+		accepted = MetaStateStore.sacrifice_campaign_neuron()
+	if not accepted:
+		return false
+	sacrificeCount += 1
+	sacrificeClaimed = true
+	sacrificeSelectedId = option_id
+	nextRoundSpinBonus += SacrificeRules.BONUS_SPINS
+	_commit()
+	return true
+
+func refuse_sacrifice() -> bool:
+	if routeDestination != RouteCards.ROUTE_SACRIFICE or sacrificeClaimed:
+		return false
+	sacrificeSelectedId = "declined"
+	_commit()
+	return finish_route_destination()
 
 ## Leaves the selected route and starts the next machine without spending a
 ## campaign neuron. The selected route is cleared only after the new machine has
@@ -2080,6 +2274,13 @@ func finish_route_destination() -> bool:
 			or routeDestination == RouteCards.ROUTE_POWER) and routeBuildSelectedId == "":
 		return false
 	if routeDestination == RouteCards.ROUTE_BONUS and not routeBonusClaimed:
+		return false
+	if routeDestination == RouteCards.ROUTE_BONUS:
+		var bonus := route_bonus_reward()
+		if int(bonus.get("oddsTokens", 0)) > 0 and not oddsPhaseCompleted:
+			return false
+	if routeDestination == RouteCards.ROUTE_SACRIFICE \
+			and not sacrificeClaimed and sacrificeSelectedId != "declined":
 		return false
 	if routeDestination != "":
 		runPhase = "over"
@@ -2156,7 +2357,11 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	var kept_guaranteed_win_spins := guaranteedWinSpins if continuing else 0
 	var kept_joker_active := pacteJokerActive if continuing else false
 	var kept_pacte_threshold_visits := pacteThresholdVisits if continuing else 0
-	var kept_sacrifice_later := sacrificeLaterPending if continuing else false
+	var kept_next_round_gain_multiplier := nextRoundGainMultiplier if continuing else 1.0
+	var kept_next_round_starting_score := nextRoundStartingScore if continuing else 0
+	var kept_next_round_spin_bonus := nextRoundSpinBonus if continuing else 0
+	var kept_flatline_restriction_removed := flatlineRestrictionRemoved if continuing else false
+	var kept_sacrifice_count := sacrificeCount if continuing else 0
 	var kept_consumables := runConsumables.duplicate(true) if continuing else {}
 	var kept_lucidity := lucidityCoins if continuing else 0
 	if consume_campaign_neuron:
@@ -2180,7 +2385,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 		_settle_pending_wealth_target()
 	# Every run starts from zero. What a run made over its target was banked to the
 	# wallet when the target was settled, so there is nothing to carry.
-	scoreEarned = 0
+	scoreEarned = maxi(0, kept_next_round_starting_score)
 	lucidityCoins = kept_lucidity
 	# The advanced target survives a round continuation, and a flatline continuation
 	# resumes the campaign where it died rather than sending the player back to the
@@ -2232,7 +2437,6 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	pacteThresholdVisits = kept_pacte_threshold_visits
 	runShopUpgrades = kept_shop_upgrades
 	runDealerServices = kept_dealer_services
-	sacrificeLaterPending = kept_sacrifice_later
 	# The Pacte selection is the source of run powers. A direct/legacy start keeps
 	# only the permanent powers the player actually owns; Shift and Reroll are not
 	# silently injected into a fresh loadout.
@@ -2265,6 +2469,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	if continuing:
 		maxFreeSpins = Economy.compute_max_free_spins(ownedUpgrades)
 		lucidityMultiplier = Economy.compute_lucidity_multiplier(ownedUpgrades)
+		lucidityMultiplier *= maxf(1.0, kept_next_round_gain_multiplier)
 	lastPowerFailureReason = ""
 	spinCount = 0
 	isFreeSpin = false
@@ -2327,6 +2532,15 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	_apply_chip_augment_run_overlay()
 	_apply_route_shop_upgrades()
 	_apply_route_dealer_services()
+	if continuing and kept_next_round_spin_bonus > 0:
+		neurons = mini(startingNeurons + kept_next_round_spin_bonus, _neuron_cap())
+	flatlineRestrictionRemoved = kept_flatline_restriction_removed
+	sacrificeCount = kept_sacrifice_count
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
+	nextRoundGainMultiplier = 1.0
+	nextRoundStartingScore = 0
+	nextRoundSpinBonus = 0
 	pendingPowerRestores = []
 	pacteSeed = seed_override if seed_override >= 0 else _seed(PACTE_INITIAL_DRAW_SEED)
 	pacteOfferAugmentIds = PacteCards.draw("augment", pacteSeed,
@@ -2364,6 +2578,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	routeBonusClaimed = false
 	routeBonusRewardId = ""
 	routeBonusSpinSeed = 0
+	oddsTokenBudgetOverride = 0
 	_commit()
 	return true
 
@@ -3750,10 +3965,14 @@ func begin_odds_phase() -> void:
 	# staged picks (and the tokens already spent on them) instead of resetting.
 	if not oddsPendingUpgrades.is_empty():
 		return
-	# Banked + fresh, capped at odds_max_tokens (issue #130): at most 8 tokens
-	# can ever be held or spent in one menu.
-	oddsTokensRemaining = mini(
-		int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget), odds_max_tokens)
+	# A Fortune Wheel odds prize is an explicit table grant, so it ignores the
+	# previously banked amount and opens with exactly 4 or 8 tokens. The normal
+	# post-run table still combines banked + fresh tokens and caps at eight.
+	if oddsTokenBudgetOverride > 0:
+		oddsTokensRemaining = mini(oddsTokenBudgetOverride, odds_max_tokens)
+	else:
+		oddsTokensRemaining = mini(
+			int(MetaStateStore.oddsTokensBanked) + maxi(0, odds_budget), odds_max_tokens)
 	oddsPendingUpgrades = {}
 	_commit()
 
@@ -3805,9 +4024,10 @@ func finalize_odds_phase() -> void:
 		return
 	if not oddsPendingUpgrades.is_empty():
 		MetaStateStore.add_odds_upgrades(oddsPendingUpgrades, odds_max_level)
-	MetaStateStore.set_odds_tokens_banked(mini(oddsTokensRemaining, odds_max_tokens))
+	MetaStateStore.set_odds_tokens_banked(mini(maxi(0, oddsTokensRemaining), odds_max_tokens))
 	oddsPendingUpgrades = {}
 	oddsTokensRemaining = 0
+	oddsTokenBudgetOverride = 0
 	oddsPhaseCompleted = true
 	_commit()
 

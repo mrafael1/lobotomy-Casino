@@ -12,7 +12,7 @@ const CENTER := Vector2(80.0, 103.0)
 const WHEEL_RADIUS := 42.0
 const BULB_RADIUS := 49.0
 const POINTER_ANGLE := -PI * 0.5
-const SEGMENT_COUNT := 8
+const SEGMENT_COUNT: int = 5
 
 const CYAN := Color(0.42, 1.0, 0.95)
 const HOT_CYAN := Color(0.72, 1.0, 0.98)
@@ -27,9 +27,6 @@ const SEGMENT_COLORS: Array[Color] = [
 	Color(0.24, 0.08, 0.24),
 	Color(0.11, 0.21, 0.25),
 	Color(0.28, 0.14, 0.12),
-	Color(0.14, 0.10, 0.29),
-	Color(0.25, 0.08, 0.19),
-	Color(0.32, 0.18, 0.08),
 ]
 
 var _font: Font = null
@@ -68,7 +65,7 @@ func spin_to_reward(reward_id: String) -> bool:
 	_result_index = FortuneWheelRules.segment_index(reward_id)
 	_spinning = true
 	_flash_time = 0.0
-	var slice := TAU / float(SEGMENT_COUNT)
+	var slice := TAU / SEGMENT_COUNT
 	var desired_angle := -float(_result_index + 1) * slice + slice * 0.5
 	var target_angle := desired_angle + TAU * 6.0
 	while target_angle <= _wheel_angle + TAU * 3.0:
@@ -90,7 +87,7 @@ func present_reward(reward_id: String) -> void:
 	_result_id = reward_id
 	_result_index = FortuneWheelRules.segment_index(reward_id)
 	_spinning = false
-	var slice := TAU / float(SEGMENT_COUNT)
+	var slice := TAU / SEGMENT_COUNT
 	_wheel_angle = -float(_result_index + 1) * slice + slice * 0.5
 	queue_redraw()
 
@@ -119,7 +116,7 @@ func _draw_wheel_shadow() -> void:
 	draw_arc(CENTER, WHEEL_RADIUS + 2.0, 0.0, TAU, 64, CYAN, 1.0, false)
 
 func _draw_segments() -> void:
-	var slice := TAU / float(SEGMENT_COUNT)
+	var slice := TAU / SEGMENT_COUNT
 	for index in SEGMENT_COUNT:
 		var start_angle := POINTER_ANGLE + _wheel_angle + float(index) * slice
 		var end_angle := start_angle + slice

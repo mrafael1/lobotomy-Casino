@@ -109,11 +109,8 @@ func _on_card_pressed(card_id: String, card_index: int) -> void:
 			SceneNav.change_to("res://scenes/route_bonus_scene.tscn",
 				SceneNav.TransitionKind.DOOR, card_index)
 		RouteCards.ROUTE_SACRIFICE:
-			if RunStateStore.finish_route_destination():
-				SceneNav.change_to("res://scenes/machine_scene.tscn",
-					SceneNav.TransitionKind.DOOR, card_index)
-			else:
-				_message.text = "NEXT MACHINE UNAVAILABLE"
+			SceneNav.change_to("res://scenes/sacrifice_scene.tscn",
+				SceneNav.TransitionKind.DOOR, card_index)
 		_:
 			_message.text = "ROUTE UNAVAILABLE"
 
