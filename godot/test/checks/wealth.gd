@@ -376,6 +376,16 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			if overlay.target_text() != "250":
 				failures.append("issue181: target number did not drain with the payout roll (%s)"
 					% overlay.target_text())
+			overlay._set_target_display_value(90)
+			var glyph_width := float(overlay.TARGET_FONT_SIZE) * 0.62
+			var centered_start: float = float(overlay.TARGET_CENTER.x) - glyph_width
+			if overlay._target_glyphs.size() != 3 \
+				or overlay._target_glyphs[0].text != "" \
+				or overlay._target_glyphs[1].text != "9" \
+				or overlay._target_glyphs[2].text != "0" \
+				or not is_equal_approx(overlay._target_glyphs[1].position.x, centered_start) \
+				or not is_equal_approx(overlay._target_glyphs[2].position.x, overlay.TARGET_CENTER.x):
+				failures.append("issue176: two-digit drain did not stay centred")
 			overlay._set_target_display_value(500)
 			if overlay.title_label == null or overlay.title_label.text != "TARGET REACHED":
 				failures.append("issue176: target overlay is missing its TARGET REACHED title")
@@ -440,23 +450,12 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	if row_total + expected_net != 150:
 		failures.append("issue184: the bill rows (%d) plus the net (%d) are not the overflow"
 			% [row_total, expected_net])
-	if not run_store.arm_pacte_for_wealth_target(500):
-		failures.append("issue176: first 500 target did not arm Pacte")
-	# Once the first visit is consumed, the same 500 milestone cannot arm it again,
-	# while the second 1500/health-one visit remains available.
-	run_store.pacteThresholdVisits = 1
-	run_store.pacteThresholdPending = false
-	run_store.pacteThresholdOpened = false
-	if run_store.arm_pacte_for_wealth_target(500):
-		failures.append("issue176: second event incorrectly reopened the first Pacte visit")
-	if not run_store.arm_pacte_for_wealth_target(1500):
-		failures.append("issue176: second Pacte milestone was consumed with the first")
-	run_store.pacteThresholdVisits = 2
-	run_store.pacteThresholdPending = false
-	if run_store.arm_pacte_for_wealth_target(1500):
-		failures.append("issue176: exhausted Pacte visits still accepted a target")
-	# The health crossings use the same visit counter: 3 -> 2 arms visit one,
-	# then 2 -> 1 arms visit two after the first visit has been consumed.
+	# Wealth targets no longer arm threshold Pacte; the machine hands off to the
+	# same route offer as every other intermediate segment.
+	if run_store.arm_pacte_for_wealth_target(500) or run_store.arm_pacte_for_wealth_target(1500):
+		failures.append("issue176: target still exposed a threshold Pacte API")
+	# Campaign-health crossings use the same route offer and never create a second
+	# Pacte scene.
 	run_store.reset_run_state()
 	meta_store.campaignActive = true
 	meta_store.campaignFailed = false
@@ -465,8 +464,9 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	run_store.campaignNeuronPending = true
 	run_store.pacteThresholdVisits = 0
 	run_store.end_run("flatline")
-	if int(meta_store.campaignNeuronsLeft) != 2 or not run_store.pacteThresholdPending:
-		failures.append("issue176: health 3 -> 2 did not arm the first Pacte visit")
+	if int(meta_store.campaignNeuronsLeft) != 2 or not run_store.routeOfferPending \
+			or run_store.pacteThresholdPending:
+		failures.append("issue176: health 3 -> 2 did not prepare the route offer")
 	run_store.runPhase = "running"
 	run_store.lastEnding = null
 	run_store.campaignNeuronPending = true
@@ -474,8 +474,9 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 	run_store.pacteThresholdVisits = 1
 	run_store.pacteAfterFlatlinePending = false
 	run_store.end_run("flatline")
-	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.pacteThresholdPending:
-		failures.append("issue176: health 2 -> 1 did not arm the second Pacte visit")
+	if int(meta_store.campaignNeuronsLeft) != 1 or not run_store.routeOfferPending \
+			or run_store.pacteThresholdPending:
+		failures.append("issue176: health 2 -> 1 did not prepare the route offer")
 	# Round break: paying a target sends the run to the PERSISTENT dealer shop and the
 	# next START begins a fresh run. Augments/powers/consumables, campaign health, the
 	# advanced target, and the money left after the payout all carry; the run-spin

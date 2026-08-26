@@ -1,0 +1,84 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/dealer_choice_scene.gd" id="1_choice"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/choice_scene.png" id="2_choice_scene"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="3_doors"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/reroll.png" id="4_reroll"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/bubble_text.png" id="5_bubble_text"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/doors.png" id="6_hover_doors"]
+
+[node name="DealerChoiceScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_choice")
+hover_doors_texture = ExtResource("6_hover_doors")
+
+[node name="DealerSprite" type="Sprite2D" parent="."]
+z_index = 0
+texture_filter = 1
+texture = ExtResource("2_choice_scene")
+centered = false
+
+[node name="RerollArt" type="Sprite2D" parent="."]
+z_index = 3
+texture_filter = 1
+texture = ExtResource("4_reroll")
+centered = false
+hframes = 2
+
+[node name="BubbleText" type="Sprite2D" parent="."]
+z_index = 25
+texture_filter = 1
+texture = ExtResource("5_bubble_text")
+centered = false
+visible = false
+
+[node name="DoorChoices" type="Control" parent="."]
+z_index = 20
+layout_mode = 0
+offset_right = 160.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="DoorLeft" type="Button" parent="DoorChoices"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 42.0
+offset_right = 74.0
+offset_bottom = 159.0
+mouse_filter = 0
+
+[node name="DoorSprite" type="Sprite2D" parent="DoorChoices/DoorLeft"]
+position = Vector2(1, 1)
+texture_filter = 1
+texture = ExtResource("3_doors")
+centered = false
+hframes = 5
+
+[node name="DoorRight" type="Button" parent="DoorChoices"]
+layout_mode = 0
+offset_left = 86.0
+offset_top = 42.0
+offset_right = 150.0
+offset_bottom = 159.0
+mouse_filter = 0
+
+[node name="DoorSprite" type="Sprite2D" parent="DoorChoices/DoorRight"]
+position = Vector2(1, 1)
+texture_filter = 1
+texture = ExtResource("3_doors")
+centered = false
+hframes = 5
+
+[node name="RerollButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 168.0
+offset_right = 46.0
+offset_bottom = 219.0
+mouse_filter = 0

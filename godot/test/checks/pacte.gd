@@ -1181,8 +1181,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	pacte._on_reward_amp_symbol_picked("eye")
 
 	# A live machine spin must never interrupt into Pacte, even when its run-spin
-	# budget reaches five. The first threshold visit is armed only by the later
-	# flatline handoff when the campaign count crosses from three to two.
+	# budget reaches five. Pacte is now available only during the initial run ritual.
 	run_store.neurons = 5
 	run_store.comboDefeatPending = false
 	var live_spin: Variant = run_store.spin()
@@ -1194,93 +1193,35 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	run_store.campaignNeuronPending = true
 	run_store.end_run("flatline")
 	if int(meta_store.campaignNeuronsLeft) != 2 \
-			or not bool(run_store.pacteThresholdPending) \
-			or not bool(run_store.pacteAfterFlatlinePending) \
+			or not bool(run_store.routeOfferPending) \
+			or bool(run_store.pacteThresholdPending) \
+			or bool(run_store.pacteAfterFlatlinePending) \
 			or String(run_store.runPhase) != "over":
-		failures.append("pacte: flatline did not arm the three-to-two campaign threshold")
-	if not run_store.open_threshold_pacte():
-		failures.append("pacte: first threshold crossing did not open the Pacte visit")
+		failures.append("pacte: flatline did not open the route offer")
+	# A legacy threshold save may still be loaded, but the full Pacte scene must
+	# refuse it instead of presenting a second ritual.
+	run_store.runPhase = "pacte_threshold"
 	var threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(threshold_scene)
 	await process_frame
-	if String(run_store.runPhase) != "pacte_threshold" \
-			or String(threshold_scene._pool_kind) != "augment":
-		failures.append("pacte: threshold visit did not restore as augment draw")
-	# The initial visit's chosen cards keep their run effects but are no longer
-	# presented on the ritual table when Pacte reopens mid-run.
-	if not (threshold_scene._chosen_card_views as Dictionary).is_empty() \
-			or threshold_scene._chosen_cards_layer.get_node_or_null("ChosenAugmentCard") != null \
-			or threshold_scene._chosen_cards_layer.get_node_or_null("ChosenPowerCard") != null:
-		failures.append("pacte: threshold visit re-presented the initial visit's cards")
-	if run_store.ownedPowerIds.is_empty() or run_store.selectedAugmentCardIds.is_empty():
-		failures.append("pacte: clearing the threshold presentation dropped earlier effects")
-	var threshold_augments := run_store.pacteOfferAugmentIds as Array
-	var threshold_powers := run_store.pacteOfferPowerIds as Array
-	if threshold_augments.is_empty() or threshold_powers.is_empty() \
-			or threshold_augments.has(first_augment) or threshold_powers.has(selected_power):
-		failures.append("pacte: threshold draw did not accumulate exclusions")
-	if not run_store.complete_pacte_selection(String(threshold_augments[0]), String(threshold_powers[0])):
-		failures.append("pacte: threshold selection was rejected")
-	# A campaign-health-crossing Pacte rejoins the shared between-run flow (odds
-	# table -> dealer shop), the same one a plain flatline uses, instead of the
-	# mid-run dealer offer (issue #176).
-	if not run_store.enter_between_run_dealer_after_flatline() \
-			or String(run_store.runPhase) != "over" \
-			or str(run_store.lastEnding) != "flatline":
-		failures.append("pacte: health-crossing Pacte did not rejoin the between-run dealer")
-	run_store.oddsPhaseCompleted = false
-	var dealer_scene := (load("res://scenes/dealer_scene.tscn") as PackedScene).instantiate()
-	get_root().add_child(dealer_scene)
-	await process_frame
-	# The shared between-run dealer is the post-run shop: pre-run presentation with
-	# the odds table overlay shown on top before the consumables.
-	if not bool(dealer_scene._pre_run) or not bool(dealer_scene._post_run):
-		failures.append("pacte: health-crossing dealer is not the shared between-run shop")
-	if dealer_scene._odds_overlay == null:
-		failures.append("pacte: health-crossing dealer did not show the odds table")
-	dealer_scene.queue_free()
-
-	# A flatline continuation (post-run dealer -> machine) keeps the campaign's
-	# Pacte cards: powers rejoin the loadout, permanent augment effects re-apply.
-	var kept_augments: Array = (run_store.selectedAugmentCardIds as Array).duplicate()
-	var kept_powers: Array = (run_store.selectedPowerCardIds as Array).duplicate()
-	run_store.runPhase = "over"
-	run_store.lastEnding = "flatline"
-	run_store.start_new_run([], {}, false)
-	if str(run_store.selectedAugmentCardIds) != str(kept_augments) \
-			or str(run_store.selectedPowerCardIds) != str(kept_powers):
-		failures.append("pacte: flatline continuation dropped the selected cards")
-	for card_id in kept_powers:
-		if not (run_store.ownedPowerIds as Array).has(PacteCards.power_id(String(card_id))):
-			failures.append("pacte: flatline continuation lost the %s power" % card_id)
-	for card_id in kept_augments:
-		var kept_effect := PacteCards.card(String(card_id)).get("effect", {}) as Dictionary
-		if String(kept_effect.get("type", "")) == "owned_upgrade" \
-				and not (run_store.ownedUpgrades as Array).has(String(kept_effect.get("upgrade_id", ""))):
-			failures.append("pacte: flatline continuation lost the %s augment effect" % card_id)
-
-	# A later flatline crossing from two to one arms the additional threshold
-	# visit instead of treating the first Pacte encounter as the only one.
+	if String(threshold_scene._instruction.text) != "PACTE IS CLOSED" \
+			or run_store.pacte_active():
+		failures.append("pacte: threshold state still reopened the full Pacte scene")
+	# A later campaign-health crossing uses the same route offer and does not
+	# arm another Pacte visit.
+	threshold_scene.queue_free()
+	run_store.reset_run_state()
 	meta_store.campaignNeuronsLeft = 2
 	run_store.campaignNeuronPending = true
 	run_store.end_run("flatline")
 	if int(meta_store.campaignNeuronsLeft) != 1 \
-			or not bool(run_store.pacteThresholdPending) \
-			or not bool(run_store.pacteAfterFlatlinePending) \
+			or not bool(run_store.routeOfferPending) \
+			or bool(run_store.pacteThresholdPending) \
+			or bool(run_store.pacteAfterFlatlinePending) \
 			or String(run_store.runPhase) != "over":
-		failures.append("pacte: flatline did not arm the two-to-one campaign threshold")
-	if not run_store.open_threshold_pacte():
-		failures.append("pacte: second threshold crossing did not open the extra Pacte visit")
-	var second_threshold_scene := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
-	get_root().add_child(second_threshold_scene)
-	await process_frame
-	if String(run_store.runPhase) != "pacte_threshold" \
-			or String(second_threshold_scene._pool_kind) != "augment":
-		failures.append("pacte: extra threshold visit did not restore as augment draw")
+		failures.append("pacte: second campaign loss did not use the route offer")
 
 	pacte.queue_free()
-	threshold_scene.queue_free()
-	second_threshold_scene.queue_free()
 	run_store.reset_run_state()
 	meta_store._apply(meta_before)
 	meta_store.save_state()

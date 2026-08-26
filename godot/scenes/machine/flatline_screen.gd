@@ -41,7 +41,7 @@ func _init(view: MachineView) -> void:
 
 ## The dedicated ending scene, parented into whatever overlay the machine has
 ## already claimed for the ending. `on_action` is the machine's — where CONTINUE
-## goes next is a run-flow decision (dealer, threshold Pacte, or menu) and stays
+## goes next is a run-flow decision (route offer, dealer fallback, or menu) and stays
 ## on that side of the seam.
 func build_screen(run: Dictionary, action_text: String, fatal_copy: String,
 		on_action: Callable) -> FlatlineEndingOverlay:

@@ -17,11 +17,15 @@ const M32 := 0xFFFFFFFF
 ## run state is snapshotted on every commit (var_to_str keeps ints/bools exact,
 ## unlike JSON) and removed only when no resumable session remains.
 const RUN_SAVE_PATH := "user://lobotomy-run.save"
-const RUN_SAVE_SCHEMA_VERSION := 1
+const RUN_SAVE_SCHEMA_VERSION := 2
+const ROUTE_SCENE := "res://scenes/dealer_choice_scene.tscn"
 
-## Offer reroll pricing: first reroll of a cycle costs the base, each subsequent
-## reroll adds the base again (5, 10, 15, …).
+## Live dealer offer reroll pricing: first reroll of a cycle costs the base, each
+## subsequent reroll adds the base again (5, 10, 15, …).
 const DEALER_REROLL_BASE_COST := 5
+## Between-machine route-door rerolls use their own starting price (10, 20, 30, …)
+## so the route choice does not share the live dealer's cheaper service.
+const ROUTE_OFFER_REROLL_BASE_COST := 10
 
 ## Pacte owns the run's power loadout. No power is granted by default; legacy
 ## callers that skip the ritual still receive only the permanent powers they own.
@@ -30,6 +34,7 @@ const PACTE_WEALTH_TARGETS: Array[int] = [500, 1500]
 const PACTE_INITIAL_DRAW_SEED := 0x50414354
 const PACTE_THRESHOLD_DRAW_SEED := 0x54485245
 const HERO_POWER_IDS: Array[String] = []
+const ROUTE_BONUS_LUCIDITY := 10
 const WIN_BOOST_RATES := [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
 const JOKER_DEALER_HELP_CHANCE := 0.35
 const JOKER_DEALER_HELP_POWERS: Array[String] = ["cheat", "shift", "reroll", "memory"]
@@ -68,7 +73,7 @@ const JOKER_DEALER_HELP_POWERS: Array[String] = ["cheat", "shift", "reroll", "me
 # modifier; the joker activates all four at once.
 #   heart   (1): a paid spin costs 2 health instead of 1 (the last chip still costs 1)
 #   spade   (2): a power restore charge refills only every other spin
-#   diamond (3): two powers per spin, and the threshold Pacte deals no augment
+#   diamond (3): two powers per spin, and the between-machine Augment route is suppressed
 #   club    (4): shop prices +50%, one item fewer per dealer counter, and a HOUSE
 #                ANGER row on every target payout
 const AUGMENTED_TIER_MODIFIERS := { "heart": 1, "spade": 2, "diamond": 3, "club": 4 }
@@ -221,9 +226,33 @@ var oddsPendingUpgrades: Dictionary = {}  # staged this phase; undoable until fi
 var oddsPhaseCompleted := false           # closed screens stay closed until the next run
 
 # RunStore extras
-var runPhase := "idle" # idle | pre_run | pacte_initial | pacte_threshold | running | over
+var runPhase := "idle" # idle | pre_run | pacte_initial | running | over (pacte_threshold is legacy)
 var lastEnding: Variant = null
 var wealthContinued := false
+## Between-machine route state. The offer is separate from runPhase so the
+## existing running/over lifecycle remains compatible with older saves.
+var routeOfferPending := false
+var routeOfferCards: Variant = null
+var routeOfferSeed := 0
+var routeOfferRerollCount := 0
+var routeContext := "" # "wealth_target" | "flatline"
+var routeDestination := "" # "shop" | "augment" | "power" | "bonus" | "sacrifice"
+var routeSelectedCardId := ""
+var routePacteVisit := false
+var routePacteFreeTier := false
+var pacteCostsActive := false
+## Between-machine build state. The selected route card is paid before this
+## scene opens; the build card is paid only when the player confirms it.
+var routeBuildKind := ""
+var routeBuildOfferIds: Variant = null
+var routeBuildFreeTier := false
+var routeBuildSelectedId := ""
+var routeBonusClaimed := false
+var sacrificeLaterPending := false
+## Run-scoped Shop purchases. These are neither persistent Lab upgrades nor
+## campaign Chip Augments.
+var runShopUpgrades: Array = []
+var runDealerServices: Array = []
 ## Intermediate Wealth targets are paid out from the run score in sequence. The
 ## final target still hands the full run to the Wealth ending screen.
 var wealthTargetIndex := 0
@@ -234,8 +263,7 @@ var wealthTargetPendingValue := 0
 ## so the next start keeps augments/powers/consumables + the advanced target while
 ## resetting score and the run-spin budget; a campaign neuron is NOT spent.
 var roundContinuationPending := false
-## Distinguishes a threshold Pacte opened by a Wealth target (routes to the target
-## round break) from one opened by a campaign-health crossing (post-flatline visit).
+## Legacy threshold marker retained only while older run snapshots migrate to routes.
 var pacteTargetRoundVisit := false
 var campaignNeuronPending := false # consumed when the machine run ends
 var pendingPowerRestores: Array = []
@@ -267,9 +295,8 @@ var ownedPowerIds: Array = []
 var pacteThresholdPending := false
 var pacteThresholdOpened := false
 var pacteAfterFlatlinePending := false
-## Number of the two campaign Pacte threshold visits already completed. A target
-## milestone and a campaign-health crossing share this sequence, so whichever
-## event happens first consumes the corresponding visit.
+## Legacy threshold visit counter retained for save compatibility. New route choices
+## never increment or consume it.
 var pacteThresholdVisits := 0
 var pacteJokerArmed := false
 var pacteJokerActive := false
@@ -466,10 +493,8 @@ func augmented_offer_penalty() -> int:
 func augmented_anger_tax_rate() -> float:
 	return EconomyConst.OVERFLOW_ANGER_RATE if augmented_modifier_active(4) else 0.0
 
-## Diamond modifier: the threshold Pacte deals a power only — no second augment for
-## the run. The offer is an explicit EMPTY array rather than a shorter draw, because
-## PacteCards.draw() already returns a short list when too few cards are unlocked;
-## a two-card augment row would read as "keep unlocking", not as the modifier biting.
+## Diamond modifier: the between-machine Augment route is suppressed. Keeping this
+## rule explicit prevents a missing unlock from being mistaken for modifier behavior.
 func augmented_pacte_augment_suppressed() -> bool:
 	return augmented_modifier_active(3)
 
@@ -607,6 +632,7 @@ func load_run_state() -> void:
 			wealthTargetIndex += 1
 	wealthTargetIndex = clampi(int(wealthTargetIndex), 0, EconomyConst.WEALTH_TARGETS.size() - 1)
 	wealthTargetPendingValue = maxi(0, int(wealthTargetPendingValue))
+	_normalise_route_offer_after_load()
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
 	selectedPowerCardIds = _normalise_power_ids(selectedPowerCardIds)
 	pacteSelectedPowerId = PacteCards.normalise_card_id(pacteSelectedPowerId)
@@ -616,6 +642,24 @@ func load_run_state() -> void:
 	_reapply_pacte_runtime_effects()
 	_clamp_neurons()
 	_commit()
+
+func _normalise_route_offer_after_load() -> void:
+	if not routeOfferPending:
+		return
+	if routeContext != "wealth_target" and routeContext != "flatline":
+		routeOfferPending = false
+		routeOfferCards = null
+		routeOfferRerollCount = 0
+		return
+	routeOfferRerollCount = maxi(0, int(routeOfferRerollCount))
+	if _route_offer_array().size() == RouteCards.OFFER_COUNT:
+		return
+	# Older saves contain the previous five-card catalogue offer. Rebuild from
+	# the persisted seed so the new dealer pair is deterministic and the held
+	# route remains resumable instead of leaving a stale five-card state behind.
+	routeOfferCards = RouteCards.offer(routeOfferSeed, routeContext)
+	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
+	routeOfferRerollCount = 0
 
 func _normalise_power_ids(values: Array) -> Array:
 	var result: Array = []
@@ -1362,6 +1406,24 @@ func reset_run_state() -> void:
 	runPhase = "idle"
 	lastEnding = null
 	wealthContinued = false
+	routeOfferPending = false
+	routeOfferCards = null
+	routeOfferSeed = 0
+	routeOfferRerollCount = 0
+	routeContext = ""
+	routeDestination = ""
+	routeSelectedCardId = ""
+	routePacteVisit = false
+	routePacteFreeTier = false
+	pacteCostsActive = false
+	routeBuildKind = ""
+	routeBuildOfferIds = null
+	routeBuildFreeTier = false
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
+	sacrificeLaterPending = false
+	runShopUpgrades = []
+	runDealerServices = []
 	wealthTargetIndex = 0
 	wealthTargetPending = false
 	wealthTargetPendingValue = 0
@@ -1432,6 +1494,330 @@ func begin_target_round() -> bool:
 	pacteThresholdOpened = false
 	pacteAfterFlatlinePending = false
 	_commit()
+	prepare_route_offer("wealth_target")
+	return true
+
+func _route_offer_array() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if routeOfferCards is Array:
+		for value in routeOfferCards as Array:
+			if value is Dictionary:
+				result.append((value as Dictionary).duplicate(true))
+	return result
+
+func current_route_offer() -> Array[Dictionary]:
+	return _route_offer_array()
+
+func route_offer_card(card_id: String) -> Dictionary:
+	for card_entry in _route_offer_array():
+		if String(card_entry.get("id", "")) == card_id:
+			return card_entry
+	return {}
+
+func route_card_affordable(card_id: String) -> bool:
+	if not routeOfferPending:
+		return false
+	var card := route_offer_card(card_id)
+	if card.is_empty():
+		return false
+	var available := int(lucidityCoins)
+	if not RouteCards.affordable(card, available):
+		return false
+	var route_type := String(card.get("routeType", ""))
+	if route_type != RouteCards.ROUTE_AUGMENT and route_type != RouteCards.ROUTE_POWER:
+		return true
+	var remaining := available - RouteCards.card_cost(card)
+	for build_card_id in _route_build_offers(route_type):
+		if route_build_card_cost(build_card_id) <= remaining:
+			return true
+	return false
+
+## The next route-door reroll costs 10G, then 20G, then 30G. It belongs to this
+## prepared offer and is persisted beside the two doors until one door is selected
+## or refused.
+func route_offer_reroll_price() -> int:
+	return ROUTE_OFFER_REROLL_BASE_COST * (int(routeOfferRerollCount) + 1)
+
+func route_offer_reroll_affordable() -> bool:
+	return routeOfferPending and int(lucidityCoins) >= route_offer_reroll_price()
+
+func reroll_route_offer() -> bool:
+	if not routeOfferPending or routeContext == "":
+		return false
+	var price := route_offer_reroll_price()
+	if int(lucidityCoins) < price:
+		return false
+	var previous := _route_offer_array()
+	var next_count := int(routeOfferRerollCount) + 1
+	var rerolled := RouteCards.reroll_offer(routeOfferSeed, routeContext,
+		next_count, previous)
+	if rerolled.size() != RouteCards.OFFER_COUNT:
+		return false
+	lucidityCoins -= price
+	routeOfferRerollCount = next_count
+	routeOfferCards = rerolled
+	_commit()
+	return true
+
+func _route_build_offers(kind: String) -> Array[String]:
+	var max_tier := 0 if routeContext == "flatline" else -1
+	var draw_seed := (routeOfferSeed ^ 0x524F5554 ^ spinCount \
+			^ (0xA670 if kind == RouteCards.ROUTE_AUGMENT else 0x504F)) & M32
+	if kind == RouteCards.ROUTE_AUGMENT:
+		if augmented_modifier_active(3):
+			return []
+		return PacteCards.draw("augment", draw_seed,
+			MetaStateStore.unlocked_augment_cards(), _augment_draw_exclusions(), 3, max_tier)
+	if kind == RouteCards.ROUTE_POWER:
+		return PacteCards.draw("power", draw_seed ^ 0x9E3779B9,
+			MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3, max_tier)
+	return []
+
+func _route_build_offer_array() -> Array[String]:
+	var result: Array[String] = []
+	if routeBuildOfferIds is Array:
+		for value in routeBuildOfferIds as Array:
+			result.append(PacteCards.normalise_card_id(String(value)))
+	return result
+
+func route_build_card_cost(card_id: String) -> int:
+	if routeBuildFreeTier or routeContext == "flatline":
+		return 0
+	return PacteCards.cost_for(card_id)
+
+func route_build_card_requires_symbol(card_id: String) -> bool:
+	return PacteCards.reward_amp_ids().has(PacteCards.normalise_card_id(card_id))
+
+func route_build_remaining_after(card_id: String) -> int:
+	return maxi(0, int(lucidityCoins) - route_build_card_cost(card_id))
+
+func route_build_card_affordable(card_id: String) -> bool:
+	return routeDestination == routeBuildKind \
+			and _route_build_offer_array().has(PacteCards.normalise_card_id(card_id)) \
+			and int(lucidityCoins) >= route_build_card_cost(card_id)
+
+## Creates the exact two-card dealer offer after a target or a survivable loss.
+## A prepared offer is never rerolled on scene re-entry or save/resume.
+func prepare_route_offer(context: String, seed_override := -1) -> bool:
+	if routeOfferPending:
+		return true
+	if context != "wealth_target" and context != "flatline":
+		return false
+	if context == "flatline" and int(MetaStateStore.campaignNeuronsLeft) <= 0:
+		return false
+	var seed := seed_override if seed_override >= 0 else _seed(
+		0x524F5554 ^ (wealthTargetIndex * 0x9E3779B9) ^ spinCount)
+	routeOfferSeed = seed & M32
+	routeOfferCards = RouteCards.offer(routeOfferSeed, context)
+	routeOfferRerollCount = 0
+	routeContext = context
+	routeOfferPending = _route_offer_array().size() == RouteCards.OFFER_COUNT
+	routeDestination = ""
+	routeSelectedCardId = ""
+	routePacteVisit = false
+	routePacteFreeTier = false
+	pacteCostsActive = false
+	routeBuildKind = ""
+	routeBuildOfferIds = null
+	routeBuildFreeTier = false
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
+	_commit()
+	return routeOfferPending
+
+## Converts a pre-route build from an older save. Previous builds parked the
+## player in pacte_threshold; the current build resumes that save at the shared
+## route offer so Pacte remains start-only without losing the run.
+func migrate_legacy_pacte_to_route() -> bool:
+	if runPhase != "pacte_threshold" and not pacteThresholdPending \
+			and not pacteAfterFlatlinePending:
+		return false
+	var context := "flatline" if lastEnding == "flatline" or pacteAfterFlatlinePending \
+			else "wealth_target"
+	if context == "wealth_target":
+		roundContinuationPending = true
+	runPhase = "over"
+	lastEnding = "flatline" if context == "flatline" else null
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
+	pacteTargetRoundVisit = false
+	return prepare_route_offer(context)
+
+func _open_route_build(kind: String, card: Dictionary) -> bool:
+	var offers := _route_build_offers(kind)
+	if offers.is_empty():
+		return false
+	routeDestination = kind
+	routePacteVisit = false
+	routePacteFreeTier = routeContext == "flatline" or bool(card.get("freeLossRoute", false))
+	pacteCostsActive = false
+	routeBuildKind = kind
+	routeBuildOfferIds = offers
+	routeBuildFreeTier = routePacteFreeTier
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
+	# This is a between-machine investment, not a second Pacte phase. Keeping
+	# runPhase over makes save/resume and the next machine use the existing lifecycle.
+	runPhase = "over"
+	lastEnding = "flatline" if routeContext == "flatline" else null
+	_commit()
+	return true
+
+func _open_route_bonus() -> bool:
+	routeDestination = RouteCards.ROUTE_BONUS
+	routePacteVisit = false
+	pacteCostsActive = false
+	routeBuildKind = ""
+	routeBuildOfferIds = null
+	routeBuildFreeTier = false
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
+	runPhase = "over"
+	lastEnding = "flatline" if routeContext == "flatline" else null
+	_commit()
+	return true
+
+func _open_route_sacrifice() -> bool:
+	routeDestination = RouteCards.ROUTE_SACRIFICE
+	routePacteVisit = false
+	pacteCostsActive = false
+	routeBuildKind = ""
+	routeBuildOfferIds = null
+	routeBuildFreeTier = false
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
+	sacrificeLaterPending = true
+	runPhase = "over"
+	lastEnding = "flatline" if routeContext == "flatline" else null
+	_commit()
+	return true
+
+func select_route(card_id: String) -> bool:
+	if not routeOfferPending or not route_card_affordable(card_id):
+		return false
+	var card := route_offer_card(card_id)
+	var cost := RouteCards.card_cost(card)
+	var offered_cards := _route_offer_array()
+	var offered_reroll_count := int(routeOfferRerollCount)
+	lucidityCoins -= cost
+	routeOfferPending = false
+	routeOfferCards = null
+	routeOfferRerollCount = 0
+	routeSelectedCardId = card_id
+	var route_type := String(card.get("routeType", ""))
+	var opened := false
+	match route_type:
+		RouteCards.ROUTE_SHOP:
+			routeDestination = RouteCards.ROUTE_SHOP
+			routePacteVisit = false
+			pacteCostsActive = false
+			runPhase = "over"
+			lastEnding = "flatline" if routeContext == "flatline" else null
+			opened = true
+		RouteCards.ROUTE_AUGMENT, RouteCards.ROUTE_POWER:
+			opened = _open_route_build(route_type, card)
+		RouteCards.ROUTE_BONUS:
+			opened = _open_route_bonus()
+		RouteCards.ROUTE_SACRIFICE:
+			opened = _open_route_sacrifice()
+		_:
+			opened = false
+	if not opened:
+		lucidityCoins += cost
+		routeOfferPending = true
+		routeOfferCards = offered_cards
+		routeOfferRerollCount = offered_reroll_count
+		routeSelectedCardId = ""
+		routeDestination = ""
+		routePacteVisit = false
+		routePacteFreeTier = false
+		pacteCostsActive = false
+		routeBuildKind = ""
+		routeBuildOfferIds = null
+		routeBuildFreeTier = false
+		routeBuildSelectedId = ""
+		routeBonusClaimed = false
+		_commit()
+		return false
+	_commit()
+	return true
+
+## Refusing all routes does not spend Lucidity or spins. The current target/loss
+## continuation is then handed directly to the next machine segment.
+func refuse_routes() -> bool:
+	if not routeOfferPending:
+		return false
+	routeOfferPending = false
+	routeOfferCards = null
+	routeOfferRerollCount = 0
+	routeSelectedCardId = ""
+	_open_route_sacrifice()
+	return finish_route_destination()
+
+func complete_route_build_selection(card_id: String, reward_symbol := "") -> bool:
+	if routeBuildKind != RouteCards.ROUTE_AUGMENT and routeBuildKind != RouteCards.ROUTE_POWER:
+		return false
+	var normalised := PacteCards.normalise_card_id(card_id)
+	if not _route_build_offer_array().has(normalised) or routeBuildSelectedId != "":
+		return false
+	if not route_build_card_affordable(normalised):
+		return false
+	if routeBuildKind == RouteCards.ROUTE_AUGMENT and route_build_card_requires_symbol(normalised):
+		if reward_symbol == "" or reward_symbol == "flatline" \
+				or not Symbols.BASE_SYMBOL_CYCLE.has(reward_symbol):
+			return false
+	var cost := route_build_card_cost(normalised)
+	if cost > 0:
+		lucidityCoins -= cost
+	if routeBuildKind == RouteCards.ROUTE_AUGMENT:
+		if route_build_card_requires_symbol(normalised):
+			MetaStateStore.set_reward_amp_symbol(reward_symbol)
+		if not _apply_pacte_augment(normalised):
+			lucidityCoins += cost
+			return false
+		selectedAugmentCardIds = selectedAugmentCardIds.duplicate()
+		selectedAugmentCardIds.append(normalised)
+	else:
+		selectedPowerCardIds = selectedPowerCardIds.duplicate()
+		selectedPowerCardIds.append(normalised)
+		ownedPowerIds = ownedPowerIds.duplicate()
+		var runtime_power_id := PacteCards.power_id(normalised)
+		if not ownedPowerIds.has(runtime_power_id):
+			ownedPowerIds.append(runtime_power_id)
+	routeBuildSelectedId = normalised
+	routeBuildOfferIds = null
+	_refresh_pacte_derivatives()
+	_commit()
+	return true
+
+func claim_route_bonus() -> bool:
+	if routeDestination != RouteCards.ROUTE_BONUS or routeBonusClaimed:
+		return false
+	lucidityCoins += ROUTE_BONUS_LUCIDITY
+	routeBonusClaimed = true
+	_commit()
+	return true
+
+## Leaves the selected route and starts the next machine without spending a
+## campaign neuron. The selected route is cleared only after the new machine has
+## been successfully prepared, so a failed start remains resumable.
+func finish_route_destination() -> bool:
+	if routeOfferPending:
+		return false
+	if routeDestination == "" and routeContext == "":
+		return false
+	if (routeDestination == RouteCards.ROUTE_AUGMENT \
+			or routeDestination == RouteCards.ROUTE_POWER) and routeBuildSelectedId == "":
+		return false
+	if routeDestination == RouteCards.ROUTE_BONUS and not routeBonusClaimed:
+		return false
+	if routeDestination != "":
+		runPhase = "over"
+		lastEnding = "flatline" if routeContext == "flatline" else null
+	if not start_new_run([], {}, false):
+		_commit()
+		return false
 	return true
 
 ## Restores the post-flatline between-run state after a campaign-health-crossing
@@ -1464,6 +1850,8 @@ func _merge_run_consumables(base: Dictionary, extra: Dictionary) -> Dictionary:
 	return merged
 
 func has_resume_state() -> bool:
+	if routeOfferPending or routeDestination != "":
+		return true
 	if runPhase == "pre_run" or runPhase == "pacte_initial" \
 			or runPhase == "pacte_threshold" or runPhase == "running":
 		return true
@@ -1490,11 +1878,17 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# target survive, only the score and the run-spin budget reset.
 	var continuing_round := not open_pacte and roundContinuationPending
 	var continuing := continuing_campaign or continuing_round
+	var kept_shop_upgrades: Array = runShopUpgrades.duplicate() if continuing else []
+	var kept_dealer_services: Array = runDealerServices.duplicate() if continuing else []
 	var kept_augment_cards: Array = selectedAugmentCardIds.duplicate() if continuing else []
 	var kept_power_cards: Array = selectedPowerCardIds.duplicate() if continuing else []
+	var kept_abilities_used: Array = abilitiesUsed.duplicate() if continuing else []
+	var kept_guaranteed_win_spins := guaranteedWinSpins if continuing else 0
 	var kept_joker_active := pacteJokerActive if continuing else false
 	var kept_pacte_threshold_visits := pacteThresholdVisits if continuing else 0
-	var kept_consumables := runConsumables.duplicate(true) if continuing_round else {}
+	var kept_sacrifice_later := sacrificeLaterPending if continuing else false
+	var kept_consumables := runConsumables.duplicate(true) if continuing else {}
+	var kept_lucidity := lucidityCoins if continuing else 0
 	if consume_campaign_neuron:
 		if not MetaStateStore.reserve_campaign_neuron_for_run():
 			_commit()
@@ -1512,7 +1906,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# Every run starts from zero. What a run made over its target was banked to the
 	# wallet when the target was settled, so there is nothing to carry.
 	scoreEarned = 0
-	lucidityCoins = 0
+	lucidityCoins = kept_lucidity
 	# The advanced target survives a round continuation, and a flatline continuation
 	# resumes the campaign where it died rather than sending the player back to the
 	# first target. Only a genuinely fresh run resets it.
@@ -1538,7 +1932,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# at the between-round dealer, capped at the run's slot limit.
 	if open_pacte:
 		runConsumables = {}
-	elif continuing_round:
+	elif continuing:
 		runConsumables = _merge_run_consumables(kept_consumables, pending_consumables)
 	else:
 		runConsumables = pending_consumables.duplicate(true)
@@ -1550,7 +1944,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	if not MetaStateStore.pendingConsumables.is_empty():
 		MetaStateStore.pendingConsumables = {}
 		MetaStateStore.save_state()
-	abilitiesUsed = []
+	abilitiesUsed = kept_abilities_used
 	# augmentedTier survives: the menu sets it before the pre-run dealer shop, and
 	# it applies to the run this call starts (issue #111).
 	powersUsedThisSpin = 0
@@ -1560,6 +1954,9 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	selectedAugmentCardIds = kept_augment_cards
 	selectedPowerCardIds = kept_power_cards
 	pacteThresholdVisits = kept_pacte_threshold_visits
+	runShopUpgrades = kept_shop_upgrades
+	runDealerServices = kept_dealer_services
+	sacrificeLaterPending = kept_sacrifice_later
 	# The Pacte selection is the source of run powers. A direct/legacy start keeps
 	# only the permanent powers the player actually owns; Shift and Reroll are not
 	# silently injected into a fresh loadout.
@@ -1610,7 +2007,7 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	# Chip Augments survive every new run, Pacte included: they are campaign state now
 	# (issue #132). Pre-run purchases are FOR this run and the overlay below applies them.
 	brainBoostSpins = 0
-	guaranteedWinSpins = 0
+	guaranteedWinSpins = kept_guaranteed_win_spins
 	blockPowersSpins = 0
 	hideNeuronsSpins = 0
 	cocktailBoostSpins = 0
@@ -1651,6 +2048,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	oddsWeightOverrides = _odds_overrides_from_meta()
 	symbolRewardBonuses = _symbol_reward_bonuses_from_meta(ownedUpgrades)
 	_apply_chip_augment_run_overlay()
+	_apply_route_shop_upgrades()
+	_apply_route_dealer_services()
 	pendingPowerRestores = []
 	pacteSeed = seed_override if seed_override >= 0 else _seed(PACTE_INITIAL_DRAW_SEED)
 	pacteOfferAugmentIds = PacteCards.draw("augment", pacteSeed,
@@ -1670,11 +2069,28 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	runPhase = "pacte_initial" if open_pacte else "running"
 	lastEnding = null
 	wealthContinued = false
+	routeOfferPending = false
+	routeOfferCards = null
+	routeOfferSeed = 0
+	routeOfferRerollCount = 0
+	routeContext = ""
+	routeDestination = ""
+	routeSelectedCardId = ""
+	routePacteVisit = false
+	routePacteFreeTier = false
+	pacteCostsActive = false
+	routeBuildKind = ""
+	routeBuildOfferIds = null
+	routeBuildFreeTier = false
+	routeBuildSelectedId = ""
+	routeBonusClaimed = false
 	_commit()
 	return true
 
 func pacte_active() -> bool:
-	return runPhase == "pacte_initial" or runPhase == "pacte_threshold"
+	# The full two-deck ritual is a run-start ceremony only. Between-machine
+	# build routes use routeBuildKind and never reopen this scene.
+	return runPhase == "pacte_initial"
 
 func current_wealth_target() -> int:
 	return int(EconomyConst.WEALTH_TARGETS[clampi(wealthTargetIndex,
@@ -1770,19 +2186,9 @@ func _pacte_threshold_available(milestone_index: int) -> bool:
 ## Target milestones and campaign-health crossings consume the same two Pacte
 ## visits. Returning false means that milestone was already consumed earlier.
 func arm_pacte_for_wealth_target(target: int) -> bool:
-	var milestone_index := PACTE_WEALTH_TARGETS.find(target)
-	if not _pacte_threshold_available(milestone_index):
-		return false
-	# The visit belongs to a Wealth target, so completing it routes to the target
-	# round break rather than the post-flatline dealer resume (issue #176).
-	pacteTargetRoundVisit = true
-	if pacteThresholdPending:
-		return true
-	pacteThresholdPending = true
-	pacteThresholdOpened = false
-	pacteAfterFlatlinePending = false
-	_commit()
-	return true
+	# Threshold Pacte visits were removed from the player-facing route loop. Keep
+	# the method as a save/API compatibility stub so older callers fail closed.
+	return false
 
 func _pacte_offer_array(value: Variant) -> Array[String]:
 	var result: Array[String] = []
@@ -1834,6 +2240,17 @@ func _apply_pacte_augment(card_id: String) -> bool:
 	_refresh_pacte_derivatives()
 	return true
 
+func pacte_card_cost(card_id: String) -> int:
+	if not pacteCostsActive or routePacteFreeTier:
+		return 0
+	return PacteCards.cost_for(card_id)
+
+func pacte_remaining_after(card_ids: Array[String]) -> int:
+	var total := 0
+	for card_id in card_ids:
+		total += pacte_card_cost(card_id)
+	return maxi(0, int(lucidityCoins) - total)
+
 func select_pacte_augment(card_id: String) -> bool:
 	if not pacte_active() or pacteSelectedAugmentId != "":
 		return false
@@ -1863,7 +2280,19 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 		return false
 	if selectedAugmentCardIds.has(augment_card_id) or selectedPowerCardIds.has(power_card_id):
 		return false
+	var purchase_ids: Array[String] = []
+	if not augment_skipped:
+		purchase_ids.append(augment_card_id)
+	purchase_ids.append(power_card_id)
+	var purchase_cost := 0
+	for purchase_id in purchase_ids:
+		purchase_cost += pacte_card_cost(purchase_id)
+	if purchase_cost > lucidityCoins:
+		return false
+	if purchase_cost > 0:
+		lucidityCoins -= purchase_cost
 	if not augment_skipped and not _apply_pacte_augment(augment_card_id):
+		lucidityCoins += purchase_cost
 		return false
 	var runtime_power_id := PacteCards.power_id(power_card_id)
 	if not augment_skipped:
@@ -1878,7 +2307,7 @@ func complete_pacte_selection(augment_id: String, power_id: String) -> bool:
 	pacteSelectedPowerId = ""
 	pacteOfferAugmentIds = null
 	pacteOfferPowerIds = null
-	if runPhase == "pacte_threshold":
+	if runPhase == "pacte_threshold" and not routePacteVisit:
 		pacteThresholdVisits = mini(pacteThresholdVisits + 1, PACTE_CAMPAIGN_NEURON_THRESHOLDS.size())
 		pacteThresholdPending = false
 		pacteThresholdOpened = false
@@ -1906,29 +2335,9 @@ func stage_pacte_power_selection(card_id: String) -> bool:
 	return complete_pacte_selection("", normalised)
 
 func open_threshold_pacte() -> bool:
-	var post_flatline_visit: bool = runPhase == "over" and lastEnding == "flatline" \
-		and pacteAfterFlatlinePending
-	if (runPhase != "running" and not post_flatline_visit) \
-			or not pacteThresholdPending or pacteThresholdOpened:
-		return false
-	# A countdown offer may have arrived on the same reveal as the target. Keep
-	# that offer pending so Pacte completion can hand off to its dealer scene.
-	if runPhase == "running" and dealerIncoming:
-		reveal_dealer()
-	var draw_seed := (pacteSeed ^ PACTE_THRESHOLD_DRAW_SEED ^ (spinCount * 0x9e3779b9)) & M32
-	var suppressed_augment: Array[String] = []
-	pacteOfferAugmentIds = suppressed_augment if augmented_pacte_augment_suppressed() \
-		else PacteCards.draw("augment", draw_seed,
-			MetaStateStore.unlocked_augment_cards(), _augment_draw_exclusions(), 3)
-	pacteOfferPowerIds = PacteCards.draw("power", draw_seed ^ 0x9e3779b9,
-		MetaStateStore.unlocked_power_cards(), selectedPowerCardIds, 3)
-	pacteSelectedAugmentId = ""
-	pacteSelectedPowerId = ""
-	pacteThresholdOpened = true
-	pacteAfterFlatlinePending = false
-	runPhase = "pacte_threshold"
-	_commit()
-	return true
+	# A full Pacte scene is available only from start_new_run(..., open_pacte=true).
+	# Older saved threshold flags are converted to route offers on menu resume.
+	return false
 
 ## A deterministic fallback used by direct scene smoke setup and accessibility
 ## automation. A real player always makes these choices in Pacte's card UI.
@@ -1978,8 +2387,6 @@ func prepare_dealer_scene_visit() -> bool:
 	return force_dealer_visit()
 
 func end_run(ending: String) -> void:
-	var campaign_neuron_before := int(MetaStateStore.campaignNeuronsLeft)
-	var consumed_campaign_neuron := campaignNeuronPending
 	runPhase = "over"
 	lastEnding = ending
 	if ending == "game_over":
@@ -1989,24 +2396,17 @@ func end_run(ending: String) -> void:
 	if campaignNeuronPending:
 		MetaStateStore.finalize_campaign_neuron_for_run()
 		campaignNeuronPending = false
-	# Threshold Pacte visits belong to the campaign-neuron count, not to the
-	# machine's run-spin counter. Arm a visit whenever a flatline crosses one of
-	# the campaign thresholds (3 -> 2 or 2 -> 1), unless that visit was already
-	# consumed by the matching Wealth target.
 	var campaign_neurons_after := int(MetaStateStore.campaignNeuronsLeft)
-	var crossed_pacte_threshold := -1
-	if ending == "flatline" and consumed_campaign_neuron and campaign_neurons_after > 0:
-		for milestone_index: int in range(PACTE_CAMPAIGN_NEURON_THRESHOLDS.size()):
-			var threshold := int(PACTE_CAMPAIGN_NEURON_THRESHOLDS[milestone_index])
-			if campaign_neuron_before > threshold and campaign_neurons_after <= threshold:
-				crossed_pacte_threshold = milestone_index
-				break
-	if _pacte_threshold_available(crossed_pacte_threshold):
-		pacteThresholdPending = true
-		pacteThresholdOpened = false
-		pacteAfterFlatlinePending = true
-		# A health crossing resumes the post-flatline dealer, not a target round.
-		pacteTargetRoundVisit = false
+	# Campaign-health crossings no longer open a second Pacte ritual. The same
+	# between-machine offer is used after every survivable loss.
+	pacteThresholdPending = false
+	pacteThresholdOpened = false
+	pacteAfterFlatlinePending = false
+	pacteTargetRoundVisit = false
+	if ending == "flatline" and campaign_neurons_after > 0:
+		# The route offer is prepared with the ending snapshot, then the flatline
+		# overlay gets time to present before the route scene opens.
+		prepare_route_offer("flatline")
 	_commit()
 
 func continue_run() -> void:
@@ -3256,6 +3656,104 @@ func consumable_price(consumable_id: String) -> int:
 	return ChipAugments.discounted_price(
 		_augmented_marked_up(int(cmap[consumable_id]["shopCost"])),
 		int(MetaStateStore.chipAugmentsPurchased.get("aug_consumable_discount", 0)))
+
+func route_shop_items() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for item_id in ShopItems.ids():
+		var item := ShopItems.item(item_id)
+		item["cost"] = route_shop_item_cost(item_id)
+		result.append(item)
+	return result
+
+func route_shop_item_cost(item_id: String) -> int:
+	return _augmented_marked_up(ShopItems.cost(item_id))
+
+func route_shop_item_purchased(item_id: String) -> bool:
+	return runShopUpgrades.has(item_id) if ShopItems.item(item_id).get("kind", "") == "upgrade" else false
+
+func buy_route_shop_item(item_id: String) -> bool:
+	if routeDestination != RouteCards.ROUTE_SHOP:
+		return false
+	var item := ShopItems.item(item_id)
+	var cost := route_shop_item_cost(item_id)
+	if item.is_empty() or lucidityCoins < cost:
+		return false
+	var kind := String(item.get("kind", ""))
+	if kind == "upgrade" and runShopUpgrades.has(item_id):
+		return false
+	if kind == "consumable" and Consumables.total_copies(runConsumables) >= max_consumable_slots:
+		return false
+	lucidityCoins -= cost
+	if kind == "consumable":
+		runConsumables = runConsumables.duplicate(true)
+		runConsumables[item_id] = int(runConsumables.get(item_id, 0)) + 1
+	else:
+		runShopUpgrades = runShopUpgrades.duplicate()
+		runShopUpgrades.append(item_id)
+	_commit()
+	return true
+
+func route_dealer_services() -> Array[Dictionary]:
+	return [
+		{ "id": "dealer_route_spins", "name": "BUY TIME", "description": "+3 SPINS.", "cost": 18 },
+		{ "id": "dealer_route_guard", "name": "STACK THE DECK", "description": "THE NEXT 2 PAID SPINS CANNOT MISS.", "cost": 16 },
+		{ "id": "dealer_route_power", "name": "POWER CHIP", "description": "RECOVER ONE RANDOM SPENT POWER.", "cost": 20 },
+	]
+
+func buy_route_dealer_service(service_id: String) -> bool:
+	if routeDestination != RouteCards.ROUTE_DEALER:
+		return false
+	var service: Dictionary = {}
+	for candidate in route_dealer_services():
+		if String(candidate["id"]) == service_id:
+			service = candidate
+			break
+	if service.is_empty() or lucidityCoins < int(service["cost"]):
+		return false
+	lucidityCoins -= int(service["cost"])
+	match service_id:
+		"dealer_route_spins":
+			runDealerServices = runDealerServices.duplicate()
+			runDealerServices.append(service_id)
+		"dealer_route_guard":
+			runDealerServices = runDealerServices.duplicate()
+			runDealerServices.append(service_id)
+		"dealer_route_power":
+			var spent: Array[String] = []
+			for power_id in ownedPowerIds:
+				if abilitiesUsed.has(power_id):
+					spent.append(String(power_id))
+			if not spent.is_empty():
+				var pick := spent[mini(spent.size() - 1, floori(
+					LobRNG.new((routeOfferSeed ^ spinCount) & M32).next() * spent.size()))]
+				abilitiesUsed.erase(pick)
+	_commit()
+	return true
+
+func _apply_route_shop_upgrade(item_id: String) -> void:
+	match item_id:
+		"shop_brain_feed":
+			oddsWeightOverrides = oddsWeightOverrides.duplicate(true)
+			oddsWeightOverrides["brain"] = float(oddsWeightOverrides.get("brain", 0.0)) + 3.0
+		"shop_pair_guard":
+			guaranteedWinSpins += 3
+		"shop_spin_reserve":
+			neurons = mini(_neuron_cap(), neurons + 2)
+		"shop_stasis":
+			decaySkips += 2
+
+func _apply_route_shop_upgrades() -> void:
+	for item_id in runShopUpgrades:
+		_apply_route_shop_upgrade(String(item_id))
+
+func _apply_route_dealer_services() -> void:
+	for service_id in runDealerServices:
+		match String(service_id):
+			"dealer_route_spins":
+				neurons = mini(_neuron_cap(), neurons + 3)
+			"dealer_route_guard":
+				guaranteedWinSpins += 2
+	runDealerServices = []
 
 ## A base cost after the club markup, on the project rounding rule. Every price the
 ## dealer shows and charges runs through the two functions above, so buying, selling

@@ -18,6 +18,34 @@ const POWER_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const POOLS: Array[String] = ["augment", "power"]
 
+# Route Pacte prices are kept here with the authored card identity. The initial
+# ritual is free, while later route visits charge these values from run Lucidity.
+# Tier 0 is the lowest normal tier and is the only tier available on the free
+# post-loss Pacte route.
+const CARD_TIERS: Dictionary = {
+	"augment_reward_1": 0,
+	"augment_smart_saving": 0,
+	"augment_passive_gain": 0,
+	"augment_book": 0,
+	"reroll": 0,
+	"shift": 0,
+	"memory": 0,
+	"augment_pattern_recognition": 1,
+	"augment_reward_2": 1,
+	"augment_reward_3": 2,
+	"augment_hallucination": 1,
+	"augment_tunnel_vision": 1,
+	"augment_adrenaline": 1,
+	"augment_joker": 2,
+	"augment_win_boost": 2,
+	"augment_glitch_2": 1,
+	"augment_how_to_cheat": 1,
+	"heart": 1,
+	"cheat": 1,
+	"rewind": 1,
+	"swap": 1,
+}
+
 const AUGMENTS: Array[Dictionary] = [
 	{
 		"id": "augment_pattern_recognition", "name": "PATTERN RECOGNITION",
@@ -233,7 +261,27 @@ static func _ids(cards: Array[Dictionary]) -> Array[String]:
 
 static func card(card_id: String) -> Dictionary:
 	var value: Variant = map().get(normalise_card_id(card_id), {})
-	return (value as Dictionary).duplicate(true)
+	var result := (value as Dictionary).duplicate(true)
+	if result.is_empty():
+		return result
+	var normalised := normalise_card_id(card_id)
+	var tier := tier_for(normalised)
+	result["tier"] = tier
+	result["cost"] = cost_for(normalised)
+	return result
+
+static func tier_for(card_id: String) -> int:
+	return maxi(0, int(CARD_TIERS.get(normalise_card_id(card_id), 0)))
+
+static func cost_for(card_id: String) -> int:
+	var normalised := normalise_card_id(card_id)
+	var tier := tier_for(normalised)
+	var entry := map().get(normalised, {}) as Dictionary
+	var pool := String(entry.get("pool", ""))
+	# Powers are slightly cheaper than augments because the augment supplies the
+	# longer-lived build identity; both still consume the same run currency.
+	var base := 8 if pool == "power" else 10
+	return base + tier * 8
 
 ## Card IDs are persisted in MetaStateStore and in resumable run snapshots. Keep
 ## the old names readable so a pre-rename save becomes the canonical card ID the
@@ -245,7 +293,8 @@ static func normalise_card_id(card_id: String) -> String:
 		return "swap"
 	return card_id
 
-static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [], count := 3) -> Array[String]:
+static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [], count := 3,
+		max_tier := -1) -> Array[String]:
 	var candidates: Array = []
 	var source := augment_ids() if pool == "augment" else power_draw_ids()
 	var unlocked_ids: Array[String] = []
@@ -259,7 +308,8 @@ static func draw(pool: String, seed: int, unlocked: Array, excluded: Array = [],
 		if not excluded_ids.has(normalised):
 			excluded_ids.append(normalised)
 	for id in source:
-		if unlocked_ids.has(id) and not excluded_ids.has(id):
+		if unlocked_ids.has(id) and not excluded_ids.has(id) \
+				and (max_tier < 0 or tier_for(id) <= max_tier):
 			candidates.append(id)
 	if candidates.size() < count:
 		var all_ids: Array[String] = []

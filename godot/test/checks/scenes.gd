@@ -20,6 +20,12 @@ func _check_scene_instantiation(failures: Array) -> void:
 		"res://scenes/collection_scene.tscn",
 		"res://scenes/options_overlay.tscn",
 		"res://scenes/pacte_scene.tscn",
+		"res://scenes/dealer_choice_scene.tscn",
+		"res://scenes/route_scene.tscn",
+		"res://scenes/route_shop_scene.tscn",
+		"res://scenes/route_dealer_scene.tscn",
+		"res://scenes/route_build_scene.tscn",
+		"res://scenes/route_bonus_scene.tscn",
 		"res://scenes/in_run_dealer_offer.tscn",
 		"res://scenes/game_over_ending_overlay.tscn",
 	]:
@@ -30,6 +36,449 @@ func _check_scene_instantiation(failures: Array) -> void:
 		var n := ps.instantiate()
 		get_root().add_child(n)
 		n.queue_free()
+
+func _route_seed_for_card(context: String, card_id: String, seed_start: int) -> int:
+	for offset in 64:
+		for card in RouteCards.offer(seed_start + offset, context):
+			if String(card.get("id", "")) == card_id:
+				return seed_start + offset
+	return -1
+
+func _authored_door_normal_frame(route_type: String) -> int:
+	if route_type == RouteCards.ROUTE_SHOP:
+		return 0
+	if route_type == RouteCards.ROUTE_AUGMENT:
+		return 2
+	if route_type == RouteCards.ROUTE_POWER:
+		return 4
+	if route_type == RouteCards.ROUTE_BONUS:
+		return 6
+	if route_type == RouteCards.ROUTE_SACRIFICE:
+		return 8
+	return -1
+
+func _check_authored_door_sprite(button: Button, route_type: String,
+		expected_frame: int, failures: Array) -> void:
+	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
+	if sprite == null:
+		failures.append("route: %s door is missing its authored hover sprite" % route_type)
+		return
+	if sprite.texture == null or sprite.texture.resource_path != \
+			"res://assets/images/dealer_choice/doors.png":
+		failures.append("route: %s door is not using the authored hover sheet" % route_type)
+	if sprite.hframes != 2 or sprite.vframes != 5:
+		failures.append("route: %s door has the wrong hover-sheet grid" % route_type)
+	if sprite.frame != expected_frame:
+		failures.append("route: %s door does not start on its normal frame" % route_type)
+
+func _check_power_door_hover(run_store: Node, failures: Array) -> void:
+	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(route)
+	await process_frame
+	var route_cards: Array = run_store.current_route_offer()
+	var power_index := -1
+	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
+		if String(route_cards[index].get("routeType", "")) == RouteCards.ROUTE_POWER:
+			power_index = index
+			break
+	if power_index < 0:
+		failures.append("route: power offer did not include its power door")
+	else:
+		var path := "DoorChoices/DoorLeft" if power_index == 0 else "DoorChoices/DoorRight"
+		var button := route.get_node_or_null(path) as Button
+		if button == null:
+			failures.append("route: power door button is missing")
+		else:
+			_check_authored_door_sprite(button, RouteCards.ROUTE_POWER, 4, failures)
+			var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
+			button.mouse_entered.emit()
+			await process_frame
+			if sprite == null or sprite.frame != 5:
+				failures.append("route: power door does not switch to its hover frame")
+			button.mouse_exited.emit()
+			await process_frame
+			if sprite == null or sprite.frame != 4:
+				failures.append("route: power door does not restore its normal frame")
+	route.free()
+
+## One native scene-smoke pass through the new machine -> route -> machine seam. The
+## rules-level route checks cover payment invariants; this check proves the actual route
+## panels and destination scenes can be entered with a live prepared offer.
+func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> void:
+	run_store.runPhase = "over"
+	run_store.lastEnding = null
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.routeSelectedCardId = ""
+	run_store.routeBuildKind = ""
+	run_store.routeBuildOfferIds = null
+	run_store.routeBuildFreeTier = false
+	run_store.routeBuildSelectedId = ""
+	run_store.routeBonusClaimed = false
+	run_store.sacrificeLaterPending = false
+	run_store.lucidityCoins = 100
+	run_store.neurons = 11
+	run_store.selectedAugmentCardIds = []
+	run_store.selectedPowerCardIds = []
+	run_store.runConsumables = {}
+	var shop_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_SHOP_ID, 0x515253)
+	if shop_seed < 0 or not run_store.prepare_route_offer("wealth_target", shop_seed):
+		failures.append("route: target offer did not prepare")
+		return
+	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(route)
+	await process_frame
+	var route_cards: Array = run_store.current_route_offer()
+	if route.get_node_or_null("ContinueButton") != null:
+		failures.append("route: dealer offer still exposes the removed continue action")
+	if route.get_node_or_null("RerollButton") == null:
+		failures.append("route: dealer offer is missing its door reroll action")
+	if route.get_node_or_null("CreditsRow") == null:
+		failures.append("route: dealer offer is missing its run-gold display")
+	if route.get_node_or_null("PathPrompt") != null:
+		failures.append("route: path prompt still sits outside the dealer bubble")
+	if route.get_node_or_null("DealerSpeechBubble") != null:
+		failures.append("route: dealer offer still includes the removed speech bubble")
+	var default_bubble := route.get_node_or_null("BubbleText") as Sprite2D
+	var default_bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+	if default_bubble == null:
+		failures.append("route: dealer offer is missing the authored hover bubble")
+	if default_bubble_label == null:
+		failures.append("route: dealer offer is missing the hover explanation label")
+	elif not default_bubble.visible or not default_bubble_label.visible \
+			or default_bubble_label.text != "CHOOSE\nYOUR PATH" \
+			or default_bubble_label.position != Vector2(103.0, 173.0) \
+			or default_bubble_label.size != Vector2(39.0, 21.0):
+		failures.append("route: dealer bubble is missing the default path prompt")
+	var cards_layer := route.get_node_or_null("DoorChoices") as Control
+	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
+		failures.append("route: dealer selection scene does not render exactly two doors")
+	var left_door_sprite := route.get_node_or_null("DoorChoices/DoorLeft/DoorSprite") as Sprite2D
+	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0):
+		failures.append("route: left door art is not offset by one pixel")
+	var right_door_sprite := route.get_node_or_null("DoorChoices/DoorRight/DoorSprite") as Sprite2D
+	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0):
+		failures.append("route: right door art is not offset by one pixel")
+	var authored_hover_index := -1
+	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
+		var route_type := String(route_cards[index].get("routeType", ""))
+		var normal_frame := _authored_door_normal_frame(route_type)
+		if normal_frame < 0:
+			continue
+		if authored_hover_index < 0:
+			authored_hover_index = index
+		var authored_button := route.get_node_or_null(
+			"DoorChoices/" + ("DoorLeft" if index == 0 else "DoorRight")) as Button
+		if authored_button != null:
+			_check_authored_door_sprite(authored_button, route_type, normal_frame, failures)
+	for door in ["DoorLeft", "DoorRight"]:
+		var door_button := route.get_node_or_null("DoorChoices/" + door) as Button
+		if door_button != null and not door_button.tooltip_text.is_empty():
+			failures.append("route: %s still exposes a hover description" % door)
+		if door_button != null and door_button.get_node_or_null("DoorCost") != null:
+			failures.append("route: %s still shows a cost under the door" % door)
+		var door_title: Label = null
+		if door_button != null:
+			door_title = door_button.get_node_or_null("DoorTitle") as Label
+		if door_title == null or door_title.position != Vector2(1.0, 107.0) \
+				or door_title.size != Vector2(62.0, 9.0) \
+				or door_title.get_theme_font_size("font_size") < 5:
+			failures.append("route: %s title is not inside its blue name plate" % door)
+	for index in RouteCards.OFFER_COUNT:
+		if route.get_node_or_null("DoorGapGlow%d" % index) != null:
+			failures.append("route: door %d still has a runtime gap overlay" % index)
+	if default_bubble_label != null \
+			and default_bubble_label.get_theme_font_size("font_size") < 4:
+		failures.append("route: dealer bubble text is still too small")
+	var reroll_row := route.get_node_or_null("RerollPriceRow") as HBoxContainer
+	if reroll_row == null or reroll_row.position != Vector2(7.0, 216.0) \
+			or reroll_row.size != Vector2(38.0, 12.0):
+		failures.append("route: reroll price row is not centered under the art")
+	var reroll_price := route.get_node_or_null("RerollPriceRow/RerollPrice") as Label
+	if reroll_price == null or reroll_price.text != "10":
+		failures.append("route: reroll price is not shown as a bare 10")
+	var reroll_coin := route.get_node_or_null("RerollPriceRow/RerollCoin") as TextureRect
+	if reroll_coin == null:
+		failures.append("route: reroll price is missing its Lucidity coin icon")
+	elif reroll_price != null:
+		var price_center_y := reroll_price.position.y + reroll_price.size.y * 0.5
+		var coin_center_y := reroll_coin.position.y + reroll_coin.size.y * 0.5
+		if absf(price_center_y - coin_center_y) > 0.5:
+			failures.append("route: reroll number and Lucidity coin are not vertically aligned")
+	if reroll_price != null and reroll_price.get_theme_font_size("font_size") < 7:
+		failures.append("route: reroll number is still too small")
+	var confirmation_door: Button = null
+	var confirmation_index := -1
+	for index in 2:
+		var door_path := "DoorChoices/DoorLeft" if index == 0 else "DoorChoices/DoorRight"
+		var door_button := route.get_node_or_null(door_path) as Button
+		var route_type := String(route_cards[index].get("routeType", "")) \
+			if index < route_cards.size() else ""
+		if door_button != null and not door_button.disabled \
+				and route_type == RouteCards.ROUTE_SHOP:
+			confirmation_door = door_button
+			confirmation_index = index
+			break
+	if confirmation_door == null:
+		for index in 2:
+			var door_path := "DoorChoices/DoorLeft" if index == 0 else "DoorChoices/DoorRight"
+			var door_button := route.get_node_or_null(door_path) as Button
+			if door_button != null and not door_button.disabled:
+				confirmation_door = door_button
+				confirmation_index = index
+				break
+	if confirmation_door != null:
+		var hover_index := authored_hover_index if authored_hover_index >= 0 else confirmation_index
+		var hover_door := confirmation_door
+		if hover_index >= 0:
+			hover_door = route.get_node_or_null(
+				"DoorChoices/" + ("DoorLeft" if hover_index == 0 else "DoorRight")) as Button
+		var hover_sprite := hover_door.get_node_or_null("DoorSprite") as Sprite2D
+		var hover_position := hover_sprite.position if hover_sprite != null else Vector2.ZERO
+		var hover_route_type := String(route_cards[hover_index].get("routeType", "")) \
+			if hover_index >= 0 and hover_index < route_cards.size() else ""
+		var hover_normal_frame := _authored_door_normal_frame(hover_route_type)
+		hover_door.mouse_entered.emit()
+		await process_frame
+		var bubble := route.get_node_or_null("BubbleText") as Sprite2D
+		var bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+		if bubble == null or not bubble.visible or bubble_label == null \
+				or bubble_label.text.is_empty() or not bubble_label.visible \
+				or bubble_label.text == "CHOOSE\nYOUR PATH":
+			failures.append("route: hovering a door does not show its dealer explanation")
+		if hover_sprite == null or not is_equal_approx(hover_sprite.scale.x, 1.0) \
+				or hover_sprite.position != hover_position:
+			failures.append("route: hovering a door changes its art size or position")
+		if hover_normal_frame >= 0 and (hover_sprite == null \
+				or hover_sprite.frame != hover_normal_frame + 1):
+			failures.append("route: %s door does not switch to its hover frame" % hover_route_type)
+		hover_door.mouse_exited.emit()
+		await process_frame
+		if bubble == null or not bubble.visible or bubble_label == null \
+				or not bubble_label.visible or bubble_label.text != "CHOOSE\nYOUR PATH":
+			failures.append("route: leaving a door does not restore the dealer path prompt")
+		if hover_sprite != null and (not is_equal_approx(hover_sprite.scale.x, 1.0) \
+				or hover_sprite.position != hover_position):
+			failures.append("route: leaving a door does not restore its art size or position")
+		if hover_normal_frame >= 0 and (hover_sprite == null or hover_sprite.frame != hover_normal_frame):
+			failures.append("route: %s door does not restore its normal frame" % hover_route_type)
+		var confirmation_card: Dictionary = route_cards[confirmation_index]
+		var confirmation_route_type := String(confirmation_card.get("routeType", ""))
+		var confirmation_normal_frame := _authored_door_normal_frame(confirmation_route_type)
+		var confirmation_sprite := confirmation_door.get_node_or_null("DoorSprite") as Sprite2D
+		var confirmation_position := confirmation_sprite.position \
+			if confirmation_sprite != null else Vector2.ZERO
+		confirmation_door.pressed.emit()
+		await process_frame
+		if route.get_node_or_null("DoorConfirmation") != null:
+			failures.append("route: old door confirmation modal is still present")
+		if not run_store.routeOfferPending or run_store.routeDestination != "":
+			failures.append("route: first door click committed the route")
+		var confirmation_label := route.get_node_or_null("BubbleTextLabel") as Label
+		var expected_confirmation := "TAKING THE\n%s DOOR?" % String(
+			confirmation_card.get("displayName", "ROUTE"))
+		if confirmation_label == null or confirmation_label.text != expected_confirmation:
+			failures.append("route: opened door did not ask for confirmation")
+		var suction := route.get_node_or_null("DoorSuctionParticles") as Control
+		if suction == null:
+			failures.append("route: opening a door did not play the gap suction effect")
+		else:
+			var initial_particle_count := suction.get_child_count()
+			var suction_line_start: Vector2 = suction.get_meta(
+				&"suction_line_start", Vector2.ZERO)
+			var suction_line_end: Vector2 = suction.get_meta(
+				&"suction_line_end", Vector2.ZERO)
+			if absf(suction_line_end.y - suction_line_start.y) < 80.0:
+				failures.append("route: door suction effect does not cover the full open-door line")
+			await create_timer(0.35).timeout
+			if not is_instance_valid(suction) \
+					or suction.get_child_count() <= initial_particle_count:
+				failures.append("route: door suction effect is not emitting continuously")
+		if confirmation_door.disabled:
+			failures.append("route: opened door is disabled before the confirmation click")
+		if confirmation_sprite == null or confirmation_sprite.position != confirmation_position:
+			failures.append("route: opening a door changed its authored position")
+		if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+				or confirmation_sprite.frame != confirmation_normal_frame + 1):
+			failures.append("route: opened door did not keep its open frame")
+		var outside_click := InputEventMouseButton.new()
+		outside_click.button_index = MOUSE_BUTTON_LEFT
+		outside_click.pressed = true
+		outside_click.position = Vector2(80.0, 230.0)
+		route.call("_input", outside_click)
+		await process_frame
+		if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+				or confirmation_sprite.frame != confirmation_normal_frame):
+			failures.append("route: outside click did not close the semi-open door")
+		var outside_bubble_label := route.get_node_or_null("BubbleTextLabel") as Label
+		if outside_bubble_label == null or outside_bubble_label.text != "CHOOSE\nYOUR PATH":
+			failures.append("route: outside click did not restore the dealer path prompt")
+		if route.get_node_or_null("DoorSuctionParticles") != null:
+			failures.append("route: outside click did not clear the door suction effect")
+		confirmation_door.pressed.emit()
+		await process_frame
+		var other_index := 1 - confirmation_index
+		var other_door := route.get_node_or_null(
+			"DoorChoices/" + ("DoorLeft" if other_index == 0 else "DoorRight")) as Button
+		var other_card: Dictionary = route_cards[other_index] \
+			if other_index < route_cards.size() else {}
+		var other_route_type := String(other_card.get("routeType", ""))
+		var other_normal_frame := _authored_door_normal_frame(other_route_type)
+		if other_door != null and not other_door.disabled and other_normal_frame >= 0:
+			var other_sprite := other_door.get_node_or_null("DoorSprite") as Sprite2D
+			other_door.pressed.emit()
+			await process_frame
+			if confirmation_normal_frame >= 0 and (confirmation_sprite == null \
+					or confirmation_sprite.frame != confirmation_normal_frame):
+				failures.append("route: switching doors did not close the previous door")
+			if other_sprite == null or other_sprite.frame != other_normal_frame + 1:
+				failures.append("route: clicking the other door did not open it")
+			confirmation_door.pressed.emit()
+			await process_frame
+		confirmation_door.pressed.emit()
+		await process_frame
+		if run_store.routeOfferPending or run_store.routeDestination != RouteCards.ROUTE_SHOP:
+			failures.append("route: second door click did not enter the Shop route")
+		elif not run_store.finish_route_destination() or run_store.runPhase != "running":
+			failures.append("route: confirmed Shop door did not return to a live machine segment")
+	if route.get_node_or_null("DealerBackground") != null:
+		failures.append("route: dealer offer still includes the shop background")
+	if route.get_node_or_null("DealerCounter") != null:
+		failures.append("route: dealer offer still includes the shop counter")
+	if route.get_node_or_null("DealerSprite") == null:
+		failures.append("route: dealer offer is missing DealerSprite art")
+	var destination_scene: Node = tree.current_scene
+	if destination_scene != null and destination_scene != route:
+		destination_scene.queue_free()
+	if is_instance_valid(route):
+		route.queue_free()
+	await process_frame
+
+	run_store.runPhase = "over"
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.lucidityCoins = 100
+	var augment_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_AUGMENT_ID, 0x535455)
+	if augment_seed < 0 or not run_store.prepare_route_offer("wealth_target", augment_seed):
+		failures.append("route: augment offer setup failed")
+	else:
+		if not run_store.select_route(RouteCards.CARD_AUGMENT_ID):
+			failures.append("route: Augment card could not be selected")
+		else:
+			var build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
+			get_root().add_child(build)
+			await process_frame
+			if build.get_node_or_null("RouteBuildCards") == null:
+				failures.append("route: augment destination has no build-card list")
+			if build.get_node_or_null("BackToRoutesButton") != null:
+				failures.append("route: build destination still exposes a return to door selection")
+			_check_route_build_artwork(build, "augment", failures)
+			var build_ids: Array = run_store.routeBuildOfferIds as Array
+			if build_ids.is_empty():
+				failures.append("route: augment destination has no cards")
+			else:
+				var build_id := String(build_ids[0])
+				var reward_symbol := "brain" if run_store.route_build_card_requires_symbol(build_id) else ""
+				if not run_store.complete_route_build_selection(build_id, reward_symbol):
+					failures.append("route: augment card could not be selected")
+				if not run_store.finish_route_destination() or run_store.runPhase != "running":
+					failures.append("route: Augment did not return to a live machine segment")
+			build.free()
+
+	# The Power route reuses the same Pacte artwork, but must swap the visible deck
+	# and emplacement so the augment side never leaks into a power-only choice.
+	run_store.runPhase = "over"
+	run_store.roundContinuationPending = true
+	run_store.routeOfferPending = false
+	run_store.routeOfferCards = null
+	run_store.routeDestination = ""
+	run_store.routeContext = ""
+	run_store.lucidityCoins = 100
+	var power_seed := _route_seed_for_card("wealth_target", RouteCards.CARD_POWER_ID, 0x565758)
+	if power_seed < 0 or not run_store.prepare_route_offer("wealth_target", power_seed):
+		failures.append("route: power artwork offer setup failed")
+	else:
+		await _check_power_door_hover(run_store, failures)
+		if not run_store.select_route(RouteCards.CARD_POWER_ID):
+			failures.append("route: power artwork card could not be selected")
+		else:
+			var power_build := (load("res://scenes/route_build_scene.tscn") as PackedScene).instantiate()
+			get_root().add_child(power_build)
+			await process_frame
+			_check_route_build_artwork(power_build, "power", failures)
+			var power_ids: Array = run_store.routeBuildOfferIds as Array
+			if power_ids.is_empty():
+				failures.append("route: power destination has no cards")
+			else:
+				var power_id := String(power_ids[0])
+				if not run_store.complete_route_build_selection(power_id):
+					failures.append("route: power artwork card could not be selected")
+				if not run_store.finish_route_destination() or run_store.runPhase != "running":
+					failures.append("route: Power did not return to a live machine segment")
+			power_build.free()
+
+	# The machine segment is the destination of the refusal path. A final live state is
+	# enough here; the existing machine checks cover the machine's complete HUD/interaction
+	# surface and the route checks pin that refusal is free.
+	if run_store.runPhase != "running":
+		failures.append("route: machine segment was not live after route loop")
+
+func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
+	var credits_row := build.get_node_or_null("CreditsRow") as HBoxContainer
+	var credits_label := build.get_node_or_null("CreditsRow/CreditsLabel") as Label
+	var credits_coin := build.get_node_or_null("CreditsRow/Coin") as TextureRect
+	if credits_row == null or credits_label == null or credits_coin == null:
+		failures.append("route: %s build scene is missing its Lucidity display" % kind)
+	elif credits_label.get_theme_font_size("font_size") < 7:
+		failures.append("route: %s build scene Lucidity number is too small" % kind)
+	var card_list := build.get_node_or_null("RouteBuildCards") as Control
+	var first_card: Button = null
+	if card_list != null:
+		for child in card_list.get_children():
+			if child is Button:
+				first_card = child as Button
+				break
+	if first_card != null:
+		var card_id := first_card.name.trim_prefix("BuildCard_")
+		var cost := RunStateStore.route_build_card_cost(card_id)
+		var cost_row := first_card.get_node_or_null("CardCost") as HBoxContainer
+		var amount := first_card.get_node_or_null("CardCost/Amount") as Label
+		var coin := first_card.get_node_or_null("CardCost/Coin") as TextureRect
+		if cost_row == null or amount == null:
+			failures.append("route: %s build card is missing its Lucidity cost" % kind)
+		else:
+			if amount.get_theme_font_size("font_size") < 7:
+				failures.append("route: %s build card cost is still too small" % kind)
+			if cost > 0 and (coin == null or amount.text == "%dG" % cost):
+				failures.append("route: %s build card cost is not using a Lucidity coin" % kind)
+			if cost <= 0 and amount.text != "FREE":
+				failures.append("route: %s free build card has the wrong cost label" % kind)
+	var artwork := build.get_node_or_null("PacteArtwork") as Control
+	if artwork == null:
+		failures.append("route: %s build scene is missing Pacte artwork" % kind)
+		return
+	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
+	var power_deck := artwork.get_node_or_null("PowerDeck") as Sprite2D
+	var augment_slot := artwork.get_node_or_null("SelectedCardEmplacement") as Sprite2D
+	var power_slot := artwork.get_node_or_null("PowerCardEmplacement") as Sprite2D
+	if augment_deck == null or power_deck == null or augment_slot == null or power_slot == null:
+		failures.append("route: %s build scene is missing Pacte deck/emplacement art" % kind)
+		return
+	var show_augment := kind == "augment"
+	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible) != show_augment:
+		failures.append("route: %s build scene has the wrong augment art visibility" % kind)
+	if bool(power_deck.visible) == show_augment or bool(power_slot.visible) == show_augment:
+		failures.append("route: %s build scene has the wrong power art visibility" % kind)
+	if artwork.process_mode != Node.PROCESS_MODE_DISABLED:
+		failures.append("route: %s build scene left Pacte interaction processing" % kind)
+	if artwork.get_node_or_null("TutorialOverlay") != null:
+		failures.append("route: %s build scene attached the Pacte tutorial overlay" % kind)
 
 func _check_global_options_layout(failures: Array) -> void:
 	var meta_store: Node = get_root().get_node("MetaStateStore")
@@ -139,6 +588,12 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: machine scene missing shared OptionsOverlay")
 	var bottom_hud := machine.get_node_or_null("BottomHudLayer") as Control
 	var spin_number := machine.get_node_or_null("BottomHudLayer/spin_number") as Label
+	var machine_credits_row := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow") as HBoxContainer
+	var machine_credits_label := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/CreditsLabel") as Label
+	var machine_credits_coin := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/Coin") as TextureRect
 	var health_bar := machine.get_node_or_null("HealthBar") as Sprite2D
 	var health_coin := machine.get_node_or_null("HealthCoin") as Sprite2D
 	if bottom_hud == null:
@@ -165,6 +620,11 @@ func _check_global_options_layout(failures: Array) -> void:
 		# The -1 NEURON popup no longer fires during normal play (flatline overlay only).
 		if machine.get_node_or_null("BottomHudLayer/NeuronSpendFeedback") != null:
 			failures.append("machine: neuron spend feedback should not appear on the normal HUD")
+	if machine_credits_row == null or machine_credits_label == null \
+			or machine_credits_coin == null:
+		failures.append("machine: bottom-left Lucidity display is missing its label or coin")
+	elif machine_credits_label.get_theme_font_size("font_size") < 7:
+		failures.append("machine: Lucidity number is too small")
 	# The spins readout left the TV: it is now the native 20-frame tube sheet
 	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
 	# plays while a spin launches.
@@ -226,6 +686,37 @@ func _check_global_options_layout(failures: Array) -> void:
 	if settings.find_child("TutorialButton", true, false) != null:
 		failures.append("settings: the tutorial button moved to the OPTIONS overlay")
 	settings.queue_free()
+
+
+func _check_machine_lucidity_display(machine: Node, run_store: Node,
+		failures: Array) -> void:
+	var credits_label := machine.get_node_or_null(
+		"BottomHudLayer/CreditsRow/CreditsLabel") as Label
+	if credits_label == null:
+		failures.append("machine: Lucidity display regression check is missing its label")
+		return
+	var previous_phase := String(run_store.runPhase)
+	var previous_lucidity := int(run_store.lucidityCoins)
+	var previous_score := int(run_store.scoreEarned)
+	var previous_before := int(machine._machine_scene_lucidity_before)
+	var previous_ready := bool(machine._machine_scene_lucidity_snapshot_ready)
+	run_store.runPhase = "running"
+	run_store.lucidityCoins = 40
+	run_store.scoreEarned = 9000
+	machine._begin_machine_lucidity_segment()
+	if credits_label.text != "40":
+		failures.append("machine: Lucidity display did not use the segment's previous balance")
+	run_store.lucidityCoins = 73 # net machine Lucidity after gains and deductions
+	machine._update_hud()
+	if credits_label.text != "40":
+		failures.append("machine: Lucidity display updated during the machine scene")
+	if int(machine._machine_lucidity_after_deductions()) != 73:
+		failures.append("machine: end-of-scene Lucidity used the full score instead of net Lucidity")
+	run_store.runPhase = previous_phase
+	run_store.lucidityCoins = previous_lucidity
+	run_store.scoreEarned = previous_score
+	machine._machine_scene_lucidity_before = previous_before
+	machine._machine_scene_lucidity_snapshot_ready = previous_ready
 
 
 func _check_scene_nav(failures: Array) -> void:

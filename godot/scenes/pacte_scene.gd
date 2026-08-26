@@ -123,15 +123,78 @@ var _selection_locked := false
 var _reveal_generation := 0
 var _deck_tween: Tween = null
 
+## Reuse the authored Pacte room for a between-machine single-deck route without
+## bringing the full two-pool ritual back. The route scene owns the selectable
+## cards; this scene contributes only its background, dealer, table and the
+## matching deck/emplacement art.
+func configure_route_artwork(kind: String) -> void:
+	var show_augment := kind == "augment"
+	var show_power := kind == "power"
+	if kind != "" and not show_augment and not show_power:
+		return
+	_close_reward_amp_picker()
+	if _augment_deck != null:
+		_augment_deck.visible = show_augment
+	if _power_deck != null:
+		_power_deck.visible = show_power
+	if _augment_emplacement != null:
+		_augment_emplacement.visible = show_augment
+	if _power_emplacement != null:
+		_power_emplacement.visible = show_power
+	_emplacement = _augment_emplacement if show_augment else _power_emplacement
+	if _emplacement != null:
+		_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
+	if _dealer_bubble != null:
+		_dealer_bubble.frame = DEALER_AUGMENT_FRAME if show_augment else DEALER_POWER_FRAME
+		_dealer_bubble.visible = show_augment or show_power
+	if _chosen_cards_layer != null:
+		_chosen_cards_layer.visible = false
+	if _description_bubble != null:
+		_description_bubble.visible = false
+	if _phase_label != null:
+		_phase_label.visible = false
+	if _instruction != null:
+		_instruction.visible = false
+	if _augment_drop_label != null:
+		_augment_drop_label.visible = false
+	if _power_drop_label != null:
+		_power_drop_label.visible = false
+	for value in _card_buttons.values():
+		var card_button := value as CanvasItem
+		if card_button != null:
+			card_button.visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+
+## Route build scenes use the same authored card faces as Pacte while keeping
+## their selection state in the route scene. These helpers let the route scene
+## compose cards above this artwork without reopening Pacte's run ritual.
+func make_route_card_view(card_id: String, kind: String) -> Control:
+	return _make_card_view(card_id, kind, true)
+
+func make_route_selected_card_view(card_id: String, kind: String) -> Control:
+	return _make_minimized_card_view(card_id, kind)
+
+func set_route_emplacement_frame(kind: String, drop_hint: bool) -> void:
+	var target := _augment_emplacement if kind == "augment" else _power_emplacement
+	if target == null:
+		return
+	target.frame = EMPLACEMENT_DROP_FRAME if drop_hint else EMPLACEMENT_SELECTING_FRAME
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_background()
 	_build_overlay_ui()
 	_restore_saved_selection()
 	# Inert unless the played tutorial is running (issue #105). The autoload is not a
-	# @tool script, so it does not exist in an editor preview of this scene.
-	if not Engine.is_editor_hint():
+	# @tool script, so it does not exist in an editor preview of this scene. A
+	# route-build instance is artwork only and must not attach a blocking tutorial
+	# overlay to the selectable route cards.
+	if not Engine.is_editor_hint() and not _is_route_artwork_context():
 		Tutorial.attach(self, "pacte")
+
+func _is_route_artwork_context() -> bool:
+	var destination := String(RunStateStore.routeDestination)
+	return destination == "augment" or destination == "power"
 
 ## Tutorial anchors (issue #105) — see machine_scene.tutorial_anchor.
 func tutorial_anchor(id: String) -> Rect2:
@@ -266,9 +329,8 @@ func _restore_saved_selection() -> void:
 	# their effects in the active run. Only this visit's staged augment returns.
 	var saved_augment := String(RunStateStore.pacteSelectedAugmentId)
 	var augment_offer := _offer_array(RunStateStore.pacteOfferAugmentIds)
-	# Diamond (issue #111) suppresses the threshold visit's augment offer entirely, so
-	# there is no augment stage to run: the ritual is the power row alone, and the
-	# augment emplacement stays hidden rather than presenting an empty table.
+	# Diamond (issue #111) suppresses the augment pool when this run-start ritual
+	# resolves its card rules; an empty pool is still a deliberate modifier state.
 	if saved_augment != "" or augment_offer.is_empty():
 		if saved_augment != "":
 			_chosen_augment_id = saved_augment
@@ -393,7 +455,7 @@ func _build_card(card_id: String, index: int) -> void:
 	_card_views[card_id] = view
 	_revealed[card_id] = false
 
-func _make_card_view(card_id: String, kind: String) -> Control:
+func _make_card_view(card_id: String, kind: String, face_up := false) -> Control:
 	var view := Control.new()
 	view.name = "CardArt"
 	view.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -404,6 +466,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.visible = not face_up
 	view.add_child(back)
 	var front := TextureRect.new()
 	front.name = "Front"
@@ -412,7 +475,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	front.visible = false
+	front.visible = face_up
 	view.add_child(front)
 	var entry := PacteCards.card(card_id)
 	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
@@ -422,7 +485,7 @@ func _make_card_view(card_id: String, kind: String) -> Control:
 			(CARD_SIZE.y - icon_rect.size.y) * 0.5))
 		if icon is Control:
 			(icon as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-		(icon as CanvasItem).visible = false
+		(icon as CanvasItem).visible = face_up
 		view.add_child(icon)
 	_attach_glitch_card_fx(view, card_id)
 	return view
@@ -771,7 +834,16 @@ func _preview_card(card_id: String) -> void:
 	var entry := PacteCards.card(card_id)
 	_description_bubble.visible = true
 	_description_title.text = String(entry.get("name", card_id))
-	_description_text.text = String(entry.get("description", ""))
+	var description := String(entry.get("description", ""))
+	if RunStateStore.pacteCostsActive:
+		var purchase_ids: Array[String] = []
+		if RunStateStore.pacteSelectedAugmentId != "":
+			purchase_ids.append(RunStateStore.pacteSelectedAugmentId)
+		purchase_ids.append(card_id)
+		var cost := RunStateStore.pacte_card_cost(card_id)
+		var remaining := RunStateStore.pacte_remaining_after(purchase_ids)
+		description += "\nCOST: %dG  LEFT: %dG" % [cost, remaining]
+	_description_text.text = description
 	# Label expands to its font line height when text is assigned. Reapply the
 	# authored rects after that update so the controls themselves stay inside the
 	# compact panel as well as their glyphs.
@@ -841,9 +913,9 @@ func _accept_card(card_id: String) -> void:
 		_selection_locked = false
 		return
 	var threshold_visit := RunStateStore.runPhase == "pacte_threshold"
-	# A threshold visit armed by a Wealth target (issue #176) ends with the
-	# between-target dealer + a fresh run; a health-crossing visit resumes the
-	# post-flatline dealer. Capture it before the selection restores "running".
+	var route_visit := threshold_visit and RunStateStore.routePacteVisit
+	# These branches only decode legacy snapshots. New route build scenes never
+	# enter Pacte and therefore never take a threshold or route visit branch.
 	var target_round_visit := threshold_visit and RunStateStore.pacteTargetRoundVisit
 	_show_chosen_card(card_id, "power")
 	if not RunStateStore.stage_pacte_power_selection(card_id):
@@ -856,14 +928,22 @@ func _accept_card(card_id: String) -> void:
 	await get_tree().create_timer(SELECTION_PREVIEW_TIME).timeout
 	if not is_inside_tree():
 		return
-	if target_round_visit:
+	if route_visit:
+		# Legacy route Pacte snapshots complete directly into the next machine.
+		if not RunStateStore.finish_route_destination():
+			_selection_locked = false
+			_instruction.text = "NEXT MACHINE UNAVAILABLE"
+			return
+		SceneNav.change_to("res://scenes/machine_scene.tscn")
+	elif target_round_visit:
 		# Wealth-target visit: end the run as a between-target break and hand off to
 		# the persistent dealer shop, whose START begins the next fresh run.
 		if not RunStateStore.begin_target_round():
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
+			else "res://scenes/dealer_scene.tscn")
 	elif threshold_visit:
 		# Health-crossing visit: rejoin the shared between-run flow (odds table ->
 		# dealer shop), the same one a plain flatline uses, instead of the mid-run
@@ -872,7 +952,8 @@ func _accept_card(card_id: String) -> void:
 			_selection_locked = false
 			_instruction.text = "DEALER VISIT UNAVAILABLE"
 			return
-		SceneNav.change_to("res://scenes/dealer_scene.tscn")
+		SceneNav.change_to("res://scenes/dealer_choice_scene.tscn" if RunStateStore.routeOfferPending \
+			else "res://scenes/dealer_scene.tscn")
 	else:
 		SceneNav.change_to("res://scenes/machine_scene.tscn")
 
