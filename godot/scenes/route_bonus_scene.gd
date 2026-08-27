@@ -13,6 +13,14 @@ const HOT_GOLD := Color(1.0, 0.95, 0.62)
 const MUTED := Color(0.62, 0.70, 0.78)
 const ROSE := Color(1.0, 0.35, 0.66)
 const INK := Color(0.055, 0.035, 0.105)
+const AMBIENT_CYAN := Color(0.42, 1.0, 0.95, 0.08)
+const AMBIENT_GOLD := Color(1.0, 0.84, 0.38, 0.06)
+const AMBIENT_LIGHT_FIRST_DELAY := 1.9
+const AMBIENT_LIGHT_MIN_DELAY := 1.7
+const AMBIENT_LIGHT_MAX_DELAY := 3.3
+const AMBIENT_REFLECTION_FIRST_DELAY := 4.6
+const AMBIENT_REFLECTION_MIN_DELAY := 4.4
+const AMBIENT_REFLECTION_MAX_DELAY := 7.0
 
 var _font: FontFile = null
 var _wheel: FortuneWheelDisplay = null
@@ -22,13 +30,25 @@ var _hint: Label = null
 var _message: Label = null
 var _spin: Button = null
 var _return: Button = null
+var _result_panel: Panel = null
 var _odds_overlay: Control = null
 var _animating_reward_id := ""
 var _spin_requesting := false
+var _ambient_layer: Control = null
+var _ambient_light: ColorRect = null
+var _ambient_reflection: ColorRect = null
+var _ambient_light_timer: Timer = null
+var _ambient_reflection_timer: Timer = null
+var _ambient_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# This scene owns the full viewport while it is open. Child controls still
+	# receive their normal GUI events, but taps cannot fall through to a scene
+	# underneath during a route transition or when the wheel is idle.
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	_font = Assets.font()
+	_build_ambient()
 	_wheel = WHEEL_SCRIPT.new() as FortuneWheelDisplay
 	_wheel.name = "FortuneWheel"
 	_wheel.position = Vector2.ZERO
@@ -55,10 +75,10 @@ func _build() -> void:
 	_balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_balance)
 
-	var result_panel := _panel(Rect2(5.0, 148.0, 150.0, 36.0),
+	_result_panel = _panel(Rect2(5.0, 148.0, 150.0, 36.0),
 		Color(INK.r, INK.g, INK.b, 0.90), Color(GOLD.r, GOLD.g, GOLD.b, 0.55))
-	result_panel.z_index = 6
-	add_child(result_panel)
+	_result_panel.z_index = 6
+	add_child(_result_panel)
 	_status = _label("", Rect2(8.0, 150.0, 144.0, 12.0), 6, CYAN)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -74,12 +94,14 @@ func _build() -> void:
 	_hint = _label("ONE TURN // NO TAKEBACKS", Rect2(8.0, 214.0, 144.0, 10.0), 4, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_hint)
-	_spin = _button("SPIN THE WHEEL", _centered_rect(231.0, Vector2(96.0, 22.0)), 6)
+	_spin = _button("SPIN THE WHEEL", _centered_rect(231.0, Vector2(96.0, 22.0)),
+		6, GOLD)
 	_spin.name = "TakeBonusButton"
 	_spin.pressed.connect(_on_spin_pressed)
 	add_child(_spin)
 
-	_return = _button("RETURN TO MACHINE", _centered_rect(286.0, Vector2(100.0, 18.0)), 5)
+	_return = _button("RETURN TO MACHINE", _centered_rect(286.0, Vector2(100.0, 18.0)),
+		5, ROSE)
 	_return.name = "ReturnButton"
 	_return.pressed.connect(_on_return_pressed)
 	add_child(_return)
@@ -100,6 +122,7 @@ func _refresh() -> void:
 		_spin.disabled = true
 		_spin.text = "SPINNING..."
 		_return.disabled = true
+		_spin.self_modulate = Color.WHITE
 		return
 
 	var reward_id := String(RunStateStore.routeBonusRewardId)
@@ -138,6 +161,15 @@ func _refresh() -> void:
 		_spin.text = "SPIN THE WHEEL"
 		_return.disabled = true
 		_hint.text = "ONE TURN // NO TAKEBACKS"
+	_apply_spin_selection_tint()
+
+func _apply_spin_selection_tint() -> void:
+	if _spin == null or not is_instance_valid(_spin):
+		return
+	var reward_locked := FortuneWheelRules.is_valid_reward(
+		String(RunStateStore.routeBonusRewardId)) \
+		and not RunStateStore.routeBonusClaimed
+	_spin.self_modulate = Color(1.10, 1.04, 0.94, 1.0) if reward_locked else Color.WHITE
 
 func _on_spin_pressed() -> void:
 	if _animating_reward_id != "" or RunStateStore.routeBonusClaimed:
@@ -165,6 +197,17 @@ func _on_wheel_finished(reward_id: String) -> void:
 		return
 	_animating_reward_id = ""
 	_refresh()
+	_settle_reward_visuals()
+
+func _settle_reward_visuals() -> void:
+	if _result_panel == null or not is_instance_valid(_result_panel):
+		return
+	# The wheel already supplies the strong reveal. A short panel pulse makes the
+	# saved selection feel acknowledged without swapping the whole background.
+	_result_panel.self_modulate = Color(1.12, 1.08, 1.02, 1.0)
+	var tween := create_tween()
+	tween.tween_property(_result_panel, "self_modulate", Color.WHITE, 0.28) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _collect_prize() -> void:
 	if not _animating_reward_id.is_empty() or RunStateStore.routeBonusClaimed:
@@ -209,6 +252,79 @@ func _on_return_pressed() -> void:
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
 
+func _gui_input(_event: InputEvent) -> void:
+	# The root is a deliberate input shield for the Bonus layer. Buttons are
+	# children and therefore retain their own GUI handling before this fallback.
+	get_viewport().set_input_as_handled()
+
+func _build_ambient() -> void:
+	_ambient_layer = Control.new()
+	_ambient_layer.name = "BonusAmbient"
+	_ambient_layer.size = CANVAS_SIZE
+	_ambient_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.z_index = -5
+	add_child(_ambient_layer)
+
+	_ambient_light = ColorRect.new()
+	_ambient_light.name = "LightFlicker"
+	_ambient_light.position = Vector2(13.0, 38.0)
+	_ambient_light.size = Vector2(134.0, 1.0)
+	_ambient_light.color = AMBIENT_CYAN
+	_ambient_light.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.add_child(_ambient_light)
+
+	_ambient_reflection = ColorRect.new()
+	_ambient_reflection.name = "ReflectionSweep"
+	_ambient_reflection.position = Vector2(16.0, 54.0)
+	_ambient_reflection.size = Vector2(2.0, 82.0)
+	_ambient_reflection.color = Color(AMBIENT_GOLD.r, AMBIENT_GOLD.g,
+		AMBIENT_GOLD.b, 0.0)
+	_ambient_reflection.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.add_child(_ambient_reflection)
+
+	_ambient_rng.seed = 0xB0A05 + Time.get_ticks_msec()
+	_ambient_light_timer = _ambient_timer(
+		"LightTimer", AMBIENT_LIGHT_FIRST_DELAY, Callable(self, "_on_ambient_light_timeout"))
+	_ambient_reflection_timer = _ambient_timer(
+		"ReflectionTimer", AMBIENT_REFLECTION_FIRST_DELAY,
+		Callable(self, "_on_ambient_reflection_timeout"))
+	if Engine.is_editor_hint():
+		return
+	_ambient_light_timer.start()
+	_ambient_reflection_timer.start()
+
+func _ambient_timer(timer_name: String, delay: float, callback: Callable) -> Timer:
+	var timer := Timer.new()
+	timer.name = timer_name
+	timer.one_shot = true
+	timer.wait_time = delay
+	timer.timeout.connect(callback)
+	_ambient_layer.add_child(timer)
+	return timer
+
+func _on_ambient_light_timeout() -> void:
+	if _ambient_light != null:
+		var tween := create_tween()
+		tween.tween_property(_ambient_light, "color:a", 0.15, 0.07)
+		tween.tween_property(_ambient_light, "color:a", 0.05, 0.20)
+	if _ambient_light_timer != null:
+		_ambient_light_timer.start(_ambient_rng.randf_range(
+			AMBIENT_LIGHT_MIN_DELAY, AMBIENT_LIGHT_MAX_DELAY))
+
+func _on_ambient_reflection_timeout() -> void:
+	if _ambient_reflection != null:
+		_ambient_reflection.position.x = 16.0
+		_ambient_reflection.color.a = 0.0
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(_ambient_reflection, "position:x", 142.0, 0.58)
+		tween.tween_property(_ambient_reflection, "color:a", 0.10, 0.11)
+		tween.tween_property(_ambient_reflection, "color:a", 0.0, 0.27).set_delay(0.28)
+		tween.set_parallel(false)
+	if _ambient_reflection_timer != null:
+		_ambient_reflection_timer.start(_ambient_rng.randf_range(
+			AMBIENT_REFLECTION_MIN_DELAY, AMBIENT_REFLECTION_MAX_DELAY))
+
 func _centered_rect(top: float, dimensions: Vector2) -> Rect2:
 	return Rect2(Vector2(roundf((CANVAS_SIZE.x - dimensions.x) * 0.5), top), dimensions)
 
@@ -242,41 +358,35 @@ func _label(text_value: String, rect: Rect2, font_size: int, color: Color) -> La
 		label.add_theme_font_override("font", _font)
 	return label
 
-func _button(text_value: String, rect: Rect2, font_size: int) -> Button:
+func _button(text_value: String, rect: Rect2, font_size: int,
+		plate_color: Color = CYAN) -> Button:
 	var button := Button.new()
 	button.text = text_value
 	button.position = rect.position
 	button.size = rect.size
+	button.custom_minimum_size = rect.size
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", CYAN)
-	button.add_theme_color_override("font_hover_color", HOT_GOLD)
-	button.add_theme_color_override("font_pressed_color", HOT_GOLD)
-	button.add_theme_color_override("font_disabled_color", MUTED)
-	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
-	if _font != null:
-		button.add_theme_font_override("font", _font)
-	button.add_theme_stylebox_override("normal", _button_style(Color(INK.r, INK.g, INK.b, 0.96), CYAN))
-	button.add_theme_stylebox_override("hover", _button_style(Color(0.11, 0.06, 0.18, 0.98), HOT_GOLD))
-	button.add_theme_stylebox_override("pressed", _button_style(Color(0.18, 0.08, 0.20, 1.0), ROSE))
-	button.add_theme_stylebox_override("disabled", _button_style(Color(0.07, 0.06, 0.11, 0.95), MUTED))
+	ButtonKit.small_neon_button_style(button, plate_color, font_size)
+	ButtonKit.add_press_feel(button)
+	button.button_down.connect(_on_bonus_button_down.bind(button))
+	button.button_up.connect(_on_bonus_button_up.bind(button))
 	return button
 
-func _button_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 2
-	style.corner_radius_top_right = 2
-	style.corner_radius_bottom_left = 2
-	style.corner_radius_bottom_right = 2
-	style.content_margin_left = 2.0
-	style.content_margin_right = 2.0
-	style.shadow_color = Color(border.r, border.g, border.b, 0.24)
-	style.shadow_size = 2
-	style.shadow_offset = Vector2(0.0, 1.0)
-	return style
+func _on_bonus_button_down(button: Button) -> void:
+	if button == null or not is_instance_valid(button):
+		return
+	button.self_modulate = Color(1.08, 1.05, 1.10, 1.0)
+	var tween := create_tween()
+	tween.tween_property(button, "self_modulate", Color.WHITE, 0.14) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _on_bonus_button_up(button: Button) -> void:
+	if button != null and is_instance_valid(button):
+		if button == _spin:
+			_apply_spin_selection_tint()
+		else:
+			button.self_modulate = Color.WHITE
