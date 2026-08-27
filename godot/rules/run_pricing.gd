@@ -1,10 +1,11 @@
 class_name RunPricing
 extends RefCounted
 
-## One readable progression curve for every run-scoped purchase.  Round 1 is
-## unchanged; each later machine segment adds 15 percentage points.
+## One readable progression curve for every run-scoped purchase. Round 1 is
+## unchanged; each later machine segment adds 10 percentage points so late-run
+## visits still feel meaningfully more expensive without pricing out the Shop.
 
-const ROUND_PRICE_STEP := 0.15
+const ROUND_PRICE_STEP := 0.10
 
 static func multiplier(round_index: int) -> float:
 	return 1.0 + ROUND_PRICE_STEP * float(maxi(0, round_index - 1))

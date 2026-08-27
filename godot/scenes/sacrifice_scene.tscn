@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scenes/sacrifice_scene.gd" id="1_sacrifice"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/choice_scene.png" id="2_choice_scene"]
+[ext_resource type="Texture2D" path="res://assets/images/sacrifice_ritual.png" id="2_sacrifice_ritual"]
 
 [node name="SacrificeScene" type="Control"]
 layout_mode = 3
@@ -16,5 +16,5 @@ script = ExtResource("1_sacrifice")
 [node name="SacrificeBackdrop" type="Sprite2D" parent="."]
 z_index = -10
 texture_filter = 1
-texture = ExtResource("2_choice_scene")
+texture = ExtResource("2_sacrifice_ritual")
 centered = false

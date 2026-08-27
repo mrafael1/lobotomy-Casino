@@ -25,14 +25,27 @@ const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 
 # Counter geometry: authored coords (1280x2560) / 8 -> the 160x320 canvas.
 const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
-# Consumables stand on the white round dots of the counter (measured centre y ~= 206
-# source px). Icons are small (issue #24 follow-up: they read as objects on the counter,
-# not giant badges) and rest with their base on the dot. Stash icons reuse the shared
-# Assets.STASH_ICON_SIZE so they match the machine scene stash.
+# Consumables stand on the white round dots of the new counter. The dots land on the
+# native y=208 contact row after the 200x380 sheet is centred over the 160x320 canvas.
+# Each 16px icon keeps its authored scale; these small offsets compensate only for
+# transparent pixels below the silhouette (the cigarette is intentionally the largest).
+# Stash icons reuse the shared Assets.STASH_ICON_SIZE so they match the machine scene stash.
 const PRE_RUN_OFFER_ICON := 16.0
 const RUN_OFFER_ICON := 16.0
-const COUNTER_DOT_CY := 206.0 # measured centre of the counter's white round dots
-const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # icon base sits on the dot
+const COUNTER_DOT_CY := 208.0 # native contact row of the counter's white round dots
+const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # full icon box top
+const COUNTER_ITEM_Y_OFFSETS := {
+	"cons_focus": 1.0,
+	"cons_cigarette": 4.5,
+	"cons_white_powder": 0.5,
+	"cons_potion": 1.333333,
+	"cons_tea": 0.5,
+	"item_water": 0.5,
+	"item_cocktail": 1.0,
+	"item_energy_drink": 0.5,
+	"item_pill": 1.0,
+}
+const COUNTER_AUGMENT_Y_OFFSET := 1.0
 const TV := { "left": 2.0, "top": 126.0, "width": 49.0, "height": 26.0 }
 const DEALER_DROP_Y := 200.0 # release above this y = dropped "on the dealer"
 const DRAG_SLOP := 4.0
@@ -68,6 +81,22 @@ const COIN_ASSET := "ui/coin.png"
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_BACKGROUND_ASSET := DEALER_SHOP_ASSET_DIR + "bg.png"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "counter.png"
+# The between-run Dealer is a compact native sprite. Keep it separate from the
+# full-canvas portrait used by the active-run dealer so either presentation can
+# evolve without changing the other one.
+const DEALER_SHOP_DEALER_ASSET := "dealer.png"
+const DEALER_SHOP_DEALER_FRAMES := 2
+# Ambient timings are deliberately staggered: the room should feel inhabited,
+# not like every layer is running one synchronized animation.
+const SHOP_IDLE_FIRST_DELAY := 2.8
+const SHOP_IDLE_MIN_DELAY := 2.4
+const SHOP_IDLE_MAX_DELAY := 4.6
+const SHOP_LIGHT_FIRST_DELAY := 1.7
+const SHOP_LIGHT_MIN_DELAY := 1.6
+const SHOP_LIGHT_MAX_DELAY := 3.4
+const SHOP_REFLECTION_FIRST_DELAY := 4.8
+const SHOP_REFLECTION_MIN_DELAY := 4.5
+const SHOP_REFLECTION_MAX_DELAY := 7.2
 # 2 hframes: 0 = default, 1 = pressed. These are native source-pixel sheets,
 # not the retired 8x full-canvas exports.
 const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "machine.png"
@@ -174,6 +203,16 @@ var _drag_kind := ""        # "offer" | "stash"
 var _drag_home := Vector2.ZERO
 var _drag_moved := false
 var _press_pos := Vector2.ZERO
+var _dealer_shop_sprite: Sprite2D = null
+var _dealer_visual_rest_position := Vector2.ZERO
+var _shop_ambient: Control = null
+var _shop_light_strip: ColorRect = null
+var _shop_reflection: ColorRect = null
+var _shop_idle_timer: Timer = null
+var _shop_light_timer: Timer = null
+var _shop_reflection_timer: Timer = null
+var _shop_idle_tween: Tween = null
+var _shop_ambient_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_font = Assets.font()
@@ -189,6 +228,7 @@ func _ready() -> void:
 			and not _options_overlay.return_to_menu_requested.is_connected(_on_options_return_to_menu):
 		_options_overlay.return_to_menu_requested.connect(_on_options_return_to_menu)
 	_build_art()
+	_build_shop_ambient()
 	_build_tv()
 	_build_offers()
 	_build_stash()
@@ -267,6 +307,7 @@ func tutorial_anchor(id: String) -> Rect2:
 func _bind_scene_nodes() -> void:
 	_background_sprite = get_node_or_null("Background")
 	_portrait_sprite = get_node_or_null("DealerPortrait")
+	_dealer_shop_sprite = get_node_or_null("DealerShopSprite") as Sprite2D
 	_counter_sprite = get_node_or_null("Counter")
 	_dealer_drop_zone = get_node_or_null("DealerDropZone")
 	_tv_pos = get_node_or_null("TvPos")
@@ -378,7 +419,31 @@ func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
 		_configure_native_art_sprite(_background_sprite, DEALER_BACKGROUND_ASSET)
-		_portrait_sprite = _configure_full_canvas_sprite(_portrait_sprite, "dealer_portrait.png", 2, 0)
+		if _pre_run:
+			if _portrait_sprite != null:
+				_portrait_sprite.visible = false
+			_dealer_shop_sprite = _configure_native_art_sprite(
+				_dealer_shop_sprite, DEALER_SHOP_DEALER_ASSET,
+				DEALER_SHOP_DEALER_FRAMES, 0)
+			if _dealer_shop_sprite != null and _dealer_shop_sprite.texture != null:
+				_dealer_shop_sprite.visible = true
+				_dealer_visual_rest_position = _dealer_shop_sprite.position
+			else:
+				# Keep a usable editor/legacy fallback if the optional native export is
+				# missing. The active-run portrait remains the source of truth here.
+				_portrait_sprite = _configure_full_canvas_sprite(
+					_portrait_sprite, "dealer_portrait.png", 2, 0)
+				if _portrait_sprite != null:
+					_portrait_sprite.visible = true
+					_dealer_visual_rest_position = _portrait_sprite.position
+		else:
+			if _dealer_shop_sprite != null:
+				_dealer_shop_sprite.visible = false
+			_portrait_sprite = _configure_full_canvas_sprite(
+				_portrait_sprite, "dealer_portrait.png", 2, 0)
+			if _portrait_sprite != null:
+				_portrait_sprite.visible = true
+				_dealer_visual_rest_position = _portrait_sprite.position
 		_configure_native_art_sprite(_counter_sprite, DEALER_COUNTER_ASSET)
 		return
 	var bg := ColorRect.new() # wall colour behind any gap
@@ -386,15 +451,127 @@ func _build_art() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 	_native_art_sprite(DEALER_BACKGROUND_ASSET)
-	_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
+	if _pre_run:
+		_dealer_shop_sprite = _native_art_sprite(
+			DEALER_SHOP_DEALER_ASSET, DEALER_SHOP_DEALER_FRAMES, 0)
+		if _dealer_shop_sprite != null:
+			_dealer_visual_rest_position = _dealer_shop_sprite.position
+	else:
+		_portrait_sprite = _full_canvas_sprite("dealer_portrait.png", 2, 0) # 2-frame sheet
+		if _portrait_sprite != null:
+			_dealer_visual_rest_position = _portrait_sprite.position
 	_native_art_sprite(DEALER_COUNTER_ASSET)
+
+## Small ambient details for the between-run room. They are intentionally built in
+## code so they do not alter the authored shop sheets or add input-bearing nodes.
+## The running dealer never calls this path, preserving its existing presentation.
+func _build_shop_ambient() -> void:
+	if not _pre_run:
+		return
+	_shop_ambient = Control.new()
+	_shop_ambient.name = "DealerShopAmbient"
+	_shop_ambient.size = Vector2(CANVAS_W, CANVAS_H)
+	_shop_ambient.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shop_ambient.z_index = 1
+	add_child(_shop_ambient)
+
+	_shop_light_strip = ColorRect.new()
+	_shop_light_strip.name = "LightFlicker"
+	_shop_light_strip.position = Vector2(35.0, 52.0)
+	_shop_light_strip.size = Vector2(90.0, 1.0)
+	_shop_light_strip.color = Color(0.47, 0.96, 1.0, 0.055)
+	_shop_light_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shop_ambient.add_child(_shop_light_strip)
+
+	_shop_reflection = ColorRect.new()
+	_shop_reflection.name = "CounterReflection"
+	_shop_reflection.position = Vector2(112.0, 172.0)
+	_shop_reflection.size = Vector2(2.0, 18.0)
+	_shop_reflection.color = Color(1.0, 0.86, 0.48, 0.0)
+	_shop_reflection.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shop_ambient.add_child(_shop_reflection)
+
+	_shop_ambient_rng.seed = 0xD34E + Time.get_ticks_msec()
+	_shop_idle_timer = _shop_ambient_timer(
+		"IdleTimer", SHOP_IDLE_FIRST_DELAY, Callable(self, "_on_shop_idle_timeout"))
+	_shop_light_timer = _shop_ambient_timer(
+		"LightTimer", SHOP_LIGHT_FIRST_DELAY, Callable(self, "_on_shop_light_timeout"))
+	_shop_reflection_timer = _shop_ambient_timer(
+		"ReflectionTimer", SHOP_REFLECTION_FIRST_DELAY,
+		Callable(self, "_on_shop_reflection_timeout"))
+	if Engine.is_editor_hint():
+		return
+	_shop_idle_timer.start()
+	_shop_light_timer.start()
+	_shop_reflection_timer.start()
+
+func _shop_ambient_timer(timer_name: String, delay: float, callback: Callable) -> Timer:
+	var timer := Timer.new()
+	timer.name = timer_name
+	timer.one_shot = true
+	timer.wait_time = delay
+	timer.timeout.connect(callback)
+	_shop_ambient.add_child(timer)
+	return timer
+
+func _on_shop_idle_timeout() -> void:
+	var visual := _active_dealer_sprite()
+	if visual != null:
+		_dealer_react()
+		if _shop_idle_tween != null and _shop_idle_tween.is_valid():
+			_shop_idle_tween.kill()
+		var rest := _dealer_visual_rest_position
+		_shop_idle_tween = create_tween()
+		_shop_idle_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_shop_idle_tween.tween_property(visual, "position:y", rest.y - 1.0, 0.10)
+		_shop_idle_tween.tween_property(visual, "position:y", rest.y + 0.5, 0.12)
+		_shop_idle_tween.tween_property(visual, "position:y", rest.y, 0.14)
+	if _shop_idle_timer != null:
+		_shop_idle_timer.start(_shop_ambient_rng.randf_range(
+			SHOP_IDLE_MIN_DELAY, SHOP_IDLE_MAX_DELAY))
+
+func _on_shop_light_timeout() -> void:
+	if _background_sprite != null:
+		var tween := create_tween()
+		tween.tween_property(_background_sprite, "self_modulate",
+			Color(1.035, 1.02, 1.06, 1.0), 0.05)
+		tween.tween_property(_background_sprite, "self_modulate",
+			Color(0.985, 0.99, 1.02, 1.0), 0.11)
+		tween.tween_property(_background_sprite, "self_modulate", Color.WHITE, 0.22)
+	if _shop_light_strip != null:
+		var strip_tween := create_tween()
+		strip_tween.tween_property(_shop_light_strip, "color:a", 0.13, 0.06)
+		strip_tween.tween_property(_shop_light_strip, "color:a", 0.055, 0.24)
+	if _shop_light_timer != null:
+		_shop_light_timer.start(_shop_ambient_rng.randf_range(
+			SHOP_LIGHT_MIN_DELAY, SHOP_LIGHT_MAX_DELAY))
+
+func _on_shop_reflection_timeout() -> void:
+	if _shop_reflection != null:
+		_shop_reflection.position.x = 112.0
+		_shop_reflection.color.a = 0.0
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(_shop_reflection, "position:x", 145.0, 0.48)
+		tween.tween_property(_shop_reflection, "color:a", 0.11, 0.10)
+		tween.tween_property(_shop_reflection, "color:a", 0.0, 0.22).set_delay(0.25)
+		tween.set_parallel(false)
+	if _shop_reflection_timer != null:
+		_shop_reflection_timer.start(_shop_ambient_rng.randf_range(
+			SHOP_REFLECTION_MIN_DELAY, SHOP_REFLECTION_MAX_DELAY))
+
+func _active_dealer_sprite() -> Sprite2D:
+	if _pre_run and _dealer_shop_sprite != null and _dealer_shop_sprite.visible:
+		return _dealer_shop_sprite
+	return _portrait_sprite
 
 # Brief dealer reaction: swap the 2-frame portrait.
 func _dealer_react() -> void:
-	if _portrait_sprite == null:
+	var visual := _active_dealer_sprite()
+	if visual == null:
 		return
 	_portrait_frame = 1 - _portrait_frame
-	_portrait_sprite.frame = _portrait_frame
+	visual.frame = clampi(_portrait_frame, 0, maxi(0, visual.hframes - 1))
 
 func _mk_label(pos: Vector2, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -495,10 +672,32 @@ func _icon_tex(id: String) -> Texture2D:
 func _offer_icon_size() -> float:
 	return PRE_RUN_OFFER_ICON if _pre_run else RUN_OFFER_ICON
 
+func _counter_item_y_offset(id: String, kind: String) -> float:
+	if kind == "augment":
+		return COUNTER_AUGMENT_Y_OFFSET
+	return float(COUNTER_ITEM_Y_OFFSETS.get(id, 1.0))
+
+func _counter_item_top(id: String, kind: String, icon_size: float) -> float:
+	return COUNTER_DOT_CY - icon_size + _counter_item_y_offset(id, kind)
+
+func _counter_parent_origin_y(parent: Control) -> float:
+	if parent == null:
+		return 0.0
+	# The authored slots are direct children today, but measuring the relative canvas
+	# origin keeps this correct if the Shop gets another layout wrapper later. The
+	# scene's expanded mobile origin cancels out on both sides of the subtraction.
+	return parent.get_global_transform_with_canvas().origin.y \
+		- get_global_transform_with_canvas().origin.y
+
 func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, icon_size := -1.0) -> void:
 	var size_px := Assets.STASH_ICON_SIZE if kind == "stash" else _offer_icon_size()
 	if icon_size > 0.0:
 		size_px = icon_size
+	if kind == "offer" or kind == "augment":
+		# Position the draggable frame and its child sprite from the same authored
+		# contact row. This keeps the mobile hitbox travelling with the art instead
+		# of correcting the visible sprite alone.
+		pos.y = _counter_item_top(id, kind, size_px) - _counter_parent_origin_y(parent)
 	var t := Control.new()
 	t.set_meta("_dealer_dynamic", true)
 	t.position = pos
@@ -639,8 +838,9 @@ func _build_offers() -> void:
 			break
 		var cx: float = float(CIRCLE_CX[idx])
 		_offer_cx[String(id)] = cx
-		_make_offer_price_tag(String(id), Vector2(cx - 17.0, ITEM_TOP - 10.0), self)
-		_make_drag_icon(String(id), "offer", Vector2(cx - icon_size * 0.5, ITEM_TOP), self, icon_size)
+		var offer_id := String(id)
+		_make_offer_price_tag(offer_id, Vector2(cx - 17.0, ITEM_TOP - 10.0), self)
+		_make_drag_icon(offer_id, "offer", Vector2(cx - icon_size * 0.5, ITEM_TOP), self, icon_size)
 		idx += 1
 
 func _build_stash() -> void:
@@ -1502,10 +1702,9 @@ func _select(id: String) -> void:
 	if _offer_slots_by_id.has(id):
 		var slot: Control = _offer_slots_by_id[id]
 		name_cx = slot.position.x + slot.size.x * 0.5
-		_name_label.position.y = slot.position.y + slot.size.y + 1.0
 	else:
 		name_cx = float(_offer_cx.get(id, 80.0))
-		_name_label.position.y = ITEM_TOP + _offer_icon_size() + 1.0
+	_name_label.position.y = COUNTER_DOT_CY + 1.0
 	# Centre on the measured text width: the Label's own box centring rounds to
 	# whole pixels, which reads as a half-pixel drift at the x8 canvas scale.
 	var name_font := _name_label.get_theme_font("font")
@@ -1662,11 +1861,13 @@ func _flash_full_pockets() -> void:
 	var tw := create_tween()
 	tw.tween_property(_message, "scale", Vector2(1.3, 1.3), 0.06)
 	tw.tween_property(_message, "scale", Vector2.ONE, 0.1)
-	if _portrait_sprite != null:
+	var visual := _active_dealer_sprite()
+	if visual != null:
 		var sh := create_tween()
-		sh.tween_property(_portrait_sprite, "position:x", 3.0, 0.04)
-		sh.tween_property(_portrait_sprite, "position:x", -3.0, 0.04)
-		sh.tween_property(_portrait_sprite, "position:x", 0.0, 0.05)
+		var rest_x := _dealer_visual_rest_position.x
+		sh.tween_property(visual, "position:x", rest_x + 3.0, 0.04)
+		sh.tween_property(visual, "position:x", rest_x - 3.0, 0.04)
+		sh.tween_property(visual, "position:x", rest_x, 0.05)
 
 func _react_then_return() -> void:
 	_dealer_react()

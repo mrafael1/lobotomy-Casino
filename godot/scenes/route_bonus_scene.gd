@@ -6,13 +6,25 @@ extends Control
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const WHEEL_SCRIPT := preload("res://scenes/fortune_wheel.gd")
+const ROUND_WALL_BUTTON_SCRIPT := preload("res://ui/round_wall_button.gd")
 const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 const CYAN := Color(0.42, 1.0, 0.95)
 const GOLD := Color(1.0, 0.84, 0.38)
 const HOT_GOLD := Color(1.0, 0.95, 0.62)
 const MUTED := Color(0.62, 0.70, 0.78)
-const ROSE := Color(1.0, 0.35, 0.66)
 const INK := Color(0.055, 0.035, 0.105)
+const AMBIENT_CYAN := Color(0.42, 1.0, 0.95, 0.08)
+const AMBIENT_GOLD := Color(1.0, 0.84, 0.38, 0.06)
+const AMBIENT_LIGHT_FIRST_DELAY := 1.9
+const AMBIENT_LIGHT_MIN_DELAY := 1.7
+const AMBIENT_LIGHT_MAX_DELAY := 3.3
+const AMBIENT_REFLECTION_FIRST_DELAY := 4.6
+const AMBIENT_REFLECTION_MIN_DELAY := 4.4
+const AMBIENT_REFLECTION_MAX_DELAY := 7.0
+const ODDS_REVEAL_DELAY := 0.82
+const RESULT_PANEL_RECT := Rect2(12.0, 157.0, 136.0, 42.0)
+const ROUND_BUTTON_RECT := Rect2(59.0, 207.0, 42.0, 42.0)
+const HINT_RECT := Rect2(0.0, 250.0, 160.0, 23.0)
 
 var _font: FontFile = null
 var _wheel: FortuneWheelDisplay = null
@@ -21,14 +33,27 @@ var _status: Label = null
 var _hint: Label = null
 var _message: Label = null
 var _spin: Button = null
-var _return: Button = null
+var _result_panel: Panel = null
 var _odds_overlay: Control = null
+var _odds_reveal_tween: Tween = null
 var _animating_reward_id := ""
 var _spin_requesting := false
+var _leaving := false
+var _ambient_layer: Control = null
+var _ambient_light: ColorRect = null
+var _ambient_reflection: ColorRect = null
+var _ambient_light_timer: Timer = null
+var _ambient_reflection_timer: Timer = null
+var _ambient_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# This scene owns the full viewport while it is open. Child controls still
+	# receive their normal GUI events, but taps cannot fall through to a scene
+	# underneath during a route transition or when the wheel is idle.
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	_font = Assets.font()
+	_build_ambient()
 	_wheel = WHEEL_SCRIPT.new() as FortuneWheelDisplay
 	_wheel.name = "FortuneWheel"
 	_wheel.position = Vector2.ZERO
@@ -55,34 +80,41 @@ func _build() -> void:
 	_balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_balance)
 
-	var result_panel := _panel(Rect2(5.0, 148.0, 150.0, 36.0),
+	_result_panel = _panel(RESULT_PANEL_RECT,
 		Color(INK.r, INK.g, INK.b, 0.90), Color(GOLD.r, GOLD.g, GOLD.b, 0.55))
-	result_panel.z_index = 6
-	add_child(result_panel)
-	_status = _label("", Rect2(8.0, 150.0, 144.0, 12.0), 6, CYAN)
+	_result_panel.z_index = 6
+	add_child(_result_panel)
+	_status = _label("", Rect2(16.0, 160.0, 128.0, 10.0), 6, CYAN)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.z_index = 20
 	add_child(_status)
-	_message = _label("", Rect2(8.0, 163.0, 144.0, 20.0), 5, HOT_GOLD)
+	_message = _label("", Rect2(16.0, 173.0, 128.0, 21.0), 5, HOT_GOLD)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 20
 	add_child(_message)
 
-	_hint = _label("ONE TURN // NO TAKEBACKS", Rect2(8.0, 214.0, 144.0, 10.0), 4, MUTED)
+	_hint = _label("PRESS TO SPIN", HINT_RECT, 4, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint.clip_text = true
 	add_child(_hint)
-	_spin = _button("SPIN THE WHEEL", _centered_rect(231.0, Vector2(96.0, 22.0)), 6)
+	_spin = ROUND_WALL_BUTTON_SCRIPT.new() as Button
 	_spin.name = "TakeBonusButton"
+	_spin.position = ROUND_BUTTON_RECT.position
+	_spin.size = ROUND_BUTTON_RECT.size
+	_spin.custom_minimum_size = ROUND_BUTTON_RECT.size
+	_spin.text = "SPIN"
+	_spin.z_index = 20
+	_spin.mouse_filter = Control.MOUSE_FILTER_STOP
+	_spin.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spin.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		_spin.add_theme_font_override("font", _font)
 	_spin.pressed.connect(_on_spin_pressed)
 	add_child(_spin)
-
-	_return = _button("RETURN TO MACHINE", _centered_rect(286.0, Vector2(100.0, 18.0)), 5)
-	_return.name = "ReturnButton"
-	_return.pressed.connect(_on_return_pressed)
-	add_child(_return)
 
 func _refresh() -> void:
 	if _balance != null:
@@ -98,8 +130,9 @@ func _refresh() -> void:
 		_status.add_theme_color_override("font_color", CYAN)
 		_message.add_theme_color_override("font_color", HOT_GOLD)
 		_spin.disabled = true
-		_spin.text = "SPINNING..."
-		_return.disabled = true
+		_spin.text = "WAIT"
+		_hint.text = "WATCH THE WHEEL"
+		_spin.queue_redraw()
 		return
 
 	var reward_id := String(RunStateStore.routeBonusRewardId)
@@ -115,32 +148,35 @@ func _refresh() -> void:
 	_status.add_theme_color_override("font_color", HOT_GOLD if jackpot else CYAN)
 	_message.add_theme_color_override("font_color", HOT_GOLD if jackpot else GOLD)
 	if RunStateStore.routeBonusClaimed and reward_valid:
-		_status.text = "PRIZE CLAIMED" if not jackpot else "JACKPOT CLAIMED"
+		_status.text = "YOU WON" if not jackpot else "JACKPOT"
 		_message.text = String(reward.get("description", "BONUS PAID"))
-		_spin.disabled = true
-		_spin.text = "PRIZE CLAIMED"
-		_return.disabled = odds_reward and not RunStateStore.oddsPhaseCompleted
+		_spin.disabled = odds_reward and not RunStateStore.oddsPhaseCompleted
+		_spin.text = "ODDS" if odds_reward and not RunStateStore.oddsPhaseCompleted else "OK"
 		_hint.text = "UPGRADE THE ODDS" if odds_reward and not RunStateStore.oddsPhaseCompleted \
-			else "THE MACHINE WILL REMEMBER"
+			else "TAP TO CONTINUE"
 		if odds_open:
 			_hint.text = "ODDS TABLE OPEN"
 	elif reward_valid:
-		_status.text = "FATE LOCKED // COLLECT"
+		_status.text = "PRIZE READY"
 		_message.text = String(reward.get("description", "COLLECT YOUR PRIZE"))
 		_spin.disabled = false
-		_spin.text = "COLLECT PRIZE"
-		_return.disabled = true
-		_hint.text = "ONE TURN // NO TAKEBACKS"
+		_spin.text = "CLAIM"
+		_hint.text = "PRESS TO CLAIM"
 	else:
 		_status.text = "SPIN FOR YOUR FATE"
 		_message.text = "FIVE REWARDS // ONE JACKPOT"
 		_spin.disabled = false
-		_spin.text = "SPIN THE WHEEL"
-		_return.disabled = true
-		_hint.text = "ONE TURN // NO TAKEBACKS"
+		_spin.text = "SPIN"
+		_hint.text = "PRESS TO SPIN"
+	# Button text/disabled changes are stateful drawing inputs for the custom wall
+	# control, so refresh its face after every non-animating state transition.
+	_spin.queue_redraw()
 
 func _on_spin_pressed() -> void:
-	if _animating_reward_id != "" or RunStateStore.routeBonusClaimed:
+	if _leaving or not _animating_reward_id.is_empty():
+		return
+	if RunStateStore.routeBonusClaimed:
+		_continue_to_machine()
 		return
 	if FortuneWheelRules.is_valid_reward(String(RunStateStore.routeBonusRewardId)):
 		_collect_prize()
@@ -164,7 +200,23 @@ func _on_wheel_finished(reward_id: String) -> void:
 	if reward_id != _animating_reward_id:
 		return
 	_animating_reward_id = ""
-	_refresh()
+	# The wheel result is the prize. Claim it as soon as the authored reveal lands,
+	# leaving the round control free to become the acknowledgement/continue action.
+	if not RunStateStore.routeBonusClaimed:
+		_collect_prize()
+	else:
+		_refresh()
+	_settle_reward_visuals()
+
+func _settle_reward_visuals() -> void:
+	if _result_panel == null or not is_instance_valid(_result_panel):
+		return
+	# The wheel already supplies the strong reveal. A short panel pulse makes the
+	# saved selection feel acknowledged without swapping the whole background.
+	_result_panel.self_modulate = Color(1.12, 1.08, 1.02, 1.0)
+	var tween := create_tween()
+	tween.tween_property(_result_panel, "self_modulate", Color.WHITE, 0.28) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _collect_prize() -> void:
 	if not _animating_reward_id.is_empty() or RunStateStore.routeBonusClaimed:
@@ -173,7 +225,22 @@ func _collect_prize() -> void:
 		_message.text = "PRIZE COULD NOT BE CLAIMED"
 		return
 	_refresh()
-	call_deferred("_open_odds_table_if_needed")
+	var reward := RunStateStore.route_bonus_reward()
+	if int(reward.get("oddsTokens", 0)) > 0:
+		_schedule_odds_table_after_reveal()
+	else:
+		call_deferred("_open_odds_table_if_needed")
+
+func _schedule_odds_table_after_reveal() -> void:
+	if _odds_reveal_tween != null and _odds_reveal_tween.is_valid():
+		_odds_reveal_tween.kill()
+	_odds_reveal_tween = create_tween()
+	_odds_reveal_tween.tween_interval(ODDS_REVEAL_DELAY)
+	_odds_reveal_tween.tween_callback(_on_odds_reveal_delay_finished)
+
+func _on_odds_reveal_delay_finished() -> void:
+	_odds_reveal_tween = null
+	_open_odds_table_if_needed()
 
 func _open_odds_table_if_needed() -> void:
 	if _odds_overlay != null and is_instance_valid(_odds_overlay):
@@ -196,21 +263,110 @@ func _on_odds_table_closed() -> void:
 	_odds_overlay = null
 	_refresh()
 
-func _on_return_pressed() -> void:
+func _continue_to_machine() -> void:
+	if _leaving:
+		return
 	if not RunStateStore.routeBonusClaimed:
-		_message.text = "COLLECT THE PRIZE FIRST"
+		_message.text = "WAIT FOR THE RESULT"
 		return
 	var reward := RunStateStore.route_bonus_reward()
 	if int(reward.get("oddsTokens", 0)) > 0 and not RunStateStore.oddsPhaseCompleted:
 		_message.text = "FINISH THE ODDS TABLE FIRST"
 		return
+	_leaving = true
 	if not RunStateStore.finish_route_destination():
+		_leaving = false
+		_refresh()
 		_message.text = "NEXT MACHINE UNAVAILABLE"
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
 
-func _centered_rect(top: float, dimensions: Vector2) -> Rect2:
-	return Rect2(Vector2(roundf((CANVAS_SIZE.x - dimensions.x) * 0.5), top), dimensions)
+func _can_continue_from_tap() -> bool:
+	if _leaving or not _animating_reward_id.is_empty() or not RunStateStore.routeBonusClaimed:
+		return false
+	var reward := RunStateStore.route_bonus_reward()
+	return int(reward.get("oddsTokens", 0)) <= 0 or RunStateStore.oddsPhaseCompleted
+
+func _gui_input(event: InputEvent) -> void:
+	# Empty wall space is also a comfortable acknowledgement target. Child buttons
+	# get first refusal; the root handles a tap/click that lands on the room itself.
+	var activate := false
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		activate = mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed
+	elif event is InputEventScreenTouch:
+		activate = not (event as InputEventScreenTouch).pressed
+	if activate and _can_continue_from_tap():
+		_continue_to_machine()
+	get_viewport().set_input_as_handled()
+
+func _build_ambient() -> void:
+	_ambient_layer = Control.new()
+	_ambient_layer.name = "BonusAmbient"
+	_ambient_layer.size = CANVAS_SIZE
+	_ambient_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.z_index = -5
+	add_child(_ambient_layer)
+
+	_ambient_light = ColorRect.new()
+	_ambient_light.name = "LightFlicker"
+	_ambient_light.position = Vector2(13.0, 38.0)
+	_ambient_light.size = Vector2(134.0, 1.0)
+	_ambient_light.color = AMBIENT_CYAN
+	_ambient_light.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.add_child(_ambient_light)
+
+	_ambient_reflection = ColorRect.new()
+	_ambient_reflection.name = "ReflectionSweep"
+	_ambient_reflection.position = Vector2(16.0, 54.0)
+	_ambient_reflection.size = Vector2(2.0, 82.0)
+	_ambient_reflection.color = Color(AMBIENT_GOLD.r, AMBIENT_GOLD.g,
+		AMBIENT_GOLD.b, 0.0)
+	_ambient_reflection.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ambient_layer.add_child(_ambient_reflection)
+
+	_ambient_rng.seed = 0xB0A05 + Time.get_ticks_msec()
+	_ambient_light_timer = _ambient_timer(
+		"LightTimer", AMBIENT_LIGHT_FIRST_DELAY, Callable(self, "_on_ambient_light_timeout"))
+	_ambient_reflection_timer = _ambient_timer(
+		"ReflectionTimer", AMBIENT_REFLECTION_FIRST_DELAY,
+		Callable(self, "_on_ambient_reflection_timeout"))
+	if Engine.is_editor_hint():
+		return
+	_ambient_light_timer.start()
+	_ambient_reflection_timer.start()
+
+func _ambient_timer(timer_name: String, delay: float, callback: Callable) -> Timer:
+	var timer := Timer.new()
+	timer.name = timer_name
+	timer.one_shot = true
+	timer.wait_time = delay
+	timer.timeout.connect(callback)
+	_ambient_layer.add_child(timer)
+	return timer
+
+func _on_ambient_light_timeout() -> void:
+	if _ambient_light != null:
+		var tween := create_tween()
+		tween.tween_property(_ambient_light, "color:a", 0.15, 0.07)
+		tween.tween_property(_ambient_light, "color:a", 0.05, 0.20)
+	if _ambient_light_timer != null:
+		_ambient_light_timer.start(_ambient_rng.randf_range(
+			AMBIENT_LIGHT_MIN_DELAY, AMBIENT_LIGHT_MAX_DELAY))
+
+func _on_ambient_reflection_timeout() -> void:
+	if _ambient_reflection != null:
+		_ambient_reflection.position.x = 16.0
+		_ambient_reflection.color.a = 0.0
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(_ambient_reflection, "position:x", 142.0, 0.58)
+		tween.tween_property(_ambient_reflection, "color:a", 0.10, 0.11)
+		tween.tween_property(_ambient_reflection, "color:a", 0.0, 0.27).set_delay(0.28)
+		tween.set_parallel(false)
+	if _ambient_reflection_timer != null:
+		_ambient_reflection_timer.start(_ambient_rng.randf_range(
+			AMBIENT_REFLECTION_MIN_DELAY, AMBIENT_REFLECTION_MAX_DELAY))
 
 func _panel(rect: Rect2, background: Color, border: Color) -> Panel:
 	var panel := Panel.new()
@@ -241,42 +397,3 @@ func _label(text_value: String, rect: Rect2, font_size: int, color: Color) -> La
 	if _font != null:
 		label.add_theme_font_override("font", _font)
 	return label
-
-func _button(text_value: String, rect: Rect2, font_size: int) -> Button:
-	var button := Button.new()
-	button.text = text_value
-	button.position = rect.position
-	button.size = rect.size
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", CYAN)
-	button.add_theme_color_override("font_hover_color", HOT_GOLD)
-	button.add_theme_color_override("font_pressed_color", HOT_GOLD)
-	button.add_theme_color_override("font_disabled_color", MUTED)
-	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
-	if _font != null:
-		button.add_theme_font_override("font", _font)
-	button.add_theme_stylebox_override("normal", _button_style(Color(INK.r, INK.g, INK.b, 0.96), CYAN))
-	button.add_theme_stylebox_override("hover", _button_style(Color(0.11, 0.06, 0.18, 0.98), HOT_GOLD))
-	button.add_theme_stylebox_override("pressed", _button_style(Color(0.18, 0.08, 0.20, 1.0), ROSE))
-	button.add_theme_stylebox_override("disabled", _button_style(Color(0.07, 0.06, 0.11, 0.95), MUTED))
-	return button
-
-func _button_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 2
-	style.corner_radius_top_right = 2
-	style.corner_radius_bottom_left = 2
-	style.corner_radius_bottom_right = 2
-	style.content_margin_left = 2.0
-	style.content_margin_right = 2.0
-	style.shadow_color = Color(border.r, border.g, border.b, 0.24)
-	style.shadow_size = 2
-	style.shadow_offset = Vector2(0.0, 1.0)
-	return style
