@@ -6,12 +6,12 @@ extends Control
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const WHEEL_SCRIPT := preload("res://scenes/fortune_wheel.gd")
+const ROUND_WALL_BUTTON_SCRIPT := preload("res://ui/round_wall_button.gd")
 const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 const CYAN := Color(0.42, 1.0, 0.95)
 const GOLD := Color(1.0, 0.84, 0.38)
 const HOT_GOLD := Color(1.0, 0.95, 0.62)
 const MUTED := Color(0.62, 0.70, 0.78)
-const ROSE := Color(1.0, 0.35, 0.66)
 const INK := Color(0.055, 0.035, 0.105)
 const AMBIENT_CYAN := Color(0.42, 1.0, 0.95, 0.08)
 const AMBIENT_GOLD := Color(1.0, 0.84, 0.38, 0.06)
@@ -21,6 +21,9 @@ const AMBIENT_LIGHT_MAX_DELAY := 3.3
 const AMBIENT_REFLECTION_FIRST_DELAY := 4.6
 const AMBIENT_REFLECTION_MIN_DELAY := 4.4
 const AMBIENT_REFLECTION_MAX_DELAY := 7.0
+const RESULT_PANEL_RECT := Rect2(12.0, 157.0, 136.0, 42.0)
+const ROUND_BUTTON_RECT := Rect2(59.0, 207.0, 42.0, 42.0)
+const HINT_RECT := Rect2(8.0, 253.0, 144.0, 10.0)
 
 var _font: FontFile = null
 var _wheel: FortuneWheelDisplay = null
@@ -29,11 +32,11 @@ var _status: Label = null
 var _hint: Label = null
 var _message: Label = null
 var _spin: Button = null
-var _return: Button = null
 var _result_panel: Panel = null
 var _odds_overlay: Control = null
 var _animating_reward_id := ""
 var _spin_requesting := false
+var _leaving := false
 var _ambient_layer: Control = null
 var _ambient_light: ColorRect = null
 var _ambient_reflection: ColorRect = null
@@ -75,36 +78,39 @@ func _build() -> void:
 	_balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_balance)
 
-	_result_panel = _panel(Rect2(5.0, 148.0, 150.0, 36.0),
+	_result_panel = _panel(RESULT_PANEL_RECT,
 		Color(INK.r, INK.g, INK.b, 0.90), Color(GOLD.r, GOLD.g, GOLD.b, 0.55))
 	_result_panel.z_index = 6
 	add_child(_result_panel)
-	_status = _label("", Rect2(8.0, 150.0, 144.0, 12.0), 6, CYAN)
+	_status = _label("", Rect2(16.0, 160.0, 128.0, 10.0), 6, CYAN)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.z_index = 20
 	add_child(_status)
-	_message = _label("", Rect2(8.0, 163.0, 144.0, 20.0), 5, HOT_GOLD)
+	_message = _label("", Rect2(16.0, 173.0, 128.0, 21.0), 5, HOT_GOLD)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.z_index = 20
 	add_child(_message)
 
-	_hint = _label("ONE TURN // NO TAKEBACKS", Rect2(8.0, 214.0, 144.0, 10.0), 4, MUTED)
+	_hint = _label("PRESS THE PLATE TO SPIN", HINT_RECT, 4, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_hint)
-	_spin = _button("SPIN THE WHEEL", _centered_rect(231.0, Vector2(96.0, 22.0)),
-		6, GOLD)
+	_spin = ROUND_WALL_BUTTON_SCRIPT.new() as Button
 	_spin.name = "TakeBonusButton"
+	_spin.position = ROUND_BUTTON_RECT.position
+	_spin.size = ROUND_BUTTON_RECT.size
+	_spin.custom_minimum_size = ROUND_BUTTON_RECT.size
+	_spin.text = "SPIN"
+	_spin.z_index = 20
+	_spin.mouse_filter = Control.MOUSE_FILTER_STOP
+	_spin.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spin.add_theme_font_size_override("font_size", 5)
+	if _font != null:
+		_spin.add_theme_font_override("font", _font)
 	_spin.pressed.connect(_on_spin_pressed)
 	add_child(_spin)
-
-	_return = _button("RETURN TO MACHINE", _centered_rect(286.0, Vector2(100.0, 18.0)),
-		5, ROSE)
-	_return.name = "ReturnButton"
-	_return.pressed.connect(_on_return_pressed)
-	add_child(_return)
 
 func _refresh() -> void:
 	if _balance != null:
@@ -120,9 +126,9 @@ func _refresh() -> void:
 		_status.add_theme_color_override("font_color", CYAN)
 		_message.add_theme_color_override("font_color", HOT_GOLD)
 		_spin.disabled = true
-		_spin.text = "SPINNING..."
-		_return.disabled = true
-		_spin.self_modulate = Color.WHITE
+		_spin.text = "WAIT"
+		_hint.text = "THE HOUSE IS WATCHING"
+		_spin.queue_redraw()
 		return
 
 	var reward_id := String(RunStateStore.routeBonusRewardId)
@@ -138,41 +144,35 @@ func _refresh() -> void:
 	_status.add_theme_color_override("font_color", HOT_GOLD if jackpot else CYAN)
 	_message.add_theme_color_override("font_color", HOT_GOLD if jackpot else GOLD)
 	if RunStateStore.routeBonusClaimed and reward_valid:
-		_status.text = "PRIZE CLAIMED" if not jackpot else "JACKPOT CLAIMED"
+		_status.text = "YOU WON" if not jackpot else "JACKPOT"
 		_message.text = String(reward.get("description", "BONUS PAID"))
-		_spin.disabled = true
-		_spin.text = "PRIZE CLAIMED"
-		_return.disabled = odds_reward and not RunStateStore.oddsPhaseCompleted
+		_spin.disabled = odds_reward and not RunStateStore.oddsPhaseCompleted
+		_spin.text = "ODDS" if odds_reward and not RunStateStore.oddsPhaseCompleted else "OK"
 		_hint.text = "UPGRADE THE ODDS" if odds_reward and not RunStateStore.oddsPhaseCompleted \
-			else "THE MACHINE WILL REMEMBER"
+			else "TAP TO CONTINUE"
 		if odds_open:
 			_hint.text = "ODDS TABLE OPEN"
 	elif reward_valid:
-		_status.text = "FATE LOCKED // COLLECT"
+		_status.text = "PRIZE READY"
 		_message.text = String(reward.get("description", "COLLECT YOUR PRIZE"))
 		_spin.disabled = false
-		_spin.text = "COLLECT PRIZE"
-		_return.disabled = true
-		_hint.text = "ONE TURN // NO TAKEBACKS"
+		_spin.text = "CLAIM"
+		_hint.text = "PRESS TO CLAIM"
 	else:
 		_status.text = "SPIN FOR YOUR FATE"
 		_message.text = "FIVE REWARDS // ONE JACKPOT"
 		_spin.disabled = false
-		_spin.text = "SPIN THE WHEEL"
-		_return.disabled = true
-		_hint.text = "ONE TURN // NO TAKEBACKS"
-	_apply_spin_selection_tint()
-
-func _apply_spin_selection_tint() -> void:
-	if _spin == null or not is_instance_valid(_spin):
-		return
-	var reward_locked := FortuneWheelRules.is_valid_reward(
-		String(RunStateStore.routeBonusRewardId)) \
-		and not RunStateStore.routeBonusClaimed
-	_spin.self_modulate = Color(1.10, 1.04, 0.94, 1.0) if reward_locked else Color.WHITE
+		_spin.text = "SPIN"
+		_hint.text = "PRESS THE PLATE TO SPIN"
+	# Button text/disabled changes are stateful drawing inputs for the custom wall
+	# control, so refresh its face after every non-animating state transition.
+	_spin.queue_redraw()
 
 func _on_spin_pressed() -> void:
-	if _animating_reward_id != "" or RunStateStore.routeBonusClaimed:
+	if _leaving or not _animating_reward_id.is_empty():
+		return
+	if RunStateStore.routeBonusClaimed:
+		_continue_to_machine()
 		return
 	if FortuneWheelRules.is_valid_reward(String(RunStateStore.routeBonusRewardId)):
 		_collect_prize()
@@ -196,7 +196,12 @@ func _on_wheel_finished(reward_id: String) -> void:
 	if reward_id != _animating_reward_id:
 		return
 	_animating_reward_id = ""
-	_refresh()
+	# The wheel result is the prize. Claim it as soon as the authored reveal lands,
+	# leaving the round control free to become the acknowledgement/continue action.
+	if not RunStateStore.routeBonusClaimed:
+		_collect_prize()
+	else:
+		_refresh()
 	_settle_reward_visuals()
 
 func _settle_reward_visuals() -> void:
@@ -239,22 +244,41 @@ func _on_odds_table_closed() -> void:
 	_odds_overlay = null
 	_refresh()
 
-func _on_return_pressed() -> void:
+func _continue_to_machine() -> void:
+	if _leaving:
+		return
 	if not RunStateStore.routeBonusClaimed:
-		_message.text = "COLLECT THE PRIZE FIRST"
+		_message.text = "WAIT FOR THE RESULT"
 		return
 	var reward := RunStateStore.route_bonus_reward()
 	if int(reward.get("oddsTokens", 0)) > 0 and not RunStateStore.oddsPhaseCompleted:
 		_message.text = "FINISH THE ODDS TABLE FIRST"
 		return
+	_leaving = true
 	if not RunStateStore.finish_route_destination():
+		_leaving = false
+		_refresh()
 		_message.text = "NEXT MACHINE UNAVAILABLE"
 		return
 	SceneNav.change_to("res://scenes/machine_scene.tscn")
 
-func _gui_input(_event: InputEvent) -> void:
-	# The root is a deliberate input shield for the Bonus layer. Buttons are
-	# children and therefore retain their own GUI handling before this fallback.
+func _can_continue_from_tap() -> bool:
+	if _leaving or not _animating_reward_id.is_empty() or not RunStateStore.routeBonusClaimed:
+		return false
+	var reward := RunStateStore.route_bonus_reward()
+	return int(reward.get("oddsTokens", 0)) <= 0 or RunStateStore.oddsPhaseCompleted
+
+func _gui_input(event: InputEvent) -> void:
+	# Empty wall space is also a comfortable acknowledgement target. Child buttons
+	# get first refusal; the root handles a tap/click that lands on the room itself.
+	var activate := false
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		activate = mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed
+	elif event is InputEventScreenTouch:
+		activate = not (event as InputEventScreenTouch).pressed
+	if activate and _can_continue_from_tap():
+		_continue_to_machine()
 	get_viewport().set_input_as_handled()
 
 func _build_ambient() -> void:
@@ -325,9 +349,6 @@ func _on_ambient_reflection_timeout() -> void:
 		_ambient_reflection_timer.start(_ambient_rng.randf_range(
 			AMBIENT_REFLECTION_MIN_DELAY, AMBIENT_REFLECTION_MAX_DELAY))
 
-func _centered_rect(top: float, dimensions: Vector2) -> Rect2:
-	return Rect2(Vector2(roundf((CANVAS_SIZE.x - dimensions.x) * 0.5), top), dimensions)
-
 func _panel(rect: Rect2, background: Color, border: Color) -> Panel:
 	var panel := Panel.new()
 	panel.position = rect.position
@@ -357,36 +378,3 @@ func _label(text_value: String, rect: Rect2, font_size: int, color: Color) -> La
 	if _font != null:
 		label.add_theme_font_override("font", _font)
 	return label
-
-func _button(text_value: String, rect: Rect2, font_size: int,
-		plate_color: Color = CYAN) -> Button:
-	var button := Button.new()
-	button.text = text_value
-	button.position = rect.position
-	button.size = rect.size
-	button.custom_minimum_size = rect.size
-	button.mouse_filter = Control.MOUSE_FILTER_STOP
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.add_theme_font_size_override("font_size", font_size)
-	ButtonKit.small_neon_button_style(button, plate_color, font_size)
-	ButtonKit.add_press_feel(button)
-	button.button_down.connect(_on_bonus_button_down.bind(button))
-	button.button_up.connect(_on_bonus_button_up.bind(button))
-	return button
-
-func _on_bonus_button_down(button: Button) -> void:
-	if button == null or not is_instance_valid(button):
-		return
-	button.self_modulate = Color(1.08, 1.05, 1.10, 1.0)
-	var tween := create_tween()
-	tween.tween_property(button, "self_modulate", Color.WHITE, 0.14) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-func _on_bonus_button_up(button: Button) -> void:
-	if button != null and is_instance_valid(button):
-		if button == _spin:
-			_apply_spin_selection_tint()
-		else:
-			button.self_modulate = Color.WHITE
