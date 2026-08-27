@@ -38,6 +38,93 @@ func _check_scene_instantiation(failures: Array) -> void:
 		get_root().add_child(n)
 		n.queue_free()
 
+## The Sacrifice scene is a native-canvas interaction, not a collection of
+## generic rows. Exercise its preview/commit/reveal seam with two accepted
+## trades and prove that the third is unavailable for this visit.
+func _check_sacrifice_ritual_scene(run_store: Node, meta_store: Node,
+		failures: Array) -> void:
+	var run_snapshot: Dictionary = {}
+	for property_name in run_store._run_state_properties():
+		run_snapshot[property_name] = run_store.get(property_name)
+	var meta_snapshot: Dictionary = meta_store._as_dict()
+	run_store.runPhase = "over"
+	run_store.routeDestination = RouteCards.ROUTE_SACRIFICE
+	run_store.routeContext = "wealth_target"
+	run_store.routeOfferPending = false
+	run_store.sacrificeCount = 0
+	run_store.sacrificesUsedThisVisit = 0
+	run_store.sacrificeClaimed = false
+	run_store.sacrificeSelectedId = ""
+	run_store.sacrificeRewardId = ""
+	run_store.nextRoundSpinBonus = 0
+	run_store.lucidityCoins = 240
+	run_store.selectedAugmentCardIds = ["augment_book"]
+	run_store.selectedPowerCardIds = ["reroll"]
+	run_store.ownedPowerIds = ["reroll"]
+	meta_store.campaignNeuronsLeft = 3
+	var scene := (load("res://scenes/sacrifice_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(scene)
+	await process_frame
+	var backdrop := scene.get_node_or_null("SacrificeBackdrop") as Sprite2D
+	if backdrop == null or backdrop.texture == null \
+			or backdrop.texture.resource_path != "res://assets/images/sacrifice_ritual.png":
+		failures.append("sacrifice: scene is not using the authored ritual backdrop")
+	if backdrop != null and backdrop.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
+		failures.append("sacrifice: ritual backdrop is not nearest-neighbor filtered")
+	if scene.get_node_or_null("SacrificeOptionsScroll") != null:
+		failures.append("sacrifice: old button-list presentation is still present")
+	var offerings := scene.get_node_or_null("RitualOfferings") as Control
+	if offerings == null or offerings.get_child_count() != 4:
+		failures.append("sacrifice: four separated offering touch targets are not rendered")
+	elif (offerings.get_child(0) as Control).get_global_rect().intersects(
+			(offerings.get_child(1) as Control).get_global_rect()):
+		failures.append("sacrifice: offering touch targets overlap")
+	var confirm := scene.get_node_or_null("ConfirmSacrificeButton") as Button
+	var leave := scene.get_node_or_null("LeaveSacrificeButton") as Button
+	if confirm == null or leave == null:
+		failures.append("sacrifice: ritual actions are missing")
+	else:
+		if not confirm.disabled:
+			failures.append("sacrifice: confirm action is live before an offering is selected")
+		if leave.text != "LEAVE":
+			failures.append("sacrifice: initial leave action has the wrong label")
+
+	scene.call("_on_option_pressed", SacrificeRules.OPTION_COINS)
+	await process_frame
+	if String(scene.get("_selected_option_id")) != SacrificeRules.OPTION_COINS \
+			or confirm == null or confirm.disabled \
+			or scene.get_node_or_null("BalanceOffering") == null:
+		failures.append("sacrifice: selecting an offering does not create a confirmable scale preview")
+	var count_before_commit := int(run_store.sacrificeCount)
+	scene.call("_on_confirm_pressed")
+	if int(run_store.sacrificeCount) != count_before_commit + 1 \
+			or not bool(scene.get("_resolving")) \
+			or not run_store.sacrificeClaimed:
+		failures.append("sacrifice: confirm did not lock the committed transaction")
+	scene.call("_on_confirm_pressed")
+	if int(run_store.sacrificeCount) != count_before_commit + 1:
+		failures.append("sacrifice: duplicate confirm changed the accepted count")
+	await create_timer(1.9).timeout
+	if bool(scene.get("_resolving")) or run_store.sacrificeClaimed \
+			or int(run_store.sacrificesUsedThisVisit) != 1 \
+			or not String(scene.get("_last_reward_label")).contains("+5"):
+		failures.append("sacrifice: deterministic reward reveal did not settle after its first trade")
+
+	var second_id := SacrificeRules.option_id_for_augment("augment_book")
+	scene.call("_on_option_pressed", second_id)
+	scene.call("_on_confirm_pressed")
+	await create_timer(1.9).timeout
+	if int(run_store.sacrificesUsedThisVisit) != SacrificeRules.MAX_USES_PER_VISIT \
+			or not run_store.sacrifice_options().is_empty() \
+			or confirm == null or not confirm.disabled \
+			or leave == null or leave.text != "RETURN":
+		failures.append("sacrifice: second trade did not close the two-offering visit")
+	if is_instance_valid(scene):
+		scene.free()
+	for property_name in run_snapshot:
+		run_store.set(String(property_name), run_snapshot[property_name])
+	meta_store._apply(meta_snapshot)
+
 func _route_seed_for_card(context: String, card_id: String, seed_start: int) -> int:
 	for offset in 64:
 		for card in RouteCards.offer(seed_start + offset, context):

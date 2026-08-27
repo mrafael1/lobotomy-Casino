@@ -165,7 +165,8 @@ static func run_all() -> Array:
 	for property_name in _store()._run_state_properties():
 		serialized[property_name] = _store().get(property_name)
 	_check(out, serialized.has("routeOfferPending") and serialized.has("routeOfferRerollCount") \
-		and serialized.has("routeBuildOfferIds"),
+		and serialized.has("routeBuildOfferIds") \
+		and serialized.has("sacrificesUsedThisVisit") and serialized.has("sacrificeRewardId"),
 		"route offer, reroll and build state are included in run persistence")
 	var round_trip: Variant = str_to_var(var_to_str(serialized))
 	_check(out, round_trip is Dictionary and bool((round_trip as Dictionary).get("routeOfferPending", false)),
@@ -349,6 +350,23 @@ static func run_all() -> Array:
 		and int(_store().nextRoundSpinBonus) == SacrificeRules.BONUS_SPINS \
 		and int(_store().sacrificeCount) == 1,
 		"Sacrifice grants its next-round spin boon once")
+	var after_first_sacrifice := _snapshot_run()
+	var after_first_sacrifice_meta: Dictionary = _meta()._as_dict()
+	_check(out, _store().resolve_sacrifice_reward().get("amount", 0) == SacrificeRules.BONUS_SPINS,
+		"Sacrifice resolves its reward before presentation")
+	_check(out, _store().acknowledge_sacrifice(),
+		"Sacrifice can acknowledge a completed reward reveal")
+	_check(out, int(_store().sacrificesUsedThisVisit) == 1 \
+			and not _store().sacrifice_options().is_empty(),
+		"a Sacrifice visit remains open after its first accepted trade")
+	_check(out, _store().claim_sacrifice(SacrificeRules.option_id_for_augment("augment_book")) \
+			and int(_store().sacrificesUsedThisVisit) == SacrificeRules.MAX_USES_PER_VISIT,
+		"a Sacrifice visit accepts a second trade")
+	_check(out, _store().sacrifice_options().is_empty() \
+			and not _store().claim_sacrifice(SacrificeRules.OPTION_NEURON),
+		"a Sacrifice visit blocks a third trade")
+	_restore_run(after_first_sacrifice)
+	_meta()._apply(after_first_sacrifice_meta)
 	_check(out, not _store().claim_sacrifice(SacrificeRules.OPTION_COINS),
 		"one Sacrifice route cannot be claimed twice")
 	_check(out, _store().finish_route_destination() and _store().runPhase == "running",

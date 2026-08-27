@@ -270,6 +270,11 @@ var routeBonusSpinSeed := 0
 var sacrificeCount := 0
 var sacrificeClaimed := false
 var sacrificeSelectedId := ""
+## A Sacrifice route can resolve two accepted trades before it closes. The
+## transaction flag above remains true until the scene acknowledges its
+## already-applied reward, so closing during presentation cannot duplicate it.
+var sacrificesUsedThisVisit := 0
+var sacrificeRewardId := ""
 ## Run-scoped Shop purchases. These are neither persistent Lab upgrades nor
 ## campaign Chip Augments.
 var runShopUpgrades: Array = []
@@ -812,6 +817,14 @@ func load_run_state() -> void:
 	nextRoundSpinBonus = maxi(0, int(nextRoundSpinBonus))
 	oddsTokenBudgetOverride = clampi(int(oddsTokenBudgetOverride), 0, odds_max_tokens)
 	sacrificeCount = clampi(int(sacrificeCount), 0, SacrificeRules.MAX_USES)
+	sacrificesUsedThisVisit = clampi(int(sacrificesUsedThisVisit), 0,
+		SacrificeRules.MAX_USES_PER_VISIT)
+	# Migrate a route save written before the per-visit counter existed. A claimed
+	# Sacrifice is already one accepted trade even when the old snapshot has no
+	# counter to prove it.
+	if sacrificesUsedThisVisit == 0 and sacrificeClaimed \
+			and routeDestination == RouteCards.ROUTE_SACRIFICE:
+		sacrificesUsedThisVisit = 1
 	_normalise_route_offer_after_load()
 	ownedPowerIds = _normalise_power_ids(ownedPowerIds)
 	ownedPowerIds = _cap_power_ids(ownedPowerIds)
@@ -1614,6 +1627,8 @@ func reset_run_state() -> void:
 	sacrificeCount = 0
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	runShopUpgrades = []
 	runDealerServices = []
 	wealthTargetIndex = 0
@@ -1845,6 +1860,8 @@ func prepare_route_offer(context: String, seed_override := -1) -> bool:
 	routeBonusSpinSeed = 0
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	_commit()
 	return routeOfferPending
 
@@ -1884,6 +1901,8 @@ func _open_route_build(kind: String, card: Dictionary) -> bool:
 	routeBonusSpinSeed = 0
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	# This is a between-machine investment, not a second Pacte phase. Keeping
 	# runPhase over makes save/resume and the next machine use the existing lifecycle.
 	runPhase = "over"
@@ -1904,6 +1923,8 @@ func _open_route_bonus() -> bool:
 	routeBonusSpinSeed = 0
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
 	_commit()
@@ -1922,6 +1943,8 @@ func _open_route_sacrifice() -> bool:
 	routeBonusSpinSeed = 0
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	runPhase = "over"
 	lastEnding = "flatline" if routeContext == "flatline" else null
 	_commit()
@@ -1973,6 +1996,8 @@ func select_route(card_id: String) -> bool:
 		routeBonusSpinSeed = 0
 		sacrificeClaimed = false
 		sacrificeSelectedId = ""
+		sacrificesUsedThisVisit = 0
+		sacrificeRewardId = ""
 		_commit()
 		return false
 	_commit()
@@ -1992,6 +2017,8 @@ func refuse_routes() -> bool:
 	routeDestination = ""
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	return finish_route_destination()
 
 func complete_route_build_selection(card_id: String, reward_symbol := "",
@@ -2123,7 +2150,8 @@ func claim_route_bonus() -> bool:
 
 func sacrifice_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
-	if sacrificeClaimed or sacrificeCount >= SacrificeRules.MAX_USES:
+	if sacrificeClaimed or sacrificeCount >= SacrificeRules.MAX_USES \
+			or sacrificesUsedThisVisit >= SacrificeRules.MAX_USES_PER_VISIT:
 		return options
 	for raw_card_id in selectedAugmentCardIds:
 		var card_id := PacteCards.normalise_card_id(String(raw_card_id))
@@ -2229,7 +2257,8 @@ func _remove_sacrificed_power(power_id: String) -> bool:
 
 func claim_sacrifice(option_id: String) -> bool:
 	if routeDestination != RouteCards.ROUTE_SACRIFICE or sacrificeClaimed \
-			or sacrificeCount >= SacrificeRules.MAX_USES:
+			or sacrificeCount >= SacrificeRules.MAX_USES \
+			or sacrificesUsedThisVisit >= SacrificeRules.MAX_USES_PER_VISIT:
 		return false
 	var accepted := false
 	if option_id.begins_with(SacrificeRules.OPTION_AUGMENT_PREFIX):
@@ -2249,9 +2278,32 @@ func claim_sacrifice(option_id: String) -> bool:
 	if not accepted:
 		return false
 	sacrificeCount += 1
+	sacrificesUsedThisVisit += 1
 	sacrificeClaimed = true
 	sacrificeSelectedId = option_id
+	# Resolve and persist the reward before the scene starts its presentation.
+	# The current Sacrifice reward is fixed, but keeping an explicit result ID makes
+	# the transaction safe to resume and leaves room for future reward tables.
+	sacrificeRewardId = SacrificeRules.REWARD_SPINS
 	nextRoundSpinBonus += SacrificeRules.BONUS_SPINS
+	_commit()
+	return true
+
+## Returns the already-resolved reward for the current Sacrifice transaction.
+## Calling this never rolls the reward again; claim_sacrifice() is the only place
+## that commits the resource trade and increments the counters.
+func resolve_sacrifice_reward() -> Dictionary:
+	return SacrificeRules.reward_for(String(sacrificeRewardId))
+
+## Acknowledges the visual reveal of an accepted trade. The reward and resource
+## mutation happened in claim_sacrifice(); clearing this pending marker only makes
+## the next trade selectable and can never grant another boon.
+func acknowledge_sacrifice() -> bool:
+	if routeDestination != RouteCards.ROUTE_SACRIFICE or not sacrificeClaimed:
+		return false
+	sacrificeClaimed = false
+	sacrificeSelectedId = ""
+	sacrificeRewardId = ""
 	_commit()
 	return true
 
@@ -2280,7 +2332,8 @@ func finish_route_destination() -> bool:
 		if int(bonus.get("oddsTokens", 0)) > 0 and not oddsPhaseCompleted:
 			return false
 	if routeDestination == RouteCards.ROUTE_SACRIFICE \
-			and not sacrificeClaimed and sacrificeSelectedId != "declined":
+			and not sacrificeClaimed and sacrificesUsedThisVisit <= 0 \
+			and sacrificeSelectedId != "declined":
 		return false
 	if routeDestination != "":
 		runPhase = "over"
@@ -2538,6 +2591,8 @@ func start_new_run(owned_permanents: Array, pending_consumables: Dictionary,
 	sacrificeCount = kept_sacrifice_count
 	sacrificeClaimed = false
 	sacrificeSelectedId = ""
+	sacrificesUsedThisVisit = 0
+	sacrificeRewardId = ""
 	nextRoundGainMultiplier = 1.0
 	nextRoundStartingScore = 0
 	nextRoundSpinBonus = 0
