@@ -21,9 +21,10 @@ const AMBIENT_LIGHT_MAX_DELAY := 3.3
 const AMBIENT_REFLECTION_FIRST_DELAY := 4.6
 const AMBIENT_REFLECTION_MIN_DELAY := 4.4
 const AMBIENT_REFLECTION_MAX_DELAY := 7.0
+const ODDS_REVEAL_DELAY := 0.82
 const RESULT_PANEL_RECT := Rect2(12.0, 157.0, 136.0, 42.0)
 const ROUND_BUTTON_RECT := Rect2(59.0, 207.0, 42.0, 42.0)
-const HINT_RECT := Rect2(8.0, 253.0, 144.0, 10.0)
+const HINT_RECT := Rect2(0.0, 250.0, 160.0, 23.0)
 
 var _font: FontFile = null
 var _wheel: FortuneWheelDisplay = null
@@ -34,6 +35,7 @@ var _message: Label = null
 var _spin: Button = null
 var _result_panel: Panel = null
 var _odds_overlay: Control = null
+var _odds_reveal_tween: Tween = null
 var _animating_reward_id := ""
 var _spin_requesting := false
 var _leaving := false
@@ -94,8 +96,10 @@ func _build() -> void:
 	_message.z_index = 20
 	add_child(_message)
 
-	_hint = _label("PRESS THE PLATE TO SPIN", HINT_RECT, 4, MUTED)
+	_hint = _label("PRESS TO SPIN", HINT_RECT, 4, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint.clip_text = true
 	add_child(_hint)
 	_spin = ROUND_WALL_BUTTON_SCRIPT.new() as Button
 	_spin.name = "TakeBonusButton"
@@ -127,7 +131,7 @@ func _refresh() -> void:
 		_message.add_theme_color_override("font_color", HOT_GOLD)
 		_spin.disabled = true
 		_spin.text = "WAIT"
-		_hint.text = "THE HOUSE IS WATCHING"
+		_hint.text = "WATCH THE WHEEL"
 		_spin.queue_redraw()
 		return
 
@@ -163,7 +167,7 @@ func _refresh() -> void:
 		_message.text = "FIVE REWARDS // ONE JACKPOT"
 		_spin.disabled = false
 		_spin.text = "SPIN"
-		_hint.text = "PRESS THE PLATE TO SPIN"
+		_hint.text = "PRESS TO SPIN"
 	# Button text/disabled changes are stateful drawing inputs for the custom wall
 	# control, so refresh its face after every non-animating state transition.
 	_spin.queue_redraw()
@@ -221,7 +225,22 @@ func _collect_prize() -> void:
 		_message.text = "PRIZE COULD NOT BE CLAIMED"
 		return
 	_refresh()
-	call_deferred("_open_odds_table_if_needed")
+	var reward := RunStateStore.route_bonus_reward()
+	if int(reward.get("oddsTokens", 0)) > 0:
+		_schedule_odds_table_after_reveal()
+	else:
+		call_deferred("_open_odds_table_if_needed")
+
+func _schedule_odds_table_after_reveal() -> void:
+	if _odds_reveal_tween != null and _odds_reveal_tween.is_valid():
+		_odds_reveal_tween.kill()
+	_odds_reveal_tween = create_tween()
+	_odds_reveal_tween.tween_interval(ODDS_REVEAL_DELAY)
+	_odds_reveal_tween.tween_callback(_on_odds_reveal_delay_finished)
+
+func _on_odds_reveal_delay_finished() -> void:
+	_odds_reveal_tween = null
+	_open_odds_table_if_needed()
 
 func _open_odds_table_if_needed() -> void:
 	if _odds_overlay != null and is_instance_valid(_odds_overlay):
