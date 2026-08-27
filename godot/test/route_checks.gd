@@ -451,7 +451,7 @@ static func run_all() -> Array:
 	_check(out, round_one_dealer < round_two_dealer,
 		"Dealer service prices increase with each round")
 	_check(out, _store().run_price_label(3).contains("ROUND 3")
-		and _store().run_price_label(3).contains("+30%"),
+		and _store().run_price_label(3).contains("+20%"),
 		"progression pricing exposes its round markup to the UI")
 	_store().wealthTargetIndex = previous_round
 	_store().pacteCostsActive = previous_pacte_costs

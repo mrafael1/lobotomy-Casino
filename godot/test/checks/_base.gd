@@ -198,12 +198,32 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	if not dealer.has_method("_native_canvas_origin") \
 			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
 		failures.append("issue55: dealer native artwork canvas is not horizontally centred")
-	var expected_offer_tops := [190.0, 190.2, 190.0, 190.2, 190.2]
+	var expected_offer_tops := [192.0, 192.2, 192.0, 192.2, 192.2]
 	for index in expected_offer_tops.size():
 		var slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
 		if slot == null or not is_equal_approx(slot.position.y, expected_offer_tops[index]):
 			failures.append("issue55: OfferSlot%d is not resting on the updated counter line" \
 				% (index + 1))
+	if not is_equal_approx(float(dealer.COUNTER_DOT_CY), 208.0):
+		failures.append("shop: counter contact row drifted from the authored dot line")
+	var checked_offer_frames := 0
+	for offer_id_variant in dealer._item_nodes:
+		var offer_id := String(offer_id_variant)
+		var item_node := dealer._item_nodes[offer_id] as Control
+		if item_node == null:
+			continue
+		var kind := "augment" if ChipAugments.map().has(offer_id) else "offer"
+		var parent := item_node.get_parent() as Control
+		var parent_y: float = dealer.call("_counter_parent_origin_y", parent)
+		var expected_top: float = dealer.call(
+			"_counter_item_top", offer_id, kind, item_node.size.y)
+		if not is_equal_approx(item_node.position.y + parent_y, expected_top):
+			failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
+		if item_node.size != Vector2(16.0, 16.0):
+			failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
+		checked_offer_frames += 1
+	if checked_offer_frames == 0:
+		failures.append("shop: no counter offer hitboxes were built")
 	# Exported builds (APK) only ship res:// — the runtime asset tree
 	# fallback does not exist on device, so shipped art MUST resolve as a resource.
 	for rel in [

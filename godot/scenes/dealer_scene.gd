@@ -25,14 +25,27 @@ const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
 
 # Counter geometry: authored coords (1280x2560) / 8 -> the 160x320 canvas.
 const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
-# Consumables stand on the white round dots of the counter (measured centre y ~= 206
-# source px). Icons are small (issue #24 follow-up: they read as objects on the counter,
-# not giant badges) and rest with their base on the dot. Stash icons reuse the shared
-# Assets.STASH_ICON_SIZE so they match the machine scene stash.
+# Consumables stand on the white round dots of the new counter. The dots land on the
+# native y=208 contact row after the 200x380 sheet is centred over the 160x320 canvas.
+# Each 16px icon keeps its authored scale; these small offsets compensate only for
+# transparent pixels below the silhouette (the cigarette is intentionally the largest).
+# Stash icons reuse the shared Assets.STASH_ICON_SIZE so they match the machine scene stash.
 const PRE_RUN_OFFER_ICON := 16.0
 const RUN_OFFER_ICON := 16.0
-const COUNTER_DOT_CY := 206.0 # measured centre of the counter's white round dots
-const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # icon base sits on the dot
+const COUNTER_DOT_CY := 208.0 # native contact row of the counter's white round dots
+const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # full icon box top
+const COUNTER_ITEM_Y_OFFSETS := {
+	"cons_focus": 1.0,
+	"cons_cigarette": 4.5,
+	"cons_white_powder": 0.5,
+	"cons_potion": 1.333333,
+	"cons_tea": 0.5,
+	"item_water": 0.5,
+	"item_cocktail": 1.0,
+	"item_energy_drink": 0.5,
+	"item_pill": 1.0,
+}
+const COUNTER_AUGMENT_Y_OFFSET := 1.0
 const TV := { "left": 2.0, "top": 126.0, "width": 49.0, "height": 26.0 }
 const DEALER_DROP_Y := 200.0 # release above this y = dropped "on the dealer"
 const DRAG_SLOP := 4.0
@@ -659,10 +672,32 @@ func _icon_tex(id: String) -> Texture2D:
 func _offer_icon_size() -> float:
 	return PRE_RUN_OFFER_ICON if _pre_run else RUN_OFFER_ICON
 
+func _counter_item_y_offset(id: String, kind: String) -> float:
+	if kind == "augment":
+		return COUNTER_AUGMENT_Y_OFFSET
+	return float(COUNTER_ITEM_Y_OFFSETS.get(id, 1.0))
+
+func _counter_item_top(id: String, kind: String, icon_size: float) -> float:
+	return COUNTER_DOT_CY - icon_size + _counter_item_y_offset(id, kind)
+
+func _counter_parent_origin_y(parent: Control) -> float:
+	if parent == null:
+		return 0.0
+	# The authored slots are direct children today, but measuring the relative canvas
+	# origin keeps this correct if the Shop gets another layout wrapper later. The
+	# scene's expanded mobile origin cancels out on both sides of the subtraction.
+	return parent.get_global_transform_with_canvas().origin.y \
+		- get_global_transform_with_canvas().origin.y
+
 func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, icon_size := -1.0) -> void:
 	var size_px := Assets.STASH_ICON_SIZE if kind == "stash" else _offer_icon_size()
 	if icon_size > 0.0:
 		size_px = icon_size
+	if kind == "offer" or kind == "augment":
+		# Position the draggable frame and its child sprite from the same authored
+		# contact row. This keeps the mobile hitbox travelling with the art instead
+		# of correcting the visible sprite alone.
+		pos.y = _counter_item_top(id, kind, size_px) - _counter_parent_origin_y(parent)
 	var t := Control.new()
 	t.set_meta("_dealer_dynamic", true)
 	t.position = pos
@@ -803,8 +838,9 @@ func _build_offers() -> void:
 			break
 		var cx: float = float(CIRCLE_CX[idx])
 		_offer_cx[String(id)] = cx
-		_make_offer_price_tag(String(id), Vector2(cx - 17.0, ITEM_TOP - 10.0), self)
-		_make_drag_icon(String(id), "offer", Vector2(cx - icon_size * 0.5, ITEM_TOP), self, icon_size)
+		var offer_id := String(id)
+		_make_offer_price_tag(offer_id, Vector2(cx - 17.0, ITEM_TOP - 10.0), self)
+		_make_drag_icon(offer_id, "offer", Vector2(cx - icon_size * 0.5, ITEM_TOP), self, icon_size)
 		idx += 1
 
 func _build_stash() -> void:
@@ -1666,10 +1702,9 @@ func _select(id: String) -> void:
 	if _offer_slots_by_id.has(id):
 		var slot: Control = _offer_slots_by_id[id]
 		name_cx = slot.position.x + slot.size.x * 0.5
-		_name_label.position.y = slot.position.y + slot.size.y + 1.0
 	else:
 		name_cx = float(_offer_cx.get(id, 80.0))
-		_name_label.position.y = ITEM_TOP + _offer_icon_size() + 1.0
+	_name_label.position.y = COUNTER_DOT_CY + 1.0
 	# Centre on the measured text width: the Label's own box centring rounds to
 	# whole pixels, which reads as a half-pixel drift at the x8 canvas scale.
 	var name_font := _name_label.get_theme_font("font")
