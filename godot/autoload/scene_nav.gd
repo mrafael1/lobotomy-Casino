@@ -29,6 +29,7 @@ var _transition_kind := TransitionKind.NORMAL
 var _transition_target := ""
 var _suspended_scene: Node = null
 var _suspended_scene_process_mode := Node.PROCESS_MODE_INHERIT
+var _transition_swap_callback := Callable()
 
 
 func _ready() -> void:
@@ -117,6 +118,7 @@ func change_to(scene_path: String, kind: int = -1, door_side: int = -1,
 	_transition_serial += 1
 	var serial := _transition_serial
 	transition_started.emit(_transition_kind, scene_path)
+	_prepare_scene_load(scene_path)
 	_run_transition(scene_path, _transition_kind, door_side, wallet_start, wallet_end,
 		serial)
 
@@ -137,54 +139,86 @@ func _resolve_transition_kind(scene_path: String, requested_kind: int) -> int:
 func _run_transition(scene_path: String, kind: int, door_side: int,
 		wallet_start: int, wallet_end: int, serial: int) -> void:
 	if _transition_overlay != null and is_instance_valid(_transition_overlay):
-		await _transition_overlay.play_exit(kind, door_side, wallet_start, wallet_end)
-	if serial != _transition_serial:
+		_disconnect_transition_swap_callback()
+		_transition_swap_callback = Callable(self, "_on_transition_swap_requested").bind(
+			scene_path, kind, door_side, wallet_start, wallet_end, serial)
+		_transition_overlay.scene_swap_requested.connect(
+			_transition_swap_callback, CONNECT_ONE_SHOT)
+		# The overlay owns the cover, the hidden scene swap, and the reveal as one
+		# uninterrupted lifecycle. It pauses at its covered frame until the callback
+		# below has finished replacing the scene.
+		await _transition_overlay.play_transition(kind, door_side, wallet_start, wallet_end)
+		if serial != _transition_serial:
+			return
+		_finish_transition(serial)
 		return
-	if kind == TransitionKind.WALLET and _transition_overlay != null \
-			and is_instance_valid(_transition_overlay):
-		_transition_overlay.begin_wallet_transfer(wallet_start, wallet_end)
+
+	# Keep a safe direct path for unusual boot/test contexts where the persistent
+	# transition layer could not be built.
 	_suspend_current_scene()
 	var packed_scene := await _load_scene(scene_path)
 	if serial != _transition_serial:
 		return
-	if packed_scene == null:
-		_restore_suspended_scene()
-		await _play_entrance(kind)
-		if serial != _transition_serial:
-			return
-		_finish_transition(serial)
-		return
-	var change_error := get_tree().change_scene_to_packed(packed_scene)
-	if change_error != OK:
+	if packed_scene != null and get_tree().change_scene_to_packed(packed_scene) == OK:
+		_configure_content_scale(scene_path)
+		await get_tree().process_frame
+		await get_tree().process_frame
+	else:
 		_configure_content_scale()
 		_restore_suspended_scene()
-		await _play_entrance(kind)
-		if serial != _transition_serial:
-			return
-		_finish_transition(serial)
-		return
-	# change_scene_to_packed() swaps at the frame boundary. Waiting twice keeps the
-	# entrance transition from revealing a scene before its _ready() and deferred HUD
-	# setup have completed.
-	_configure_content_scale(scene_path)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if serial != _transition_serial:
-		return
-	await _play_entrance(kind)
 	if serial != _transition_serial:
 		return
 	_finish_transition(serial)
 
 
-func _play_entrance(kind: int) -> void:
-	if _transition_overlay == null or not is_instance_valid(_transition_overlay):
+func _on_transition_swap_requested(scene_path: String, kind: int, _door_side: int,
+		wallet_start: int, wallet_end: int, serial: int) -> void:
+	if serial != _transition_serial:
+		_complete_transition_swap()
 		return
-	await _transition_overlay.play_entrance()
-	if kind != TransitionKind.WALLET:
+	_suspend_current_scene()
+	var packed_scene := await _load_scene(scene_path)
+	if serial != _transition_serial:
+		_restore_suspended_scene()
+		_complete_transition_swap()
 		return
-	await _transition_overlay.wait_for_wallet_transfer()
-	_transition_overlay.finish_wallet_handoff()
+	if packed_scene == null:
+		_restore_suspended_scene()
+		_complete_transition_swap()
+		return
+	var change_error := get_tree().change_scene_to_packed(packed_scene)
+	if change_error != OK:
+		_configure_content_scale()
+		_restore_suspended_scene()
+		_complete_transition_swap()
+		return
+	# change_scene_to_packed() swaps at the frame boundary. Keeping the overlay
+	# covered for two frames prevents _ready() and deferred HUD setup from leaking
+	# into the single reveal animation.
+	_configure_content_scale(scene_path)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if serial != _transition_serial:
+		_complete_transition_swap()
+		return
+	if kind == TransitionKind.WALLET and _transition_overlay != null \
+			and is_instance_valid(_transition_overlay):
+		_transition_overlay.begin_wallet_transfer(wallet_start, wallet_end)
+	_complete_transition_swap()
+
+
+func _complete_transition_swap() -> void:
+	if _transition_overlay != null and is_instance_valid(_transition_overlay):
+		_transition_overlay.complete_scene_swap()
+
+
+func _disconnect_transition_swap_callback() -> void:
+	if _transition_overlay != null and is_instance_valid(_transition_overlay) \
+			and _transition_swap_callback.is_valid() \
+			and _transition_overlay.scene_swap_requested.is_connected(
+				_transition_swap_callback):
+		_transition_overlay.scene_swap_requested.disconnect(_transition_swap_callback)
+	_transition_swap_callback = Callable()
 
 
 func _suspend_current_scene() -> void:
@@ -204,6 +238,7 @@ func _restore_suspended_scene() -> void:
 func _finish_transition(serial: int) -> void:
 	if serial != _transition_serial:
 		return
+	_disconnect_transition_swap_callback()
 	_restore_suspended_scene()
 	_transition_active = false
 	transition_finished.emit(_transition_kind, _transition_target)
@@ -214,7 +249,7 @@ func _load_scene(scene_path: String) -> PackedScene:
 	if cached != null:
 		return cached
 	var request_error := ResourceLoader.load_threaded_request(scene_path, "PackedScene", true)
-	if request_error != OK:
+	if request_error != OK and request_error != ERR_BUSY:
 		return load(scene_path) as PackedScene
 	while true:
 		var progress: Array = []
@@ -231,6 +266,17 @@ func _load_scene(scene_path: String) -> PackedScene:
 				push_error("SceneNav: failed to load transition destination %s" % scene_path)
 				return load(scene_path) as PackedScene
 	return null
+
+
+## Start resource loading while the cover is moving. The destination is still not
+## instantiated or shown until the transition reaches its swap point.
+func _prepare_scene_load(scene_path: String) -> void:
+	if scene_path.is_empty() or _scene_cache.has(scene_path):
+		return
+	var request_error := ResourceLoader.load_threaded_request(scene_path, "PackedScene", true)
+	if request_error != OK and request_error != ERR_BUSY:
+		# _load_scene() keeps the synchronous fallback for invalid or unsupported paths.
+		return
 
 
 func _input(_event: InputEvent) -> void:
@@ -281,6 +327,7 @@ func clear() -> void:
 func cancel_transition() -> void:
 	_transition_serial += 1
 	_transition_active = false
+	_disconnect_transition_swap_callback()
 	_restore_suspended_scene()
 	if _transition_overlay != null and is_instance_valid(_transition_overlay):
 		_transition_overlay.cancel()

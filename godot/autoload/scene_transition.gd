@@ -5,7 +5,10 @@ extends Control
 ## The transition intentionally uses a few cheap CanvasItem primitives rather than a
 ## generic fullscreen shader. At the game's 160x320 resolution the shutter, door edge,
 ## and dying trace read as authored machine presentation while keeping scene loading
-## completely hidden underneath the cover.
+## completely hidden underneath the cover. The live scene-change animation is a single
+## edge-to-edge curtain pass; the scene swap happens at its covered midpoint.
+
+signal scene_swap_requested
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const NORMAL_EXIT_TIME := 0.42
@@ -35,6 +38,8 @@ var _door_side := -1
 var _progress := 0.0
 var _phase: StringName = &"hidden"
 var _tween: Tween = null
+var _swap_pending := false
+var _animation_token := 0
 var _wallet_row: HBoxContainer = null
 var _wallet_label: Label = null
 var _wallet_coin: TextureRect = null
@@ -69,8 +74,91 @@ func configure(kind: int, door_side: int = -1, wallet_start: int = -1,
 	queue_redraw()
 
 
+## Plays the whole scene change as one owned animation. One curtain crosses the canvas,
+## asks SceneNav to replace the scene when it fully covers the canvas, and continues in
+## the same direction until it clears the destination. Keeping the swap point inside
+## this method prevents the visible animation from being started once by the old scene
+## and then restarted by the destination scene.
+func play_transition(kind: int, door_side: int = -1, wallet_start: int = -1,
+		wallet_end: int = -1) -> void:
+	if _phase != &"hidden":
+		return
+	configure(kind, door_side, wallet_start, wallet_end)
+	_animation_token += 1
+	_swap_pending = false
+	_phase = &"transition"
+	_progress = 0.0
+	visible = true
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	queue_redraw()
+
+	if _kind == WALLET_KIND:
+		# Wallet transitions use the same persistent black handoff as before, but still
+		# travel through this one scene-swap lifecycle.
+		_phase = &"covered"
+		_set_progress(1.0)
+	else:
+		var half_duration := _transition_duration() * 0.5
+		var curtain_arrived := await _animate_progress(
+			0.0, 0.5, half_duration, Tween.TRANS_LINEAR)
+		if not curtain_arrived or _phase != &"transition":
+			return
+		_set_progress(0.5)
+	_swap_pending = true
+	# Direct overlay tests can exercise the animation without a SceneNav listener.
+	# Normal gameplay always has one listener and waits here until the destination has
+	# been loaded, swapped, and allowed two frames to finish its deferred setup.
+	if get_signal_connection_list(&"scene_swap_requested").is_empty():
+		_swap_pending = false
+	else:
+		scene_swap_requested.emit()
+	while _swap_pending and (_phase == &"transition" or _phase == &"covered"):
+		await get_tree().process_frame
+	if _phase != &"transition" and _phase != &"covered":
+		return
+
+	if _kind == WALLET_KIND:
+		# Wallet handoffs deliberately stay black until the balance animation finishes;
+		# the route screen is already present underneath the persistent cover.
+		while _wallet_transfer_active and _phase == &"covered":
+			await get_tree().process_frame
+		if _phase != &"covered":
+			return
+		_complete_transition()
+		return
+
+	var curtain_left := await _animate_progress(
+		0.5, 1.0, _transition_duration() * 0.5, Tween.TRANS_LINEAR)
+	if not curtain_left:
+		return
+	if _phase != &"transition":
+		return
+	_set_progress(1.0)
+	_complete_transition()
+
+
+## The curtain's total travel time remains comparable to the previous cover/reveal
+## pair, but it is now one directional pass instead of a shutter reversing direction.
+func _transition_duration() -> float:
+	match _kind:
+		1:
+			return DOOR_EXIT_TIME + DOOR_ENTER_TIME
+		2:
+			return FLATLINE_EXIT_TIME + FLATLINE_ENTER_TIME
+		_:
+			return NORMAL_EXIT_TIME + NORMAL_ENTER_TIME
+
+
+## Called by SceneNav after the destination is safely underneath the cover.
+func complete_scene_swap() -> void:
+	if _phase == &"transition" or _phase == &"covered":
+		_swap_pending = false
+
+
 func play_exit(kind: int, door_side: int = -1, wallet_start: int = -1,
 		wallet_end: int = -1) -> void:
+	# Legacy direct-cover API retained for low-level callers. SceneNav uses the unified
+	# play_transition() method above, so real scene changes never run this separately.
 	# SceneNav owns the request lock, but the presentation is also deliberately
 	# idempotent. A second caller joining the same phase must not kill the running
 	# tween and restart the shutter from frame zero.
@@ -136,11 +224,39 @@ func play_entrance() -> void:
 
 
 func cancel() -> void:
+	_animation_token += 1
+	_swap_pending = false
 	_kill_tween()
 	_kill_wallet_tween()
 	_wallet_transfer_active = false
 	if _wallet_row != null:
 		_wallet_row.visible = false
+	_phase = &"hidden"
+	_progress = 0.0
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	queue_redraw()
+
+
+func _animate_progress(from_value: float, to_value: float, duration: float,
+		transition_type: Tween.TransitionType = Tween.TRANS_SINE) -> bool:
+	_kill_tween()
+	var token := _animation_token
+	var tween := create_tween()
+	_tween = tween
+	tween.set_trans(transition_type).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(Callable(self, "_set_progress"), from_value, to_value, duration)
+	await tween.finished
+	if token != _animation_token or _tween != tween:
+		return false
+	_set_progress(to_value)
+	_tween = null
+	return true
+
+
+func _complete_transition() -> void:
+	_swap_pending = false
+	_kill_tween()
 	_phase = &"hidden"
 	_progress = 0.0
 	visible = false
@@ -293,6 +409,9 @@ func _cover_progress() -> float:
 
 
 func _draw() -> void:
+	if _phase == &"transition":
+		_draw_single_pass(_progress)
+		return
 	var cover := clampf(_cover_progress(), 0.0, 1.0)
 	match _kind:
 		1:
@@ -303,6 +422,48 @@ func _draw() -> void:
 			_draw_wallet(cover)
 		_:
 			_draw_normal(cover)
+
+
+func _draw_single_pass(progress: float) -> void:
+	var travel := clampf(progress, 0.0, 1.0)
+	if travel <= 0.0 or travel >= 1.0:
+		return
+	# The curtain is exactly one canvas wide. It starts just outside one edge, fully
+	# covers the canvas at 0.5 (the scene-swap point), and exits through the opposite
+	# edge. Unlike the old shutter, it never reverses direction on the destination.
+	var moves_right := _door_side <= 0
+	var curtain_x := lerpf(-CANVAS_SIZE.x, CANVAS_SIZE.x, travel) \
+		if moves_right else lerpf(CANVAS_SIZE.x, -CANVAS_SIZE.x, travel)
+	var curtain_rect := Rect2(curtain_x, 0.0, CANVAS_SIZE.x, CANVAS_SIZE.y)
+	var accent := MACHINE_BLUE
+	if _kind == 1:
+		accent = DOOR_ROSE
+	elif _kind == 2:
+		accent = FLATLINE_RED
+	draw_rect(curtain_rect, Color(DARK, 0.99))
+
+	# Sparse pixel bands keep the transition readable without adding a shader or a
+	# second animated object. The two edges are intentionally asymmetric: one is the
+	# leading scan edge, the other is the quiet tail left behind it.
+	var leading_x := curtain_x + CANVAS_SIZE.x if moves_right else curtain_x
+	var trailing_x := curtain_x if moves_right else curtain_x + CANVAS_SIZE.x
+	var leading_alpha := 0.5 + 0.45 * absf(sin(travel * PI))
+	var trailing_alpha := 0.25 + 0.25 * absf(sin(travel * PI))
+	if leading_x > -2.0 and leading_x < CANVAS_SIZE.x + 2.0:
+		draw_line(Vector2(leading_x, 0.0), Vector2(leading_x, CANVAS_SIZE.y),
+			Color(accent, leading_alpha), 2.0)
+	if trailing_x > -2.0 and trailing_x < CANVAS_SIZE.x + 2.0:
+		draw_line(Vector2(trailing_x, 0.0), Vector2(trailing_x, CANVAS_SIZE.y),
+			Color(DEEP_BLUE, trailing_alpha), 1.0)
+	var stripe_left := maxf(curtain_rect.position.x, 0.0)
+	var stripe_right := minf(curtain_rect.end.x, CANVAS_SIZE.x)
+	if stripe_right > stripe_left:
+		for y in [72.0, 160.0, 248.0]:
+			draw_line(Vector2(stripe_left, y), Vector2(stripe_right, y),
+				Color(DEEP_BLUE, 0.55), 1.0)
+		if _kind == 2:
+			draw_line(Vector2(stripe_left, 160.0), Vector2(stripe_right, 160.0),
+				Color(accent, 0.8), 1.0)
 
 
 func _draw_wallet(cover: float) -> void:
