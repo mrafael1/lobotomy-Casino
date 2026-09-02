@@ -6,6 +6,16 @@ extends "res://test/checks/_base.gd"
 ## this file owns nothing but the assertions. See test/checks/_base.gd for why the check
 ## bodies can still call get_root(), create_timer() and `await process_frame` bare.
 
+var _scene_transition_swap_count := 0
+var _scene_transition_swap_at_midpoint := false
+
+
+func _on_scene_transition_swap(transition: Control) -> void:
+	_scene_transition_swap_count += 1
+	_scene_transition_swap_at_midpoint = transition.get("_phase") == &"transition" \
+			and is_equal_approx(float(transition.get("_progress")), 0.5)
+	transition.call("complete_scene_swap")
+
 
 ## ── checks that used to be inline in _run() ───────────────────────────────────────
 
@@ -949,9 +959,13 @@ func _check_scene_nav(failures: Array) -> void:
 			failures.append("scene nav: destination is not loaded under the transition cover")
 		if not source.contains("PROCESS_MODE_DISABLED"):
 			failures.append("scene nav: source scene is not suspended during loading")
-		if not source.contains("begin_wallet_transfer") \
-				or not source.contains("wait_for_wallet_transfer"):
-			failures.append("scene nav: wallet handoff is not persistent across scene load")
+		if not source.contains("play_transition") \
+				or not source.contains("scene_swap_requested") \
+				or not source.contains("complete_scene_swap"):
+			failures.append("scene nav: scene changes are not owned by one transition lifecycle")
+		if source.contains("await _transition_overlay.play_exit") \
+				or source.contains("await _play_entrance"):
+			failures.append("scene nav: transition still runs separate exit and entrance calls")
 	nav.push_scene("res://scenes/dealer_scene.tscn", true)
 	if nav.peek_back_scene() != "res://scenes/dealer_scene.tscn":
 		failures.append("scene nav: did not retain dealer as return scene")
@@ -961,6 +975,18 @@ func _check_scene_nav(failures: Array) -> void:
 	var transition_script: Script = load("res://autoload/scene_transition.gd")
 	var transition := transition_script.new() as Control
 	get_root().add_child(transition)
+	_scene_transition_swap_count = 0
+	_scene_transition_swap_at_midpoint = false
+	var swap_callback := Callable(self, "_on_scene_transition_swap").bind(transition)
+	transition.scene_swap_requested.connect(swap_callback)
+	await transition.play_transition(0)
+	if _scene_transition_swap_count != 1:
+		failures.append("scene nav: unified transition did not request exactly one scene swap")
+	if not _scene_transition_swap_at_midpoint:
+		failures.append("scene nav: unified transition did not swap at its covered midpoint")
+	if transition.get("_phase") != &"hidden" or transition.visible:
+		failures.append("scene nav: unified transition did not finish in its hidden state")
+	transition.scene_swap_requested.disconnect(swap_callback)
 	await transition.play_exit(0)
 	var exit_progress := float(transition.get("_progress"))
 	transition.play_exit(0)
