@@ -32,6 +32,14 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or cabinet.scale != Vector2.ONE \
 			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: cabinet is not a 160x320 native sprite")
+	else:
+		var cabinet_image := cabinet.texture.get_image()
+		for x in [33, 65, 97]:
+			for y in range(169, 203):
+				for offset in range(21):
+					if cabinet_image.get_pixel(x + offset, y).a > 0.01:
+						failures.append("machine art: cabinet obscures a live reel aperture")
+						break
 
 	var lever := machine.get_node_or_null("Lever") as Sprite2D
 	if lever == null:
@@ -543,6 +551,12 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	var prev_upgrades: Array = (run_store.ownedUpgrades as Array).duplicate()
 	run_store.ownedUpgrades = ["pacte_tunnel_vision"]
 	machine._refresh_consumable_fx()
+	var shutter := machine._consumable_fx.layer().get_node_or_null("TunnelVisionShutter") as TextureRect
+	if shutter == null or not shutter.visible or shutter.position != Vector2(97, 169) \
+			or shutter.size != Vector2(21, 34):
+		failures.append("machine art: Tunnel Vision shutter must fit the entire third reel")
+	elif shutter.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		failures.append("machine art: shutter must not intercept power targeting")
 	if not (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue181: Tunnel Vision did not hide the third reel")
 	if machine._tobacco_smoke.size() > 2 \
@@ -550,6 +564,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue181: Tunnel Vision should blind the reel without smoking it")
 	run_store.ownedUpgrades = prev_upgrades
 	machine._refresh_consumable_fx()
+	if shutter != null and shutter.visible:
+		failures.append("machine art: shutter remained attached without Tunnel Vision")
 	if (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue181: the third reel stayed covered without Tunnel Vision")
 	machine._clear_boost_zero_linger()

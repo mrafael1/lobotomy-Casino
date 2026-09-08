@@ -479,6 +479,11 @@ Resources and currencies:
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
+  Its native 160x320 cabinet uses shaded oxblood enamel and recessed metal trim.
+  Separate three-state power chips preserve acquisition order and the existing
+  ready/selected/spent interactions. Tunnel Vision mounts a slatted shutter over
+  the third reel; the shutter lowers over the already-opaque scoring cover and
+  disappears when the augment is removed. It does not intercept targeting input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
 - `collection_scene` — the complete Pacte card catalog, in two scrollable
   sections (AUGMENTS, then POWERS) that follow the authored card order, so a card

@@ -14,6 +14,7 @@ const SRC_H := 320.0
 const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
+const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -154,15 +155,15 @@ const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
 const POWER_SHEETS := {
-	# Native 480x320 exports: three full-canvas frames (available / selected / disabled)
+	# Native 480x320 pixel-grid sheets: available / selected / disabled.
 	# at 1:1, no upscale.
-	"reroll": "machine new view/reroll.png",
-	"shift": "machine new view/shift.png",
-	"memory": "machine new view/lock.png",
-	"rewind": "machine new view/rewind_power.png",
-	"heart": "machine new view/chip_power.png",
-	"cheat": "machine new view/cheat_power.png",
-	"swap": "machine new view/move_power.png",
+	"reroll": "machine_polished/reroll.svg",
+	"shift": "machine_polished/shift.svg",
+	"memory": "machine_polished/memory.svg",
+	"rewind": "machine_polished/rewind.svg",
+	"heart": "machine_polished/heart.svg",
+	"cheat": "machine_polished/cheat.svg",
+	"swap": "machine_polished/swap.svg",
 }
 const REEL_SELECT_COLUMNS := 2
 const REEL_SELECT_ROWS := 2
@@ -838,7 +839,7 @@ func _ready() -> void:
 	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
 	_reel_blur.build_covers("machine new view/reel_final_machine.png")
 	_reel_symbols.build()
-	_build_full_canvas_sprite("machine new view/machine_neon.png")
+	_build_full_canvas_sprite("machine_polished/cabinet.svg")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -856,6 +857,7 @@ func _ready() -> void:
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_augments.build_pacte_badges()
+	_finish_machine_materials(self)
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
@@ -1004,6 +1006,8 @@ func _authored_control(name: String) -> Control:
 	return get_node_or_null(name) as Control
 
 func _full_canvas_name(rel: String) -> String:
+	if rel == "machine_polished/cabinet.svg":
+		return "Cabinet"
 	if rel.ends_with("reel_final_machine.png"):
 		return "ReelBacking"
 	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
@@ -1012,6 +1016,12 @@ func _full_canvas_name(rel: String) -> String:
 	return ""
 
 func _full_canvas_sheet_name(rel: String, frame: int) -> String:
+	if rel == "machine_polished/reroll.svg":
+		return "RerollPower"
+	if rel == "machine_polished/shift.svg":
+		return "ShiftPower"
+	if rel == "machine_polished/memory.svg":
+		return "MemoryPower"
 	if rel.ends_with("health_bar.png"):
 		return "HealthBar"
 	if rel.ends_with("health_animation.png"):
@@ -1104,7 +1114,7 @@ void fragment() {
 			wsum += w;
 		}
 	}
-	COLOR = sum / wsum;
+	COLOR = (sum / wsum) * vec4(0.46, 0.43, 0.50, 1.0);
 }"
 
 ## The shared neon casino backdrop fills the canvas behind the cabinet (blurred,
@@ -1151,6 +1161,23 @@ func _build_full_canvas_sprite(rel: String) -> Sprite2D:
 		add_child(spr)
 	_configure_full_canvas_sprite(spr, tex, not authored)
 	return spr
+
+## A shared finish for the legacy moving hardware. Power icons and gameplay
+## overlays keep their own state colours; authored animation frames stay intact.
+func _finish_machine_materials(node: Node) -> void:
+	if node is Sprite2D:
+		var sprite := node as Sprite2D
+		if sprite.texture != null and sprite.texture.resource_path.get_file() in [
+				"neon_machine_lever.png", "neon_machine_jackpot.png",
+				"neon_machine_power_bar.png", "health_bar.png", "augments.png",
+				"wealth_bar.png", "wealth_cases.png", "target_goals.png"]:
+			var finish := ShaderMaterial.new()
+			finish.shader = MACHINE_MATERIALS
+			finish.set_shader_parameter("phosphor_text",
+				sprite.texture.resource_path.get_file() == "target_goals.png")
+			sprite.material = finish
+	for child in node.get_children():
+		_finish_machine_materials(child)
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
@@ -4826,6 +4853,7 @@ func _refresh_tobacco_fx() -> void:
 		or _boosts.lingering("pairBoostSpins")
 	var smoking := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
 	_consumable_fx.set_tobacco(_blind_reel_count(), smoking)
+	_consumable_fx.set_tunnel_shutter(Economy.has_tunnel_vision(RunStateStore.ownedUpgrades))
 
 ## Reels currently out of the scoring, read from live state rather than the last result so a
 ## run that owns Tunnel Vision is blind from its first frame, before any spin has landed.
