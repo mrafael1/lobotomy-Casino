@@ -166,6 +166,24 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
 
+	var tube := machine._health_bar_sprite as Sprite2D
+	if tube == null or tube.texture == null or not String(tube.texture.resource_path).ends_with("spin_tube.svg"):
+		failures.append("machine: the spin tube still uses the old hardware")
+	else:
+		var tube_image := tube.texture.get_image()
+		if tube_image.get_size() != Vector2i(160 * machine.HEALTH_BAR_FRAME_COUNT, 320):
+			failures.append("machine: spin tube frames must use the native canvas size")
+		else:
+			for count: int in int(machine.HEALTH_BAR_FRAME_COUNT):
+				for slot: int in int(machine.HEALTH_BAR_FRAME_COUNT) - 1:
+					var y := 110 - 3 * slot
+					var empty := tube_image.get_pixel(10, y)
+					var filled := tube_image.get_pixel(160 * count + 10, y) != empty
+					if filled != (slot < count):
+						failures.append("machine: tube frame %d does not show %d bottom-up chips" % [count, count])
+				if tube_image.get_pixel(160 * count + 24, 80).a > 0.0:
+					failures.append("machine: spin tube paints outside its side mount")
+
 	for node_name in [
 		"ReelBacking", "HealthBar",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",

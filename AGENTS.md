@@ -505,6 +505,11 @@ Resources and currencies:
   and title. Target-payout digit snapshots and power coins launch from the CRT.
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
+  The left spin tube is an independent glass cartridge with worn steel caps and
+  nineteen bottom-up chip segments. Its twenty native frames preserve empty through
+  full capacity, with warmer red chips at three or fewer spins. Emergency Reserve
+  borrows the lowest chip at (7,110,7,2); gains still fly into the tube before its
+  fill advances. The shelf number remains the exact runtime spin count.
   Idle, depressed, disabled, hover and focus assets are independent of the cabinet; keyboard/controller UI activation is supported.
   Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
   rewind and loss locks still govern it. Power targeting receives shelf input

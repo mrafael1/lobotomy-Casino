@@ -30,11 +30,10 @@ const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
 # grew a chip (19 frames -> 20) and EconomyConst.MAX_NEURONS rose with it, so the
 # top of the tube is reachable rather than authored-but-dead.
 const HEALTH_BAR_FRAME_COUNT := 20
-# The tube's bottom chip — the last spin the run has — measured off health_bar.png as the
-# pixels that differ between frame 0 (empty) and frame 1 (one spin). An armed Emergency
-# Reserve glows exactly that chip: the reserve IS one more spin waiting under the last
-# one, so it reads where the player already looks for spins rather than as a new badge.
-const HEALTH_BOTTOM_CHIP_RECT := Rect2(4.0, 98.0, 13.0, 7.0)
+const HEALTH_BAR_SHEET := "machine_polished/spin_tube.svg"
+# Emergency Reserve borrows the bottom chip from frame 1 of the native cartridge.
+# Its glow stays registered to the final spin instead of adding another HUD badge.
+const HEALTH_BOTTOM_CHIP_RECT := Rect2(7.0, 110.0, 7.0, 2.0)
 const HEALTH_BAR_FRAME_W := 160.0 # full-canvas sheet: one frame is the whole canvas
 const RESERVE_GLOW_COLOR := Color(0.55, 1.0, 0.85)
 const RESERVE_GLOW_MIN_ALPHA := 0.22
@@ -878,9 +877,7 @@ func tutorial_anchor(id: String) -> Rect2:
 			return Rect2(SPIN_HIT["left"], SPIN_HIT["top"],
 				SPIN_HIT["width"], SPIN_HIT["height"])
 		"health":
-			# The spins tube down the cabinet's left flank. Measured off health_bar.png's
-			# tallest frame (x3..19, y44..120), not eyeballed: a highlight that misses the
-			# thing it is naming is worse than no highlight.
+			# The highlight encloses the independent cartridge and both steel end caps.
 			return Rect2(2.0, 43.0, 18.0, 78.0)
 		"wealth":
 			return Rect2(72.0, 59.0, 50.0, 18.0)
@@ -994,7 +991,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel == "machine_polished/memory.svg":
 		return "MemoryPower"
-	if rel.ends_with("health_bar.png"):
+	if rel == HEALTH_BAR_SHEET:
 		return "HealthBar"
 	if rel.ends_with("multiplier.svg"):
 		return "Multiplier"
@@ -1254,7 +1251,7 @@ func _build_tv_indicators() -> void:
 	_wealth.build()
 	_refresh_target_readout()
 	_health_bar_sprite = _build_full_canvas_sheet(
-		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
+		HEALTH_BAR_SHEET, HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
 	_build_full_canvas_sprite("machine_polished/shelf_labels.svg")
 	_build_spins_left_label()
@@ -1346,7 +1343,7 @@ func _build_power_bar() -> void:
 ## a region of frame 1 of the tube sheet, laid exactly over where that chip already sits —
 ## so the glow can never drift out of register with the art it is highlighting.
 func _build_reserve_glow() -> void:
-	var tex := _load_texture("machine new view/health_bar.png", true)
+	var tex := _load_texture(HEALTH_BAR_SHEET, true)
 	if tex == null:
 		return
 	_reserve_glow_sprite = Sprite2D.new()

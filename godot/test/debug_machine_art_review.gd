@@ -37,6 +37,26 @@ func _run() -> void:
 	root.add_child(_scene)
 	await create_timer(0.5).timeout
 	await _capture("01-idle")
+	for count in [0, 1, 3, _scene.MAX_RUN_SPINS]:
+		run.neurons = count
+		_scene._update_hud()
+		assert(_scene._health_bar_sprite.frame == count, "Spin tube fill disagrees with the counter")
+		await _capture("01-spin-tube-%02d" % count)
+	run.neurons = 1
+	_scene._update_hud()
+	meta.chipAugmentsPurchased = {"aug_emergency_reserve": 1}
+	meta.emergencyReserveUsed = false
+	_scene._refresh_reserve_glow()
+	assert(_scene._reserve_glow_sprite.visible, "Reserve must light the bottom chip")
+	await create_timer(0.3).timeout
+	await _capture("01-spin-tube-reserve")
+	meta.emergencyReserveUsed = true
+	_scene._refresh_reserve_glow()
+	assert(not _scene._reserve_glow_sprite.visible, "Spent reserve still glows")
+	meta.chipAugmentsPurchased = {}
+	meta.emergencyReserveUsed = false
+	run.neurons = 15
+	_scene._update_hud()
 	_scene._wealth.set_score(99, false)
 	_scene._wealth.set_score(100, true)
 	await create_timer(0.12).timeout
