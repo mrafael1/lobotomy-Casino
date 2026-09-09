@@ -178,7 +178,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
 	for node_name: String in [
-		"WealthOdometer", "HealthBar"]:
+		"WealthOdometer", "SpinsLeftNumber"]:
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
@@ -194,7 +194,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	# wealth presentation must keep the machine bars hidden through that path too.
 	machine._update_hud()
 	for node_name: String in [
-		"WealthOdometer", "HealthBar"]:
+		"WealthOdometer", "SpinsLeftNumber"]:
 		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
 			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)

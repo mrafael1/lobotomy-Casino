@@ -166,26 +166,13 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
 
-	var tube := machine._health_bar_sprite as Sprite2D
-	if tube == null or tube.texture == null or not String(tube.texture.resource_path).ends_with("spin_tube.svg"):
-		failures.append("machine: the spin tube still uses the old hardware")
-	else:
-		var tube_image := tube.texture.get_image()
-		if tube_image.get_size() != Vector2i(160 * machine.HEALTH_BAR_FRAME_COUNT, 320):
-			failures.append("machine: spin tube frames must use the native canvas size")
-		else:
-			for count: int in int(machine.HEALTH_BAR_FRAME_COUNT):
-				for slot: int in int(machine.HEALTH_BAR_FRAME_COUNT) - 1:
-					var y := 110 - 3 * slot
-					var empty := tube_image.get_pixel(10, y)
-					var filled := tube_image.get_pixel(160 * count + 10, y) != empty
-					if filled != (slot < count):
-						failures.append("machine: tube frame %d does not show %d bottom-up chips" % [count, count])
-				if tube_image.get_pixel(160 * count + 24, 80).a > 0.0:
-					failures.append("machine: spin tube paints outside its side mount")
+	if machine.get_node_or_null("HealthBar") != null:
+		failures.append("machine: redundant side spin tube is still active")
+	if not machine.SPINS_LEFT_LABEL_RECT.has_point(machine.SPIN_COUNTER_TARGET):
+		failures.append("machine: spin recovery still flies toward the removed tube")
 
 	for node_name in [
-		"ReelBacking", "HealthBar",
+		"ReelBacking",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
 		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
 		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",
@@ -927,12 +914,12 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
 	machine._update_hud()
-	var tube := machine._health_bar_sprite as Sprite2D
+	var tube := machine._spins_left_label as Label
 	if tube == null:
-		failures.append("issue66: spins tube missing")
+		failures.append("issue66: shelf counter missing")
 		return
 	var before_n := int(machine._display_spins_left())
-	var before_frame := int(tube.frame)
+	var before_frame := int(tube.text)
 
 	# 3x vial restores +3 normal spins, spawns the fly-in, and holds the counter.
 	machine._apply_symbol_triple("vial", 0, false)
@@ -942,16 +929,16 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 		failures.append("issue66: vial grant did not spawn the +3 fly-in")
 	if int(machine._display_spins_left()) != before_n:
 		failures.append("issue66: counter ticked before the vial fly-in landed")
-	if int(tube.frame) != before_frame:
-		failures.append("issue66: spins tube filled before the vial fly-in landed")
+	if int(tube.text) != before_frame:
+		failures.append("issue66: shelf counter filled before the vial fly-in landed")
 	await create_timer(1.3).timeout
 	if int(machine._pending_spin_gain) != 0:
 		failures.append("issue66: pending spin gain never landed")
 	var after_n := int(machine._display_spins_left())
 	if after_n != before_n + 3:
 		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
-	if int(tube.frame) <= before_frame:
-		failures.append("issue66: spins tube did not refill with the +3 vial grant")
+	if int(tube.text) <= before_frame:
+		failures.append("issue66: shelf counter did not refill with the +3 vial grant")
 
 	# Tea with no used powers restores +3 spins through the same fly-in.
 	run_store.isSpinning = false
@@ -998,23 +985,23 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 
-	var tube := machine._health_bar_sprite as Sprite2D
+	var tube := machine._spins_left_label as Label
 	if tube == null:
-		failures.append("issue80: spins tube missing")
+		failures.append("issue80: shelf counter missing")
 		run_store.reset_run_state()
 		return
 	var full_spins := int(machine._display_spins_left())
-	var full_frame := int(tube.frame)
+	var full_frame := int(tube.text)
 
-	# Lever pull: the reward-delta hold is on, and spin() has spent the neuron cost.
+	# SPIN press: the reward-delta hold is on, and spin() has spent the neuron cost.
 	machine._hud_delta_hold = true
 	run_store.neurons = 2
 	machine._update_hud()
 	var during_hold := int(machine._display_spins_left())
 	if during_hold >= full_spins:
-		failures.append("issue80: SPINS LEFT did not drop on lever pull while the HUD was held")
-	if int(tube.frame) >= full_frame:
-		failures.append("issue80: spins tube did not drain on lever pull while the HUD was held")
+		failures.append("issue80: SPINS LEFT did not drop on SPIN press while the HUD was held")
+	if int(tube.text) >= full_frame:
+		failures.append("issue80: shelf counter did not drain on SPIN press while the HUD was held")
 
 	# A free spin granted by the same spin never enters the counter, held or not.
 	run_store.freeSpinsRemaining = 1
@@ -1054,12 +1041,11 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	if before != EconomyConst.MAX_NEURONS:
 		failures.append("issue85: SPINS LEFT should cap at %d, got %d"
 			% [EconomyConst.MAX_NEURONS, before])
-	# The tube and number both show their full state at the cap: the top frame of the
-	# sheet is the cap itself, so a raised cap must reach real authored art.
-	var tube := machine._health_bar_sprite as Sprite2D
-	if tube != null and int(tube.frame) != EconomyConst.MAX_NEURONS:
-		failures.append("issue85: spins tube showed frame %d at the %d-spin cap"
-			% [int(tube.frame), EconomyConst.MAX_NEURONS])
+	# The displayed number follows the current cap exactly.
+	var tube := machine._spins_left_label as Label
+	if tube != null and int(tube.text) != EconomyConst.MAX_NEURONS:
+		failures.append("issue85: shelf counter showed frame %d at the %d-spin cap"
+			% [int(tube.text), EconomyConst.MAX_NEURONS])
 	if machine._spins_left_label == null \
 			or machine._spins_left_label.get_theme_color("font_color") != machine.SPINS_LEFT_MAX_COLOR:
 		failures.append("issue85: max SPINS LEFT number did not turn dark red")

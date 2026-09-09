@@ -36,20 +36,22 @@ func _run() -> void:
 	_scene = (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
 	root.add_child(_scene)
 	await create_timer(0.5).timeout
+	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
+	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
 	for count in [0, 1, 3, _scene.MAX_RUN_SPINS]:
 		run.neurons = count
 		_scene._update_hud()
-		assert(_scene._health_bar_sprite.frame == count, "Spin tube fill disagrees with the counter")
-		await _capture("01-spin-tube-%02d" % count)
+		assert(int(_scene._spins_left_label.text) == count, "Shelf counter disagrees with remaining spins")
+		await _capture("01-spin-counter-%02d" % count)
 	run.neurons = 1
 	_scene._update_hud()
 	meta.chipAugmentsPurchased = {"aug_emergency_reserve": 1}
 	meta.emergencyReserveUsed = false
 	_scene._refresh_reserve_glow()
-	assert(_scene._reserve_glow_sprite.visible, "Reserve must light the bottom chip")
+	assert(_scene._reserve_glow_sprite.visible, "Reserve must outline the counter")
 	await create_timer(0.3).timeout
-	await _capture("01-spin-tube-reserve")
+	await _capture("01-spin-counter-reserve")
 	meta.emergencyReserveUsed = true
 	_scene._refresh_reserve_glow()
 	assert(not _scene._reserve_glow_sprite.visible, "Spent reserve still glows")

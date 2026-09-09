@@ -25,16 +25,6 @@ const REEL_HOLES := [
 	{ "left": 97.0, "top": 170.0, "width": 21.0, "height": 30.0 },
 ]
 const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
-# Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
-# N spins remaining — frame 0 = empty/no spins, frame 19 = 19+ spins. The sheet
-# grew a chip (19 frames -> 20) and EconomyConst.MAX_NEURONS rose with it, so the
-# top of the tube is reachable rather than authored-but-dead.
-const HEALTH_BAR_FRAME_COUNT := 20
-const HEALTH_BAR_SHEET := "machine_polished/spin_tube.svg"
-# Emergency Reserve borrows the bottom chip from frame 1 of the native cartridge.
-# Its glow stays registered to the final spin instead of adding another HUD badge.
-const HEALTH_BOTTOM_CHIP_RECT := Rect2(7.0, 110.0, 7.0, 2.0)
-const HEALTH_BAR_FRAME_W := 160.0 # full-canvas sheet: one frame is the whole canvas
 const RESERVE_GLOW_COLOR := Color(0.55, 1.0, 0.85)
 const RESERVE_GLOW_MIN_ALPHA := 0.22
 const RESERVE_GLOW_MAX_ALPHA := 0.72
@@ -584,10 +574,9 @@ var _wealth_target_transition_active := false
 ## machine is on its way out, so nothing new may take the screen here.
 var _target_round_handoff := false
 var _unlock_popup: UnlockCardPopup = null
-var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
-var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
+var _reserve_glow_sprite: Panel = null # armed reserve contour around the shelf counter
 var _reserve_glow_tween: Tween = null
-var _spins_left_label: Label = null # numeric spins-left readout under the tube
+var _spins_left_label: Label = null # single remaining-spin readout on the shelf
 ## The mini-reel's authored sheet, as a view onto CheatMiniReel — the smoke checks
 ## reach it under this name.
 var _cheat_selection_sprite: Sprite2D:
@@ -877,8 +866,7 @@ func tutorial_anchor(id: String) -> Rect2:
 			return Rect2(SPIN_HIT["left"], SPIN_HIT["top"],
 				SPIN_HIT["width"], SPIN_HIT["height"])
 		"health":
-			# The highlight encloses the independent cartridge and both steel end caps.
-			return Rect2(2.0, 43.0, 18.0, 78.0)
+			return SPINS_LEFT_LABEL_RECT
 		"wealth":
 			return Rect2(72.0, 59.0, 50.0, 18.0)
 		"target_bar":
@@ -991,8 +979,6 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel == "machine_polished/memory.svg":
 		return "MemoryPower"
-	if rel == HEALTH_BAR_SHEET:
-		return "HealthBar"
 	if rel.ends_with("multiplier.svg"):
 		return "Multiplier"
 	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
@@ -1250,8 +1236,6 @@ func _set_sheet_frame(spr: Sprite2D, frame: int) -> void:
 func _build_tv_indicators() -> void:
 	_wealth.build()
 	_refresh_target_readout()
-	_health_bar_sprite = _build_full_canvas_sheet(
-		HEALTH_BAR_SHEET, HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
 	_build_full_canvas_sprite("machine_polished/shelf_labels.svg")
 	_build_spins_left_label()
@@ -1261,7 +1245,7 @@ func _build_tv_indicators() -> void:
 	_build_augment_emplacements()
 
 ## Numeric spins-left readout in the left control-shelf well — tracks the same
-## _display_spins_left() budget the capped tube frames show.
+## _display_spins_left() budget, including any gain held until its fly-in lands.
 func _build_spins_left_label() -> void:
 	_spins_left_label = Label.new()
 	_spins_left_label.name = "SpinsLeftNumber"
@@ -1338,27 +1322,20 @@ func _build_power_bar() -> void:
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
 
-## A soft pulse on the tube's bottom chip while the Emergency Reserve is armed (issue
-## #132). Rather than invent a badge, this re-draws the authored chip pixels themselves —
-## a region of frame 1 of the tube sheet, laid exactly over where that chip already sits —
-## so the glow can never drift out of register with the art it is highlighting.
+## Emergency Reserve outlines the shelf counter without adding another readout.
 func _build_reserve_glow() -> void:
-	var tex := _load_texture(HEALTH_BAR_SHEET, true)
-	if tex == null:
-		return
-	_reserve_glow_sprite = Sprite2D.new()
+	_reserve_glow_sprite = Panel.new()
 	_reserve_glow_sprite.name = "ReserveGlow"
-	_reserve_glow_sprite.texture = tex
-	_reserve_glow_sprite.centered = false
-	_reserve_glow_sprite.region_enabled = true
-	# Frame 1 is "one spin left", so its copy of the chip is the lit one to borrow.
-	_reserve_glow_sprite.region_rect = Rect2(
-		HEALTH_BAR_FRAME_W + HEALTH_BOTTOM_CHIP_RECT.position.x,
-		HEALTH_BOTTOM_CHIP_RECT.position.y,
-		HEALTH_BOTTOM_CHIP_RECT.size.x, HEALTH_BOTTOM_CHIP_RECT.size.y)
-	_reserve_glow_sprite.position = HEALTH_BOTTOM_CHIP_RECT.position
-	_reserve_glow_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	_reserve_glow_sprite.z_index = 3 # over the tube, under the HUD overlays
+	_reserve_glow_sprite.position = Vector2(25, 210)
+	_reserve_glow_sprite.size = Vector2(31, 21)
+	_reserve_glow_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color.WHITE
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
+	_reserve_glow_sprite.add_theme_stylebox_override("panel", style)
+	_reserve_glow_sprite.z_index = 3
 	_reserve_glow_sprite.visible = false
 	add_child(_reserve_glow_sprite)
 
@@ -1905,7 +1882,7 @@ func _restore_options_overlay_if_requested() -> void:
 		_options_overlay.call_deferred("show_overlay")
 
 ## Collects the notes the dealer left for this scene (issue #132): a chip bought at the
-## counter whose payoff lives on the machine — Extra Spins filling the tube, the Tip
+## counter whose payoff lives on the machine — Extra Spins raising the count, the Tip
 ## shortening the dealer's walk, the Reserve arming. Purely cosmetic: every target is
 ## checked and a missing one skips its effect, so feedback can never block a run.
 func _play_pending_scene_feedback() -> void:
@@ -1920,7 +1897,7 @@ func _play_pending_scene_feedback() -> void:
 			"dealer_bar":
 				_pulse_dealer_bar(label)
 
-## The spins tube/count flashes and the label pops beside it — what Extra Spins and the
+## The shelf counter/count flashes and the label pops beside it — what Extra Spins and the
 ## armed Reserve both pay out in.
 func _pulse_spins_readout(label: String) -> void:
 	var target: CanvasItem = _spins_left_label
@@ -2850,7 +2827,7 @@ func _release_hud_delta_hold() -> void:
 	_refresh_jackpot_lamp()
 
 # The authored spin_number Label stays as an anchor/editor placeholder and
-# renders no text; the live number is the SPINS LEFT readout under the tube.
+# renders no text; the live number is the SPINS LEFT readout on the shelf.
 func _refresh_spin_label() -> void:
 	if _spin_label != null:
 		_spin_label.text = ""
@@ -2912,7 +2889,7 @@ func _refresh_lock_art() -> void:
 
 func _refresh_tv_indicators() -> void:
 	# The FREE SPIN banner lights the TV while the next spin is free (banked free
-	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
+	# spins or an Energy Drink rush); the shelf counter lives off-TV and stays put.
 	# It resolves FIRST because it is itself a TV owner (_tv_content_muted): every
 	# readout below reads the mute it just set, so the banner never shares the screen
 	# with the objective, the dealer countdown or the item icons for a frame.
@@ -2921,14 +2898,6 @@ func _refresh_tv_indicators() -> void:
 	# The SPINS LEFT counter reflects the neuron cost the moment the SPIN is pressed,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
-	if _health_bar_sprite != null:
-		# A HUD refresh re-derives the tube from state (an ending that wants it
-		# hidden skips this refresh entirely, see _update_hud).
-		_health_bar_sprite.visible = true
-		_set_sheet_frame(_health_bar_sprite,
-			clampi(spins_left, 0, HEALTH_BAR_FRAME_COUNT - 1))
-	# The numeric readout under the tube follows the same budget (spends, gains,
-	# protections all land here via _update_hud), capped at MAX_NEURONS spins.
 	if _spins_left_label != null:
 		_spins_left_label.visible = true
 		_spins_left_label.text = str(spins_left)
@@ -4642,12 +4611,11 @@ func _on_serum_pick(symbol_id: String) -> void:
 func _close_serum_picker() -> void:
 	_choices.close_serum()
 
-# Centre of the spins tube on the canvas (the authored art spans x 3..18,
-# y 47..105 in its native full-canvas frame): spin-restore fly-ins land here.
-const HEALTH_TUBE_TARGET := Vector2(11.0, 76.0)
+# Fly-ins land over the shelf number; the count changes on the landing beat.
+const SPIN_COUNTER_TARGET := Vector2(34.0, 216.0)
 
 ## Tea (issue #53): the restored free spins fly from the used stash slot to the
-## spins tube, which pulses as the tea lands.
+## shelf counter, which pulses as the tea lands.
 func _play_tea_flight(slot_index: int) -> void:
 	if not consumable_fx_enabled:
 		return
@@ -4666,20 +4634,20 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
 	var tw := create_tween()
-	tw.tween_property(icon, "position", HEALTH_TUBE_TARGET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(icon, "position", SPIN_COUNTER_TARGET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(icon.queue_free)
 	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
 	# travels alongside this icon and lands on the same beat.
 
-## Issue #66: a "+N" popup pops in at `origin` and flies into the spins tube.
-## The tube's fill is held back (_pending_spin_gain) while the popup is in
+## Issue #66: a "+N" popup pops in at `origin` and flies into the shelf counter.
+## The counter's value is held back (_pending_spin_gain) while the popup is in
 ## flight, then ticks up with a flash exactly when it lands — reward visible,
 ## value in sync, ~0.7s total so gameplay is not delayed.
 func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
 		already_held := false) -> void:
 	if amount <= 0:
 		return
-	if not consumable_fx_enabled or _health_bar_sprite == null or not is_inside_tree():
+	if not consumable_fx_enabled or _spins_left_label == null or not is_inside_tree():
 		if already_held:
 			_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 		_update_hud()
@@ -4705,7 +4673,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
 	gain.scale = Vector2(0.4, 0.4)
 	var tw := create_tween()
 	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(gain, "position", HEALTH_TUBE_TARGET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(gain, "position", SPIN_COUNTER_TARGET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(_land_spin_gain.bind(amount, gain))
 
 func _land_spin_gain(amount: int, gain: Label) -> void:
@@ -4713,11 +4681,11 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 		gain.queue_free()
 	_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 	_update_hud()
-	if _health_bar_sprite != null and is_instance_valid(_health_bar_sprite):
+	if _spins_left_label != null and is_instance_valid(_spins_left_label):
 		var pulse := create_tween()
-		pulse.tween_property(_health_bar_sprite, "modulate",
+		pulse.tween_property(_spins_left_label, "modulate",
 			Color(1.6, 1.6, 1.6), 0.1)
-		pulse.tween_property(_health_bar_sprite, "modulate", Color.WHITE, 0.14)
+		pulse.tween_property(_spins_left_label, "modulate", Color.WHITE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
@@ -4813,10 +4781,10 @@ func _refresh_energy_fx() -> void:
 	var active := consumable_fx_enabled and energy_fx_enabled and RunStateStore.decaySkips > 0
 	if not _consumable_fx.set_energy(active, energy_pulse_time):
 		return
-	# The drink used to fade the spins tube out for its duration. It stays up now — the
-	# rush is told by the edges alone, and hiding the tube took away the one readout the
+	# The drink used to fade the shelf counter out for its duration. It stays up now — the
+	# rush is told by the edges alone, and hiding the count took away the one readout the
 	# player still needs while it runs. Any fade left mid-flight is returned here. The
-	# tube is the machine's, which is why this half did not move with the edges.
+	# counter is the machine's, which is why this half did not move with the edges.
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for node in _spins_bar_nodes():
@@ -4824,7 +4792,7 @@ func _refresh_energy_fx() -> void:
 
 func _spins_bar_nodes() -> Array:
 	var nodes: Array = []
-	for n in [_health_bar_sprite]:
+	for n in [_spins_left_label]:
 		if n != null and is_instance_valid(n):
 			nodes.append(n)
 	return nodes
@@ -5563,7 +5531,7 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 	if not visible and _tv_content_muted():
 		_tv.forget_restore_state()
 	for node_name: String in [
-		"WealthOdometer", "HealthBar", "DealerBar", "DealerBarOverlay1",
+		"WealthOdometer", "SpinsLeftNumber", "SpinsLegend", "ReserveGlow", "DealerBar", "DealerBarOverlay1",
 		"DealerBarOverlay2", "DealerBarOverlay3", "DealerIcon"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:

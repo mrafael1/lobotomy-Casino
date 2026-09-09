@@ -249,7 +249,7 @@ func _check_reserve_glow_132(machine: Node, run_store: Node, failures: Array) ->
 	var prev_augs: Dictionary = (meta_store.chipAugmentsPurchased as Dictionary).duplicate(true)
 	var prev_used := bool(meta_store.emergencyReserveUsed)
 	var prev_phase := String(run_store.runPhase)
-	var glow: Sprite2D = machine._reserve_glow_sprite
+	var glow: Control = machine._reserve_glow_sprite
 	if glow == null:
 		failures.append("issue132: the machine built no reserve glow")
 	else:
@@ -258,27 +258,11 @@ func _check_reserve_glow_132(machine: Node, run_store: Node, failures: Array) ->
 		meta_store.emergencyReserveUsed = false
 		machine._refresh_reserve_glow()
 		if not glow.visible:
-			failures.append("issue132: an armed reserve did not light the bottom chip")
-		# It must sit ON the chip, not near it: the region is borrowed from the sheet's
-		# own "one spin left" frame so the two can never drift apart.
-		if not glow.region_enabled \
-				or not is_equal_approx(glow.position.x, machine.HEALTH_BOTTOM_CHIP_RECT.position.x) \
-				or not is_equal_approx(glow.position.y, machine.HEALTH_BOTTOM_CHIP_RECT.position.y):
-			failures.append("issue132: the reserve glow is not registered on the bottom chip (%s)"
-				% str(glow.position))
-		# The borrowed region has to be frame 1 of the sheet as it is authored TODAY. A
-		# re-export that adds or drops a frame changes the frame width, which would slide
-		# the glow onto a neighbouring frame while every position check still passed.
-		var tube: Sprite2D = machine._health_bar_sprite
-		if tube != null and tube.texture != null and int(tube.hframes) > 0:
-			var frame_w := float(tube.texture.get_width()) / float(tube.hframes)
-			if not is_equal_approx(frame_w, machine.HEALTH_BAR_FRAME_W):
-				failures.append("issue132: the tube's real frame width is %.1f, not HEALTH_BAR_FRAME_W %.1f"
-					% [frame_w, machine.HEALTH_BAR_FRAME_W])
-			var want_x: float = frame_w + machine.HEALTH_BOTTOM_CHIP_RECT.position.x
-			if not is_equal_approx(glow.region_rect.position.x, want_x):
-				failures.append("issue132: the glow borrows x=%.1f, but frame 1's chip is at x=%.1f"
-					% [glow.region_rect.position.x, want_x])
+			failures.append("issue132: an armed reserve did not outline the shelf counter")
+		if not glow.get_rect().encloses(machine.SPINS_LEFT_LABEL_RECT):
+			failures.append("issue132: reserve contour does not surround the shelf counter")
+		if glow.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			failures.append("issue132: reserve contour intercepts input")
 		meta_store.emergencyReserveUsed = true
 		machine._refresh_reserve_glow()
 		if glow.visible:

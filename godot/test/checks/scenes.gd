@@ -791,19 +791,11 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("machine: bottom-left Lucidity display is missing its label or coin")
 	elif machine_credits_label.get_theme_font_size("font_size") < 7:
 		failures.append("machine: Lucidity number is too small")
-	# The spins readout left the TV: it is now the native 20-frame tube sheet
-	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
-	# plays while a spin launches.
+	# The shelf number is the only remaining-spin readout.
 	if machine.get_node_or_null("HealthLabel") != null:
 		failures.append("machine: HealthLabel spins counter should be removed from the TV")
-	if health_bar == null or health_bar.hframes != 20:
-		failures.append("machine: HealthBar spins tube is not a 20-frame sheet")
-	# The tube must be able to draw every spin the economy can hand out: one frame per
-	# count from empty to the cap. A sheet that falls behind a raised cap silently
-	# clamps the top of the tube instead of failing.
-	if health_bar != null and health_bar.hframes != EconomyConst.MAX_NEURONS + 1:
-		failures.append("machine: the tube's %d frames cannot draw a %d-spin cap"
-			% [int(health_bar.hframes), EconomyConst.MAX_NEURONS])
+	if health_bar != null:
+		failures.append("machine: redundant side spin tube is still active")
 	if health_coin != null:
 		failures.append("machine: retired HealthCoin drop sheet is still active")
 	machine.queue_free()
