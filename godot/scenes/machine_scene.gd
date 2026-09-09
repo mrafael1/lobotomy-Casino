@@ -577,9 +577,7 @@ var _mult_fx_3: Sprite2D = null
 var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
 var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
-var _dealer_icon: TextureRect = null
-var _dealer_reaction: Label = null
-var _dealer_reaction_tween: Tween = null
+var _dealer_icon: MachineDealerPortrait = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
@@ -1736,7 +1734,7 @@ func _build_hud() -> void:
 ## Issue #155: the compact dealer portrait sits beside the authored countdown bar.
 ## The countdown is entirely visual now; no numeric badge is layered over the icon.
 func _build_dealer_icon() -> void:
-	var icon := TextureRect.new()
+	var icon := MachineDealerPortrait.new()
 	icon.name = "DealerIcon"
 	icon.position = DEALER_ICON_POS
 	icon.size = DEALER_ICON_SIZE
@@ -1751,35 +1749,12 @@ func _build_dealer_icon() -> void:
 	# Built in the HUD pass, long after the component block — so it is handed to the
 	# arbiter here rather than passed in at construction.
 	_tv.set_dealer_icon(icon)
-	_dealer_reaction = Label.new()
-	_dealer_reaction.name = "DealerReaction"
-	_dealer_reaction.position = Vector2(0, 33)
-	_dealer_reaction.size = Vector2(30, 11)
-	_dealer_reaction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dealer_reaction.add_theme_font_override("font", _font)
-	_dealer_reaction.add_theme_font_size_override("font_size", 5)
-	_dealer_reaction.add_theme_color_override("font_color", Color("dce3b7"))
-	_dealer_reaction.add_theme_color_override("font_outline_color", Color("071510"))
-	_dealer_reaction.add_theme_constant_override("outline_size", 2)
-	_dealer_reaction.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dealer_reaction.visible = false
-	icon.add_child(_dealer_reaction)
+	icon.build_caption(_font)
 
 ## Presentation only: a short response remains after the payout releases the CRT.
 func _react_dealer(win_type: String) -> void:
-	if _dealer_reaction == null:
-		return
-	if _dealer_reaction_tween != null and _dealer_reaction_tween.is_valid():
-		_dealer_reaction_tween.kill()
-	_dealer_reaction.text = "AGAIN?" if win_type == "miss" else "NICE."
-	if win_type == "jackpot":
-		_dealer_reaction.text = "WELL..."
-	_dealer_reaction.modulate.a = 1.0
-	_dealer_reaction.visible = true
-	_dealer_reaction_tween = create_tween()
-	_dealer_reaction_tween.tween_interval(4.5)
-	_dealer_reaction_tween.tween_property(_dealer_reaction, "modulate:a", 0.0, 0.5)
-	_dealer_reaction_tween.tween_callback(_dealer_reaction.hide)
+	if _dealer_icon != null:
+		_dealer_icon.react(win_type)
 
 
 ## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own

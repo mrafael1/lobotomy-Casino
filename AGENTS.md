@@ -307,7 +307,9 @@ Resources and currencies:
   all three overlays remain visible at every multiplier. At 0 he visits
   automatically. A persistent 30x45 dealer portrait occupies the CRT's left column;
   the twelve approach steps and cumulative warning lights sit beneath it. Short
-  reactions respond to revealed plays and yield to payout and targeting callouts.
+  reactions type into a framed caption, respond to revealed plays, and yield to
+  payout and targeting callouts. Their hold/fade timer pauses while the portrait
+  is hidden, leaving the response readable after a callout finishes.
 - A visit offers 2 run items (3 with the offer-expand augment) plus one dedicated
   Chip Augment; offers can be rerolled for escalating run Lucidity. Taking or
   refusing the visit both reset the countdown.
@@ -501,6 +503,8 @@ Resources and currencies:
   Payout and targeting callouts hide the portrait, score, target, normal multiplier,
   and augment badges until they finish. FREE SPIN replaces only the target number
   and title. Target-payout digit snapshots and power coins launch from the CRT.
+  COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
+  an unscaled bonus amount; its original payout timing remains intact.
   Idle, depressed, disabled, hover and focus assets are independent of the cabinet; keyboard/controller UI activation is supported.
   Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
   rewind and loss locks still govern it. Power targeting receives shelf input

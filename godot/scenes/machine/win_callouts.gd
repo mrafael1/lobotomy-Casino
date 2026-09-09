@@ -36,18 +36,18 @@ const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
 const WIN_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the COMBO component -------------------------------------------------------
-const COMBO_EFFECT_SHEET := "machine new view/COMBO_effect.png"
+const COMBO_EFFECT_SHEET := "machine_polished/combo.svg"
 const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose fewer frames
 const COMBO_EFFECT_DELAY := 2.55
 const COMBO_EFFECT_TIME := 1.05
 const COMBO_EFFECT_Z_INDEX := 9
-## Fit the legacy COMBO sheet into the CRT's score column. Its backing temporarily
+## Native pixel lettering occupies the CRT's score column. Its backing temporarily
 ## covers the score/multiplier; the portrait and approach row remain readable.
-const COMBO_EFFECT_POSITION := Vector2(51.0, -10.0)
+const COMBO_EFFECT_POSITION := Vector2.ZERO
 
 ## The bonus line briefly sits over the odometer's digit windows. It is a transient
 ## payout pop, so the wealth total is readable again as soon as the line fades.
-const COMBO_PAYOUT_RECT := Rect2(35.0, 110.0, 82.0, 10.0)
+const COMBO_PAYOUT_RECT := Rect2(73.0, 78.0, 48.0, 10.0)
 const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the combo-loss warning ----------------------------------------------------
@@ -112,16 +112,8 @@ func build() -> void:
 	_combo_effect_sprite = _view.full_canvas_sheet(COMBO_EFFECT_SHEET, _combo_effect_frame_count)
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
-		_combo_effect_sprite.scale = Vector2(0.6, 0.75)
 		_combo_effect_sprite.z_index = COMBO_EFFECT_Z_INDEX
-		var backing := ColorRect.new()
-		backing.position = Vector2(35, 92)
-		backing.size = Vector2(85, 42)
-		backing.color = Color("081712")
-		backing.show_behind_parent = true
-		backing.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_combo_effect_sprite.add_child(backing)
-		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 8, COMBO_PAYOUT_COLOR)
+		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 6, COMBO_PAYOUT_COLOR)
 		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		_combo_payout_label.add_theme_constant_override("outline_size", 1)
 		_combo_payout_label.visible = false
@@ -233,7 +225,7 @@ func show_combo(frame: int, bonus: int, percent: int) -> void:
 	if _combo_payout_label != null:
 		_combo_payout_tween = _view.tween()
 		_combo_payout_tween.tween_property(_combo_payout_label, "position:y",
-			COMBO_PAYOUT_RECT.position.y - 8.0, 0.72)
+			COMBO_PAYOUT_RECT.position.y - 3.0, 0.72)
 		_combo_payout_tween.parallel().tween_property(_combo_payout_label, "modulate:a",
 			0.0, 0.72).set_delay(0.18)
 

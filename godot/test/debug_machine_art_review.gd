@@ -115,10 +115,30 @@ func _run() -> void:
 	_scene._callouts.stop_win()
 	assert(_scene._wealth.odometer().visible, "Score did not return after the payout")
 	_scene._react_dealer("miss")
+	_scene._tv.begin_pop("reaction_review")
+	await create_timer(3.1).timeout
+	var reaction := _scene._dealer_icon.get_node("DealerReaction") as Label
+	assert(reaction.get_global_rect().end.y <= 94.0,
+		"Dealer caption must leave the approach row visible: %s minimum %s font %d" % [reaction.get_global_rect(), reaction.get_minimum_size(), reaction.get_theme_font_size("font_size")])
+	assert(reaction.visible and reaction.visible_characters == 0,
+		"Hidden dealer reaction consumed its reading time")
+	_scene._tv.end_pop("reaction_review")
+	await create_timer(0.4).timeout
+	assert(reaction.visible and reaction.visible_characters == reaction.text.length(),
+		"Dealer reaction did not type after the CRT returned")
 	await _capture("07-dealer-reaction")
+	# A synthetic paying COMBO must start outside the random spin's rescue warning.
+	run.comboDefeatPending = false
+	_scene._callouts.set_loss_display(0)
 	run.winBoostEnabled = true
 	_scene._callouts.show_combo(1, 5, 10)
+	assert(_scene._callouts.combo_sprite().scale == Vector2.ONE,
+		"COMBO lettering must render at native resolution")
+	assert(_scene._callouts.combo_sprite().hframes == 9, "COMBO must show all nine stages")
 	await _capture("07-combo")
+	_scene._callouts.stop_combo()
+	_scene._callouts.show_combo(8, 90, 45)
+	await _capture("07-combo-max")
 	_scene._callouts.stop_combo()
 	run.winBoostEnabled = false
 	# The CRT multiplier retains its warning/cap states independently of the powers.
