@@ -16,8 +16,13 @@ There are no runtime dependencies outside `godot/assets`.
 scene's measured geometry. `apertures.svg` supplies the exact transparent reel
 holes. The texture includes the casino backdrop and empty cabinet hardware;
 dealer, counters, symbols and interaction states are rendered independently.
-`reel_paper.gdshader` shades the reel backing and settled covers; the odometer
-material fits a painted-steel surround around the original animated drums.
+`reel_drums.svg` supplies native paper drums with curved warm shading. Settled
+covers sample this same 160x320 texture, without a shader substitute.
+`reel_motion.svg` supplies four 160x320 motion frames with matching paper and
+indistinct symbol streaks. Each reel advances/stops independently; its crop and
+scale are derived from the actual sheet dimensions. `reel_housing.svg` supplies
+separate worn-metal bezels and ivory lamps, leaving every aperture pixel clear.
+The odometer material still fits a steel surround around the animated digits.
 
 The cabinet keeps transparent apertures at x33, 65 and 97, y169, 21x34 pixels.
 The existing scoring/hit rectangles remain x33/65/97, y170, 21x30. The surrounding
@@ -70,3 +75,8 @@ chips, spinning, reveal, Tunnel Vision, payout and dealer interruption, x2/x3 wa
 exercises actual viewport mouse events and focused Enter activation, including
 the lower Shift arrow over the SPIN area. The scene smoke suite checks existing power interactions
 and the shutter's geometry, visibility and input transparency.
+
+The reel geometry checks verify native texture sizes, full drum coverage, transparent
+frame apertures, matching landing covers and horizontal motion-frame crops. The
+previous reel/backing PNGs and paper shader are retained as source material, but
+the active machine no longer references them.

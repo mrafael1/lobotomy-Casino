@@ -481,7 +481,12 @@ Resources and currencies:
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
   Its painted cabinet is imported at 160x320, with worn red enamel, recessed
-  metal trim, a matching cadaver-green dealer portrait, and shaded paper drums.
+  metal trim and a matching cadaver-green dealer portrait. Independent worn-metal
+  reel frames sit over native 160x320 shaded paper drums; a four-frame native
+  motion sheet uses the same warm paper surface. The three transparent apertures
+  remain x33/65/97, y169..202, with live scoring windows at y170..199. Landed and
+  locked reels use the same drum backing while each other reel keeps spinning.
+  Symbols, targeting, and the Tunnel Vision shutter remain independent layers.
   A registration material fits the painting to the existing live reel apertures;
   numbers, symbols, powers, and counters remain separate runtime elements.
   SPIN is a separate ivory/brass button centered at x80 on the lower metal shelf.

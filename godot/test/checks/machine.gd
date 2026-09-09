@@ -1711,8 +1711,30 @@ func _check_reel_strip_geometry(machine: Node, failures: Array) -> void:
 ## a version of this that stepped down the sheet instead of across it was written and
 ## caught by hand during #207 — it renders a plausible-looking wrong thing.
 func _check_spin_blur_region(machine: Node, failures: Array) -> void:
+	var housing := machine.get_node("ReelHousing") as Sprite2D
+	var backing := machine.get_node("ReelBacking") as Sprite2D
+	if housing.texture.get_size() != Vector2(160, 320) or backing.texture.get_size() != Vector2(160, 320):
+		failures.append("reel hardware: frame and drums must be native 160x320 assets")
+	var housing_image := housing.texture.get_image()
+	var drum_image := backing.texture.get_image()
+	for hole: Dictionary in machine.REEL_HOLES:
+		for y in range(169, 203):
+			for x in range(int(hole["left"]), int(hole["left"] + hole["width"])):
+				if housing_image.get_pixel(x, y).a > 0.01:
+					failures.append("reel hardware: metal frame covers a live aperture pixel")
+					return
+				if drum_image.get_pixel(x, y).a < 0.99:
+					failures.append("reel hardware: transparent hole in the drum backing")
+					return
 	var rb = machine._reel_blur
-	var scale: float = float(machine.ASSET_SCALE)
+	var strip := machine.get_node("SpinReel0") as Sprite2D
+	var scale: float = float(strip.texture.get_height()) / 320.0
+	if strip.texture.get_size() != Vector2(640, 320) or strip.scale != Vector2.ONE:
+		failures.append("reel hardware: motion strip must use four native 160x320 frames")
+	for i in 3:
+		var cover: Sprite2D = rb.cover(i)
+		if cover.texture != backing.texture or cover.material != null:
+			failures.append("reel hardware: a landed reel must use the same unmodified drum backing")
 	for reel in 3:
 		var hole: Dictionary = machine.REEL_HOLES[reel]
 		rb.set_spin_frame(reel, 0)

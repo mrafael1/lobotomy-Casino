@@ -11,7 +11,6 @@ extends Node2D
 
 const SRC_W := 160.0
 const SRC_H := 320.0
-const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
@@ -781,7 +780,7 @@ func _ready() -> void:
 	_boosts = BoostIndicators.new(_view, DURATION_BOOSTS, TV_SCREEN,
 		_icon_for, _item_info_popup_text)
 	_coins = CoinFlights.new(_view, MACHINE_ART_TEXTURE_FILTER)
-	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
+	_reel_blur = ReelBlur.new(_view, REEL_HOLES, SPIN_FRAME_COUNT)
 	_reel_symbols = ReelSymbols.new(_view, REEL_CELL_CENTERS, REEL_WINDOW,
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
 	_power_callout = PowerCallout.new(_view, SRC_W)
@@ -810,17 +809,13 @@ func _ready() -> void:
 	# sprites all share z_index 0, so the scene tree IS the layer stack.
 	_build_neon_background()
 	_reel_backing_sprite = _build_full_canvas_sprite(
-		"machine new view/reel_final_machine.png")
-	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
-	_reel_blur.build_covers("machine new view/reel_final_machine.png")
-	var paper := ShaderMaterial.new()
-	paper.shader = preload("res://assets/shaders/reel_paper.gdshader")
-	_reel_backing_sprite.material = paper
-	for i in 3:
-		_reel_blur.cover(i).material = paper
+		"machine_polished/reel_drums.svg")
+	_reel_blur.build_spin_strips("machine_polished/reel_motion.svg")
+	_reel_blur.build_covers("machine_polished/reel_drums.svg")
 	_reel_symbols.build()
 	var cabinet := _build_full_canvas_sprite("machine_polished/cabinet-painted.png")
 	cabinet.material = preload("res://assets/shaders/painted_cabinet.tres")
+	_build_full_canvas_sprite("machine_polished/reel_housing.svg")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -989,8 +984,10 @@ func _authored_control(name: String) -> Control:
 func _full_canvas_name(rel: String) -> String:
 	if rel == "machine_polished/cabinet-painted.png":
 		return "Cabinet"
-	if rel.ends_with("reel_final_machine.png"):
+	if rel.ends_with("reel_drums.svg"):
 		return "ReelBacking"
+	if rel.ends_with("reel_housing.svg"):
+		return "ReelHousing"
 	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
 			or rel.ends_with("machine_neon.png"):
 		return "Cabinet"
@@ -1044,7 +1041,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 ## patch, and an exact match would miss the scene node and build a loose sprite on top of
 ## everything instead of slotting in under the symbols.
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
-	if rel.ends_with("reel_final_machine.png"):
+	if rel.ends_with("reel_drums.svg"):
 		for i in REEL_HOLES.size():
 			if absf(float(rect["left"]) - float(REEL_HOLES[i]["left"])) <= 2.0 \
 					and absf(float(rect["top"]) - float(REEL_HOLES[i]["top"])) <= 4.0:
@@ -1206,9 +1203,8 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	spr.texture = tex
 	spr.centered = false
 	# How many sheet pixels one source pixel is, measured from the sheet instead of assumed:
-	# ASSET_SCALE only ever described the legacy x8 exports, and a sheet that goes native
-	# (reel_final_machine.png did) would be cropped far outside its own bounds and draw
-	# nothing at all.
+	# Native and legacy sheets share this helper; crops follow the actual texture
+	# height so switching an asset to native resolution cannot crop beyond its bounds.
 	var art_scale := maxf(1.0, float(tex.get_height()) / SRC_H)
 	spr.position = Vector2(rect["left"], rect["top"])
 	spr.region_enabled = true
