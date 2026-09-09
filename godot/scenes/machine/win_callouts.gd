@@ -41,14 +41,13 @@ const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose few
 const COMBO_EFFECT_DELAY := 2.55
 const COMBO_EFFECT_TIME := 1.05
 const COMBO_EFFECT_Z_INDEX := 9
-## The authored COMBO art sits around y94 in its full-canvas frame. Offset the
-## sprite onto the upper part of the Wealth plate (y242..278), above the rolling
-## digits, so the bonus belongs to the score it is paying.
-const COMBO_EFFECT_POSITION := Vector2(0.0, 150.0)
+## Fit the legacy COMBO sheet into the CRT's score column. Its backing temporarily
+## covers the score/multiplier; the portrait and approach row remain readable.
+const COMBO_EFFECT_POSITION := Vector2(51.0, -10.0)
 
 ## The bonus line briefly sits over the odometer's digit windows. It is a transient
 ## payout pop, so the wealth total is readable again as soon as the line fades.
-const COMBO_PAYOUT_RECT := Rect2(35.0, 107.0, 82.0, 10.0)
+const COMBO_PAYOUT_RECT := Rect2(35.0, 110.0, 82.0, 10.0)
 const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the combo-loss warning ----------------------------------------------------
@@ -96,6 +95,9 @@ func _init(view: MachineView) -> void:
 func build() -> void:
 	_combo_loss_2_sprite = _view.full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _view.full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
+	for loss in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
+		if loss != null:
+			loss.position = Vector2(-9, 30)
 	_win_anim_sprite = _view.full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
 	if _win_anim_sprite != null:
 		_win_payout_label = _payout_label("WinPayout", WIN_PAYOUT_RECT, 11, WIN_PAYOUT_COLOR)
@@ -110,7 +112,15 @@ func build() -> void:
 	_combo_effect_sprite = _view.full_canvas_sheet(COMBO_EFFECT_SHEET, _combo_effect_frame_count)
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
+		_combo_effect_sprite.scale = Vector2(0.6, 0.75)
 		_combo_effect_sprite.z_index = COMBO_EFFECT_Z_INDEX
+		var backing := ColorRect.new()
+		backing.position = Vector2(35, 92)
+		backing.size = Vector2(85, 42)
+		backing.color = Color("081712")
+		backing.show_behind_parent = true
+		backing.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_combo_effect_sprite.add_child(backing)
 		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 8, COMBO_PAYOUT_COLOR)
 		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		_combo_payout_label.add_theme_constant_override("outline_size", 1)

@@ -70,7 +70,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		var socket: Dictionary = machine.POWER_HITS[machine.POWER_IDS[i]]
 		if socket["top"] != 114.0 or socket["width"] != 26.0 or socket["height"] != 26.0:
 			failures.append("machine: powers must occupy the large metal sockets below the CRT")
-	if machine.MULT_STRIP["top"] < 46.0 or machine.MULT_STRIP["top"] + machine.MULT_STRIP["height"] > 60.0:
+	if machine.MULT_STRIP["top"] < 77.0 or machine.MULT_STRIP["top"] + machine.MULT_STRIP["height"] > 90.0:
 		failures.append("machine: multiplier must fit inside the CRT above dealer information")
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var style := spin.get_theme_stylebox(state) as StyleBoxTexture
@@ -126,12 +126,18 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		failures.append("machine art: wealth odometer is missing")
 	else:
 		var wealth_art := wealth_odometer.get_node_or_null("WealthBarArt") as Sprite2D
+		var digits := wealth_odometer.visible_digit_bounds()
+		digits.position += wealth_odometer.position
+		if not Rect2(72, 59, 50, 18).encloses(digits):
+			failures.append("machine: wealth drums must fit below the CRT target")
+		if digits.intersects(Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)):
+			failures.append("machine: dealer portrait overlaps the wealth drums")
 		if wealth_art == null or wealth_art.texture == null \
 				or Vector2i(wealth_art.texture.get_width(), wealth_art.texture.get_height()) \
 					!= Vector2i(160, 320) \
 				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: wealth odometer bar is not native 160x320 art")
-		elif not String(wealth_art.texture.resource_path).ends_with("wealth_bar.png"):
+		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt.svg"):
 			failures.append("machine art: wealth odometer still uses the misspelled bar asset")
 		var wealth_cases := wealth_odometer.get_node_or_null("WealthCasesArt") as Sprite2D
 		if wealth_cases == null or wealth_cases.texture == null \
@@ -485,9 +491,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			% int(icon_size))
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
 	# Measured art extents of the TV's other occupants (see the constants' comment).
-	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
-	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
-	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
+	var goal_rect := Rect2(72.0, 47.0, 50.0, 8.0)
+	var fill_bar_rect := Rect2(72.0, 56.0, 48.0, 5.0)
 	# The TV's own SCREEN below the fill bar, measured off the rendered cabinet as the
 	# near-black region rather than "anything dark" — the surrounding cabinet grey reads
 	# dark too, and counting it as screen is what let the row run past the bezel and off
@@ -713,7 +718,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 					continue
 				lo.x = mini(lo.x, x); lo.y = mini(lo.y, y)
 				hi.x = maxi(hi.x, x); hi.y = maxi(hi.y, y)
-		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5)
+		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5) + CoinFlights.POP_OFFSET
 		if hi.x >= 0 and machine.WEALTH_COIN_ORIGIN.distance_to(pop_end) > 1.01:
 			failures.append("issue76: power coin flight starts at %s but the pop ends at %s"
 				% [str(machine.WEALTH_COIN_ORIGIN), str(pop_end)])

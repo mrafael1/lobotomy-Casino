@@ -37,6 +37,13 @@ func _run() -> void:
 	root.add_child(_scene)
 	await create_timer(0.5).timeout
 	await _capture("01-idle")
+	_scene._wealth.set_score(99, false)
+	_scene._wealth.set_score(100, true)
+	await create_timer(0.12).timeout
+	await _capture("01-odometer-carry")
+	_scene._wealth.set_score(40, false)
+	assert(_scene.tutorial_anchor("wealth").encloses(Rect2(74, 61, 46, 14)),
+		"Tutorial still points to the lower cabinet wealth display")
 	var spin := _scene.get_node("SpinButton") as Button
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -102,9 +109,18 @@ func _run() -> void:
 	_scene._refresh_consumable_fx()
 	assert(not shutter.visible, "Removing Tunnel Vision left the shutter visible")
 	_scene._callouts.play_win("pair", 20)
+	assert(not _scene._wealth.odometer().visible, "Payout must own the CRT above the score")
 	await create_timer(0.08).timeout
 	await _capture("07-payout")
 	_scene._callouts.stop_win()
+	assert(_scene._wealth.odometer().visible, "Score did not return after the payout")
+	_scene._react_dealer("miss")
+	await _capture("07-dealer-reaction")
+	run.winBoostEnabled = true
+	_scene._callouts.show_combo(1, 5, 10)
+	await _capture("07-combo")
+	_scene._callouts.stop_combo()
+	run.winBoostEnabled = false
 	# The CRT multiplier retains its warning/cap states independently of the powers.
 	for multiplier in [2, 3]:
 		run.betMultiplier = multiplier

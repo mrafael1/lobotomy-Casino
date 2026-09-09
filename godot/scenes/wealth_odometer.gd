@@ -26,7 +26,7 @@ const VALUE_MODULUS := 10_000
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 const BAR_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine new view/wealth_bar.png")
+	"res://assets/images/machine_polished/wealth_crt.svg")
 const CASES_TEXTURE: Texture2D = preload(
 	"res://assets/images/machine new view/wealth_cases.png")
 const REEL_TEXTURES: Array[Texture2D] = [
@@ -44,6 +44,8 @@ var _built := false
 ## so an overlay can fly the machine's own number around without the surrounding art
 ## coming with it. Set before the node enters the tree; _build_art() reads it once.
 var snapshot_mode := false
+## Starting placement of a lifted copy; the digit art remains in source coordinates.
+var snapshot_origin := Vector2.ZERO
 ## How many digit slots stay visible, counted from the units end. Locking this keeps
 ## a drain that drops a digit from re-laying-out mid-animation.
 var digit_window := DIGIT_COUNT

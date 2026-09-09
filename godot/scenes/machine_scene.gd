@@ -52,7 +52,7 @@ const SPINS_LEFT_LABEL_RECT := Rect2(26.0, 211.0, 29.0, 19.0)
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
 const TV_STATUS_RIGHT := 109.0
-const MULT_STRIP := { "top": 47.0, "height": 12.0 }
+const MULT_STRIP := { "top": 77.0, "height": 12.0 }
 const MULT_BADGE_CENTERS := [87.5, 92.5, 97.5]
 # Lower shelf: SPIN between the remaining-spin display and the two stash wells.
 const SPIN_HIT := { "left": 57.0, "top": 210.0, "width": 46.0, "height": 28.0 }
@@ -120,7 +120,7 @@ const MULT_FX_FRAME_TIME := 0.09
 # this single native full-canvas frame recolours exactly those first steps so the head
 # start is visible on the bar instead of only in the arithmetic. Shown while the augment
 # is owned: each reset comes back onto the tipped value, so those steps are never unlit.
-const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
+const DEALER_TIP_STEPS_SHEET := "machine_polished/dealer_tips.svg"
 # The bar walks through each authored progress frame when one spin advances it
 # by multiple steps; the warning itself beeps through alpha so it does not
 # reveal a different countdown position before that spin's result is known.
@@ -128,10 +128,10 @@ const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
 # the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
 # BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
 const DEALER_ICON_ASSET := "machine_polished/dealer-painted.png"
-const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
+const DEALER_ICON_SIZE := Vector2(30.0, 45.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
 # fully inside the pink TV border.
-const DEALER_ICON_POS := Vector2(100.0, 59.0)
+const DEALER_ICON_POS := Vector2(34.0, 47.0)
 const LOCK_POWER_FRAME_COUNT := 3
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
@@ -232,10 +232,8 @@ const DEALER_OVERLAY_Z_INDEX := 100
 # Pacte augment badge: a compact blue contour around the active card icon stays
 # inside the TV; it is shifted 10px right from the original left-side placement.
 # Pressing it opens the current card(s) and effects.
-# Issue #181: the held augments sit on the power bar, continuing the row after the
-# third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
-# and the same 14px pitch, so the whole strip reads as one row of chips.
-const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
+# Held augment sockets occupy the CRT's right column beneath the multiplier.
+const AUGMENT_PLATE_SHEET := "machine_polished/augments.svg"
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
 # Canvas centers of the 40 baked marquee bulbs (scanned from the art's yellow
@@ -249,10 +247,8 @@ const JACKPOT_ROLL_TAIL := 0.25 # a beat of stillness after the reels land
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
-# Where the coin pop hands the coin over to the flight: the centre of the pop sheet's LAST
-# frame (x70..77, y241..249), so the flying coin appears exactly where the animation left it
-# instead of teleporting. The art moved up 3px in its latest export and this followed it.
-const WEALTH_COIN_ORIGIN := Vector2(74.0, 245.5)
+# The translated pop sheet hands its final frame to the flight above the CRT drums.
+const WEALTH_COIN_ORIGIN := Vector2(97.0, 62.0)
 # The chip's own size, asset, flight time and pop sheet are CoinFlights' — they
 # describe the flight, not where it starts. The jackpot pays in the machine's own
 # currency, so its spray is lucidity coins — the same coin the dealer and upgrade
@@ -582,6 +578,8 @@ var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
 var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
 var _dealer_icon: TextureRect = null
+var _dealer_reaction: Label = null
+var _dealer_reaction_tween: Tween = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
@@ -887,13 +885,11 @@ func tutorial_anchor(id: String) -> Rect2:
 			# thing it is naming is worse than no highlight.
 			return Rect2(2.0, 43.0, 18.0, 78.0)
 		"wealth":
-			return Rect2(39.0, 242.0, 97.0, 37.0) # the wealth plate
+			return Rect2(72.0, 59.0, 50.0, 18.0)
 		"target_bar":
-			# The bar itself (target_bar.png: x41..111, y94..99) plus the goal number above
-			# it (target_goals.png: y86..91) — the pair is what "the target" means.
-			return Rect2(40.0, 84.0, 72.0, 17.0)
+			return Rect2(72.0, 47.0, 50.0, 12.0)
 		"dealer_countdown":
-			return Rect2(DEALER_ICON_POS, DEALER_ICON_SIZE)
+			return Rect2(34.0, 47.0, 36.0, 51.0)
 		"reels":
 			return Rect2(REEL_HOLES[0]["left"], REEL_WINDOW["top"],
 				REEL_HOLES[2]["left"] + REEL_HOLES[2]["width"] - REEL_HOLES[0]["left"],
@@ -1014,7 +1010,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel.ends_with("lock.png") or rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
-	if rel.to_lower().ends_with("free_spin.png"):
+	if rel.get_basename().ends_with("free_spin"):
 		return "FreeSpinOverlay"
 	if rel.ends_with("win_animation.png"):
 		return "WinCallout"
@@ -1026,13 +1022,13 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ComboLoss2"
 	if rel.ends_with("loss_3.svg"):
 		return "ComboLoss3"
-	if rel.ends_with("dealer_bar.png"):
+	if rel.get_basename().ends_with("dealer_bar"):
 		return "DealerBar"
-	if rel.ends_with("dealer_bar_overlay_1.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_1"):
 		return "DealerBarOverlay1"
-	if rel.ends_with("dealer_bar_overlay_2.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_2"):
 		return "DealerBarOverlay2"
-	if rel.ends_with("dealer_bar_overlay_3.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_3"):
 		return "DealerBarOverlay3"
 	return ""
 
@@ -1312,7 +1308,7 @@ func _build_spins_left_label() -> void:
 func _build_augment_emplacements() -> void:
 	var plate := _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AugmentDisplay.AUGMENT_PLATE_FRAMES)
 	if plate != null:
-		plate.position = Vector2(-32, -178)
+		plate.position = Vector2.ZERO
 		plate.z_index = AUGMENT_PLATE_Z_INDEX
 		plate.visible = false
 	_augments.attach_plate(plate)
@@ -1635,6 +1631,9 @@ func _build_machine_control_art() -> void:
 	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
 	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
+	for sprite in [_multiplier_sprite, _mult_fx_2, _mult_fx_3, _mult_fx_fire]:
+		if sprite != null:
+			sprite.position = Vector2(-9, 30)
 	_dealer_bar.build()
 	_build_dealer_tip_steps()
 	_tv.build_banner()
@@ -1752,6 +1751,35 @@ func _build_dealer_icon() -> void:
 	# Built in the HUD pass, long after the component block — so it is handed to the
 	# arbiter here rather than passed in at construction.
 	_tv.set_dealer_icon(icon)
+	_dealer_reaction = Label.new()
+	_dealer_reaction.name = "DealerReaction"
+	_dealer_reaction.position = Vector2(0, 33)
+	_dealer_reaction.size = Vector2(30, 11)
+	_dealer_reaction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dealer_reaction.add_theme_font_override("font", _font)
+	_dealer_reaction.add_theme_font_size_override("font_size", 5)
+	_dealer_reaction.add_theme_color_override("font_color", Color("dce3b7"))
+	_dealer_reaction.add_theme_color_override("font_outline_color", Color("071510"))
+	_dealer_reaction.add_theme_constant_override("outline_size", 2)
+	_dealer_reaction.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dealer_reaction.visible = false
+	icon.add_child(_dealer_reaction)
+
+## Presentation only: a short response remains after the payout releases the CRT.
+func _react_dealer(win_type: String) -> void:
+	if _dealer_reaction == null:
+		return
+	if _dealer_reaction_tween != null and _dealer_reaction_tween.is_valid():
+		_dealer_reaction_tween.kill()
+	_dealer_reaction.text = "AGAIN?" if win_type == "miss" else "NICE."
+	if win_type == "jackpot":
+		_dealer_reaction.text = "WELL..."
+	_dealer_reaction.modulate.a = 1.0
+	_dealer_reaction.visible = true
+	_dealer_reaction_tween = create_tween()
+	_dealer_reaction_tween.tween_interval(4.5)
+	_dealer_reaction_tween.tween_property(_dealer_reaction, "modulate:a", 0.0, 0.5)
+	_dealer_reaction_tween.tween_callback(_dealer_reaction.hide)
 
 
 ## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own
@@ -2291,6 +2319,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	_wealth.stop_roll()
 	if _wealth.odometer() != null:
 		snapshot = WealthOdometer.make_snapshot(score)
+		snapshot.snapshot_origin = _wealth.odometer().position
 	_tv.begin_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
 	# The final target is not paid out of the score and banks nothing, so it shows no
@@ -3081,6 +3110,8 @@ func _emit_score_burst(source_reel) -> float:
 	_bursts.remember(spin_count, score)
 
 	var win_type := String(lr["winType"])
+	if is_new_spin or gain > 0:
+		_react_dealer(win_type)
 	var reels: Array = lr["reels"]
 	var combo_applied := bool(lr.get("winBoostApplied", false)) \
 		and win_type in SpinResult.PAYING_WIN_TYPES

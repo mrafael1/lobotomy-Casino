@@ -24,11 +24,11 @@ const AUGMENTED_BADGE_SIZE := 14.0
 
 ## --- the Pacte augment chip row (issue #181) -----------------------------------
 const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
-const PACTE_AUGMENT_BADGE_POS := Vector2(32.0, 45.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
+const PACTE_AUGMENT_BADGE_POS := Vector2(76.0, 90.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(10.0, 9.0)
 const PACTE_AUGMENT_BADGE_PITCH := 14.0
 const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 10.0
+const PACTE_AUGMENT_ICON_SIZE := 8.0
 const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
 
 ## Card names and their descriptions run long; wrapping keeps the bubble on the canvas.

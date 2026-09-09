@@ -42,7 +42,7 @@ extends RefCounted
 ## to y84..89 instead — into the band the goal number vacates while free spins are
 ## lit — so it now clears the fill bar at y94..98 outright and the bar can keep
 ## running underneath it.
-const BANNER_SHEET := "machine new view/free_spin.png"
+const BANNER_SHEET := "machine_polished/free_spin.svg"
 const BANNER_FRAMES := 1
 const BANNER_BLINK_PERIOD := 0.18
 ## Lit for the first 72% of each period: a duty cycle, not a square wave, so the

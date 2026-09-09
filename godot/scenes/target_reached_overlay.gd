@@ -368,7 +368,7 @@ func _prepare_snapshot() -> void:
 	_snapshot_scale = SCORE_SCALE
 	# Scale about the digits themselves; the snapshot's own rect is the whole canvas.
 	_snapshot.pivot_offset = bounds.get_center()
-	_snapshot.position = Vector2.ZERO # sits exactly over the machine's live reels
+	_snapshot.position = _snapshot.snapshot_origin
 	_snapshot.scale = Vector2.ONE
 	_snapshot_to = SCORE_CENTER - bounds.get_center()
 
@@ -376,7 +376,7 @@ func _prepare_snapshot() -> void:
 func _place_snapshot_at_tv(t: float) -> void:
 	if _snapshot == null or not is_instance_valid(_snapshot):
 		return
-	_snapshot.position = Vector2.ZERO.lerp(_snapshot_to, t)
+	_snapshot.position = _snapshot.snapshot_origin.lerp(_snapshot_to, t)
 	var s := lerpf(1.0, _snapshot_scale, t)
 	_snapshot.scale = Vector2(s, s)
 

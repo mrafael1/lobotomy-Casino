@@ -19,11 +19,11 @@ extends RefCounted
 ## walked to, the tick accumulator, the initialised flag and the beep clock — had
 ## no readers outside the three functions that move them.
 
-const SHEET := "machine new view/dealer_bar.png"
+const SHEET := "machine_polished/dealer_bar.svg"
 const FRAME_COUNT := 13
-const OVERLAY_1_SHEET := "machine new view/dealer_bar_overlay_1.png"
-const OVERLAY_2_SHEET := "machine new view/dealer_bar_overlay_2.png"
-const OVERLAY_3_SHEET := "machine new view/dealer_bar_overlay_3.png"
+const OVERLAY_1_SHEET := "machine_polished/dealer_bar_overlay_1.svg"
+const OVERLAY_2_SHEET := "machine_polished/dealer_bar_overlay_2.svg"
+const OVERLAY_3_SHEET := "machine_polished/dealer_bar_overlay_3.svg"
 const OVERLAY_1_FRAMES := 12
 const OVERLAY_2_FRAMES := 11
 const OVERLAY_3_FRAMES := 10

@@ -64,8 +64,8 @@ Resources and currencies:
   advances directly with score payouts when their score pop appears; it does not collect
   the separate Lucidity coins from the cash tray. Changed digits roll and carry like
   physical number drums. Its white cases sit behind the rolling digits and the
-  authored Wealth bar frame sits above them. The white box below the odometer shows
-  the run's current Wealth objective as a single "TARGET: n" line. Reaching an
+  CRT surround sits above them. The current Wealth objective sits above the odometer
+  in the CRT's right column, with a thin progress bar between them. Reaching an
   intermediate target briefly presents that target in the centre of the machine,
   drains its displayed number to zero while the target payment rolls off the wealth
   readout. During the drain, shortened target values stay anchored to the units slot
@@ -305,8 +305,9 @@ Resources and currencies:
   during a losing-state warning: pending x1 and x2 show all three lights, while
   pending x3 shows the preceding x2 stack (overlays 1+2). With Glitch 2 active,
   all three overlays remain visible at every multiplier. At 0 he visits
-  automatically. The compact dealer portrait sits just inside the TV border
-  beside the countdown bar.
+  automatically. A persistent 30x45 dealer portrait occupies the CRT's left column;
+  the twelve approach steps and cumulative warning lights sit beneath it. Short
+  reactions respond to revealed plays and yield to payout and targeting callouts.
 - A visit offers 2 run items (3 with the offer-expand augment) plus one dedicated
   Chip Augment; offers can be rerolled for escalating run Lucidity. Taking or
   refusing the visit both reset the countdown.
@@ -494,9 +495,12 @@ Resources and currencies:
   left and two 16px stash slots on the right, clear of the wealth odometer.
   The deeper shelf spans y203..241. Three 22px power faces sit on the upper
   metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
-  The compact frenzy multiplier and its loss warning occupy the CRT header at
-  (83,47); augment badges occupy the other side at (32,45). Payout and targeting
-  callouts hide the normal multiplier and augment badges until they finish.
+  The CRT groups the dealer at (34,47), TARGET at the upper right, rolling wealth
+  drums at (74,61), and the frenzy multiplier/loss warning at (74,77). Augment
+  badges sit at y90 on the right; item durations retain their row at y100.
+  Payout and targeting callouts hide the portrait, score, target, normal multiplier,
+  and augment badges until they finish. FREE SPIN replaces only the target number
+  and title. Target-payout digit snapshots and power coins launch from the CRT.
   Idle, depressed, disabled, hover and focus assets are independent of the cabinet; keyboard/controller UI activation is supported.
   Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
   rewind and loss locks still govern it. Power targeting receives shelf input
