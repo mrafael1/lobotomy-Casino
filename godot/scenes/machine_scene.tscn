@@ -5,14 +5,14 @@
 [ext_resource type="Texture2D" uid="uid://cle4mx7cn42t" path="res://assets/images/machine new view/reel_final_machine.png" id="2_reel"]
 [ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet-painted.png" id="4_cabinet"]
-[ext_resource type="Texture2D" uid="uid://bux7jbe7o4let" path="res://assets/images/machine new view/multiplier_final_machine.png" id="9_multiplier"]
+[ext_resource type="Texture2D" path="res://assets/images/machine_polished/multiplier.svg" id="9_multiplier"]
 [ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
 [ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/reroll.svg" id="13_reroll"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/shift.svg" id="14_shift"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/memory.svg" id="15_memory"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
-[ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="17_vp1vd"]
+[ext_resource type="Texture2D" path="res://assets/images/machine_polished/stash.svg" id="17_vp1vd"]
 [ext_resource type="Texture2D" uid="uid://d28yxo0yalrku" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="19_options"]
 
@@ -223,35 +223,35 @@ stretch_mode = 5
 
 [node name="SpinButton" type="Button" parent="." unique_id=554475154]
 offset_left = 57.0
-offset_top = 203.0
+offset_top = 210.0
 offset_right = 103.0
-offset_bottom = 223.0
+offset_bottom = 238.0
 
 [node name="PowerButtonReroll" type="Button" parent="." unique_id=245745428]
-offset_left = 21.0
-offset_top = 224.0
-offset_right = 34.0
-offset_bottom = 237.0
+offset_left = 33.0
+offset_top = 114.0
+offset_right = 59.0
+offset_bottom = 140.0
 
 [node name="PowerButtonShift" type="Button" parent="." unique_id=230104019]
-offset_left = 35.0
-offset_top = 224.0
-offset_right = 48.0
-offset_bottom = 237.0
+offset_left = 64.0
+offset_top = 114.0
+offset_right = 90.0
+offset_bottom = 140.0
 
 [node name="PowerButtonMemory" type="Button" parent="." unique_id=1912385711]
-offset_left = 49.0
-offset_top = 224.0
-offset_right = 62.0
-offset_bottom = 237.0
+offset_left = 95.0
+offset_top = 114.0
+offset_right = 121.0
+offset_bottom = 140.0
 
 [node name="stash" type="TextureRect" parent="." unique_id=46112402]
 z_index = 50
 texture_filter = 1
-offset_left = 106.0
-offset_top = 290.0
-offset_right = 154.0
-offset_bottom = 316.0
+offset_left = 103.0
+offset_top = 213.0
+offset_right = 139.0
+offset_bottom = 237.0
 mouse_filter = 2
 texture = ExtResource("17_vp1vd")
 expand_mode = 1
@@ -259,10 +259,10 @@ stretch_mode = 5
 
 [node name="StashSlot1" type="Control" parent="stash" unique_id=1670430773]
 anchors_preset = 0
-offset_left = 4.0
-offset_top = 5.0
-offset_right = 20.0
-offset_bottom = 21.0
+offset_left = 1.0
+offset_top = 4.0
+offset_right = 17.0
+offset_bottom = 20.0
 
 [node name="Icon" type="TextureRect" parent="stash/StashSlot1" unique_id=1098456785]
 texture_filter = 1
@@ -275,10 +275,10 @@ stretch_mode = 5
 
 [node name="StashSlot2" type="Control" parent="stash" unique_id=1765167292]
 anchors_preset = 0
-offset_left = 28.0
-offset_top = 5.0
-offset_right = 44.0
-offset_bottom = 21.0
+offset_left = 19.0
+offset_top = 4.0
+offset_right = 35.0
+offset_bottom = 20.0
 
 [node name="Icon" type="TextureRect" parent="stash/StashSlot2" unique_id=2040374747]
 texture_filter = 1

@@ -6,8 +6,8 @@ cabinet at 160x320 (size limit 320) and the portrait at 14x21 (size limit 21).
 The original paintings remain in the PNG source files. Nearest filtering and
 pixel-quantized registration keep the scene on its virtual pixel grid.
 Power chips remain separate editable 480x320 SVG state strips.
-The five `spin_*.svg` files are separate native 46x20 pixel-grid button assets:
-normal, pressed (face depressed two pixels), disabled, hover and focus.
+The five `spin_*.svg` files are separate native 46x28 pixel-grid button assets:
+normal, pressed (face depressed three pixels), disabled, hover and focus.
 They use an ivory face, brass bezel and dark pixel lettering; no cabinet edit
 or image-generation dependency is needed to adjust these vector controls.
 There are no runtime dependencies outside `godot/assets`.
@@ -23,18 +23,28 @@ The cabinet keeps transparent apertures at x33, 65 and 97, y169, 21x34 pixels.
 The existing scoring/hit rectangles remain x33/65/97, y170, 21x30. The surrounding
 mask accommodates adjacent reel symbols and the existing reveal animations.
 
-The registered metal control shelf spans y203..223. SPIN's touch area is
-(57,203,46,20), centered on x80; its painted bezel is inset two pixels.
-The power hit row starts at y223, the odometer sits below that row, and the
-stash remains at the bottom right. None overlaps SPIN. Lower Shift arrows
-share the shelf only while targeting: SPIN yields mouse/touch events then.
-The side lever and coin-insert sheet are no longer loaded or animated. Their
-source files are retained for the later reference-audited asset cleanup stage.
+The layout follows `tmp/preview.jpg`: large powers under the CRT, a small screen
+multiplier, then the reels and a deeper physical shelf. Cabinet registration now
+opens the CRT header and stretches the metal shelf over y203..241; gameplay
+apertures stay independent and unchanged.
 
-Each power has available, selected and disabled frames. Artwork occupies 11x11
-pixels at y225, starting at x20 and advancing 14 pixels in canonical power order.
-Runtime acquisition order moves these independent chips into the first three
-slots, using the existing targeting buttons and restore animations.
+SPIN's touch area is (57,210,46,28), centered at x80. The count uses the left
+well (26,211,29,19), while the two 16px stash icons sit inside the right-hand
+tray (103,213,36,24). All three are separate runtime controls. Lower Shift
+arrows share the shelf only while targeting: SPIN yields mouse/touch events.
+The lever and coin-insert source files remain for the later asset cleanup.
+
+Power faces are 22px circles at y116, centered at x46/77/108. Their touch boxes
+are 26x26 at y114. All seven powers have available, selected and spent frames,
+with ivory glyphs, a green selected rim and muted spent faces. Acquisition order
+moves the first three owned powers into these sockets; other owned IDs stay
+hidden under the existing three-slot rule.
+
+The multiplier and loss sheets render in the CRT header (83,47,41,12), retaining
+the existing six multiplier states, Energy Drink cap, x2 warning pulse and nine
+x3 warning frames. Augment badges sit at (32,45) on a 14px pitch. Both normal
+multiplier and augment badges yield to TV callouts; the large power controls
+remain visible. New warning/effect SVGs use the existing presentation cadence.
 
 Tunnel Vision mounts the separate 21x34 shutter over the third reel. An opaque
 scoring cover remains underneath throughout the lowering animation. Removing
@@ -56,7 +66,7 @@ godot --path godot --resolution 480x960 -s res://test/debug_machine_art_review.g
 ```
 
 The review captures idle, SPIN pressed/disabled, Lock/Shift targeting, spent
-chips, spinning, reveal, Tunnel Vision, payout and dealer interruption. It
+chips, spinning, reveal, Tunnel Vision, payout and dealer interruption, x2/x3 warnings and a full augment row. It
 exercises actual viewport mouse events and focused Enter activation, including
 the lower Shift arrow over the SPIN area. The scene smoke suite checks existing power interactions
 and the shutter's geometry, visibility and input transparency.

@@ -55,9 +55,9 @@ Resources and currencies:
   save/parity compatibility, but the machine presents it as the CHIPS/SPINS
   counter. A fresh run starts with 15 and the run can hold at most 18;
   each spin spends 1 run spin unless protected. Restores and Wealth continuations
-  also stop at 18. The machine prints the current remaining-spin number under the
-  neuron tube; it updates whenever spins are gained, spent, or protected, and the
-  number turns dark red when the 18-spin cap is full.
+  also stop at 18. The machine prints the current remaining-spin number in the left
+  control-shelf well beside SPIN; it updates whenever spins are gained, spent, or
+  protected, and the number turns dark red when the 18-spin cap is full.
 - **Score** — the run's win total. The Wealth targets advance through **100 → 200 →
   500 → 800 → 1,500 → 2,500 → 3,500 → 5,000**; reaching **5,000 score** triggers
   the Wealth ending. The machine's four-reel wealth odometer
@@ -95,8 +95,8 @@ Resources and currencies:
    granted implicitly; Reroll, Shift, and the other run powers must be selected in
    Pacte. The run begins with no pre-run consumables.
    A compact blue contour around the selected augment icon sits inside the machine
-   TV, shifted 10px right from the original placement; tapping it opens the active
-   Pacte augment(s)' names and descriptions.
+   TV header at (32,45); tapping it opens the active Pacte augment(s)' names and
+   descriptions.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
    state instead of dropping instantly.
@@ -258,7 +258,8 @@ Resources and currencies:
   uses a helpful Cheat, Shift, Reroll, or Lock effect. These assists are separate
   from the player's loadout and never consume the player's power chips.
 - Power slots preserve acquisition order: the first three owned powers occupy the
-	authored 1/2/3 positions in the machine bar, regardless of their card IDs.
+	three large round sockets on the metal rail below the CRT, regardless of
+	their card IDs.
 - Selecting a power for targeting flashes its authored TV callout (with text
   frames ordered Reroll, Shift, Lock, Rewind, Heart, Cheat, Swap (with text
   fallbacks if an authored frame is unavailable) with
@@ -278,8 +279,8 @@ Resources and currencies:
   Cocktail, Water, Red Pill.
 - Items are TAKEN and USED in two different places. The dealer's visit overlay is
   where an offer is selected (tapping an item arms TAKE with it) and taken into the
-  run stash; the machine's own bottom-right stash is where a held item is spent, by
-  tapping its slot. Taking is not using — an item sits in the stash until the player
+  run stash; the machine's right-hand control-shelf stash is where a held item is
+  spent, by tapping its slot. Taking is not using — an item sits in the stash until the player
   spends it, and the stash holds 2.
 - Water grants +40 run Lucidity AND +40 score: drinking it rolls the wealth
   odometer up immediately and its points feed the power gauge like any score. Using
@@ -355,8 +356,8 @@ Resources and currencies:
   because progress toward the target is exactly what the free spins are being spent
   on. The dealer interface and the active-item icons stay lit beside it too.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
-  authored overlay with a beeping pulse; the x3 state shows a steady 9-frame
-  diminished-fire sheet (never both, and the normal gauge effects are suppressed
+  CRT warning with a beeping pulse; the x3 state shows a steady 9-frame
+  diminished warning (never both, and the normal gauge effects are suppressed
   while one is up). A power that turns the reveal into a paying pair/triple
   rescues the gauge (one step up); pressing SPIN confirms the loss (one step
   down). Consumables stay usable during the rescue window. Cocktail points awarded
@@ -484,9 +485,14 @@ Resources and currencies:
   A registration material fits the painting to the existing live reel apertures;
   numbers, symbols, powers, and counters remain separate runtime elements.
   SPIN is a separate ivory/brass button centered at x80 on the lower metal shelf.
-  Its touch rect is (57,203,46,20), above the power row at y223 and clear of the
-  wealth odometer and stash. Idle, depressed, disabled, hover and focus assets
-  are independent of the cabinet; keyboard/controller UI activation is supported.
+  Its touch rect is (57,210,46,28), between the remaining-spin counter on the
+  left and two 16px stash slots on the right, clear of the wealth odometer.
+  The deeper shelf spans y203..241. Three 22px power faces sit on the upper
+  metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
+  The compact frenzy multiplier and its loss warning occupy the CRT header at
+  (83,47); augment badges occupy the other side at (32,45). Payout and targeting
+  callouts hide the normal multiplier and augment badges until they finish.
+  Idle, depressed, disabled, hover and focus assets are independent of the cabinet; keyboard/controller UI activation is supported.
   Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
   rewind and loss locks still govern it. Power targeting receives shelf input
   through the button. There is no side lever or coin-insert launch sequence.

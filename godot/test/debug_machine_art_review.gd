@@ -30,6 +30,7 @@ func _run() -> void:
 	run.dealerCountdown = 12
 	run.ownedPowerIds = ["reroll", "shift", "memory"]
 	run.abilitiesUsed = []
+	run.runConsumables = {"cons_cigarette": 1, "cons_focus": 1}
 	run.lastResult = {"reels": ["brain", "eye", "pill"], "winType": "miss",
 		"scoreEarned": 0, "coinsEarned": 0, "freeSpinsGranted": 0, "isFreeSpin": false}
 	_scene = (load("res://scenes/machine_scene.tscn") as PackedScene).instantiate()
@@ -103,6 +104,23 @@ func _run() -> void:
 	_scene._callouts.play_win("pair", 20)
 	await create_timer(0.08).timeout
 	await _capture("07-payout")
+	_scene._callouts.stop_win()
+	# The CRT multiplier retains its warning/cap states independently of the powers.
+	for multiplier in [2, 3]:
+		run.betMultiplier = multiplier
+		_scene._refresh_multiplier_controls()
+		await _capture("07-multiplier-x%d" % multiplier)
+		_scene._callouts.set_loss_display(multiplier)
+		assert(not _scene._multiplier_sprite.visible, "Loss warning must replace the normal multiplier")
+		await _capture("07-loss-x%d" % multiplier)
+		_scene._callouts.set_loss_display(0)
+		assert(_scene._multiplier_sprite.visible, "Multiplier did not return after the warning")
+	run.selectedAugmentCardIds = ["augment_tunnel_vision", "augment_adrenaline", "augment_reward_1"]
+	_scene._augments.refresh_pacte_badges()
+	await _capture("07-three-augments")
+	_scene._callouts.play_win("triple", 50)
+	assert(not _scene._multiplier_sprite.visible, "TV payout must hide the multiplier")
+	await _capture("07-crt-payout-priority")
 	_scene._callouts.stop_win()
 	run.force_dealer_visit()
 	_scene._show_dealer_offers()

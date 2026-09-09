@@ -24,7 +24,7 @@ const AUGMENTED_BADGE_SIZE := 14.0
 
 ## --- the Pacte augment chip row (issue #181) -----------------------------------
 const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
-const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
+const PACTE_AUGMENT_BADGE_POS := Vector2(32.0, 45.0)
 const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
 const PACTE_AUGMENT_BADGE_PITCH := 14.0
 const PACTE_AUGMENT_BADGE_MAX := 3
@@ -228,7 +228,7 @@ func refresh_pacte_badges() -> void:
 	# hides it — only the description popup steps aside for one.
 	if _view.tv_callout_open():
 		hide_pacte_popup()
-	if ids.is_empty():
+	if ids.is_empty() or _view.tv_callout_open():
 		for entry: Dictionary in _pacte_augment_badges:
 			(entry["badge"] as Button).visible = false
 		if _augment_plate_sprite != null:

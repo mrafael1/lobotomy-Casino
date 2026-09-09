@@ -172,6 +172,7 @@ func apply_mute() -> void:
 		restore_layers()
 
 func hide_layers() -> void:
+	_view.apply_multiplier_fx_visibility()
 	# The banner is an owner in its own right, so it hides only for a callout —
 	# never for its own mute. The item badges follow the same rule (issue #185):
 	# a callout clears them, the banner beside them does not.
@@ -192,6 +193,7 @@ func hide_layers() -> void:
 			info.visible = false
 
 func restore_layers() -> void:
+	_view.apply_multiplier_fx_visibility()
 	refresh_banner()
 	if _banner_sprite != null:
 		_banner_sprite.visible = _banner_active \

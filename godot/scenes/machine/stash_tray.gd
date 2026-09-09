@@ -1,7 +1,7 @@
 class_name StashTray
 extends RefCounted
 
-## The consumable stash in the machine's bottom-right corner: one icon per slot,
+## The consumable stash in the machine's right-hand control-shelf wells: one icon per slot,
 ## and where the tray sits in the layer stack.
 ##
 ## Seam 4.7a, and the leaf half of the stash. What a tap DOES — which item is

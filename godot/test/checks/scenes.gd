@@ -1349,8 +1349,10 @@ func _check_base_scene_parity(failures: Array) -> void:
 		if stash == null:
 			failures.append("parity: %s missing authored stash tray" % scene_path)
 		else:
-			if stash.position != Vector2(106.0, 290.0) or stash.size != Vector2(48.0, 26.0):
-				failures.append("parity: %s stash tray does not match authored shared layout: %s %s" % [scene_path, stash.position, stash.size])
+			var machine_shelf: bool = scene_path == "res://scenes/machine_scene.tscn"
+			var expected_stash := Rect2(103, 213, 36, 24) if machine_shelf else Rect2(106, 290, 48, 26)
+			if stash.get_rect() != expected_stash:
+				failures.append("parity: %s stash tray does not match its authored layout: %s %s" % [scene_path, stash.position, stash.size])
 			if stash.z_index < 50:
 				failures.append("parity: %s stash tray can draw behind base art" % scene_path)
 			for i in range(1, 3):

@@ -44,12 +44,8 @@ const RESERVE_GLOW_PERIOD := 1.1
 const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
 const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
-# Remaining-spin readout, centered in the badge chip under the neuron tube
-# (badge pixels span x4..16, y107..119). The rect rides ~6px above the chip
-# centre and 1px right of it because DTM-Sans' line metrics drop the glyphs
-# below a centered box and its digits carry a lopsided side bearing (verified
-# against rendered pixels; same trick as the wealth goal rects).
-const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
+# Remaining spins sit in the left shelf well beside SPIN.
+const SPINS_LEFT_LABEL_RECT := Rect2(26.0, 211.0, 29.0, 19.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
 # number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
 # y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
@@ -57,10 +53,10 @@ const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
 const TV_STATUS_RIGHT := 109.0
-const MULT_STRIP := { "top": 119.0, "height": 16.0 }
-const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
-# Registered shelf y203..223; the independent power row begins at y223.
-const SPIN_HIT := { "left": 57.0, "top": 203.0, "width": 46.0, "height": 20.0 }
+const MULT_STRIP := { "top": 47.0, "height": 12.0 }
+const MULT_BADGE_CENTERS := [87.5, 92.5, 97.5]
+# Lower shelf: SPIN between the remaining-spin display and the two stash wells.
+const SPIN_HIT := { "left": 57.0, "top": 210.0, "width": 46.0, "height": 28.0 }
 const SPIN_PRESS_TIME := 0.09
 # Centre of the reel window — consumable-use hint popups originate here.
 const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
@@ -81,27 +77,21 @@ const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever t
 # hole: the old hole+gap guess sat 3px above the top arrow and 4px above the bottom
 # one, which left the lower half of the down arrow dead (issue #181).
 
-# Machine-mounted power button hit rects (source px). Every chip is painted 11x11 at y225
-# in its own sheet (POWER_ART_LEFT below), so each rect is that chip grown 1px sideways and
-# a couple of pixels top and bottom. The old rects drifted a pixel either way and reroll's
-# extra width ran into shift's box.
+# Three 22px power faces on the painted steel rail; 26px independent touch boxes.
+# Additional IDs share the first authored position until acquisition-order slotting.
 const POWER_HITS := {
-	"reroll": { "left": 19.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"shift": { "left": 33.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"memory": { "left": 47.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"rewind": { "left": 61.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"heart": { "left": 75.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"cheat": { "left": 89.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"swap": { "left": 103.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"reroll": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"shift": { "left": 64.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"memory": { "left": 95.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"rewind": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"heart": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"cheat": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"swap": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
 }
 const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
-# Where each power's chip is actually painted in its own sheet, measured from the art: 11x11
-# at y225, on one unbroken 14px pitch that the augment sockets pick up again at 64/78/92
-# after the divider. Slotting is done art-to-art rather than hit box to hit box, so a
-# re-slotted power lands exactly where the power that owns the emplacement is drawn.
 const POWER_ART_LEFT := {
-	"reroll": 20.0, "shift": 34.0, "memory": 48.0,
-	"rewind": 62.0, "heart": 76.0, "cheat": 90.0, "swap": 104.0,
+	"reroll": 35.0, "shift": 66.0, "memory": 97.0,
+	"rewind": 35.0, "heart": 35.0, "cheat": 35.0, "swap": 35.0,
 }
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
@@ -113,9 +103,9 @@ const REWIND_RESTORE_DURATION := 0.9
 const MULTIPLIER_FRAME_COUNT := 6
 # Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
 # blinking FREE SPINS TV overlay.
-const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
-const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
-const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
+const MULT_FX_2_SHEET := "machine_polished/multiplier_2_effect.svg"
+const MULT_FX_3_SHEET := "machine_polished/multiplier_3_effect.svg"
+const MULT_FX_FIRE_SHEET := "machine_polished/multiplier_3_fire.svg"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
@@ -1015,7 +1005,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "MemoryPower"
 	if rel.ends_with("health_bar.png"):
 		return "HealthBar"
-	if rel.ends_with("multiplier_final_machine.png"):
+	if rel.ends_with("multiplier.svg"):
 		return "Multiplier"
 	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
 		return "Jackpot"
@@ -1035,9 +1025,9 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "PowerCallout"
 	if rel.ends_with("cheat_selection.png"):
 		return "CheatSelection"
-	if rel.ends_with("2_losing_animation.png"):
+	if rel.ends_with("loss_2.svg"):
 		return "ComboLoss2"
-	if rel.ends_with("3_losing_animation.png"):
+	if rel.ends_with("loss_3.svg"):
 		return "ComboLoss3"
 	if rel.ends_with("dealer_bar.png"):
 		return "DealerBar"
@@ -1276,13 +1266,14 @@ func _build_tv_indicators() -> void:
 	_health_bar_sprite = _build_full_canvas_sheet(
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
+	_build_full_canvas_sprite("machine_polished/shelf_labels.svg")
 	_build_spins_left_label()
 	_boosts.build()
 	_build_power_bar()
 	_build_restore_cap()
 	_build_augment_emplacements()
 
-## Numeric spins-left readout under the neuron tube — tracks the same
+## Numeric spins-left readout in the left control-shelf well — tracks the same
 ## _display_spins_left() budget the capped tube frames show.
 func _build_spins_left_label() -> void:
 	_spins_left_label = Label.new()
@@ -1292,7 +1283,7 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_spins_left_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_spins_left_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_spins_left_label.add_theme_font_size_override("font_size", 7)
+	_spins_left_label.add_theme_font_size_override("font_size", 13)
 	if _font != null:
 		_spins_left_label.add_theme_font_override("font", _font)
 	_spins_left_label.add_theme_color_override("font_color", SPINS_LEFT_NORMAL_COLOR)
@@ -1300,6 +1291,17 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.add_theme_constant_override("outline_size", 1)
 	_spins_left_label.text = ""
 	add_child(_spins_left_label)
+	var legend := Label.new()
+	legend.name = "SpinsLegend"
+	legend.text = "SPINS"
+	legend.position = Vector2(27, 229)
+	legend.size = Vector2(27, 8)
+	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	legend.add_theme_font_override("font", _font)
+	legend.add_theme_font_size_override("font_size", 5)
+	legend.add_theme_color_override("font_color", Color("#9baa88"))
+	add_child(legend)
 
 ## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
@@ -1314,6 +1316,7 @@ func _build_spins_left_label() -> void:
 func _build_augment_emplacements() -> void:
 	var plate := _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AugmentDisplay.AUGMENT_PLATE_FRAMES)
 	if plate != null:
+		plate.position = Vector2(-32, -178)
 		plate.z_index = AUGMENT_PLATE_Z_INDEX
 		plate.visible = false
 	_augments.attach_plate(plate)
@@ -1630,7 +1633,7 @@ func _make_info_bubble(node_name: String, source: String, border: Color,
 	return popup
 
 func _build_machine_control_art() -> void:
-	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
+	_multiplier_sprite = _build_full_canvas_sheet("machine_polished/multiplier.svg", MULTIPLIER_FRAME_COUNT)
 	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
 	# the frenzy reaches their state.
 	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
@@ -3541,12 +3544,15 @@ func _refresh_multiplier_fx(effective: int) -> void:
 ## hidden and come back the moment the loss display closes.
 func _apply_multiplier_fx_visibility() -> void:
 	var loss_active := _callouts.loss_showing()
+	var muted := _tv != null and _tv.callout_active()
+	if _multiplier_sprite != null:
+		_multiplier_sprite.visible = not muted and not loss_active
 	if _mult_fx_2 != null:
-		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active
+		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active and not muted
 	if _mult_fx_3 != null:
-		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active
+		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active and not muted
 	if _mult_fx_fire != null:
-		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active
+		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active and not muted
 
 func _step_multiplier_fx(delta: float) -> void:
 	var loss_3_active := _callouts.loss_3_showing()
@@ -3590,6 +3596,8 @@ func _build_power_buttons() -> void:
 			"width": maxf(hit["width"], 11.0),
 			"height": hit["height"],
 		}, _on_power_pressed.bind(id))
+		b.position = Vector2(hit["left"], hit["top"])
+		b.size = Vector2(hit["width"], hit["height"])
 		_power_buttons[id] = b
 
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay

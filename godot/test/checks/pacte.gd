@@ -1189,11 +1189,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("issue181: the sockets plate stayed up with no augments held")
 		run_store.selectedAugmentCardIds = kept_augments
 		machine._augments.refresh_pacte_badges()
-		var third_slot: Dictionary = machine.POWER_HITS[machine.POWER_IDS[2]]
-		if not is_equal_approx(AugmentDisplay.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
-			failures.append("issue181: the augment row is not on the power bar baseline")
-		if AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x <= float(machine.POWER_ART_LEFT[machine.POWER_IDS[2]]):
-			failures.append("issue181: the augment row does not start after the third power")
+		var badge_rect := Rect2(AugmentDisplay.PACTE_AUGMENT_BADGE_POS,
+			AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE)
+		if not Rect2(24, 42, 112, 66).encloses(badge_rect):
+			failures.append("machine: augment badges must live inside the CRT")
 		var augment_row_end: float = AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x \
 			+ float(AugmentDisplay.PACTE_AUGMENT_BADGE_MAX - 1) * AugmentDisplay.PACTE_AUGMENT_BADGE_PITCH \
 			+ AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE.x

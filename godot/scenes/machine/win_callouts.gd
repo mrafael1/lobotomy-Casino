@@ -52,9 +52,9 @@ const COMBO_PAYOUT_RECT := Rect2(35.0, 107.0, 82.0, 10.0)
 const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the combo-loss warning ----------------------------------------------------
-const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
-const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
-## The x3 losing state is an authored 9-frame diminished-fire sheet (1440x320)
+const COMBO_LOSS_2_SHEET := "machine_polished/loss_2.svg"
+const COMBO_LOSS_3_SHEET := "machine_polished/loss_3.svg"
+## The x3 losing state is an independent 9-frame CRT warning sheet (1440x320)
 ## stepped at the same cadence as the regular multiplier effects.
 const COMBO_LOSS_3_FRAMES := 9
 ## Presentation stack: machine art → loss overlays (97) → dealer offer (100).
@@ -323,7 +323,7 @@ func set_loss_display(multiplier: int) -> void:
 func start_loss_beep() -> void:
 	stop_loss_beep()
 	# The authored x2 loss marker keeps its existing pulse; x3 remains a steady
-	# diminished-fire sheet. COMBO has already disappeared after its payout pop.
+	# diminished CRT warning. COMBO has already disappeared after its payout pop.
 	var loss_sprite: Sprite2D = _combo_loss_2_sprite \
 		if int(RunStateStore.pendingComboMultiplier) == 2 else null
 	if loss_sprite == null:

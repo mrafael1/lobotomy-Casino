@@ -50,7 +50,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		failures.append("machine: retired lever/coin hardware is still active")
 	var spin := machine.get_node("SpinButton") as Button
 	var hit := spin.get_rect()
-	if hit != Rect2(57, 203, 46, 20) or not is_equal_approx(hit.get_center().x, 80.0):
+	if hit != Rect2(57, 210, 46, 28) or not is_equal_approx(hit.get_center().x, 80.0):
 		failures.append("machine: SPIN must be centered on the shelf with its touch area")
 	if hit.intersects(Rect2(133, 160, 20, 40)):
 		failures.append("machine: old lever hitbox is still active")
@@ -59,8 +59,19 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	for power: Button in machine._power_buttons.values():
 		if hit.intersects(power.get_rect()):
 			failures.append("machine: SPIN overlaps a power socket")
-	if hit.end.y > 223 or hit.position.y < 203:
+	if hit.end.y > 241 or hit.position.y < 203:
 		failures.append("machine: SPIN escapes the shelf into the reels or lower HUD")
+	for icon: Control in machine._stash.icons():
+		if hit.intersects(icon.get_global_rect()):
+			failures.append("machine: SPIN overlaps a stash slot")
+	if hit.intersects(machine.SPINS_LEFT_LABEL_RECT):
+		failures.append("machine: SPIN overlaps the remaining-spin counter")
+	for i in 3:
+		var socket: Dictionary = machine.POWER_HITS[machine.POWER_IDS[i]]
+		if socket["top"] != 114.0 or socket["width"] != 26.0 or socket["height"] != 26.0:
+			failures.append("machine: powers must occupy the large metal sockets below the CRT")
+	if machine.MULT_STRIP["top"] < 46.0 or machine.MULT_STRIP["top"] + machine.MULT_STRIP["height"] > 60.0:
+		failures.append("machine: multiplier must fit inside the CRT above dealer information")
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var style := spin.get_theme_stylebox(state) as StyleBoxTexture
 		if style == null or style.texture == null:
