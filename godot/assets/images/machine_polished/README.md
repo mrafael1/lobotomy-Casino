@@ -6,6 +6,10 @@ cabinet at 160x320 (size limit 320) and the portrait at 14x21 (size limit 21).
 The original paintings remain in the PNG source files. Nearest filtering and
 pixel-quantized registration keep the scene on its virtual pixel grid.
 Power chips remain separate editable 480x320 SVG state strips.
+The five `spin_*.svg` files are separate native 46x20 pixel-grid button assets:
+normal, pressed (face depressed two pixels), disabled, hover and focus.
+They use an ivory face, brass bezel and dark pixel lettering; no cabinet edit
+or image-generation dependency is needed to adjust these vector controls.
 There are no runtime dependencies outside `godot/assets`.
 
 `painted_cabinet.gdshader` fits the painting's horizontal assemblies to the live
@@ -18,6 +22,14 @@ material fits a painted-steel surround around the original animated drums.
 The cabinet keeps transparent apertures at x33, 65 and 97, y169, 21x34 pixels.
 The existing scoring/hit rectangles remain x33/65/97, y170, 21x30. The surrounding
 mask accommodates adjacent reel symbols and the existing reveal animations.
+
+The registered metal control shelf spans y203..223. SPIN's touch area is
+(57,203,46,20), centered on x80; its painted bezel is inset two pixels.
+The power hit row starts at y223, the odometer sits below that row, and the
+stash remains at the bottom right. None overlaps SPIN. Lower Shift arrows
+share the shelf only while targeting: SPIN yields mouse/touch events then.
+The side lever and coin-insert sheet are no longer loaded or animated. Their
+source files are retained for the later reference-audited asset cleanup stage.
 
 Each power has available, selected and disabled frames. Artwork occupies 11x11
 pixels at y225, starting at x20 and advancing 14 pixels in canonical power order.
@@ -43,6 +55,8 @@ $env:ART_REVIEW_DIR = "$PWD/tmp/machine-art-review"
 godot --path godot --resolution 480x960 -s res://test/debug_machine_art_review.gd
 ```
 
-The review captures the actual scene in idle, selected, spent, spinning, revealed
-and Tunnel Vision states. The scene smoke suite checks existing power interactions
+The review captures idle, SPIN pressed/disabled, Lock/Shift targeting, spent
+chips, spinning, reveal, Tunnel Vision, payout and dealer interruption. It
+exercises actual viewport mouse events and focused Enter activation, including
+the lower Shift arrow over the SPIN area. The scene smoke suite checks existing power interactions
 and the shutter's geometry, visibility and input transparency.

@@ -804,8 +804,8 @@ func _check_global_options_layout(failures: Array) -> void:
 	if health_bar != null and health_bar.hframes != EconomyConst.MAX_NEURONS + 1:
 		failures.append("machine: the tube's %d frames cannot draw a %d-spin cap"
 			% [int(health_bar.hframes), EconomyConst.MAX_NEURONS])
-	if health_coin == null or health_coin.hframes != 4 or health_coin.visible:
-		failures.append("machine: HealthCoin drop sheet is missing or visible at rest")
+	if health_coin != null:
+		failures.append("machine: retired HealthCoin drop sheet is still active")
 	machine.queue_free()
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()

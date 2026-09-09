@@ -482,7 +482,7 @@ func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failu
 		# The softlock shape: a beat that ends because the player DID something, while the
 		# mask covers the thing they have to do it with. A spin beat must open the lever;
 		# an action beat must open whatever it is waiting on.
-		if advance == "spin" and anchor != "spin_lever":
+		if advance == "spin" and anchor != "spin_button":
 			failures.append("issue105: beat '%s' waits for a spin but does not open the lever" \
 				% String(beat.get("id", i)))
 		if advance != "tap" and anchor == "":

@@ -17,7 +17,6 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# reel/HUD sheets remain legacy 8x art, so both scale conventions must coexist.
 	for rel in [
 		"machine new view/machine_neon.png",
-		"machine new view/neon_machine_lever.png",
 		"machine new view/neon_machine_jackpot.png",
 		"machine new view/neon_machine_power_bar.png",
 	]:
@@ -47,15 +46,27 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 							failures.append("machine art: cabinet obscures a live reel aperture")
 							break
 
-	var lever := machine.get_node_or_null("Lever") as Sprite2D
-	if lever == null:
-		failures.append("machine art: native lever node is missing")
-	elif lever.texture == null \
-			or Vector2i(lever.texture.get_width(), lever.texture.get_height()) != Vector2i(960, 320) \
-			or lever.hframes != 6 \
-			or lever.scale != Vector2.ONE \
-			or lever.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: lever is not a 6-frame native sprite")
+	if machine.get_node_or_null("Lever") != null or machine.get_node_or_null("HealthCoin") != null:
+		failures.append("machine: retired lever/coin hardware is still active")
+	var spin := machine.get_node("SpinButton") as Button
+	var hit := spin.get_rect()
+	if hit != Rect2(57, 203, 46, 20) or not is_equal_approx(hit.get_center().x, 80.0):
+		failures.append("machine: SPIN must be centered on the shelf with its touch area")
+	if hit.intersects(Rect2(133, 160, 20, 40)):
+		failures.append("machine: old lever hitbox is still active")
+	if machine.tutorial_anchor("spin_button") != hit:
+		failures.append("machine: tutorial does not expose the new SPIN control")
+	for power: Button in machine._power_buttons.values():
+		if hit.intersects(power.get_rect()):
+			failures.append("machine: SPIN overlaps a power socket")
+	if hit.end.y > 223 or hit.position.y < 203:
+		failures.append("machine: SPIN escapes the shelf into the reels or lower HUD")
+	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
+		var style := spin.get_theme_stylebox(state) as StyleBoxTexture
+		if style == null or style.texture == null:
+			failures.append("machine: missing SPIN %s asset" % state)
+	if spin.focus_mode != Control.FOCUS_ALL or not spin.pressed.is_connected(machine._do_spin):
+		failures.append("machine: SPIN lost focus activation or its gameplay action")
 
 	var jackpot := machine.get_node_or_null("Jackpot") as Sprite2D
 	if jackpot == null:
@@ -139,7 +150,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
 
 	for node_name in [
-		"ReelBacking", "HealthBar", "HealthCoin",
+		"ReelBacking", "HealthBar",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
 		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
 		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",

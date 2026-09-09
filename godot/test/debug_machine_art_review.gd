@@ -36,14 +36,55 @@ func _run() -> void:
 	root.add_child(_scene)
 	await create_timer(0.5).timeout
 	await _capture("01-idle")
+	var spin := _scene.get_node("SpinButton") as Button
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.position = spin.get_global_rect().get_center()
+	press.pressed = true
+	root.push_input(press, true)
+	await process_frame
+	assert(spin.is_pressed(), "SPIN did not receive the shelf press")
+	await _capture("01-spin-pressed")
+	press = press.duplicate() as InputEventMouseButton
+	press.pressed = false
+	root.push_input(press, true)
+	await process_frame
+	assert(spin.disabled, "SPIN must lock after release")
+	await _capture("01-spin-disabled")
+	await create_timer(5.0).timeout
 	_scene._on_power_pressed("memory")
 	await create_timer(0.3).timeout
+	assert(spin.mouse_filter == Control.MOUSE_FILTER_IGNORE, "SPIN intercepts power targeting")
 	await _capture("02-lock-selected")
 	_scene._apply_reel_power("memory", 0)
 	await create_timer(0.5).timeout
 	assert(run.abilitiesUsed.has("memory"), "Lock was not spent by the real power action")
 	await _capture("03-lock-spent")
-	_scene._do_spin()
+	_scene._on_power_pressed("shift")
+	await create_timer(0.3).timeout
+	await _capture("03-shift-targeting")
+	var shift_press := InputEventMouseButton.new()
+	shift_press.button_index = MOUSE_BUTTON_LEFT
+	shift_press.position = Vector2(75.5, 211.0)
+	shift_press.pressed = true
+	root.push_input(shift_press, true)
+	shift_press = shift_press.duplicate() as InputEventMouseButton
+	shift_press.pressed = false
+	root.push_input(shift_press, true)
+	await create_timer(1.0).timeout
+	assert(run.abilitiesUsed.has("shift"), "SPIN intercepted the lower Shift arrow")
+	await create_timer(4.0).timeout
+	assert(not spin.disabled, "SPIN remained locked after Shift resolved")
+	spin.grab_focus()
+	var accept := InputEventKey.new()
+	accept.keycode = KEY_ENTER
+	accept.pressed = true
+	root.push_input(accept, true)
+	await process_frame
+	assert(spin.is_pressed(), "Focused SPIN did not accept keyboard/controller input")
+	accept = accept.duplicate() as InputEventKey
+	accept.pressed = false
+	root.push_input(accept, true)
 	await create_timer(0.45).timeout
 	await _capture("04-spinning")
 	await create_timer(5.0).timeout
@@ -59,7 +100,17 @@ func _run() -> void:
 	run.ownedUpgrades = []
 	_scene._refresh_consumable_fx()
 	assert(not shutter.visible, "Removing Tunnel Vision left the shutter visible")
-	print("Machine art review: live Lock, spin, reveal and Tunnel Vision passed")
+	_scene._callouts.play_win("pair", 20)
+	await create_timer(0.08).timeout
+	await _capture("07-payout")
+	_scene._callouts.stop_win()
+	run.force_dealer_visit()
+	_scene._show_dealer_offers()
+	await create_timer(1.5).timeout
+	assert(_scene._dealer_offer_popup != null and _scene._dealer_offer_popup.visible, "Dealer offer did not open")
+	assert(spin.disabled, "Dealer interruption left SPIN enabled")
+	await _capture("08-dealer-interruption")
+	print("Machine art review: mouse/focus SPIN, Shift targeting, locks, dealer, payout and Tunnel Vision passed")
 	_scene.free()
 	quit(0)
 

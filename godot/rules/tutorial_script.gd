@@ -55,8 +55,8 @@ const BEATS: Array[Dictionary] = [
 		"state": {},
 	},
 	{
-		"id": "first_spin", "scene": "machine", "anchor": "spin_lever", "advance": "spin",
-		"text": "PULL THE LEVER.",
+		"id": "first_spin", "scene": "machine", "anchor": "spin_button", "advance": "spin",
+		"text": "PRESS SPIN.",
 		"state": { "scriptedReels": ["vial", "vial", "eye"] },
 	},
 	{
@@ -71,7 +71,7 @@ const BEATS: Array[Dictionary] = [
 		"state": { "dealerCountdown": 0 },
 	},
 	{
-		"id": "dealer_spin", "scene": "machine", "anchor": "spin_lever", "advance": "spin",
+		"id": "dealer_spin", "scene": "machine", "anchor": "spin_button", "advance": "spin",
 		"text": "SPIN AGAIN AND HE WALKS IN.",
 		"state": { "scriptedReels": ["brain", "eye", "vial"] },
 	},
@@ -115,13 +115,13 @@ const BEATS: Array[Dictionary] = [
 		"state": {},
 	},
 	{
-		"id": "hidden_spin", "scene": "machine", "anchor": "spin_lever", "advance": "spin",
+		"id": "hidden_spin", "scene": "machine", "anchor": "spin_button", "advance": "spin",
 		"text": "SPIN. THE REELS COME BACK\nUNDER COVERS.",
 		"state": { "scriptedReels": ["eye", "eye", "vial"] },
 	},
 	# ── beating the target ───────────────────────────────────────────────────────────
 	{
-		"id": "big_spin", "scene": "machine", "anchor": "spin_lever", "advance": "spin",
+		"id": "big_spin", "scene": "machine", "anchor": "spin_button", "advance": "spin",
 		"text": "ONE MORE. THREE OF A KIND\nPAYS THE HOUSE OUT.",
 		"state": { "scriptedReels": ["brain", "brain", "brain"] },
 	},
@@ -148,7 +148,7 @@ const BEATS: Array[Dictionary] = [
 		"state": { "neurons": 1, "freeSpinsRemaining": 0, "scoreEarned": 0 },
 	},
 	{
-		"id": "flatline_spin", "scene": "machine", "anchor": "spin_lever", "advance": "spin",
+		"id": "flatline_spin", "scene": "machine", "anchor": "spin_button", "advance": "spin",
 		"text": "SPEND IT.",
 		"state": { "forceFlatlineSpins": 1 },
 	},

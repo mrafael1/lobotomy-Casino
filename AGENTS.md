@@ -206,7 +206,7 @@ Resources and currencies:
 	spent before that spin remain spent. Rewind itself is spent and cannot recover
 	itself, so one history can never create an infinite rewind loop. It is
 	unavailable without spin history or while another sequence is active. While the
-	restore's backwards reel roll plays, SPIN is locked out; the lever re-enables
+	restore's backwards reel roll plays, SPIN is locked out; SPIN re-enables
 	only once the restored reveal (and any restored warning) has fully landed.
 - **Heart** — arms the next spin and immediately turns the whole reel strip —
   centre and adjacent symbols — into hearts as a preview. That spin is free and
@@ -483,6 +483,13 @@ Resources and currencies:
   metal trim, a matching cadaver-green dealer portrait, and shaded paper drums.
   A registration material fits the painting to the existing live reel apertures;
   numbers, symbols, powers, and counters remain separate runtime elements.
+  SPIN is a separate ivory/brass button centered at x80 on the lower metal shelf.
+  Its touch rect is (57,203,46,20), above the power row at y223 and clear of the
+  wealth odometer and stash. Idle, depressed, disabled, hover and focus assets
+  are independent of the cabinet; keyboard/controller UI activation is supported.
+  Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
+  rewind and loss locks still govern it. Power targeting receives shelf input
+  through the button. There is no side lever or coin-insert launch sequence.
   Separate three-state power chips preserve acquisition order and the existing
   ready/selected/spent interactions. Tunnel Vision mounts a slatted shutter over
   the third reel; the shutter lowers over the already-opaque scoring cover and

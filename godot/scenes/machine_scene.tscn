@@ -6,7 +6,6 @@
 [ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet-painted.png" id="4_cabinet"]
 [ext_resource type="Texture2D" uid="uid://bux7jbe7o4let" path="res://assets/images/machine new view/multiplier_final_machine.png" id="9_multiplier"]
-[ext_resource type="Texture2D" uid="uid://pqc0qfbcf28q" path="res://assets/images/machine new view/neon_machine_lever.png" id="10_lever"]
 [ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
 [ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/reroll.svg" id="13_reroll"]
@@ -110,11 +109,6 @@ position = Vector2(107.5, 199)
 
 [node name="Reel2Center" type="Sprite2D" parent="." unique_id=325200504]
 position = Vector2(107.5, 185)
-
-[node name="Lever" type="Sprite2D" parent="." unique_id=1583962497]
-texture = ExtResource("10_lever")
-centered = false
-hframes = 6
 
 [node name="Cabinet" type="Sprite2D" parent="." unique_id=1998976856]
 material = ExtResource("painted_material")
@@ -228,10 +222,10 @@ ignore_texture_size = true
 stretch_mode = 5
 
 [node name="SpinButton" type="Button" parent="." unique_id=554475154]
-offset_left = 133.0
-offset_top = 160.0
-offset_right = 153.0
-offset_bottom = 200.0
+offset_left = 57.0
+offset_top = 203.0
+offset_right = 103.0
+offset_bottom = 223.0
 
 [node name="PowerButtonReroll" type="Button" parent="." unique_id=245745428]
 offset_left = 21.0

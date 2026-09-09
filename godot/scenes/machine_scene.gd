@@ -56,14 +56,12 @@ const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
 # entry, so its frame index is the target index; the bar's twelve frames are the fill
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
-# Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
-# the lever animation starts.
-const COIN_INSERT_FRAME_COUNT := 4
-const COIN_INSERT_FRAME_TIME := 0.055
 const TV_STATUS_RIGHT := 109.0
 const MULT_STRIP := { "top": 119.0, "height": 16.0 }
 const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
-const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
+# Registered shelf y203..223; the independent power row begins at y223.
+const SPIN_HIT := { "left": 57.0, "top": 203.0, "width": 46.0, "height": 20.0 }
+const SPIN_PRESS_TIME := 0.09
 # Centre of the reel window — consumable-use hint popups originate here.
 const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
@@ -105,17 +103,12 @@ const POWER_ART_LEFT := {
 	"reroll": 20.0, "shift": 34.0, "memory": 48.0,
 	"rewind": 62.0, "heart": 76.0, "cheat": 90.0, "swap": 104.0,
 }
-const LEVER_FRAME_COUNT := 6
-const LEVER_FRAME_TIME := 0.042
-const LEVER_HOLD_TIME := 0.055
-const LEVER_RETURN_TIME := 0.07
-const LEVER_REEL_START_DELAY := 0.22
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
 const REEL_STOP_SFX_LEAD_TIME := 0.1
 # Rewind rolls the previous spin back in: all three reels blur backwards for this
-# long while the sequence lock keeps the lever out of reach.
+# long while the sequence lock keeps SPIN out of reach.
 const REWIND_RESTORE_DURATION := 0.9
 const MULTIPLIER_FRAME_COUNT := 6
 # Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
@@ -199,7 +192,6 @@ const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_dist
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
 const SETTINGS_ASSET := "ui/setting_icon.png"
 const SFX_FILES := {
-	&"lever": "lever.mp3",
 	&"reel_spin": "reel-spinning.mp3",
 	&"reel_stop": "reel-stop.mp3",
 	&"multiplier_change": "multiplier-change.mp3",
@@ -657,14 +649,10 @@ var _free_spin_sprite: Sprite2D:
 var _tv_blackout_rect: ColorRect:
 	get: return _tv.blackout_rect() if _tv != null else null
 
-var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
-var _coin_anim_active := false
-var _coin_anim_elapsed := 0.0
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
 var _lock_count_labels: Array[Label] = []
-var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
 ## The armed picker layer, as a view onto TargetingLayer — the smoke checks and the
 ## lock debug shot reach the node under this name.
@@ -727,8 +715,6 @@ var _locked_reels_during_spin := [false, false, false]
 var _use_full_spin_sheet := true
 var _reel_stop_times := [0.55, 1, 1.4]
 var _reel_stop_sfx_played := [false, false, false]
-var _lever_anim_active := false
-var _lever_anim_elapsed := 0.0
 var _reroll_anim_active := false
 var _reroll_reel_index := -1
 var _reroll_elapsed := 0.0
@@ -829,7 +815,6 @@ func _ready() -> void:
 		_refresh_dealer_countdown, _refresh_target_readout, _spin_in_flight)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
-	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
 	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
 	# spin button. The authored node order in the .tscn is what fixes this — these
 	# sprites all share z_index 0, so the scene tree IS the layer stack.
@@ -908,9 +893,9 @@ func tutorial_blocking_modal() -> bool:
 ## not know answers with an empty rect, which the overlay reads as "mask everything".
 func tutorial_anchor(id: String) -> Rect2:
 	match id:
-		"spin_lever":
-			return Rect2(LEVER_HIT["left"], LEVER_HIT["top"],
-				LEVER_HIT["width"], LEVER_HIT["height"])
+		"spin_button":
+			return Rect2(SPIN_HIT["left"], SPIN_HIT["top"],
+				SPIN_HIT["width"], SPIN_HIT["height"])
 		"health":
 			# The spins tube down the cabinet's left flank. Measured off health_bar.png's
 			# tallest frame (x3..19, y44..120), not eyeballed: a highlight that misses the
@@ -1030,12 +1015,8 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "MemoryPower"
 	if rel.ends_with("health_bar.png"):
 		return "HealthBar"
-	if rel.ends_with("health_animation.png"):
-		return "HealthCoin"
 	if rel.ends_with("multiplier_final_machine.png"):
 		return "Multiplier"
-	if rel.ends_with("lever_final_machine.png") or rel.ends_with("neon_machine_lever.png"):
-		return "Lever"
 	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
@@ -1174,7 +1155,7 @@ func _finish_machine_materials(node: Node) -> void:
 	if node is Sprite2D:
 		var sprite := node as Sprite2D
 		if sprite.texture != null and sprite.texture.resource_path.get_file() in [
-				"neon_machine_lever.png", "neon_machine_jackpot.png",
+				"neon_machine_jackpot.png",
 				"neon_machine_power_bar.png", "health_bar.png", "augments.png",
 				"wealth_bar.png", "wealth_cases.png", "target_goals.png"]:
 			var finish := ShaderMaterial.new()
@@ -1296,10 +1277,6 @@ func _build_tv_indicators() -> void:
 		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
 	_build_spins_left_label()
-	_coin_insert_sprite = _build_full_canvas_sheet(
-		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
-	if _coin_insert_sprite != null:
-		_coin_insert_sprite.visible = false
 	_boosts.build()
 	_build_power_bar()
 	_build_restore_cap()
@@ -1672,7 +1649,6 @@ func _build_machine_control_art() -> void:
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
-	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_bursts.build_jackpot_lamp()
 	for i in 3:
 		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
@@ -1851,7 +1827,7 @@ func _refresh_dealer_countdown() -> void:
 		show_overlay_2 = effective <= 2
 		show_overlay_3 = effective <= 1
 	# Warning lights are committed after the reveal/score result. Showing them as
-	# soon as the lever is pulled would leak the next gauge state into the spin.
+	# soon as the SPIN is pressed would leak the next gauge state into the spin.
 	var overlay_ready := not _spinning_anim and not _spin_launch_pending \
 		and not RunStateStore.isSpinning and not _hud_delta_hold
 	var dealer_info_allowed := not _tv_callout_active() \
@@ -2124,7 +2100,15 @@ func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
 
 func _build_spin_button() -> void:
-	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
+	_spin_button = _make_or_bind_hit_button("SpinButton", SPIN_HIT, _do_spin)
+	_configure_hit_button(_spin_button, SPIN_HIT, _do_spin)
+	_spin_button.flat = false
+	_spin_button.focus_mode = Control.FOCUS_ALL
+	_spin_button.tooltip_text = "SPIN"
+	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
+		var style := StyleBoxTexture.new()
+		style.texture = load("res://assets/images/machine_polished/spin_%s.svg" % state)
+		_spin_button.add_theme_stylebox_override(state, style)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
 
@@ -2199,7 +2183,7 @@ func _sync_visuals() -> void:
 	_reel_blur.hide_spin_strips()
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
-	_cancel_coin_insert()
+
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp(false)
@@ -2385,7 +2369,7 @@ func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
 		return
 	# A pending loss is confirmed by the next manual spin. Powers still have the
-	# current reveal's rescue window, but pulling the lever means the pair/triple
+	# current reveal's rescue window, but pressing SPIN means the pair/triple
 	# was not rescued and the gauge loses one level before the new spin starts.
 	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
@@ -2420,7 +2404,7 @@ func _do_spin(compulsive := false) -> void:
 	var pill_guaranteed_spin := _pill_guaranteed_spin_pending()
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
-	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
+	# bars / lamp during the SPIN press (issue #54). The SPINS LEFT counter is the
 	# exception — it must drop with the neuron cost right now (issue #80). Free
 	# spins never show in the counter (the FREE SPIN banner carries them), so a
 	# grant made by this spin needs no counter hold.
@@ -2457,21 +2441,13 @@ func _do_spin(compulsive := false) -> void:
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
 		_reel_stop_times[_reveal_reel_next_spin] = 0.2
 	_reveal_reel_next_spin = -1
-	# Launch beat: the coin drops into the machine first, THEN the lever pulls,
-	# THEN the reels start.
-	_start_coin_insert()
+	# Button depression precedes the existing reel/reward sequence.
 	_spin_launch_pending = true
 	_spin_button.disabled = true
 	_refresh_controls()
-	await get_tree().create_timer(
-		COIN_INSERT_FRAME_TIME * float(COIN_INSERT_FRAME_COUNT)).timeout
+	await get_tree().create_timer(SPIN_PRESS_TIME).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
-		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
-		return
-	_start_lever_pull()
-	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
-	if not is_inside_tree() or not _spin_launch_pending:
-		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
+		_hud_delta_hold = false
 		return
 	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
@@ -2480,10 +2456,6 @@ func _do_spin(compulsive := false) -> void:
 	_blur_accum = 0.0
 
 func _process(delta: float) -> void:
-	if _coin_anim_active:
-		_step_coin_insert(delta)
-	if _lever_anim_active:
-		_step_lever(delta)
 	if _reroll_anim_active:
 		_step_reroll(delta)
 	if _rewind_anim_active:
@@ -2543,51 +2515,6 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_reel_blur.set_cover(i, locked)
 		_reel_blur.set_spin_frame(i, _spin_frame)
 		_reel_blur.set_spin_visible(i, not locked)
-
-func _start_coin_insert() -> void:
-	if _coin_insert_sprite == null:
-		return
-	_coin_anim_active = true
-	_coin_anim_elapsed = 0.0
-	_coin_insert_sprite.visible = true
-	_set_sheet_frame(_coin_insert_sprite, 0)
-
-func _step_coin_insert(delta: float) -> void:
-	_coin_anim_elapsed += delta
-	var frame := int(_coin_anim_elapsed / COIN_INSERT_FRAME_TIME)
-	if frame >= COIN_INSERT_FRAME_COUNT:
-		_cancel_coin_insert()
-		return
-	_set_sheet_frame(_coin_insert_sprite, frame)
-
-func _cancel_coin_insert() -> void:
-	_coin_anim_active = false
-	if _coin_insert_sprite != null:
-		_coin_insert_sprite.visible = false
-
-func _start_lever_pull() -> void:
-	_play_sfx(&"lever")
-	_lever_anim_active = true
-	_lever_anim_elapsed = 0.0
-	_set_sheet_frame(_lever_sprite, 0)
-
-func _step_lever(delta: float) -> void:
-	_lever_anim_elapsed += delta
-	var pull_duration := LEVER_FRAME_TIME * float(LEVER_FRAME_COUNT - 1)
-	var return_start := pull_duration + LEVER_HOLD_TIME
-	var done_at := return_start + LEVER_RETURN_TIME
-	var frame := 0
-	if _lever_anim_elapsed <= pull_duration:
-		frame = clampi(int(round(_lever_anim_elapsed / LEVER_FRAME_TIME)), 0, LEVER_FRAME_COUNT - 1)
-	elif _lever_anim_elapsed <= return_start:
-		frame = LEVER_FRAME_COUNT - 1
-	elif _lever_anim_elapsed <= done_at:
-		var t := (_lever_anim_elapsed - return_start) / LEVER_RETURN_TIME
-		frame = clampi(int(round(lerpf(float(LEVER_FRAME_COUNT - 1), 0.0, t))), 0, LEVER_FRAME_COUNT - 1)
-	else:
-		_lever_anim_active = false
-		frame = 0
-	_set_sheet_frame(_lever_sprite, frame)
 
 func _on_reveal_complete() -> void:
 	_stop_sfx(&"reel_spin")
@@ -2653,7 +2580,7 @@ func _finish_post_spin_sequence() -> void:
 		# A wealth-target payout owns the screen AND the sequence lock until its CONTINUE
 		# resumes the run — _start_wealth_target_transition took that lock a moment ago and
 		# releasing it here would undo it. That mattered most on a losing spin whose passive
-		# gain beat the target: one lever press confirms the combo loss, procs the target,
+		# gain beat the target: one SPIN press confirms the combo loss, procs the target,
 		# and then — with the lock dropped — started a fresh spin straight under the
 		# overlay, so the payout screen never got to be read (issue #176).
 		if not _wealth_target_transition_active:
@@ -2693,7 +2620,7 @@ func _discard_moot_combo_defeat() -> bool:
 		return false
 	# Out of spins: the confirming spin can never come, so the rescue window is
 	# dead — resolve the loss now and let the ending check proc the flatline
-	# without the player having to touch the lever.
+	# without the player having to press SPIN.
 	var out_of_spins: bool = int(RunStateStore.neurons) < 1 \
 		and int(RunStateStore.freeSpinsRemaining) <= 0
 	if RunStateStore.compulsiveSpinSkips <= 0 and not out_of_spins:
@@ -2991,7 +2918,7 @@ func _refresh_tv_indicators() -> void:
 	# with the objective, the dealer countdown or the item icons for a frame.
 	_refresh_free_spin_banner()
 	_refresh_target_readout()
-	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
+	# The SPINS LEFT counter reflects the neuron cost the moment the SPIN is pressed,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
 	if _health_bar_sprite != null:
@@ -3009,7 +2936,7 @@ func _refresh_tv_indicators() -> void:
 			"font_color",
 			SPINS_LEFT_MAX_COLOR if spins_left >= MAX_RUN_SPINS else SPINS_LEFT_NORMAL_COLOR)
 	# Issue #155: the dealer bar advances with the inverse multiplier step (not the
-	# reward hold), so its progress changes the moment the lever is pulled.
+	# reward hold), so its progress changes the moment the SPIN is pressed.
 	_refresh_dealer_countdown()
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
@@ -3712,6 +3639,7 @@ func _refresh_controls() -> void:
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and not _rewind_anim_active and _dealer_offer_popup == null and sequence_allows_power
 	if _spin_button != null:
+		_spin_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if not _targeting_power_id.is_empty() else Control.MOUSE_FILTER_STOP
 		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
 			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active \
 			or (_sequence_lock_active and not combo_pending)
@@ -3848,7 +3776,7 @@ func _use_rewind_power() -> void:
 	_start_rewind_restore()
 
 ## Rewind's restore beat: all three reels blur backwards while the previous state
-## rolls back in. The whole sequence runs under the sequence lock so the lever is
+## rolls back in. The whole sequence runs under the sequence lock so SPIN is
 ## dead until the restored reveal has landed; _finish_rewind_restore always runs
 ## (the step is driven from _process) and always releases the lock.
 func _start_rewind_restore() -> void:
@@ -3923,7 +3851,7 @@ func _use_heart_power() -> void:
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	# Heart is a preparation action: the next lever pull renders and resolves the
+	# Heart is a preparation action: the next SPIN press renders and resolves the
 	# guaranteed heart triple as a free spin.
 	if was_pending and RunStateStore.comboDefeatPending:
 		_show_pending_combo_defeat()
@@ -5276,7 +5204,7 @@ func _wealth_target_due_now() -> bool:
 
 ## Claims a due target and puts its payout screen up. Called from every path that can
 ## move the score — the spin tail, a consumable, a power rescore — so the player never
-## has to pull the lever again just to be told the target was already beaten.
+## has to press SPIN again just to be told the target was already beaten.
 ## Returns true when the transition took the screen.
 ## A beaten target outranks a pending combo defeat. The rescue window exists to let the
 ## player buy their way out before the confirming spin, and beating the target IS the way
@@ -5634,9 +5562,7 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 		if node != null:
 			node.visible = visible
 	# The FREE SPINS banner re-derives from state on the next HUD refresh; a
-	# mid-flight coin drop never outlives the bars it belongs to.
 	if not visible:
-		_cancel_coin_insert()
 		_set_free_spin_display(false)
 	elif _tv.callout_active():
 		_tv.hide_layers()
