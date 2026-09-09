@@ -219,7 +219,8 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 			"_counter_item_top", offer_id, kind, item_node.size.y)
 		if not is_equal_approx(item_node.position.y + parent_y, expected_top):
 			failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
-		if item_node.size != Vector2(16.0, 16.0):
+		# Fractional counter placement can round the requested 16px to 15.999999px.
+		if not item_node.size.is_equal_approx(Vector2(16.0, 16.0)):
 			failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
 		checked_offer_frames += 1
 	if checked_offer_frames == 0:
