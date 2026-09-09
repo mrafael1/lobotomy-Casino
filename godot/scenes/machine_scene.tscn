@@ -1,9 +1,10 @@
 [gd_scene format=3 uid="uid://564kp6mg7m4v"]
 
 [ext_resource type="Script" uid="uid://bty2dglqk8hul" path="res://scenes/machine_scene.gd" id="1_machine"]
+[ext_resource type="Material" path="res://assets/shaders/painted_cabinet.tres" id="painted_material"]
 [ext_resource type="Texture2D" uid="uid://cle4mx7cn42t" path="res://assets/images/machine new view/reel_final_machine.png" id="2_reel"]
 [ext_resource type="Texture2D" uid="uid://dbbo8cwcxrxbo" path="res://assets/images/machine new view/spin_final_machine.png" id="3_spin"]
-[ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet.svg" id="4_cabinet"]
+[ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet-painted.png" id="4_cabinet"]
 [ext_resource type="Texture2D" uid="uid://bux7jbe7o4let" path="res://assets/images/machine new view/multiplier_final_machine.png" id="9_multiplier"]
 [ext_resource type="Texture2D" uid="uid://pqc0qfbcf28q" path="res://assets/images/machine new view/neon_machine_lever.png" id="10_lever"]
 [ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
@@ -116,6 +117,7 @@ centered = false
 hframes = 6
 
 [node name="Cabinet" type="Sprite2D" parent="." unique_id=1998976856]
+material = ExtResource("painted_material")
 texture = ExtResource("4_cabinet")
 centered = false
 

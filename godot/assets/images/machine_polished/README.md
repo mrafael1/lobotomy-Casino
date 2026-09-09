@@ -1,9 +1,19 @@
-# Machine art: first playable pass
+# Machine art: painted playable pass
 
-The cabinet and power chips are editable SVG artwork on an integer pixel grid.
-Godot imports the cabinet at 160x320 and each power strip at 480x320; nearest
-filtering keeps the artwork at the same pixel scale as the game. There are no
-runtime dependencies outside `godot/assets`.
+The cabinet and dealer portrait are generated paintings based on the approved
+concept, produced with the built-in image-generation tool. Godot imports the
+cabinet at 160x320 (size limit 320) and the portrait at 14x21 (size limit 21).
+The original paintings remain in the PNG source files. Nearest filtering and
+pixel-quantized registration keep the scene on its virtual pixel grid.
+Power chips remain separate editable 480x320 SVG state strips.
+There are no runtime dependencies outside `godot/assets`.
+
+`painted_cabinet.gdshader` fits the painting's horizontal assemblies to the live
+scene's measured geometry. `apertures.svg` supplies the exact transparent reel
+holes. The texture includes the casino backdrop and empty cabinet hardware;
+dealer, counters, symbols and interaction states are rendered independently.
+`reel_paper.gdshader` shades the reel backing and settled covers; the odometer
+material fits a painted-steel surround around the original animated drums.
 
 The cabinet keeps transparent apertures at x33, 65 and 97, y169, 21x34 pixels.
 The existing scoring/hit rectangles remain x33/65/97, y170, 21x30. The surrounding
@@ -20,7 +30,9 @@ the augment removes the shutter; this presentation adds no save fields.
 
 The material shader harmonizes the existing moving hardware with the new
 cabinet. Reels, warning callouts and power-state glyphs retain their own colours.
-The approved generated image is an art-direction reference, not a runtime texture.
+The approved generated concept remains a reference. The two new paintings in
+this directory are the runtime source assets. `cabinet.svg` is the earlier
+geometric prototype and is no longer used by the machine.
 
 Visual review (PowerShell, isolated saves):
 

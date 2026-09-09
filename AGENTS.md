@@ -479,7 +479,10 @@ Resources and currencies:
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
-  Its native 160x320 cabinet uses shaded oxblood enamel and recessed metal trim.
+  Its painted cabinet is imported at 160x320, with worn red enamel, recessed
+  metal trim, a matching cadaver-green dealer portrait, and shaded paper drums.
+  A registration material fits the painting to the existing live reel apertures;
+  numbers, symbols, powers, and counters remain separate runtime elements.
   Separate three-state power chips preserve acquisition order and the existing
   ready/selected/spent interactions. Tunnel Vision mounts a slatted shutter over
   the third reel; the shutter lowers over the already-opaque scoring cover and

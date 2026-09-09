@@ -145,7 +145,7 @@ const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
 # The warning speeds up as the dealer closes in: a lone first light beeps lazily, and from
 # the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
 # BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
-const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
+const DEALER_ICON_ASSET := "machine_polished/dealer-painted.png"
 const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
 # fully inside the pink TV border.
@@ -838,8 +838,14 @@ func _ready() -> void:
 		"machine new view/reel_final_machine.png")
 	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
 	_reel_blur.build_covers("machine new view/reel_final_machine.png")
+	var paper := ShaderMaterial.new()
+	paper.shader = preload("res://assets/shaders/reel_paper.gdshader")
+	_reel_backing_sprite.material = paper
+	for i in 3:
+		_reel_blur.cover(i).material = paper
 	_reel_symbols.build()
-	_build_full_canvas_sprite("machine_polished/cabinet.svg")
+	var cabinet := _build_full_canvas_sprite("machine_polished/cabinet-painted.png")
+	cabinet.material = preload("res://assets/shaders/painted_cabinet.tres")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -1006,7 +1012,7 @@ func _authored_control(name: String) -> Control:
 	return get_node_or_null(name) as Control
 
 func _full_canvas_name(rel: String) -> String:
-	if rel == "machine_polished/cabinet.svg":
+	if rel == "machine_polished/cabinet-painted.png":
 		return "Cabinet"
 	if rel.ends_with("reel_final_machine.png"):
 		return "ReelBacking"
@@ -1176,6 +1182,8 @@ func _finish_machine_materials(node: Node) -> void:
 			finish.set_shader_parameter("phosphor_text",
 				sprite.texture.resource_path.get_file() == "target_goals.png")
 			sprite.material = finish
+			if sprite.texture.resource_path.get_file() == "wealth_bar.png":
+				sprite.material = preload("res://assets/shaders/painted_odometer.tres")
 	for child in node.get_children():
 		_finish_machine_materials(child)
 

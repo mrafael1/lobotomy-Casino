@@ -33,13 +33,19 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: cabinet is not a 160x320 native sprite")
 	else:
-		var cabinet_image := cabinet.texture.get_image()
-		for x in [33, 65, 97]:
-			for y in range(169, 203):
-				for offset in range(21):
-					if cabinet_image.get_pixel(x + offset, y).a > 0.01:
-						failures.append("machine art: cabinet obscures a live reel aperture")
-						break
+		var cabinet_material := cabinet.material as ShaderMaterial
+		var aperture_texture: Texture2D = cabinet_material.get_shader_parameter("aperture_mask") \
+			if cabinet_material != null else null
+		if aperture_texture == null:
+			failures.append("machine art: painted cabinet is missing its aperture mask")
+		else:
+			var cabinet_image := aperture_texture.get_image()
+			for x in [33, 65, 97]:
+				for y in range(169, 203):
+					for offset in range(21):
+						if cabinet_image.get_pixel(x + offset, y).a > 0.01:
+							failures.append("machine art: cabinet obscures a live reel aperture")
+							break
 
 	var lever := machine.get_node_or_null("Lever") as Sprite2D
 	if lever == null:
