@@ -7,7 +7,11 @@ x33/65/97, y169..202. Live symbols and targeting remain runtime elements.
 `cabinet_controls.svg` is sampled by the cabinet material: it supplies the clean
 metal power rail and one sloped shelf with counter, SPIN and two stash recesses.
 The stash container has no texture; only its item icons and input are live.
-The five `spin_*.svg` states retain a separate face compressed to fit the shelf.
+The five `spin_*.svg` states retain a separate native face fitted to the shelf.
+`tools/generate_spin_face.py` supplies evenly spaced pixel lettering and a two-pixel
+depression. The count and SPINS legend share the left well side by side; their
+bounds are reset after font assignment so default theme minima cannot push them
+over SPIN. Power sockets have matching dark mounting rims in the cabinet surface.
 SPIN keeps its 46x28 touch area at (57,210), keyboard activation and targeting pass-through.
 
 The CRT dealer is inset at (36,51), size 30x43, with reactions above the approach

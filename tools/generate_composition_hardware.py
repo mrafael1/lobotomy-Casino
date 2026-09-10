@@ -11,6 +11,8 @@ rng=random.Random(42)
 for _ in range(95): art+=rect(rng.randrange(25,133),rng.randrange(115,137),1,1,rng.choice(['#64646b','#85818a']))
 for x in [25,132]:
     for y in [118,133]: art+=rect(x,y,2,2,'#3c4140')+rect(x,y,1,1,'#b8b5ad')
+for x in [46,77,108]:
+    art+=f'<circle cx="{x}" cy="127" r="12" fill="#323634"/><path d="M{x-7} 117H{x+7}V118H{x-7}Z" fill="#b0aba3"/>'
 art+=path('M22 207H135L140 236H18Z','#383b3c')+path('M23 208H134L138 234H20Z','#86818a')+path('M23 208H134L135 210H22Z','#b0a6af')+path('M20 234H138V238H20Z','#49464c')
 for _ in range(100): art+=rect(rng.randrange(24,134),rng.randrange(211,233),1,1,rng.choice(['#77737b','#9a919b']))
 for left,right in [(27,55),(60,101),(105,120),(123,139)]:

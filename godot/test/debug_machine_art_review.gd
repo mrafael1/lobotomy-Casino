@@ -39,6 +39,8 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
+	var spin_legend := _scene.get_node("SpinsLegend") as Label
+	assert(spin_legend.get_rect().end.x <= 55, "SPINS legend must remain in the counter well")
 	var screen := Rect2(33, 47, 90, 58)
 	var title := _scene.get_node("CrtTargetTitle") as Label
 	var target := _scene.get_node("CrtTargetNumber") as Label
@@ -49,6 +51,26 @@ func _run() -> void:
 	assert(title.position.y == target.position.y and title.get_theme_font_size("font_size") == target.get_theme_font_size("font_size"), "Target title and value must share a baseline and font size")
 	assert(screen.encloses(title.get_rect()) and screen.encloses(target.get_rect()), "Target text must fit inside CRT glass")
 	assert((_scene.get_node("stash") as TextureRect).texture == null, "Stash wells belong to cabinet material, not an overlay")
+	run.wealthTargetIndex = 7
+	_scene._refresh_target_readout()
+	await process_frame
+	assert(screen.encloses(target.get_rect()), "The 5000 target must fit inside the CRT")
+	var active_fields := ["guaranteeSymbolSpins", "cocktailBoostSpins", "pairBoostSpins", "potionSpins", "forceFlatlineSpins"]
+	for field: String in active_fields:
+		run.set(field, 2)
+	_scene._update_hud()
+	await _capture("01-populated-crt")
+	var shown_items := 0
+	for entry: Dictionary in _scene._boosts.slots():
+		var slot := entry["slot"] as Control
+		if slot.visible:
+			shown_items += 1
+			assert(Rect2(33, 100, 90, 9).encloses(slot.get_rect()), "Item duration must stay in its CRT row")
+	assert(shown_items == 5, "Review must show all five duration indicators")
+	for field: String in active_fields:
+		run.set(field, 0)
+	run.wealthTargetIndex = 0
+	_scene._update_hud()
 	assert(_scene.get_node_or_null("PowerBar") == null, "Side power gauge must be removed")
 	_scene._set_sequence_lock(true)
 	run.scoreEarned = 0

@@ -513,8 +513,12 @@ Resources and currencies:
   The power rail and sloped lower shelf are composed into the cabinet material.
   Counter and stash recesses belong to that surface; stash nodes carry only item
   icons and input, with no tray texture overlay. SPIN retains an independent
-  compressed face and press states over its cabinet recess. Worn, uneven sticker
+  native face and press states over its cabinet recess. Worn, uneven sticker
   edges replace the flat paper squares on the lower panel.
+  The spin count and small SPINS legend sit side by side within the left well.
+  SPIN uses evenly spaced native pixel lettering and a two-pixel depressed face;
+  its full touch area remains unchanged. Dark mounting rims seat the power buttons
+  into the metal rail. Visual review includes the 5,000 target and five active items.
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
   The shelf number is the single remaining-spin display. Spin-gain fly-ins land

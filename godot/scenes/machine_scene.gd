@@ -33,7 +33,7 @@ const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
 const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # Remaining spins sit in the left shelf well beside SPIN.
-const SPINS_LEFT_LABEL_RECT := Rect2(26.0, 211.0, 29.0, 19.0)
+const SPINS_LEFT_LABEL_RECT := Rect2(27.0, 213.0, 15.0, 18.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
 # number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
 # y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
@@ -1249,7 +1249,7 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_spins_left_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_spins_left_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_spins_left_label.add_theme_font_size_override("font_size", 13)
+	_spins_left_label.add_theme_font_size_override("font_size", 11)
 	if _font != null:
 		_spins_left_label.add_theme_font_override("font", _font)
 	_spins_left_label.add_theme_color_override("font_color", SPINS_LEFT_NORMAL_COLOR)
@@ -1257,17 +1257,20 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.add_theme_constant_override("outline_size", 1)
 	_spins_left_label.text = ""
 	add_child(_spins_left_label)
+	_spins_left_label.size = SPINS_LEFT_LABEL_RECT.size
 	var legend := Label.new()
 	legend.name = "SpinsLegend"
 	legend.text = "SPINS"
-	legend.position = Vector2(27, 225)
-	legend.size = Vector2(27, 8)
+	legend.position = Vector2(43, 219)
+	legend.size = Vector2(11, 8)
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	legend.add_theme_font_override("font", _font)
-	legend.add_theme_font_size_override("font_size", 5)
+	legend.add_theme_font_size_override("font_size", 4)
 	legend.add_theme_color_override("font_color", Color("#9baa88"))
 	add_child(legend)
+	# Tree entry resolves the pixel font; clear the default theme's larger minimum.
+	legend.size = Vector2(11, 8)
 
 ## The power-restore lamps: a native full-canvas overlay sheet (4x1 = 4 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
