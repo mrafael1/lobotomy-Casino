@@ -520,6 +520,10 @@ Resources and currencies:
   ready/selected/spent interactions. Tunnel Vision mounts a slatted shutter over
   the third reel; the shutter lowers over the already-opaque scoring cover and
   disappears when the augment is removed. It does not intercept targeting input.
+  Learning mounts a small leather field book on a bolted bracket beside the reels,
+  with brass indexing strips outside the live symbol apertures. This independent
+  layer appears only while Book is enabled, coexists with the Tunnel Vision shutter,
+  and disappears when Learning is removed; it never changes scoring or input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
 - `collection_scene` — the complete Pacte card catalog, in two scrollable
   sections (AUGMENTS, then POWERS) that follow the authored card order, so a card

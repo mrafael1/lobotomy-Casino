@@ -57,6 +57,7 @@ var _layer: Control = null
 var _tobacco_covers: Array = []
 var _tobacco_smoke: Array = []
 var _tunnel_shutter: TextureRect = null
+var _learning_attachment: TextureRect = null
 var _tunnel_shutter_tween: Tween = null
 var _energy_edges: Control = null
 var _hidden_covers: Array = []
@@ -97,6 +98,7 @@ func build(style: Dictionary) -> void:
 	_build_energy_edges(style["energy_edge"], float(style["energy_thickness"]))
 	_build_hidden_covers(style["hidden_cover"], style["hidden_glyph"])
 	_build_tunnel_shutter()
+	_build_learning_attachment()
 
 func layer() -> Control:
 	return _layer
@@ -140,7 +142,23 @@ func persistent_nodes() -> Array:
 	nodes.append_array(_hidden_covers)
 	if _tunnel_shutter != null:
 		nodes.append(_tunnel_shutter)
+	if _learning_attachment != null:
+		nodes.append(_learning_attachment)
 	return nodes
+
+func _build_learning_attachment() -> void:
+	_learning_attachment = TextureRect.new()
+	_learning_attachment.name = "LearningAttachment"
+	_learning_attachment.texture = preload("res://assets/images/machine_polished/learning_attachment.svg")
+	_learning_attachment.size = _canvas
+	_learning_attachment.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_learning_attachment.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_learning_attachment.visible = false
+	_layer.add_child(_learning_attachment)
+
+func set_learning_attachment(active: bool) -> void:
+	if _learning_attachment != null:
+		_learning_attachment.visible = active
 
 ## A fitted mechanical attachment. The opaque scoring cover underneath remains
 ## authoritative, including when Tobacco and Tunnel Vision coexist.
@@ -398,6 +416,7 @@ func hide_water() -> void:
 ## must not inherit a smoked reel or a running pulse.
 func reset() -> void:
 	set_tunnel_shutter(false)
+	set_learning_attachment(false)
 	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
 		_energy_pulse_tween.kill()
 	_energy_pulse_tween = null

@@ -168,6 +168,21 @@ func _run() -> void:
 	run.ownedUpgrades = []
 	_scene._refresh_consumable_fx()
 	assert(not shutter.visible, "Removing Tunnel Vision left the shutter visible")
+	run.ownedUpgrades = ["pos_learning", "pacte_tunnel_vision"]
+	_scene._refresh_consumable_fx()
+	var book := _scene._consumable_fx.layer().get_node("LearningAttachment") as TextureRect
+	assert(book.visible and book.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"Learning attachment must appear without blocking reel input")
+	assert(_scene._consumable_fx.persistent_nodes().has(book), "Learning attachment must survive effect cleanup")
+	await create_timer(0.4).timeout
+	await _capture("06-learning-and-tunnel")
+	run.ownedUpgrades = ["pos_learning"]
+	_scene._refresh_consumable_fx()
+	assert(book.visible and not shutter.visible, "Augment attachments must be independent")
+	await _capture("06-learning")
+	run.ownedUpgrades = []
+	_scene._refresh_consumable_fx()
+	assert(not book.visible, "Removed Learning left its attachment visible")
 	_scene._callouts.play_win("pair", 20)
 	assert(not _scene._wealth.odometer().visible, "Payout must own the CRT above the score")
 	await create_timer(0.08).timeout

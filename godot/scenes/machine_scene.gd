@@ -4766,6 +4766,7 @@ func _refresh_consumable_fx() -> void:
 		return
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
+	_consumable_fx.set_learning_attachment(Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0)
 
 ## Tobacco hides the LAST reels from scoring (reels.slice keeps the first ones),
 ## so smoke exactly those. Hallucination changes scoring/reward scale but leaves
