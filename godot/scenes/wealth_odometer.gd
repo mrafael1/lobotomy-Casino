@@ -28,12 +28,12 @@ const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 const BAR_TEXTURE: Texture2D = preload(
 	"res://assets/images/machine_polished/wealth_crt.svg")
 const CASES_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine new view/wealth_cases.png")
+	"res://assets/images/machine_polished/wealth_cases.svg")
 const REEL_TEXTURES: Array[Texture2D] = [
-	preload("res://assets/images/machine new view/wealth_1st_reel.png"),
-	preload("res://assets/images/machine new view/wealth_2nd_reel.png"),
-	preload("res://assets/images/machine new view/wealth_3rd_reel.png"),
-	preload("res://assets/images/machine new view/wealth_4th_reel.png"),
+	preload("res://assets/images/machine_polished/wealth_digit_0.svg"),
+	preload("res://assets/images/machine_polished/wealth_digit_1.svg"),
+	preload("res://assets/images/machine_polished/wealth_digit_2.svg"),
+	preload("res://assets/images/machine_polished/wealth_digit_3.svg"),
 ]
 
 var _reels: Array[Dictionary] = []

@@ -12,7 +12,6 @@
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/shift.svg" id="14_shift"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/memory.svg" id="15_memory"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
-[ext_resource type="Texture2D" path="res://assets/images/machine_polished/stash.svg" id="17_vp1vd"]
 [ext_resource type="Texture2D" uid="uid://d28yxo0yalrku" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="19_options"]
 
@@ -259,7 +258,6 @@ offset_top = 213.0
 offset_right = 139.0
 offset_bottom = 237.0
 mouse_filter = 2
-texture = ExtResource("17_vp1vd")
 expand_mode = 1
 stretch_mode = 5
 

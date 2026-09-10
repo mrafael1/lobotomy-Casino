@@ -22,15 +22,13 @@ extends RefCounted
 
 ## Legacy goal and progress frames are registered into the CRT's right column.
 ## The title remains runtime text; all values and frame timing remain independent.
-const BAR_SHEET := "machine new view/target_bar.png"
+const BAR_SHEET := "machine_polished/target_progress.svg"
 const BAR_FRAME_COUNT := 12
-const GOALS_SHEET := "machine new view/target_goals.png"
-const GOALS_FRAME_COUNT := 8
-const BAR_ANIM_SHEET := "machine new view/target_bar_animation.png"
+const BAR_ANIM_SHEET := "machine_polished/target_shimmer.svg"
 const BAR_ANIM_FRAME_COUNT := 6
 const BAR_ANIM_FRAME_TIME := 0.12
 const TV_Z_INDEX := 8 # above the cabinet and callout sheets, below the icons
-const ODOMETER_OFFSET := Vector2(29.0, -197.0)
+const ODOMETER_OFFSET := Vector2(29.0, -194.0)
 
 var _view: MachineView = null
 
@@ -39,7 +37,7 @@ var _odometer: WealthOdometer = null
 ## "display lucidity"; it has been the cumulative score since #181.
 var _display_score := 0
 var _bar_sprite: Sprite2D = null
-var _goals_sprite: Sprite2D = null
+var _goals_sprite: Label = null
 var _bar_anim_sprite: Sprite2D = null
 var _bar_anim_time := 0.0
 var _target_title: Label = null
@@ -55,10 +53,10 @@ func build() -> void:
 	_odometer.z_index = TV_Z_INDEX
 	_target_title = Label.new()
 	_target_title.name = "CrtTargetTitle"
-	_target_title.position = Vector2(73, 47)
-	_target_title.text = "TARGET"
+	_target_title.position = Vector2(74, 49)
+	_target_title.text = "TARGET:"
 	_target_title.add_theme_font_override("font", _view.font())
-	_target_title.add_theme_font_size_override("font_size", 5)
+	_target_title.add_theme_font_size_override("font_size", 6)
 	_target_title.add_theme_color_override("font_color", Color("b7c7a5"))
 	_target_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_target_title.z_index = TV_Z_INDEX
@@ -66,19 +64,24 @@ func build() -> void:
 	_bar_sprite = _view.full_canvas_sheet(BAR_SHEET, BAR_FRAME_COUNT)
 	if _bar_sprite != null:
 		_bar_sprite.z_index = TV_Z_INDEX
-		_bar_sprite.scale.x = 48.0 / 70.0
-		_bar_sprite.position = Vector2(72 - 41 * _bar_sprite.scale.x, -38)
-	_goals_sprite = _view.full_canvas_sheet(GOALS_SHEET, GOALS_FRAME_COUNT)
-	if _goals_sprite != null:
-		_goals_sprite.z_index = TV_Z_INDEX
-		_goals_sprite.position = Vector2(30, -37)
+
+	_goals_sprite = Label.new()
+	_goals_sprite.name = "CrtTargetNumber"
+	_goals_sprite.position = Vector2(103, 49)
+	_goals_sprite.size = Vector2(17, 8)
+	_goals_sprite.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_goals_sprite.add_theme_font_override("font", _view.font())
+	_goals_sprite.add_theme_font_size_override("font_size", 6)
+	_goals_sprite.add_theme_color_override("font_color", Color("b7c7a5"))
+	_goals_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_goals_sprite.z_index = TV_Z_INDEX
+	_view.add_layer(_goals_sprite)
 	# The shimmer plays underneath the bar, so the authored fill always reads on top
 	# of it rather than being animated over.
 	_bar_anim_sprite = _view.full_canvas_sheet(BAR_ANIM_SHEET, BAR_ANIM_FRAME_COUNT)
 	if _bar_anim_sprite != null:
 		_bar_anim_sprite.z_index = TV_Z_INDEX - 1
-		_bar_anim_sprite.scale.x = 48.0 / 70.0
-		_bar_anim_sprite.position = Vector2(72 - 41 * _bar_anim_sprite.scale.x, -38)
+
 
 ## --- the odometer ----------------------------------------------------------------
 
@@ -143,8 +146,7 @@ func refresh_target(shown_score: int, callout_active: bool, content_muted: bool)
 		_goals_sprite.visible = not content_muted
 	if not should_show:
 		return
-	var index := clampi(int(RunStateStore.wealthTargetIndex), 0, GOALS_FRAME_COUNT - 1)
-	_view.set_sheet_frame(_goals_sprite, index)
+	_goals_sprite.text = str(RunStateStore.current_wealth_target())
 	var target := maxi(1, RunStateStore.current_wealth_target())
 	var progress := clampf(float(shown_score) / float(target), 0.0, 1.0)
 	_view.set_sheet_frame(_bar_sprite, clampi(
@@ -167,7 +169,7 @@ func step_bar_animation(delta: float) -> void:
 func bar_sprite() -> Sprite2D:
 	return _bar_sprite
 
-func goals_sprite() -> Sprite2D:
+func goals_sprite() -> Label:
 	return _goals_sprite
 
 func bar_anim_sprite() -> Sprite2D:

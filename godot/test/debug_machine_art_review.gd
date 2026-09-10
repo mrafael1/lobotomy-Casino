@@ -39,6 +39,16 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
+	var screen := Rect2(33, 47, 90, 58)
+	var title := _scene.get_node("CrtTargetTitle") as Label
+	var target := _scene.get_node("CrtTargetNumber") as Label
+	assert(screen.encloses(_scene._dealer_icon.get_rect()), "Dealer must fit inside the CRT glass")
+	assert(_scene._dealer_icon.get_rect().end.y <= 95, "Dealer must leave room for his approach bar")
+	for slot_pos: Vector2 in _scene._boosts.SLOT_POSITIONS:
+		assert(slot_pos.y >= 100, "Active items must stay below the dealer path ending at y99")
+	assert(title.position.y == target.position.y and title.get_theme_font_size("font_size") == target.get_theme_font_size("font_size"), "Target title and value must share a baseline and font size")
+	assert(screen.encloses(title.get_rect()) and screen.encloses(target.get_rect()), "Target text must fit inside CRT glass")
+	assert((_scene.get_node("stash") as TextureRect).texture == null, "Stash wells belong to cabinet material, not an overlay")
 	assert(_scene.get_node_or_null("PowerBar") == null, "Side power gauge must be removed")
 	_scene._set_sequence_lock(true)
 	run.scoreEarned = 0
@@ -132,6 +142,7 @@ func _run() -> void:
 	await create_timer(0.3).timeout
 	await _capture("03-shift-targeting")
 	var shift_press := InputEventMouseButton.new()
+	var before_shift: String = str(run.lastResult["reels"][1])
 	shift_press.button_index = MOUSE_BUTTON_LEFT
 	shift_press.position = Vector2(75.5, 211.0)
 	shift_press.pressed = true
@@ -140,7 +151,8 @@ func _run() -> void:
 	shift_press.pressed = false
 	root.push_input(shift_press, true)
 	await create_timer(1.0).timeout
-	assert(run.abilitiesUsed.has("shift"), "SPIN intercepted the lower Shift arrow")
+	assert(_scene._targeting_power_id.is_empty() and str(run.lastResult["reels"][1]) != before_shift,
+		"Lower Shift arrow must change the reel, even if the payout immediately restores Shift")
 	await create_timer(4.0).timeout
 	assert(not spin.disabled, "SPIN remained locked after Shift resolved")
 	spin.grab_focus()

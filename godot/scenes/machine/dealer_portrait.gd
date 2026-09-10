@@ -12,7 +12,7 @@ var _elapsed := 0.0
 func build_caption(pixel_font: Font) -> void:
 	_caption = Label.new()
 	_caption.name = "DealerReaction"
-	_caption.position = Vector2(-1, 33)
+	_caption.position = Vector2(0, 30)
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_caption.add_theme_font_override("font", pixel_font)

@@ -155,9 +155,9 @@ func build_pacte_badges() -> void:
 		badge.focus_mode = Control.FOCUS_NONE
 		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var badge_style := StyleBoxFlat.new()
-		badge_style.bg_color = Color("#d6c9a4")
+		badge_style.bg_color = Color.TRANSPARENT
 		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
-		badge_style.set_border_width_all(1)
+		badge_style.set_border_width_all(0)
 		badge_style.set_corner_radius_all(1)
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			badge.add_theme_stylebox_override(state, badge_style)

@@ -308,7 +308,7 @@ Resources and currencies:
   during a losing-state warning: pending x1 and x2 show all three lights, while
   pending x3 shows the preceding x2 stack (overlays 1+2). With Glitch 2 active,
   all three overlays remain visible at every multiplier. At 0 he visits
-  automatically. A persistent 30x45 dealer portrait occupies the CRT's left column;
+  automatically. A persistent 30x43 dealer portrait occupies the CRT's left column;
   the twelve approach steps and cumulative warning lights sit beneath it. Short
   reactions type into a framed caption, respond to revealed plays, and yield to
   payout and targeting callouts. Their hold/fade timer pauses while the portrait
@@ -500,14 +500,21 @@ Resources and currencies:
   left and two 16px stash slots on the right, clear of the wealth odometer.
   The deeper shelf spans y203..241. Three 22px power faces sit on the upper
   metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
-  The CRT groups the dealer at (34,47), TARGET at the upper right, rolling wealth
-  drums at (74,61), and the frenzy multiplier/loss warning at (74,77). Augment
+  The CRT groups the dealer at (36,51), with his approach row at y95..98, above
+  the item-duration row. TARGET and its value share a 6px font and y49 baseline.
+  A muted olive progress strip sits at y59; warm paper wealth drums at (74,64)
+  use native heavy digits, with the multiplier/loss warning lowered to y82. Augment
   stickers are 20px paper squares at (48,260), (74,260), and (100,260), with 14px
   icons and hold-for-details behavior; item durations retain their row at y100.
   Payout and targeting callouts hide the portrait, score, target, and normal multiplier
   until they finish. Cabinet stickers remain visible during CRT callouts.
   FREE SPIN replaces only the target number and title. Target-payout digit snapshots
   launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
+  The power rail and sloped lower shelf are composed into the cabinet material.
+  Counter and stash recesses belong to that surface; stash nodes carry only item
+  icons and input, with no tray texture overlay. SPIN retains an independent
+  compressed face and press states over its cabinet recess. Worn, uneven sticker
+  edges replace the flat paper squares on the lower panel.
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
   The shelf number is the single remaining-spin display. Spin-gain fly-ins land

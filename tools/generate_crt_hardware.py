@@ -14,13 +14,16 @@ def sheet(name, count, draw):
 
 
 sheet('dealer_bar.svg', 13, lambda frame: ''.join(
-    rect(34+3*i, 94, 2, 4, '#aacb9b' if i < frame else '#284237') for i in range(12)))
+    rect(36+3*i, 95, 2, 4, '#aacb9b' if i < frame else '#284237') for i in range(12)))
 for light in range(1, 4):
     sheet(f'dealer_bar_overlay_{light}.svg', 13-light,
-          lambda frame, light=light: rect(34+3*min(11, frame+light-1), 94, 2, 4, '#ef6556'))
-sheet('dealer_tips.svg', 1, lambda _: rect(34, 94, 2, 4, '#d2b978') + rect(37, 94, 2, 4, '#d2b978'))
+          lambda frame, light=light: rect(36+3*min(11, frame+light-1), 95, 2, 4, '#ef6556'))
+sheet('dealer_tips.svg', 1, lambda _: rect(36, 95, 2, 4, '#d2b978') + rect(39, 95, 2, 4, '#d2b978'))
 sheet('augments.svg', 3, lambda frame: ''.join(
-    rect(49+26*i, 261, 21, 21, '#552b28') + rect(48+26*i, 260, 20, 20, '#98876a')
+    f'<g transform="translate({48+26*i} 260)"><path d="M1 1L20 0L21 18L18 21L0 20Z" fill="#502b27"/>'
+    '<path d="M0 1L18 0L20 17L17 20L1 19Z" fill="#ae9c75"/>'
+    '<path d="M1 2L17 1L19 17L16 19L2 18Z" fill="#c8b68c"/>'
+    '<path d="M1 5h2v1H1zM14 1h2v1h-2zM3 17h3v1H3z" fill="#8e7a57"/></g>'
     for i in range(frame+1)))
 GLYPHS = {'F': ['111','100','110','100','100'], 'R': ['110','101','110','101','101'],
           'E': ['111','100','110','100','111'], 'S': ['111','100','111','001','111'],

@@ -128,7 +128,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		var wealth_art := wealth_odometer.get_node_or_null("WealthBarArt") as Sprite2D
 		var digits := wealth_odometer.visible_digit_bounds()
 		digits.position += wealth_odometer.position
-		if not Rect2(72, 59, 50, 18).encloses(digits):
+		if not Rect2(72, 63, 50, 17).encloses(digits):
 			failures.append("machine: wealth drums must fit below the CRT target")
 		if digits.intersects(Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)):
 			failures.append("machine: dealer portrait overlaps the wealth drums")
@@ -145,7 +145,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 					!= Vector2i(160, 320) \
 				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: wealth odometer cases are missing or not native art")
-		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases.png"):
+		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases.svg"):
 			failures.append("machine art: wealth odometer cases use the wrong asset")
 		var wealth_numbers := wealth_odometer.get_node_or_null("Reel0") as Control
 		if wealth_art != null and wealth_cases != null and wealth_numbers != null \
@@ -196,7 +196,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue181: the TV is missing the TARGET bar/goal art")
 		return
 	if machine._wealth.bar_sprite().hframes != WealthReadout.BAR_FRAME_COUNT \
-			or machine._wealth.goals_sprite().hframes != WealthReadout.GOALS_FRAME_COUNT:
+			or machine._wealth.goals_sprite().get_theme_font_size("font_size") != 6:
 		failures.append("issue181: the TARGET sheets were sliced into the wrong frame count")
 	# The shimmer is re-authored from time to time; catch a sheet whose real frame count
 	# has drifted from the constant rather than letting it play sliced-up frames.
@@ -223,7 +223,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 		machine._wealth.step_bar_animation(WealthReadout.BAR_ANIM_FRAME_TIME)
 		if shimmer.frame == first_frame:
 			failures.append("issue181: the shimmer is not advancing")
-	if machine._wealth.goals_sprite().hframes != EconomyConst.WEALTH_TARGETS.size():
+	if machine._wealth.goals_sprite().get_theme_font("font") == null:
 		failures.append("issue181: the goal sheet does not carry one frame per wealth target")
 
 	run_store.runPhase = "running"
@@ -231,7 +231,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._wealth.goals_sprite().frame != 0 or machine._wealth.bar_sprite().frame != 0:
+	if machine._wealth.goals_sprite().text != "100" or machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: a fresh run did not show goal 0 with an empty bar")
 	# Meeting the current target fills the bar completely.
 	run_store.scoreEarned = EconomyConst.WEALTH_TARGETS[0]
@@ -242,7 +242,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	run_store.wealthTargetIndex = 3
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._wealth.goals_sprite().frame != 3:
+	if machine._wealth.goals_sprite().text != "800":
 		failures.append("issue181: the goal frame does not follow the wealth target index")
 	if machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: the TARGET bar did not refill from empty after a payout")

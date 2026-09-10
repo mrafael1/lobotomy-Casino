@@ -117,10 +117,10 @@ const DEALER_TIP_STEPS_SHEET := "machine_polished/dealer_tips.svg"
 # the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
 # BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
 const DEALER_ICON_ASSET := "machine_polished/dealer-painted.png"
-const DEALER_ICON_SIZE := Vector2(30.0, 45.0)
+const DEALER_ICON_SIZE := Vector2(30.0, 43.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
 # fully inside the pink TV border.
-const DEALER_ICON_POS := Vector2(34.0, 47.0)
+const DEALER_ICON_POS := Vector2(36.0, 51.0)
 const LOCK_POWER_FRAME_COUNT := 3
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
@@ -1233,7 +1233,6 @@ func _build_tv_indicators() -> void:
 	_wealth.build()
 	_refresh_target_readout()
 	_build_reserve_glow()
-	_build_full_canvas_sprite("machine_polished/shelf_labels.svg")
 	_build_spins_left_label()
 	_boosts.build()
 	_build_power_bar()
@@ -1261,7 +1260,7 @@ func _build_spins_left_label() -> void:
 	var legend := Label.new()
 	legend.name = "SpinsLegend"
 	legend.text = "SPINS"
-	legend.position = Vector2(27, 229)
+	legend.position = Vector2(27, 225)
 	legend.size = Vector2(27, 8)
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE

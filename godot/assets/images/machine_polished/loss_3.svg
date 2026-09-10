@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="320" viewBox="0 0 1440 320" shape-rendering="crispEdges">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="320" viewBox="0 0 1440 320" shape-rendering="crispEdges"><g transform="translate(0 5)">
 <g transform="translate(-3 4)">
 <rect x="86" y="43" width="41" height="12" rx="2" fill="#241210"/>
 <path d="M88 43H125 M88 56H125" stroke="#ad5140"/>
@@ -163,4 +163,4 @@
 <rect x="1395" y="49" width="2" height="2" fill="#e4c18b"/>
 <rect x="1395" y="53" width="2" height="2" fill="#e4c18b"/>
 </g>
-</svg>
+</g></svg>
