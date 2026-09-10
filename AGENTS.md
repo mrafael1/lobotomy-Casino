@@ -519,6 +519,9 @@ Resources and currencies:
   SPIN uses evenly spaced native pixel lettering and a two-pixel depressed face;
   its full touch area remains unchanged. Dark mounting rims seat the power buttons
   into the metal rail. Visual review includes the 5,000 target and five active items.
+  Stash artwork is inset to 12x14 inside each 16x18 touch well. Tapping the empty
+  margin around a held item uses that item under the same animation and dealer
+  locks as tapping its icon; the artwork itself does not intercept input.
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
   The shelf number is the single remaining-spin display. Spin-gain fly-ins land

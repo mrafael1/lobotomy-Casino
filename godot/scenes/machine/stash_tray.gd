@@ -55,10 +55,13 @@ func build(slot_count: int) -> void:
 			_apply_icon_fit(icon)
 		elif icon.has_meta("_machine_generated_stash_icon"):
 			_apply_icon_fit(icon)
-		icon.mouse_filter = Control.MOUSE_FILTER_STOP
+		# Authored wells own the touch area; the inset artwork does not shrink it.
+		var hit: Control = slot if slot != null else icon
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE if hit != icon else Control.MOUSE_FILTER_STOP
+		hit.mouse_filter = Control.MOUSE_FILTER_STOP
 		var cb := _on_input.bind(icon, i)
-		if not icon.gui_input.is_connected(cb):
-			icon.gui_input.connect(cb)
+		if not hit.gui_input.is_connected(cb):
+			hit.gui_input.connect(cb)
 		_icons.append(icon)
 
 ## Keeps the icons crisp and the same size as the drag stashes in the other

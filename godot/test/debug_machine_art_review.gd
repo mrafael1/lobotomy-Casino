@@ -274,6 +274,29 @@ func _run() -> void:
 	assert(not _scene._multiplier_sprite.visible, "TV payout must hide the multiplier")
 	await _capture("07-crt-payout-priority")
 	_scene._callouts.stop_win()
+	# Touching the well margin must use an item even though its inset art is smaller.
+	run.comboDefeatPending = false
+	run.runConsumables = {"cons_cigarette": 1, "cons_focus": 1}
+	_scene._refresh_controls()
+	var well := _scene._stash.slot_node(0) as Control
+	var item_icon := _scene._stash.icons()[0] as TextureRect
+	assert(well.size == Vector2(16, 18) and item_icon.size == Vector2(12, 14), "Stash art must be inset within its larger touch well")
+	var margin := well.global_position + Vector2(0.5, 0.5)
+	assert(not item_icon.get_global_rect().has_point(margin), "Review tap must hit the well outside its icon")
+	_scene._set_sequence_lock(true)
+	var stash_tap := InputEventMouseButton.new()
+	stash_tap.button_index = MOUSE_BUTTON_LEFT
+	stash_tap.position = margin
+	stash_tap.pressed = true
+	root.push_input(stash_tap, true)
+	assert(run.runConsumables.get("cons_cigarette", 0) == 1, "Locked stash accepted a margin tap")
+	_scene._set_sequence_lock(false)
+	root.push_input(stash_tap, true)
+	assert(run.runConsumables.get("cons_cigarette", 0) == 0, "Well margin did not use its item")
+	stash_tap = stash_tap.duplicate() as InputEventMouseButton
+	stash_tap.pressed = false
+	root.push_input(stash_tap, true)
+	await _capture("07-stash-margin-used")
 	run.force_dealer_visit()
 	_scene._show_dealer_offers()
 	await create_timer(1.5).timeout

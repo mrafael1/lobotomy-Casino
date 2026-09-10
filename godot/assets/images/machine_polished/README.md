@@ -7,6 +7,8 @@ x33/65/97, y169..202. Live symbols and targeting remain runtime elements.
 `cabinet_controls.svg` is sampled by the cabinet material: it supplies the clean
 metal power rail and one sloped shelf with counter, SPIN and two stash recesses.
 The stash container has no texture; only its item icons and input are live.
+Each 16x18 slot owns input around an inset 12x14 item image, leaving the cabinet
+recess visible. Slot margins obey the same use locks as the item image.
 The five `spin_*.svg` states retain a separate native face fitted to the shelf.
 `tools/generate_spin_face.py` supplies evenly spaced pixel lettering and a two-pixel
 depression. The count and SPINS legend share the left well side by side; their

@@ -1349,10 +1349,11 @@ func _check_base_scene_parity(failures: Array) -> void:
 				failures.append("parity: %s stash tray can draw behind base art" % scene_path)
 			for i in range(1, 3):
 				var slot := stash.get_node_or_null("StashSlot%d" % i) as Control
+				var expected_slot := Vector2(16, 18) if machine_shelf else Vector2(16, 16)
 				if slot == null:
 					failures.append("parity: %s missing StashSlot%d" % [scene_path, i])
-				elif slot.size != Vector2(16.0, 16.0):
-					failures.append("parity: %s StashSlot%d is not 16x16: %s" % [scene_path, i, slot.size])
+				elif slot.size != expected_slot:
+					failures.append("parity: %s StashSlot%d has wrong touch size: %s, expected %s" % [scene_path, i, slot.size, expected_slot])
 		scene.queue_free()
 
 
