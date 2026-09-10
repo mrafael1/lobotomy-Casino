@@ -229,7 +229,14 @@ func _run() -> void:
 	run.selectedAugmentCardIds = ["augment_tunnel_vision", "augment_adrenaline", "augment_reward_1"]
 	_scene._augments.refresh_pacte_badges()
 	await _capture("07-three-augments")
+	var stickers: Array = _scene._augments.badges()
+	for entry: Dictionary in stickers:
+		var sticker := entry["badge"] as Button
+		assert(Rect2(42, 250, 88, 36).encloses(sticker.get_rect()),
+			"Augment sticker must stay on the lower cabinet clear of controls and cash outlet")
 	_scene._callouts.play_win("triple", 50)
+	assert((stickers[0]["badge"] as Button).visible,
+		"CRT callouts must leave cabinet stickers visible")
 	assert(not _scene._multiplier_sprite.visible, "TV payout must hide the multiplier")
 	await _capture("07-crt-payout-priority")
 	_scene._callouts.stop_win()

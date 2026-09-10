@@ -32,10 +32,10 @@ const LUCIDITY_ASSET := "ui/coin.png"
 const POWER_ASSET := "ui/power_coin.png"
 const POWER_SIZE := 8.0
 const POWER_FLIGHT_TIME := 0.64
-## The authored pop that plays at the odometer before the chip sets off.
+## The authored pop that plays at the cash outlet before the chip sets off.
 const POP_SHEET := "machine new view/power coin animation.png"
 const POP_FRAMES := 4
-const POP_OFFSET := Vector2(23.0, -183.5)
+const POP_OFFSET := Vector2(6.0, 52.5) # last frame meets the cash outlet at (80, 298)
 const POP_FRAME_TIME := 0.06
 
 ## Casino-TV payout spray (issue #181): lucidity coins erupt out of the cash tray
@@ -109,7 +109,7 @@ func make_power_coin(pos: Vector2) -> Sprite2D:
 
 ## The pop sheet, parented into the coin layer at the origin and starting
 ## invisible. Uncentered and unpositioned on purpose: it is full-canvas art whose
-## frames already sit where the odometer is.
+## frames are offset to meet the cash outlet.
 func make_power_pop() -> Sprite2D:
 	if _layer == null:
 		return null

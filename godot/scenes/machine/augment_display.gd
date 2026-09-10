@@ -24,12 +24,12 @@ const AUGMENTED_BADGE_SIZE := 14.0
 
 ## --- the Pacte augment chip row (issue #181) -----------------------------------
 const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
-const PACTE_AUGMENT_BADGE_POS := Vector2(76.0, 90.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(10.0, 9.0)
-const PACTE_AUGMENT_BADGE_PITCH := 14.0
+const PACTE_AUGMENT_BADGE_POS := Vector2(48.0, 260.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(20.0, 20.0)
+const PACTE_AUGMENT_BADGE_PITCH := 26.0
 const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 8.0
-const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
+const PACTE_AUGMENT_ICON_SIZE := 14.0
+const PACTE_AUGMENT_CONTOUR_COLOR := Color("#98876a")
 
 ## Card names and their descriptions run long; wrapping keeps the bubble on the canvas.
 const PACTE_AUGMENT_POPUP_MAX_WIDTH := 126.0
@@ -155,7 +155,7 @@ func build_pacte_badges() -> void:
 		badge.focus_mode = Control.FOCUS_NONE
 		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var badge_style := StyleBoxFlat.new()
-		badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
+		badge_style.bg_color = Color("#d6c9a4")
 		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
 		badge_style.set_border_width_all(1)
 		badge_style.set_corner_radius_all(1)
@@ -171,6 +171,13 @@ func build_pacte_badges() -> void:
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		badge.add_child(icon)
+		var peel := ColorRect.new()
+		peel.name = "PaperCorner"
+		peel.position = Vector2(17, 17)
+		peel.size = Vector2(2, 2)
+		peel.color = Color("#f0e4c5")
+		peel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_child(peel)
 		# The overflow count replaces the last icon rather than sitting on top of one,
 		# so it can never obscure the art it is counting.
 		var count := Label.new()
@@ -224,11 +231,11 @@ func refresh_pacte_badges() -> void:
 	if _pacte_augment_badges.is_empty():
 		return
 	var ids := _active_pacte_augment_ids()
-	# The row lives on the power bar now, not on the TV, so a TV callout no longer
+	# The stickers live on the lower cabinet, so a TV callout no longer
 	# hides it — only the description popup steps aside for one.
 	if _view.tv_callout_open():
 		hide_pacte_popup()
-	if ids.is_empty() or _view.tv_callout_open():
+	if ids.is_empty():
 		for entry: Dictionary in _pacte_augment_badges:
 			(entry["badge"] as Button).visible = false
 		if _augment_plate_sprite != null:

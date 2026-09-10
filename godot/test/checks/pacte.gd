@@ -1191,8 +1191,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		machine._augments.refresh_pacte_badges()
 		var badge_rect := Rect2(AugmentDisplay.PACTE_AUGMENT_BADGE_POS,
 			AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE)
-		if not Rect2(24, 42, 112, 66).encloses(badge_rect):
-			failures.append("machine: augment badges must live inside the CRT")
+		if not Rect2(42, 250, 88, 36).encloses(badge_rect):
+			failures.append("machine: augment stickers must live on the lower cabinet")
 		var augment_row_end: float = AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x \
 			+ float(AugmentDisplay.PACTE_AUGMENT_BADGE_MAX - 1) * AugmentDisplay.PACTE_AUGMENT_BADGE_PITCH \
 			+ AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE.x

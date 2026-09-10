@@ -94,8 +94,8 @@ Resources and currencies:
 3. Enter the machine with 15 CHIPS/SPINS and the selected Pacte power. No power is
    granted implicitly; Reroll, Shift, and the other run powers must be selected in
    Pacte. The run begins with no pre-run consumables.
-   A compact blue contour around the selected augment icon sits inside the machine
-   TV header at (32,45); tapping it opens the active Pacte augment(s)' names and
+   Worn-paper augment stickers sit on the lower red cabinet beneath the controls;
+   holding one opens the active Pacte augment(s)' names and
    descriptions.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
@@ -268,7 +268,7 @@ Resources and currencies:
 - Using a power spends it; the three reel lamps restore one random spent power per 30
   run-Lucidity coins. Score payouts—including Cocktail rarity points—also advance the
   wealth-linked 10-point bank. Each 10-point gauge step launches the four-frame `power
-  coin animation` from the wealth odometer, then sends the real power coin to the power
+  coin animation` from the cash outlet, then sends the real power coin to the power
   lamps above the reels, filling left to right at 10, 20 and 30. The old side gauge
   is removed. A successful restore flashes all three lamps and clears the fill;
   without an eligible spent power or restore charge, the lamps hold full until
@@ -502,10 +502,12 @@ Resources and currencies:
   metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
   The CRT groups the dealer at (34,47), TARGET at the upper right, rolling wealth
   drums at (74,61), and the frenzy multiplier/loss warning at (74,77). Augment
-  badges sit at y90 on the right; item durations retain their row at y100.
-  Payout and targeting callouts hide the portrait, score, target, normal multiplier,
-  and augment badges until they finish. FREE SPIN replaces only the target number
-  and title. Target-payout digit snapshots and power coins launch from the CRT.
+  stickers are 20px paper squares at (48,260), (74,260), and (100,260), with 14px
+  icons and hold-for-details behavior; item durations retain their row at y100.
+  Payout and targeting callouts hide the portrait, score, target, and normal multiplier
+  until they finish. Cabinet stickers remain visible during CRT callouts.
+  FREE SPIN replaces only the target number and title. Target-payout digit snapshots
+  launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
   The shelf number is the single remaining-spin display. Spin-gain fly-ins land

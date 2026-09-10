@@ -707,8 +707,8 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			failures.append("issue76: the power-bar chip flies the wrong currency (%s)"
 				% String(chip.texture.resource_path).get_file())
 		chip.queue_free()
-	if machine.WEALTH_COIN_ORIGIN == machine._cash_tray_pos():
-		failures.append("issue76: wealth power coins still start in the cash tray")
+	if machine.POWER_COIN_ORIGIN != machine._cash_tray_pos():
+		failures.append("issue76: power coins must start at the cash outlet")
 	# The flight must begin where the pop's last frame leaves the coin, or the coin jumps at
 	# the hand-off. Measured off the sheet so a re-exported animation is caught here.
 	var pop_sheet := Image.load_from_file(
@@ -724,9 +724,9 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 				lo.x = mini(lo.x, x); lo.y = mini(lo.y, y)
 				hi.x = maxi(hi.x, x); hi.y = maxi(hi.y, y)
 		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5) + CoinFlights.POP_OFFSET
-		if hi.x >= 0 and machine.WEALTH_COIN_ORIGIN.distance_to(pop_end) > 1.01:
+		if hi.x >= 0 and machine.POWER_COIN_ORIGIN.distance_to(pop_end) > 1.01:
 			failures.append("issue76: power coin flight starts at %s but the pop ends at %s"
-				% [str(machine.WEALTH_COIN_ORIGIN), str(pop_end)])
+				% [str(machine.POWER_COIN_ORIGIN), str(pop_end)])
 
 	# Frame for a banked-score value.
 	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 3, 50: 3 }

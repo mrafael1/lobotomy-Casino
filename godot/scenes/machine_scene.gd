@@ -218,10 +218,7 @@ const DEALER_OVERLAY_Z_INDEX := 100
 # y242..278, so a 14px badge at x22 leaves a 3px gap and centres on it. The suit belongs
 # beside the number the run is played for, not off in the top strip with the settings.
 ## The suit's own gold, on the badge and on the bubble it raises.
-# Pacte augment badge: a compact blue contour around the active card icon stays
-# inside the TV; it is shifted 10px right from the original left-side placement.
-# Pressing it opens the current card(s) and effects.
-# Held augment sockets occupy the CRT's right column beneath the multiplier.
+# Pacte augment stickers occupy the lower cabinet. Holding one shows card details.
 const AUGMENT_PLATE_SHEET := "machine_polished/augments.svg"
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
@@ -236,8 +233,8 @@ const JACKPOT_ROLL_TAIL := 0.25 # a beat of stillness after the reels land
 const COIN_TRAY := Vector2(80.0, 290.0)
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
-# The translated pop sheet hands its final frame to the flight above the CRT drums.
-const WEALTH_COIN_ORIGIN := Vector2(97.0, 62.0)
+# The translated pop sheet hands its final frame to the flight at the cash outlet.
+const POWER_COIN_ORIGIN := COIN_TRAY + CASH_COIN_TRAY_OFFSET
 # The chip's own size, asset, flight time and pop sheet are CoinFlights' — they
 # describe the flight, not where it starts. The jackpot pays in the machine's own
 # currency, so its spray is lucidity coins — the same coin the dealer and upgrade
@@ -3332,7 +3329,7 @@ func _on_power_coin_pop_finished(pop: Sprite2D, stepd: Dictionary) -> void:
 	_start_power_bank_coin_flight(stepd, 0.0)
 
 func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
-	var coin := _coins.make_power_coin(WEALTH_COIN_ORIGIN)
+	var coin := _coins.make_power_coin(POWER_COIN_ORIGIN)
 	if coin == null:
 		_apply_power_bank_step(stepd)
 		_on_power_coin_landed()
@@ -3341,7 +3338,7 @@ func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(
-			_coins.drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN,
+			_coins.drive_power_coin.bind(coin, POWER_COIN_ORIGIN,
 				POWER_LAMP_CENTERS[clampi(int(stepd["frame"]) - 1, 0, 2)]),
 			0.0, 1.0, CoinFlights.POWER_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
