@@ -39,6 +39,44 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
+	assert(_scene.get_node_or_null("PowerBar") == null, "Side power gauge must be removed")
+	_scene._set_sequence_lock(true)
+	run.scoreEarned = 0
+	run.lucidityCoins = 0
+	run.abilitiesUsed = ["shift"]
+	run.powerRestoreCharges = 1
+	_scene._power_seen_lucidity = 0
+	_scene._power_bar_score = 0
+	for coins in [10, 20, 30]:
+		run.lucidityCoins = coins
+		_scene._advance_power_bar()
+		await create_timer(0.93).timeout
+		await _capture("01-power-lamps-%02d" % coins)
+		if coins < 30:
+			assert(_scene._power_bar_frame == coins / 10, "Wrong lamp activated")
+			assert(run.abilitiesUsed.has("shift"), "Power restored before the third lamp")
+	assert(not run.abilitiesUsed.has("shift"), "Third lamp did not restore the spent power")
+	await create_timer(0.8).timeout
+	assert(_scene._power_bar_frame == 0, "Restore did not reset the lamps")
+	await _capture("01-power-lamps-reset")
+	run.lucidityCoins = 60
+	_scene._advance_power_bar()
+	await create_timer(1.2).timeout
+	assert(_scene._power_bar_frame == 3, "Full lamps must wait when no restore is available")
+	await _capture("01-power-lamps-waiting")
+	run.powerRestoreCharges = 1
+	run.abilitiesUsed = ["reroll"]
+	_scene._advance_power_bar()
+	await create_timer(1.2).timeout
+	assert(not run.abilitiesUsed.has("reroll"), "Banked lamps required extra coins to restore")
+	_scene._stop_restore_flash()
+	run.powerRestoreCharges = 1
+	run.lucidityCoins = 0
+	run.scoreEarned = 40
+	_scene._power_seen_lucidity = 40
+	_scene._power_bar_score = 0
+	_scene._set_power_bar_frame(0)
+	_scene._set_sequence_lock(false)
 	for count in [0, 1, 3, _scene.MAX_RUN_SPINS]:
 		run.neurons = count
 		_scene._update_hud()

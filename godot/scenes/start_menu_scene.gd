@@ -106,7 +106,7 @@ const AUGMENTED_DESCRIPTIONS := {
 - You have 15 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the "Reroll" power.
-- 1 random power restores every 50 coins obtained."""
+- 1 random power restores every 30 coins obtained."""
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")

@@ -959,7 +959,7 @@ func _check_restore_cap_181(machine: Node, run_store: Node, failures: Array) -> 
 		if bool(stepd["restore"]):
 			failures.append("issue181: the gauge restored a power with no charge left")
 			break
-	if int(blocked["score"]) != EconomyConst.LUCIDITY_COINS_PER_RESTORE - machine._power_bar_step():
+	if int(blocked["score"]) != EconomyConst.LUCIDITY_COINS_PER_RESTORE:
 		failures.append("issue181: a capped gauge did not hold at 4/5 (score %d)"
 			% int(blocked["score"]))
 

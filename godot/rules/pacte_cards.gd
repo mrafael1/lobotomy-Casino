@@ -138,7 +138,7 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_adrenaline", "name": "ADRENALINE",
-		"description": "POWER RESTORE THRESHOLD: 30 LUCIDITY.", "pool": "augment",
+		"description": "POWER RESTORE THRESHOLD: 18 LUCIDITY.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		# Glyph spans x[8,32) y[799,845); widen/heighten by one so the right column
 		# and bottom row are not clipped.

@@ -244,27 +244,26 @@ const WEALTH_COIN_ORIGIN := Vector2(97.0, 62.0)
 # screens count credits in — not power chips.
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
-# six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
+# four horizontal frames, lamps empty (0) -> full (3), filling left to right. A power coin
 # flies from the wealth odometer to the bar every 10 power points and advances one frame;
 # at the full frame the gauge resets and a random restorable power comes back — the
 # button re-enabling is the feedback, no coin walks back out to it. Each bank coin first
 # plays the authored four-frame pop sheet.
-# The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
+# The 4 frames span one restore threshold (coins_per_power_restore), so 3 steps = 30
 # coins = 10/step.
-const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
-const POWER_BAR_HFRAMES := 6
+const POWER_BAR_SHEET := "machine_polished/power_lamps.svg"
+const POWER_BAR_HFRAMES := 4
 const POWER_BAR_VFRAMES := 1
-const POWER_BAR_FRAMES := 6
-const POWER_BAR_CENTER := Vector2(137.0, 84.0) # coin-to-bar landing point (gauge middle)
+const POWER_BAR_FRAMES := 4
+const POWER_LAMP_CENTERS: Array[Vector2] = [Vector2(43.5, 159), Vector2(75.5, 159), Vector2(107.5, 159)]
 const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
-# With no restorable power the gauge stops one frame short of full so it never fake-fills.
-const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
+# With no eligible restore, all three lamps hold full until restoration is possible.
+const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 1
 
-# The restore charge read out as a light beside the gauge (issue #181). Native
+# The restore charge reads as a slim rim beneath the third lamp. Native
 # full-canvas sheet, one frame per banked charge: frame 0 lit, frame 1 dark. With the
-# light out the gauge can still bank points but never completes — it holds at 4/5 until
-# the next spin puts the light back.
-const RESTORE_CAP_SHEET := "machine new view/restore_cap.png"
+# light out the lamps can still bank points and hold full until a charge returns.
+const RESTORE_CAP_SHEET := "machine_polished/restore_ready.svg"
 const RESTORE_CAP_FRAMES := 2
 
 # Augmented spade (issue #111) makes a spent charge take two spins to come back, so the
@@ -276,8 +275,8 @@ const RESTORE_CAP_FRAMES := 2
 # the clear strip directly beneath it.
 const RESTORE_SPADE_WAITING_TINT := Color(0.45, 0.62, 1.0)
 const RESTORE_CYCLE_PIP_RECTS: Array[Rect2] = [
-	Rect2(143.0, 71.0, 3.0, 2.0),
-	Rect2(148.0, 71.0, 3.0, 2.0),
+	Rect2(102.0, 163.0, 3.0, 1.0),
+	Rect2(108.0, 163.0, 3.0, 1.0),
 ]
 const RESTORE_CYCLE_PIP_ON := Color(1.0, 0.86, 0.2)
 const RESTORE_CYCLE_PIP_OFF := Color(0.24, 0.26, 0.34)
@@ -1274,7 +1273,7 @@ func _build_spins_left_label() -> void:
 	legend.add_theme_color_override("font_color", Color("#9baa88"))
 	add_child(legend)
 
-## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
+## The power-restore lamps: a native full-canvas overlay sheet (4x1 = 4 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
 ## The authored augment sockets on the power bar — the divider after the third power
 ## emplacement plus one chip bed per held augment. Three frames: frame N shows N+1 sockets,
@@ -1296,11 +1295,11 @@ func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
 	if tex == null:
 		return
-	_power_bar_sprite = _authored_sprite("PowerBar")
+	_power_bar_sprite = _authored_sprite("PowerLamps")
 	var authored := _power_bar_sprite != null
 	if _power_bar_sprite == null:
 		_power_bar_sprite = Sprite2D.new()
-		_power_bar_sprite.name = "PowerBar"
+		_power_bar_sprite.name = "PowerLamps"
 		add_child(_power_bar_sprite)
 	_power_bar_sprite.texture = tex
 	_power_bar_sprite.hframes = POWER_BAR_HFRAMES
@@ -1366,7 +1365,7 @@ func _refresh_reserve_glow() -> void:
 ## reads as discharging into the power, without needing a second authored asset.
 func _build_restore_cap() -> void:
 	_restore_cap_sprite = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES)
-	_restore_cap_glow = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES, 0)
+	_restore_cap_glow = _build_full_canvas_sheet("machine_polished/power_restore_flash.svg", 1)
 	if _restore_cap_glow != null:
 		_restore_cap_glow.visible = false
 		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -3193,10 +3192,9 @@ func _try_start_power_coin_flow() -> void:
 		return
 	_advance_power_bar()
 
-## Pure: plan the coins for power points gained since the gauge last caught up. Each coin banks
-## Pending restore entries are prefixed so their reset happens before this point fill.
-## one step; a full gauge is only completed when a restore is available (else it caps at 4/5 and
-## the rest of the gain is discarded — never fake-fills or loops). Returns { steps:
+## Pure: plan lamp steps for power points gained since the display last caught up.
+## Pending restores consume their cycle before the remaining points fill the lamps.
+## A full bank waits for an eligible restore and discards excess gains. Returns { steps:
 ## [{frame, restore}], score: <final banked score>, seen: <power points now> }.
 func _compute_power_plan() -> Dictionary:
 	var power_points := _power_point_total()
@@ -3210,15 +3208,26 @@ func _compute_power_plan() -> Dictionary:
 	# the point fill from the reset gauge. They must not also count as bar-driven restores.
 	var pending_restores := RunStateStore.pendingPowerRestores.size()
 	for _restore_index in pending_restores:
+		for lamp in range(_bar_frame_for_score(score) + 1, POWER_BAR_FRAMES - 1):
+			out.append({ "frame": lamp, "restore": false })
 		out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
-	if pending_restores > 0:
+		# The queued restore already consumed this cycle's points in the store.
+		gain = maxi(0, score + gain - per)
 		score = 0
 	# Only powers still in abilitiesUsed are available for a later bar-completion restore,
 	# and only while a restore charge is banked (issue #181 soft cap). A spent charge
-	# reads exactly like an empty pool of powers: the gauge stops at 4/5 rather than
-	# completing into a restore it is not allowed to hand out.
+	# reads exactly like an empty pool of powers: the lamps hold full without
+	# handing out a restore until a charge returns.
 	var avail := mini(RunStateStore.abilitiesUsed.size(), RunStateStore.restore_budget_left())
 	var g := gain
+	# A completed bank waits for an eligible spent power without requiring more coins.
+	if score >= per:
+		if avail > 0:
+			out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
+			avail -= 1
+			score = 0
+		else:
+			return { "steps": out, "score": per, "seen": power_points }
 	while g > 0:
 		var to_next := step - (score % step)
 		if g < to_next:
@@ -3233,7 +3242,8 @@ func _compute_power_plan() -> Dictionary:
 				avail -= 1
 				score = 0 # restore resets the gauge; no backlog carries over
 			else:
-				score = per - step # cap at 4/5
+				score = per # all lamps remain lit until a restore becomes available
+				out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": false })
 				g = 0 # discard the rest of the gain
 				break
 		else:
@@ -3331,7 +3341,8 @@ func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(
-			_coins.drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
+			_coins.drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN,
+				POWER_LAMP_CENTERS[clampi(int(stepd["frame"]) - 1, 0, 2)]),
 			0.0, 1.0, CoinFlights.POWER_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
 

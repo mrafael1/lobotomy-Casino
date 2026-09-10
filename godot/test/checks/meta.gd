@@ -30,7 +30,7 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	else:
 		if not body.bbcode_enabled:
 			failures.append("tutorial: RichTextLabel BBCode is not enabled")
-		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "15 spins", "50 coins"]:
+		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "15 spins", "30 coins"]:
 			if not body.text.contains(phrase):
 				failures.append("tutorial: missing copy phrase '%s'" % phrase)
 				break

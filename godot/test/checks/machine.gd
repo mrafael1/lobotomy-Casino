@@ -18,7 +18,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	for rel in [
 		"machine new view/machine_neon.png",
 		"machine new view/neon_machine_jackpot.png",
-		"machine new view/neon_machine_power_bar.png",
+		"machine_polished/power_lamps.svg",
 	]:
 		if not ResourceLoader.exists("res://assets/images/" + rel):
 			failures.append("machine art: missing native asset %s" % rel)
@@ -99,16 +99,16 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or multiplier.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: multiplier is not a 6-frame native nearest-neighbor sprite")
 
-	var power_bar := machine.get_node_or_null("PowerBar") as Sprite2D
+	var power_bar := machine.get_node_or_null("PowerLamps") as Sprite2D
 	if power_bar == null:
 		failures.append("machine art: native power bar node is missing")
 	elif power_bar.texture == null \
-			or Vector2i(power_bar.texture.get_width(), power_bar.texture.get_height()) != Vector2i(960, 320) \
-			or power_bar.hframes != 6 \
+			or Vector2i(power_bar.texture.get_width(), power_bar.texture.get_height()) != Vector2i(640, 320) \
+			or power_bar.hframes != 4 \
 			or power_bar.vframes != 1 \
 			or power_bar.scale != Vector2.ONE \
 			or power_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: power bar is not a 6-frame native sprite")
+		failures.append("machine art: power bar is not a 4-frame native sprite")
 
 	var power_callout := machine.get_node_or_null("PowerCallout") as Sprite2D
 	if power_callout == null:
@@ -181,8 +181,8 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
 		if machine_art == null or machine_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: %s is not nearest-neighbor filtered" % node_name)
-	if float(machine.POWER_BAR_CENTER.x) < 80.0:
-		failures.append("machine art: power bar coin target is still on the left")
+	if machine.get_node_or_null("PowerBar") != null:
+		failures.append("machine art: old side power gauge is still active")
 
 
 ## Issue #181: the TV's objective readout is two authored sheets — a goal frame per
@@ -729,7 +729,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 				% [str(machine.WEALTH_COIN_ORIGIN), str(pop_end)])
 
 	# Frame for a banked-score value.
-	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
+	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 3, 50: 3 }
 	for score in expect:
 		if machine._bar_frame_for_score(score) != expect[score]:
 			failures.append("issue76: frame for score %d = %d, expected %d" % [score, machine._bar_frame_for_score(score), expect[score]])
@@ -775,10 +775,9 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	run_store.abilitiesUsed = []
 	var restore_first: Dictionary = machine._compute_power_plan()
 	var restore_first_steps: Array = restore_first["steps"]
-	if restore_first_steps.size() != 2 \
+	if restore_first_steps.size() != 1 \
 			or not bool(restore_first_steps[0]["restore"]) \
-			or bool(restore_first_steps[1]["restore"]) \
-			or int(restore_first["score"]) != 10:
+			or int(restore_first["score"]) != 0:
 		failures.append("issue174: queued restore did not precede the point fill")
 
 	run_store.scoreEarned = 60
@@ -788,7 +787,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	for stepd in restore_no_double_steps:
 		if bool(stepd["restore"]):
 			restore_step_count += 1
-	if restore_step_count != 1 or int(restore_no_double["score"]) != 40:
+	if restore_step_count != 1 or int(restore_no_double["score"]) != 30:
 		failures.append("issue174: queued restore was counted again by the power bar")
 
 	# Cocktail can award points on a miss, which opens the combo-loss warning. The warning
@@ -846,25 +845,24 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			cap_restores += 1
 	if cap_restores != 0:
 		failures.append("issue76: gauge planned a restore with no restorable power")
-	if int(cap["score"]) != 40:
+	if int(cap["score"]) != 30:
 		failures.append("issue76: no-restore gauge did not cap at 4/5 (score %d, expected 40)" % int(cap["score"]))
 
 	# A queued restore fires first, then the same gain starts filling the reset gauge.
-	machine._power_bar_score = 40
+	machine._power_bar_score = 20
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = ["reroll"]
 	run_store.lucidityCoins = 110
 	var atcap: Dictionary = machine._compute_power_plan()
-	if (atcap["steps"] as Array).size() != 2 \
-			or not bool((atcap["steps"] as Array)[0]["restore"]) \
-			or bool((atcap["steps"] as Array)[1]["restore"]):
+	if (atcap["steps"] as Array).size() != 1 \
+			or not bool((atcap["steps"] as Array)[0]["restore"]):
 		failures.append("issue174: 4/5 + 10 should restore before the new point coin")
-	if int(atcap["score"]) != 10:
+	if int(atcap["score"]) != 0:
 		failures.append("issue174: point fill after restore should leave 10 banked, got %d" % int(atcap["score"]))
 
 	# At 4/5 with NO pending but a SPENT ability, scoring 10 completes the fill and the
 	# gauge restores the spent power itself (e.g. Water at 4/5 with a used power).
-	machine._power_bar_score = 40
+	machine._power_bar_score = 20
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = ["reroll"]
@@ -874,25 +872,25 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		failures.append("issue76: 4/5 + 10 with a spent power should restore it (bar-driven)")
 
 	# At 4/5, scoring 10 with NOTHING restorable => no coin, gauge stays 4/5, excess discarded.
-	machine._power_bar_score = 40
+	machine._power_bar_score = 30
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = []
 	run_store.lucidityCoins = 110
 	var stay: Dictionary = machine._compute_power_plan()
-	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 40:
+	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 30:
 		failures.append("issue76: 4/5 with nothing restorable should stay at 4/5 (score %d)" % int(stay["score"]))
 
 	# A restore step consumes a pending restore first (front, once).
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = ["reroll", "shift"]
-	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	machine._apply_power_bank_step({ "frame": 3, "restore": true })
 	if run_store.pendingPowerRestores != ["shift"]:
 		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
 	# With no pending but a spent ability, the restore step brings that ability back.
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = ["shift"]
-	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	machine._apply_power_bank_step({ "frame": 3, "restore": true })
 	if run_store.abilitiesUsed.has("shift"):
 		failures.append("issue76: bar-driven restore did not bring the spent ability back")
 	machine._power_coins_in_flight = 0

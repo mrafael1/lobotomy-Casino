@@ -73,8 +73,8 @@ Resources and currencies:
   the run score before handing the run to the between-machine route offer. Target and
   loss breaks use the same route choices; the full Pacte ritual is only available when
   a run starts.
-- **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 50 coins
-  restores one random spent power (30 with Adrenaline). Gold pays for route cards,
+- **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 30 coins
+  restores one random spent power (18 with Adrenaline). Gold pays for route cards,
   Augment/Power build cards, Shop investments, and Shop consumables; it also pays for
   live-dealer offer rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save,
   halved by the spade modifier) and banked into the wallet.
@@ -237,8 +237,8 @@ Resources and currencies:
 - **Tunnel Vision** — hides the third reel and increases rewards by 50%.
 - **How to Cheat** — a solo visible symbol counts as a pair; all pair payouts use
   a x0.6 multiplier.
-- **Adrenaline** — lowers the power-restore threshold from 50 to 30 Lucidity;
-  its six-frame gauge therefore advances in six-point steps.
+- **Adrenaline** — lowers the power-restore threshold from 30 to 18 Lucidity;
+  the three reel lamps advance at 6, 12 and 18 coins.
 - **Passive Gain** — adds 10 run Lucidity on every spin, including misses.
 - **Reward Amplification** — selecting a Reward+ Pacte card opens a symbol-only
 	picker so the boosted symbol is chosen during the ritual; its title and close
@@ -265,11 +265,14 @@ Resources and currencies:
   fallbacks if an authored frame is unavailable) with
   a short beeping pulse; the callout stays up while targeting is armed and hides
   when the target is picked or the selection is cancelled.
-- Using a power spends it; the power gauge restores one random spent power per 50
+- Using a power spends it; the three reel lamps restore one random spent power per 30
   run-Lucidity coins. Score payouts—including Cocktail rarity points—also advance the
   wealth-linked 10-point bank. Each 10-point gauge step launches the four-frame `power
   coin animation` from the wealth odometer, then sends the real power coin to the power
-  bar. The diamond modifier caps power use at two per spin.
+  lamps above the reels, filling left to right at 10, 20 and 30. The old side gauge
+  is removed. A successful restore flashes all three lamps and clears the fill;
+  without an eligible spent power or restore charge, the lamps hold full until
+  restoration is possible. The diamond modifier caps power use at two per spin.
 
 ### Consumables and run items
 

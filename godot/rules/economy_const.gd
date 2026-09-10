@@ -29,7 +29,7 @@ const WEALTH_TARGETS := [100, 200, 500, 800, 1500, 2500, 3500, 5000]
 const WEALTH_SCORE_THRESHOLD := 5000
 const EXIT_LUCIDITY_THRESHOLD := 750
 const LUCIDITY_OBJECTIVE := 1000
-const LUCIDITY_COINS_PER_RESTORE := 50
+const LUCIDITY_COINS_PER_RESTORE := 30
 # Soft cap on the score-driven power restore economy, held as charges: each score-driven
 # restore spends one, and a spin gives one back. The pool holds a single charge and so
 # cannot be banked — a spin restores at most one power however much it scores, and a spin
@@ -135,7 +135,7 @@ static func overflow_after_tax(overflow: int, target: int, anger_rate := 0.0) ->
 	return int(overflow_bill(overflow, target, anger_rate)["net"])
 
 
-# The Nth coin (50, 100, …) is a "power coin". Pass the total AFTER counting it.
+# The Nth coin (30, 60, …) is a "power coin". Pass the total AFTER counting it.
 static func is_power_coin(total_after_coin: int,
 		coins_per_restore: int = LUCIDITY_COINS_PER_RESTORE) -> bool:
 	var threshold := maxi(1, coins_per_restore)
