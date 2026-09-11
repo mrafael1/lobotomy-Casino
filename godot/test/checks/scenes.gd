@@ -615,6 +615,36 @@ func _check_route_shop_layout(run_store: Node, failures: Array) -> void:
 	run_store.lucidityCoins = prev_gold
 	run_store.runShopUpgrades = prev_upgrades
 
+## The bonus header has a translucent plate behind it. Keep the live title and
+## balance above that plate so the route never opens with unreadable dark text.
+func _check_route_bonus_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_claimed := bool(run_store.routeBonusClaimed)
+	var prev_reward := String(run_store.routeBonusRewardId)
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_BONUS
+	run_store.routeBonusClaimed = false
+	run_store.routeBonusRewardId = ""
+	var bonus := (load("res://scenes/route_bonus_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(bonus)
+	await process_frame
+	var header := bonus.get_node_or_null("BonusHeader") as Panel
+	var title := bonus.get_node_or_null("BonusTitle") as Label
+	var balance := bonus.get_node_or_null("BonusBalance") as Label
+	if header == null or title == null or balance == null:
+		failures.append("route bonus: header labels or plate are missing")
+	else:
+		if title.z_index <= header.z_index or balance.z_index <= header.z_index:
+			failures.append("route bonus: header plate is covering its live text")
+		if not title.visible or not balance.visible:
+			failures.append("route bonus: header text is hidden at idle")
+	bonus.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.routeBonusClaimed = prev_claimed
+	run_store.routeBonusRewardId = prev_reward
+
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
 	for label_node in build.find_children("*", "Label", true, false):
 		var label := label_node as Label
