@@ -12,11 +12,11 @@ prompts remain separate runtime nodes so the ritual can still animate and save
 its state. The high-resolution file is retained as the editable source master;
 the native derivative is the exported runtime asset.
 
-The matching `augment_deck_native.svg` and `power_deck_native.svg` stacks are
-separate crisp overlays positioned in the painted upper wells at (13,109) and
-(118,109). The painted table's three choice recesses and two lower placement
-wells are intentionally left unobstructed; legacy proposition and emplacement
-plates stay hidden while their interaction nodes remain available to gameplay.
+The matching generated deck stacks are separate crisp PNG overlays positioned
+in the painted upper wells at (13,109) and (119,109). Generated card fronts and
+backs are sliced into the native `cards_native.png` atlas; the painted table's
+three choice recesses and two lower placement wells remain unobstructed while
+live card symbols and descriptions stay runtime layers.
 
 References: `tmp/preview.jpg` (style) and
 `godot/assets/images/pacte_scene/pacte_scene.png` (composition).

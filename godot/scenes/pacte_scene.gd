@@ -36,8 +36,8 @@ const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
 # code and save/reveal state. The painted master already contains the table's
 # three card recesses and the two lower placement wells, so only live card faces
 # and compact selected-card views are drawn above it.
-const AUGMENT_DECK_ASSET := "pacte_polished/augment_deck_native.svg"
-const POWER_DECK_ASSET := "pacte_polished/power_deck_native.svg"
+const AUGMENT_DECK_ASSET := "pacte_polished/generated_set/augment_deck_native.png"
+const POWER_DECK_ASSET := "pacte_polished/generated_set/power_deck_native.png"
 const AUGMENT_DECK_POSITION := Vector2(13.0, 109.0)
 const POWER_DECK_POSITION := Vector2(119.0, 109.0)
 const DEALER_ASSET := "pacte_scene/dealer.png"
@@ -516,8 +516,8 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
-		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
+	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.stretch_mode = TextureRect.STRETCH_SCALE
 	front.position = Vector2.ZERO
@@ -591,7 +591,8 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var back := TextureRect.new()
 	back.name = "Back"
-	back.texture = UiKit.atlas(PacteCards.sheet_for_pool(kind), PacteCards.back_rect_for_pool(kind))
+	back.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_BACK_RECT if kind == "augment" else PacteCards.GENERATED_POWER_BACK_RECT)
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -599,8 +600,8 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	view.add_child(back)
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
-		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
+	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE

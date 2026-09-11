@@ -873,9 +873,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: painted native scene master is not the active crisp base layer")
 	var deck_specs: Array[Dictionary] = [
 		{"node": pacte.get_node_or_null("AugmentDeck"),
-			"asset": "augment_deck_native.svg", "position": Vector2(13.0, 109.0)},
+			"asset": "generated_set/augment_deck_native.png", "position": Vector2(13.0, 109.0)},
 		{"node": pacte.get_node_or_null("PowerDeck"),
-			"asset": "power_deck_native.svg", "position": Vector2(119.0, 109.0)},
+			"asset": "generated_set/power_deck_native.png", "position": Vector2(119.0, 109.0)},
 	]
 	for deck_spec in deck_specs:
 		var deck := deck_spec["node"] as Sprite2D
@@ -886,6 +886,25 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 				or deck.scale != Vector2.ONE:
 			failures.append("pacte: %s deck is not aligned to its painted upper recess" \
 				% String(deck_spec["asset"]))
+	var card_art := pacte._make_card_view("augment_book", "augment") as Control
+	var card_front := card_art.get_node_or_null("Front") as TextureRect
+	var card_back := card_art.get_node_or_null("Back") as TextureRect
+	if card_front == null or card_front.texture == null \
+			or not (card_front.texture as AtlasTexture).atlas.resource_path.ends_with("generated_set/cards_native.png") \
+			or (card_front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT \
+			or card_back == null or card_back.texture == null \
+			or (card_back.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_BACK_RECT:
+		failures.append("pacte: generated augment card front/back artwork is not active")
+	card_art.free()
+	var power_art := pacte._make_card_view("shift", "power") as Control
+	var power_front := power_art.get_node_or_null("Front") as TextureRect
+	var power_back := power_art.get_node_or_null("Back") as TextureRect
+	if power_front == null or power_front.texture == null \
+			or (power_front.texture as AtlasTexture).region != PacteCards.GENERATED_POWER_FRONT_RECT \
+			or power_back == null or power_back.texture == null \
+			or (power_back.texture as AtlasTexture).region != PacteCards.GENERATED_POWER_BACK_RECT:
+		failures.append("pacte: generated power card front/back artwork is not active")
+	power_art.free()
 	var pattern_view := pacte._make_card_view("augment_pattern_recognition", "augment") as Control
 	var pattern_icon := pattern_view.get_node_or_null("Icon") as AnimatedSprite2D
 	if pattern_icon == null or pattern_icon.sprite_frames == null \

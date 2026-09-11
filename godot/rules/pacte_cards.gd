@@ -15,6 +15,14 @@ const POWER_FRONT_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
 # renders locked entries with it, and Pacte deals every card face-down with it.
 const AUGMENT_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
 const POWER_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
+## Pacte's painted card treatment is kept separate from the legacy icon sheets above.
+## Card faces are intentionally blank in their centre so the scene can place the live
+## card icon and runtime description without baking gameplay text into the artwork.
+const GENERATED_CARD_SHEET := "pacte_polished/generated_set/cards_native.png"
+const GENERATED_AUGMENT_FRONT_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
+const GENERATED_AUGMENT_BACK_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
+const GENERATED_POWER_FRONT_RECT := Rect2(78.0, 0.0, 39.0, 61.0)
+const GENERATED_POWER_BACK_RECT := Rect2(117.0, 0.0, 39.0, 61.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const POOLS: Array[String] = ["augment", "power"]
 

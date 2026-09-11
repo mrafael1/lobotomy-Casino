@@ -15,6 +15,10 @@ they are nearest-sampled to the shared 16px stash/offer size.
   Target native card size: 39x61. Names, descriptions and gameplay symbols
   remain runtime elements.
 
+The generated card and deck crops are now active in Pacte:
+`cards_native.png`, `augment_deck_native.png`, and `power_deck_native.png`.
+The legacy SVG deck placeholders are no longer referenced by the scene.
+
 The generated item sheet is sliced by `tools/slice_item_sheet.gd` into
 `tobacco.png`, `serum.png`, `white_powder.png`, `potion.png`, `tea.png`,
 `energy_drink.png`, `cocktail.png`, `water.png`, and `red_pill.png`.
