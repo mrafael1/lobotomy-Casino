@@ -64,6 +64,10 @@ func _run() -> void:
 	assert(title.position.y == target.position.y and title.get_theme_font_size("font_size") == target.get_theme_font_size("font_size"), "Target title and value must share a baseline and font size")
 	assert(screen.encloses(title.get_rect()) and screen.encloses(target.get_rect()), "Target text must fit inside CRT glass")
 	assert((_scene.get_node("stash") as TextureRect).texture == null, "Stash wells belong to cabinet material, not an overlay")
+	for index in range(2):
+		var item := _scene.get_node("stash/StashSlot%d/Icon" % (index + 1)) as TextureRect
+		var aperture := Rect2(105 + index * 19, 216, 14, 14)
+		assert(aperture.encloses(item.get_global_rect()), "Item art must fit its square cabinet aperture")
 	run.wealthTargetIndex = 7
 	_scene._refresh_target_readout()
 	await process_frame

@@ -516,6 +516,8 @@ Resources and currencies:
   The lower shelf uses a shared sloping plate with deep beveled wells, a projecting
   metal front edge and a red enamel fascia, following the preview's construction.
   SPIN has smaller lettering within a broad ivory face fitted to that slope.
+  Its mounting frame is drawn only in the cabinet; button states draw the moving
+  cap. Item wells have matching 14x14 square apertures containing the live icons.
   Counter and stash recesses belong to that surface; stash nodes carry only item
   icons and input, with no tray texture overlay. SPIN retains an independent
   native face and press states over its cabinet recess. Worn, uneven sticker

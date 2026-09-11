@@ -10,6 +10,8 @@ The shelf has a tucked back edge, projecting front bevel and red enamel fascia.
 Layered dark wells follow the plate's slope; their highlights, screws and wear
 are cabinet pixels. The smaller SPIN inscription leaves a broad ivory face visible.
 The stash container has no texture; only its item icons and input are live.
+The matching item apertures are 14x14 at (105,216) and (124,216). SPIN's frame
+is drawn once in the cabinet; the button sheet supplies only its moving cap.
 Each 16x18 slot owns input around an inset 12x14 item image, leaving the cabinet
 recess visible. Slot margins obey the same use locks as the item image.
 The five `spin_*.svg` states retain a separate native face fitted to the shelf.

@@ -6,11 +6,10 @@ GLYPHS = ['01111100001000001110000010000111110', '111101000110001111101000010000
 for state in ['normal', 'pressed', 'disabled', 'hover', 'focus']:
     disabled = state == 'disabled'
     depression = 2 if state == 'pressed' else 0
-    face = '#969383' if disabled else '#eed9a1'
+    face = '#969383' if disabled else ('#fff0bb' if state == 'hover' else '#eed9a1')
     ink = '#535648' if disabled else '#252b23'
-    rim = '#b4b391' if state in ['hover', 'focus'] else '#777060'
-    art = f'<path d="M5 2H40L43 22L41 24H3L2 22Z" fill="#181e1c"/><path d="M6 3H39L42 21L40 23H4L3 21Z" fill="{rim}"/>'
-    art += '<path d="M7 4H38L40 21H5Z" fill="#242721"/>'
+    # The mounting frame belongs to the cabinet. Only the moving cap is drawn here.
+    art = ''
     art += f'<g transform="translate(0 {depression})"><path d="M8 4H37L39 18L37 20H7L6 18Z" fill="#896840"/>'
     art += f'<path d="M9 5H36L38 17L36 18H8L7 17Z" fill="{face}"/>'
     art += '<path d="M10 5H35V6H10L9 15H8Z" fill="#fff0c5"/><path d="M9 17H36V18H9Z" fill="#c8aa70"/>' if not disabled else ''
