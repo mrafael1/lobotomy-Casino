@@ -39,6 +39,9 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
+	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
+		var face := _scene._spin_button.get_theme_stylebox(state) as StyleBoxTexture
+		assert(face.texture.resource_path.ends_with("preview_spin_%s.png" % state), "SPIN must use extracted preview art")
 	var beacon := _scene.get_node("Jackpot") as Sprite2D
 	assert(beacon.texture.resource_path.ends_with("jackpot_beacon.svg"), "Jackpot must use the cabinet beacon")
 	_scene._bursts.refresh_jackpot_lamp(true, true)
@@ -66,7 +69,7 @@ func _run() -> void:
 	assert((_scene.get_node("stash") as TextureRect).texture == null, "Stash wells belong to cabinet material, not an overlay")
 	for index in range(2):
 		var item := _scene.get_node("stash/StashSlot%d/Icon" % (index + 1)) as TextureRect
-		var aperture := Rect2(105 + index * 19, 216, 14, 14)
+		var aperture := Rect2(102 + index * 18, 211, 14, 14)
 		assert(aperture.encloses(item.get_global_rect()), "Item art must fit its square cabinet aperture")
 	run.wealthTargetIndex = 7
 	_scene._refresh_target_readout()

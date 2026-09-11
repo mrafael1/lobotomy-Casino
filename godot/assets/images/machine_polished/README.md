@@ -4,21 +4,21 @@ The painted cabinet is registered to a native 160x320 canvas by
 `painted_cabinet.gdshader`. `apertures.svg` defines independent reel holes at
 x33/65/97, y169..202. Live symbols and targeting remain runtime elements.
 
-`cabinet_controls.svg` is sampled by the cabinet material: it supplies the clean
-metal power rail and one sloped shelf with counter, SPIN and two stash recesses.
-The shelf has a tucked back edge, projecting front bevel and red enamel fascia.
-Layered dark wells follow the plate's slope; their highlights, screws and wear
-are cabinet pixels. The smaller SPIN inscription leaves a broad ivory face visible.
-The stash container has no texture; only its item icons and input are live.
-The matching item apertures are 14x14 at (105,216) and (124,216). SPIN's frame
-is drawn once in the cabinet; the button sheet supplies only its moving cap.
-Each 16x18 slot owns input around an inset 12x14 item image, leaving the cabinet
-recess visible. Slot margins obey the same use locks as the item image.
-The five `spin_*.svg` states retain a separate native face fitted to the shelf.
-`tools/generate_spin_face.py` supplies evenly spaced pixel lettering and a two-pixel
-depression. The count and SPINS legend share the left well side by side; their
-bounds are reset after font assignment so default theme minima cannot push them
-over SPIN. Power sockets have matching dark mounting rims in the cabinet surface.
+`cabinet_controls.svg` supplies only the metal power rail at runtime. The lower
+shelf is `preview_shelf.png`, extracted directly from the approved preview, not
+redrawn. `tools/extract_preview_shelf.gd` reduces the archived source once to
+160x320, copies rows 199..237 to y207..245, and clears only the baked-in count,
+item contents and independently animated cap. Bevels, slots, wear, red fascia
+and the static SPINS engraving retain the original pixels.
+The five `preview_spin_*.png` states use the original cap and lettering, with a
+two-pixel depression, dimmed disabled state, brighter hover and a separate focus
+mark that does not cover the depressed cap. The older
+procedural shelf and SPIN SVGs are no longer sampled for these controls.
+The live counter occupies (28,210,14,16). Item images are 12x14 at (103,211)
+and (121,211), within the original recesses; their 16x18 touch slots retain
+margin activation and gameplay locks. The stash container has no tray texture.
+Rebuild with `godot --headless --path godot -s ../tools/extract_preview_shelf.gd`.
+The source archive is tooling only; exported builds use PNGs under `godot/assets`.
 SPIN keeps its 46x28 touch area at (57,210), keyboard activation and targeting pass-through.
 
 The CRT dealer is inset at (36,51), size 30x43, with reactions above the approach

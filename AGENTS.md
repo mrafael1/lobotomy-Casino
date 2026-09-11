@@ -513,11 +513,12 @@ Resources and currencies:
   FREE SPIN replaces only the target number and title. Target-payout digit snapshots
   launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
   The power rail and sloped lower shelf are composed into the cabinet material.
-  The lower shelf uses a shared sloping plate with deep beveled wells, a projecting
-  metal front edge and a red enamel fascia, following the preview's construction.
-  SPIN has smaller lettering within a broad ivory face fitted to that slope.
-  Its mounting frame is drawn only in the cabinet; button states draw the moving
-  cap. Item wells have matching 14x14 square apertures containing the live icons.
+  The lower shelf is copied directly from the approved preview by
+  `tools/extract_preview_shelf.gd`, reduced once to native resolution. Its original
+  plate, corners, wells, wear and red fascia remain intact. The changing count and
+  items are cleared; the original SPIN cap is extracted into five separate PNG
+  states. Do not replace this artwork with procedural approximations.
+  The counter is at (28,210,14,16); 12x14 live items sit at (103,211) and (121,211).
   Counter and stash recesses belong to that surface; stash nodes carry only item
   icons and input, with no tray texture overlay. SPIN retains an independent
   native face and press states over its cabinet recess. Worn, uneven sticker
@@ -526,7 +527,7 @@ Resources and currencies:
   An amber glass jackpot beacon sits on a metal base above the CRT. Its three
   native frames retain the payout hold, lit state and alternating jackpot flash;
   it stays dark until the winning result is announced.
-  SPIN uses evenly spaced native pixel lettering and a two-pixel depressed face;
+  SPIN retains the preview's original lettering and a two-pixel depressed face;
   its full touch area remains unchanged. Dark mounting rims seat the power buttons
   into the metal rail. Visual review includes the 5,000 target and five active items.
   Stash artwork is inset to 12x14 inside each 16x18 touch well. Tapping the empty

@@ -253,10 +253,10 @@ offset_bottom = 140.0
 [node name="stash" type="TextureRect" parent="." unique_id=46112402]
 z_index = 50
 texture_filter = 1
-offset_left = 103.0
-offset_top = 213.0
-offset_right = 139.0
-offset_bottom = 237.0
+offset_left = 100.0
+offset_top = 208.0
+offset_right = 136.0
+offset_bottom = 232.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5

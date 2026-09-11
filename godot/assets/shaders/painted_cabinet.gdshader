@@ -2,6 +2,7 @@ shader_type canvas_item;
 
 uniform sampler2D aperture_mask : filter_nearest, repeat_disable;
 uniform sampler2D control_surface : source_color, filter_nearest, repeat_disable;
+uniform sampler2D preview_shelf : source_color, filter_nearest, repeat_disable;
 
 // Registration in virtual pixels. The painting has no gameplay baked into it;
 // each horizontal assembly is fitted to the existing machine's live controls.
@@ -35,6 +36,7 @@ void fragment() {
 	}
 	vec4 paint = texture(TEXTURE, q / vec2(160.0, 320.0));
 	vec4 controls = texture(control_surface, p / vec2(160.0, 320.0));
+	if (p.y >= 207.0) controls = texture(preview_shelf, p / vec2(160.0, 320.0));
 	paint.rgb = mix(paint.rgb, controls.rgb, controls.a);
 	paint.a *= texture(aperture_mask, p / vec2(160.0, 320.0)).a;
 	COLOR = paint;

@@ -30,10 +30,10 @@ const RESERVE_GLOW_MIN_ALPHA := 0.22
 const RESERVE_GLOW_MAX_ALPHA := 0.72
 const RESERVE_GLOW_PERIOD := 1.1
 const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
-const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
+const SPINS_LEFT_NORMAL_COLOR := Color("#f0e4b4")
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # Remaining spins sit in the left shelf well beside SPIN.
-const SPINS_LEFT_LABEL_RECT := Rect2(27.0, 213.0, 15.0, 18.0)
+const SPINS_LEFT_LABEL_RECT := Rect2(28.0, 210.0, 14.0, 16.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
 # number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
 # y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
@@ -1260,7 +1260,7 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.size = SPINS_LEFT_LABEL_RECT.size
 	var legend := Label.new()
 	legend.name = "SpinsLegend"
-	legend.text = "SPINS"
+	legend.text = "" # The original static SPINS engraving remains in the preview shelf.
 	legend.position = Vector2(43, 219)
 	legend.size = Vector2(11, 8)
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2081,7 +2081,7 @@ func _build_spin_button() -> void:
 	_spin_button.tooltip_text = "SPIN"
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var style := StyleBoxTexture.new()
-		style.texture = load("res://assets/images/machine_polished/spin_%s.svg" % state)
+		style.texture = load("res://assets/images/machine_polished/preview_spin_%s.png" % state)
 		_spin_button.add_theme_stylebox_override(state, style)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
