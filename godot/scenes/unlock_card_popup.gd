@@ -277,8 +277,8 @@ func show_card(card_id: String, pool: String = "") -> bool:
 	_pool = resolved_pool
 	_name_label.text = String(entry.get("name", "")).to_upper()
 	_description_label.text = String(entry.get("description", ""))
-	_back.texture = _atlas(PacteCards.sheet_for_pool(_pool), PacteCards.back_rect_for_pool(_pool))
-	_front.texture = _atlas(PacteCards.sheet_for_pool(_pool), PacteCards.front_rect_for_pool(_pool))
+	_back.texture = _atlas(PacteCards.GENERATED_CARD_SHEET, PacteCards.painted_face_rect(_pool, false))
+	_front.texture = _atlas(PacteCards.GENERATED_CARD_SHEET, PacteCards.painted_face_rect(_pool, true))
 	_apply_icon(entry)
 	visible = true
 	_play_flip()

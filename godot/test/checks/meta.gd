@@ -269,7 +269,7 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	else:
 		var art := unlocked_entry.get_node_or_null("CardArt") as TextureRect
 		var atlas := art.texture as AtlasTexture if art != null else null
-		if atlas == null or atlas.region != PacteCards.AUGMENT_FRONT_RECT:
+		if atlas == null or atlas.region != PacteCards.GENERATED_AUGMENT_FRONT_RECT:
 			failures.append("issue52: unlocked augment did not render the card front")
 		if unlocked_entry.get_node_or_null("CardIcon") == null:
 			failures.append("issue52: unlocked augment did not render its icon")
@@ -279,8 +279,8 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 
 	# A locked card keeps its slot but shows only the card back.
 	for locked in [
-		{ "id": locked_augment, "back": PacteCards.AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
-		{ "id": locked_power, "back": PacteCards.POWER_BACK_RECT, "name": "HEART" },
+		{ "id": locked_augment, "back": PacteCards.GENERATED_AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
+		{ "id": locked_power, "back": PacteCards.GENERATED_POWER_BACK_RECT, "name": "HEART" },
 	]:
 		var locked_id := String(locked["id"])
 		var locked_entry := collection.card_entry(locked_id) as Button
@@ -347,7 +347,7 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	if popup._name_label.text != String(PacteCards.card(locked_augment)["name"]).to_upper() \
 			or popup._description_label.text != String(PacteCards.card(locked_augment)["description"]):
 		failures.append("issue52: the popup did not show the card's authored name/description")
-	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.AUGMENT_FRONT_RECT:
+	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT:
 		failures.append("issue52: the popup did not show the enlarged card front")
 	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("issue52: the popup card front is not nearest-filtered")

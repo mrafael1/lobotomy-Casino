@@ -80,6 +80,15 @@ func _slim_scrollbar() -> void:
 	var bar := _scroll.get_v_scroll_bar()
 	if bar != null:
 		bar.custom_minimum_size.x = SCROLLBAR_WIDTH
+		var track := StyleBoxFlat.new()
+		track.bg_color = Color(0.08, 0.10, 0.10)
+		track.content_margin_left = 2.0
+		track.content_margin_right = 2.0
+		bar.add_theme_stylebox_override("scroll", track)
+		for state in ["grabber", "grabber_highlight", "grabber_pressed"]:
+			var thumb := track.duplicate() as StyleBoxFlat
+			thumb.bg_color = NEON_GOLD if state != "grabber" else Color(0.43, 0.43, 0.30)
+			bar.add_theme_stylebox_override(state, thumb)
 
 func _rebuild_grid() -> void:
 	if not is_inside_tree() or _catalog == null:
@@ -122,8 +131,8 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 
 	var art := TextureRect.new()
 	art.name = "CardArt"
-	art.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool),
-		PacteCards.front_rect_for_pool(pool) if unlocked else PacteCards.back_rect_for_pool(pool))
+	art.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.painted_face_rect(pool, unlocked))
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.size = CARD_SIZE
@@ -264,9 +273,8 @@ func show_card_detail(card_id: String, pool: String = "") -> void:
 	_modal_card_id = card_id
 	_modal_state = "unlocked" if unlocked else "locked"
 	if _modal_card_art != null:
-		_modal_card_art.texture = UiKit.atlas(PacteCards.sheet_for_pool(resolved_pool),
-			PacteCards.front_rect_for_pool(resolved_pool) if unlocked
-			else PacteCards.back_rect_for_pool(resolved_pool))
+		_modal_card_art.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+			PacteCards.painted_face_rect(resolved_pool, unlocked))
 		_modal_card_art.modulate = Color.WHITE if unlocked else LOCKED_MODULATE
 	_apply_modal_icon(entry, resolved_pool, unlocked)
 	inject_modal_data(
@@ -347,11 +355,8 @@ func highlighted_card_id() -> String:
 func _style_button(button: Button, negative := false) -> void:
 	if button == null:
 		return
-	button.add_theme_font_size_override("font_size", 8)
-	if negative:
-		ButtonKit.skin_negative_button(button)
-	else:
-		ButtonKit.skin_sheet_button(button, "ui/green_button.png", 4)
+	ButtonKit.small_neon_button_style(button,
+		ButtonKit.START_MENU_BUTTON_PINK if negative else NEON_CYAN, 6, 2.0)
 
 
 func _go_back() -> void:

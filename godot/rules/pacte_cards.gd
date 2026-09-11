@@ -350,6 +350,13 @@ static func ids_for_pool(pool: String) -> Array[String]:
 static func sheet_for_pool(pool: String) -> String:
 	return CARD_SHEET if pool == "augment" else POWER_SHEET
 
+## Presentation faces share the painted Pacte sheet. Symbol icons still come
+## from sheet_for_pool(), whose regions must remain on the original icon atlas.
+static func painted_face_rect(pool: String, face_up: bool) -> Rect2:
+	if pool == "augment":
+		return GENERATED_AUGMENT_FRONT_RECT if face_up else GENERATED_AUGMENT_BACK_RECT
+	return GENERATED_POWER_FRONT_RECT if face_up else GENERATED_POWER_BACK_RECT
+
 static func front_rect_for_pool(pool: String) -> Rect2:
 	return AUGMENT_FRONT_RECT if pool == "augment" else POWER_FRONT_RECT
 
