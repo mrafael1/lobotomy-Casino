@@ -514,7 +514,8 @@ Resources and currencies:
   launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
   The power rail and sloped lower shelf are composed into the cabinet material.
   The lower shelf is copied directly from the approved preview by
-  `tools/extract_preview_shelf.gd`, reduced once to native resolution. Its original
+  `tools/extract_preview_shelf.gd`, reduced once to native resolution with nearest
+  sampling so extraction cannot blur the pixel edges. Its original
   plate, corners, wells, wear and red fascia remain intact. The changing count and
   items are cleared; the original SPIN cap is extracted into five separate PNG
   states. Do not replace this artwork with procedural approximations.

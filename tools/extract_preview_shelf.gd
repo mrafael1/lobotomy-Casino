@@ -8,7 +8,9 @@ const SHIFT := Vector2i(0, 8)
 func _initialize() -> void:
 	var source := Image.load_from_file("res://../tools/art_sources/control-shelf-preview.jpg")
 	assert(source != null)
-	source.resize(160, 320, Image.INTERPOLATE_LANCZOS)
+	# Preserve the source's hard pixel edges; averaging introduces a soft halo
+	# that nearest filtering at runtime cannot undo.
+	source.resize(160, 320, Image.INTERPOLATE_NEAREST)
 	source.convert(Image.FORMAT_RGBA8)
 	var shelf := Image.create(160, 320, false, Image.FORMAT_RGBA8)
 	shelf.blit_rect(source, Rect2i(0, 199, 160, 39), Vector2i(0, 207))
