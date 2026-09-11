@@ -80,10 +80,10 @@ const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
 const INVERTED_HINT_ITEMS := ["item_pill"]
 # In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).
 const ITEM_ICONS := {
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
+	"item_energy_drink": "items/generated/energy_drink.png",
+	"item_cocktail": "items/generated/cocktail.png",
+	"item_water": "items/generated/water.png",
+	"item_pill": "items/generated/red_pill.png",
 }
 
 @export var editor_preview_offer_ids: Array[String] = ["item_water", "item_pill"]:

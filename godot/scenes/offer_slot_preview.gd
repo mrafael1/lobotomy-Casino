@@ -5,13 +5,13 @@ extends Control
 ## Editor-only placeholder renderer for authored dealer offer slots.
 
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
+	"cons_focus": "items/generated/serum.png",
+	"cons_cigarette": "items/generated/tobacco.png",
+	"cons_white_powder": "items/generated/white_powder.png",
+	"item_energy_drink": "items/generated/energy_drink.png",
+	"item_cocktail": "items/generated/cocktail.png",
+	"item_water": "items/generated/water.png",
+	"item_pill": "items/generated/red_pill.png",
 }
 const FALLBACK_ICON := "items/consumable_placeholder.png"
 const PLACEHOLDER_TINT := Color(1.0, 1.0, 1.0, 0.62)

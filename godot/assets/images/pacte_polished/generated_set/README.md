@@ -3,9 +3,9 @@
 Generated with the built-in imagegen tool using `../pacte_scene_painted.png`
 as the material, palette and perspective reference.
 
-These are source sheets for the next integration pass, not active runtime
-textures. Native-size slicing, edge cleanup and in-scene alignment must be
-reviewed before replacing the current assets.
+The three large sheets remain source artwork. The sliced 32x32 PNGs in
+`godot/assets/images/items/generated` are the active runtime item textures;
+they are nearest-sampled to the shared 16px stash/offer size.
 
 - `decks_painted.png`: augment stack on the left, power stack on the right.
   Target native footprint: 28x32 per stack, at (13,109) and (119,109).
@@ -14,6 +14,10 @@ reviewed before replacing the current assets.
 - `cards_painted.png`: augment front/back, power front/back, left to right.
   Target native card size: 39x61. Names, descriptions and gameplay symbols
   remain runtime elements.
+
+The generated item sheet is sliced by `tools/slice_item_sheet.gd` into
+`tobacco.png`, `serum.png`, `white_powder.png`, `potion.png`, `tea.png`,
+`energy_drink.png`, `cocktail.png`, `water.png`, and `red_pill.png`.
 
 The generation prompts are preserved in `prompts.json`.
 

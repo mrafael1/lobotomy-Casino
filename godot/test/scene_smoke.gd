@@ -214,6 +214,7 @@ const CHECKS: Array = [
 	{"fn": "_check_augment_feedback_map_132", "file": "pacte", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_wealth_ending_augment_teardown_132", "file": "pacte", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_water_lucidity_gain", "file": "consumables", "iso": ISO_STORES, "args": ["run_store", "failures"]},
+	{"fn": "_check_generated_item_icons", "file": "consumables", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_additive_power_payout_181", "file": "economy", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_jackpot_payout_181", "file": "economy", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},
 	{"fn": "_check_target_readout_181", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "run_store", "failures"]},

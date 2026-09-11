@@ -453,7 +453,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	else:
 		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
 		var serum_neg_color := (slots[0]["count"] as Label).get_theme_color("font_color")
-		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/focus_serum.png"):
+		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/generated/serum.png"):
 			failures.append("issue92: Serum negative boost icon did not use the serum bottle")
 		if serum_neg_color != Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum negative boost count should be red")

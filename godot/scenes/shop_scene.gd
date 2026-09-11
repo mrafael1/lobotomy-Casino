@@ -27,11 +27,11 @@ const FOOTER_Y := 262.0
 const READABILITY_RECT := Rect2(3.0, 3.0, 154.0, 286.0)
 
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
-	"cons_potion": "items/consumable_placeholder.png",
-	"cons_tea": "items/herbal_tea.png",
+	"cons_focus": "items/generated/serum.png",
+	"cons_cigarette": "items/generated/tobacco.png",
+	"cons_white_powder": "items/generated/white_powder.png",
+	"cons_potion": "items/generated/potion.png",
+	"cons_tea": "items/generated/tea.png",
 }
 
 var _font: FontFile = null

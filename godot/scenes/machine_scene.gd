@@ -307,15 +307,15 @@ const SCENE_FEEDBACK_LABEL_COLOR := Color(0.42, 1.0, 0.95)
 
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
-	"cons_potion": "items/consumable_placeholder.png",
-	"cons_tea": "items/herbal_tea.png",
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
+	"cons_focus": "items/generated/serum.png",
+	"cons_cigarette": "items/generated/tobacco.png",
+	"cons_white_powder": "items/generated/white_powder.png",
+	"cons_potion": "items/generated/potion.png",
+	"cons_tea": "items/generated/tea.png",
+	"item_energy_drink": "items/generated/energy_drink.png",
+	"item_cocktail": "items/generated/cocktail.png",
+	"item_water": "items/generated/water.png",
+	"item_pill": "items/generated/red_pill.png",
 }
 
 # Active multi-spin boosts shown as little duration icons on the TV screen (issue #76):
