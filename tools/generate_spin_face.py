@@ -2,22 +2,22 @@
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / 'godot/assets/images/machine_polished'
-GLYPHS = [(3, '111100111001111'), (3, '110101110100100'), (3, '111010010010111'), (4, '10011101101110011001')]
+GLYPHS = ['01111100001000001110000010000111110', '11110100011000111110100001000010000', '11111001000010000100001000010011111', '10001110011100110101100111001110001']
 for state in ['normal', 'pressed', 'disabled', 'hover', 'focus']:
     disabled = state == 'disabled'
     depression = 2 if state == 'pressed' else 0
     face = '#969383' if disabled else '#eed9a1'
     ink = '#535648' if disabled else '#252b23'
     rim = '#b4b391' if state in ['hover', 'focus'] else '#777060'
-    art = f'<path d="M5 2H41L44 6V24H2V6Z" fill="#222620"/><path d="M6 3H40L43 6V23H3V6Z" fill="{rim}"/>'
-    art += '<path d="M7 5H39L41 8V21H5V8Z" fill="#362e21"/>'
-    art += f'<g transform="translate(0 {depression})"><path d="M8 4H38L40 7V18H6V7Z" fill="#947744"/>'
-    art += f'<path d="M9 5H37L39 7V16H7V7Z" fill="{face}"/>'
-    art += '<path d="M10 5H36V6H10Z" fill="#fff0c5"/>' if not disabled else ''
-    for char, (width, glyph) in enumerate(GLYPHS):
+    art = f'<path d="M5 2H40L43 22L41 24H3L2 22Z" fill="#181e1c"/><path d="M6 3H39L42 21L40 23H4L3 21Z" fill="{rim}"/>'
+    art += '<path d="M7 4H38L40 21H5Z" fill="#242721"/>'
+    art += f'<g transform="translate(0 {depression})"><path d="M8 4H37L39 18L37 20H7L6 18Z" fill="#896840"/>'
+    art += f'<path d="M9 5H36L38 17L36 18H8L7 17Z" fill="{face}"/>'
+    art += '<path d="M10 5H35V6H10L9 15H8Z" fill="#fff0c5"/><path d="M9 17H36V18H9Z" fill="#c8aa70"/>' if not disabled else ''
+    for char, glyph in enumerate(GLYPHS):
         for i, bit in enumerate(glyph):
             if bit == '1':
-                art += f'<rect x="{7+char*8+(i%width)*2}" y="{6+(i//width)*2}" width="2" height="2" fill="{ink}"/>'
+                art += f'<rect x="{11+char*6+i%5}" y="{8+i//5}" width="1" height="1" fill="{ink}"/>'
     art += '</g>'
     if state == 'focus':
         art += '<path d="M4 9V5H8M38 5H42V9M4 18V22H8M38 22H42V18" fill="none" stroke="#d5eec0"/>'

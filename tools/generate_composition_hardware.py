@@ -13,12 +13,32 @@ for x in [25,132]:
     for y in [118,133]: art+=rect(x,y,2,2,'#3c4140')+rect(x,y,1,1,'#b8b5ad')
 for x in [46,77,108]:
     art+=f'<circle cx="{x}" cy="127" r="12" fill="#323634"/><path d="M{x-7} 117H{x+7}V118H{x-7}Z" fill="#b0aba3"/>'
-art+=path('M22 207H135L140 236H18Z','#383b3c')+path('M23 208H134L138 234H20Z','#86818a')+path('M23 208H134L135 210H22Z','#b0a6af')+path('M20 234H138V238H20Z','#49464c')
-for _ in range(100): art+=rect(rng.randrange(24,134),rng.randrange(211,233),1,1,rng.choice(['#77737b','#9a919b']))
-for left,right in [(27,55),(60,101),(105,120),(123,139)]:
-    art+=path(f'M{left} 212H{right-2}L{right} 233H{left-2}Z','#444846')
-    art+=path(f'M{left+1} 213H{right-3}L{right-1} 231H{left-1}Z','#111b18')
-    art+=path(f'M{left-1} 232H{right-1}V233H{left-1}Z','#b1a5a2')
+# A single folded plate: its back edge tucks under the reel frame and its
+# front edge projects over the enamel fascia. Wells share this perspective.
+art+=path('M22 207H135L141 237H16Z','#252629')
+art+=path('M23 208H134L139 235H18Z','#66636e')
+art+=path('M25 209H132L137 233H20Z','#8a8591')
+art+=path('M23 208H134L135 210H23Z','#b8b0bc')
+art+=path('M23 210H25L21 232H19Z','#a39ba9')
+art+=path('M132 210H134L139 234H136Z','#a69aa7')
+art+=path('M18 234H140V237H17Z','#454149')
+art+=rect(19,234,119,1,'#c0b3b8')
+for x,y,w in [(26,210,7),(51,234,4),(91,232,5),(129,210,3),(23,230,2),(101,234,3)]:
+    art+=rect(x,y,w,1,'#a69da7')
+for left,right in [(26,55),(59,102),(104,121),(123,138)]:
+    art+=path(f'M{left+1} 211H{right-2}L{right} 230L{right-1} 233H{left-2}L{left-3} 230Z','#49474c')
+    art+=path(f'M{left+2} 212H{right-3}L{right-1} 230V231H{left-1}L{left-2} 230Z','#1b2523')
+    art+=path(f'M{left+2} 213H{right-3}V214H{left+2}L{left} 230H{left-1}Z','#45534d')
+    art+=path(f'M{left+3} 214H{right-4}L{right-2} 229H{left}Z','#101916')
+    art+=path(f'M{left-2} 232H{right-1}V233H{left-2}Z','#b5a7ad')
+for x,y in [(23,211),(134,211),(20,231),(137,231),(56,232)]:
+    art+=rect(x,y,2,3,'#454348')+rect(x,y,1,1,'#c1b6b9')+rect(x+1,y+1,1,1,'#24292a')
+# The shelf's red front lip has depth; it is part of the cabinet, not a UI bar.
+art+=path('M16 237H141V249H16Z','#35070d')
+art+=rect(17,238,123,9,'#810d18')+rect(18,238,121,1,'#c62a32')
+art+=rect(18,239,1,7,'#a72129')+rect(19,246,120,1,'#590b14')
+art+=rect(122,241,10,4,'#260b10')+rect(123,242,8,2,'#101615')
+for x in [20,136]: art+=rect(x,240,2,2,'#392a2c')+rect(x,240,1,1,'#ae7674')
 save('cabinet_controls.svg',art)
 save('target_progress.svg',''.join(f'<g transform="translate({160*i} 0)">'+rect(74,59,46,2,'#263c32')+rect(74,59,int(46*i/11),1,'#a0ad80')+'</g>' for i in range(12)),12)
 save('target_shimmer.svg',''.join(f'<g transform="translate({160*i} 0)">'+rect(74+i*8,60,3,1,'#405747')+'</g>' for i in range(6)),6)

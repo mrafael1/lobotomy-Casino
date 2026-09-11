@@ -6,6 +6,9 @@ x33/65/97, y169..202. Live symbols and targeting remain runtime elements.
 
 `cabinet_controls.svg` is sampled by the cabinet material: it supplies the clean
 metal power rail and one sloped shelf with counter, SPIN and two stash recesses.
+The shelf has a tucked back edge, projecting front bevel and red enamel fascia.
+Layered dark wells follow the plate's slope; their highlights, screws and wear
+are cabinet pixels. The smaller SPIN inscription leaves a broad ivory face visible.
 The stash container has no texture; only its item icons and input are live.
 Each 16x18 slot owns input around an inset 12x14 item image, leaving the cabinet
 recess visible. Slot margins obey the same use locks as the item image.
