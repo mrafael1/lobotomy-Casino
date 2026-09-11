@@ -410,7 +410,10 @@ func _on_option_pressed(option_id: String) -> void:
 	_show_balance_token(option_id)
 	var settle_tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	settle_tween.tween_property(self, "_scale_settle", 1.0, 0.18)
-	_refresh()
+	# The option signal is emitted by a RitualToken while its input callback is
+	# still on the stack. Defer the rebuild until that callback returns; freeing
+	# the pressed token synchronously makes Godot reject it as a locked object.
+	call_deferred("_refresh")
 
 
 func _show_balance_token(option_id: String) -> void:
@@ -534,7 +537,10 @@ func _clear_offering_tokens() -> void:
 	if _options_layer == null:
 		return
 	for child in _options_layer.get_children():
-		child.free()
+		# queue_free() is safe even when a refresh is requested from a token signal.
+		# The refresh itself is deferred in _on_option_pressed, so old children are
+		# removed before the next input cycle and never accumulate in the tray.
+		child.queue_free()
 
 
 func _start_ambient_timers() -> void:

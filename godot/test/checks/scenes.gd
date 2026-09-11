@@ -99,7 +99,9 @@ func _check_sacrifice_ritual_scene(run_store: Node, meta_store: Node,
 		if leave.text != "LEAVE":
 			failures.append("sacrifice: initial leave action has the wrong label")
 
-	scene.call("_on_option_pressed", SacrificeRules.OPTION_COINS)
+	# Exercise the real signal path: RitualToken emits while its input callback is
+	# still active, which previously made _refresh() free that locked token.
+	offerings.get_child(0).emit_signal("chosen", SacrificeRules.OPTION_COINS)
 	await process_frame
 	if String(scene.get("_selected_option_id")) != SacrificeRules.OPTION_COINS \
 			or confirm == null or confirm.disabled \
