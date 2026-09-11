@@ -570,6 +570,51 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if run_store.runPhase != "running":
 		failures.append("route: machine segment was not live after route loop")
 
+## The run Shop keeps its long catalog inside one native scroll region. This check
+## protects the authored panel geometry and prevents future rows from spilling over
+## the footer or silently losing their state styling.
+func _check_route_shop_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_gold := int(run_store.lucidityCoins)
+	var prev_upgrades: Array = (run_store.runShopUpgrades as Array).duplicate()
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_SHOP
+	run_store.lucidityCoins = 999
+	run_store.runShopUpgrades = []
+	var shop := (load("res://scenes/route_shop_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	await process_frame
+	var scroll := shop.get_node_or_null("ShopScroll") as ScrollContainer
+	var list := shop.get_node_or_null("ShopScroll/RunShopItems") as VBoxContainer
+	if scroll == null or scroll.position != Vector2(7.0, 45.0) \
+			or scroll.size != Vector2(146.0, 188.0):
+		failures.append("route shop: catalog is not inside the authored scroll frame")
+	if list == null:
+		failures.append("route shop: catalog list is missing from its scroll frame")
+	else:
+		var expected_count := ShopItems.ids().size()
+		if list.get_child_count() != expected_count:
+			failures.append("route shop: catalog row count changed (%d/%d)" % [
+				list.get_child_count(), expected_count])
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if not is_equal_approx(row.custom_minimum_size.y, 32.0):
+				failures.append("route shop: %s lost its compact row height" % row.name)
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("route shop: %s lost its state-specific plate" % row.name)
+	var return_button := shop.get_node_or_null("ReturnButton") as Button
+	if return_button == null or return_button.get_theme_stylebox("normal") == null:
+		failures.append("route shop: return control is missing its painted button style")
+	shop.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.lucidityCoins = prev_gold
+	run_store.runShopUpgrades = prev_upgrades
+
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
 	for label_node in build.find_children("*", "Label", true, false):
 		var label := label_node as Label

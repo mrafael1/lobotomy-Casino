@@ -52,7 +52,9 @@ func _build() -> void:
 	add_child(_scroll)
 	_list = VBoxContainer.new()
 	_list.name = "RunShopItems"
-	_list.custom_minimum_size = Vector2(LIST_RECT.size.x - 5.0, 0.0)
+	# Leave room for the native vertical scrollbar inside the viewport; otherwise
+	# the child minimum forces the ScrollContainer three pixels wider than its panel.
+	_list.custom_minimum_size = Vector2(LIST_RECT.size.x - 12.0, 0.0)
 	_list.add_theme_constant_override("separation", ROW_GAP)
 	_scroll.add_child(_list)
 	_message = _label("", Rect2(5.0, 239.0, 150.0, 16.0), 5, RED)

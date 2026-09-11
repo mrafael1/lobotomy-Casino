@@ -189,6 +189,7 @@ const CHECKS: Array = [
 	{"fn": "_check_scene_instantiation", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
 	{"fn": "_check_sacrifice_ritual_scene", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "meta_store", "failures"]},
 	{"fn": "_check_route_loop", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "meta_store", "failures"]},
+	{"fn": "_check_route_shop_layout", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_jackpot_burst_hook", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_machine_art_mix", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_sheet_frame_integrity", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
