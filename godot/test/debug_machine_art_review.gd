@@ -39,6 +39,19 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
 	await _capture("01-idle")
+	var beacon := _scene.get_node("Jackpot") as Sprite2D
+	assert(beacon.texture.resource_path.ends_with("jackpot_beacon.svg"), "Jackpot must use the cabinet beacon")
+	_scene._bursts.refresh_jackpot_lamp(true, true)
+	assert(beacon.frame == 0, "Held payout must not light the beacon early")
+	_scene._bursts.refresh_jackpot_lamp(true, false)
+	assert(beacon.frame == 1, "Jackpot must light the beacon")
+	await _capture("01-jackpot-lit")
+	_scene._bursts.flash_jackpot_lamp(_scene._refresh_jackpot_lamp.bind(false))
+	await create_timer(0.1).timeout
+	assert(beacon.frame in [1, 2], "Jackpot flash must use a lit beacon frame")
+	await _capture("01-jackpot-flash")
+	await create_timer(0.95).timeout
+	assert(beacon.frame == 0, "Jackpot flash must return to its current result state")
 	var spin_legend := _scene.get_node("SpinsLegend") as Label
 	assert(spin_legend.get_rect().end.x <= 55, "SPINS legend must remain in the counter well")
 	var screen := Rect2(33, 47, 90, 58)

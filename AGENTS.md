@@ -518,6 +518,9 @@ Resources and currencies:
   native face and press states over its cabinet recess. Worn, uneven sticker
   edges replace the flat paper squares on the lower panel.
   The spin count and small SPINS legend sit side by side within the left well.
+  An amber glass jackpot beacon sits on a metal base above the CRT. Its three
+  native frames retain the payout hold, lit state and alternating jackpot flash;
+  it stays dark until the winning result is announced.
   SPIN uses evenly spaced native pixel lettering and a two-pixel depressed face;
   its full touch area remains unchanged. Dark mounting rims seat the power buttons
   into the metal rail. Visual review includes the 5,000 target and five active items.

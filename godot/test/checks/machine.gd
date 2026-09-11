@@ -17,7 +17,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# reel/HUD sheets remain legacy 8x art, so both scale conventions must coexist.
 	for rel in [
 		"machine new view/machine_neon.png",
-		"machine new view/neon_machine_jackpot.png",
+		"machine_polished/jackpot_beacon.svg",
 		"machine_polished/power_lamps.svg",
 	]:
 		if not ResourceLoader.exists("res://assets/images/" + rel):

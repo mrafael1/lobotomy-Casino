@@ -977,7 +977,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "MemoryPower"
 	if rel.ends_with("multiplier.svg"):
 		return "Multiplier"
-	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
+	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png") or rel.ends_with("jackpot_beacon.svg"):
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
 		return "LockPower%d" % frame

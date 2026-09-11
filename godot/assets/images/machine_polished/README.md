@@ -28,12 +28,15 @@ Adrenaline). Coin pops and flights begin at the cash outlet (80,298). A restore
 flashes the lamps and resets them; an ineligible restore leaves the bank full.
 Power acquisition order and all gameplay locks are unchanged.
 
+`jackpot_beacon.svg` mounts amber glass on a metal base above the CRT. Its three
+native frames preserve the existing payout hold, lit state and alternating flash.
+
 Augment stickers occupy the lower cabinet at x48/74/100, y260, with worn paper
 edges, 14px icons and hold-for-details behavior. They remain visible during CRT
 callouts. Learning's book and Tunnel Vision's shutter remain independent layers.
 
 Generators: `tools/generate_composition_hardware.py` authors cabinet surfaces,
-progress and wealth hardware; `tools/generate_crt_hardware.py` authors approach,
+progress, wealth hardware and jackpot beacon; `tools/generate_crt_hardware.py` authors approach,
 sticker and callout sheets; `tools/generate_power_lamps.py` authors restore lamps.
 Unused older art remains until a separate reference audit permits deletion.
 

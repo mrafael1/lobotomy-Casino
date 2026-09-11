@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/reel_motion.svg" id="3_spin"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet-painted.png" id="4_cabinet"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/multiplier.svg" id="9_multiplier"]
-[ext_resource type="Texture2D" uid="uid://bkiciges1kij5" path="res://assets/images/machine new view/neon_machine_jackpot.png" id="11_jackpot"]
+[ext_resource type="Texture2D" path="res://assets/images/machine_polished/jackpot_beacon.svg" id="11_jackpot"]
 [ext_resource type="Texture2D" uid="uid://cwafd7c7i8nk4" path="res://assets/images/machine new view/lock_power.png" id="12_lock_power"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/reroll.svg" id="13_reroll"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/shift.svg" id="14_shift"]

@@ -28,6 +28,18 @@ for x in [45,57,69,81]:
     surround+=rect(x-1,257,12,1,'#736e56')+rect(x-1,272,12,1,'#403f31')+rect(x-1,258,1,14,'#8c8569')+rect(x+10,258,1,14,'#3f4636')
 save('wealth_cases.svg',cases)
 save('wealth_crt.svg',surround)
+beacon=''
+for frame,glass in enumerate(['#494937','#c39b4c','#f0d68d']):
+    beacon+=f'<g transform="translate({160*frame} 0)">'
+    beacon+=path('M68 36V28L72 24H80L84 28V36Z','#252c28')
+    beacon+=path('M70 35V28L73 25H79L82 28V35Z',glass)
+    beacon+=rect(73,26,6,1,'#b5b38a' if frame==0 else '#fff0be')
+    beacon+=rect(71,29,1,5,'#71735b' if frame==0 else '#fff0be')
+    beacon+=rect(79,29,2,6,'#373e30' if frame==0 else '#ad7c37')
+    beacon+=rect(74,30,3,4,'#5a5840' if frame==0 else '#ffe3a2')
+    beacon+=path('M67 35H85V39H67Z','#303632')+rect(68,35,16,1,'#9d9984')+rect(68,37,16,1,'#66695c')
+    beacon+='</g>'
+save('jackpot_beacon.svg',beacon,3)
 digits=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001','111100111001111','111100111101111','111001001001001','111101111101111','111101111001111']
 order=[0,9,7,8,6,5,4,3,2,1,0]
 for reel,x in enumerate([45,57,69,81]):
