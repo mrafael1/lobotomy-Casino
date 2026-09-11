@@ -206,12 +206,21 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	if not dealer.has_method("_native_canvas_origin") \
 			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
 		failures.append("issue55: dealer native artwork canvas is not horizontally centred")
-	var expected_offer_tops := [192.0, 192.2, 192.0, 192.2, 192.2]
-	for index in expected_offer_tops.size():
+	var expected_offer_rects: Array = dealer.PRE_RUN_OFFER_SLOT_RECTS \
+			if bool(dealer._pre_run) else dealer.RUN_OFFER_SLOT_RECTS
+	for index in expected_offer_rects.size():
 		var slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
-		if slot == null or not is_equal_approx(slot.position.y, expected_offer_tops[index]):
-			failures.append("issue55: OfferSlot%d is not resting on the updated counter line" \
+		var expected_rect: Rect2 = expected_offer_rects[index]
+		if slot == null or slot.position != expected_rect.position \
+				or slot.size != expected_rect.size:
+			failures.append("issue55: OfferSlot%d is not aligned to its authored well" \
 				% (index + 1))
+	if bool(dealer._pre_run):
+		for index in range(expected_offer_rects.size(), 5):
+			var hidden_slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
+			if hidden_slot != null and hidden_slot.visible:
+				failures.append("issue55: pre-run OfferSlot%d is outside the painted master" \
+					% (index + 1))
 	if not is_equal_approx(float(dealer.COUNTER_DOT_CY), 208.0):
 		failures.append("shop: counter contact row drifted from the authored dot line")
 	var checked_offer_frames := 0
@@ -223,13 +232,21 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 		var kind := "augment" if ChipAugments.map().has(offer_id) else "offer"
 		var parent := item_node.get_parent() as Control
 		var parent_y: float = dealer.call("_counter_parent_origin_y", parent)
-		var expected_top: float = dealer.call(
-			"_counter_item_top", offer_id, kind, item_node.size.y)
-		if not is_equal_approx(item_node.position.y + parent_y, expected_top):
-			failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
-		# Fractional counter placement can round the requested 16px to 15.999999px.
-		if not item_node.size.is_equal_approx(Vector2(16.0, 16.0)):
-			failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
+		if bool(dealer._pre_run) and parent != dealer:
+			var expected_pos := (parent.size - item_node.size) * 0.5
+			if not item_node.position.is_equal_approx(expected_pos):
+				failures.append("shop: %s is not centred in its painted item well" % offer_id)
+			if not item_node.size.is_equal_approx(Vector2(dealer.PRE_RUN_PAINTED_OFFER_ICON,
+					dealer.PRE_RUN_PAINTED_OFFER_ICON)):
+				failures.append("shop: %s lost its painted-well icon size" % offer_id)
+		else:
+			var expected_top: float = dealer.call(
+				"_counter_item_top", offer_id, kind, item_node.size.y)
+			if not is_equal_approx(item_node.position.y + parent_y, expected_top):
+				failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
+			# Fractional counter placement can round the requested 16px to 15.999999px.
+			if not item_node.size.is_equal_approx(Vector2(16.0, 16.0)):
+				failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
 		checked_offer_frames += 1
 	if checked_offer_frames == 0:
 		failures.append("shop: no counter offer hitboxes were built")
@@ -250,6 +267,8 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	else:
 		if machine_art.hframes != 2:
 			failures.append("issue55: machine button art is not a 2-frame sheet")
+		if bool(dealer._pre_run) and machine_art.visible:
+			failures.append("issue55: pre-run machine button art should be hidden until its replacement is ready")
 		if machine_art.position != Vector2(-20.0, -30.0):
 			failures.append("issue55: machine art is not centred on the bleed-aware dealer canvas")
 		if machine_art.scale != Vector2.ONE:
@@ -334,12 +353,19 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 				or art.hframes != 2 or art.texture == null:
 			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
 			continue
-		if Vector2i(art.texture.get_width(), art.texture.get_height()) != Vector2i(400, 380) \
-				or art.position != Vector2(-20.0, -30.0) \
-				or art.scale != Vector2.ONE:
-			failures.append("dealer shop: %s is not centred at native source-pixel scale" % art_name)
+		var uses_full_canvas_export: bool = art_name == "RerollButtonArt" \
+				and art.texture.resource_path.ends_with("dealer_scene_reroll_BUTTON.png")
+		var expected_size := Vector2i(2560, 2560) if uses_full_canvas_export \
+				else Vector2i(400, 380)
+		var expected_position := Vector2.ZERO if uses_full_canvas_export \
+				else Vector2(-20.0, -30.0)
+		var expected_scale := Vector2(0.125, 0.125) if uses_full_canvas_export else Vector2.ONE
+		if Vector2i(art.texture.get_width(), art.texture.get_height()) != expected_size \
+				or art.position != expected_position \
+				or art.scale != expected_scale:
+			failures.append("dealer shop: %s is not centred at its authored source scale" % art_name)
 		var expected_asset := "dealer_shop/machine.png" if art_name == "MachineButtonArt" \
-				else "dealer_shop/reroll.png"
+				else ("dealer_scene_reroll_BUTTON.png" if uses_full_canvas_export else "dealer_shop/reroll.png")
 		if not art.texture.resource_path.ends_with(expected_asset):
 			failures.append("dealer shop: %s is using the wrong native asset" % art_name)
 
