@@ -19,8 +19,8 @@ retain the original pixels. The reduced SPINS engraving is cleared for a crisp
 runtime label; the cap's lettering is replaced with native 5x7 pixel glyphs.
 The five `preview_spin_*.png` states use the original cap with a
 two-pixel depression, dimmed disabled state, brighter hover and a separate focus
-mark that does not cover the depressed cap. The older
-procedural shelf and SPIN SVGs are no longer sampled for these controls.
+mark that does not cover the depressed cap. The obsolete procedural shelf drawing,
+SPIN SVG states and their generator have been removed after reference checks.
 The live counter occupies (28,213,14,16). Item images are 12x14 at (103,214)
 and (121,214), within the original recesses; their 16x18 touch slots retain
 margin activation and gameplay locks. The stash container has no tray texture.
