@@ -8,10 +8,10 @@ extends Control
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+	Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 ]
-const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
-const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const AUGMENT_DROP_RECT := Rect2(25.0, 219.0, 25.0, 35.0)
+const POWER_DROP_RECT := Rect2(110.0, 219.0, 25.0, 35.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const SELECTION_PREVIEW_TIME := 0.24
 const SYMBOL_PICKER_RECT := Rect2(4.0, 100.0, 152.0, 102.0)

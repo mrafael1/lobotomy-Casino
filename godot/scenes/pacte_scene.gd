@@ -1,16 +1,16 @@
 extends Control
 
-## Pacte is the run's card ritual. The background and emplacement art are
-## authored at the game's 160x320 virtual resolution; card fronts are composed
-## from the supplied sheets so every pool entry can carry its own icon metadata.
+## Pacte is the run's card ritual. The painted table master owns the physical
+## recesses; card fronts are composed from the supplied sheets so every pool
+## entry can carry its own icon metadata without a second plate being drawn.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+	Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 ]
-const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
-const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const AUGMENT_DROP_RECT := Rect2(25.0, 219.0, 25.0, 35.0)
+const POWER_DROP_RECT := Rect2(110.0, 219.0, 25.0, 35.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const CHOSEN_CARD_MARGIN := 2.0
 const SELECTION_PREVIEW_TIME := 0.24
@@ -32,13 +32,14 @@ const GLITCH_CARD_CHANCE := 0.42
 ## One source of truth with the draw that keeps these out of the tutorial's pool.
 static var REWARD_AMP_CARD_IDS: Array[String] = PacteCards.reward_amp_ids()
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
-# Pacte's authored split art is intentionally kept as full-canvas pieces. The
-# current exports include decorative bleed around the old 160x320 play area, so
-# each frame is centered around the native canvas and kept at source-pixel scale.
-# The viewport/phone is responsible for trimming that bleed; gameplay geometry
-# remains in the original 160x320 coordinate space.
-const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
-const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
+# Runtime overlays remain available as hidden compatibility nodes for route-build
+# code and save/reveal state. The painted master already contains the table's
+# three card recesses and the two lower placement wells, so only live card faces
+# and compact selected-card views are drawn above it.
+const AUGMENT_DECK_ASSET := "pacte_polished/augment_deck_native.svg"
+const POWER_DECK_ASSET := "pacte_polished/power_deck_native.svg"
+const AUGMENT_DECK_POSITION := Vector2(13.0, 109.0)
+const POWER_DECK_POSITION := Vector2(119.0, 109.0)
 const DEALER_ASSET := "pacte_scene/dealer.png"
 const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
 const DEALER_TEXT_FRAME_COUNT := 2
@@ -113,6 +114,7 @@ const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _painted_master_active := false
 var _title_light: Sprite2D = null
 var _table: Sprite2D = null
 var _proposition: Sprite2D = null
@@ -174,9 +176,9 @@ func configure_route_artwork(kind: String) -> void:
 	if _power_deck != null:
 		_power_deck.visible = show_power
 	if _augment_emplacement != null:
-		_augment_emplacement.visible = show_augment
+		_augment_emplacement.visible = show_augment and not _painted_master_active
 	if _power_emplacement != null:
-		_power_emplacement.visible = show_power
+		_power_emplacement.visible = show_power and not _painted_master_active
 	_emplacement = _augment_emplacement if show_augment else _power_emplacement
 	if _emplacement != null:
 		_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
@@ -285,17 +287,21 @@ func _build_background() -> void:
 	painted_master.name = "PactePaintedMaster"
 	add_child(painted_master)
 	if painted_master.texture != null:
+		_painted_master_active = true
 		_background.visible = false
 		_dealer_sprite.visible = false
 		_table.visible = false
 		_title_light.visible = false
+		_proposition.visible = false
 	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
 	_augment_deck.name = "AugmentDeck"
 	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+	_augment_deck.position = AUGMENT_DECK_POSITION
 	add_child(_augment_deck)
 	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, ART_Z_INDEX)
 	_power_deck.name = "PowerDeck"
 	_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+	_power_deck.position = POWER_DECK_POSITION
 	add_child(_power_deck)
 	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, ART_Z_INDEX)
 	_dealer_bubble.name = "DealerBubble"
@@ -436,9 +442,9 @@ func _build_overlay_ui() -> void:
 	# The hint belongs to the emplacement itself. At native resolution the slot is
 	# only 25 px wide, so word wrapping keeps both words inside its card frame.
 	_augment_drop_label = _drop_hint_label(
-		"DropHere", Rect2(28.0, 256.0, 25.0, 36.0))
+		"DropHere", AUGMENT_DROP_RECT)
 	_power_drop_label = _drop_hint_label(
-		"PowerDropHere", Rect2(107.0, 256.0, 25.0, 36.0))
+		"PowerDropHere", POWER_DROP_RECT)
 	_drop_label = _augment_drop_label
 	_set_drop_hint_visible(false)
 
@@ -481,9 +487,10 @@ func _set_emplacement(asset: String) -> void:
 
 func _sync_emplacement_visibility() -> void:
 	if _augment_emplacement != null:
-		_augment_emplacement.visible = _pool_kind == "augment" or _chosen_augment_id != ""
+		_augment_emplacement.visible = not _painted_master_active \
+				and (_pool_kind == "augment" or _chosen_augment_id != "")
 	if _power_emplacement != null:
-		_power_emplacement.visible = _pool_kind == "power"
+		_power_emplacement.visible = not _painted_master_active and _pool_kind == "power"
 
 func _show_chosen_card(card_id: String, kind: String) -> void:
 	if _chosen_cards_layer == null or card_id == "":
@@ -777,10 +784,12 @@ func _on_reward_amp_symbol_picked(symbol_id: String) -> void:
 func _set_deck_visible(_kind: String) -> void:
 	if _augment_deck != null:
 		_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+		_augment_deck.position = AUGMENT_DECK_POSITION
 		_augment_deck.visible = true
 		_augment_deck.frame = DECK_FRAME
 	if _power_deck != null:
 		_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+		_power_deck.position = POWER_DECK_POSITION
 		_power_deck.visible = true
 		_power_deck.frame = DECK_FRAME
 
@@ -790,7 +799,8 @@ func _shuffle_active_deck() -> void:
 		return
 	if _deck_tween != null and _deck_tween.is_valid():
 		_deck_tween.kill()
-	var native_position := _native_art_position(deck.texture, maxi(int(deck.hframes), 1))
+	var native_position := AUGMENT_DECK_POSITION if deck == _augment_deck \
+			else POWER_DECK_POSITION
 	deck.position = native_position
 	deck.rotation = 0.0
 	_deck_tween = create_tween()

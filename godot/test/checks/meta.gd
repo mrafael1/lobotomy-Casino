@@ -882,7 +882,7 @@ func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failu
 			if sealed_in:
 				failures.append("issue105: the Pacte pick is masked — nothing can be chosen")
 			var hole: Rect2 = (anchor_hosts["pacte"] as Node).call("tutorial_anchor", "cards")
-			if not hole.has_point(Vector2(40.0, 274.0)):
+			if not hole.has_point(Vector2(40.0, 235.0)):
 				failures.append("issue105: the Pacte hole misses the card slots: %s" % hole)
 			break
 		tutorial._advance()

@@ -871,6 +871,21 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or painted_master.position != Vector2.ZERO \
 			or painted_master.scale != Vector2.ONE:
 		failures.append("pacte: painted native scene master is not the active crisp base layer")
+	var deck_specs: Array[Dictionary] = [
+		{"node": pacte.get_node_or_null("AugmentDeck"),
+			"asset": "augment_deck_native.svg", "position": Vector2(13.0, 109.0)},
+		{"node": pacte.get_node_or_null("PowerDeck"),
+			"asset": "power_deck_native.svg", "position": Vector2(119.0, 109.0)},
+	]
+	for deck_spec in deck_specs:
+		var deck := deck_spec["node"] as Sprite2D
+		if deck == null or deck.texture == null \
+				or not deck.texture.resource_path.ends_with(String(deck_spec["asset"])) \
+				or Vector2i(deck.texture.get_width(), deck.texture.get_height()) != Vector2i(28, 32) \
+				or deck.position.distance_to(deck_spec["position"]) > 1.1 \
+				or deck.scale != Vector2.ONE:
+			failures.append("pacte: %s deck is not aligned to its painted upper recess" \
+				% String(deck_spec["asset"]))
 	var pattern_view := pacte._make_card_view("augment_pattern_recognition", "augment") as Control
 	var pattern_icon := pattern_view.get_node_or_null("Icon") as AnimatedSprite2D
 	if pattern_icon == null or pattern_icon.sprite_frames == null \
@@ -929,10 +944,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("pacte: %s artwork is missing" % String(art_spec["name"]))
 			continue
 		var expected_art_position: Vector2 = pacte._native_art_position(art.texture, frame_count)
+		if art == pacte._augment_deck:
+			expected_art_position = pacte.AUGMENT_DECK_POSITION
+		elif art == pacte._power_deck:
+			expected_art_position = pacte.POWER_DECK_POSITION
 		var position_tolerance := 1.1 if art == pacte._augment_deck \
 			or art == pacte._power_deck else 0.01
 		if art.position.distance_to(expected_art_position) > position_tolerance:
-			failures.append("pacte: %s artwork is not centred around the native canvas" \
+			failures.append("pacte: %s artwork is not aligned to its native slot" \
 				% String(art_spec["name"]))
 		if art.scale != Vector2.ONE:
 			failures.append("pacte: %s artwork was resized instead of preserving source pixels" \
@@ -948,7 +967,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag instruction did not move below the card row")
 	if augment_offers.size() >= 3:
 		var expected_card_positions: Array[Vector2] = [
-			Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+			Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 		]
 		# The cards do not simply appear at their offsets — _shuffle_face_down_cards
 		# wiggles each one ±2px around its origin for ~0.22s when the scene opens. This
@@ -986,7 +1005,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
 		failures.append("pacte: fixed dual-deck state is not initialized")
 	if pacte._proposition == null or pacte._proposition.z_index <= pacte.TABLE_Z_INDEX:
-		failures.append("pacte: proposition placeholder is not drawn above the table")
+		failures.append("pacte: proposition placeholder node is not retained above the table")
+	elif pacte._proposition.visible:
+		failures.append("pacte: obsolete three-card proposition overlay is still visible")
 	for card_button in pacte._card_buttons.values():
 		if pacte._proposition != null and (card_button as Button).z_index <= pacte._proposition.z_index:
 			failures.append("pacte: proposition placeholder is not beneath the cards")
@@ -999,18 +1020,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("pacte: %s should have been removed" % removed_name)
 	var augment_drop := pacte.get_node_or_null("DropHere") as Label
 	var power_drop := pacte.get_node_or_null("PowerDropHere") as Label
-	if augment_drop == null or augment_drop.position != Vector2(28.0, 256.0) \
-			or augment_drop.size != Vector2(25.0, 36.0):
+	if augment_drop == null or augment_drop.position != Vector2(25.0, 219.0) \
+			or augment_drop.size != Vector2(25.0, 35.0):
 		failures.append("pacte: augment DROP HERE is not inside its emplacement")
-	if power_drop == null or power_drop.position != Vector2(107.0, 256.0) \
-			or power_drop.size != Vector2(25.0, 36.0):
+	if power_drop == null or power_drop.position != Vector2(110.0, 219.0) \
+			or power_drop.size != Vector2(25.0, 35.0):
 		failures.append("pacte: power DROP HERE is not inside its emplacement")
 	if augment_drop != null and augment_drop.visible or power_drop != null and power_drop.visible:
 		failures.append("pacte: DROP HERE was not moved into the emplacement artwork")
 	if pacte._emplacement == null or pacte._emplacement.hframes != pacte.EMPLACEMENT_FRAME_COUNT \
 			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or pacte._power_emplacement == null or pacte._power_emplacement.visible:
-		failures.append("pacte: emplacement did not start on its centered selecting frame")
+			or pacte._augment_emplacement.visible or pacte._power_emplacement.visible:
+		failures.append("pacte: obsolete emplacement overlays are still visible")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	var first_card_art := pacte._card_views.get(first_augment, null) as Control
@@ -1117,14 +1138,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
 	if pacte._augment_emplacement == null \
 			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or not pacte._augment_emplacement.visible \
+			or pacte._augment_emplacement.visible \
 			or pacte._power_emplacement == null \
 			or pacte._power_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or not pacte._power_emplacement.visible:
-		failures.append("pacte: augment and power emplacement frames are incorrect")
+			or pacte._power_emplacement.visible:
+		failures.append("pacte: obsolete emplacement overlays are still visible after selection")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
-			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
+			or not Rect2(25.0, 219.0, 25.0, 35.0).encloses(
 				Rect2(chosen_augment.position, chosen_augment.size)):
 		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:

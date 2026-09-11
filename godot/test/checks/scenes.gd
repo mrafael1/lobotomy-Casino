@@ -614,8 +614,10 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
 		return
 	var proposition := artwork.get_node_or_null("PacteProposition") as Sprite2D
-	if proposition == null or not proposition.visible:
-		failures.append("route: %s build scene is missing the table proposition placeholder" % kind)
+	if proposition == null:
+		failures.append("route: %s build scene is missing the table proposition node" % kind)
+	elif proposition.visible:
+		failures.append("route: %s build scene still shows the obsolete proposition overlay" % kind)
 	elif first_card != null and first_card.z_index <= proposition.z_index:
 		failures.append("route: %s proposition placeholder is not beneath the cards" % kind)
 	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
@@ -626,9 +628,9 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing Pacte deck/emplacement art" % kind)
 		return
 	var show_augment := kind == "augment"
-	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible) != show_augment:
+	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible):
 		failures.append("route: %s build scene has the wrong augment art visibility" % kind)
-	if bool(power_deck.visible) == show_augment or bool(power_slot.visible) == show_augment:
+	if bool(power_deck.visible) == show_augment or bool(power_slot.visible):
 		failures.append("route: %s build scene has the wrong power art visibility" % kind)
 	if artwork.process_mode != Node.PROCESS_MODE_DISABLED:
 		failures.append("route: %s build scene left Pacte interaction processing" % kind)

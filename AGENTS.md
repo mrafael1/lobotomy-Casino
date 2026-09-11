@@ -432,16 +432,17 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — run-start-only card ritual: deterministic three-card augment and
   power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
-  emplacement assets are composed at native resolution in bg -> dealer -> table ->
-  overlay order. A crisp native painted master supplies the room, dealer and felt
-  base while all cards, prompts and descriptions remain live layers. The one-frame
-  augment and power decks stay visible at their
-  authored left/right positions during both draw phases. Each emplacement uses a
-  no-DROP-HERE frame and a DROP HERE frame while dragging. The active deck shuffles
-  briefly while the three cards remain facedown, and dragging either card type
-  shows its authored DROP HERE frame. Both proposition card types use the same
-  authored 39x61 front size, including the power card's left edge. A dragged card
+  partial choices. Its authored table, dealer-bubble, and card interaction assets
+  remain composed at native resolution; the legacy room/deck/emplacement sprites
+  are retained only as compatibility nodes. A crisp native painted master supplies
+  the room, dealer and felt
+  base while all cards, prompts and descriptions remain live layers. New compact
+  cyan and rose deck stacks sit in the painted upper recesses at (13,109) and
+  (118,109); they remain visible at those positions during both draw phases. The
+  painted table already supplies the three card recesses and two lower placement
+  wells, so the legacy proposition and emplacement overlays stay hidden while
+  drag hitboxes and DROP-HERE frames remain runtime state. Both proposition card
+  types use the same authored 39x61 front size, including the power card's left edge. A dragged card
   casts a drop shadow (as do
   dragged dealer/stash items everywhere). There is no arrow selector overlay and
   no CANCEL/EXIT text buttons. The card preview is a compact dark information
