@@ -17,6 +17,12 @@ const FIXED_CANVAS_NODES := [
 	&"NeonBackground", &"SpinButton", &"stash", &"SpinsLeftNumber", &"SpinsLegend",
 	&"ReserveGlow", &"ScoreButton", &"options", &"OptionsOverlay", &"BottomHudLayer",
 ]
+# These controls stay top-level to preserve the four-pixel cabinet alignment, but
+# they are still part of the physical machine. Keep them in lockstep with the
+# cabinet whenever it shakes or hops.
+const MACHINE_MOTION_NODES := [
+	&"SpinButton", &"stash", &"SpinsLeftNumber", &"SpinsLegend", &"ReserveGlow",
+]
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
@@ -724,6 +730,8 @@ var _pending_spin_gain := 0
 # two shake and jump the machine NODE, which is not on that layer.
 var _cocktail_shake_tween: Tween = null
 var _potion_jump_tween: Tween = null
+var _machine_motion_offset := Vector2.ZERO
+var _fixed_canvas_node_positions: Dictionary = {}
 
 ## Views onto ConsumableFx, under the names the smoke checks read the effects by.
 var _fx_layer: Control:
@@ -836,9 +844,69 @@ func _ready() -> void:
 
 func _pin_fixed_canvas_node(node: Node) -> void:
 	if node is CanvasItem and node.name in FIXED_CANVAS_NODES:
-		(node as CanvasItem).set_as_top_level(true)
+		var item := node as CanvasItem
+		item.set_as_top_level(true)
+		# Capture the authored viewport position after promoting the node. If a
+		# control is created while a shake is already running, remove the current
+		# motion offset so its stored position remains the unshaken shelf position.
+		if MACHINE_MOTION_NODES.has(node.name) and not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - _machine_motion_offset
 		if node.name == &"NeonBackground":
-			(node as CanvasItem).z_index = -100
+			item.z_index = -100
+
+func _canvas_item_position(item: CanvasItem) -> Vector2:
+	if item is Control:
+		return (item as Control).position
+	if item is Node2D:
+		return (item as Node2D).position
+	return Vector2.ZERO
+
+func _set_canvas_item_position(item: CanvasItem, value: Vector2) -> void:
+	if item is Control:
+		(item as Control).position = value
+	elif item is Node2D:
+		(item as Node2D).position = value
+
+## Apply one physical machine offset to the painted cabinet and the top-level
+## controls that sit over its shelf. The top-level nodes are necessary for the
+## cabinet's static alignment; updating them here keeps that alignment during
+## motion without making their input rectangles drift from their visuals.
+func _set_machine_motion_offset(offset: Vector2) -> void:
+	_machine_motion_offset = offset
+	position = CABINET_OFFSET + offset
+	for node in get_children():
+		if not (node is CanvasItem) or not MACHINE_MOTION_NODES.has(node.name):
+			continue
+		var item := node as CanvasItem
+		if not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - offset
+		_set_canvas_item_position(item, _fixed_canvas_node_positions[item] + offset)
+
+func _set_machine_motion_x(value: float) -> void:
+	var offset := _machine_motion_offset
+	offset.x = value
+	_set_machine_motion_offset(offset)
+
+func _set_machine_motion_y(value: float) -> void:
+	var offset := _machine_motion_offset
+	offset.y = value
+	_set_machine_motion_offset(offset)
+
+func _append_machine_motion_segment(tween: Tween, axis: String, target: float,
+		duration: float) -> void:
+	var root_target := CABINET_OFFSET.x + target if axis == "x" else CABINET_OFFSET.y + target
+	tween.tween_property(self, "position:" + axis, root_target, duration)
+	for node in get_children():
+		if not (node is CanvasItem) or not MACHINE_MOTION_NODES.has(node.name):
+			continue
+		var item := node as CanvasItem
+		if not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - _machine_motion_offset
+		var base: Vector2 = _fixed_canvas_node_positions[item]
+		var item_target := base.x + target if axis == "x" else base.y + target
+		tween.parallel().tween_property(item, "position:" + axis, item_target, duration)
+	# The next segment starts after the root and every shelf control finish this one.
+	tween.chain()
 
 ## Whether a control the tutorial wants to point at is really on screen yet.
 ## The dealer hides the stash while his offer is up and slides it back afterward.
@@ -2753,14 +2821,15 @@ func _play_compulsive_shake() -> void:
 		_cocktail_shake_tween.kill()
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position.x = 0.0
+	_set_machine_motion_x(0.0)
 	_cocktail_shake_tween = create_tween()
 	var swings := 14
 	var step := compulsive_shake_time / float(swings + 1)
 	for s in swings:
 		var dir := 1.0 if s % 2 == 0 else -1.0
-		_cocktail_shake_tween.tween_property(self, "position:x", compulsive_shake_strength * dir, step)
-	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x",
+			compulsive_shake_strength * dir, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x", 0.0, step)
 
 func _update_hud() -> void:
 	if _wealth_ending_is_visible():
@@ -2992,11 +3061,11 @@ func _refresh_jackpot_lamp(use_result := true) -> void:
 func _nudge(strength: float) -> void:
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position = CABINET_OFFSET
+	_set_machine_motion_offset(Vector2.ZERO)
 	_nudge_tween = create_tween()
-	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x + strength, 0.04)
-	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x - strength * 0.6, 0.04)
-	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x, 0.05)
+	_append_machine_motion_segment(_nudge_tween, "x", strength, 0.04)
+	_append_machine_motion_segment(_nudge_tween, "x", -strength * 0.6, 0.04)
+	_append_machine_motion_segment(_nudge_tween, "x", 0.0, 0.05)
 
 # ── score bursts (visual only — score-burst presentation) ──────────────
 
@@ -4846,15 +4915,16 @@ func _play_cocktail_shake() -> void:
 		_cocktail_shake_tween.kill()
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position.x = 0.0
+	_set_machine_motion_x(0.0)
 	_cocktail_shake_tween = create_tween()
 	var swings := 6
 	var step := cocktail_shake_time / float(swings + 1)
 	for s in swings:
 		var dir := 1.0 if s % 2 == 0 else -1.0
 		var decay := 1.0 - float(s) / float(swings)
-		_cocktail_shake_tween.tween_property(self, "position:x", cocktail_shake_strength * dir * decay, step)
-	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x",
+			cocktail_shake_strength * dir * decay, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x", 0.0, step)
 
 func _play_potion_spin_fx() -> void:
 	if not (consumable_fx_enabled and potion_fx_enabled):
@@ -4868,11 +4938,10 @@ func _play_potion_spin_fx() -> void:
 func _play_potion_jump() -> void:
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
 		_potion_jump_tween.kill()
-	position.y = 0.0
+	_set_machine_motion_y(0.0)
 	_potion_jump_tween = create_tween()
-	_potion_jump_tween.tween_property(self, "position:y", -potion_jump_height, 0.09)
-	_potion_jump_tween.tween_property(self, "position:y", 0.0, 0.14) \
-		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	_append_machine_motion_segment(_potion_jump_tween, "y", -potion_jump_height, 0.09)
+	_append_machine_motion_segment(_potion_jump_tween, "y", 0.0, 0.14)
 
 func _play_tea_sakura_fx() -> void:
 	_consumable_fx.tea_petals(tea_petal_count, tea_petal_time, tea_petal_color)
@@ -5170,9 +5239,9 @@ func _play_close_call_heartbeat() -> void:
 func _clear_close_call_heartbeat() -> void:
 	if _close_call_heartbeat_tween != null and _close_call_heartbeat_tween.is_valid():
 		_close_call_heartbeat_tween.kill()
-	_close_call_heartbeat_tween = null
+		_close_call_heartbeat_tween = null
 	scale = Vector2.ONE
-	position = CABINET_OFFSET
+	_set_machine_motion_offset(Vector2.ZERO)
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	_reactions.play(color, text, reaction_flash_time)
@@ -5445,7 +5514,7 @@ func _clear_wealth_presentation_fx() -> void:
 	if _reserve_glow_sprite != null and is_instance_valid(_reserve_glow_sprite):
 		_reserve_glow_sprite.visible = false
 	_clear_close_call_heartbeat()
-	position = CABINET_OFFSET
+	_set_machine_motion_offset(Vector2.ZERO)
 
 	_wealth.stop_roll()
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked

@@ -80,6 +80,21 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	if spin.focus_mode != Control.FOCUS_ALL or not spin.pressed.is_connected(machine._do_spin):
 		failures.append("machine: SPIN lost focus activation or its gameplay action")
 
+	# The shelf controls are top-level so their authored four-pixel alignment is
+	# preserved. They must still follow the painted cabinet during a machine shake.
+	var shelf_base := spin.global_position
+	var stash := machine.get_node("stash") as Control
+	var stash_base := stash.global_position
+	var shelf_offset := Vector2(2.0, 1.0)
+	machine._set_machine_motion_offset(shelf_offset)
+	if not is_equal_approx(spin.global_position.x, shelf_base.x + shelf_offset.x) \
+			or not is_equal_approx(spin.global_position.y, shelf_base.y + shelf_offset.y):
+		failures.append("machine: SPIN does not follow the cabinet shake")
+	if not is_equal_approx(stash.global_position.x, stash_base.x + shelf_offset.x) \
+			or not is_equal_approx(stash.global_position.y, stash_base.y + shelf_offset.y):
+		failures.append("machine: stash shelf does not follow the cabinet shake")
+	machine._set_machine_motion_offset(Vector2.ZERO)
+
 	var jackpot := machine.get_node_or_null("Jackpot") as Sprite2D
 	if jackpot == null:
 		failures.append("machine art: native jackpot node is missing")
