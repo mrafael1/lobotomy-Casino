@@ -645,6 +645,41 @@ func _check_route_bonus_layout(run_store: Node, failures: Array) -> void:
 	run_store.routeBonusClaimed = prev_claimed
 	run_store.routeBonusRewardId = prev_reward
 
+## The persistent Lab uses a compact native UI instead of the dealer's stocked
+## counter art. Keep the catalog opaque, single-axis scrollable and separated from
+## the footer so upgrades remain readable at the 160x320 target resolution.
+func _check_meta_shop_layout(failures: Array) -> void:
+	var shop := (load("res://scenes/shop_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	await process_frame
+	for old_name in ["Background", "Portrait", "Counter", "Readability", "stash"]:
+		var old_art := shop.get_node_or_null(old_name) as CanvasItem
+		if old_art != null and old_art.visible:
+			failures.append("meta shop: obsolete %s art is still visible" % old_name)
+	for panel_name in ["LabBackdrop", "LabHeaderPanel", "LabCatalogPanel"]:
+		if shop.get_node_or_null(panel_name) == null:
+			failures.append("meta shop: %s panel is missing" % panel_name)
+	var scroll := shop.get_node_or_null("Root/Scroll") as ScrollContainer
+	var list := shop.get_node_or_null("Root/Scroll/List") as VBoxContainer
+	if scroll == null or scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		failures.append("meta shop: horizontal catalog scrolling is still enabled")
+	if list == null:
+		failures.append("meta shop: upgrade catalog is missing")
+	else:
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if not is_equal_approx(row.custom_minimum_size.y, 22.0):
+				failures.append("meta shop: %s lost its compact row height" % row.name)
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("meta shop: %s lost its state-specific plate" % row.name)
+	var meter := shop.get_node_or_null("Root/Header/NeuronMeter") as Control
+	if meter != null and meter.scale.x > 0.6:
+		failures.append("meta shop: campaign meter is crowding the header")
+	shop.queue_free()
+
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
 	for label_node in build.find_children("*", "Label", true, false):
 		var label := label_node as Label

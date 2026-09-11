@@ -34,7 +34,7 @@ func _build() -> void:
 	add_child(background)
 	var header := _panel(Rect2(3.0, 3.0, 154.0, 34.0), CYAN, 0.88)
 	add_child(header)
-	var title := _label("SHOP / MACHINE INVESTMENT", Rect2(5.0, 7.0, 150.0, 11.0), 7, CYAN)
+	var title := _label("MACHINE SHOP", Rect2(5.0, 7.0, 150.0, 11.0), 7, CYAN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(title)
 	_gold_label = _label("", Rect2(5.0, 23.0, 150.0, 9.0), 5, GOLD)

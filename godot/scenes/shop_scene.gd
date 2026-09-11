@@ -25,6 +25,11 @@ const LIST_W := PANEL_W - 2.0                  # 146: room for the scrollbar
 const SCROLL_H := 196.0
 const FOOTER_Y := 262.0
 const READABILITY_RECT := Rect2(3.0, 3.0, 154.0, 286.0)
+const INK := Color(0.035, 0.025, 0.075)
+const CYAN := Color(0.42, 1.0, 0.95)
+const HEADER_PANEL_RECT := Rect2(3.0, 3.0, 154.0, 47.0)
+const CATALOG_PANEL_RECT := Rect2(3.0, 49.0, 154.0, 208.0)
+const SHOP_ROW_HEIGHT := 22.0
 
 const ITEM_ICONS := {
 	"cons_focus": "items/generated/serum.png",
@@ -115,20 +120,36 @@ func _configure_full_canvas_sheet(spr: Sprite2D, rel: String, hframes: int, fram
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _build_shop_art_background() -> void:
-	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_full_canvas_sheet(_background_sprite, "dealer_shop_bg.png", 1)
-		_configure_full_canvas_sheet(_portrait_sprite, "dealer_portrait.png", 2)
-		_configure_full_canvas_sheet(_counter_sprite, "dealer_shop_counter.png", 1)
-		return
-	_build_full_canvas_sheet("dealer_shop_bg.png", 1)
-	_build_full_canvas_sheet("dealer_portrait.png", 2)
-	_build_full_canvas_sheet("dealer_shop_counter.png", 1)
-
-	var readability := ColorRect.new()
-	readability.color = Color(0.02, 0.015, 0.035, 0.68)
-	readability.position = READABILITY_RECT.position
-	readability.size = READABILITY_RECT.size
-	add_child(readability)
+	# The Lab is a progression terminal, not the stocked dealer counter. The old
+	# room/counter sheets showed through the catalog and made every row look pasted
+	# over the dealer, so keep those nodes as compatibility anchors but hide them.
+	for art in [_background_sprite, _portrait_sprite, _counter_sprite]:
+		if art != null:
+			art.visible = false
+	var old_readability := get_node_or_null("Readability") as ColorRect
+	if old_readability != null:
+		old_readability.visible = false
+	var old_stash := get_node_or_null("stash") as TextureRect
+	if old_stash != null:
+		# Stash slots belong to the run machine; showing an empty tray in the Lab
+		# reads like a broken inventory panel and competes with the footer controls.
+		old_stash.visible = false
+	var backdrop := ColorRect.new()
+	backdrop.name = "LabBackdrop"
+	backdrop.color = INK
+	backdrop.position = Vector2.ZERO
+	backdrop.size = Vector2(CANVAS_W, 320.0)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.z_index = -20
+	add_child(backdrop)
+	var header := _panel(HEADER_PANEL_RECT, CYAN, 0.92)
+	header.name = "LabHeaderPanel"
+	header.z_index = -10
+	add_child(header)
+	var catalog := _panel(CATALOG_PANEL_RECT, Color(CYAN.r, CYAN.g, CYAN.b, 0.34), 0.96)
+	catalog.name = "LabCatalogPanel"
+	catalog.z_index = -10
+	add_child(catalog)
 
 func _label(text: String, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -150,7 +171,14 @@ func _styled_button(text: String, size: int) -> Button:
 func _build() -> void:
 	_build_shop_art_background()
 	if _list != null:
+		var scroll := _list.get_parent() as ScrollContainer
+		if scroll != null:
+			scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			_list.custom_minimum_size.x = LIST_W - 8.0
 		_build_shop_rows(_list)
+		ButtonKit.small_neon_button_style(_start_button, Color(0.42, 1.0, 0.95), 6, 2.0)
+		ButtonKit.small_neon_button_style(_scores_button, Color(1.0, 0.5, 0.7), 5, 2.0)
+		ButtonKit.skin_negative_button(_menu_button)
 		_connect_scene_button(_start_button, _start_run)
 		_connect_scene_button(_scores_button, _go_scores)
 		if _menu_button != null:
@@ -232,12 +260,60 @@ func _shop_row_button(parent: VBoxContainer, node_name: String, cb: Callable) ->
 		b.name = node_name
 		parent.add_child(b)
 	else:
-		b.add_theme_font_size_override("font_size", 8)
+		b.add_theme_font_size_override("font_size", 6)
 		if _font != null:
 			b.add_theme_font_override("font", _font)
+	b.add_theme_font_size_override("font_size", 6)
+	if _font != null:
+		b.add_theme_font_override("font", _font)
 	if not b.pressed.is_connected(cb):
 		b.pressed.connect(cb)
+	b.custom_minimum_size = Vector2(LIST_W - 8.0, SHOP_ROW_HEIGHT)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.clip_text = true
+	_style_shop_row(b)
 	return b
+
+func _style_shop_row(button: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.07, 0.11, 0.14, 0.96)
+	normal.border_color = Color(CYAN.r, CYAN.g, CYAN.b, 0.30)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(2)
+	normal.content_margin_left = 4.0
+	normal.content_margin_right = 3.0
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.10, 0.18, 0.20, 0.98)
+	hover.border_color = CYAN
+	var pressed := hover.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.15, 0.22, 0.20, 1.0)
+	pressed.content_margin_top = 2.0
+	var disabled := normal.duplicate() as StyleBoxFlat
+	disabled.bg_color = Color(0.055, 0.06, 0.09, 0.94)
+	disabled.border_color = Color(0.34, 0.38, 0.45, 0.40)
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		button.add_theme_stylebox_override(state, {
+			"normal": normal, "hover": hover, "pressed": pressed,
+			"focus": hover, "disabled": disabled,
+		}[state])
+	button.add_theme_color_override("font_color", Color(0.92, 0.96, 0.90))
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.84, 0.38))
+	button.add_theme_color_override("font_focus_color", Color.WHITE)
+	button.add_theme_color_override("font_disabled_color", Color(0.52, 0.56, 0.62))
+	button.add_theme_color_override("font_outline_color", Color.BLACK)
+	button.add_theme_constant_override("outline_size", 1)
+	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+func _panel(rect: Rect2, border_color: Color, alpha: float) -> Panel:
+	var panel := Panel.new()
+	panel.position = rect.position
+	panel.size = rect.size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := ButtonKit.neon_panel_style(border_color, 1.0)
+	style.bg_color = Color(INK.r, INK.g, INK.b, alpha)
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
 
 func _connect_scene_button(button: Button, cb: Callable) -> void:
 	if button == null:
@@ -261,7 +337,11 @@ func _refresh() -> void:
 	# native px (no resampling), so it sizes itself; right-align it to the column.
 	if not Engine.is_editor_hint() and _campaign_meter == null:
 		_campaign_meter = NeuronMeter.attach(_header, Vector2.ZERO)
-		_campaign_meter.position = Vector2(PANEL_W - _campaign_meter.size.x, -2.0)
+		# The authored neuron sheet is 64px wide; scale it down for the compact
+		# progression header so it reads as a status mark instead of covering the
+		# credit and run totals.
+		_campaign_meter.scale = Vector2(0.5, 0.5)
+		_campaign_meter.position = Vector2(PANEL_W - _campaign_meter.size.x * 0.5 - 1.0, 1.0)
 	# The endings are stored as IDs ("wealth", "flatline"); translate each before joining,
 	# or the line reads as a list of English identifiers in a French screen.
 	var reached_names := PackedStringArray()
