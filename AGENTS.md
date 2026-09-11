@@ -528,8 +528,10 @@ Resources and currencies:
   An amber glass jackpot beacon sits on a metal base above the CRT. Its three
   native frames retain the payout hold, lit state and alternating jackpot flash;
   it stays dark until the winning result is announced.
-  SPIN retains the preview's original lettering and a two-pixel depressed face;
-  its full touch area remains unchanged. Dark mounting rims seat the power buttons
+  SPIN uses crisp native 5x7 lettering on the preview cap and a two-pixel depression;
+  the SPINS legend is a runtime pixel-font label at (43,215), replacing the tiny
+  baked-in engraving.
+  The full SPIN touch area remains unchanged. Dark mounting rims seat the power buttons
   into the metal rail. Visual review includes the 5,000 target and five active items.
   Stash artwork is inset to 12x14 inside each 16x18 touch well. Tapping the empty
   margin around a held item uses that item under the same animation and dealer

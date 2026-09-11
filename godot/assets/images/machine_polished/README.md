@@ -10,8 +10,9 @@ redrawn. `tools/extract_preview_shelf.gd` reduces the archived source once to
 160x320 with nearest-neighbor sampling (no smoothing), copies rows 199..237 to
 y207..245, and clears only the baked-in count,
 item contents and independently animated cap. Bevels, slots, wear, red fascia
-and the static SPINS engraving retain the original pixels.
-The five `preview_spin_*.png` states use the original cap and lettering, with a
+retain the original pixels. The reduced SPINS engraving is cleared for a crisp
+runtime label; the cap's lettering is replaced with native 5x7 pixel glyphs.
+The five `preview_spin_*.png` states use the original cap with a
 two-pixel depression, dimmed disabled state, brighter hover and a separate focus
 mark that does not cover the depressed cap. The older
 procedural shelf and SPIN SVGs are no longer sampled for these controls.

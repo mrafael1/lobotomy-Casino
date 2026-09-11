@@ -1260,8 +1260,8 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.size = SPINS_LEFT_LABEL_RECT.size
 	var legend := Label.new()
 	legend.name = "SpinsLegend"
-	legend.text = "" # The original static SPINS engraving remains in the preview shelf.
-	legend.position = Vector2(43, 219)
+	legend.text = "SPINS"
+	legend.position = Vector2(43, 215)
 	legend.size = Vector2(11, 8)
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
