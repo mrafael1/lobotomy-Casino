@@ -199,7 +199,7 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 		return null
 	var icon := TextureRect.new()
 	icon.name = "CardIcon"
-	icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	icon.texture = PacteCards.icon_texture(entry)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
@@ -297,7 +297,7 @@ func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 		_modal_card_icon.texture = null
 		_modal_card_icon.visible = false
 		return
-	_modal_card_icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	_modal_card_icon.texture = PacteCards.icon_texture(entry)
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
 		(CARD_SIZE.y - 6.0) / icon_rect.size.y))
 	_modal_card_icon.size = icon_rect.size * scale

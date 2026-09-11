@@ -693,7 +693,7 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 	if card_id != PATTERN_RECOGNITION_ID and card_id != HOW_TO_CHEAT_ID:
 		var icon := TextureRect.new()
 		icon.name = "Icon"
-		icon.texture = UiKit.atlas(String(entry.get("sheet", "")), source_rect)
+		icon.texture = PacteCards.icon_texture(entry)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_SCALE
 		icon.size = display_size

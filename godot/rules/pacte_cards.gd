@@ -64,6 +64,7 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_book", "name": "BOOK",
+		"icon_asset": "cards/painted/book.png",
 		"description": "LEARNING ADDS BOOKS TO THE REELS; BOOK WINS -30%.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(9.0, 201.0, 22.0, 27.0),
@@ -356,6 +357,14 @@ static func painted_face_rect(pool: String, face_up: bool) -> Rect2:
 	if pool == "augment":
 		return GENERATED_AUGMENT_FRONT_RECT if face_up else GENERATED_AUGMENT_BACK_RECT
 	return GENERATED_POWER_FRONT_RECT if face_up else GENERATED_POWER_BACK_RECT
+
+## Individual replacement artwork can evolve without changing icon layout or
+## the animated icon sheets used by Pattern Recognition and How to Cheat.
+static func icon_texture(entry: Dictionary) -> Texture2D:
+	var asset := String(entry.get("icon_asset", ""))
+	if not asset.is_empty():
+		return UiKit.texture(asset)
+	return UiKit.atlas(String(entry.get("sheet", "")), entry.get("icon_rect", Rect2()))
 
 static func front_rect_for_pool(pool: String) -> Rect2:
 	return AUGMENT_FRONT_RECT if pool == "augment" else POWER_FRONT_RECT

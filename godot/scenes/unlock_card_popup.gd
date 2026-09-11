@@ -291,7 +291,7 @@ func _apply_icon(entry: Dictionary) -> void:
 		_icon.texture = null
 		_icon.visible = false
 		return
-	_icon.texture = _atlas(PacteCards.sheet_for_pool(_pool), icon_rect)
+	_icon.texture = PacteCards.icon_texture(entry)
 	_icon.size = icon_rect.size * CARD_SCALE
 	_icon.position = (_card_holder.size - _icon.size) * 0.5
 	_icon.visible = false # revealed together with the front, mid-flip
