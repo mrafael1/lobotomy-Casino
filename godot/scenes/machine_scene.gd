@@ -11,6 +11,12 @@ extends Node2D
 
 const SRC_W := 160.0
 const SRC_H := 320.0
+const CABINET_OFFSET := Vector2(4.0, 0.0)
+# These belong to the viewport or the already-centered preview shelf.
+const FIXED_CANVAS_NODES := [
+	&"NeonBackground", &"SpinButton", &"stash", &"SpinsLeftNumber", &"SpinsLegend",
+	&"ReserveGlow", &"ScoreButton", &"options", &"OptionsOverlay", &"BottomHudLayer",
+]
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
@@ -230,7 +236,7 @@ const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 # the tray throws a coin spray up through the cabinet like a casino payout.
 const JACKPOT_ODOMETER_ROLL_TIME := 1.60
 const JACKPOT_ROLL_TAIL := 0.25 # a beat of stillness after the reels land
-const COIN_TRAY := Vector2(80.0, 290.0)
+const COIN_TRAY := Vector2(76.0, 290.0) # world x80 after the cabinet offset
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
 # The translated pop sheet hands its final frame to the flight at the cash outlet.
@@ -746,6 +752,10 @@ var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
 func _ready() -> void:
+	position = CABINET_OFFSET
+	child_entered_tree.connect(_pin_fixed_canvas_node)
+	for child in get_children():
+		_pin_fixed_canvas_node(child)
 	_font = _load_font("font/DTM-Sans.otf")
 	# Before any build step: _build_augment_emplacements hands the plate straight to
 	# the display, and that runs inside the sprite pass below.
@@ -824,10 +834,14 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		Tutorial.attach(self, "machine")
 
-## Whether a control the tutorial wants to point at is really on screen yet (issue #105).
-## The dealer's offer hides the machine's own stash while he is in and it slides out over a
-## few frames after an item is taken, so the beat that says "tap the powder" would otherwise
-## open pointing at a stash that is not drawn.
+func _pin_fixed_canvas_node(node: Node) -> void:
+	if node is CanvasItem and node.name in FIXED_CANVAS_NODES:
+		(node as CanvasItem).set_as_top_level(true)
+		if node.name == &"NeonBackground":
+			(node as CanvasItem).z_index = -100
+
+## Whether a control the tutorial wants to point at is really on screen yet.
+## The dealer hides the stash while his offer is up and slides it back afterward.
 func tutorial_ready_for(id: String) -> bool:
 	match id:
 		"stash":
@@ -859,10 +873,10 @@ func tutorial_blocking_modal() -> bool:
 func tutorial_anchor(id: String) -> Rect2:
 	match id:
 		"spin_button":
-			return Rect2(SPIN_HIT["left"], SPIN_HIT["top"],
-				SPIN_HIT["width"], SPIN_HIT["height"])
+			return Rect2(Vector2(SPIN_HIT["left"], SPIN_HIT["top"]) - global_position,
+				Vector2(SPIN_HIT["width"], SPIN_HIT["height"]))
 		"health":
-			return SPINS_LEFT_LABEL_RECT
+			return Rect2(SPINS_LEFT_LABEL_RECT.position - global_position, SPINS_LEFT_LABEL_RECT.size)
 		"wealth":
 			return Rect2(72.0, 59.0, 50.0, 18.0)
 		"target_bar":
@@ -2255,6 +2269,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	var score := int(RunStateStore.scoreEarned)
 	var target := int(info.get("target", 0))
 	var overlay := TARGET_REACHED_SCENE.instantiate() as TargetReachedOverlay
+	overlay.set_as_top_level(true)
 	overlay.name = "WealthTargetTransition"
 	overlay.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	overlay.z_index = WEALTH_TARGET_FX_Z_INDEX
@@ -2266,7 +2281,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	_wealth.stop_roll()
 	if _wealth.odometer() != null:
 		snapshot = WealthOdometer.make_snapshot(score)
-		snapshot.snapshot_origin = _wealth.odometer().position
+		snapshot.snapshot_origin = _wealth.odometer().position + CABINET_OFFSET
 	_tv.begin_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
 	# The final target is not paid out of the score and banks nothing, so it shows no
@@ -2977,11 +2992,11 @@ func _refresh_jackpot_lamp(use_result := true) -> void:
 func _nudge(strength: float) -> void:
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position = Vector2.ZERO
+	position = CABINET_OFFSET
 	_nudge_tween = create_tween()
-	_nudge_tween.tween_property(self, "position:x", strength, 0.04)
-	_nudge_tween.tween_property(self, "position:x", -strength * 0.6, 0.04)
-	_nudge_tween.tween_property(self, "position:x", 0.0, 0.05)
+	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x + strength, 0.04)
+	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x - strength * 0.6, 0.04)
+	_nudge_tween.tween_property(self, "position:x", CABINET_OFFSET.x, 0.05)
 
 # ── score bursts (visual only — score-burst presentation) ──────────────
 
@@ -4644,7 +4659,7 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
 	var tw := create_tween()
-	tw.tween_property(icon, "position", SPIN_COUNTER_TARGET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(icon, "position", SPIN_COUNTER_TARGET - CABINET_OFFSET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(icon.queue_free)
 	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
 	# travels alongside this icon and lands on the same beat.
@@ -4683,7 +4698,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
 	gain.scale = Vector2(0.4, 0.4)
 	var tw := create_tween()
 	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(gain, "position", SPIN_COUNTER_TARGET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(gain, "position", SPIN_COUNTER_TARGET - CABINET_OFFSET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(_land_spin_gain.bind(amount, gain))
 
 func _land_spin_gain(amount: int, gain: Label) -> void:
@@ -5137,7 +5152,7 @@ func _play_close_call_heartbeat() -> void:
 	_clear_close_call_heartbeat()
 	var center := Vector2(SRC_W * 0.5, SRC_H * 0.5)
 	var zoom := maxf(1.0, close_call_zoom_scale)
-	var zoom_pos := -center * (zoom - 1.0)
+	var zoom_pos := CABINET_OFFSET - center * (zoom - 1.0)
 	var half_time := close_call_zoom_time * 0.5
 	_close_call_heartbeat_tween = create_tween()
 	_close_call_heartbeat_tween.set_parallel(true)
@@ -5148,7 +5163,7 @@ func _play_close_call_heartbeat() -> void:
 	_close_call_heartbeat_tween.chain()
 	_close_call_heartbeat_tween.tween_property(self, "scale", Vector2.ONE, half_time) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	_close_call_heartbeat_tween.tween_property(self, "position", Vector2.ZERO, half_time) \
+	_close_call_heartbeat_tween.tween_property(self, "position", CABINET_OFFSET, half_time) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	_close_call_heartbeat_tween.chain().tween_callback(_clear_close_call_heartbeat)
 
@@ -5157,7 +5172,7 @@ func _clear_close_call_heartbeat() -> void:
 		_close_call_heartbeat_tween.kill()
 	_close_call_heartbeat_tween = null
 	scale = Vector2.ONE
-	position = Vector2.ZERO
+	position = CABINET_OFFSET
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	_reactions.play(color, text, reaction_flash_time)
@@ -5285,6 +5300,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	# is what tells the unlock popup to wait rather than beat the ending screen onto
 	# the scene. The queue is drained once the player leaves it (issue #52).
 	_overlay = Control.new()
+	_overlay.set_as_top_level(true)
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
@@ -5429,7 +5445,7 @@ func _clear_wealth_presentation_fx() -> void:
 	if _reserve_glow_sprite != null and is_instance_valid(_reserve_glow_sprite):
 		_reserve_glow_sprite.visible = false
 	_clear_close_call_heartbeat()
-	position = Vector2.ZERO
+	position = CABINET_OFFSET
 
 	_wealth.stop_roll()
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
@@ -5472,6 +5488,7 @@ func _show_campaign_failed() -> void:
 	if _overlay != null:
 		_overlay.queue_free()
 	_overlay = Control.new()
+	_overlay.set_as_top_level(true)
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
@@ -5694,6 +5711,7 @@ func _show_dealer_offers() -> void:
 	_dealer_overlay = null
 	_dealer_offer_popup = null
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
+	_dealer_offer_popup.set_as_top_level(true)
 	_dealer_overlay = _dealer_offer_popup
 	# The dealer draws above the loss overlays (97) but under the HUD (120); the
 	# machine stash rides above him while his offer is up so it stays draggable.

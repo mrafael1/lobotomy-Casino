@@ -54,7 +54,8 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		failures.append("machine: SPIN must be centered on the shelf with its touch area")
 	if hit.intersects(Rect2(133, 160, 20, 40)):
 		failures.append("machine: old lever hitbox is still active")
-	if machine.tutorial_anchor("spin_button") != hit:
+	var tutorial_hit: Rect2 = machine.tutorial_anchor("spin_button")
+	if tutorial_hit.position + machine.global_position != spin.global_position or tutorial_hit.size != hit.size:
 		failures.append("machine: tutorial does not expose the new SPIN control")
 	for power: Button in machine._power_buttons.values():
 		if hit.intersects(power.get_rect()):

@@ -35,7 +35,7 @@ const POWER_FLIGHT_TIME := 0.64
 ## The authored pop that plays at the cash outlet before the chip sets off.
 const POP_SHEET := "machine new view/power coin animation.png"
 const POP_FRAMES := 4
-const POP_OFFSET := Vector2(6.0, 52.5) # last frame meets the cash outlet at (80, 298)
+const POP_OFFSET := Vector2(2.0, 52.5) # cabinet-local x76; world cash outlet remains (80, 298)
 const POP_FRAME_TIME := 0.06
 
 ## Casino-TV payout spray (issue #181): lucidity coins erupt out of the cash tray

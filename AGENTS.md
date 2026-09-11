@@ -513,6 +513,11 @@ Resources and currencies:
   FREE SPIN replaces only the target number and title. Target-payout digit snapshots
   launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
   The power rail and sloped lower shelf are composed into the cabinet material.
+  The machine's local origin is shifted four native pixels right to center its
+  upper cabinet, reels and hitboxes over the preview shelf. Shelf controls and
+  viewport UI remain fixed. Cabinet shakes return to this offset; the shelf
+  texture samples canvas coordinates so it does not drift with those effects.
+  The cash outlet remains at world (80,298), or machine-local (76,298).
   The lower shelf is copied directly from the approved preview by
   `tools/extract_preview_shelf.gd`, reduced once to native resolution with nearest
   sampling so extraction cannot blur the pixel edges. Its original

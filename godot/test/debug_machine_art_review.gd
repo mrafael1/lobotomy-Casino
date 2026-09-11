@@ -37,7 +37,14 @@ func _run() -> void:
 	root.add_child(_scene)
 	await create_timer(0.5).timeout
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
-	assert(_scene.tutorial_anchor("health") == _scene.SPINS_LEFT_LABEL_RECT, "Tutorial must highlight the shelf counter")
+	assert(_scene.tutorial_anchor("health").position + _scene.global_position == _scene.SPINS_LEFT_LABEL_RECT.position, "Tutorial must highlight the fixed shelf counter")
+	assert(_scene.position == Vector2(4, 0), "Cabinet must be centered four pixels right")
+	assert(_scene._spin_button.global_position == Vector2(57, 210), "Centered SPIN must not move with the cabinet")
+	assert(_scene._spins_left_label.global_position == Vector2(28, 210), "Shelf count must stay fixed")
+	_scene._nudge(2.0)
+	await create_timer(0.2).timeout
+	assert(_scene.position == _scene.CABINET_OFFSET, "Shake must return to the new cabinet center")
+	assert(_scene._spin_button.global_position == Vector2(57, 210), "Shake must leave the shelf button fixed")
 	await _capture("01-idle")
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var face := _scene._spin_button.get_theme_stylebox(state) as StyleBoxTexture

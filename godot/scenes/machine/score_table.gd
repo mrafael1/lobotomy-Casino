@@ -121,6 +121,7 @@ func open() -> void:
 	_info_buttons.clear()
 	_pct_buttons.clear()
 	_overlay = Control.new()
+	_overlay.set_as_top_level(true)
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = OVERLAY_Z_INDEX
 	_view.add_layer(_overlay)

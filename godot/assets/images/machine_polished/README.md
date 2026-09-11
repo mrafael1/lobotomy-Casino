@@ -3,6 +3,11 @@
 The painted cabinet is registered to a native 160x320 canvas by
 `painted_cabinet.gdshader`. `apertures.svg` defines independent reel holes at
 x33/65/97, y169..202. Live symbols and targeting remain runtime elements.
+The machine origin is offset (4,0), centering the upper hardware and its input
+with the fixed shelf. Geometry above is machine-local. Shelf controls and
+viewport overlays ignore that transform; the shelf shader samples canvas pixels.
+Shake/heartbeat resets retain the offset, and cash flights use local (76,298)
+to preserve the world outlet at (80,298).
 
 `cabinet_controls.svg` supplies only the metal power rail at runtime. The lower
 shelf is `preview_shelf.png`, extracted directly from the approved preview, not
