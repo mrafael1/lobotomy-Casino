@@ -4,9 +4,13 @@
 image-generation tool. It follows the painted Pacte dealer, red enamel, dark
 green surfaces, brass and restrained casino lighting.
 
-Not yet wired into the live scene. Generated layout is approximate and needs
-measurement before native 160x320 integration. Use nearest sampling for native
-pixel assets. This interprets pre-dealer shop as the stocked dealer-counter room using dealer_shop artwork as reference. Separate background stock, dealer and foreground counter before integration. Decorative bottles are background only; real merchandise, prices and controls remain runtime layers. Remeasure the generated three offer wells; do not assume they match existing item hitboxes.
+The 160x320 `pre_dealer_shop_native.png` derivative is now the active base layer
+for the pre-run branch of `dealer_scene.gd`. It supplies the stocked room,
+dealer and counter as one crisp nearest sampled composition. Live offer slots,
+prices, stash, wallet and navigation controls remain independent runtime nodes;
+the in-run dealer branch keeps its existing dedicated artwork. The high-
+resolution file is retained as the editable source master; the native
+derivative is the exported runtime asset.
 
 ## Generation prompt
 

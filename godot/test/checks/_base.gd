@@ -195,6 +195,14 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	_check_dealer_shop_light_art(dealer, failures)
+	if bool(dealer._pre_run):
+		var painted_shop := dealer.get_node_or_null("Background") as Sprite2D
+		if painted_shop == null or painted_shop.texture == null \
+				or not painted_shop.texture.resource_path.ends_with(
+					"dealer_shop_polished/pre_dealer_shop_native.png") \
+				or painted_shop.position != Vector2.ZERO \
+				or painted_shop.scale != Vector2.ONE:
+			failures.append("issue55: pre-run dealer shop is not using its painted native master")
 	if not dealer.has_method("_native_canvas_origin") \
 			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
 		failures.append("issue55: dealer native artwork canvas is not horizontally centred")
@@ -298,11 +306,19 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 	var background := dealer.get_node_or_null("Background") as Sprite2D
 	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("dealer shop: background is not nearest-neighbor filtered")
-	elif background.texture == null \
-			or not background.texture.resource_path.ends_with("dealer_shop/bg.png") \
-			or background.position != Vector2(-20.0, -30.0) \
-			or background.scale != Vector2.ONE:
-		failures.append("dealer shop: background is not the centred native sheet")
+	elif background.texture == null:
+		failures.append("dealer shop: background is missing its texture")
+	else:
+		var expected_background := "dealer_shop/bg.png"
+		var expected_position := Vector2(-20.0, -30.0)
+		if bool(dealer._pre_run) and background.texture.resource_path.ends_with(
+				"dealer_shop_polished/pre_dealer_shop_native.png"):
+			expected_background = "dealer_shop_polished/pre_dealer_shop_native.png"
+			expected_position = Vector2.ZERO
+		if not background.texture.resource_path.ends_with(expected_background) \
+				or background.position != expected_position \
+				or background.scale != Vector2.ONE:
+			failures.append("dealer shop: background is not the centred native sheet")
 	var counter := dealer.get_node_or_null("Counter") as Sprite2D
 	if counter == null:
 		failures.append("dealer shop: counter node is missing")

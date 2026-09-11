@@ -5,6 +5,7 @@ extends Control
 ## There is intentionally no back action once a door has been opened.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
+const PAINTED_MASTER_ASSET := "dealer_choice_polished/choice_scene_native.png"
 const DOOR_PATHS: Array[NodePath] = [
 	NodePath("DoorChoices/DoorLeft"),
 	NodePath("DoorChoices/DoorRight"),
@@ -98,6 +99,11 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_font = Assets.font()
 	_reroll_art = get_node_or_null("RerollArt") as Sprite2D
+	var painted_master := Assets.texture(PAINTED_MASTER_ASSET, true)
+	var scene_art := get_node_or_null("DealerSprite") as Sprite2D
+	if painted_master != null and scene_art != null:
+		scene_art.texture = painted_master
+		scene_art.position = Vector2.ZERO
 	_bubble_sprite = get_node_or_null("BubbleText") as Sprite2D
 	_build_header()
 	_build_credits_display()

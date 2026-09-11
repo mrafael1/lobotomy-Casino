@@ -434,7 +434,9 @@ Resources and currencies:
   power offers, previews, drag-to-emplacement selection, and resumable
   partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
   emplacement assets are composed at native resolution in bg -> dealer -> table ->
-  overlay order. The one-frame augment and power decks stay visible at their
+  overlay order. A crisp native painted master supplies the room, dealer and felt
+  base while all cards, prompts and descriptions remain live layers. The one-frame
+  augment and power decks stay visible at their
   authored left/right positions during both draw phases. Each emplacement uses a
   no-DROP-HERE frame and a DROP HERE frame while dragging. The active deck shuffles
   briefly while the three cards remain facedown, and dragging either card type
@@ -454,9 +456,9 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice. The shop background and counter
-  layers are intentionally omitted for now; the scene keeps the dealer, doors, and
-  route controls.
+  doors for Shop/Augment/Power/Bonus/Sacrifice. Its crisp native painted master
+  supplies the lobby, doors and dealer; route titles, prices, hover/open frames,
+  reroll and confirmation remain runtime layers.
   Each door switches its authored
   door asset to match the route card; paying the dealer reshuffles both doors at an
   escalating **5G / 10G / 15G** price. Selecting a door commits the route and there is
@@ -485,6 +487,9 @@ Resources and currencies:
   new end-of-segment offers use the live Dealer only through its interruption flow.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — live in-run dealer visits and the post-run odds phase (gateway to the Lab).
+  Its pre-run branch uses the native painted stocked-counter master while offers,
+  prices, stash and wallet remain runtime elements; active-run visits retain their
+  dedicated dealer art.
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).

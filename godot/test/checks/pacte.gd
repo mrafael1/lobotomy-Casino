@@ -863,6 +863,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var pacte := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(pacte)
 	await process_frame
+	var painted_master := pacte.get_node_or_null("PactePaintedMaster") as Sprite2D
+	if painted_master == null or painted_master.texture == null \
+			or not painted_master.visible \
+			or not painted_master.texture.resource_path.ends_with(
+				"pacte_polished/pacte_scene_native.png") \
+			or painted_master.position != Vector2.ZERO \
+			or painted_master.scale != Vector2.ONE:
+		failures.append("pacte: painted native scene master is not the active crisp base layer")
 	var pattern_view := pacte._make_card_view("augment_pattern_recognition", "augment") as Control
 	var pattern_icon := pattern_view.get_node_or_null("Icon") as AnimatedSprite2D
 	if pattern_icon == null or pattern_icon.sprite_frames == null \

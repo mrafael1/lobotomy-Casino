@@ -4,9 +4,12 @@
 image-generation tool. It follows the painted Pacte dealer, red enamel, dark
 green surfaces, brass and restrained casino lighting.
 
-Not yet wired into the live scene. Generated layout is approximate and needs
-measurement before native 160x320 integration. Use nearest sampling for native
-pixel assets. Separate doors from the room and dealer before integration. Runtime route symbols, titles, prices, reroll controls and CONTINUE remain separate. Door opening and hover need independent states; remeasure the generated door positions against dealer_choice_scene.gd.
+The 160x320 `choice_scene_native.png` derivative is now the active base layer in
+`dealer_choice_scene.gd`. It supplies the lobby, doors and dealer as a single
+crisp nearest sampled composition. Door sprites, route titles, prices, reroll,
+confirmation and CONTINUE controls remain live nodes above it, preserving hover
+and opening animation. The high-resolution file is retained as the editable
+source master; the native derivative is the exported runtime asset.
 
 ## Generation prompt
 

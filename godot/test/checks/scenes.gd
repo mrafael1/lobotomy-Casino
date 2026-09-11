@@ -235,6 +235,13 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
+	var route_master := route.get_node_or_null("DealerSprite") as Sprite2D
+	if route_master == null or route_master.texture == null \
+			or not route_master.texture.resource_path.ends_with(
+				"dealer_choice_polished/choice_scene_native.png") \
+			or route_master.position != Vector2.ZERO \
+			or route_master.scale != Vector2.ONE:
+		failures.append("route: painted choice master is not the active crisp base layer")
 	var route_cards: Array = run_store.current_route_offer()
 	if route.get_node_or_null("ContinueButton") != null:
 		failures.append("route: dealer offer still exposes the removed continue action")

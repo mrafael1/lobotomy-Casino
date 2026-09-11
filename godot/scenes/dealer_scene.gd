@@ -81,6 +81,7 @@ const COIN_ASSET := "ui/coin.png"
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_BACKGROUND_ASSET := DEALER_SHOP_ASSET_DIR + "bg.png"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "counter.png"
+const PRE_RUN_PAINTED_MASTER_ASSET := "dealer_shop_polished/pre_dealer_shop_native.png"
 # The between-run Dealer is a compact native sprite. Keep it separate from the
 # full-canvas portrait used by the active-run dealer so either presentation can
 # evolve without changing the other one.
@@ -418,15 +419,18 @@ func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_native_art_sprite(_background_sprite, DEALER_BACKGROUND_ASSET)
+		_configure_native_art_sprite(_background_sprite,
+			PRE_RUN_PAINTED_MASTER_ASSET if _pre_run else DEALER_BACKGROUND_ASSET)
 		if _pre_run:
 			if _portrait_sprite != null:
 				_portrait_sprite.visible = false
+			if _counter_sprite != null:
+				_counter_sprite.visible = false
 			_dealer_shop_sprite = _configure_native_art_sprite(
 				_dealer_shop_sprite, DEALER_SHOP_DEALER_ASSET,
 				DEALER_SHOP_DEALER_FRAMES, 0)
 			if _dealer_shop_sprite != null and _dealer_shop_sprite.texture != null:
-				_dealer_shop_sprite.visible = true
+				_dealer_shop_sprite.visible = false
 				_dealer_visual_rest_position = _dealer_shop_sprite.position
 			else:
 				# Keep a usable editor/legacy fallback if the optional native export is

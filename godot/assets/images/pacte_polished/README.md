@@ -5,16 +5,15 @@ the augment/power table, generated with the built-in image-generation tool.
 It follows the approved machine preview: cadaver-green dealer, worn crimson
 enamel, dark green felt, brass trim and cyan/red casino lighting.
 
-This is a composed art master, not yet wired into `pacte_scene.gd`. The dealer,
-room and table are currently baked together. Cards, deck artwork and gameplay
-text are intentionally absent. Before integration, separate the needed layers
-and remeasure the generated wells; generated placement is approximate and does
-not exactly match the existing 160x320 card/hitbox constants. Use nearest sampling
-when preparing native-resolution assets, following the machine shelf workflow.
+The 160x320 `pacte_scene_native.png` derivative is now the active base layer in
+`pacte_scene.gd`. It supplies the room, dealer and felt as one crisp nearest
+sampled composition. Live decks, cards, emplacement masks, descriptions and
+prompts remain separate runtime nodes so the ritual can still animate and save
+its state. The high-resolution file is retained as the editable source master;
+the native derivative is the exported runtime asset.
 
 References: `tmp/preview.jpg` (style) and
 `godot/assets/images/pacte_scene/pacte_scene.png` (composition).
-The original live Pacte assets remain active.
 
 ## Generation prompt
 

@@ -92,6 +92,7 @@ const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
+const PAINTED_MASTER_ASSET := "pacte_polished/pacte_scene_native.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
 const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
@@ -277,6 +278,17 @@ func _build_background() -> void:
 	_proposition = _full_canvas_sprite(PROPOSITION_ASSET, ART_Z_INDEX)
 	_proposition.name = "PacteProposition"
 	add_child(_proposition)
+	# The painted master supplies the room, dealer and felt in one coherent layer.
+	# Keep the authored component nodes alive for route-build/tests and their card
+	# placeholder, but hide duplicate room art when the new native master is present.
+	var painted_master := _full_canvas_sprite(PAINTED_MASTER_ASSET, BACKGROUND_Z_INDEX)
+	painted_master.name = "PactePaintedMaster"
+	add_child(painted_master)
+	if painted_master.texture != null:
+		_background.visible = false
+		_dealer_sprite.visible = false
+		_table.visible = false
+		_title_light.visible = false
 	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
 	_augment_deck.name = "AugmentDeck"
 	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
