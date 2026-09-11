@@ -194,9 +194,11 @@ func _check_painting_reroll_117(failures: Array) -> void:
 		failures.append("issue117: pre-run offer must be exactly two consumables: %s" % str(shop_offers))
 	if int(run_store.dealerRerollCount) != 0 or int(run_store.dealer_reroll_price()) != 5:
 		failures.append("issue117: fresh pre-run offer did not reset the reroll price to 5L")
-	# Slots beyond the two-item offer are empty (the far-right slot belongs to the
-	# Chip Augment): their authored price tags must hide.
+	# Slots beyond the two-item offer are empty unless the dedicated Chip Augment
+	# occupies the third painted well. Their authored price tags must hide.
 	for i in range(shop_offers.size() + 1, 5):
+		if i == shop._augment_slot_index() + 1 and shop._augment_offer_id() != "":
+			continue
 		var empty_slot := shop.get_node_or_null("OfferSlot%d" % i) as Control
 		var empty_tag := empty_slot.get_node_or_null("PriceTag") as Control if empty_slot != null else null
 		if empty_tag != null and empty_tag.visible:
@@ -539,7 +541,7 @@ func _check_chip_augments(failures: Array) -> void:
 	if String(run_store._roll_augment_offer(5)) != "aug_pair_triple":
 		failures.append("augments: sole eligible augment was not offered")
 
-	# UI: the augment stands on the far-right counter slot like a consumable —
+	# UI: the augment stands in the third painted well like a consumable —
 	# priced tag above, name/rarity/stock/effect on select, drag-on-dealer to buy;
 	# selector cancel never charges.
 	run_store.runPhase = "idle"
@@ -554,9 +556,9 @@ func _check_chip_augments(failures: Array) -> void:
 	get_root().add_child(shop)
 	run_store.dealerAugmentOfferId = "aug_symbol_level"
 	shop._build_offers()
-	var aug_slot := shop.get_node_or_null("OfferSlot5") as Control
+	var aug_slot := shop.get_node_or_null("OfferSlot3") as Control
 	if aug_slot == null:
-		failures.append("augments: far-right offer slot missing")
+		failures.append("augments: third painted offer slot missing")
 	else:
 		var has_icon := false
 		var icon_sprite: Sprite2D = null
@@ -565,7 +567,7 @@ func _check_chip_augments(failures: Array) -> void:
 				has_icon = true
 				icon_sprite = (child as Control).get_child(0) as Sprite2D
 		if not has_icon:
-			failures.append("augments: no augment icon on the far-right counter slot")
+			failures.append("augments: no augment icon on the third painted counter slot")
 		# The authored chip sheet: 6 frames, one unique chip per augment.
 		if icon_sprite == null or icon_sprite.texture == null:
 			failures.append("augments: augment icon has no chip art")
@@ -576,7 +578,7 @@ func _check_chip_augments(failures: Array) -> void:
 		var aug_price_label := aug_slot.get_node_or_null("PriceTag/Price") as Label
 		if aug_tag == null or not aug_tag.visible or aug_price_label == null \
 				or aug_price_label.text != str(run_store.chip_augment_price("aug_symbol_level")):
-			failures.append("augments: far-right slot must show the live augment price")
+			failures.append("augments: third painted slot must show the live augment price")
 		# Selecting the augment surfaces the shared AUGMENT name (rarity-coloured)
 		# and green-only TV hints — no explanatory message text.
 		shop._select("aug_symbol_level")

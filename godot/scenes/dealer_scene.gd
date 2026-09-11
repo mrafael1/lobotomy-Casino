@@ -133,8 +133,8 @@ const PAINTING_NO_CREDITS_MESSAGE := "NOT ENOUGH CREDITS"
 # Escalating reroll price tag, centred under the painting art (rect x 2..31).
 const REROLL_PRICE_TAG_POS := Vector2(0.0, 107.0)
 const PRICE_WARN_COLOR := Color(0.94, 0.27, 0.27)
-# Chip Augment offer: presented like a consumable on the counter's far-right
-# slot — icon on the dot, price tag above (both phases), name/rarity/stock/effect
+# Chip Augment offer: presented like a consumable in its dedicated counter
+# well — icon in the recess, price tag above (both phases), name/rarity/stock/effect
 # on select, drag onto the dealer to buy.
 const AUGMENT_RARITY_COLORS := {
 	"common": Color(0.0, 0.9, 1.0),
@@ -833,12 +833,11 @@ func _build_offers() -> void:
 			_clear_dynamic_children(slot)
 		var ids := _offer_ids()
 		var icon_size := _offer_icon_size()
-		# The Chip Augment stands on the far-right dot, like one more consumable.
+		# The Chip Augment gets the third painted well in the pre-run shop; in-run
+		# visits retain the fifth compact slot so their five-offer layout is unchanged.
 		var aug_id := _augment_offer_id()
-		# Keep the dedicated Chip Augment on its existing far-right slot. The
-		# three painted wells belong to consumables; the augment is a separate
-		# dealer offer and remains available without crowding those wells.
-		var aug_slot: Control = _offer_slots[_offer_slots.size() - 1] \
+		var aug_index := _augment_slot_index()
+		var aug_slot: Control = _offer_slots[aug_index] \
 				if aug_id != "" else null
 		for i in range(mini(ids.size(), _offer_slots.size())):
 			var id := String(ids[i])
@@ -890,8 +889,15 @@ func _configure_offer_slot_geometry() -> void:
 			# The painted pre-run master only exposes three wells. Extra authored
 			# placeholders stay available for in-run offers. Keep the dedicated
 			# augment slot visible when a visit supplies one.
-			slot.visible = not _pre_run or (i == _offer_slots.size() - 1 \
+			slot.visible = not _pre_run or (i == _augment_slot_index() \
 					and _augment_offer_id() != "")
+
+func _augment_slot_index() -> int:
+	if _offer_slots.is_empty():
+		return -1
+	if _pre_run and _offer_slots.size() > PRE_RUN_OFFER_SLOT_RECTS.size() - 1:
+		return PRE_RUN_OFFER_SLOT_RECTS.size() - 1
+	return _offer_slots.size() - 1
 
 func _build_stash() -> void:
 	if not _stash_slot_nodes.is_empty():
@@ -1230,10 +1236,10 @@ func _on_painting_pressed() -> void:
 	_dealer_react()
 	_refresh_painting_state() # price + affordability update immediately
 
-# ── Chip Augment offer (far-right counter slot) ─────────────────────────────────────
+# ── Chip Augment offer (dedicated counter slot) ─────────────────────────────────────
 # One dedicated augment offer per dealer visit (both phases), separate from the
 # counter items and untouched by the painting reroll. It stands on the counter's
-# far-right dot like a consumable: price tag above (live discounted price, both
+# counter well like a consumable: price tag above (live discounted price, both
 # phases), tap to read name/rarity/stock/effect, drag onto the dealer to buy.
 # Symbol Level / Pair-Triple open a selector first — cancelling never charges
 # (the store is only called on commit).
@@ -1330,8 +1336,10 @@ func _pulse_offer_prices(label: String) -> void:
 func _pulse_augment_price(label: String) -> void:
 	var aug_id := _augment_offer_id()
 	var slot: Control = _offer_slots_by_id.get(aug_id) as Control if aug_id != "" else null
-	if slot == null and not _offer_slots.is_empty():
-		slot = _offer_slots[_offer_slots.size() - 1] as Control
+	if slot == null:
+		var aug_index := _augment_slot_index()
+		if aug_index >= 0:
+			slot = _offer_slots[aug_index] as Control
 	if slot == null:
 		return
 	var tag := slot.get_node_or_null("PriceTag") as Control
