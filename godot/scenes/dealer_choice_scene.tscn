@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/dealer_choice_scene.gd" id="1_choice"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_choice/choice_scene.png" id="2_choice_scene"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_choice_polished/choice_scene_native.png" id="2_choice_scene"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/dealer_choice_doors.svg" id="3_doors"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/reroll.png" id="4_reroll"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer_choice/bubble_text.png" id="5_bubble_text"]

@@ -270,11 +270,13 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
 	var left_door_sprite := route.get_node_or_null("DoorChoices/DoorLeft/DoorSprite") as Sprite2D
-	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0):
-		failures.append("route: left door art is not offset by one pixel")
+	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0) \
+			or left_door_sprite.visible:
+		failures.append("route: left legacy door plate is still drawing over the master")
 	var right_door_sprite := route.get_node_or_null("DoorChoices/DoorRight/DoorSprite") as Sprite2D
-	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0):
-		failures.append("route: right door art is not offset by one pixel")
+	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0) \
+			or right_door_sprite.visible:
+		failures.append("route: right legacy door plate is still drawing over the master")
 	var authored_hover_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
 		var route_type := String(route_cards[index].get("routeType", ""))
@@ -296,10 +298,16 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position != Vector2(2.0, 107.0) \
-				or door_title.size != Vector2(62.0, 9.0) \
-				or door_title.get_theme_font_size("font_size") < 5:
-			failures.append("route: %s title is not inside its blue name plate" % door)
+		var door_emblem: Control = null
+		if door_button != null:
+			door_emblem = door_button.get_node_or_null("RouteEmblem") as Control
+		if door_emblem == null or door_emblem.position != Vector2(18.0, -1.0) \
+				or door_emblem.size != Vector2(28.0, 32.0):
+			failures.append("route: %s emblem is not seated in its painted door inset" % door)
+		if door_title == null or door_title.position != Vector2(14.0, 34.0) \
+				or door_title.size != Vector2(36.0, 10.0) \
+				or door_title.get_theme_font_size("font_size") < 4:
+			failures.append("route: %s title is not inside its painted name plate" % door)
 		if door_title != null and door_button != null:
 			var title_route_type := String(route_cards[0 if door == "DoorLeft" else 1].get(
 				"routeType", ""))

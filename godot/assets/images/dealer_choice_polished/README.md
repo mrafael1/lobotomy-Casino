@@ -6,10 +6,12 @@ green surfaces, brass and restrained casino lighting.
 
 The 160x320 `choice_scene_native.png` derivative is now the active base layer in
 `dealer_choice_scene.gd`. It supplies the lobby, doors and dealer as a single
-crisp nearest sampled composition. Door sprites, route titles, prices, reroll,
-confirmation and CONTINUE controls remain live nodes above it, preserving hover
-and opening animation. The high-resolution file is retained as the editable
-source master; the native derivative is the exported runtime asset.
+crisp nearest sampled composition. Runtime route emblems and short names sit in
+the doors' painted inset and name plaques; the legacy full-card door sheet is
+kept hidden as a state carrier for compatibility. Reroll price, confirmation and
+navigation controls remain live nodes above it, preserving input and animation
+without covering the hardware. The high-resolution file is retained as the
+editable source master; the native derivative is the exported runtime asset.
 
 ## Generation prompt
 
