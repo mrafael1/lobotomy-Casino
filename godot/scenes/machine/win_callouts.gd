@@ -40,7 +40,8 @@ const COMBO_EFFECT_SHEET := "machine_polished/combo.svg"
 const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose fewer frames
 const COMBO_EFFECT_DELAY := 2.55
 const COMBO_EFFECT_TIME := 1.05
-const COMBO_EFFECT_Z_INDEX := 9
+# Wealth's frame draws at parent 8 + child 2. The whole bonus panel must clear it.
+const COMBO_EFFECT_Z_INDEX := 13
 ## Native pixel lettering occupies the CRT's score column. Its backing temporarily
 ## covers the score/multiplier; the portrait and approach row remain readable.
 const COMBO_EFFECT_POSITION := Vector2.ZERO

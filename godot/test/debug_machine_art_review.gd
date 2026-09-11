@@ -60,6 +60,14 @@ func _run() -> void:
 		run.set(field, 2)
 	_scene._update_hud()
 	await _capture("01-populated-crt")
+	run.freeSpinsRemaining = 1
+	_scene._refresh_free_spin_banner()
+	assert(not target.visible and not title.visible, "FREE SPIN must replace the target text")
+	assert(_scene._wealth.bar_sprite().visible and _scene._dealer_icon.visible,
+		"FREE SPIN must retain progress and dealer information")
+	await _capture("01-free-spin-items")
+	run.freeSpinsRemaining = 0
+	_scene._refresh_free_spin_banner()
 	var shown_items := 0
 	for entry: Dictionary in _scene._boosts.slots():
 		var slot := entry["slot"] as Control
@@ -241,6 +249,9 @@ func _run() -> void:
 	_scene._callouts.set_loss_display(0)
 	run.winBoostEnabled = true
 	_scene._callouts.show_combo(1, 5, 10)
+	var wealth_frame := _scene._wealth.odometer().get_node("WealthBarArt") as Sprite2D
+	assert(_scene._callouts.combo_sprite().z_index > _scene._wealth.odometer().z_index + wealth_frame.z_index,
+		"Odometer dividers must not draw across the COMBO panel")
 	assert(_scene._callouts.combo_sprite().scale == Vector2.ONE,
 		"COMBO lettering must render at native resolution")
 	assert(_scene._callouts.combo_sprite().hframes == 9, "COMBO must show all nine stages")
@@ -250,6 +261,8 @@ func _run() -> void:
 	await _capture("07-combo-max")
 	_scene._callouts.stop_combo()
 	run.winBoostEnabled = false
+	assert(_scene._wealth.odometer().visible and not _scene._callouts.combo_sprite().visible,
+		"Closing COMBO must reveal the wealth display")
 	# The CRT multiplier retains its warning/cap states independently of the powers.
 	for multiplier in [2, 3]:
 		run.betMultiplier = multiplier

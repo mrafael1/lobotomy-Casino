@@ -361,6 +361,8 @@ Resources and currencies:
   its own text occupies; the fill bar keeps running underneath it with its shimmer,
   because progress toward the target is exactly what the free spins are being spent
   on. The dealer interface and the active-item icons stay lit beside it too.
+  Switching FREE SPIN on or off refreshes the target text immediately, so the
+  banner and target never wait for a later HUD update to exchange visibility.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
   CRT warning with a beeping pulse; the x3 state shows a steady 9-frame
   diminished warning (never both, and the normal gauge effects are suppressed
@@ -524,6 +526,8 @@ Resources and currencies:
   locks as tapping its icon; the artwork itself does not intercept input.
   COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
   an unscaled bonus amount; its original payout timing remains intact.
+  The COMBO panel draws above the odometer's cases, digits and dividers and covers
+  the whole multiplier band, while leaving the dealer and item-duration row visible.
   The shelf number is the single remaining-spin display. Spin-gain fly-ins land
   over that number before it increments and pulses. Emergency Reserve adds a soft
   mint contour around the counter while armed, disappearing when spent. The

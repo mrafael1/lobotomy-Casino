@@ -47,7 +47,7 @@ def lettering(text, left, top, color, scale=1):
 
 
 sheet('combo.svg', 9, lambda frame:
-      rect(72, 60, 50, 30, '#081712') + rect(73, 60, 48, 1, '#536e58')
+      rect(72, 60, 50, 36, '#081712') + rect(73, 60, 48, 1, '#536e58')
       + lettering('COMBO', 76, 64, '#bac9a2')
       + lettering('X'+str(frame+1), 103, 62, '#e8dfad', 2)
       + rect(76, 73, 42, 1, '#284237'))

@@ -266,6 +266,7 @@ func set_banner_display(active: bool) -> void:
 	# Lighting the banner takes the TV; letting it go out hands it back. Either way
 	# every other readout has to re-evaluate its mute right here.
 	apply_mute()
+	_refresh_target_readout.call()
 
 # --- the wealth-target blackout ----------------------------------------------
 
