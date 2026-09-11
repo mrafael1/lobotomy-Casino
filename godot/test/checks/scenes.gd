@@ -680,6 +680,45 @@ func _check_meta_shop_layout(failures: Array) -> void:
 		failures.append("meta shop: campaign meter is crowding the header")
 	shop.queue_free()
 
+## The retained Dealer route shell still needs to be legible for older saves that
+## resolve into it. Keep its service list on the same dark/cyan plates as the
+## current route screens and preserve the authored neon return control.
+func _check_route_dealer_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_gold := int(run_store.lucidityCoins)
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_DEALER
+	run_store.lucidityCoins = 999
+	var dealer := (load("res://scenes/route_dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	await process_frame
+	for panel_name in ["RouteDealerHeaderPanel", "RouteDealerCatalogPanel"]:
+		if dealer.get_node_or_null(panel_name) == null:
+			failures.append("route dealer: %s panel is missing" % panel_name)
+	var list := dealer.get_node_or_null("ServiceList") as VBoxContainer
+	if list == null:
+		# The list is intentionally named by the controller at runtime; keep this
+		# assertion tolerant of a scene-authored wrapper if that changes later.
+		list = dealer.get_node_or_null("VBoxContainer") as VBoxContainer
+	if list == null:
+		failures.append("route dealer: service list is missing")
+	else:
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("route dealer: service row lost its state-specific plate")
+	var return_button := dealer.get_node_or_null("ReturnButton") as Button
+	if return_button == null or return_button.get_theme_stylebox("normal") == null:
+		failures.append("route dealer: return control is missing its painted button style")
+	dealer.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.lucidityCoins = prev_gold
+
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
 	for label_node in build.find_children("*", "Label", true, false):
 		var label := label_node as Label

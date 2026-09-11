@@ -192,6 +192,7 @@ const CHECKS: Array = [
 	{"fn": "_check_route_shop_layout", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_route_bonus_layout", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_meta_shop_layout", "file": "scenes", "iso": ISO_STORES, "args": ["failures"]},
+	{"fn": "_check_route_dealer_layout", "file": "scenes", "iso": ISO_STORES, "args": ["run_store", "failures"]},
 	{"fn": "_check_jackpot_burst_hook", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_machine_art_mix", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
 	{"fn": "_check_sheet_frame_integrity", "file": "machine", "iso": ISO_MACHINE, "args": ["machine", "failures"]},
