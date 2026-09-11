@@ -40,8 +40,13 @@ void fragment() {
 		else q.x = fit(p.x, 118.0, 140.0, 126.0, 147.0);
 	}
 	vec4 paint = texture(TEXTURE, q / vec2(160.0, 320.0));
+	// Dark recess behind the reel frames and above the lowered control shelf.
+	if (p.x >= 30.0 && p.x < 123.0 && p.y >= 203.0 && canvas_pixel.y < 210.0) {
+		paint.rgb = vec3(0.025, 0.035, 0.030);
+	}
 	vec4 controls = texture(control_surface, p / vec2(160.0, 320.0));
-	if (canvas_pixel.y >= 207.0) controls = texture(preview_shelf, (floor(canvas_pixel) + vec2(0.5)) / vec2(160.0, 320.0));
+	if (p.y >= 207.0) controls = vec4(0.0);
+	if (canvas_pixel.y >= 210.0) controls = texture(preview_shelf, (floor(canvas_pixel) + vec2(0.5)) / vec2(160.0, 320.0));
 	paint.rgb = mix(paint.rgb, controls.rgb, controls.a);
 	paint.a *= texture(aperture_mask, p / vec2(160.0, 320.0)).a;
 	COLOR = paint;

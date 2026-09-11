@@ -39,12 +39,12 @@ func _run() -> void:
 	assert(_scene.get_node_or_null("HealthBar") == null, "Side tube must be removed")
 	assert(_scene.tutorial_anchor("health").position + _scene.global_position == _scene.SPINS_LEFT_LABEL_RECT.position, "Tutorial must highlight the fixed shelf counter")
 	assert(_scene.position == Vector2(4, 0), "Cabinet must be centered four pixels right")
-	assert(_scene._spin_button.global_position == Vector2(57, 210), "Centered SPIN must not move with the cabinet")
-	assert(_scene._spins_left_label.global_position == Vector2(28, 210), "Shelf count must stay fixed")
+	assert(_scene._spin_button.global_position == Vector2(57, 213), "Centered SPIN must not move with the cabinet")
+	assert(_scene._spins_left_label.global_position == Vector2(28, 213), "Shelf count must stay fixed")
 	_scene._nudge(2.0)
 	await create_timer(0.2).timeout
 	assert(_scene.position == _scene.CABINET_OFFSET, "Shake must return to the new cabinet center")
-	assert(_scene._spin_button.global_position == Vector2(57, 210), "Shake must leave the shelf button fixed")
+	assert(_scene._spin_button.global_position == Vector2(57, 213), "Shake must leave the shelf button fixed")
 	await _capture("01-idle")
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var face := _scene._spin_button.get_theme_stylebox(state) as StyleBoxTexture
@@ -76,7 +76,7 @@ func _run() -> void:
 	assert((_scene.get_node("stash") as TextureRect).texture == null, "Stash wells belong to cabinet material, not an overlay")
 	for index in range(2):
 		var item := _scene.get_node("stash/StashSlot%d/Icon" % (index + 1)) as TextureRect
-		var aperture := Rect2(102 + index * 18, 211, 14, 14)
+		var aperture := Rect2(102 + index * 18, 214, 14, 14)
 		assert(aperture.encloses(item.get_global_rect()), "Item art must fit its square cabinet aperture")
 	run.wealthTargetIndex = 7
 	_scene._refresh_target_readout()

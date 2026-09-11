@@ -13,7 +13,7 @@ to preserve the world outlet at (80,298).
 shelf is `preview_shelf.png`, extracted directly from the approved preview, not
 redrawn. `tools/extract_preview_shelf.gd` reduces the archived source once to
 160x320 with nearest-neighbor sampling (no smoothing), copies rows 199..237 to
-y207..245, and clears only the baked-in count,
+y210..248, leaving a four-pixel dark gap beneath the reel frames, and clears only the baked-in count,
 item contents and independently animated cap. Bevels, slots, wear, red fascia
 retain the original pixels. The reduced SPINS engraving is cleared for a crisp
 runtime label; the cap's lettering is replaced with native 5x7 pixel glyphs.
@@ -21,12 +21,12 @@ The five `preview_spin_*.png` states use the original cap with a
 two-pixel depression, dimmed disabled state, brighter hover and a separate focus
 mark that does not cover the depressed cap. The older
 procedural shelf and SPIN SVGs are no longer sampled for these controls.
-The live counter occupies (28,210,14,16). Item images are 12x14 at (103,211)
-and (121,211), within the original recesses; their 16x18 touch slots retain
+The live counter occupies (28,213,14,16). Item images are 12x14 at (103,214)
+and (121,214), within the original recesses; their 16x18 touch slots retain
 margin activation and gameplay locks. The stash container has no tray texture.
 Rebuild with `godot --headless --path godot -s ../tools/extract_preview_shelf.gd`.
 The source archive is tooling only; exported builds use PNGs under `godot/assets`.
-SPIN keeps its 46x28 touch area at (57,210), keyboard activation and targeting pass-through.
+SPIN keeps its 46x28 touch area at (57,213), keyboard activation and targeting pass-through.
 
 The CRT dealer is inset at (36,51), size 30x43, with reactions above the approach
 row at y95..98. Active items occupy y100..107. TARGET and its current value are

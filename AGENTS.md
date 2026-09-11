@@ -498,7 +498,7 @@ Resources and currencies:
   A registration material fits the painting to the existing live reel apertures;
   numbers, symbols, powers, and counters remain separate runtime elements.
   SPIN is a separate ivory/brass button centered at x80 on the lower metal shelf.
-  Its touch rect is (57,210,46,28), between the remaining-spin counter on the
+  Its touch rect is (57,213,46,28), between the remaining-spin counter on the
   left and two 16px stash slots on the right, clear of the wealth odometer.
   The deeper shelf spans y203..241. Three 22px power faces sit on the upper
   metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
@@ -524,7 +524,10 @@ Resources and currencies:
   plate, corners, wells, wear and red fascia remain intact. The changing count and
   items are cleared; the original SPIN cap is extracted into five separate PNG
   states. Do not replace this artwork with procedural approximations.
-  The counter is at (28,210,14,16); 12x14 live items sit at (103,211) and (121,211).
+  A four-pixel dark recess separates the reel frames ending at y206 from the
+  preview shelf beginning at y210. The complete shelf assembly sits three pixels
+  lower, retaining its proportions and horizontal centering.
+  The counter is at (28,213,14,16); 12x14 live items sit at (103,214) and (121,214).
   Counter and stash recesses belong to that surface; stash nodes carry only item
   icons and input, with no tray texture overlay. SPIN retains an independent
   native face and press states over its cabinet recess. Worn, uneven sticker
@@ -534,7 +537,7 @@ Resources and currencies:
   native frames retain the payout hold, lit state and alternating jackpot flash;
   it stays dark until the winning result is announced.
   SPIN uses crisp native 5x7 lettering on the preview cap and a two-pixel depression;
-  the SPINS legend is a runtime pixel-font label at (43,215), replacing the tiny
+  the SPINS legend is a runtime pixel-font label at (43,218), replacing the tiny
   baked-in engraving.
   The full SPIN touch area remains unchanged. Dark mounting rims seat the power buttons
   into the metal rail. Visual review includes the 5,000 target and five active items.

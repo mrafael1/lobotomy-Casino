@@ -228,9 +228,9 @@ stretch_mode = 5
 
 [node name="SpinButton" type="Button" parent="." unique_id=554475154]
 offset_left = 57.0
-offset_top = 210.0
+offset_top = 213.0
 offset_right = 103.0
-offset_bottom = 238.0
+offset_bottom = 241.0
 
 [node name="PowerButtonReroll" type="Button" parent="." unique_id=245745428]
 offset_left = 33.0
@@ -254,9 +254,9 @@ offset_bottom = 140.0
 z_index = 50
 texture_filter = 1
 offset_left = 100.0
-offset_top = 208.0
+offset_top = 211.0
 offset_right = 136.0
-offset_bottom = 232.0
+offset_bottom = 235.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5

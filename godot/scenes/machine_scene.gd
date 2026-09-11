@@ -39,7 +39,7 @@ const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
 const SPINS_LEFT_NORMAL_COLOR := Color("#f0e4b4")
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
 # Remaining spins sit in the left shelf well beside SPIN.
-const SPINS_LEFT_LABEL_RECT := Rect2(28.0, 210.0, 14.0, 16.0)
+const SPINS_LEFT_LABEL_RECT := Rect2(28.0, 213.0, 14.0, 16.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
 # number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
 # y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
@@ -50,7 +50,7 @@ const TV_STATUS_RIGHT := 109.0
 const MULT_STRIP := { "top": 77.0, "height": 12.0 }
 const MULT_BADGE_CENTERS := [87.5, 92.5, 97.5]
 # Lower shelf: SPIN between the remaining-spin display and the two stash wells.
-const SPIN_HIT := { "left": 57.0, "top": 210.0, "width": 46.0, "height": 28.0 }
+const SPIN_HIT := { "left": 57.0, "top": 213.0, "width": 46.0, "height": 28.0 }
 const SPIN_PRESS_TIME := 0.09
 # Centre of the reel window — consumable-use hint popups originate here.
 const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
@@ -1275,7 +1275,7 @@ func _build_spins_left_label() -> void:
 	var legend := Label.new()
 	legend.name = "SpinsLegend"
 	legend.text = "SPINS"
-	legend.position = Vector2(43, 215)
+	legend.position = Vector2(43, 218)
 	legend.size = Vector2(11, 8)
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1338,7 +1338,7 @@ func _build_power_bar() -> void:
 func _build_reserve_glow() -> void:
 	_reserve_glow_sprite = Panel.new()
 	_reserve_glow_sprite.name = "ReserveGlow"
-	_reserve_glow_sprite.position = Vector2(25, 210)
+	_reserve_glow_sprite.position = Vector2(25, 213)
 	_reserve_glow_sprite.size = Vector2(31, 21)
 	_reserve_glow_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
@@ -4637,7 +4637,7 @@ func _close_serum_picker() -> void:
 	_choices.close_serum()
 
 # Fly-ins land over the shelf number; the count changes on the landing beat.
-const SPIN_COUNTER_TARGET := Vector2(34.0, 216.0)
+const SPIN_COUNTER_TARGET := Vector2(34.0, 219.0)
 
 ## Tea (issue #53): the restored free spins fly from the used stash slot to the
 ## shelf counter, which pulses as the tea lands.

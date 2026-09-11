@@ -3,7 +3,7 @@ extends SceneTree
 ## Literal artwork extraction, not a redraw. Run with --path godot -s ../tools/extract_preview_shelf.gd.
 const OUT := "res://assets/images/machine_polished/"
 const CAP := Rect2i(64, 203, 31, 14)
-const SHIFT := Vector2i(0, 8)
+const SHIFT := Vector2i(0, 11)
 const LETTERS := ["01111100001000001110000010000111110", "11110100011000111110100001000010000", "11111001000010000100001000010011111", "10001110011100110101100111001110001"]
 
 func _initialize() -> void:
@@ -14,7 +14,7 @@ func _initialize() -> void:
 	source.resize(160, 320, Image.INTERPOLATE_NEAREST)
 	source.convert(Image.FORMAT_RGBA8)
 	var shelf := Image.create(160, 320, false, Image.FORMAT_RGBA8)
-	shelf.blit_rect(source, Rect2i(0, 199, 160, 39), Vector2i(0, 207))
+	shelf.blit_rect(source, Rect2i(0, 199, 160, 39), Vector2i(0, 199) + SHIFT)
 	# Clear only changing contents. Frame, bevel, wear and corner pixels stay intact.
 	for area in [Rect2i(30, 205, 10, 9), Rect2i(42, 207, 12, 6), Rect2i(103, 204, 13, 12), Rect2i(121, 204, 13, 12)]:
 		for y in range(area.position.y, area.end.y):

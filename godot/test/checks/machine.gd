@@ -50,7 +50,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		failures.append("machine: retired lever/coin hardware is still active")
 	var spin := machine.get_node("SpinButton") as Button
 	var hit := spin.get_rect()
-	if hit != Rect2(57, 210, 46, 28) or not is_equal_approx(hit.get_center().x, 80.0):
+	if hit != Rect2(57, 213, 46, 28) or not is_equal_approx(hit.get_center().x, 80.0):
 		failures.append("machine: SPIN must be centered on the shelf with its touch area")
 	if hit.intersects(Rect2(133, 160, 20, 40)):
 		failures.append("machine: old lever hitbox is still active")
