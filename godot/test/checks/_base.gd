@@ -116,24 +116,23 @@ func _check_start_menu_press_feedback(button: Button, label: String, failures: A
 
 func _check_settings_neon(settings: Node, failures: Array) -> void:
 	var panel := settings.get_node_or_null("Panel") as PanelContainer
-	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat \
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if panel != null else null
-	if panel_style == null or not panel_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)) \
-			or panel_style.shadow_size < 1:
-		failures.append("settings: panel is missing the neon contour style")
+	if panel_style == null:
+		failures.append("settings: runtime panel covers the painted console")
 	var slider := settings.get_node_or_null("Panel/Rows/VolumeRow/VolumeSlider") as HSlider
 	var slider_style := slider.get_theme_stylebox("slider") as StyleBoxFlat \
 		if slider != null else null
-	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
-		failures.append("settings: volume slider is missing the neon track")
+	if slider_style == null or not slider_style.border_color.is_equal_approx(settings.NEON_PINK):
+		failures.append("settings: volume slider is missing the brass track")
 	# MUTE is a TOGGLE and must not wear the button art: with a plate it read as a second
 	# button stacked on BACK, one that mysteriously did not navigate. The box and its tick
-	# carry the state instead, so every stylebox on it has to draw nothing.
+	# carry the state instead; only keyboard focus may outline the row.
 	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
 	if mute == null:
 		failures.append("settings: MUTE toggle is missing")
 	else:
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		for state in ["normal", "hover", "pressed", "disabled"]:
 			if not (mute.get_theme_stylebox(String(state)) is StyleBoxEmpty):
 				failures.append("settings: MUTE is wearing a %s button plate" % state)
 				break
@@ -145,8 +144,8 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 			failures.append("settings: MUTE cannot show checked apart from unchecked")
 		if mute.custom_minimum_size.y < 20.0:
 			failures.append("settings: MUTE lost its tap target with its plate")
-	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
-	_check_start_menu_button_style(back, ButtonKit.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
+	var back := settings.get_node_or_null("BackButton") as Button
+	_check_start_menu_button_style(back, ButtonKit.START_MENU_BUTTON_YELLOW, "settings: BACK", failures, true)
 	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal.

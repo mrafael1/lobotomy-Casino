@@ -3,6 +3,7 @@ extends SceneTree
 ## Reduce generated scene masters once to the game's native 160x320 canvas.
 ## Nearest sampling preserves their authored pixel clusters for runtime filtering.
 const JOBS := [
+	["res://assets/images/settings_polished/audio_console_painted.png", "res://assets/images/settings_polished/audio_console_native.png"],
 	["res://assets/images/pacte_polished/pacte_scene_painted.png", "res://assets/images/pacte_polished/pacte_scene_native.png"],
 	["res://assets/images/dealer_choice_polished/choice_scene_painted.png", "res://assets/images/dealer_choice_polished/choice_scene_native.png"],
 	["res://assets/images/dealer_shop_polished/pre_dealer_shop_painted.png", "res://assets/images/dealer_shop_polished/pre_dealer_shop_native.png"],

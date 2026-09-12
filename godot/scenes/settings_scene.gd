@@ -4,9 +4,9 @@ extends Control
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const MIN_VOLUME_DB := -48.0
 const MAX_VOLUME_DB := 0.0
-const NEON_CYAN := Color(0.42, 1.0, 0.95)
-const NEON_PINK := Color(1.0, 0.5, 0.7)
-const MUTE_ROW_MIN_SIZE := Vector2(108.0, 20.0) # tap target; survives the plate being gone
+const NEON_CYAN := Color(0.65, 0.95, 0.83)
+const NEON_PINK := Color(0.86, 0.71, 0.43)
+const MUTE_ROW_MIN_SIZE := Vector2(88.0, 24.0)
 
 @export var audio_bus_name: StringName = &"Master":
 	set(value):
@@ -16,7 +16,7 @@ const MUTE_ROW_MIN_SIZE := Vector2(108.0, 20.0) # tap target; survives the plate
 @onready var _volume_slider := $Panel/Rows/VolumeRow/VolumeSlider as HSlider
 @onready var _volume_value := $Panel/Rows/VolumeRow/ValueLabel as Label
 @onready var _mute_check := $Panel/Rows/MuteCheck as CheckBox
-@onready var _back_button := $Panel/Rows/BackButton as Button
+@onready var _back_button := $BackButton as Button
 @onready var _panel := $Panel as PanelContainer
 @onready var _title := $Panel/Rows/Title as Label
 @onready var _volume_title := $Panel/Rows/VolumeTitle as Label
@@ -40,11 +40,8 @@ func _connect_controls() -> void:
 
 func _style_controls() -> void:
 	if _panel != null:
-		var panel_style := ButtonKit.neon_panel_style(NEON_CYAN, 8.0)
-		panel_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.42)
-		panel_style.shadow_size = 3
-		_panel.add_theme_stylebox_override("panel", panel_style)
-	_style_label(_title, NEON_CYAN, 12)
+		_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_style_label(_title, NEON_PINK, 10)
 	_style_label(_volume_title, NEON_PINK, 8)
 	_style_label(_volume_value, NEON_CYAN, 8)
 	if _volume_slider != null:
@@ -74,11 +71,7 @@ func _style_controls() -> void:
 		_volume_slider.add_theme_icon_override("grabber_highlight", grabber)
 		_volume_slider.add_theme_icon_override("grabber_disabled", grabber)
 	if _mute_check != null:
-		# NO button plate. MUTE is a toggle, not an action, and wearing the same neon
-		# button art as BACK made it read as one — two buttons stacked, one of which
-		# mysteriously did not navigate. The box and its tick carry the state on their
-		# own, so every state gets an empty stylebox and the row keeps only its label.
-		# The minimum stays: the plate is gone, the tap target is not.
+		# Keep the toggle visually distinct from BACK; only keyboard focus outlines it.
 		_mute_check.custom_minimum_size = MUTE_ROW_MIN_SIZE
 		# Left, so the label sits against the box it belongs to instead of floating in the
 		# middle of a row with no plate to centre it in.
@@ -86,12 +79,16 @@ func _style_controls() -> void:
 		_mute_check.add_theme_constant_override("icon_max_width", 9)
 		for state in ["normal", "hover", "pressed", "disabled", "focus", "hover_pressed"]:
 			_mute_check.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-		# Without the plate's styling the label would fall back to the default theme's
-		# colours on hover and press; pin them so it stays the same pink throughout.
+		# Preserve the brass lettering through hover and press.
 		for color_state in ["font_color", "font_hover_color", "font_pressed_color",
 				"font_hover_pressed_color", "font_focus_color"]:
 			_mute_check.add_theme_color_override(color_state, NEON_PINK)
-		_mute_check.focus_mode = Control.FOCUS_NONE
+		_mute_check.focus_mode = Control.FOCUS_ALL
+		var focus_style := StyleBoxFlat.new()
+		focus_style.bg_color = Color.TRANSPARENT
+		focus_style.border_color = NEON_CYAN
+		focus_style.set_border_width_all(1)
+		_mute_check.add_theme_stylebox_override("focus", focus_style)
 		_mute_check.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var unchecked_icon := _make_checkbox_icon(false)
 		var checked_icon := _make_checkbox_icon(true)
@@ -100,7 +97,7 @@ func _style_controls() -> void:
 		_mute_check.add_theme_icon_override("unchecked_disabled", unchecked_icon)
 		_mute_check.add_theme_icon_override("checked_disabled", checked_icon)
 	if _back_button != null:
-		ButtonKit.start_menu_button_style(_back_button, NEON_CYAN, 8)
+		ButtonKit.small_neon_button_style(_back_button, ButtonKit.START_MENU_BUTTON_YELLOW, 8)
 		ButtonKit.start_menu_button_press_feedback(_back_button)
 
 func _style_label(label: Label, color: Color, font_size: int) -> void:
@@ -113,14 +110,10 @@ func _style_label(label: Label, color: Color, font_size: int) -> void:
 
 func _make_slider_grabber() -> ImageTexture:
 	var image := Image.create(7, 9, false, Image.FORMAT_RGBA8)
-	for y in range(9):
-		var width := 1 + mini(3, mini(y, 8 - y)) * 2
-		var left := (7 - width) / 2
-		for x in range(left, left + width):
-			image.set_pixel(x, y, NEON_PINK)
-	for y in range(2, 7):
-		for x in range(2, 5):
-			image.set_pixel(x, y, NEON_CYAN)
+	image.fill(Color(0.13, 0.10, 0.07))
+	image.fill_rect(Rect2i(1, 1, 5, 7), NEON_PINK)
+	image.fill_rect(Rect2i(1, 1, 5, 1), Color(1.0, 0.89, 0.62))
+	image.fill_rect(Rect2i(3, 3, 1, 3), Color(0.28, 0.21, 0.12))
 	return ImageTexture.create_from_image(image)
 
 func _make_checkbox_icon(checked: bool) -> ImageTexture:

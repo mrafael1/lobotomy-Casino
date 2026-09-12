@@ -571,6 +571,9 @@ Resources and currencies:
   layer appears only while Book is enabled, coexists with the Tunnel Vision shutter,
   and disappears when Learning is removed; it never changes scoring or input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
+  Audio settings use a native painted scarlet-and-brass speaker console, with live
+  volume and mute controls inset in its dark faceplate and BACK on the lower shelf.
+  The mute row keeps its checkmark and has a visible keyboard-focus outline.
 - `collection_scene` — the complete Pacte card catalog, in two scrollable
   sections (AUGMENTS, then POWERS) that follow the authored card order, so a card
   never changes position once it is earned. Unlocked cards show their authored
