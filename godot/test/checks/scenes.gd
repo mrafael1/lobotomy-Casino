@@ -977,13 +977,15 @@ func _check_global_options_layout(failures: Array) -> void:
 	if dim == null or dim.mouse_filter != Control.MOUSE_FILTER_STOP:
 		failures.append("options: modal dimmer does not capture outside-panel input")
 	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
-	var options_contour := overlay.get_node_or_null("Contour") as Panel
-	if options_contour == null:
-		failures.append("options: overlay missing neon contour")
-	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxFlat \
+	var options_contour := overlay.get_node_or_null("Contour") as TextureRect
+	if options_contour == null or options_contour.texture == null:
+		failures.append("options: overlay missing painted frame")
+	elif options_contour.texture.get_size() != Vector2(144, 252):
+		failures.append("options: painted frame must render at native resolution")
+	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if options_panel != null else null
-	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
-		failures.append("options: panel is missing the neon contour style")
+	if panel_style == null:
+		failures.append("options: panel obscures the painted glass")
 	# Issue #105: replaying the tutorial is an ACTION, so it belongs on this menu rather
 	# than buried in the audio settings screen behind it.
 	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/TutorialButton", "Panel/Menu/MenuButton"]:
@@ -1003,13 +1005,12 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: close button does not stop modal input")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
-	# The panel grew to make room for the fifth row; the contour drawn behind it has to
-	# have grown with it, or the menu spills out of its own frame.
+	# All live menu rows must remain inside the painted frame.
 	var options_contour_rect := Rect2(options_contour.position, options_contour.size) \
 		if options_contour != null else Rect2()
 	if options_panel != null and not options_contour_rect.encloses(
 			Rect2(options_panel.position, options_panel.size)):
-		failures.append("options: the neon contour no longer contains the panel")
+		failures.append("options: the painted frame no longer contains the panel")
 	var options_rows := overlay.get_node("Panel/Menu") as Control
 	if options_panel != null \
 			and options_panel.size.y < options_rows.get_combined_minimum_size().y:

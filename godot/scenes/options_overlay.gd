@@ -19,9 +19,9 @@ const NEON_YELLOW := Color(1.0, 0.86, 0.36)
 const MODAL_Z_INDEX := 1000
 ## px from the LANGUAGE row's right edge to the flag, matching the row's own text inset.
 const LANGUAGE_FLAG_INSET := 8.0
-const MENU_BUTTON_SIZE := Vector2(104.0, 20.0)
+const MENU_BUTTON_SIZE := Vector2(100.0, 20.0)
 const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
-const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the panel's top-right corner
+const CLOSE_BUTTON_INSET := Vector2(12.0, -4.0) # upper-right edge of the painted glass
 
 @export var editor_preview_visible := true:
 	set(value):
@@ -159,12 +159,9 @@ func _cycle_language() -> void:
 func _style_panel() -> void:
 	if _panel == null:
 		return
-	var panel_style: StyleBoxFlat = ButtonKit.neon_panel_style(NEON_CYAN, 8.0)
-	panel_style.shadow_color = Color(NEON_PINK.r, NEON_PINK.g, NEON_PINK.b, 0.42)
-	panel_style.shadow_size = 3
-	_panel.add_theme_stylebox_override("panel", panel_style)
+	_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	if _title != null:
-		_title.add_theme_color_override("font_color", NEON_CYAN)
+		_title.add_theme_color_override("font_color", Color(0.86, 0.71, 0.43))
 		_title.add_theme_color_override("font_outline_color", Color.BLACK)
 		_title.add_theme_constant_override("outline_size", 1)
 
@@ -187,7 +184,7 @@ func _style_close_button(button: Button) -> void:
 		_panel.position.y + CLOSE_BUTTON_INSET.y)
 	button.size = CLOSE_BUTTON_SIZE
 	button.custom_minimum_size = Vector2.ZERO
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
 	button.add_theme_font_size_override("font_size", 7)
 	button.add_theme_color_override("font_color", NEON_CYAN)
 	button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -195,6 +192,11 @@ func _style_close_button(button: Button) -> void:
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		button.add_theme_stylebox_override(String(state), StyleBoxEmpty.new())
+	var focus_style := StyleBoxFlat.new()
+	focus_style.bg_color = Color.TRANSPARENT
+	focus_style.border_color = NEON_CYAN
+	focus_style.set_border_width_all(1)
+	button.add_theme_stylebox_override("focus", focus_style)
 	button.pivot_offset = button.size * 0.5
 	if not button.button_down.is_connected(_on_menu_button_down):
 		button.button_down.connect(_on_menu_button_down.bind(button))
