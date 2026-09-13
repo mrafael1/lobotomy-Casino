@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cyxq3el8mmofl"
-path="res://.godot/imported/reroll.svg-81df53616ff5f14e9e9ecbb5b326351c.ctex"
+uid="uid://c8o5hug6yxdyt"
+path="res://.godot/imported/wealth_crt_detail.svg-e3af2719f5b40b38e0430990a245f4a8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/machine_polished/reroll.svg"
-dest_files=["res://.godot/imported/reroll.svg-81df53616ff5f14e9e9ecbb5b326351c.ctex"]
+source_file="res://assets/images/machine_polished/wealth_crt_detail.svg"
+dest_files=["res://.godot/imported/wealth_crt_detail.svg-e3af2719f5b40b38e0430990a245f4a8.ctex"]
 
 [params]
 

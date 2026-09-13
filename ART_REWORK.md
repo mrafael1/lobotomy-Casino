@@ -17,6 +17,7 @@ art. Do not flatten all art to the 160x320 layout grid.
 | Hardware | Painted settings, left/right arrows, close, confirm and Lucidity coin; settings checkmark and shared overlays |
 | Reel symbols | Nine 128px symbols in `images/symbols/premium`, shared by reels and symbol pickers; existing painted Book retained |
 | Screen fill | High-resolution decorative casino overscan, centered gameplay safe area, fractional scaling for phone and tablet aspect ratios |
+| Machine hardware | Full-resolution cabinet sampling and painted rail; 4x shelf/SPIN exports; smooth three-state power caps; detailed reel frames and enamel number drums |
 | Card illustrations | Seventeen static 24px emblems in `images/cards/painted`, used by shared card renderers and machine stickers |
 | Power coin | Separate mint token for restoration flights, preserving existing flight geometry and timing |
 | Menu surfaces | Start buttons, settings labels, options heading, Collection names, Shop rows and footer controls |
@@ -34,6 +35,13 @@ animated Pattern Recognition and How to Cheat emblems, campaign-neuron animation
 dealer chip glyphs, payout/ending animation families, and the remaining Lab/scores
 surfaces. These need native-frame review, not a static substitution that removes
 their animation. The Shop campaign meter/header layout also needs a dedicated pass.
+
+Machine hardware validation also uses `res://test/debug_machine_art_review.gd`.
+It covers mouse and keyboard SPIN activation, pressed/disabled states, power
+targeting and locks, odometer carry, target drains, COMBO, dealer interruptions,
+and Learning/Tunnel Vision. The cabinet's shader keeps geometric registration in
+layout units while sampling the original painting continuously. The number reels
+share a small detailed atlas rather than four enlarged full-canvas sheets.
 
 ## Rebuild and review
 

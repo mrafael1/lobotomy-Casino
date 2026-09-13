@@ -1115,6 +1115,8 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 		spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / float(tex.get_width()), SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	if tex.resource_path.ends_with("cabinet-painted.png") or tex.resource_path.ends_with("reel_housing.svg"):
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -1126,6 +1128,9 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	if tex.resource_path.contains("machine_polished/") and POWER_IDS.has(tex.resource_path.get_file().get_basename()):
+		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 # Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
 # hall reads as out-of-focus scenery so the cabinet pops in front of it.
@@ -2161,6 +2166,7 @@ func _build_spin_button() -> void:
 	_spin_button.flat = false
 	_spin_button.focus_mode = Control.FOCUS_ALL
 	_spin_button.tooltip_text = "SPIN"
+	_spin_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var style := StyleBoxTexture.new()
 		style.texture = load("res://assets/images/machine_polished/preview_spin_%s.png" % state)

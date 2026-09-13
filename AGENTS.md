@@ -615,6 +615,16 @@ Resources and currencies:
 
 ### Shared presentation assets
 
+- Machine hardware retains source detail: the cabinet import has no 320px cap,
+  its registration shader samples continuously, and the original painted rail
+  supplies the sockets at x46/77/108. The shelf exports at 640x1280 and SPIN states
+  at 184x112, retaining painted lettering and a two-layout-unit depression.
+  Seven power controls have detailed normal/selected/spent caps; their order and
+  hit regions are unchanged. Detailed reel frames keep all three apertures clear.
+- Wealth drums use shaded enamel cases and one shared compact 440x56 eleven-frame
+  digit strip. Four independent clipped reels preserve carry, reverse drains,
+  snapshot bounds and units-slot alignment. Source texture sizes do not set layout.
+
 - Shared buttons use the brass-and-ivory enamel caps in `ui/premium`, with
   separate normal, hover, pressed and disabled art plus a keyboard-focus outline.
   The existing ButtonKit color APIs select dark green, burgundy or brown label ink.

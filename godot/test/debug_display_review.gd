@@ -22,6 +22,10 @@ func _run() -> void:
 	for window_size in [Vector2i(400, 800), Vector2i(540, 960), Vector2i(450, 1000), Vector2i(800, 1000)]:
 		root.size = window_size
 		for scene_name in ["start_menu_scene", "machine_scene", "pacte_scene", "settings_scene", "upgrades_scene"]:
+			if scene_name == "machine_scene":
+				run.reset_run_state()
+				run.start_new_run([], {}, false, 12345)
+				run.ownedPowerIds = ["reroll", "shift", "memory"]
 			if scene_name == "pacte_scene":
 				run.reset_run_state()
 				run.start_new_run([], {}, false, 12345, true)

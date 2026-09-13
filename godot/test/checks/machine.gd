@@ -27,10 +27,10 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	if cabinet == null:
 		failures.append("machine art: native cabinet node is missing")
 	elif cabinet.texture == null \
-			or Vector2i(cabinet.texture.get_width(), cabinet.texture.get_height()) != Vector2i(160, 320) \
-			or cabinet.scale != Vector2.ONE \
-			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: cabinet is not a 160x320 native sprite")
+			or cabinet.texture.get_width() < 640 \
+			or not (cabinet.scale * cabinet.texture.get_size()).is_equal_approx(Vector2(160, 320)) \
+			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("machine art: cabinet lost source detail or changed its 160x320 layout footprint")
 	else:
 		var cabinet_material := cabinet.material as ShaderMaterial
 		var aperture_texture: Texture2D = cabinet_material.get_shader_parameter("aperture_mask") \
@@ -150,18 +150,18 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			failures.append("machine: dealer portrait overlaps the wealth drums")
 		if wealth_art == null or wealth_art.texture == null \
 				or Vector2i(wealth_art.texture.get_width(), wealth_art.texture.get_height()) \
-					!= Vector2i(160, 320) \
-				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: wealth odometer bar is not native 160x320 art")
-		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt.svg"):
-			failures.append("machine art: wealth odometer still uses the misspelled bar asset")
+					!= Vector2i(640, 1280) \
+				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("machine art: wealth odometer trim lost its detailed source")
+		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt_detail.svg"):
+			failures.append("machine art: wealth odometer uses the wrong trim asset")
 		var wealth_cases := wealth_odometer.get_node_or_null("WealthCasesArt") as Sprite2D
 		if wealth_cases == null or wealth_cases.texture == null \
 				or Vector2i(wealth_cases.texture.get_width(), wealth_cases.texture.get_height()) \
-					!= Vector2i(160, 320) \
-				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: wealth odometer cases are missing or not native art")
-		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases.svg"):
+					!= Vector2i(640, 1280) \
+				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("machine art: wealth odometer cases lost their detailed source")
+		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases_detail.svg"):
 			failures.append("machine art: wealth odometer cases use the wrong asset")
 		var wealth_numbers := wealth_odometer.get_node_or_null("Reel0") as Control
 		if wealth_art != null and wealth_cases != null and wealth_numbers != null \
@@ -176,11 +176,11 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 				failures.append("machine art: wealth odometer reel %d is not clipped" % reel_index)
 			elif current == null or next == null or current.texture == null \
 					or Vector2i(current.texture.get_width(), current.texture.get_height()) \
-						!= Vector2i(1760, 320) \
+						!= Vector2i(440, 56) \
 					or current.hframes != 11 or next.hframes != 11 \
-					or current.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
-					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
+					or current.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+					or next.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+				failures.append("machine art: wealth odometer reel %d is not the compact 11-frame detailed strip" % reel_index)
 
 	if machine.get_node_or_null("HealthBar") != null:
 		failures.append("machine: redundant side spin tube is still active")
@@ -197,7 +197,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
 		var detailed_symbol: bool = String(node_name).begins_with("Reel") and node_name != "ReelBacking"
 		var expected_filter := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
-			if detailed_symbol else CanvasItem.TEXTURE_FILTER_NEAREST
+			if detailed_symbol or node_name in ["RerollPower", "ShiftPower", "MemoryPower"] else CanvasItem.TEXTURE_FILTER_NEAREST
 		if machine_art == null or machine_art.texture_filter != expected_filter:
 			failures.append("machine art: %s has the wrong art sampling mode" % node_name)
 		elif detailed_symbol and machine_art.texture.resource_path.contains("symbols/premium/") \
@@ -1674,6 +1674,10 @@ func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
 				CanvasItem.TEXTURE_FILTER_NEAREST)
 			if tex.resource_path.begins_with("res://assets/images/symbols/"):
 				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			if tex.resource_path.contains("/machine_polished/") and tex.resource_path.get_file().get_basename() in [
+				"cabinet-painted", "reel_housing", "wealth_cases_detail", "wealth_crt_detail", "wealth_digits_detail",
+				"reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]:
+				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			if sprite.texture_filter != wanted:
 				failures.append("art identity: %s draws with filter %d, expected %d (%s)"
 					% [here, sprite.texture_filter, wanted, String(tex.resource_path).get_file()])
@@ -1744,16 +1748,18 @@ func _check_reel_strip_geometry(machine: Node, failures: Array) -> void:
 func _check_spin_blur_region(machine: Node, failures: Array) -> void:
 	var housing := machine.get_node("ReelHousing") as Sprite2D
 	var backing := machine.get_node("ReelBacking") as Sprite2D
-	if housing.texture.get_size() != Vector2(160, 320) or backing.texture.get_size() != Vector2(160, 320):
-		failures.append("reel hardware: frame and drums must be native 160x320 assets")
+	if housing.texture.get_size() != Vector2(640, 1280) \
+			or not (housing.texture.get_size() * housing.scale).is_equal_approx(Vector2(160, 320)) \
+			or backing.texture.get_size() != Vector2(160, 320):
+		failures.append("reel hardware: detailed frame and drum backing lost their shared layout footprint")
 	var housing_image := housing.texture.get_image()
 	var drum_image := backing.texture.get_image()
 	for hole: Dictionary in machine.REEL_HOLES:
+		var opening := Rect2i(int(hole["left"]) * 4, 169 * 4, int(hole["width"]) * 4, 34 * 4)
+		if housing_image.get_region(opening).get_used_rect().has_area():
+			failures.append("reel hardware: detailed metal frame covers a live aperture")
 		for y in range(169, 203):
 			for x in range(int(hole["left"]), int(hole["left"] + hole["width"])):
-				if housing_image.get_pixel(x, y).a > 0.01:
-					failures.append("reel hardware: metal frame covers a live aperture pixel")
-					return
 				if drum_image.get_pixel(x, y).a < 0.99:
 					failures.append("reel hardware: transparent hole in the drum backing")
 					return
