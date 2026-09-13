@@ -195,8 +195,14 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		"Reel2Center",
 	]:
 		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
-		if machine_art == null or machine_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: %s is not nearest-neighbor filtered" % node_name)
+		var detailed_symbol: bool = String(node_name).begins_with("Reel") and node_name != "ReelBacking"
+		var expected_filter := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			if detailed_symbol else CanvasItem.TEXTURE_FILTER_NEAREST
+		if machine_art == null or machine_art.texture_filter != expected_filter:
+			failures.append("machine art: %s has the wrong art sampling mode" % node_name)
+		elif detailed_symbol and machine_art.texture.resource_path.contains("symbols/premium/") \
+				and machine_art.texture.get_width() < 128:
+			failures.append("machine art: %s lost its high-resolution symbol source" % node_name)
 	if machine.get_node_or_null("PowerBar") != null:
 		failures.append("machine art: old side power gauge is still active")
 
@@ -1666,6 +1672,8 @@ func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
 			# Pixel art that ends up LINEAR renders soft and passes everything else.
 			var wanted: int = ART_FILTER_EXCEPTIONS.get(String(child.name),
 				CanvasItem.TEXTURE_FILTER_NEAREST)
+			if tex.resource_path.begins_with("res://assets/images/symbols/"):
+				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			if sprite.texture_filter != wanted:
 				failures.append("art identity: %s draws with filter %d, expected %d (%s)"
 					% [here, sprite.texture_filter, wanted, String(tex.resource_path).get_file()])

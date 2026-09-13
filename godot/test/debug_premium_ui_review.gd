@@ -95,6 +95,9 @@ func _controls() -> void:
 	for symbol in ["brain", "eye", "pill", "syringe", "vial", "flatline", "heart x1", "heart x2", "heart x3"]:
 		var icon := TextureRect.new()
 		icon.texture = UiKit.texture("symbols/%s.png" % symbol)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.size = Vector2(16, 16)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.position = Vector2(28 + index % 3 * 44, 219 + index / 3 * 28)
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		board.add_child(icon)

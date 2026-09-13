@@ -26,6 +26,7 @@ MetaStateStore="*res://autoload/meta_state_store.gd"
 RunStateStore="*res://autoload/run_state_store.gd"
 Language="*res://autoload/language.gd"
 SceneNav="*res://autoload/scene_nav.gd"
+Presentation="*res://autoload/presentation.gd"
 Tutorial="*res://autoload/tutorial.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
@@ -36,7 +37,7 @@ window/size/viewport_height=320
 window/size/window_width_override=400
 window/size/window_height_override=800
 window/stretch/mode="canvas_items"
-window/stretch/scale_mode="integer"
+window/stretch/aspect="expand"
 window/handheld/orientation="portrait"
 
 [editor_plugins]

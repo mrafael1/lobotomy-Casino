@@ -240,7 +240,7 @@ func _on_viewport_size_changed() -> void:
 	_center_native_canvas()
 
 func _center_native_canvas() -> void:
-	position = _native_canvas_origin(get_viewport_rect().size)
+	position = _native_canvas_origin(get_viewport_rect().size) - get_viewport().canvas_transform.origin
 
 func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
 	var extra_size := viewport_size - CANVAS_SIZE

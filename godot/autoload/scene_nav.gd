@@ -40,28 +40,14 @@ func _ready() -> void:
 	_layout_transition_overlay()
 
 
-## Keep ordinary scenes on the original 160x320 canvas. Pacte's new room exports
-## are 200x380 and are the one deliberate exception: their decorative bleed may
-## occupy the extra phone viewport while their gameplay controls remain native.
-## Switching this at the scene boundary prevents the expanded logical bounds from
-## moving every other scene's authored controls away from the old canvas.
-func _configure_content_scale(scene_path: String = "") -> void:
+## Layout units are independent of rendering resolution. Presentation centers the
+## safe area and fills expanded phone/tablet bounds with decorative artwork.
+func _configure_content_scale(_scene_path: String = "") -> void:
 	var root_view := get_tree().root
 	root_view.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-	var target_path := scene_path
-	if target_path.is_empty():
-		var current := get_tree().current_scene
-		target_path = String(current.scene_file_path) if current != null else ""
-	root_view.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND \
-		if _uses_expanded_pacte_canvas(target_path) else Window.CONTENT_SCALE_ASPECT_KEEP
-	root_view.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+	root_view.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	root_view.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
 	root_view.content_scale_size = Vector2i(160, 320)
-
-func _uses_expanded_pacte_canvas(scene_path: String) -> bool:
-	return scene_path.ends_with("pacte_scene.tscn") \
-		or scene_path.ends_with("route_build_scene.tscn") \
-		or scene_path.ends_with("dealer_scene.tscn")
-
 
 func _build_transition_layer() -> void:
 	_transition_layer = CanvasLayer.new()

@@ -1078,10 +1078,10 @@ func _check_scene_nav(failures: Array) -> void:
 	nav.clear()
 	var root_view := get_root()
 	if root_view.content_scale_mode != Window.CONTENT_SCALE_MODE_CANVAS_ITEMS \
-			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP \
-			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_INTEGER \
+			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND \
+			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_FRACTIONAL \
 			or root_view.content_scale_size != Vector2i(160, 320):
-		failures.append("scene nav: ordinary scenes are not using the centered 160x320 canvas")
+		failures.append("scene nav: display-resolution rendering and fractional overscan are not enabled")
 	nav.call("_configure_content_scale", "res://scenes/pacte_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: Pacte did not opt into the expanded artwork viewport")
@@ -1092,8 +1092,8 @@ func _check_scene_nav(failures: Array) -> void:
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: dealer shop did not opt into the expanded artwork viewport")
 	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
-	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
-		failures.append("scene nav: machine scene kept the expanded artwork viewport")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: machine scene lost its decorative overscan")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")

@@ -94,7 +94,7 @@ func _center_native_canvas() -> void:
 	var viewport_size := get_viewport_rect().size
 	var extra_size := viewport_size - CANVAS_SIZE
 	position = Vector2(maxf(0.0, extra_size.x * 0.5),
-		maxf(0.0, extra_size.y * 0.5))
+		maxf(0.0, extra_size.y * 0.5)) - get_viewport().canvas_transform.origin
 
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:

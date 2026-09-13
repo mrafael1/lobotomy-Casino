@@ -35,7 +35,12 @@ do not add Claude/codex in front of branch
 ## Godot Project
 
 - The Godot project lives in `godot/`.
-- The game uses a 160x320 virtual canvas.
+- The game uses a centered 160x320 gameplay safe area in layout units, not a
+  160x320 render target. Canvas Items renders at the display's resolution with
+  fractional scaling and expanded aspect. `Presentation` centers the safe area
+  and fills the whole viewport with decorative overscan; important information
+  and controls must remain inside the safe area. Export detailed artwork at high
+  resolution instead of reducing it to the layout grid.
 - Runtime art, fonts, and sounds live under `godot/assets`.
 - Exported builds must not depend on root-level assets outside `godot/`.
 - Machine geometry constants in `godot/scenes/machine_scene.gd` are measured in
@@ -618,8 +623,10 @@ Resources and currencies:
   Collection names use 8px type with ellipsis and their full text in the detail view.
 - Settings, navigation, close, confirmation and Lucidity icons share the painted
   hardware family. Power-restoration flights use a distinct mint power coin.
-- The nine non-Book reel symbols resolve through Assets to native 16px painted
-  sprites. Book keeps its existing painted asset. Symbol IDs and scoring are unchanged.
+- The nine non-Book reel symbols resolve through Assets to 128px painted sprites
+  with mipmaps and linear filtering on the reels. Their 16-unit center/12-unit
+  neighbor geometry is independent of source resolution. Book keeps its existing
+  painted asset. Symbol IDs and scoring are unchanged.
 - Seventeen static Pacte card icons use individual 24px painted assets throughout
   Pacte, Collection, unlock popups and machine augment stickers. Renderers use
   `PacteCards.display_icon_rect`; original atlas metadata remains intact.

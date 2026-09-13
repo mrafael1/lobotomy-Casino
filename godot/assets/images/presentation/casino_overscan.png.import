@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cwbw0ek8yqinv"
-path="res://.godot/imported/vial.png-ecde7d030986d9baec4c05e96268f0d7.ctex"
+uid="uid://cudf3ovnq56sd"
+path="res://.godot/imported/casino_overscan.png-f40db12ef160d12d79170ce95644ce0a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/symbols/premium/vial.png"
-dest_files=["res://.godot/imported/vial.png-ecde7d030986d9baec4c05e96268f0d7.ctex"]
+source_file="res://assets/images/presentation/casino_overscan.png"
+dest_files=["res://.godot/imported/casino_overscan.png-f40db12ef160d12d79170ce95644ce0a.ctex"]
 
 [params]
 

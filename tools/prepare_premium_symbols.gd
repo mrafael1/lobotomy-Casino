@@ -2,6 +2,7 @@ extends SceneTree
 
 const SOURCE := "res://assets/images/symbols/premium/symbols_painted.png"
 const OUTPUT := "res://assets/images/symbols/premium/"
+const EXPORT_SIZE := 128
 const NAMES := ["brain", "eye", "pill", "syringe", "vial", "flatline", "heart x1", "heart x2", "heart x3"]
 
 func _initialize() -> void:
@@ -28,10 +29,10 @@ func _initialize() -> void:
 		var band: Vector2i = bands[index / 3]
 		var tile := sheet.get_region(Rect2i(index % 3 * width, band.x, width, band.y))
 		tile = tile.get_region(tile.get_used_rect())
-		var factor := 16.0 / float(maxi(tile.get_width(), tile.get_height()))
-		tile.resize(maxi(1, roundi(tile.get_width() * factor)), maxi(1, roundi(tile.get_height() * factor)), Image.INTERPOLATE_NEAREST)
-		var icon := Image.create(16, 16, false, Image.FORMAT_RGBA8)
-		icon.blit_rect(tile, Rect2i(Vector2i.ZERO, tile.get_size()), (Vector2i(16, 16) - tile.get_size()) / 2)
+		var factor := float(EXPORT_SIZE) / float(maxi(tile.get_width(), tile.get_height()))
+		tile.resize(maxi(1, roundi(tile.get_width() * factor)), maxi(1, roundi(tile.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
+		var icon := Image.create(EXPORT_SIZE, EXPORT_SIZE, false, Image.FORMAT_RGBA8)
+		icon.blit_rect(tile, Rect2i(Vector2i.ZERO, tile.get_size()), (Vector2i(EXPORT_SIZE, EXPORT_SIZE) - tile.get_size()) / 2)
 		assert(icon.save_png(ProjectSettings.globalize_path(OUTPUT + NAMES[index] + ".png")) == OK)
-	print("Prepared nine native reel symbols")
+	print("Prepared nine detailed 128px reel symbols")
 	quit()
