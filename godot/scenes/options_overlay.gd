@@ -161,6 +161,8 @@ func _style_panel() -> void:
 		return
 	_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	if _title != null:
+		_title.add_theme_font_override("font", UiKit.control_font())
+		_title.add_theme_font_size_override("font_size", 8)
 		_title.add_theme_color_override("font_color", Color(0.86, 0.71, 0.43))
 		_title.add_theme_color_override("font_outline_color", Color.BLACK)
 		_title.add_theme_constant_override("outline_size", 1)
@@ -178,7 +180,10 @@ func _style_menu_button(button: Button, border_color: Color) -> void:
 func _style_close_button(button: Button) -> void:
 	if button == null:
 		return
-	button.text = "X"
+	button.text = ""
+	button.icon = UiKit.texture("ui/premium/close.png")
+	button.add_theme_constant_override("icon_max_width", 8)
+	button.tooltip_text = tr("CLOSE")
 	button.position = Vector2(
 		_panel.position.x + _panel.size.x - CLOSE_BUTTON_INSET.x,
 		_panel.position.y + CLOSE_BUTTON_INSET.y)

@@ -134,14 +134,9 @@ func _frame_rect(rel: String, frame: int) -> TextureRect:
 # on press (start-menu selector feel). Positioned at its authored canvas spot.
 func _arrow_art(crop: Rect2) -> TextureRect:
 	var tr := TextureRect.new()
-	var tex := Assets.texture(ARROWS_REL)
-	if tex != null:
-		var at := AtlasTexture.new()
-		at.atlas = tex
-		at.region = Rect2(crop.position, crop.size)
-		tr.texture = at
-	tr.position = crop.position
-	tr.pivot_offset = crop.size * 0.5
+	tr.texture = Assets.texture("ui/premium/left.png" if crop == ARROW_LEFT_CROP else "ui/premium/right.png")
+	tr.position = crop.position + Vector2(-3, 0)
+	tr.pivot_offset = Vector2(8, 8)
 	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	tr.stretch_mode = TextureRect.STRETCH_KEEP
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE

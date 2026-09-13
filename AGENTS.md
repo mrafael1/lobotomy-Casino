@@ -608,6 +608,24 @@ Resources and currencies:
 
 ## Living Game Documentation
 
+### Shared presentation assets
+
+- Shared buttons use the brass-and-ivory enamel caps in `ui/premium`, with
+  separate normal, hover, pressed and disabled art plus a keyboard-focus outline.
+  The existing ButtonKit color APIs select dark green, burgundy or brown label ink.
+- Tiny5 supplies crisp control and heading typography at native 8px or 16px.
+  Localized start labels fit the available width; dense microcopy retains DTM Sans.
+  Collection names use 8px type with ellipsis and their full text in the detail view.
+- Settings, navigation, close, confirmation and Lucidity icons share the painted
+  hardware family. Power-restoration flights use a distinct mint power coin.
+- The nine non-Book reel symbols resolve through Assets to native 16px painted
+  sprites. Book keeps its existing painted asset. Symbol IDs and scoring are unchanged.
+- Seventeen static Pacte card icons use individual 24px painted assets throughout
+  Pacte, Collection, unlock popups and machine augment stickers. Renderers use
+  `PacteCards.display_icon_rect`; original atlas metadata remains intact.
+  Pattern Recognition and How to Cheat retain their authored animation sequences.
+- `ART_REWORK.md` records asset coverage and the reproducible visual review.
+
 Every change that adds, removes, renames, rebalances, or behaviorally modifies a
 player-visible mechanic MUST update the Game Reference above in the same branch
 and PR.

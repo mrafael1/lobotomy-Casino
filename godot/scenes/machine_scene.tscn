@@ -12,7 +12,7 @@
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/shift.svg" id="14_shift"]
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/memory.svg" id="15_memory"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="16_font"]
-[ext_resource type="Texture2D" uid="uid://d28yxo0yalrku" path="res://assets/images/ui/setting_icon.png" id="18_settings"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/premium/settings.png" id="18_settings"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="19_options"]
 
 [ext_resource type="Texture2D" path="res://assets/images/machine_polished/reel_housing.svg" id="reel_housing"]

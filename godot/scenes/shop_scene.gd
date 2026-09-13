@@ -60,6 +60,9 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bind_scene_nodes()
 	_build()
+	UiKit.style_display_label(get_node_or_null("Root/Title") as Label, 8)
+	UiKit.style_display_label(_header)
+	UiKit.style_display_label(_endings)
 	if not MetaStateStore.meta_changed.is_connected(_refresh):
 		MetaStateStore.meta_changed.connect(_refresh)
 	_refresh()
@@ -177,8 +180,11 @@ func _build() -> void:
 			_list.custom_minimum_size.x = LIST_W - 8.0
 		_build_shop_rows(_list)
 		ButtonKit.small_neon_button_style(_start_button, Color(0.42, 1.0, 0.95), 6, 2.0)
-		ButtonKit.small_neon_button_style(_scores_button, Color(1.0, 0.5, 0.7), 5, 2.0)
+		ButtonKit.small_neon_button_style(_scores_button, Color(1.0, 0.5, 0.7), 8, 2.0)
 		ButtonKit.skin_negative_button(_menu_button)
+		_start_button.custom_minimum_size = Vector2(60, 20)
+		_scores_button.custom_minimum_size = Vector2(46, 20)
+		_menu_button.custom_minimum_size = Vector2(34, 20)
 		_connect_scene_button(_start_button, _start_run)
 		_connect_scene_button(_scores_button, _go_scores)
 		if _menu_button != null:
@@ -251,6 +257,7 @@ func _shop_section_label(parent: VBoxContainer, node_name: String, text: String)
 		if _font != null:
 			l.add_theme_font_override("font", _font)
 		l.add_theme_color_override("font_color", Color(1.0, 0.7, 0.5))
+	UiKit.style_display_label(l)
 	return l
 
 func _shop_row_button(parent: VBoxContainer, node_name: String, cb: Callable) -> Button:
@@ -271,20 +278,23 @@ func _shop_row_button(parent: VBoxContainer, node_name: String, cb: Callable) ->
 	b.custom_minimum_size = Vector2(LIST_W - 8.0, SHOP_ROW_HEIGHT)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.clip_text = true
+	b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_style_shop_row(b)
 	return b
 
 func _style_shop_row(button: Button) -> void:
+	button.add_theme_font_override("font", UiKit.control_font())
+	button.add_theme_font_size_override("font_size", 8)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.07, 0.11, 0.14, 0.96)
-	normal.border_color = Color(CYAN.r, CYAN.g, CYAN.b, 0.30)
+	normal.bg_color = Color(0.085, 0.072, 0.055, 0.98)
+	normal.border_color = Color(0.40, 0.32, 0.20)
 	normal.set_border_width_all(1)
 	normal.set_corner_radius_all(2)
 	normal.content_margin_left = 4.0
 	normal.content_margin_right = 3.0
 	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(0.10, 0.18, 0.20, 0.98)
-	hover.border_color = CYAN
+	hover.bg_color = Color(0.14, 0.12, 0.08, 0.98)
+	hover.border_color = ButtonKit.PANEL_BRASS
 	var pressed := hover.duplicate() as StyleBoxFlat
 	pressed.bg_color = Color(0.15, 0.22, 0.20, 1.0)
 	pressed.content_margin_top = 2.0
@@ -302,7 +312,7 @@ func _style_shop_row(button: Button) -> void:
 	button.add_theme_color_override("font_focus_color", Color.WHITE)
 	button.add_theme_color_override("font_disabled_color", Color(0.52, 0.56, 0.62))
 	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
+	button.add_theme_constant_override("outline_size", 0)
 	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _panel(rect: Rect2, border_color: Color, alpha: float) -> Panel:
@@ -368,6 +378,7 @@ func _refresh() -> void:
 		else:
 			b.text = "%s%s  %dL" % [upgrade_name, tier, cost]
 			b.disabled = wallet < cost
+		b.tooltip_text = b.text
 
 	# Consumables are dealer-run items now; the old pre-run purchase/stash UI is
 	# intentionally absent from this progression hub.

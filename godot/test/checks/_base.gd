@@ -39,13 +39,13 @@ func create_timer(seconds: float) -> SceneTreeTimer:
 func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
 	if button == null:
 		return
-	const asset_path := "res://assets/images/ui/setting_icon.png"
+	const asset_path := "res://assets/images/ui/premium/settings.png"
 	if not ResourceLoader.exists(asset_path):
 		failures.append("options: %s is missing the new setting icon" % scene_name)
 		return
 	var icon := button.texture_normal
-	if icon == null or icon.get_width() != 69 or icon.get_height() != 66:
-		failures.append("options: %s is not using the 69x66 setting icon" % scene_name)
+	if icon == null or icon.get_width() != 16 or icon.get_height() != 16:
+		failures.append("options: %s is not using the 16x16 painted setting icon" % scene_name)
 	if button.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("options: %s setting icon is not nearest-neighbor filtered" % scene_name)
 
@@ -80,8 +80,8 @@ func _check_start_menu_button_style(button: Button, expected_color: Color, label
 		failures.append("%s: start-menu plate is not configured as a nine-slice" % label)
 	if expect_small:
 		var small_asset := String(button.get_meta(&"_small_neon_button_asset", ""))
-		if not small_asset.begins_with("ui/neon_small_"):
-			failures.append("%s: compact control is not using neon_small button art" % label)
+		if not small_asset.begins_with("ui/premium/"):
+			failures.append("%s: compact control is not using painted button art" % label)
 		# A Button centres its label in the CONTENT box, so the gap between the top and
 		# bottom margins IS the label's offset from the plate's middle. This used to demand
 		# bottom > top — pushing every compact label upward on the theory that the font

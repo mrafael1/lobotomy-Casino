@@ -25,11 +25,11 @@ extends RefCounted
 ## emplacements are the machine's geometry.
 
 const COIN_SIZE := 8.0
-const LUCIDITY_ASSET := "ui/coin.png"
+const LUCIDITY_ASSET := "ui/premium/coin.png"
 
 ## The power chip: flies from the wealth odometer to the gauge when banked score
 ## buys a restore, or from the cash tray to a power's emplacement on a direct one.
-const POWER_ASSET := "ui/power_coin.png"
+const POWER_ASSET := "cards/painted/power_coin.png"
 const POWER_SIZE := 8.0
 const POWER_FLIGHT_TIME := 0.64
 ## The authored pop that plays at the cash outlet before the chip sets off.

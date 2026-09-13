@@ -180,7 +180,7 @@ const WEALTH_TARGET_FX_Z_INDEX := 140
 const REWARD_FX_Z_INDEX := 42
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
-const SETTINGS_ASSET := "ui/setting_icon.png"
+const SETTINGS_ASSET := "ui/premium/settings.png"
 const SFX_FILES := {
 	&"reel_spin": "reel-spinning.mp3",
 	&"reel_stop": "reel-stop.mp3",
@@ -218,7 +218,7 @@ const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 # Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
 # offer (100) → dealer-interactive stash (StashTray, 110 while his offer is up

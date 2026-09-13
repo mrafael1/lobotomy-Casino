@@ -73,6 +73,8 @@ func _style_controls() -> void:
 	if _mute_check != null:
 		# Keep the toggle visually distinct from BACK; only keyboard focus outlines it.
 		_mute_check.custom_minimum_size = MUTE_ROW_MIN_SIZE
+		_mute_check.add_theme_font_override("font", UiKit.control_font())
+		_mute_check.add_theme_font_size_override("font_size", 8)
 		# Left, so the label sits against the box it belongs to instead of floating in the
 		# middle of a row with no plate to centre it in.
 		_mute_check.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -103,10 +105,11 @@ func _style_controls() -> void:
 func _style_label(label: Label, color: Color, font_size: int) -> void:
 	if label == null:
 		return
-	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_font_override("font", UiKit.control_font())
+	label.add_theme_font_size_override("font_size", UiKit.control_font_size(font_size))
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 1)
+	label.add_theme_constant_override("outline_size", 0)
 
 func _make_slider_grabber() -> ImageTexture:
 	var image := Image.create(7, 9, false, Image.FORMAT_RGBA8)
@@ -116,7 +119,9 @@ func _make_slider_grabber() -> ImageTexture:
 	image.fill_rect(Rect2i(3, 3, 1, 3), Color(0.28, 0.21, 0.12))
 	return ImageTexture.create_from_image(image)
 
-func _make_checkbox_icon(checked: bool) -> ImageTexture:
+func _make_checkbox_icon(checked: bool) -> Texture2D:
+	if checked:
+		return UiKit.texture("ui/premium/confirm.png")
 	var image := Image.create(9, 9, false, Image.FORMAT_RGBA8)
 	for x in range(9):
 		image.set_pixel(x, 0, NEON_PINK)
@@ -124,13 +129,6 @@ func _make_checkbox_icon(checked: bool) -> ImageTexture:
 	for y in range(9):
 		image.set_pixel(0, y, NEON_PINK)
 		image.set_pixel(8, y, NEON_PINK)
-	if checked:
-		var check_pixels: Array[Vector2i] = [
-			Vector2i(1, 4), Vector2i(2, 5), Vector2i(3, 6),
-			Vector2i(4, 5), Vector2i(5, 4), Vector2i(6, 3), Vector2i(7, 2),
-		]
-		for pixel in check_pixels:
-			image.set_pixel(pixel.x, pixel.y, NEON_CYAN)
 	return ImageTexture.create_from_image(image)
 
 

@@ -69,7 +69,7 @@ const DOOR_PATHS: Array[NodePath] = [
 ]
 const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7

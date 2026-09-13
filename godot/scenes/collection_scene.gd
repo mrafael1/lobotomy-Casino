@@ -10,7 +10,7 @@ extends Control
 
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const CARD_SIZE := Vector2(39.0, 61.0)
-const CARD_NAME_HEIGHT := 8.0
+const CARD_NAME_HEIGHT := 10.0
 # Native 160x320 leaves 128px of catalog width: three 39px cards plus two 3px
 # gaps, with the slimmed scrollbar taking the remainder.
 const CARD_H_SEPARATION := 3
@@ -55,6 +55,10 @@ var _highlighted_card_id := ""
 
 func _ready() -> void:
 	UiKit.apply_font(self)
+	for path in ["Panel/Rows/Title", "Panel/Rows/Scroll/Catalog/AugmentsHeader", "Panel/Rows/Scroll/Catalog/PowersHeader"]:
+		var heading := get_node(path) as Label
+		heading.add_theme_font_override("font", UiKit.control_font())
+		heading.add_theme_font_size_override("font_size", 8)
 	_slim_scrollbar()
 	_build_modal_card_art()
 	UiKit.connect_button(_modal_close, _hide_modal)
@@ -161,10 +165,10 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 4)
+	label.add_theme_font_size_override("font_size", 8)
 	label.add_theme_constant_override("line_spacing", 0)
 	label.add_theme_color_override("font_color", NEON_GOLD)
-	var font := Assets.font()
+	var font := UiKit.control_font()
 	if font != null:
 		label.add_theme_font_override("font", font)
 	button.add_child(label)
@@ -194,7 +198,7 @@ func _add_locked_glitch(button: Button) -> void:
 	button.add_child(fx)
 
 func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		return null
 	var icon := TextureRect.new()
@@ -292,7 +296,7 @@ func _locked_description(card_id: String) -> String:
 func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 	if _modal_card_icon == null:
 		return
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if not unlocked or icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		_modal_card_icon.texture = null
 		_modal_card_icon.visible = false

@@ -9,6 +9,7 @@ extends Node
 
 var _tex := {}
 var _fonts := {}
+const PAINTED_SYMBOLS := ["brain.png", "eye.png", "pill.png", "syringe.png", "vial.png", "flatline.png", "heart x1.png", "heart x2.png", "heart x3.png"]
 
 ## Shared stash consumable icon size (virtual px). Single source of truth so the
 ## dealer scene, in-run dealer overlay, shop, and machine stash never drift apart
@@ -42,6 +43,10 @@ static func _res_asset(rel: String) -> String:
 
 # Texture under assets/images/<rel>. Cached by (rel, mipmaps). Returns null if missing.
 func texture(rel: String, mipmaps := false) -> Texture2D:
+	# All reel, chooser, duration and odds-table views share the same symbol art.
+	if rel.get_base_dir() == "symbols" and PAINTED_SYMBOLS.has(rel.get_file()):
+		rel = "symbols/premium/" + rel.get_file()
+		mipmaps = false
 	var key := rel + ("#m" if mipmaps else "")
 	if _tex.has(key):
 		return _tex[key]

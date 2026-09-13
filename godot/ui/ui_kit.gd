@@ -40,6 +40,27 @@ static func font() -> FontFile:
 	var a := assets()
 	return a.font() if a != null else null
 
+## Tiny5 is drawn only on its native eight-pixel grid (or an exact multiple).
+## Dense body copy keeps its existing metrics until its layout is migrated.
+static func control_font() -> FontFile:
+	var a := assets()
+	return a.font("font/Tiny5-Regular.ttf") if a != null else null
+
+static func control_font_size(requested: int) -> int:
+	return maxi(8, roundi(float(requested) / 8.0) * 8) if requested >= 6 else requested
+
+static func style_display_label(label: Label, size: int = 8, available_width: float = 0.0) -> void:
+	if label == null:
+		return
+	label.add_theme_font_override("font", control_font())
+	var resolved_size := control_font_size(size)
+	if available_width > 0.0 and resolved_size > 8:
+		var text_width := control_font().get_string_size(String(TranslationServer.translate(label.text)), HORIZONTAL_ALIGNMENT_LEFT, -1, resolved_size).x
+		if text_width > available_width:
+			resolved_size = 8
+	label.add_theme_font_size_override("font_size", resolved_size)
+	label.add_theme_constant_override("outline_size", 0)
+
 static func centered_text_nudge(font_size: int) -> float:
 	var a := assets()
 	return a.centered_text_nudge(font_size) if a != null else 0.0

@@ -437,7 +437,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_icon := (slots[0]["icon"] as TextureRect).texture
-		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/vial.png"):
+		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/premium/vial.png"):
 			failures.append("issue92: Serum boost icon did not use the chosen symbol")
 	run_store.guaranteeSymbolSpins = 1
 	run_store.guaranteeSymbolId = "vial"
@@ -454,7 +454,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	else:
 		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
 		var serum_zero_color := (slots[0]["count"] as Label).get_theme_color("font_color")
-		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/vial.png"):
+		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/premium/vial.png"):
 			failures.append("issue92: Serum zero-count handoff icon should keep the chosen symbol")
 		if serum_zero_color == Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum zero-count handoff should not be red yet")

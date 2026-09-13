@@ -296,7 +296,7 @@ func _build_wallet_display() -> void:
 
 	_wallet_coin = TextureRect.new()
 	_wallet_coin.name = "WalletCoin"
-	_wallet_coin.texture = Assets.texture("ui/coin.png", true)
+	_wallet_coin.texture = Assets.texture("ui/premium/coin.png", true)
 	_wallet_coin.custom_minimum_size = Vector2(9.0, 9.0)
 	_wallet_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_wallet_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

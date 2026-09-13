@@ -999,8 +999,8 @@ func _check_global_options_layout(failures: Array) -> void:
 			if button_style == null or button_style.texture == null:
 				failures.append("options: %s is not using start-menu button art" % path)
 	var close_button := overlay.get_node_or_null("CloseButton") as Button
-	if close_button == null or close_button.text != "X":
-		failures.append("options: overlay close button is not the pixel X control")
+	if close_button == null or close_button.icon == null:
+		failures.append("options: overlay close button is missing its painted X")
 	elif close_button.mouse_filter != Control.MOUSE_FILTER_STOP:
 		failures.append("options: close button does not stop modal input")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
@@ -1675,11 +1675,11 @@ func _check_upgrades_scene(failures: Array) -> void:
 		"upgrades: RETURN TO BAR", failures)
 	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
 	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
-	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
-		failures.append("upgrades: power name box is missing its cyan neon contour")
+	if power_style == null or not power_style.border_color.is_equal_approx(ButtonKit.PANEL_BRASS.lerp(Color(0.42, 1.0, 0.95), 0.15)):
+		failures.append("upgrades: power name box is missing its brass name contour")
 	var description_style := description.get_theme_stylebox(&"panel") as StyleBoxFlat
-	if description_style == null or not description_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
-		failures.append("upgrades: description bubble is missing its pink neon contour")
+	if description_style == null or not description_style.border_color.is_equal_approx(ButtonKit.PANEL_BRASS.lerp(Color(1.0, 0.5, 0.7), 0.15)):
+		failures.append("upgrades: description bubble is missing its brass description contour")
 	if back_button.z_index <= description.z_index:
 		failures.append("upgrades: back button should render above description bubble")
 	scene._activate_memory()

@@ -285,7 +285,7 @@ func show_card(card_id: String, pool: String = "") -> bool:
 	return true
 
 func _apply_icon(entry: Dictionary) -> void:
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		# GLITCH ships without an authored icon; its bare card face is intentional.
 		_icon.texture = null

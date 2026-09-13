@@ -366,14 +366,10 @@ func _scramble_augment_glitch(host: Control) -> void:
 
 func _pacte_augment_icon(card_id: String) -> Texture2D:
 	var entry := PacteCards.card(card_id)
-	var sheet := _view.texture(String(entry.get("sheet", "")), true)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	if sheet == null or icon_rect.size == Vector2.ZERO:
+	var icon_rect := PacteCards.display_icon_rect(entry)
+	if icon_rect.size == Vector2.ZERO:
 		return null
-	var atlas := AtlasTexture.new()
-	atlas.atlas = sheet
-	atlas.region = icon_rect
-	return atlas
+	return PacteCards.icon_texture(entry)
 
 func _pacte_augment_popup_text() -> String:
 	var lines: Array[String] = []

@@ -90,8 +90,8 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 @export var name_color: Color = Color(0.0, 0.9, 1.0)
 
 # New UI assets (issue #25). The settings control uses one authored icon.
-const SETTINGS_ASSET := "ui/setting_icon.png"
-const COIN_ASSET := "ui/coin.png"
+const SETTINGS_ASSET := "ui/premium/settings.png"
+const COIN_ASSET := "ui/premium/coin.png"
 # The dealer room now uses the same bleed-aware 200x380 native exports as Pacte.
 # Their central 160x320 area stays at source-pixel scale; the expanded viewport
 # trims the decorative 20px horizontal / 30px vertical bleed on a narrow phone.

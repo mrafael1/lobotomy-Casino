@@ -227,13 +227,7 @@ func _build_art_menu() -> void:
 	add_child(_options_button)
 	_style_plate_button(_options_button, ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
 	_options_button.pressed.connect(_toggle_options_overlay)
-	# Standalone plate overlays (drawn above the frame, below the labels).
-	_plate_sprites[_start_button] = _frame_sprite(MENU_START_PLATE_ASSET, 1)
-	_plate_sprites[_scores_button] = _frame_sprite(MENU_SCORES_PLATE_ASSET, 2)
-	_plate_sprites[_options_button] = _frame_sprite(MENU_OPTIONS_PLATE_ASSET, 2)
-	# Plates were added after the buttons, so raise the buttons back above them —
-	# the labels must draw over their plates (the tutorial modal stays on top
-	# via its z_index).
+	# ButtonKit supplies the same painted physical cap as the in-game controls.
 	for b in [_start_button, _scores_button, _options_button]:
 		if b != null:
 			move_child(b, get_child_count() - 1)
@@ -258,6 +252,7 @@ func _build_art_menu() -> void:
 
 	# Campaign meter + hint live in the frame's free strips (issue #38).
 	_campaign_hint = _overlay_label("CampaignHint", ART_HINT_RECT, 5, Color(0.9, 0.78, 0.64))
+	UiKit.style_display_label(_campaign_hint)
 	_campaign_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	# Options overlay (shared component; same one the machine/dealer scenes use).
@@ -305,20 +300,7 @@ func _style_plate_button(b: Button, rect: Rect2, color: Color, font_size: int) -
 	b.size = rect.size
 	b.custom_minimum_size = Vector2.ZERO
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		b.add_theme_stylebox_override(String(state), StyleBoxEmpty.new())
-	var focus := StyleBoxFlat.new()
-	focus.draw_center = false
-	focus.border_color = Color(1.0, 1.0, 1.0, 0.7)
-	focus.set_border_width_all(1)
-	b.add_theme_stylebox_override("focus", focus)
-	b.add_theme_font_size_override("font_size", font_size)
-	if _font != null:
-		b.add_theme_font_override("font", _font)
-	b.add_theme_color_override("font_color", color)
-	b.add_theme_color_override("font_hover_color", Color.WHITE)
-	b.add_theme_color_override("font_pressed_color", Color.WHITE)
-	b.add_theme_color_override("font_focus_color", color)
+	ButtonKit.start_menu_button_style(b, color, font_size)
 	# Pressed squash: shrink around the centre while held, spring back on release
 	# (same feel as the machine's buttons). Signals connect once; layout refreshes
 	# re-run this styling on the same button.
@@ -571,8 +553,14 @@ func _refresh_start_button() -> void:
 	else:
 		_start_button.text = "CLASSIC RUN"
 		_start_button.add_theme_font_size_override("font_size", 10)
-	if _font != null:
-		_start_button.add_theme_font_override("font", _font)
+	_start_button.add_theme_font_override("font", UiKit.control_font())
+	var translated := String(TranslationServer.translate(_start_button.text))
+	var width := UiKit.control_font().get_string_size(translated, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	_start_button.add_theme_font_size_override("font_size", 16 if width <= _start_button.size.x - 12.0 else 8)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_refresh_start_button()
 
 func _refresh_campaign_ui() -> void:
 	if _campaign_hint == null:

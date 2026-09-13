@@ -24,6 +24,7 @@ const GENERATED_AUGMENT_BACK_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
 const GENERATED_POWER_FRONT_RECT := Rect2(78.0, 0.0, 39.0, 61.0)
 const GENERATED_POWER_BACK_RECT := Rect2(117.0, 0.0, 39.0, 61.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
+const PAINTED_ICON_IDS := ["augment_smart_saving", "augment_hallucination", "augment_reward_1", "augment_reward_2", "augment_reward_3", "augment_joker", "augment_win_boost", "augment_tunnel_vision", "augment_adrenaline", "augment_passive_gain", "reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
 const POOLS: Array[String] = ["augment", "power"]
 
 # Route Pacte prices are kept here with the authored card identity. The initial
@@ -274,6 +275,8 @@ static func card(card_id: String) -> Dictionary:
 	if result.is_empty():
 		return result
 	var normalised := normalise_card_id(card_id)
+	if PAINTED_ICON_IDS.has(normalised):
+		result["icon_asset"] = "cards/painted/%s.png" % normalised
 	var tier := tier_for(normalised)
 	result["tier"] = tier
 	result["cost"] = cost_for(normalised)
@@ -365,6 +368,12 @@ static func icon_texture(entry: Dictionary) -> Texture2D:
 	if not asset.is_empty():
 		return UiKit.texture(asset)
 	return UiKit.atlas(String(entry.get("sheet", "")), entry.get("icon_rect", Rect2()))
+
+## Replacement art has its own dimensions; legacy atlas coordinates remain stable.
+static func display_icon_rect(entry: Dictionary) -> Rect2:
+	if PAINTED_ICON_IDS.has(String(entry.get("id", ""))):
+		return Rect2(0, 0, 24, 24)
+	return entry.get("icon_rect", Rect2()) as Rect2
 
 static func front_rect_for_pool(pool: String) -> Rect2:
 	return AUGMENT_FRONT_RECT if pool == "augment" else POWER_FRONT_RECT

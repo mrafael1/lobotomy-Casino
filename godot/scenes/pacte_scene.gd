@@ -524,7 +524,7 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	front.size = CHOSEN_CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(front)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
 		var available := CHOSEN_CARD_SIZE - Vector2(CHOSEN_CARD_MARGIN * 2.0, CHOSEN_CARD_MARGIN * 2.0)
 		var icon_scale := minf(available.x / icon_rect.size.x,
@@ -608,7 +608,7 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	front.visible = face_up
 	view.add_child(front)
 	var entry := PacteCards.card(card_id)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
 		var icon := _make_card_icon(card_id, entry, icon_rect, icon_rect.size)
 		_set_card_icon_position(icon, Vector2((CARD_SIZE.x - icon_rect.size.x) * 0.5,

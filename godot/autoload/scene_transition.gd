@@ -24,7 +24,7 @@ const WALLET_COIN_SIZE := Vector2(9.0, 9.0)
 const WALLET_TRANSFER_MIN_TIME := 0.35
 const WALLET_TRANSFER_PER_CREDIT := 0.012
 const WALLET_TRANSFER_MAX_TIME := 1.5
-const WALLET_COIN_ASSET := "ui/coin.png"
+const WALLET_COIN_ASSET := "ui/premium/coin.png"
 const WALLET_COLOR := Color(0.92, 0.86, 0.56, 1.0)
 
 const DARK := Color(0.008, 0.012, 0.026, 1.0)
@@ -338,7 +338,7 @@ func _build_wallet_display() -> void:
 	if assets != null:
 		_wallet_coin.texture = assets.call("texture", WALLET_COIN_ASSET, true) as Texture2D
 	else:
-		_wallet_coin.texture = load("res://assets/images/ui/coin.png") as Texture2D
+		_wallet_coin.texture = load("res://assets/images/ui/premium/coin.png") as Texture2D
 	_wallet_coin.custom_minimum_size = WALLET_COIN_SIZE
 	_wallet_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_wallet_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
