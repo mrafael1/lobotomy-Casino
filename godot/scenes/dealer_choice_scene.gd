@@ -62,7 +62,7 @@ class RouteEmblem extends Control:
 				draw_circle(center + Vector2(0.0, 0.0), 2.0, color)
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
-const PAINTED_MASTER_ASSET := "dealer_choice_polished/choice_scene_native.png"
+const PAINTED_MASTER_ASSET := "dealer_choice_polished/choice_scene_painted.png"
 const DOOR_PATHS: Array[NodePath] = [
 	NodePath("DoorChoices/DoorLeft"),
 	NodePath("DoorChoices/DoorRight"),
@@ -173,6 +173,8 @@ func _ready() -> void:
 	if painted_master != null and scene_art != null:
 		scene_art.texture = painted_master
 		scene_art.position = Vector2.ZERO
+		scene_art.scale = Vector2(160, 320) / painted_master.get_size()
+		scene_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_bubble_sprite = get_node_or_null("BubbleText") as Sprite2D
 	_build_header()
 	_build_credits_display()

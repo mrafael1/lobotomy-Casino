@@ -16,7 +16,10 @@ they are nearest-sampled to the shared 16px stash/offer size.
   remain runtime elements.
 
 The generated card and deck crops are now active in Pacte:
-`cards_native.png`, `augment_deck_native.png`, and `power_deck_native.png`.
+`cards_detail.png`, `augment_deck_detail.png`, and `power_deck_detail.png`.
+These export at four source pixels per layout unit and use linear mipmaps.
+Card faces occupy 156x244 source pixels; deck stacks occupy 112x128.
+The previous native exports remain compatibility assets.
 The legacy SVG deck placeholders are no longer referenced by the scene.
 
 The generated item sheet is sliced by `tools/slice_item_sheet.gd` into

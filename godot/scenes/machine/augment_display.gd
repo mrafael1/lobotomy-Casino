@@ -268,6 +268,7 @@ func refresh_pacte_badges() -> void:
 				glitch.visible = false
 		else:
 			icon.texture = _pacte_augment_icon(ids[i])
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(ids[i]) else CanvasItem.TEXTURE_FILTER_NEAREST
 			if glitch != null:
 				glitch.visible = _augment_glitches(String(ids[i]))
 

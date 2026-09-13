@@ -18,11 +18,11 @@ const POWER_BACK_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
 ## Pacte's painted card treatment is kept separate from the legacy icon sheets above.
 ## Card faces are intentionally blank in their centre so the scene can place the live
 ## card icon and runtime description without baking gameplay text into the artwork.
-const GENERATED_CARD_SHEET := "pacte_polished/generated_set/cards_native.png"
-const GENERATED_AUGMENT_FRONT_RECT := Rect2(0.0, 0.0, 39.0, 61.0)
-const GENERATED_AUGMENT_BACK_RECT := Rect2(39.0, 0.0, 39.0, 61.0)
-const GENERATED_POWER_FRONT_RECT := Rect2(78.0, 0.0, 39.0, 61.0)
-const GENERATED_POWER_BACK_RECT := Rect2(117.0, 0.0, 39.0, 61.0)
+const GENERATED_CARD_SHEET := "pacte_polished/generated_set/cards_detail.png"
+const GENERATED_AUGMENT_FRONT_RECT := Rect2(0.0, 0.0, 156.0, 244.0)
+const GENERATED_AUGMENT_BACK_RECT := Rect2(156.0, 0.0, 156.0, 244.0)
+const GENERATED_POWER_FRONT_RECT := Rect2(312.0, 0.0, 156.0, 244.0)
+const GENERATED_POWER_BACK_RECT := Rect2(468.0, 0.0, 156.0, 244.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const PAINTED_ICON_IDS := ["augment_smart_saving", "augment_hallucination", "augment_reward_1", "augment_reward_2", "augment_reward_3", "augment_joker", "augment_win_boost", "augment_tunnel_vision", "augment_adrenaline", "augment_passive_gain", "reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
 const POOLS: Array[String] = ["augment", "power"]
@@ -369,7 +369,7 @@ static func icon_texture(entry: Dictionary) -> Texture2D:
 		return UiKit.texture(asset)
 	return UiKit.atlas(String(entry.get("sheet", "")), entry.get("icon_rect", Rect2()))
 
-## Replacement art has its own dimensions; legacy atlas coordinates remain stable.
+## Painted textures render in a 24-unit footprint regardless of source resolution.
 static func display_icon_rect(entry: Dictionary) -> Rect2:
 	if PAINTED_ICON_IDS.has(String(entry.get("id", ""))):
 		return Rect2(0, 0, 24, 24)

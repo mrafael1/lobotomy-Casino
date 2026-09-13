@@ -439,7 +439,7 @@ Resources and currencies:
   power offers, previews, drag-to-emplacement selection, and resumable
   partial choices. Its authored table, dealer-bubble, and card interaction assets
   remain composed at native resolution; the legacy room/deck/emplacement sprites
-  are retained only as compatibility nodes. A crisp native painted master supplies
+  are retained only as compatibility nodes. A high-resolution painted master supplies
   the room, dealer and felt
   base while all cards, prompts and descriptions remain live layers. New compact
   cyan and rose deck stacks sit in the painted upper recesses at (13,109) and
@@ -462,7 +462,7 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice. Its crisp native painted master
+  doors for Shop/Augment/Power/Bonus/Sacrifice. Its high-resolution painted master
   supplies the lobby, doors and dealer; route titles, prices, hover/open frames,
   reroll and confirmation remain runtime layers.
   Each door switches its authored
@@ -493,7 +493,7 @@ Resources and currencies:
   new end-of-segment offers use the live Dealer only through its interruption flow.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — live in-run dealer visits and the post-run odds phase (gateway to the Lab).
-  Its pre-run branch uses the native painted stocked-counter master while offers,
+  Its pre-run branch uses the high-resolution painted stocked-counter master while offers,
   prices, stash and wallet remain runtime elements; active-run visits retain their
   dedicated dealer art.
 - `upgrades_scene` — the Lab: permanent upgrades.
@@ -576,7 +576,7 @@ Resources and currencies:
   layer appears only while Book is enabled, coexists with the Tunnel Vision shutter,
   and disappears when Learning is removed; it never changes scoring or input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
-  Audio settings use a native painted scarlet-and-brass speaker console, with live
+  Audio settings use a high-resolution painted scarlet-and-brass speaker console, with live
   volume and mute controls inset in its dark faceplate and BACK on the lower shelf.
   The mute row keeps its checkmark and has a visible keyboard-focus outline.
   The shared options modal uses a transparent painted scarlet-and-brass plaque
@@ -637,7 +637,7 @@ Resources and currencies:
   with mipmaps and linear filtering on the reels. Their 16-unit center/12-unit
   neighbor geometry is independent of source resolution. Book keeps its existing
   painted asset. Symbol IDs and scoring are unchanged.
-- Seventeen static Pacte card icons use individual 24px painted assets throughout
+- Seventeen static Pacte card icons use individual 128px painted assets in 24-unit display footprints throughout
   Pacte, Collection, unlock popups and machine augment stickers. Renderers use
   `PacteCards.display_icon_rect`; original atlas metadata remains intact.
   Pattern Recognition and How to Cheat retain their authored animation sequences.
@@ -688,3 +688,8 @@ or save/runtime integration.
 - Use `PascalCase` for class names and node names.
 - Use `CONSTANT_CASE` for constants.
 - Add brief docstrings only for complex functions and classes.
+
+Painted Pacte card fronts/backs and deck stacks use 4x source exports with linear
+mipmap filtering. Their 39x61 and 28x32 layout footprints stay fixed; source atlas
+coordinates are independent of card interaction geometry. Room painted masters
+render at display resolution inside the centered safe area.

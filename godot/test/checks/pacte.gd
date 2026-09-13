@@ -869,30 +869,31 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	if painted_master == null or painted_master.texture == null \
 			or not painted_master.visible \
 			or not painted_master.texture.resource_path.ends_with(
-				"pacte_polished/pacte_scene_native.png") \
+				"pacte_polished/pacte_scene_painted.png") \
 			or painted_master.position != Vector2.ZERO \
-			or painted_master.scale != Vector2.ONE:
+			or painted_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or not (painted_master.scale * painted_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 		failures.append("pacte: painted native scene master is not the active crisp base layer")
 	var deck_specs: Array[Dictionary] = [
 		{"node": pacte.get_node_or_null("AugmentDeck"),
-			"asset": "generated_set/augment_deck_native.png", "position": Vector2(13.0, 109.0)},
+			"asset": "generated_set/augment_deck_detail.png", "position": Vector2(13.0, 109.0)},
 		{"node": pacte.get_node_or_null("PowerDeck"),
-			"asset": "generated_set/power_deck_native.png", "position": Vector2(119.0, 109.0)},
+			"asset": "generated_set/power_deck_detail.png", "position": Vector2(119.0, 109.0)},
 	]
 	for deck_spec in deck_specs:
 		var deck := deck_spec["node"] as Sprite2D
 		if deck == null or deck.texture == null \
 				or not deck.texture.resource_path.ends_with(String(deck_spec["asset"])) \
-				or Vector2i(deck.texture.get_width(), deck.texture.get_height()) != Vector2i(28, 32) \
+				or Vector2i(deck.texture.get_width(), deck.texture.get_height()) != Vector2i(112, 128) \
 				or deck.position.distance_to(deck_spec["position"]) > 1.1 \
-				or deck.scale != Vector2.ONE:
+				or not (deck.scale * deck.texture.get_size()).is_equal_approx(Vector2(28, 32)):
 			failures.append("pacte: %s deck is not aligned to its painted upper recess" \
 				% String(deck_spec["asset"]))
 	var card_art := pacte._make_card_view("augment_book", "augment") as Control
 	var card_front := card_art.get_node_or_null("Front") as TextureRect
 	var card_back := card_art.get_node_or_null("Back") as TextureRect
 	if card_front == null or card_front.texture == null \
-			or not (card_front.texture as AtlasTexture).atlas.resource_path.ends_with("generated_set/cards_native.png") \
+			or not (card_front.texture as AtlasTexture).atlas.resource_path.ends_with("generated_set/cards_detail.png") \
 			or (card_front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT \
 			or card_back == null or card_back.texture == null \
 			or (card_back.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_BACK_RECT:
@@ -974,7 +975,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		if art.position.distance_to(expected_art_position) > position_tolerance:
 			failures.append("pacte: %s artwork is not aligned to its native slot" \
 				% String(art_spec["name"]))
-		if art.scale != Vector2.ONE:
+		var expected_art_scale := Vector2(0.25, 0.25) if art == pacte._augment_deck \
+			or art == pacte._power_deck else Vector2.ONE
+		if not art.scale.is_equal_approx(expected_art_scale):
 			failures.append("pacte: %s artwork was resized instead of preserving source pixels" \
 				% String(art_spec["name"]))
 	if pacte._dealer_bubble == null \

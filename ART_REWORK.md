@@ -18,10 +18,11 @@ art. Do not flatten all art to the 160x320 layout grid.
 | Reel symbols | Nine 128px symbols in `images/symbols/premium`, shared by reels and symbol pickers; existing painted Book retained |
 | Screen fill | High-resolution decorative casino overscan, centered gameplay safe area, fractional scaling for phone and tablet aspect ratios |
 | Machine hardware | Full-resolution cabinet sampling and painted rail; 4x shelf/SPIN exports; smooth three-state power caps; detailed reel frames and enamel number drums |
-| Card illustrations | Seventeen static 24px emblems in `images/cards/painted`, used by shared card renderers and machine stickers |
+| Card illustrations | Seventeen static 128px emblems in 24-unit display footprints in `images/cards/painted`, used by shared card renderers and machine stickers |
 | Power coin | Separate mint token for restoration flights, preserving existing flight geometry and timing |
 | Menu surfaces | Start buttons, settings labels, options heading, Collection names, Shop rows and footer controls |
-| Earlier room passes | Painted machine/room assets, Pacte table, route lobby, settings console and options plaque already integrated on this branch |
+| Room surfaces | Full-resolution painted Pacte/build table, route lobby, dealer counter, settings console and options plaque with filtered sampling and fixed safe-area layouts |
+| Card faces and decks | Four-times-resolution painted fronts, backs and deck stacks; original 39x61 card and 28x32 deck footprints |
 
 Dense descriptions still use the existing microfont. Collection truncation keeps
 the full name in its detail view; Shop rows keep their full text in tooltips.

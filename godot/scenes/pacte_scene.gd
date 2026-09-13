@@ -36,8 +36,8 @@ const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
 # code and save/reveal state. The painted master already contains the table's
 # three card recesses and the two lower placement wells, so only live card faces
 # and compact selected-card views are drawn above it.
-const AUGMENT_DECK_ASSET := "pacte_polished/generated_set/augment_deck_native.png"
-const POWER_DECK_ASSET := "pacte_polished/generated_set/power_deck_native.png"
+const AUGMENT_DECK_ASSET := "pacte_polished/generated_set/augment_deck_detail.png"
+const POWER_DECK_ASSET := "pacte_polished/generated_set/power_deck_detail.png"
 const AUGMENT_DECK_POSITION := Vector2(13.0, 109.0)
 const POWER_DECK_POSITION := Vector2(119.0, 109.0)
 const DEALER_ASSET := "pacte_scene/dealer.png"
@@ -93,7 +93,7 @@ const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
-const PAINTED_MASTER_ASSET := "pacte_polished/pacte_scene_native.png"
+const PAINTED_MASTER_ASSET := "pacte_polished/pacte_scene_painted.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
 const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
@@ -372,6 +372,10 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	sprite.position = _native_art_position(sprite.texture, 1)
 	sprite.z_index = z
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if asset == PAINTED_MASTER_ASSET and sprite.texture != null:
+		sprite.position = Vector2.ZERO
+		sprite.scale = CANVAS_SIZE / sprite.texture.get_size()
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return sprite
 
 func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
@@ -387,6 +391,9 @@ func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
 	# is allowed to fall outside the phone's viewport naturally.
 	sprite.scale = Vector2.ONE
 	sprite.position = _native_art_position(sprite.texture, safe_frame_count)
+	if sprite.texture.resource_path.ends_with("deck_detail.png"):
+		sprite.scale = Vector2(28, 32) / sprite.texture.get_size()
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _native_art_position(texture: Texture2D, frame_count: int) -> Vector2:
 	if texture == null:
@@ -518,6 +525,7 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	front.name = "Front"
 	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.stretch_mode = TextureRect.STRETCH_SCALE
 	front.position = Vector2.ZERO
@@ -593,6 +601,7 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	back.name = "Back"
 	back.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_BACK_RECT if kind == "augment" else PacteCards.GENERATED_POWER_BACK_RECT)
+	back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -602,6 +611,7 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	front.name = "Front"
 	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -694,6 +704,8 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		var icon := TextureRect.new()
 		icon.name = "Icon"
 		icon.texture = PacteCards.icon_texture(entry)
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			if PacteCards.PAINTED_ICON_IDS.has(card_id) else CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_SCALE
 		icon.size = display_size

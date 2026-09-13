@@ -13,3 +13,8 @@ no cast shadow beyond object, no lettering. Premium hand-painted pixel-art
 matching a gothic red enamel casino and ivory parchment cards. Strong clear
 silhouette, restrained highlights, chunky intentional pixels, extremely readable
 when displayed at 22 by 27 pixels. Portrait sprite. Single book only.
+
+Seventeen additional static icons and the power coin export at 128x128 from
+the painted masters using tools/prepare_premium_card_icons.gd. Static card
+icons keep 24x24 layout footprints with linear mipmap filtering. Book and the
+authored animated icons retain their existing presentation in this pass.

@@ -240,9 +240,10 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route_master := route.get_node_or_null("DealerSprite") as Sprite2D
 	if route_master == null or route_master.texture == null \
 			or not route_master.texture.resource_path.ends_with(
-				"dealer_choice_polished/choice_scene_native.png") \
+				"dealer_choice_polished/choice_scene_painted.png") \
 			or route_master.position != Vector2.ZERO \
-			or route_master.scale != Vector2.ONE:
+			or route_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or not (route_master.scale * route_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 		failures.append("route: painted choice master is not the active crisp base layer")
 	var route_cards: Array = run_store.current_route_offer()
 	if route.get_node_or_null("ContinueButton") != null:
@@ -980,8 +981,10 @@ func _check_global_options_layout(failures: Array) -> void:
 	var options_contour := overlay.get_node_or_null("Contour") as TextureRect
 	if options_contour == null or options_contour.texture == null:
 		failures.append("options: overlay missing painted frame")
-	elif options_contour.texture.get_size() != Vector2(144, 252):
-		failures.append("options: painted frame must render at native resolution")
+	elif options_contour.size != Vector2(144, 252) \
+			or options_contour.texture.get_width() <= 144 \
+			or options_contour.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("options: detailed frame must preserve the 144x252 layout footprint")
 	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if options_panel != null else null
 	if panel_style == null:

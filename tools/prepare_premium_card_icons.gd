@@ -20,8 +20,8 @@ func _slice(source: String, names: Array, rows: int) -> void:
 			continue
 		var tile := sheet.get_region(Rect2i(Vector2i(index % 3, index / 3) * cell, cell))
 		tile = tile.get_region(tile.get_used_rect())
-		var factor := 24.0 / float(maxi(tile.get_width(), tile.get_height()))
-		tile.resize(maxi(1, roundi(tile.get_width() * factor)), maxi(1, roundi(tile.get_height() * factor)), Image.INTERPOLATE_NEAREST)
-		var icon := Image.create(24, 24, false, Image.FORMAT_RGBA8)
-		icon.blit_rect(tile, Rect2i(Vector2i.ZERO, tile.get_size()), (Vector2i(24, 24) - tile.get_size()) / 2)
+		var factor := 128.0 / float(maxi(tile.get_width(), tile.get_height()))
+		tile.resize(maxi(1, roundi(tile.get_width() * factor)), maxi(1, roundi(tile.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
+		var icon := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+		icon.blit_rect(tile, Rect2i(Vector2i.ZERO, tile.get_size()), (Vector2i(128, 128) - tile.get_size()) / 2)
 		assert(icon.save_png(ProjectSettings.globalize_path(ROOT + String(names[index]) + ".png")) == OK)

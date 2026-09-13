@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scenes/options_overlay.gd" id="1_options"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
 
-[ext_resource type="Texture2D" path="res://assets/images/options_polished/menu_panel_native.png" id="3_frame"]
+[ext_resource type="Texture2D" path="res://assets/images/options_polished/menu_panel_painted.png" id="3_frame"]
 
 [node name="OptionsOverlay" type="Control"]
 z_index = 1000
@@ -22,7 +22,8 @@ mouse_filter = 0
 color = Color(0, 0, 0, 0.68)
 
 [node name="Contour" type="TextureRect" parent="."]
-texture_filter = 1
+texture_filter = 4
+expand_mode = 1
 layout_mode = 0
 offset_left = 8.0
 offset_top = 26.0

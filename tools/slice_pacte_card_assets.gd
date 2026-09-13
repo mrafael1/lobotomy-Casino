@@ -1,18 +1,16 @@
 extends SceneTree
 
-## Prepare the generated Pacte card and deck sheets for the native canvas.
-## The source renders at high resolution; this tool isolates each opaque card,
-## resizes with nearest sampling, and writes the exact runtime footprints used by
-## pacte_scene.gd.
+## Export painted cards and decks at four pixels per layout unit.
+## Runtime controls keep their original card and deck footprints.
 
 const CARD_SOURCE := "res://assets/images/pacte_polished/generated_set/cards_painted.png"
 const DECK_SOURCE := "res://assets/images/pacte_polished/generated_set/decks_painted.png"
 const OUTPUT_DIR := "res://assets/images/pacte_polished/generated_set"
-const CARD_OUTPUT := "cards_native.png"
-const CARD_WIDTH := 39
-const CARD_HEIGHT := 61
-const DECK_WIDTH := 28
-const DECK_HEIGHT := 32
+const CARD_OUTPUT := "cards_detail.png"
+const CARD_WIDTH := 156
+const CARD_HEIGHT := 244
+const DECK_WIDTH := 112
+const DECK_HEIGHT := 128
 
 func _initialize() -> void:
 	var cards := Image.load_from_file(ProjectSettings.globalize_path(CARD_SOURCE))
@@ -32,7 +30,7 @@ func _initialize() -> void:
 	assert(cards_native.save_png(ProjectSettings.globalize_path("%s/%s" % [OUTPUT_DIR, CARD_OUTPUT])) == OK)
 
 	var deck_cell_w := decks.get_width() / 2
-	var deck_names := ["augment_deck_native.png", "power_deck_native.png"]
+	var deck_names := ["augment_deck_detail.png", "power_deck_detail.png"]
 	for index in 2:
 		var cell := Rect2i(index * deck_cell_w, 0, deck_cell_w if index == 0 else decks.get_width() - index * deck_cell_w, decks.get_height())
 		var crop := _opaque_crop(decks.get_region(cell))
@@ -67,5 +65,5 @@ func _opaque_crop(region: Image) -> Image:
 	return region.get_region(Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
 
 func _resize_exact(source: Image, target_size: Vector2i) -> Image:
-	source.resize(target_size.x, target_size.y, Image.INTERPOLATE_NEAREST)
+	source.resize(target_size.x, target_size.y, Image.INTERPOLATE_LANCZOS)
 	return source

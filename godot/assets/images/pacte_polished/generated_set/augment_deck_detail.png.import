@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bfoesev2ym370"
-path="res://.godot/imported/heart.png-7641c8e22c3f8303ff6899e81500ba76.ctex"
+uid="uid://8whnsculf7u3"
+path="res://.godot/imported/augment_deck_detail.png-cef8396b5423e8fc603325db853c9132.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/cards/painted/heart.png"
-dest_files=["res://.godot/imported/heart.png-7641c8e22c3f8303ff6899e81500ba76.ctex"]
+source_file="res://assets/images/pacte_polished/generated_set/augment_deck_detail.png"
+dest_files=["res://.godot/imported/augment_deck_detail.png-cef8396b5423e8fc603325db853c9132.ctex"]
 
 [params]
 

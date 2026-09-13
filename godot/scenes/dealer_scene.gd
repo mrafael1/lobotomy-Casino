@@ -98,7 +98,7 @@ const COIN_ASSET := "ui/premium/coin.png"
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_BACKGROUND_ASSET := DEALER_SHOP_ASSET_DIR + "bg.png"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "counter.png"
-const PRE_RUN_PAINTED_MASTER_ASSET := "dealer_shop_polished/pre_dealer_shop_native.png"
+const PRE_RUN_PAINTED_MASTER_ASSET := "dealer_shop_polished/pre_dealer_shop_painted.png"
 # The between-run Dealer is a compact native sprite. Keep it separate from the
 # full-canvas portrait used by the active-run dealer so either presentation can
 # evolve without changing the other one.
@@ -417,6 +417,10 @@ func _configure_native_art_sprite(
 	spr.position = _native_art_position(tex, spr.hframes)
 	spr.scale = Vector2.ONE
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if rel == PRE_RUN_PAINTED_MASTER_ASSET:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(CANVAS_W, CANVAS_H) / tex.get_size()
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return spr
 
 func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:

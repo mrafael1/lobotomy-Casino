@@ -141,7 +141,7 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.size = CARD_SIZE
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	button.add_child(art)
 
 	if unlocked:
@@ -204,6 +204,7 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 	var icon := TextureRect.new()
 	icon.name = "CardIcon"
 	icon.texture = PacteCards.icon_texture(entry)
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
@@ -211,7 +212,6 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 	icon.size = icon_rect.size * scale
 	icon.position = (CARD_SIZE - icon.size) * 0.5
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return icon
 
 func is_card_unlocked(card_id: String, pool: String = "") -> bool:
@@ -251,7 +251,7 @@ func _build_modal_card_art() -> void:
 	_modal_card_art.stretch_mode = TextureRect.STRETCH_SCALE
 	_modal_card_art.size = CARD_SIZE
 	_modal_card_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_modal_card_holder.add_child(_modal_card_art)
 
 	_modal_card_icon = TextureRect.new()
@@ -302,6 +302,7 @@ func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 		_modal_card_icon.visible = false
 		return
 	_modal_card_icon.texture = PacteCards.icon_texture(entry)
+	_modal_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
 		(CARD_SIZE.y - 6.0) / icon_rect.size.y))
 	_modal_card_icon.size = icon_rect.size * scale

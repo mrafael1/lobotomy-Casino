@@ -349,8 +349,8 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 		failures.append("issue52: the popup did not show the card's authored name/description")
 	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT:
 		failures.append("issue52: the popup did not show the enlarged card front")
-	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("issue52: the popup card front is not nearest-filtered")
+	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("issue52: the painted popup card front is not mipmap-filtered")
 	if popup._heading.text != "CARD UNLOCKED":
 		failures.append("issue52: the popup is missing its CARD UNLOCKED heading")
 	if popup._dim == null or popup.mouse_filter != Control.MOUSE_FILTER_STOP:

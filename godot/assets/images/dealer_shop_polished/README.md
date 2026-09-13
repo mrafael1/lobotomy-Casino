@@ -4,13 +4,12 @@
 image-generation tool. It follows the painted Pacte dealer, red enamel, dark
 green surfaces, brass and restrained casino lighting.
 
-The 160x320 `pre_dealer_shop_native.png` derivative is now the active base layer
+The full-resolution `pre_dealer_shop_painted.png` is the active base layer
 for the pre-run branch of `dealer_scene.gd`. It supplies the stocked room,
-dealer and counter as one crisp nearest sampled composition. Live offer slots,
+dealer and counter, filtered into the 160x320 safe-area layout. Live offer slots,
 prices, stash, wallet and navigation controls remain independent runtime nodes;
-the in-run dealer branch keeps its existing dedicated artwork. The high-
-resolution file is retained as the editable source master; the native
-derivative is the exported runtime asset.
+the in-run dealer branch keeps its existing dedicated artwork. The native
+derivative remains for compatibility.
 
 ## Generation prompt
 

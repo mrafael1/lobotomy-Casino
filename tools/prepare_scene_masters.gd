@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Reduce generated masters to the native canvas, or the declared UI asset size.
-## Nearest sampling preserves their authored pixel clusters for runtime filtering.
+## Rebuild legacy native-size derivatives for compatibility.
+## Runtime room scenes use the detailed painted masters directly.
 const JOBS := [
 	["res://assets/images/options_polished/menu_panel_painted.png", "res://assets/images/options_polished/menu_panel_native.png", Vector2i(144, 252)],
 	["res://assets/images/settings_polished/audio_console_painted.png", "res://assets/images/settings_polished/audio_console_native.png"],

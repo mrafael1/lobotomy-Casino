@@ -198,9 +198,10 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 		var painted_shop := dealer.get_node_or_null("Background") as Sprite2D
 		if painted_shop == null or painted_shop.texture == null \
 				or not painted_shop.texture.resource_path.ends_with(
-					"dealer_shop_polished/pre_dealer_shop_native.png") \
+					"dealer_shop_polished/pre_dealer_shop_painted.png") \
 				or painted_shop.position != Vector2.ZERO \
-				or painted_shop.scale != Vector2.ONE:
+				or painted_shop.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+				or not (painted_shop.scale * painted_shop.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 			failures.append("issue55: pre-run dealer shop is not using its painted native master")
 	if not dealer.has_method("_native_canvas_origin") \
 			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
@@ -322,20 +323,25 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
 			failures.append("dealer shop: %s is not a native sheet at %s" % [rel, expected])
 	var background := dealer.get_node_or_null("Background") as Sprite2D
-	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("dealer shop: background is not nearest-neighbor filtered")
+	if background == null:
+		failures.append("dealer shop: background node is missing")
 	elif background.texture == null:
 		failures.append("dealer shop: background is missing its texture")
 	else:
 		var expected_background := "dealer_shop/bg.png"
 		var expected_position := Vector2(-20.0, -30.0)
+		var expected_scale := Vector2.ONE
+		var expected_filter := CanvasItem.TEXTURE_FILTER_NEAREST
 		if bool(dealer._pre_run) and background.texture.resource_path.ends_with(
-				"dealer_shop_polished/pre_dealer_shop_native.png"):
-			expected_background = "dealer_shop_polished/pre_dealer_shop_native.png"
+				"dealer_shop_polished/pre_dealer_shop_painted.png"):
+			expected_background = "dealer_shop_polished/pre_dealer_shop_painted.png"
 			expected_position = Vector2.ZERO
+			expected_scale = Vector2(160, 320) / background.texture.get_size()
+			expected_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		if not background.texture.resource_path.ends_with(expected_background) \
 				or background.position != expected_position \
-				or background.scale != Vector2.ONE:
+				or not background.scale.is_equal_approx(expected_scale) \
+				or background.texture_filter != expected_filter:
 			failures.append("dealer shop: background is not the centred native sheet")
 	var counter := dealer.get_node_or_null("Counter") as Sprite2D
 	if counter == null:
