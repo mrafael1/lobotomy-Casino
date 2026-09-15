@@ -33,11 +33,11 @@ const MENU_W := 148.0
 const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
 const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
-# Authored menu art (issue #111). Legacy fallback background if missing.
+# Authored menu art (issue #111). The scene's simple background remains as the
+# fallback if the authored sheet is unavailable.
 const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # bg + title
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
 const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
-const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
 # Standalone button plates (full-canvas overlays): the plate squashes together
 # with its label on press. START is one frame; SCORES/OPTIONS carry two frames
 # (locked | unlocked positions). The selector bar stays baked — no press art.
@@ -429,15 +429,6 @@ func _layout_art_menu(augmented: bool) -> void:
 
 func _build_background() -> void:
 	if _background != null:
-		var neon := Assets.texture(MENU_BG_ASSET, true)
-		if neon != null:
-			_background.texture = neon
-			_background.centered = false
-			_background.position = Vector2.ZERO
-			_background.scale = Vector2(CANVAS_W / neon.get_width(), CANVAS_H / neon.get_height())
-			var dim := get_node_or_null("Dim") as ColorRect
-			if dim != null:
-				dim.color = Color(0.02, 0.01, 0.04, 0.42)
 		_background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_CENTER) -> Label:
