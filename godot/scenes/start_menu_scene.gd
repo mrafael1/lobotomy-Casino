@@ -29,7 +29,7 @@ const MENU_W := 148.0
 const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
 const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
-# The full-screen start_menu.png sheet was retired. The live menu uses the
+# The retired full-screen menu sheet is no longer loaded. The live menu uses the
 # scene's controls and these small overlays for the optional run selector.
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
 const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
@@ -40,7 +40,8 @@ const MENU_START_PLATE_ASSET := "start_menu/start_menu_start_button.png"
 const MENU_SCORES_PLATE_ASSET := "start_menu/start_menu_score_button.png"
 const MENU_OPTIONS_PLATE_ASSET := "start_menu/start_menu_options_button.png"
 
-# Baked plate rects (canvas px, frame-relative), measured on start_menu.png.
+# Baked plate rects (canvas px, frame-relative), retained for compatibility
+# with the live selector layout.
 const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
 const ART_SCORES_LOCKED_RECT := Rect2(30.0, 178.0, 101.0, 25.0)
 const ART_OPTIONS_LOCKED_RECT := Rect2(30.0, 213.0, 101.0, 25.0)
