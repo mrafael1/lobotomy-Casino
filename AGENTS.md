@@ -698,3 +698,8 @@ Consumable presentation uses nine 128x128 painted item exports from the shared
 item master. Dealer offers, Shop and machine stash icons use linear mipmaps
 inside their existing layout footprints; active-item badges remain 8 units and
 preserve phase-coloured turn counts. Tea flights use the same detailed item art.
+
+Dealer Chip Augments use an eight-frame detailed brass/enamel sheet, one 128px
+square per effect. Dealer's Tip has a clock and Emergency Reserve a heart shield;
+neither reuses the previous six-frame sheet's fallback. Dealer views use linear
+mipmaps and retain their existing offer geometry, prices and selection behavior.

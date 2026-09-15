@@ -23,10 +23,10 @@ const DEALER_TIP_HEAD_START := 2
 # campaign, matching the chips' own scope.
 const EMERGENCY_RESERVE_SPINS := 1
 
-# Authored chip art: one 6-frame horizontal sheet, one unique chip per augment
+# Authored chip art: one 8-frame horizontal sheet, one unique chip per augment
 # (`frame` indexes into it).
-const ICON_SHEET := "items/chips_upgrade.png"
-const ICON_HFRAMES := 6
+const ICON_SHEET := "items/chips_detail.svg"
+const ICON_HFRAMES := 8
 
 # Every chip presents under the same "Augment" name (rarity colours it); the TV
 # shows only beneficial green `hints` — one word each, up to two lines for

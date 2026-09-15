@@ -273,6 +273,8 @@ func _check_augment_feedback_map_132(failures: Array) -> void:
 	var assets: Node = get_root().get_node("Assets")
 	var sheet: Texture2D = assets.texture(ChipAugments.ICON_SHEET)
 	var frames := ChipAugments.icon_frames(sheet)
+	if sheet == null or sheet.get_size() != Vector2(1024, 128) or frames != ChipAugments.ids().size():
+		failures.append("augments: detailed sheet must provide one 128px frame per chip")
 	for augment_id in ChipAugments.ids():
 		var frame := ChipAugments.icon_frame(String(augment_id), frames)
 		if frame < 0 or frame >= frames:
@@ -568,7 +570,7 @@ func _check_chip_augments(failures: Array) -> void:
 				icon_sprite = (child as Control).get_child(0) as Sprite2D
 		if not has_icon:
 			failures.append("augments: no augment icon on the third painted counter slot")
-		# The authored chip sheet: 6 frames, one unique chip per augment.
+		# The detailed chip sheet: eight frames, one unique chip per augment.
 		if icon_sprite == null or icon_sprite.texture == null:
 			failures.append("augments: augment icon has no chip art")
 		elif icon_sprite.hframes != ChipAugments.ICON_HFRAMES \
