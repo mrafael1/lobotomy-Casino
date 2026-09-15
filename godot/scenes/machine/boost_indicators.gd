@@ -262,6 +262,8 @@ func refresh(callout_active: bool) -> void:
 		s["boost"] = boost
 		slot.position = SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
+		(s["icon"] as TextureRect).texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			if tex.resource_path.contains("/items/generated/") else CanvasItem.TEXTURE_FILTER_NEAREST
 		var cn: Label = s["count"]
 		# Just the number of turns left, coloured by what the item is doing right now:
 		# green while it is helping, red while it is costing. The badge is 8px and the

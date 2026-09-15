@@ -693,3 +693,8 @@ Painted Pacte card fronts/backs and deck stacks use 4x source exports with linea
 mipmap filtering. Their 39x61 and 28x32 layout footprints stay fixed; source atlas
 coordinates are independent of card interaction geometry. Room painted masters
 render at display resolution inside the centered safe area.
+
+Consumable presentation uses nine 128x128 painted item exports from the shared
+item master. Dealer offers, Shop and machine stash icons use linear mipmaps
+inside their existing layout footprints; active-item badges remain 8 units and
+preserve phase-coloured turn counts. Tea flights use the same detailed item art.

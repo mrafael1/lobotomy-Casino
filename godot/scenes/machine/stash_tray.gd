@@ -70,7 +70,7 @@ func build(slot_count: int) -> void:
 func _apply_icon_fit(icon: TextureRect) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 ## The authored slot for one index, under any of the names the scene has used for
 ## it. The list is history rather than design: the tray has been re-parented and

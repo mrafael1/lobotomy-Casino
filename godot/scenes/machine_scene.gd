@@ -3755,6 +3755,7 @@ func _refresh_controls() -> void:
 		var icon: TextureRect = stash_icons[i]
 		if i < slots.size():
 			icon.texture = _icon_for(slots[i])
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			icon.modulate = Color.WHITE if usable else Color(1.0, 1.0, 1.0, 0.4)
 		else:
 			icon.texture = null # empty slot draws nothing
@@ -4727,7 +4728,7 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.size = Vector2(12.0, 12.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 130
 	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)

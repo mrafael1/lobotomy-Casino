@@ -752,7 +752,7 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 			# 15.5), so nudge half a source pixel right to sit centred on the dot
 			# — and under the name label.
 			spr.position.x += 0.5 * spr.scale.x
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if kind != "augment" else CanvasItem.TEXTURE_FILTER_NEAREST
 	t.add_child(spr)
 	t.gui_input.connect(_on_item_input.bind(t, id, kind))
 	parent.add_child(t)

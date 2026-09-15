@@ -20,6 +20,7 @@ art. Do not flatten all art to the 160x320 layout grid.
 | Machine hardware | Full-resolution cabinet sampling and painted rail; 4x shelf/SPIN exports; smooth three-state power caps; detailed reel frames and enamel number drums |
 | Card illustrations | Seventeen static 128px emblems in 24-unit display footprints in `images/cards/painted`, used by shared card renderers and machine stickers |
 | Power coin | Separate mint token for restoration flights, preserving existing flight geometry and timing |
+| Consumables | Nine 128px painted items with linear mipmaps in dealer offers, Shop, machine stash, active-item badges and Tea flight; existing layout footprints retained |
 | Menu surfaces | Start buttons, settings labels, options heading, Collection names, Shop rows and footer controls |
 | Room surfaces | Full-resolution painted Pacte/build table, route lobby, dealer counter, settings console and options plaque with filtered sampling and fixed safe-area layouts |
 | Card faces and decks | Four-times-resolution painted fronts, backs and deck stacks; original 39x61 card and 28x32 deck footprints |

@@ -3,9 +3,9 @@
 Generated with the built-in imagegen tool using `../pacte_scene_painted.png`
 as the material, palette and perspective reference.
 
-The three large sheets remain source artwork. The sliced 32x32 PNGs in
+The three large sheets remain source artwork. The sliced 128x128 PNGs in
 `godot/assets/images/items/generated` are the active runtime item textures;
-they are nearest-sampled to the shared 16px stash/offer size.
+they use linear mipmaps inside the shared 16-unit stash/offer footprint.
 
 - `decks_painted.png`: augment stack on the left, power stack on the right.
   Target native footprint: 28x32 per stack, at (13,109) and (119,109).

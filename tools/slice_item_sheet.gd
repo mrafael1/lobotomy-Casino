@@ -2,8 +2,8 @@ extends SceneTree
 
 ## Prepare the generated Pacte item sheet for runtime use.
 ## Each source cell is cropped to its opaque silhouette, padded, and placed on a
-## 32x32 transparent canvas. Nearest sampling keeps the authored pixel clusters
-## crisp when the icons are shown at the game's 16px native size.
+## 128x128 transparent canvas. Linear mipmaps retain painted detail when the
+## icons are shown inside their existing 16-unit layout footprints.
 
 const SOURCE := "res://assets/images/pacte_polished/generated_set/items_painted.png"
 const OUTPUT_DIR := "res://assets/images/items/generated"
@@ -30,15 +30,15 @@ func _initialize() -> void:
 		var crop_pos := Vector2i(maxi(0, used.position.x - margin), maxi(0, used.position.y - margin))
 		var crop_end := Vector2i(mini(region.get_width(), used.end.x + margin), mini(region.get_height(), used.end.y + margin))
 		var crop := region.get_region(Rect2i(crop_pos, crop_end - crop_pos))
-		var scale := minf(30.0 / float(crop.get_width()), 30.0 / float(crop.get_height()))
+		var scale := minf(120.0 / float(crop.get_width()), 120.0 / float(crop.get_height()))
 		var resized_w := maxi(1, roundi(float(crop.get_width()) * scale))
 		var resized_h := maxi(1, roundi(float(crop.get_height()) * scale))
-		crop.resize(resized_w, resized_h, Image.INTERPOLATE_NEAREST)
-		var icon := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		crop.resize(resized_w, resized_h, Image.INTERPOLATE_LANCZOS)
+		var icon := Image.create(128, 128, false, Image.FORMAT_RGBA8)
 		icon.fill(Color(0.0, 0.0, 0.0, 0.0))
 		icon.blit_rect(crop, Rect2i(Vector2i.ZERO, crop.get_size()),
-			Vector2i((32 - resized_w) / 2, (32 - resized_h) / 2))
+			Vector2i((128 - resized_w) / 2, (128 - resized_h) / 2))
 		var path := ProjectSettings.globalize_path("%s/%s.png" % [OUTPUT_DIR, name])
 		assert(icon.save_png(path) == OK, "Could not save generated item: %s" % path)
-	print("Sliced generated item icons into 32x32 transparent PNGs")
+	print("Sliced generated item icons into 128x128 transparent PNGs")
 	quit()
