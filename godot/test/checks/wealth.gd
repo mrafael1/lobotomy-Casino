@@ -178,7 +178,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	if wealth_screen != null and wealth_screen.get_node_or_null("TVPanel") != null:
 		failures.append("wealth: overlay created a replacement TV panel")
 	for node_name: String in [
-		"WealthOdometer", "HealthBar"]:
+		"WealthOdometer", "SpinsLeftNumber"]:
 		var tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if tv_bar == null or tv_bar.visible:
 			failures.append("wealth: %s is still visible over the ending screen" % node_name)
@@ -194,7 +194,7 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	# wealth presentation must keep the machine bars hidden through that path too.
 	machine._update_hud()
 	for node_name: String in [
-		"WealthOdometer", "HealthBar"]:
+		"WealthOdometer", "SpinsLeftNumber"]:
 		var refreshed_tv_bar := machine.get_node_or_null(node_name) as CanvasItem
 		if refreshed_tv_bar == null or refreshed_tv_bar.visible:
 			failures.append("wealth: %s reappeared after an ending HUD refresh" % node_name)
@@ -370,6 +370,8 @@ func _check_wealth_target_flow_176(machine: Node, run_store: Node, meta_store: N
 			# cabinet as a detached snapshot rather than retyped as a Label.
 			if overlay._snapshot == null or overlay._snapshot.get_value() != 650:
 				failures.append("issue181: target overlay did not lift the running score")
+			elif overlay._snapshot.snapshot_origin != machine._wealth.odometer().position + machine.CABINET_OFFSET:
+				failures.append("machine: target payout lifted digits from the old cabinet position")
 			if overlay.target_text() != "500":
 				failures.append("issue181: target overlay did not show the beaten target")
 			overlay._drive_target_drain(0.5)

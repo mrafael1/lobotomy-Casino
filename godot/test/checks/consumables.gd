@@ -7,6 +7,31 @@ extends "res://test/checks/_base.gd"
 ## bodies can still call get_root(), create_timer() and `await process_frame` bare.
 
 
+## Generated item art is shared by the machine, shop, and both dealer offer views. Keep a
+## small load/size gate here so a renamed or unimported slice cannot silently fall back to
+## the placeholder in one of those scenes.
+func _check_generated_item_icons(failures: Array) -> void:
+	var expected := {
+		"cons_cigarette": "items/generated/tobacco.png",
+		"cons_focus": "items/generated/serum.png",
+		"cons_white_powder": "items/generated/white_powder.png",
+		"cons_potion": "items/generated/potion.png",
+		"cons_tea": "items/generated/tea.png",
+		"item_energy_drink": "items/generated/energy_drink.png",
+		"item_cocktail": "items/generated/cocktail.png",
+		"item_water": "items/generated/water.png",
+		"item_pill": "items/generated/red_pill.png",
+	}
+	for item_id: String in expected:
+		var texture := Assets.texture(String(expected[item_id]))
+		if texture == null:
+			failures.append("generated item art: missing texture for %s" % item_id)
+			continue
+		if texture.get_width() != 128 or texture.get_height() != 128:
+			failures.append("generated item art: %s should be 128x128, got %dx%d"
+				% [item_id, texture.get_width(), texture.get_height()])
+
+
 func _check_water_lucidity_gain(run_store: Node, failures: Array) -> void:
 	var previous_phase := String(run_store.runPhase)
 	var previous_spinning := bool(run_store.isSpinning)
@@ -488,7 +513,7 @@ func _check_red_pill_tv_badge_185(machine: Node, run_store: Node, failures: Arra
 		failures.append("issue185: the Red Pill badge should count both phases, got '%s'"
 			% (slots[0]["count"] as Label).text)
 	var icon := (slots[0]["icon"] as TextureRect).texture
-	if icon == null or not String(icon.resource_path).ends_with("items/pill.png"):
+	if icon == null or not String(icon.resource_path).ends_with("items/generated/red_pill.png"):
 		failures.append("issue185: the Red Pill badge did not use the pill icon")
 	# Phase one is the forced flatline it makes you take, so the count is RED.
 	var green: Color = BoostIndicators.COUNT_COLOR

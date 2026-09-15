@@ -236,8 +236,8 @@ func _make_card_texture(node_name: String, texture_size: Vector2) -> TextureRect
 	rect.stretch_mode = TextureRect.STRETCH_SCALE
 	rect.size = texture_size
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Upscaled pixel art: the enlarged card stays crisp instead of smearing.
-	rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Painted fronts retain detail during the enlarged reveal.
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return rect
 
 func _make_action_button(node_name: String, text: String, color: Color) -> Button:
@@ -277,21 +277,22 @@ func show_card(card_id: String, pool: String = "") -> bool:
 	_pool = resolved_pool
 	_name_label.text = String(entry.get("name", "")).to_upper()
 	_description_label.text = String(entry.get("description", ""))
-	_back.texture = _atlas(PacteCards.sheet_for_pool(_pool), PacteCards.back_rect_for_pool(_pool))
-	_front.texture = _atlas(PacteCards.sheet_for_pool(_pool), PacteCards.front_rect_for_pool(_pool))
+	_back.texture = _atlas(PacteCards.GENERATED_CARD_SHEET, PacteCards.painted_face_rect(_pool, false))
+	_front.texture = _atlas(PacteCards.GENERATED_CARD_SHEET, PacteCards.painted_face_rect(_pool, true))
 	_apply_icon(entry)
 	visible = true
 	_play_flip()
 	return true
 
 func _apply_icon(entry: Dictionary) -> void:
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		# GLITCH ships without an authored icon; its bare card face is intentional.
 		_icon.texture = null
 		_icon.visible = false
 		return
-	_icon.texture = _atlas(PacteCards.sheet_for_pool(_pool), icon_rect)
+	_icon.texture = PacteCards.icon_texture(entry)
+	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	_icon.size = icon_rect.size * CARD_SCALE
 	_icon.position = (_card_holder.size - _icon.size) * 0.5
 	_icon.visible = false # revealed together with the front, mid-flip

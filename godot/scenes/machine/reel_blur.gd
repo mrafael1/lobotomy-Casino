@@ -19,7 +19,7 @@ extends RefCounted
 ## Per-reel geometry, handed over at construction: it is the machine's layout and
 ## it never changes.
 var _holes: Array = []
-var _asset_scale := 8.0
+var _asset_scale := 1.0
 var _frame_count := 1
 ## The machine's pixel-art filter, so a strip matches the cabinet it sits in.
 var _texture_filter := CanvasItem.TEXTURE_FILTER_NEAREST
@@ -35,10 +35,9 @@ var _covers: Array = []
 var _blur_covers: Array = []
 var _result_blurred := false
 
-func _init(view: MachineView, holes: Array, asset_scale: float, frame_count: int) -> void:
+func _init(view: MachineView, holes: Array, frame_count: int) -> void:
 	_view = view
 	_holes = holes
-	_asset_scale = asset_scale
 	_frame_count = maxi(1, frame_count)
 
 ## --- the spin strips ---------------------------------------------------------------
@@ -47,9 +46,9 @@ func build_spin_strips(sheet: String) -> void:
 	var tex := _view.texture(sheet, true)
 	if tex == null:
 		return
+	_asset_scale = float(tex.get_height()) / 320.0
 	for i in 3:
 		var spr := _view.authored_sprite("SpinReel%d" % i)
-		var authored := spr != null
 		if spr == null:
 			spr = Sprite2D.new()
 			spr.name = "SpinReel%d" % i
@@ -57,9 +56,8 @@ func build_spin_strips(sheet: String) -> void:
 		spr.texture = tex
 		spr.centered = false
 		spr.region_enabled = true
-		if not authored:
-			spr.position = Vector2(_holes[i]["left"], _holes[i]["top"])
-			spr.scale = Vector2(1.0 / _asset_scale, 1.0 / _asset_scale)
+		spr.position = Vector2(_holes[i]["left"], _holes[i]["top"])
+		spr.scale = Vector2.ONE / _asset_scale
 		spr.texture_filter = _texture_filter
 		spr.visible = false
 		_spin_sprites.append(spr)

@@ -1,16 +1,16 @@
 extends Control
 
-## Pacte is the run's card ritual. The background and emplacement art are
-## authored at the game's 160x320 virtual resolution; card fronts are composed
-## from the supplied sheets so every pool entry can carry its own icon metadata.
+## Pacte is the run's card ritual. The painted table master owns the physical
+## recesses; card fronts are composed from the supplied sheets so every pool
+## entry can carry its own icon metadata without a second plate being drawn.
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+	Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 ]
-const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
-const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const AUGMENT_DROP_RECT := Rect2(25.0, 219.0, 25.0, 35.0)
+const POWER_DROP_RECT := Rect2(110.0, 219.0, 25.0, 35.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const CHOSEN_CARD_MARGIN := 2.0
 const SELECTION_PREVIEW_TIME := 0.24
@@ -32,13 +32,14 @@ const GLITCH_CARD_CHANCE := 0.42
 ## One source of truth with the draw that keeps these out of the tutorial's pool.
 static var REWARD_AMP_CARD_IDS: Array[String] = PacteCards.reward_amp_ids()
 const REWARD_AMP_PICKER_RECT := Rect2(10.0, 124.0, 140.0, 58.0)
-# Pacte's authored split art is intentionally kept as full-canvas pieces. The
-# current exports include decorative bleed around the old 160x320 play area, so
-# each frame is centered around the native canvas and kept at source-pixel scale.
-# The viewport/phone is responsible for trimming that bleed; gameplay geometry
-# remains in the original 160x320 coordinate space.
-const AUGMENT_DECK_ASSET := "pacte_scene/augment_deck.png"
-const POWER_DECK_ASSET := "pacte_scene/power_deck.png"
+# Runtime overlays remain available as hidden compatibility nodes for route-build
+# code and save/reveal state. The painted master already contains the table's
+# three card recesses and the two lower placement wells, so only live card faces
+# and compact selected-card views are drawn above it.
+const AUGMENT_DECK_ASSET := "pacte_polished/generated_set/augment_deck_detail.png"
+const POWER_DECK_ASSET := "pacte_polished/generated_set/power_deck_detail.png"
+const AUGMENT_DECK_POSITION := Vector2(13.0, 109.0)
+const POWER_DECK_POSITION := Vector2(119.0, 109.0)
 const DEALER_ASSET := "pacte_scene/dealer.png"
 const DEALER_BUBBLE_ASSET := "pacte_scene/dealer_bubble.png"
 const DEALER_TEXT_FRAME_COUNT := 2
@@ -92,6 +93,7 @@ const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
 const INSTRUCTION_RECT := Rect2(5.0, 238.0, 150.0, 10.0)
 const BG_ASSET := "pacte_scene/bg.png"
+const PAINTED_MASTER_ASSET := "pacte_polished/pacte_scene_painted.png"
 const AUGMENT_EMPLACEMENT_ASSET := "pacte_scene/augment_card.png"
 const POWER_EMPLACEMENT_ASSET := "pacte_scene/power_card.png"
 const POWER_REPLACEMENT_PICKER_SCRIPT := preload("res://scenes/power_replacement_picker.gd")
@@ -112,6 +114,7 @@ const DRAG_COLOR := Color(0.42, 1.0, 0.95, 0.95)
 const DRAG_SLOP := 4.0
 
 var _background: Sprite2D = null
+var _painted_master_active := false
 var _title_light: Sprite2D = null
 var _table: Sprite2D = null
 var _proposition: Sprite2D = null
@@ -173,9 +176,9 @@ func configure_route_artwork(kind: String) -> void:
 	if _power_deck != null:
 		_power_deck.visible = show_power
 	if _augment_emplacement != null:
-		_augment_emplacement.visible = show_augment
+		_augment_emplacement.visible = show_augment and not _painted_master_active
 	if _power_emplacement != null:
-		_power_emplacement.visible = show_power
+		_power_emplacement.visible = show_power and not _painted_master_active
 	_emplacement = _augment_emplacement if show_augment else _power_emplacement
 	if _emplacement != null:
 		_emplacement.frame = EMPLACEMENT_SELECTING_FRAME
@@ -237,7 +240,7 @@ func _on_viewport_size_changed() -> void:
 	_center_native_canvas()
 
 func _center_native_canvas() -> void:
-	position = _native_canvas_origin(get_viewport_rect().size)
+	position = _native_canvas_origin(get_viewport_rect().size) - get_viewport().canvas_transform.origin
 
 func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
 	var extra_size := viewport_size - CANVAS_SIZE
@@ -277,13 +280,28 @@ func _build_background() -> void:
 	_proposition = _full_canvas_sprite(PROPOSITION_ASSET, ART_Z_INDEX)
 	_proposition.name = "PacteProposition"
 	add_child(_proposition)
+	# The painted master supplies the room, dealer and felt in one coherent layer.
+	# Keep the authored component nodes alive for route-build/tests and their card
+	# placeholder, but hide duplicate room art when the new native master is present.
+	var painted_master := _full_canvas_sprite(PAINTED_MASTER_ASSET, BACKGROUND_Z_INDEX)
+	painted_master.name = "PactePaintedMaster"
+	add_child(painted_master)
+	if painted_master.texture != null:
+		_painted_master_active = true
+		_background.visible = false
+		_dealer_sprite.visible = false
+		_table.visible = false
+		_title_light.visible = false
+		_proposition.visible = false
 	_augment_deck = _full_canvas_sprite(AUGMENT_DECK_ASSET, ART_Z_INDEX)
 	_augment_deck.name = "AugmentDeck"
 	_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+	_augment_deck.position = AUGMENT_DECK_POSITION
 	add_child(_augment_deck)
 	_power_deck = _full_canvas_sprite(POWER_DECK_ASSET, ART_Z_INDEX)
 	_power_deck.name = "PowerDeck"
 	_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+	_power_deck.position = POWER_DECK_POSITION
 	add_child(_power_deck)
 	_dealer_bubble = _full_canvas_sprite(DEALER_BUBBLE_ASSET, ART_Z_INDEX)
 	_dealer_bubble.name = "DealerBubble"
@@ -354,6 +372,10 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	sprite.position = _native_art_position(sprite.texture, 1)
 	sprite.z_index = z
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if asset == PAINTED_MASTER_ASSET and sprite.texture != null:
+		sprite.position = Vector2.ZERO
+		sprite.scale = CANVAS_SIZE / sprite.texture.get_size()
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return sprite
 
 func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
@@ -369,6 +391,9 @@ func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
 	# is allowed to fall outside the phone's viewport naturally.
 	sprite.scale = Vector2.ONE
 	sprite.position = _native_art_position(sprite.texture, safe_frame_count)
+	if sprite.texture.resource_path.ends_with("deck_detail.png"):
+		sprite.scale = Vector2(28, 32) / sprite.texture.get_size()
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _native_art_position(texture: Texture2D, frame_count: int) -> Vector2:
 	if texture == null:
@@ -424,9 +449,9 @@ func _build_overlay_ui() -> void:
 	# The hint belongs to the emplacement itself. At native resolution the slot is
 	# only 25 px wide, so word wrapping keeps both words inside its card frame.
 	_augment_drop_label = _drop_hint_label(
-		"DropHere", Rect2(28.0, 256.0, 25.0, 36.0))
+		"DropHere", AUGMENT_DROP_RECT)
 	_power_drop_label = _drop_hint_label(
-		"PowerDropHere", Rect2(107.0, 256.0, 25.0, 36.0))
+		"PowerDropHere", POWER_DROP_RECT)
 	_drop_label = _augment_drop_label
 	_set_drop_hint_visible(false)
 
@@ -469,9 +494,10 @@ func _set_emplacement(asset: String) -> void:
 
 func _sync_emplacement_visibility() -> void:
 	if _augment_emplacement != null:
-		_augment_emplacement.visible = _pool_kind == "augment" or _chosen_augment_id != ""
+		_augment_emplacement.visible = not _painted_master_active \
+				and (_pool_kind == "augment" or _chosen_augment_id != "")
 	if _power_emplacement != null:
-		_power_emplacement.visible = _pool_kind == "power"
+		_power_emplacement.visible = not _painted_master_active and _pool_kind == "power"
 
 func _show_chosen_card(card_id: String, kind: String) -> void:
 	if _chosen_cards_layer == null or card_id == "":
@@ -497,15 +523,16 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
-		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
+	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.stretch_mode = TextureRect.STRETCH_SCALE
 	front.position = Vector2.ZERO
 	front.size = CHOSEN_CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(front)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
 		var available := CHOSEN_CARD_SIZE - Vector2(CHOSEN_CARD_MARGIN * 2.0, CHOSEN_CARD_MARGIN * 2.0)
 		var icon_scale := minf(available.x / icon_rect.size.x,
@@ -572,7 +599,9 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var back := TextureRect.new()
 	back.name = "Back"
-	back.texture = UiKit.atlas(PacteCards.sheet_for_pool(kind), PacteCards.back_rect_for_pool(kind))
+	back.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_BACK_RECT if kind == "augment" else PacteCards.GENERATED_POWER_BACK_RECT)
+	back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -580,15 +609,16 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	view.add_child(back)
 	var front := TextureRect.new()
 	front.name = "Front"
-	front.texture = UiKit.atlas(PacteCards.CARD_SHEET if kind == "augment" else PacteCards.POWER_SHEET,
-		PacteCards.AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.POWER_FRONT_RECT)
+	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	front.visible = face_up
 	view.add_child(front)
 	var entry := PacteCards.card(card_id)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x > 0.0 and icon_rect.size.y > 0.0:
 		var icon := _make_card_icon(card_id, entry, icon_rect, icon_rect.size)
 		_set_card_icon_position(icon, Vector2((CARD_SIZE.x - icon_rect.size.x) * 0.5,
@@ -673,7 +703,9 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 	if card_id != PATTERN_RECOGNITION_ID and card_id != HOW_TO_CHEAT_ID:
 		var icon := TextureRect.new()
 		icon.name = "Icon"
-		icon.texture = UiKit.atlas(String(entry.get("sheet", "")), source_rect)
+		icon.texture = PacteCards.icon_texture(entry)
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			if PacteCards.PAINTED_ICON_IDS.has(card_id) else CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_SCALE
 		icon.size = display_size
@@ -765,10 +797,12 @@ func _on_reward_amp_symbol_picked(symbol_id: String) -> void:
 func _set_deck_visible(_kind: String) -> void:
 	if _augment_deck != null:
 		_configure_native_sheet(_augment_deck, DECK_FRAME_COUNT)
+		_augment_deck.position = AUGMENT_DECK_POSITION
 		_augment_deck.visible = true
 		_augment_deck.frame = DECK_FRAME
 	if _power_deck != null:
 		_configure_native_sheet(_power_deck, DECK_FRAME_COUNT)
+		_power_deck.position = POWER_DECK_POSITION
 		_power_deck.visible = true
 		_power_deck.frame = DECK_FRAME
 
@@ -778,7 +812,8 @@ func _shuffle_active_deck() -> void:
 		return
 	if _deck_tween != null and _deck_tween.is_valid():
 		_deck_tween.kill()
-	var native_position := _native_art_position(deck.texture, maxi(int(deck.hframes), 1))
+	var native_position := AUGMENT_DECK_POSITION if deck == _augment_deck \
+			else POWER_DECK_POSITION
 	deck.position = native_position
 	deck.rotation = 0.0
 	_deck_tween = create_tween()

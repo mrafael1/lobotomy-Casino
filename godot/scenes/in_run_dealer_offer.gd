@@ -80,10 +80,10 @@ const FALLBACK_HINT := { "pos": "GIFT", "neg": "PRICE" }
 const INVERTED_HINT_ITEMS := ["item_pill"]
 # In-run pool only (InRunItems.LIST) — see ITEM_HINTS note (issue #31).
 const ITEM_ICONS := {
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
+	"item_energy_drink": "items/generated/energy_drink.png",
+	"item_cocktail": "items/generated/cocktail.png",
+	"item_water": "items/generated/water.png",
+	"item_pill": "items/generated/red_pill.png",
 }
 
 @export var editor_preview_offer_ids: Array[String] = ["item_water", "item_pill"]:
@@ -737,7 +737,7 @@ func _make_item_icon_on(parent: Control, id: String, kind: String, pos: Vector2,
 	icon.pivot_offset = Vector2(icon_size, icon_size) * 0.5
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if kind == "augment" or (icon.texture != null and icon.texture.resource_path.contains("/items/generated/")) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_STOP
 	icon.gui_input.connect(_on_offer_icon_input.bind(id, kind))
 	parent.add_child(icon)

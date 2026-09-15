@@ -36,25 +36,25 @@ const WIN_PAYOUT_RECT := Rect2(41.0, 86.0, 70.0, 14.0)
 const WIN_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the COMBO component -------------------------------------------------------
-const COMBO_EFFECT_SHEET := "machine new view/COMBO_effect.png"
+const COMBO_EFFECT_SHEET := "machine_polished/combo.svg"
 const COMBO_EFFECT_FRAMES := 9 # gameplay cap; the authored sheet may expose fewer frames
 const COMBO_EFFECT_DELAY := 2.55
 const COMBO_EFFECT_TIME := 1.05
-const COMBO_EFFECT_Z_INDEX := 9
-## The authored COMBO art sits around y94 in its full-canvas frame. Offset the
-## sprite onto the upper part of the Wealth plate (y242..278), above the rolling
-## digits, so the bonus belongs to the score it is paying.
-const COMBO_EFFECT_POSITION := Vector2(0.0, 150.0)
+# Wealth's frame draws at parent 8 + child 2. The whole bonus panel must clear it.
+const COMBO_EFFECT_Z_INDEX := 13
+## Native pixel lettering occupies the CRT's score column. Its backing temporarily
+## covers the score/multiplier; the portrait and approach row remain readable.
+const COMBO_EFFECT_POSITION := Vector2.ZERO
 
 ## The bonus line briefly sits over the odometer's digit windows. It is a transient
 ## payout pop, so the wealth total is readable again as soon as the line fades.
-const COMBO_PAYOUT_RECT := Rect2(35.0, 107.0, 82.0, 10.0)
+const COMBO_PAYOUT_RECT := Rect2(73.0, 78.0, 48.0, 10.0)
 const COMBO_PAYOUT_COLOR := Color("#20d6c7")
 
 ## --- the combo-loss warning ----------------------------------------------------
-const COMBO_LOSS_2_SHEET := "machine new view/2_losing_animation.png"
-const COMBO_LOSS_3_SHEET := "machine new view/3_losing_animation.png"
-## The x3 losing state is an authored 9-frame diminished-fire sheet (1440x320)
+const COMBO_LOSS_2_SHEET := "machine_polished/loss_2.svg"
+const COMBO_LOSS_3_SHEET := "machine_polished/loss_3.svg"
+## The x3 losing state is an independent 9-frame CRT warning sheet (1440x320)
 ## stepped at the same cadence as the regular multiplier effects.
 const COMBO_LOSS_3_FRAMES := 9
 ## Presentation stack: machine art → loss overlays (97) → dealer offer (100).
@@ -96,6 +96,9 @@ func _init(view: MachineView) -> void:
 func build() -> void:
 	_combo_loss_2_sprite = _view.full_canvas_sheet(COMBO_LOSS_2_SHEET, 1)
 	_combo_loss_3_sprite = _view.full_canvas_sheet(COMBO_LOSS_3_SHEET, COMBO_LOSS_3_FRAMES)
+	for loss in [_combo_loss_2_sprite, _combo_loss_3_sprite]:
+		if loss != null:
+			loss.position = Vector2(-9, 30)
 	_win_anim_sprite = _view.full_canvas_sheet(WIN_ANIM_SHEET, WIN_ANIM_FRAMES)
 	if _win_anim_sprite != null:
 		_win_payout_label = _payout_label("WinPayout", WIN_PAYOUT_RECT, 11, WIN_PAYOUT_COLOR)
@@ -111,7 +114,7 @@ func build() -> void:
 	if _combo_effect_sprite != null:
 		_combo_effect_sprite.position = COMBO_EFFECT_POSITION
 		_combo_effect_sprite.z_index = COMBO_EFFECT_Z_INDEX
-		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 8, COMBO_PAYOUT_COLOR)
+		_combo_payout_label = _payout_label("ComboPayout", COMBO_PAYOUT_RECT, 6, COMBO_PAYOUT_COLOR)
 		_combo_payout_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		_combo_payout_label.add_theme_constant_override("outline_size", 1)
 		_combo_payout_label.visible = false
@@ -223,7 +226,7 @@ func show_combo(frame: int, bonus: int, percent: int) -> void:
 	if _combo_payout_label != null:
 		_combo_payout_tween = _view.tween()
 		_combo_payout_tween.tween_property(_combo_payout_label, "position:y",
-			COMBO_PAYOUT_RECT.position.y - 8.0, 0.72)
+			COMBO_PAYOUT_RECT.position.y - 3.0, 0.72)
 		_combo_payout_tween.parallel().tween_property(_combo_payout_label, "modulate:a",
 			0.0, 0.72).set_delay(0.18)
 
@@ -323,7 +326,7 @@ func set_loss_display(multiplier: int) -> void:
 func start_loss_beep() -> void:
 	stop_loss_beep()
 	# The authored x2 loss marker keeps its existing pulse; x3 remains a steady
-	# diminished-fire sheet. COMBO has already disappeared after its payout pop.
+	# diminished CRT warning. COMBO has already disappeared after its payout pop.
 	var loss_sprite: Sprite2D = _combo_loss_2_sprite \
 		if int(RunStateStore.pendingComboMultiplier) == 2 else null
 	if loss_sprite == null:

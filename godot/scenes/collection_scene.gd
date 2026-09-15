@@ -10,7 +10,7 @@ extends Control
 
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const CARD_SIZE := Vector2(39.0, 61.0)
-const CARD_NAME_HEIGHT := 8.0
+const CARD_NAME_HEIGHT := 10.0
 # Native 160x320 leaves 128px of catalog width: three 39px cards plus two 3px
 # gaps, with the slimmed scrollbar taking the remainder.
 const CARD_H_SEPARATION := 3
@@ -55,6 +55,10 @@ var _highlighted_card_id := ""
 
 func _ready() -> void:
 	UiKit.apply_font(self)
+	for path in ["Panel/Rows/Title", "Panel/Rows/Scroll/Catalog/AugmentsHeader", "Panel/Rows/Scroll/Catalog/PowersHeader"]:
+		var heading := get_node(path) as Label
+		heading.add_theme_font_override("font", UiKit.control_font())
+		heading.add_theme_font_size_override("font_size", 8)
 	_slim_scrollbar()
 	_build_modal_card_art()
 	UiKit.connect_button(_modal_close, _hide_modal)
@@ -80,6 +84,15 @@ func _slim_scrollbar() -> void:
 	var bar := _scroll.get_v_scroll_bar()
 	if bar != null:
 		bar.custom_minimum_size.x = SCROLLBAR_WIDTH
+		var track := StyleBoxFlat.new()
+		track.bg_color = Color(0.08, 0.10, 0.10)
+		track.content_margin_left = 2.0
+		track.content_margin_right = 2.0
+		bar.add_theme_stylebox_override("scroll", track)
+		for state in ["grabber", "grabber_highlight", "grabber_pressed"]:
+			var thumb := track.duplicate() as StyleBoxFlat
+			thumb.bg_color = NEON_GOLD if state != "grabber" else Color(0.43, 0.43, 0.30)
+			bar.add_theme_stylebox_override(state, thumb)
 
 func _rebuild_grid() -> void:
 	if not is_inside_tree() or _catalog == null:
@@ -122,13 +135,13 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 
 	var art := TextureRect.new()
 	art.name = "CardArt"
-	art.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool),
-		PacteCards.front_rect_for_pool(pool) if unlocked else PacteCards.back_rect_for_pool(pool))
+	art.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+		PacteCards.painted_face_rect(pool, unlocked))
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.size = CARD_SIZE
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	button.add_child(art)
 
 	if unlocked:
@@ -152,10 +165,10 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 4)
+	label.add_theme_font_size_override("font_size", 8)
 	label.add_theme_constant_override("line_spacing", 0)
 	label.add_theme_color_override("font_color", NEON_GOLD)
-	var font := Assets.font()
+	var font := UiKit.control_font()
 	if font != null:
 		label.add_theme_font_override("font", font)
 	button.add_child(label)
@@ -185,12 +198,13 @@ func _add_locked_glitch(button: Button) -> void:
 	button.add_child(fx)
 
 func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		return null
 	var icon := TextureRect.new()
 	icon.name = "CardIcon"
-	icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	icon.texture = PacteCards.icon_texture(entry)
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
@@ -198,7 +212,6 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 	icon.size = icon_rect.size * scale
 	icon.position = (CARD_SIZE - icon.size) * 0.5
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return icon
 
 func is_card_unlocked(card_id: String, pool: String = "") -> bool:
@@ -238,7 +251,7 @@ func _build_modal_card_art() -> void:
 	_modal_card_art.stretch_mode = TextureRect.STRETCH_SCALE
 	_modal_card_art.size = CARD_SIZE
 	_modal_card_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_modal_card_holder.add_child(_modal_card_art)
 
 	_modal_card_icon = TextureRect.new()
@@ -264,9 +277,8 @@ func show_card_detail(card_id: String, pool: String = "") -> void:
 	_modal_card_id = card_id
 	_modal_state = "unlocked" if unlocked else "locked"
 	if _modal_card_art != null:
-		_modal_card_art.texture = UiKit.atlas(PacteCards.sheet_for_pool(resolved_pool),
-			PacteCards.front_rect_for_pool(resolved_pool) if unlocked
-			else PacteCards.back_rect_for_pool(resolved_pool))
+		_modal_card_art.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
+			PacteCards.painted_face_rect(resolved_pool, unlocked))
 		_modal_card_art.modulate = Color.WHITE if unlocked else LOCKED_MODULATE
 	_apply_modal_icon(entry, resolved_pool, unlocked)
 	inject_modal_data(
@@ -284,12 +296,13 @@ func _locked_description(card_id: String) -> String:
 func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 	if _modal_card_icon == null:
 		return
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
+	var icon_rect := PacteCards.display_icon_rect(entry)
 	if not unlocked or icon_rect.size.x <= 0.0 or icon_rect.size.y <= 0.0:
 		_modal_card_icon.texture = null
 		_modal_card_icon.visible = false
 		return
-	_modal_card_icon.texture = UiKit.atlas(PacteCards.sheet_for_pool(pool), icon_rect)
+	_modal_card_icon.texture = PacteCards.icon_texture(entry)
+	_modal_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
 		(CARD_SIZE.y - 6.0) / icon_rect.size.y))
 	_modal_card_icon.size = icon_rect.size * scale
@@ -347,11 +360,8 @@ func highlighted_card_id() -> String:
 func _style_button(button: Button, negative := false) -> void:
 	if button == null:
 		return
-	button.add_theme_font_size_override("font_size", 8)
-	if negative:
-		ButtonKit.skin_negative_button(button)
-	else:
-		ButtonKit.skin_sheet_button(button, "ui/green_button.png", 4)
+	ButtonKit.small_neon_button_style(button,
+		ButtonKit.START_MENU_BUTTON_PINK if negative else NEON_CYAN, 6, 2.0)
 
 
 func _go_back() -> void:

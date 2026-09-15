@@ -35,7 +35,12 @@ do not add Claude/codex in front of branch
 ## Godot Project
 
 - The Godot project lives in `godot/`.
-- The game uses a 160x320 virtual canvas.
+- The game uses a centered 160x320 gameplay safe area in layout units, not a
+  160x320 render target. Canvas Items renders at the display's resolution with
+  fractional scaling and expanded aspect. `Presentation` centers the safe area
+  and fills the whole viewport with decorative overscan; important information
+  and controls must remain inside the safe area. Export detailed artwork at high
+  resolution instead of reducing it to the layout grid.
 - Runtime art, fonts, and sounds live under `godot/assets`.
 - Exported builds must not depend on root-level assets outside `godot/`.
 - Machine geometry constants in `godot/scenes/machine_scene.gd` are measured in
@@ -55,17 +60,17 @@ Resources and currencies:
   save/parity compatibility, but the machine presents it as the CHIPS/SPINS
   counter. A fresh run starts with 15 and the run can hold at most 18;
   each spin spends 1 run spin unless protected. Restores and Wealth continuations
-  also stop at 18. The machine prints the current remaining-spin number under the
-  neuron tube; it updates whenever spins are gained, spent, or protected, and the
-  number turns dark red when the 18-spin cap is full.
+  also stop at 18. The machine prints the current remaining-spin number in the left
+  control-shelf well beside SPIN; it updates whenever spins are gained, spent, or
+  protected, and the number turns dark red when the 18-spin cap is full.
 - **Score** — the run's win total. The Wealth targets advance through **100 → 200 →
   500 → 800 → 1,500 → 2,500 → 3,500 → 5,000**; reaching **5,000 score** triggers
   the Wealth ending. The machine's four-reel wealth odometer
   advances directly with score payouts when their score pop appears; it does not collect
   the separate Lucidity coins from the cash tray. Changed digits roll and carry like
   physical number drums. Its white cases sit behind the rolling digits and the
-  authored Wealth bar frame sits above them. The white box below the odometer shows
-  the run's current Wealth objective as a single "TARGET: n" line. Reaching an
+  CRT surround sits above them. The current Wealth objective sits above the odometer
+  in the CRT's right column, with a thin progress bar between them. Reaching an
   intermediate target briefly presents that target in the centre of the machine,
   drains its displayed number to zero while the target payment rolls off the wealth
   readout. During the drain, shortened target values stay anchored to the units slot
@@ -73,8 +78,8 @@ Resources and currencies:
   the run score before handing the run to the between-machine route offer. Target and
   loss breaks use the same route choices; the full Pacte ritual is only available when
   a run starts.
-- **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 50 coins
-  restores one random spent power (30 with Adrenaline). Gold pays for route cards,
+- **Run Lucidity (coins / gold)** — earned alongside score during the run. Every 30 coins
+  restores one random spent power (18 with Adrenaline). Gold pays for route cards,
   Augment/Power build cards, Shop investments, and Shop consumables; it also pays for
   live-dealer offer rerolls. On a non-Wealth ending, 10% is kept (20% with Smart Save,
   halved by the spade modifier) and banked into the wallet.
@@ -94,9 +99,9 @@ Resources and currencies:
 3. Enter the machine with 15 CHIPS/SPINS and the selected Pacte power. No power is
    granted implicitly; Reroll, Shift, and the other run powers must be selected in
    Pacte. The run begins with no pre-run consumables.
-   A compact blue contour around the selected augment icon sits inside the machine
-   TV, shifted 10px right from the original placement; tapping it opens the active
-   Pacte augment(s)' names and descriptions.
+   Worn-paper augment stickers sit on the lower red cabinet beneath the controls;
+   holding one opens the active Pacte augment(s)' names and
+   descriptions.
 4. Spin for pairs, triples, and jackpots. Paying wins step the automatic frenzy
    gauge x1 → x2 → x3; a miss at x2/x3 opens a rescuable diminished (combo-loss)
    state instead of dropping instantly.
@@ -206,7 +211,7 @@ Resources and currencies:
 	spent before that spin remain spent. Rewind itself is spent and cannot recover
 	itself, so one history can never create an infinite rewind loop. It is
 	unavailable without spin history or while another sequence is active. While the
-	restore's backwards reel roll plays, SPIN is locked out; the lever re-enables
+	restore's backwards reel roll plays, SPIN is locked out; SPIN re-enables
 	only once the restored reveal (and any restored warning) has fully landed.
 - **Heart** — arms the next spin and immediately turns the whole reel strip —
   centre and adjacent symbols — into hearts as a preview. That spin is free and
@@ -237,8 +242,8 @@ Resources and currencies:
 - **Tunnel Vision** — hides the third reel and increases rewards by 50%.
 - **How to Cheat** — a solo visible symbol counts as a pair; all pair payouts use
   a x0.6 multiplier.
-- **Adrenaline** — lowers the power-restore threshold from 50 to 30 Lucidity;
-  its six-frame gauge therefore advances in six-point steps.
+- **Adrenaline** — lowers the power-restore threshold from 30 to 18 Lucidity;
+  the three reel lamps advance at 6, 12 and 18 coins.
 - **Passive Gain** — adds 10 run Lucidity on every spin, including misses.
 - **Reward Amplification** — selecting a Reward+ Pacte card opens a symbol-only
 	picker so the boosted symbol is chosen during the ritual; its title and close
@@ -258,17 +263,21 @@ Resources and currencies:
   uses a helpful Cheat, Shift, Reroll, or Lock effect. These assists are separate
   from the player's loadout and never consume the player's power chips.
 - Power slots preserve acquisition order: the first three owned powers occupy the
-	authored 1/2/3 positions in the machine bar, regardless of their card IDs.
+	three large round sockets on the metal rail below the CRT, regardless of
+	their card IDs.
 - Selecting a power for targeting flashes its authored TV callout (with text
   frames ordered Reroll, Shift, Lock, Rewind, Heart, Cheat, Swap (with text
   fallbacks if an authored frame is unavailable) with
   a short beeping pulse; the callout stays up while targeting is armed and hides
   when the target is picked or the selection is cancelled.
-- Using a power spends it; the power gauge restores one random spent power per 50
+- Using a power spends it; the three reel lamps restore one random spent power per 30
   run-Lucidity coins. Score payouts—including Cocktail rarity points—also advance the
   wealth-linked 10-point bank. Each 10-point gauge step launches the four-frame `power
-  coin animation` from the wealth odometer, then sends the real power coin to the power
-  bar. The diamond modifier caps power use at two per spin.
+  coin animation` from the cash outlet, then sends the real power coin to the power
+  lamps above the reels, filling left to right at 10, 20 and 30. The old side gauge
+  is removed. A successful restore flashes all three lamps and clears the fill;
+  without an eligible spent power or restore charge, the lamps hold full until
+  restoration is possible. The diamond modifier caps power use at two per spin.
 
 ### Consumables and run items
 
@@ -278,8 +287,8 @@ Resources and currencies:
   Cocktail, Water, Red Pill.
 - Items are TAKEN and USED in two different places. The dealer's visit overlay is
   where an offer is selected (tapping an item arms TAKE with it) and taken into the
-  run stash; the machine's own bottom-right stash is where a held item is spent, by
-  tapping its slot. Taking is not using — an item sits in the stash until the player
+  run stash; the machine's right-hand control-shelf stash is where a held item is
+  spent, by tapping its slot. Taking is not using — an item sits in the stash until the player
   spends it, and the stash holds 2.
 - Water grants +40 run Lucidity AND +40 score: drinking it rolls the wealth
   odometer up immediately and its points feed the power gauge like any score. Using
@@ -304,8 +313,11 @@ Resources and currencies:
   during a losing-state warning: pending x1 and x2 show all three lights, while
   pending x3 shows the preceding x2 stack (overlays 1+2). With Glitch 2 active,
   all three overlays remain visible at every multiplier. At 0 he visits
-  automatically. The compact dealer portrait sits just inside the TV border
-  beside the countdown bar.
+  automatically. A persistent 30x43 dealer portrait occupies the CRT's left column;
+  the twelve approach steps and cumulative warning lights sit beneath it. Short
+  reactions type into a framed caption, respond to revealed plays, and yield to
+  payout and targeting callouts. Their hold/fade timer pauses while the portrait
+  is hidden, leaving the response readable after a callout finishes.
 - A visit offers 2 run items (3 with the offer-expand augment) plus one dedicated
   Chip Augment; offers can be rerolled for escalating run Lucidity. Taking or
   refusing the visit both reset the countdown.
@@ -354,9 +366,11 @@ Resources and currencies:
   its own text occupies; the fill bar keeps running underneath it with its shimmer,
   because progress toward the target is exactly what the free spins are being spent
   on. The dealer interface and the active-item icons stay lit beside it too.
+  Switching FREE SPIN on or off refreshes the target text immediately, so the
+  banner and target never wait for a later HUD update to exchange visibility.
 - Combo loss: a miss at x2/x3 sets a pending defeat. The x2 state shows its
-  authored overlay with a beeping pulse; the x3 state shows a steady 9-frame
-  diminished-fire sheet (never both, and the normal gauge effects are suppressed
+  CRT warning with a beeping pulse; the x3 state shows a steady 9-frame
+  diminished warning (never both, and the normal gauge effects are suppressed
   while one is up). A power that turns the reveal into a paying pair/triple
   rescues the gauge (one step up); pressing SPIN confirms the loss (one step
   down). Consumables stay usable during the rescue window. Cocktail points awarded
@@ -423,14 +437,17 @@ Resources and currencies:
   first-launch tutorial.
 - `pacte_scene` — run-start-only card ritual: deterministic three-card augment and
   power offers, previews, drag-to-emplacement selection, and resumable
-  partial choices. Its authored table, deck, dealer, dealer-bubble, and two-frame
-  emplacement assets are composed at native resolution in bg -> dealer -> table ->
-  overlay order. The one-frame augment and power decks stay visible at their
-  authored left/right positions during both draw phases. Each emplacement uses a
-  no-DROP-HERE frame and a DROP HERE frame while dragging. The active deck shuffles
-  briefly while the three cards remain facedown, and dragging either card type
-  shows its authored DROP HERE frame. Both proposition card types use the same
-  authored 39x61 front size, including the power card's left edge. A dragged card
+  partial choices. Its authored table, dealer-bubble, and card interaction assets
+  remain composed at native resolution; the legacy room/deck/emplacement sprites
+  are retained only as compatibility nodes. A high-resolution painted master supplies
+  the room, dealer and felt
+  base while all cards, prompts and descriptions remain live layers. New compact
+  cyan and rose deck stacks sit in the painted upper recesses at (13,109) and
+  (118,109); they remain visible at those positions during both draw phases. The
+  painted table already supplies the three card recesses and two lower placement
+  wells, so the legacy proposition and emplacement overlays stay hidden while
+  drag hitboxes and DROP-HERE frames remain runtime state. Both proposition card
+  types use the same authored 39x61 front size, including the power card's left edge. A dragged card
   casts a drop shadow (as do
   dragged dealer/stash items everywhere). There is no arrow selector overlay and
   no CANCEL/EXIT text buttons. The card preview is a compact dark information
@@ -445,9 +462,9 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice. The shop background and counter
-  layers are intentionally omitted for now; the scene keeps the dealer, doors, and
-  route controls.
+  doors for Shop/Augment/Power/Bonus/Sacrifice. Its high-resolution painted master
+  supplies the lobby, doors and dealer; route titles, prices, hover/open frames,
+  reroll and confirmation remain runtime layers.
   Each door switches its authored
   door asset to match the route card; paying the dealer reshuffles both doors at an
   escalating **5G / 10G / 15G** price. Selecting a door commits the route and there is
@@ -476,10 +493,94 @@ Resources and currencies:
   new end-of-segment offers use the live Dealer only through its interruption flow.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — live in-run dealer visits and the post-run odds phase (gateway to the Lab).
+  Its pre-run branch uses the high-resolution painted stocked-counter master while offers,
+  prices, stash and wallet remain runtime elements; active-run visits retain their
+  dedicated dealer art.
 - `upgrades_scene` — the Lab: permanent upgrades.
 - `machine_scene` — the run itself; also hosts the in-run dealer offer overlay
   and the ending overlays (flatline, game over, wealth).
+  Its painted cabinet is imported at 160x320, with worn red enamel, recessed
+  metal trim and a matching cadaver-green dealer portrait. Independent worn-metal
+  reel frames sit over native 160x320 shaded paper drums; a four-frame native
+  motion sheet uses the same warm paper surface. The three transparent apertures
+  remain x33/65/97, y169..202, with live scoring windows at y170..199. Landed and
+  locked reels use the same drum backing while each other reel keeps spinning.
+  Symbols, targeting, and the Tunnel Vision shutter remain independent layers.
+  A registration material fits the painting to the existing live reel apertures;
+  numbers, symbols, powers, and counters remain separate runtime elements.
+  SPIN is a separate ivory/brass button centered at x80 on the lower metal shelf.
+  Its touch rect is (57,213,46,28), between the remaining-spin counter on the
+  left and two 16px stash slots on the right, clear of the wealth odometer.
+  The deeper shelf spans y203..241. Three 22px power faces sit on the upper
+  metal rail with 26px touch areas centered at (46,127), (77,127), (108,127).
+  The CRT groups the dealer at (36,51), with his approach row at y95..98, above
+  the item-duration row. TARGET and its value share a 6px font and y49 baseline.
+  A muted olive progress strip sits at y59; warm paper wealth drums at (74,64)
+  use native heavy digits, with the multiplier/loss warning lowered to y82. Augment
+  stickers are 20px paper squares at (48,260), (74,260), and (100,260), with 14px
+  icons and hold-for-details behavior; item durations retain their row at y100.
+  Payout and targeting callouts hide the portrait, score, target, and normal multiplier
+  until they finish. Cabinet stickers remain visible during CRT callouts.
+  FREE SPIN replaces only the target number and title. Target-payout digit snapshots
+  launch from the CRT; coin pops and flights launch from the cash outlet at (80,298).
+  The power rail and sloped lower shelf are composed into the cabinet material.
+  The machine's local origin is shifted four native pixels right to center its
+  upper cabinet, reels and hitboxes over the preview shelf. Shelf controls and
+  viewport UI remain fixed. Cabinet shakes return to this offset; the shelf
+  texture samples canvas coordinates so it does not drift with those effects.
+  The cash outlet remains at world (80,298), or machine-local (76,298).
+  The lower shelf is copied directly from the approved preview by
+  `tools/extract_preview_shelf.gd`, reduced once to native resolution with nearest
+  sampling so extraction cannot blur the pixel edges. Its original
+  plate, corners, wells, wear and red fascia remain intact. The changing count and
+  items are cleared; the original SPIN cap is extracted into five separate PNG
+  states. Do not replace this artwork with procedural approximations.
+  A four-pixel dark recess separates the reel frames ending at y206 from the
+  preview shelf beginning at y210. The complete shelf assembly sits three pixels
+  lower, retaining its proportions and horizontal centering.
+  The counter is at (28,213,14,16); 12x14 live items sit at (103,214) and (121,214).
+  Counter and stash recesses belong to that surface; stash nodes carry only item
+  icons and input, with no tray texture overlay. SPIN retains an independent
+  native face and press states over its cabinet recess. Worn, uneven sticker
+  edges replace the flat paper squares on the lower panel.
+  The spin count and small SPINS legend sit side by side within the left well.
+  An amber glass jackpot beacon sits on a metal base above the CRT. Its three
+  native frames retain the payout hold, lit state and alternating jackpot flash;
+  it stays dark until the winning result is announced.
+  SPIN uses crisp native 5x7 lettering on the preview cap and a two-pixel depression;
+  the SPINS legend is a runtime pixel-font label at (43,218), replacing the tiny
+  baked-in engraving.
+  The full SPIN touch area remains unchanged. Dark mounting rims seat the power buttons
+  into the metal rail. Visual review includes the 5,000 target and five active items.
+  Stash artwork is inset to 12x14 inside each 16x18 touch well. Tapping the empty
+  margin around a held item uses that item under the same animation and dealer
+  locks as tapping its icon; the artwork itself does not intercept input.
+  COMBO uses nine native-resolution CRT frames with larger x1..x9 lettering and
+  an unscaled bonus amount; its original payout timing remains intact.
+  The COMBO panel draws above the odometer's cases, digits and dividers and covers
+  the whole multiplier band, while leaving the dealer and item-duration row visible.
+  The shelf number is the single remaining-spin display. Spin-gain fly-ins land
+  over that number before it increments and pulses. Emergency Reserve adds a soft
+  mint contour around the counter while armed, disappearing when spent. The
+  tutorial highlights the shelf counter; there is no side spin tube.
+  Idle, depressed, disabled, hover and focus assets are independent of the cabinet; keyboard/controller UI activation is supported.
+  Pressing SPIN calls `_do_spin()` after release; the existing animation, dealer,
+  rewind and loss locks still govern it. Power targeting receives shelf input
+  through the button. There is no side lever or coin-insert launch sequence.
+  Separate three-state power chips preserve acquisition order and the existing
+  ready/selected/spent interactions. Tunnel Vision mounts a slatted shutter over
+  the third reel; the shutter lowers over the already-opaque scoring cover and
+  disappears when the augment is removed. It does not intercept targeting input.
+  Learning mounts a small leather field book on a bolted bracket beside the reels,
+  with brass indexing strips outside the live symbol apertures. This independent
+  layer appears only while Book is enabled, coexists with the Tunnel Vision shutter,
+  and disappears when Learning is removed; it never changes scoring or input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
+  Audio settings use a high-resolution painted scarlet-and-brass speaker console, with live
+  volume and mute controls inset in its dark faceplate and BACK on the lower shelf.
+  The mute row keeps its checkmark and has a visible keyboard-focus outline.
+  The shared options modal uses a transparent painted scarlet-and-brass plaque
+  over the dimmed scene, with six live menu rows and a keyboard-focusable close X.
 - `collection_scene` — the complete Pacte card catalog, in two scrollable
   sections (AUGMENTS, then POWERS) that follow the authored card order, so a card
   never changes position once it is earned. Unlocked cards show their authored
@@ -511,6 +612,36 @@ Resources and currencies:
   `running` without consuming another campaign neuron.
 
 ## Living Game Documentation
+
+### Shared presentation assets
+
+- Machine hardware retains source detail: the cabinet import has no 320px cap,
+  its registration shader samples continuously, and the original painted rail
+  supplies the sockets at x46/77/108. The shelf exports at 640x1280 and SPIN states
+  at 184x112, retaining painted lettering and a two-layout-unit depression.
+  Seven power controls have detailed normal/selected/spent caps; their order and
+  hit regions are unchanged. Detailed reel frames keep all three apertures clear.
+- Wealth drums use shaded enamel cases and one shared compact 440x56 eleven-frame
+  digit strip. Four independent clipped reels preserve carry, reverse drains,
+  snapshot bounds and units-slot alignment. Source texture sizes do not set layout.
+
+- Shared buttons use the brass-and-ivory enamel caps in `ui/premium`, with
+  separate normal, hover, pressed and disabled art plus a keyboard-focus outline.
+  The existing ButtonKit color APIs select dark green, burgundy or brown label ink.
+- Tiny5 supplies crisp control and heading typography at native 8px or 16px.
+  Localized start labels fit the available width; dense microcopy retains DTM Sans.
+  Collection names use 8px type with ellipsis and their full text in the detail view.
+- Settings, navigation, close, confirmation and Lucidity icons share the painted
+  hardware family. Power-restoration flights use a distinct mint power coin.
+- The nine non-Book reel symbols resolve through Assets to 128px painted sprites
+  with mipmaps and linear filtering on the reels. Their 16-unit center/12-unit
+  neighbor geometry is independent of source resolution. Book keeps its existing
+  painted asset. Symbol IDs and scoring are unchanged.
+- Seventeen static Pacte card icons use individual 128px painted assets in 24-unit display footprints throughout
+  Pacte, Collection, unlock popups and machine augment stickers. Renderers use
+  `PacteCards.display_icon_rect`; original atlas metadata remains intact.
+  Pattern Recognition and How to Cheat retain their authored animation sequences.
+- `ART_REWORK.md` records asset coverage and the reproducible visual review.
 
 Every change that adds, removes, renames, rebalances, or behaviorally modifies a
 player-visible mechanic MUST update the Game Reference above in the same branch
@@ -557,3 +688,23 @@ or save/runtime integration.
 - Use `PascalCase` for class names and node names.
 - Use `CONSTANT_CASE` for constants.
 - Add brief docstrings only for complex functions and classes.
+
+Painted Pacte card fronts/backs and deck stacks use 4x source exports with linear
+mipmap filtering. Their 39x61 and 28x32 layout footprints stay fixed; source atlas
+coordinates are independent of card interaction geometry. Room painted masters
+render at display resolution inside the centered safe area.
+
+Consumable presentation uses nine 128x128 painted item exports from the shared
+item master. Dealer offers, Shop and machine stash icons use linear mipmaps
+inside their existing layout footprints; active-item badges remain 8 units and
+preserve phase-coloured turn counts. Tea flights use the same detailed item art.
+
+Dealer Chip Augments use an eight-frame detailed brass/enamel sheet, one 128px
+square per effect. Dealer's Tip has a clock and Emergency Reserve a heart shield;
+neither reuses the previous six-frame sheet's fallback. Dealer views use linear
+mipmaps and retain their existing offer geometry, prices and selection behavior.
+
+Scores presentation uses a brass/enamel ledger with live English/French labels,
+statistics and ending dates. Six detailed suit emblems identify the selected win
+counter. Visible tier and close buttons support keyboard focus; browsing remains
+read-only. Value boxes are applied after font setup to contain large statistics.

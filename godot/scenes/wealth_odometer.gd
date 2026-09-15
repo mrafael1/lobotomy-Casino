@@ -2,8 +2,8 @@ class_name WealthOdometer
 extends Control
 
 ## Four mechanically linked number reels for the machine's run-wealth readout.
-## Each authored reel sheet contains full-canvas frames so its glyph keeps the
-## exact placement and pixel treatment from the source art.
+## All four reels share a compact detailed digit strip. Clipping and carry timing
+## stay in layout units, independently of the texture resolution.
 
 const FRAME_COUNT := 11
 const DIGIT_COUNT := 4
@@ -23,17 +23,17 @@ const MAX_ROLL_TIME := 0.9
 # payout) is allowed past MAX_ROLL_TIME, but not indefinitely.
 const OVERRIDE_MAX_ROLL_TIME := 2.4
 const VALUE_MODULUS := 10_000
-const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
+const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 const BAR_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine new view/wealth_bar.png")
+	"res://assets/images/machine_polished/wealth_crt_detail.svg")
 const CASES_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine new view/wealth_cases.png")
+	"res://assets/images/machine_polished/wealth_cases_detail.svg")
 const REEL_TEXTURES: Array[Texture2D] = [
-	preload("res://assets/images/machine new view/wealth_1st_reel.png"),
-	preload("res://assets/images/machine new view/wealth_2nd_reel.png"),
-	preload("res://assets/images/machine new view/wealth_3rd_reel.png"),
-	preload("res://assets/images/machine new view/wealth_4th_reel.png"),
+	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
+	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
+	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
+	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
 ]
 
 var _reels: Array[Dictionary] = []
@@ -44,6 +44,8 @@ var _built := false
 ## so an overlay can fly the machine's own number around without the surrounding art
 ## coming with it. Set before the node enters the tree; _build_art() reads it once.
 var snapshot_mode := false
+## Starting placement of a lifted copy; the digit art remains in source coordinates.
+var snapshot_origin := Vector2.ZERO
 ## How many digit slots stay visible, counted from the units end. Locking this keeps
 ## a drain that drops a digit from re-laying-out mid-animation.
 var digit_window := DIGIT_COUNT
@@ -127,6 +129,7 @@ func _build_art() -> void:
 	var cases := Sprite2D.new()
 	cases.name = "WealthCasesArt"
 	cases.texture = CASES_TEXTURE
+	cases.scale = Vector2(160, 320) / CASES_TEXTURE.get_size()
 	cases.centered = false
 	cases.z_index = 0
 	cases.texture_filter = MACHINE_ART_TEXTURE_FILTER
@@ -140,6 +143,7 @@ func _build_art() -> void:
 		bar = Sprite2D.new()
 		bar.name = "WealthBarArt"
 		bar.texture = BAR_TEXTURE
+		bar.scale = Vector2(160, 320) / BAR_TEXTURE.get_size()
 		bar.centered = false
 		bar.z_index = 2
 		bar.texture_filter = MACHINE_ART_TEXTURE_FILTER
@@ -207,7 +211,7 @@ func _make_digit_sprite(
 	sprite.texture = texture
 	sprite.hframes = FRAME_COUNT
 	sprite.centered = false
-	sprite.position = -window_rect.position
+	sprite.scale = window_rect.size / Vector2(float(texture.get_width()) / FRAME_COUNT, texture.get_height())
 	sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	return sprite
 
@@ -219,13 +223,12 @@ func _show_static_value(value: int) -> void:
 
 func _show_static_digit(reel_index: int, digit: int) -> void:
 	var reel := _reels[reel_index]
-	var window_rect: Rect2 = reel["window"]
 	var current := reel["current"] as Sprite2D
 	var next := reel["next"] as Sprite2D
 	current.frame = FRAME_FOR_DIGIT[digit]
-	current.position = -window_rect.position
+	current.position = Vector2.ZERO
 	current.visible = true
-	next.position = -window_rect.position
+	next.position = Vector2.ZERO
 	next.visible = false
 
 
@@ -255,10 +258,9 @@ func _position_reel(
 		reel_index: int, current_digit: int, next_digit: int,
 		fraction: float, direction: int) -> void:
 	var reel := _reels[reel_index]
-	var window_rect: Rect2 = reel["window"]
 	var current := reel["current"] as Sprite2D
 	var next := reel["next"] as Sprite2D
-	var origin := -window_rect.position
+	var origin := Vector2.ZERO
 	current.frame = FRAME_FOR_DIGIT[current_digit]
 	next.frame = FRAME_FOR_DIGIT[next_digit]
 	current.position = origin + Vector2(0.0, -float(direction) * fraction * ROLL_DISTANCE)

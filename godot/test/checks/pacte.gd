@@ -194,9 +194,11 @@ func _check_painting_reroll_117(failures: Array) -> void:
 		failures.append("issue117: pre-run offer must be exactly two consumables: %s" % str(shop_offers))
 	if int(run_store.dealerRerollCount) != 0 or int(run_store.dealer_reroll_price()) != 5:
 		failures.append("issue117: fresh pre-run offer did not reset the reroll price to 5L")
-	# Slots beyond the two-item offer are empty (the far-right slot belongs to the
-	# Chip Augment): their authored price tags must hide.
+	# Slots beyond the two-item offer are empty unless the dedicated Chip Augment
+	# occupies the third painted well. Their authored price tags must hide.
 	for i in range(shop_offers.size() + 1, 5):
+		if i == shop._augment_slot_index() + 1 and shop._augment_offer_id() != "":
+			continue
 		var empty_slot := shop.get_node_or_null("OfferSlot%d" % i) as Control
 		var empty_tag := empty_slot.get_node_or_null("PriceTag") as Control if empty_slot != null else null
 		if empty_tag != null and empty_tag.visible:
@@ -271,6 +273,8 @@ func _check_augment_feedback_map_132(failures: Array) -> void:
 	var assets: Node = get_root().get_node("Assets")
 	var sheet: Texture2D = assets.texture(ChipAugments.ICON_SHEET)
 	var frames := ChipAugments.icon_frames(sheet)
+	if sheet == null or sheet.get_size() != Vector2(1024, 128) or frames != ChipAugments.ids().size():
+		failures.append("augments: detailed sheet must provide one 128px frame per chip")
 	for augment_id in ChipAugments.ids():
 		var frame := ChipAugments.icon_frame(String(augment_id), frames)
 		if frame < 0 or frame >= frames:
@@ -539,7 +543,7 @@ func _check_chip_augments(failures: Array) -> void:
 	if String(run_store._roll_augment_offer(5)) != "aug_pair_triple":
 		failures.append("augments: sole eligible augment was not offered")
 
-	# UI: the augment stands on the far-right counter slot like a consumable —
+	# UI: the augment stands in the third painted well like a consumable —
 	# priced tag above, name/rarity/stock/effect on select, drag-on-dealer to buy;
 	# selector cancel never charges.
 	run_store.runPhase = "idle"
@@ -554,9 +558,9 @@ func _check_chip_augments(failures: Array) -> void:
 	get_root().add_child(shop)
 	run_store.dealerAugmentOfferId = "aug_symbol_level"
 	shop._build_offers()
-	var aug_slot := shop.get_node_or_null("OfferSlot5") as Control
+	var aug_slot := shop.get_node_or_null("OfferSlot3") as Control
 	if aug_slot == null:
-		failures.append("augments: far-right offer slot missing")
+		failures.append("augments: third painted offer slot missing")
 	else:
 		var has_icon := false
 		var icon_sprite: Sprite2D = null
@@ -565,8 +569,8 @@ func _check_chip_augments(failures: Array) -> void:
 				has_icon = true
 				icon_sprite = (child as Control).get_child(0) as Sprite2D
 		if not has_icon:
-			failures.append("augments: no augment icon on the far-right counter slot")
-		# The authored chip sheet: 6 frames, one unique chip per augment.
+			failures.append("augments: no augment icon on the third painted counter slot")
+		# The detailed chip sheet: eight frames, one unique chip per augment.
 		if icon_sprite == null or icon_sprite.texture == null:
 			failures.append("augments: augment icon has no chip art")
 		elif icon_sprite.hframes != ChipAugments.ICON_HFRAMES \
@@ -576,7 +580,7 @@ func _check_chip_augments(failures: Array) -> void:
 		var aug_price_label := aug_slot.get_node_or_null("PriceTag/Price") as Label
 		if aug_tag == null or not aug_tag.visible or aug_price_label == null \
 				or aug_price_label.text != str(run_store.chip_augment_price("aug_symbol_level")):
-			failures.append("augments: far-right slot must show the live augment price")
+			failures.append("augments: third painted slot must show the live augment price")
 		# Selecting the augment surfaces the shared AUGMENT name (rarity-coloured)
 		# and green-only TV hints — no explanatory message text.
 		shop._select("aug_symbol_level")
@@ -863,6 +867,49 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 	var pacte := (load("res://scenes/pacte_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(pacte)
 	await process_frame
+	var painted_master := pacte.get_node_or_null("PactePaintedMaster") as Sprite2D
+	if painted_master == null or painted_master.texture == null \
+			or not painted_master.visible \
+			or not painted_master.texture.resource_path.ends_with(
+				"pacte_polished/pacte_scene_painted.png") \
+			or painted_master.position != Vector2.ZERO \
+			or painted_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or not (painted_master.scale * painted_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
+		failures.append("pacte: painted native scene master is not the active crisp base layer")
+	var deck_specs: Array[Dictionary] = [
+		{"node": pacte.get_node_or_null("AugmentDeck"),
+			"asset": "generated_set/augment_deck_detail.png", "position": Vector2(13.0, 109.0)},
+		{"node": pacte.get_node_or_null("PowerDeck"),
+			"asset": "generated_set/power_deck_detail.png", "position": Vector2(119.0, 109.0)},
+	]
+	for deck_spec in deck_specs:
+		var deck := deck_spec["node"] as Sprite2D
+		if deck == null or deck.texture == null \
+				or not deck.texture.resource_path.ends_with(String(deck_spec["asset"])) \
+				or Vector2i(deck.texture.get_width(), deck.texture.get_height()) != Vector2i(112, 128) \
+				or deck.position.distance_to(deck_spec["position"]) > 1.1 \
+				or not (deck.scale * deck.texture.get_size()).is_equal_approx(Vector2(28, 32)):
+			failures.append("pacte: %s deck is not aligned to its painted upper recess" \
+				% String(deck_spec["asset"]))
+	var card_art := pacte._make_card_view("augment_book", "augment") as Control
+	var card_front := card_art.get_node_or_null("Front") as TextureRect
+	var card_back := card_art.get_node_or_null("Back") as TextureRect
+	if card_front == null or card_front.texture == null \
+			or not (card_front.texture as AtlasTexture).atlas.resource_path.ends_with("generated_set/cards_detail.png") \
+			or (card_front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT \
+			or card_back == null or card_back.texture == null \
+			or (card_back.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_BACK_RECT:
+		failures.append("pacte: generated augment card front/back artwork is not active")
+	card_art.free()
+	var power_art := pacte._make_card_view("shift", "power") as Control
+	var power_front := power_art.get_node_or_null("Front") as TextureRect
+	var power_back := power_art.get_node_or_null("Back") as TextureRect
+	if power_front == null or power_front.texture == null \
+			or (power_front.texture as AtlasTexture).region != PacteCards.GENERATED_POWER_FRONT_RECT \
+			or power_back == null or power_back.texture == null \
+			or (power_back.texture as AtlasTexture).region != PacteCards.GENERATED_POWER_BACK_RECT:
+		failures.append("pacte: generated power card front/back artwork is not active")
+	power_art.free()
 	var pattern_view := pacte._make_card_view("augment_pattern_recognition", "augment") as Control
 	var pattern_icon := pattern_view.get_node_or_null("Icon") as AnimatedSprite2D
 	if pattern_icon == null or pattern_icon.sprite_frames == null \
@@ -892,8 +939,8 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: background/dealer/table draw order is incorrect")
 	if pacte._dealer_bubble == null or int(pacte._dealer_bubble.z_index) <= pacte.TABLE_Z_INDEX:
 		failures.append("pacte: dealer text does not draw above the table")
-	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) == "expand":
-		failures.append("pacte: expanded artwork viewport was applied globally")
+	if String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) != "expand":
+		failures.append("pacte: decorative viewport expansion is missing")
 	if pacte._native_canvas_origin(Vector2(180.0, 320.0)) != Vector2(10.0, 0.0) \
 		or pacte._native_canvas_origin(Vector2(160.0, 360.0)) != Vector2(0.0, 20.0):
 		failures.append("pacte: native gameplay canvas is not centred in an expanded phone viewport")
@@ -921,12 +968,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("pacte: %s artwork is missing" % String(art_spec["name"]))
 			continue
 		var expected_art_position: Vector2 = pacte._native_art_position(art.texture, frame_count)
+		if art == pacte._augment_deck:
+			expected_art_position = pacte.AUGMENT_DECK_POSITION
+		elif art == pacte._power_deck:
+			expected_art_position = pacte.POWER_DECK_POSITION
 		var position_tolerance := 1.1 if art == pacte._augment_deck \
 			or art == pacte._power_deck else 0.01
 		if art.position.distance_to(expected_art_position) > position_tolerance:
-			failures.append("pacte: %s artwork is not centred around the native canvas" \
+			failures.append("pacte: %s artwork is not aligned to its native slot" \
 				% String(art_spec["name"]))
-		if art.scale != Vector2.ONE:
+		var expected_art_scale := Vector2(0.25, 0.25) if art == pacte._augment_deck \
+			or art == pacte._power_deck else Vector2.ONE
+		if not art.scale.is_equal_approx(expected_art_scale):
 			failures.append("pacte: %s artwork was resized instead of preserving source pixels" \
 				% String(art_spec["name"]))
 	if pacte._dealer_bubble == null \
@@ -940,7 +993,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: drag instruction did not move below the card row")
 	if augment_offers.size() >= 3:
 		var expected_card_positions: Array[Vector2] = [
-			Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+			Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 		]
 		# The cards do not simply appear at their offsets — _shuffle_face_down_cards
 		# wiggles each one ±2px around its origin for ~0.22s when the scene opens. This
@@ -978,7 +1031,9 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or not pacte._augment_deck.visible or not pacte._power_deck.visible:
 		failures.append("pacte: fixed dual-deck state is not initialized")
 	if pacte._proposition == null or pacte._proposition.z_index <= pacte.TABLE_Z_INDEX:
-		failures.append("pacte: proposition placeholder is not drawn above the table")
+		failures.append("pacte: proposition placeholder node is not retained above the table")
+	elif pacte._proposition.visible:
+		failures.append("pacte: obsolete three-card proposition overlay is still visible")
 	for card_button in pacte._card_buttons.values():
 		if pacte._proposition != null and (card_button as Button).z_index <= pacte._proposition.z_index:
 			failures.append("pacte: proposition placeholder is not beneath the cards")
@@ -991,18 +1046,18 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("pacte: %s should have been removed" % removed_name)
 	var augment_drop := pacte.get_node_or_null("DropHere") as Label
 	var power_drop := pacte.get_node_or_null("PowerDropHere") as Label
-	if augment_drop == null or augment_drop.position != Vector2(28.0, 256.0) \
-			or augment_drop.size != Vector2(25.0, 36.0):
+	if augment_drop == null or augment_drop.position != Vector2(25.0, 219.0) \
+			or augment_drop.size != Vector2(25.0, 35.0):
 		failures.append("pacte: augment DROP HERE is not inside its emplacement")
-	if power_drop == null or power_drop.position != Vector2(107.0, 256.0) \
-			or power_drop.size != Vector2(25.0, 36.0):
+	if power_drop == null or power_drop.position != Vector2(110.0, 219.0) \
+			or power_drop.size != Vector2(25.0, 35.0):
 		failures.append("pacte: power DROP HERE is not inside its emplacement")
 	if augment_drop != null and augment_drop.visible or power_drop != null and power_drop.visible:
 		failures.append("pacte: DROP HERE was not moved into the emplacement artwork")
 	if pacte._emplacement == null or pacte._emplacement.hframes != pacte.EMPLACEMENT_FRAME_COUNT \
 			or pacte._emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or pacte._power_emplacement == null or pacte._power_emplacement.visible:
-		failures.append("pacte: emplacement did not start on its centered selecting frame")
+			or pacte._augment_emplacement.visible or pacte._power_emplacement.visible:
+		failures.append("pacte: obsolete emplacement overlays are still visible")
 	var first_augment := String(augment_offers[0])
 	pacte._set_face_up(first_augment)
 	var first_card_art := pacte._card_views.get(first_augment, null) as Control
@@ -1060,12 +1115,12 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: card explanation disappeared before drag movement")
 	var screen_drag := InputEventScreenDrag.new()
 	screen_drag.index = 0
-	# _input receives events the viewport has already mapped into canvas space.
-	var screen_drag_position: Vector2 = pacte.get_global_transform() * Vector2(40.0, 270.0)
+	# _input receives viewport coordinates, including the centered canvas transform.
+	var screen_drag_position: Vector2 = pacte.get_global_transform_with_canvas() * Vector2(40.0, 270.0)
 	screen_drag.position = screen_drag_position
 	pacte._input(screen_drag)
 	# The grabbed point of the card must end up exactly under the reported finger.
-	var dragged_finger_position := first_button.get_global_transform() * grabbed_card_point
+	var dragged_finger_position := first_button.get_global_transform_with_canvas() * grabbed_card_point
 	if dragged_finger_position.distance_to(screen_drag_position) > 0.1:
 		failures.append("pacte: mobile card drag did not stay under the finger")
 	if not first_button.visible:
@@ -1109,14 +1164,14 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 		failures.append("pacte: dropped card left explanation or DROP HERE frame visible")
 	if pacte._augment_emplacement == null \
 			or pacte._augment_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or not pacte._augment_emplacement.visible \
+			or pacte._augment_emplacement.visible \
 			or pacte._power_emplacement == null \
 			or pacte._power_emplacement.frame != pacte.EMPLACEMENT_SELECTING_FRAME \
-			or not pacte._power_emplacement.visible:
-		failures.append("pacte: augment and power emplacement frames are incorrect")
+			or pacte._power_emplacement.visible:
+		failures.append("pacte: obsolete emplacement overlays are still visible after selection")
 	var chosen_augment := pacte._chosen_card_views.get("augment", null) as Control
 	if chosen_augment == null or chosen_augment.size != Vector2(21.0, 33.0) \
-			or not Rect2(28.0, 256.0, 25.0, 36.0).encloses(
+			or not Rect2(25.0, 219.0, 25.0, 35.0).encloses(
 				Rect2(chosen_augment.position, chosen_augment.size)):
 		failures.append("pacte: chosen augment card is not minimized inside its emplacement")
 	if pacte._drop_label != power_drop:
@@ -1189,11 +1244,10 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			failures.append("issue181: the sockets plate stayed up with no augments held")
 		run_store.selectedAugmentCardIds = kept_augments
 		machine._augments.refresh_pacte_badges()
-		var third_slot: Dictionary = machine.POWER_HITS[machine.POWER_IDS[2]]
-		if not is_equal_approx(AugmentDisplay.PACTE_AUGMENT_BADGE_POS.y, float(third_slot["top"])):
-			failures.append("issue181: the augment row is not on the power bar baseline")
-		if AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x <= float(machine.POWER_ART_LEFT[machine.POWER_IDS[2]]):
-			failures.append("issue181: the augment row does not start after the third power")
+		var badge_rect := Rect2(AugmentDisplay.PACTE_AUGMENT_BADGE_POS,
+			AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE)
+		if not Rect2(42, 250, 88, 36).encloses(badge_rect):
+			failures.append("machine: augment stickers must live on the lower cabinet")
 		var augment_row_end: float = AugmentDisplay.PACTE_AUGMENT_BADGE_POS.x \
 			+ float(AugmentDisplay.PACTE_AUGMENT_BADGE_MAX - 1) * AugmentDisplay.PACTE_AUGMENT_BADGE_PITCH \
 			+ AugmentDisplay.PACTE_AUGMENT_BADGE_SIZE.x

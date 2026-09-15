@@ -37,7 +37,7 @@ const BURST_RISE := 28.0
 const JACKPOT_GOLD := Color(1.0, 0.84, 0.18)
 
 ## --- the lamp ------------------------------------------------------------------
-const JACKPOT_SHEET := "machine new view/neon_machine_jackpot.png"
+const JACKPOT_SHEET := "machine_polished/jackpot_beacon.svg"
 const JACKPOT_FRAME_COUNT := 3
 const JACKPOT_FRAME_OFF := 0
 const JACKPOT_FRAME_LIT := 1

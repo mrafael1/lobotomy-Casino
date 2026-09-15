@@ -11,9 +11,21 @@ extends Node2D
 
 const SRC_W := 160.0
 const SRC_H := 320.0
-const ASSET_SCALE := 8.0 # legacy machine sheets are 8x the 160x320 source
+const CABINET_OFFSET := Vector2(4.0, 0.0)
+# These belong to the viewport or the already-centered preview shelf.
+const FIXED_CANVAS_NODES := [
+	&"NeonBackground", &"SpinButton", &"stash", &"SpinsLeftNumber", &"SpinsLegend",
+	&"ReserveGlow", &"ScoreButton", &"options", &"OptionsOverlay", &"BottomHudLayer",
+]
+# These controls stay top-level to preserve the four-pixel cabinet alignment, but
+# they are still part of the physical machine. Keep them in lockstep with the
+# cabinet whenever it shakes or hops.
+const MACHINE_MOTION_NODES := [
+	&"SpinButton", &"stash", &"SpinsLeftNumber", &"SpinsLegend", &"ReserveGlow",
+]
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
+const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -25,44 +37,27 @@ const REEL_HOLES := [
 	{ "left": 97.0, "top": 170.0, "width": 21.0, "height": 30.0 },
 ]
 const TV_SCREEN := { "left": 24.0, "top": 42.0, "width": 112.0, "height": 66.0 }
-# Spins-left tube (off-TV, authored as native full-canvas frames): frame N shows
-# N spins remaining — frame 0 = empty/no spins, frame 19 = 19+ spins. The sheet
-# grew a chip (19 frames -> 20) and EconomyConst.MAX_NEURONS rose with it, so the
-# top of the tube is reachable rather than authored-but-dead.
-const HEALTH_BAR_FRAME_COUNT := 20
-# The tube's bottom chip — the last spin the run has — measured off health_bar.png as the
-# pixels that differ between frame 0 (empty) and frame 1 (one spin). An armed Emergency
-# Reserve glows exactly that chip: the reserve IS one more spin waiting under the last
-# one, so it reads where the player already looks for spins rather than as a new badge.
-const HEALTH_BOTTOM_CHIP_RECT := Rect2(4.0, 98.0, 13.0, 7.0)
-const HEALTH_BAR_FRAME_W := 160.0 # full-canvas sheet: one frame is the whole canvas
 const RESERVE_GLOW_COLOR := Color(0.55, 1.0, 0.85)
 const RESERVE_GLOW_MIN_ALPHA := 0.22
 const RESERVE_GLOW_MAX_ALPHA := 0.72
 const RESERVE_GLOW_PERIOD := 1.1
 const MAX_RUN_SPINS := EconomyConst.MAX_NEURONS
-const SPINS_LEFT_NORMAL_COLOR := Color(0.8, 0.95, 1.0)
+const SPINS_LEFT_NORMAL_COLOR := Color("#f0e4b4")
 const SPINS_LEFT_MAX_COLOR := Color("#8f0d16")
-# Remaining-spin readout, centered in the badge chip under the neuron tube
-# (badge pixels span x4..16, y107..119). The rect rides ~6px above the chip
-# centre and 1px right of it because DTM-Sans' line metrics drop the glyphs
-# below a centered box and its digits carry a lopsided side bearing (verified
-# against rendered pixels; same trick as the wealth goal rects).
-const SPINS_LEFT_LABEL_RECT := Rect2(1.0, 102.0, 21.0, 11.0)
+# Remaining spins sit in the left shelf well beside SPIN.
+const SPINS_LEFT_LABEL_RECT := Rect2(28.0, 213.0, 14.0, 16.0)
 # Objective readout on the TV (issue #181). Authored full-canvas sheets: the goal
 # number (art y91..95), the fill bar under it (y99..103), and a six-frame shimmer at
 # y95..97 that loops between them. The goal sheet carries one frame per EconomyConst.WEALTH_TARGETS
 # entry, so its frame index is the target index; the bar's twelve frames are the fill
 # steps. They replace the TARGET word + red digit labels that used to be drawn into
 # the bottom wealth bar.
-# Coin-insert sheet: a coin drops into the machine when the lever is pulled, before
-# the lever animation starts.
-const COIN_INSERT_FRAME_COUNT := 4
-const COIN_INSERT_FRAME_TIME := 0.055
 const TV_STATUS_RIGHT := 109.0
-const MULT_STRIP := { "top": 119.0, "height": 16.0 }
-const MULT_BADGE_CENTERS := [47.0, 78.0, 106.0]
-const LEVER_HIT := { "left": 133.0, "top": 160.0, "width": 20.0, "height": 40.0 }
+const MULT_STRIP := { "top": 77.0, "height": 12.0 }
+const MULT_BADGE_CENTERS := [87.5, 92.5, 97.5]
+# Lower shelf: SPIN between the remaining-spin display and the two stash wells.
+const SPIN_HIT := { "left": 57.0, "top": 213.0, "width": 46.0, "height": 28.0 }
+const SPIN_PRESS_TIME := 0.09
 # Centre of the reel window — consumable-use hint popups originate here.
 const MACHINE_HINT_CENTER := Vector2(75.5, 185.0)
 const SYMBOL_TARGET_H := 32.0 # 32px symbols render 1:1 in the virtual canvas.
@@ -82,46 +77,35 @@ const SWAP_CENTRE_SLOT := 1 # 0 = above, 1 = centre, 2 = below; Swap only ever t
 # hole: the old hole+gap guess sat 3px above the top arrow and 4px above the bottom
 # one, which left the lower half of the down arrow dead (issue #181).
 
-# Machine-mounted power button hit rects (source px). Every chip is painted 11x11 at y225
-# in its own sheet (POWER_ART_LEFT below), so each rect is that chip grown 1px sideways and
-# a couple of pixels top and bottom. The old rects drifted a pixel either way and reroll's
-# extra width ran into shift's box.
+# Three 22px power faces on the painted steel rail; 26px independent touch boxes.
+# Additional IDs share the first authored position until acquisition-order slotting.
 const POWER_HITS := {
-	"reroll": { "left": 19.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"shift": { "left": 33.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"memory": { "left": 47.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"rewind": { "left": 61.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"heart": { "left": 75.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"cheat": { "left": 89.0, "top": 223.0, "width": 13.0, "height": 15.0 },
-	"swap": { "left": 103.0, "top": 223.0, "width": 13.0, "height": 15.0 },
+	"reroll": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"shift": { "left": 64.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"memory": { "left": 95.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"rewind": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"heart": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"cheat": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
+	"swap": { "left": 33.0, "top": 114.0, "width": 26.0, "height": 26.0 },
 }
 const POWER_IDS: Array[String] = ["reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
-# Where each power's chip is actually painted in its own sheet, measured from the art: 11x11
-# at y225, on one unbroken 14px pitch that the augment sockets pick up again at 64/78/92
-# after the divider. Slotting is done art-to-art rather than hit box to hit box, so a
-# re-slotted power lands exactly where the power that owns the emplacement is drawn.
 const POWER_ART_LEFT := {
-	"reroll": 20.0, "shift": 34.0, "memory": 48.0,
-	"rewind": 62.0, "heart": 76.0, "cheat": 90.0, "swap": 104.0,
+	"reroll": 35.0, "shift": 66.0, "memory": 97.0,
+	"rewind": 35.0, "heart": 35.0, "cheat": 35.0, "swap": 35.0,
 }
-const LEVER_FRAME_COUNT := 6
-const LEVER_FRAME_TIME := 0.042
-const LEVER_HOLD_TIME := 0.055
-const LEVER_RETURN_TIME := 0.07
-const LEVER_REEL_START_DELAY := 0.22
 const SPIN_FRAME_COUNT := 4
 const SPIN_FRAME_TIME := 0.055
 const REROLL_REEL_DURATION := 0.55
 const REEL_STOP_SFX_LEAD_TIME := 0.1
 # Rewind rolls the previous spin back in: all three reels blur backwards for this
-# long while the sequence lock keeps the lever out of reach.
+# long while the sequence lock keeps SPIN out of reach.
 const REWIND_RESTORE_DURATION := 0.9
 const MULTIPLIER_FRAME_COUNT := 6
 # Issue #155: authored frenzy-gauge effect sheets (full-canvas x1 strips) and the
 # blinking FREE SPINS TV overlay.
-const MULT_FX_2_SHEET := "machine new view/multiplier_2_effect.png"
-const MULT_FX_3_SHEET := "machine new view/multiplier_3_effect.png"
-const MULT_FX_FIRE_SHEET := "machine new view/multiplier_3_fire.png"
+const MULT_FX_2_SHEET := "machine_polished/multiplier_2_effect.svg"
+const MULT_FX_3_SHEET := "machine_polished/multiplier_3_effect.svg"
+const MULT_FX_FIRE_SHEET := "machine_polished/multiplier_3_fire.svg"
 const MULT_FX_2_FRAMES := 7
 const MULT_FX_3_FRAMES := 9
 const MULT_FX_FRAME_TIME := 0.09
@@ -137,32 +121,32 @@ const MULT_FX_FRAME_TIME := 0.09
 # this single native full-canvas frame recolours exactly those first steps so the head
 # start is visible on the bar instead of only in the arithmetic. Shown while the augment
 # is owned: each reset comes back onto the tipped value, so those steps are never unlit.
-const DEALER_TIP_STEPS_SHEET := "machine new view/dealer_tips.png"
+const DEALER_TIP_STEPS_SHEET := "machine_polished/dealer_tips.svg"
 # The bar walks through each authored progress frame when one spin advances it
 # by multiple steps; the warning itself beeps through alpha so it does not
 # reveal a different countdown position before that spin's result is known.
 # The warning speeds up as the dealer closes in: a lone first light beeps lazily, and from
 # the second light on the cadence tightens. BEEP_TIME is the pulse itself (the lights sit at
 # BEEP_MIN_ALPHA for it); the rest of the period is full alpha.
-const DEALER_ICON_ASSET := "ui/dealer_portrait.png"
-const DEALER_ICON_SIZE := Vector2(14.0, 21.0)
+const DEALER_ICON_ASSET := "machine_polished/dealer-painted.png"
+const DEALER_ICON_SIZE := Vector2(30.0, 43.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
 # fully inside the pink TV border.
-const DEALER_ICON_POS := Vector2(100.0, 59.0)
+const DEALER_ICON_POS := Vector2(36.0, 51.0)
 const LOCK_POWER_FRAME_COUNT := 3
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
 const POWER_SHEETS := {
-	# Native 480x320 exports: three full-canvas frames (available / selected / disabled)
+	# Native 480x320 pixel-grid sheets: available / selected / disabled.
 	# at 1:1, no upscale.
-	"reroll": "machine new view/reroll.png",
-	"shift": "machine new view/shift.png",
-	"memory": "machine new view/lock.png",
-	"rewind": "machine new view/rewind_power.png",
-	"heart": "machine new view/chip_power.png",
-	"cheat": "machine new view/cheat_power.png",
-	"swap": "machine new view/move_power.png",
+	"reroll": "machine_polished/reroll.svg",
+	"shift": "machine_polished/shift.svg",
+	"memory": "machine_polished/memory.svg",
+	"rewind": "machine_polished/rewind.svg",
+	"heart": "machine_polished/heart.svg",
+	"cheat": "machine_polished/cheat.svg",
+	"swap": "machine_polished/swap.svg",
 }
 const REEL_SELECT_COLUMNS := 2
 const REEL_SELECT_ROWS := 2
@@ -196,9 +180,8 @@ const WEALTH_TARGET_FX_Z_INDEX := 140
 const REWARD_FX_Z_INDEX := 42
 const WHITE_POWDER_DISTORTION_SHADER := preload("res://shaders/white_powder_distortion.gdshader")
 const WEALTH_TRANSIENT_FX_GROUP := &"wealth_transient_fx"
-const SETTINGS_ASSET := "ui/setting_icon.png"
+const SETTINGS_ASSET := "ui/premium/settings.png"
 const SFX_FILES := {
-	&"lever": "lever.mp3",
 	&"reel_spin": "reel-spinning.mp3",
 	&"reel_stop": "reel-stop.mp3",
 	&"multiplier_change": "multiplier-change.mp3",
@@ -235,7 +218,7 @@ const COCKTAIL_COLOR := Color(0.941, 0.671, 0.988) # #f0abfc
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_GOLD := Color(1.0, 0.86, 0.36)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 # Presentation stack: machine art → loss overlays (WinCallouts, 97) → dealer
 # offer (100) → dealer-interactive stash (StashTray, 110 while his offer is up
@@ -247,13 +230,8 @@ const DEALER_OVERLAY_Z_INDEX := 100
 # y242..278, so a 14px badge at x22 leaves a 3px gap and centres on it. The suit belongs
 # beside the number the run is played for, not off in the top strip with the settings.
 ## The suit's own gold, on the badge and on the bubble it raises.
-# Pacte augment badge: a compact blue contour around the active card icon stays
-# inside the TV; it is shifted 10px right from the original left-side placement.
-# Pressing it opens the current card(s) and effects.
-# Issue #181: the held augments sit on the power bar, continuing the row after the
-# third emplacement — powers at 22/36/50, augments at 64/78/92 on the same baseline
-# and the same 14px pitch, so the whole strip reads as one row of chips.
-const AUGMENT_PLATE_SHEET := "machine new view/augments.png"
+# Pacte augment stickers occupy the lower cabinet. Holding one shows card details.
+const AUGMENT_PLATE_SHEET := "machine_polished/augments.svg"
 # The sockets draw on top of the cabinet and under the badges that fill them (40).
 const AUGMENT_PLATE_Z_INDEX := 39
 # Canvas centers of the 40 baked marquee bulbs (scanned from the art's yellow
@@ -264,40 +242,37 @@ const TENSION_DELAY := 0.4   # extra hold on reel 3 when reels 1 & 2 match
 # the tray throws a coin spray up through the cabinet like a casino payout.
 const JACKPOT_ODOMETER_ROLL_TIME := 1.60
 const JACKPOT_ROLL_TAIL := 0.25 # a beat of stillness after the reels land
-const COIN_TRAY := Vector2(80.0, 290.0)
+const COIN_TRAY := Vector2(76.0, 290.0) # world x80 after the cabinet offset
 const CASH_COIN_TRAY_OFFSET := Vector2(0.0, 8.0)
 # The four-frame pop sheet is full-canvas and authored around the wealth-bar centre.
-# Where the coin pop hands the coin over to the flight: the centre of the pop sheet's LAST
-# frame (x70..77, y241..249), so the flying coin appears exactly where the animation left it
-# instead of teleporting. The art moved up 3px in its latest export and this followed it.
-const WEALTH_COIN_ORIGIN := Vector2(74.0, 245.5)
+# The translated pop sheet hands its final frame to the flight at the cash outlet.
+const POWER_COIN_ORIGIN := COIN_TRAY + CASH_COIN_TRAY_OFFSET
 # The chip's own size, asset, flight time and pop sheet are CoinFlights' — they
 # describe the flight, not where it starts. The jackpot pays in the machine's own
 # currency, so its spray is lucidity coins — the same coin the dealer and upgrade
 # screens count credits in — not power chips.
 
 # Power restore gauge (issue #76). The native power-bar art is a full-canvas sheet with
-# six horizontal frames, gauge empty (0) -> full (5), filling bottom-up. A power coin
+# four horizontal frames, lamps empty (0) -> full (3), filling left to right. A power coin
 # flies from the wealth odometer to the bar every 10 power points and advances one frame;
 # at the full frame the gauge resets and a random restorable power comes back — the
 # button re-enabling is the feedback, no coin walks back out to it. Each bank coin first
 # plays the authored four-frame pop sheet.
-# The 6 frames span one restore threshold (coins_per_power_restore), so 5 steps = 50
+# The 4 frames span one restore threshold (coins_per_power_restore), so 3 steps = 30
 # coins = 10/step.
-const POWER_BAR_SHEET := "machine new view/neon_machine_power_bar.png"
-const POWER_BAR_HFRAMES := 6
+const POWER_BAR_SHEET := "machine_polished/power_lamps.svg"
+const POWER_BAR_HFRAMES := 4
 const POWER_BAR_VFRAMES := 1
-const POWER_BAR_FRAMES := 6
-const POWER_BAR_CENTER := Vector2(137.0, 84.0) # coin-to-bar landing point (gauge middle)
+const POWER_BAR_FRAMES := 4
+const POWER_LAMP_CENTERS: Array[Vector2] = [Vector2(43.5, 159), Vector2(75.5, 159), Vector2(107.5, 159)]
 const POWER_COIN_STAGGER := 0.045              # 45ms between power-coin launches (quick succession)
-# With no restorable power the gauge stops one frame short of full so it never fake-fills.
-const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 2
+# With no eligible restore, all three lamps hold full until restoration is possible.
+const POWER_BAR_MAX_BEFORE_FULL := POWER_BAR_FRAMES - 1
 
-# The restore charge read out as a light beside the gauge (issue #181). Native
+# The restore charge reads as a slim rim beneath the third lamp. Native
 # full-canvas sheet, one frame per banked charge: frame 0 lit, frame 1 dark. With the
-# light out the gauge can still bank points but never completes — it holds at 4/5 until
-# the next spin puts the light back.
-const RESTORE_CAP_SHEET := "machine new view/restore_cap.png"
+# light out the lamps can still bank points and hold full until a charge returns.
+const RESTORE_CAP_SHEET := "machine_polished/restore_ready.svg"
 const RESTORE_CAP_FRAMES := 2
 
 # Augmented spade (issue #111) makes a spent charge take two spins to come back, so the
@@ -309,8 +284,8 @@ const RESTORE_CAP_FRAMES := 2
 # the clear strip directly beneath it.
 const RESTORE_SPADE_WAITING_TINT := Color(0.45, 0.62, 1.0)
 const RESTORE_CYCLE_PIP_RECTS: Array[Rect2] = [
-	Rect2(143.0, 71.0, 3.0, 2.0),
-	Rect2(148.0, 71.0, 3.0, 2.0),
+	Rect2(102.0, 163.0, 3.0, 1.0),
+	Rect2(108.0, 163.0, 3.0, 1.0),
 ]
 const RESTORE_CYCLE_PIP_ON := Color(1.0, 0.86, 0.2)
 const RESTORE_CYCLE_PIP_OFF := Color(0.24, 0.26, 0.34)
@@ -338,15 +313,15 @@ const SCENE_FEEDBACK_LABEL_COLOR := Color(0.42, 1.0, 0.95)
 
 # Consumable / in-run item id -> icon (under assets/images/). Placeholder fallback.
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
-	"cons_potion": "items/consumable_placeholder.png",
-	"cons_tea": "items/herbal_tea.png",
-	"item_energy_drink": "items/energy_drink.png",
-	"item_cocktail": "items/cocktail.png",
-	"item_water": "items/water.png",
-	"item_pill": "items/pill.png",
+	"cons_focus": "items/generated/serum.png",
+	"cons_cigarette": "items/generated/tobacco.png",
+	"cons_white_powder": "items/generated/white_powder.png",
+	"cons_potion": "items/generated/potion.png",
+	"cons_tea": "items/generated/tea.png",
+	"item_energy_drink": "items/generated/energy_drink.png",
+	"item_cocktail": "items/generated/cocktail.png",
+	"item_water": "items/generated/water.png",
+	"item_pill": "items/generated/red_pill.png",
 }
 
 # Active multi-spin boosts shown as little duration icons on the TV screen (issue #76):
@@ -599,7 +574,7 @@ var _mult_fx_3: Sprite2D = null
 var _mult_fx_fire: Sprite2D = null
 var _mult_fx_time := 0.0
 var _dealer_tip_steps: Sprite2D = null # Dealer's Tip head start, drawn on the bar's first steps
-var _dealer_icon: TextureRect = null
+var _dealer_icon: MachineDealerPortrait = null
 var _gauge_shown := 0 # last displayed gauge value (0 = not shown yet; gates the rise sfx)
 var _wealth_target_transition: TargetReachedOverlay = null
 var _wealth_target_transition_active := false
@@ -607,10 +582,9 @@ var _wealth_target_transition_active := false
 ## machine is on its way out, so nothing new may take the screen here.
 var _target_round_handoff := false
 var _unlock_popup: UnlockCardPopup = null
-var _health_bar_sprite: Sprite2D = null  # spins-left tube: frame = spins remaining
-var _reserve_glow_sprite: Sprite2D = null # armed Emergency Reserve, glowing on the last chip
+var _reserve_glow_sprite: Panel = null # armed reserve contour around the shelf counter
 var _reserve_glow_tween: Tween = null
-var _spins_left_label: Label = null # numeric spins-left readout under the tube
+var _spins_left_label: Label = null # single remaining-spin readout on the shelf
 ## The mini-reel's authored sheet, as a view onto CheatMiniReel — the smoke checks
 ## reach it under this name.
 var _cheat_selection_sprite: Sprite2D:
@@ -656,14 +630,10 @@ var _free_spin_sprite: Sprite2D:
 var _tv_blackout_rect: ColorRect:
 	get: return _tv.blackout_rect() if _tv != null else null
 
-var _coin_insert_sprite: Sprite2D = null # coin-drop played when the lever is pulled
-var _coin_anim_active := false
-var _coin_anim_elapsed := 0.0
 var _power_buttons := {}      # id -> Button
 var _power_sprites := {}      # id -> Sprite2D
 var _lock_sprites: Array = []
 var _lock_count_labels: Array[Label] = []
-var _lever_sprite: Sprite2D = null
 var _spin_sheet_sprite: Sprite2D = null
 ## The armed picker layer, as a view onto TargetingLayer — the smoke checks and the
 ## lock debug shot reach the node under this name.
@@ -726,8 +696,6 @@ var _locked_reels_during_spin := [false, false, false]
 var _use_full_spin_sheet := true
 var _reel_stop_times := [0.55, 1, 1.4]
 var _reel_stop_sfx_played := [false, false, false]
-var _lever_anim_active := false
-var _lever_anim_elapsed := 0.0
 var _reroll_anim_active := false
 var _reroll_reel_index := -1
 var _reroll_elapsed := 0.0
@@ -762,6 +730,8 @@ var _pending_spin_gain := 0
 # two shake and jump the machine NODE, which is not on that layer.
 var _cocktail_shake_tween: Tween = null
 var _potion_jump_tween: Tween = null
+var _machine_motion_offset := Vector2.ZERO
+var _fixed_canvas_node_positions: Dictionary = {}
 
 ## Views onto ConsumableFx, under the names the smoke checks read the effects by.
 var _fx_layer: Control:
@@ -790,6 +760,10 @@ var _compulsive_queued := false            # energy-drink auto-spin pending
 var _compulsive_overlay: ColorRect = null  # red overlay during the compulsive spin
 
 func _ready() -> void:
+	position = CABINET_OFFSET
+	child_entered_tree.connect(_pin_fixed_canvas_node)
+	for child in get_children():
+		_pin_fixed_canvas_node(child)
 	_font = _load_font("font/DTM-Sans.otf")
 	# Before any build step: _build_augment_emplacements hands the plate straight to
 	# the display, and that runs inside the sprite pass below.
@@ -804,7 +778,7 @@ func _ready() -> void:
 	_boosts = BoostIndicators.new(_view, DURATION_BOOSTS, TV_SCREEN,
 		_icon_for, _item_info_popup_text)
 	_coins = CoinFlights.new(_view, MACHINE_ART_TEXTURE_FILTER)
-	_reel_blur = ReelBlur.new(_view, REEL_HOLES, ASSET_SCALE, SPIN_FRAME_COUNT)
+	_reel_blur = ReelBlur.new(_view, REEL_HOLES, SPIN_FRAME_COUNT)
 	_reel_symbols = ReelSymbols.new(_view, REEL_CELL_CENTERS, REEL_WINDOW,
 		HEART_SYMBOL_ASSETS, MACHINE_ART_TEXTURE_FILTER)
 	_power_callout = PowerCallout.new(_view, SRC_W)
@@ -828,17 +802,18 @@ func _ready() -> void:
 		_refresh_dealer_countdown, _refresh_target_readout, _spin_in_flight)
 	_apply_balance_exports()
 	# Draw order (back -> front): casino backdrop -> reel background -> symbols
-	# -> lever (bolted to the cabinet's flank, so the cabinet occludes its arm)
 	# -> cabinet (with transparent holes that mask symbol overflow) -> HUD ->
 	# spin button. The authored node order in the .tscn is what fixes this — these
 	# sprites all share z_index 0, so the scene tree IS the layer stack.
 	_build_neon_background()
 	_reel_backing_sprite = _build_full_canvas_sprite(
-		"machine new view/reel_final_machine.png")
-	_reel_blur.build_spin_strips("machine new view/spin_final_machine.png")
-	_reel_blur.build_covers("machine new view/reel_final_machine.png")
+		"machine_polished/reel_drums.svg")
+	_reel_blur.build_spin_strips("machine_polished/reel_motion.svg")
+	_reel_blur.build_covers("machine_polished/reel_drums.svg")
 	_reel_symbols.build()
-	_build_full_canvas_sprite("machine new view/machine_neon.png")
+	var cabinet := _build_full_canvas_sprite("machine_polished/cabinet-painted.png")
+	cabinet.material = preload("res://assets/shaders/painted_cabinet.tres")
+	_build_full_canvas_sprite("machine_polished/reel_housing.svg")
 	_build_tv_indicators()
 	_build_machine_control_art()
 	_build_hud()
@@ -856,6 +831,7 @@ func _ready() -> void:
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_augments.build_pacte_badges()
+	_finish_machine_materials(self)
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
@@ -866,10 +842,74 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		Tutorial.attach(self, "machine")
 
-## Whether a control the tutorial wants to point at is really on screen yet (issue #105).
-## The dealer's offer hides the machine's own stash while he is in and it slides out over a
-## few frames after an item is taken, so the beat that says "tap the powder" would otherwise
-## open pointing at a stash that is not drawn.
+func _pin_fixed_canvas_node(node: Node) -> void:
+	if node is CanvasItem and node.name in FIXED_CANVAS_NODES:
+		var item := node as CanvasItem
+		item.set_as_top_level(true)
+		# Capture the authored viewport position after promoting the node. If a
+		# control is created while a shake is already running, remove the current
+		# motion offset so its stored position remains the unshaken shelf position.
+		if MACHINE_MOTION_NODES.has(node.name) and not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - _machine_motion_offset
+		if node.name == &"NeonBackground":
+			item.z_index = -100
+
+func _canvas_item_position(item: CanvasItem) -> Vector2:
+	if item is Control:
+		return (item as Control).position
+	if item is Node2D:
+		return (item as Node2D).position
+	return Vector2.ZERO
+
+func _set_canvas_item_position(item: CanvasItem, value: Vector2) -> void:
+	if item is Control:
+		(item as Control).position = value
+	elif item is Node2D:
+		(item as Node2D).position = value
+
+## Apply one physical machine offset to the painted cabinet and the top-level
+## controls that sit over its shelf. The top-level nodes are necessary for the
+## cabinet's static alignment; updating them here keeps that alignment during
+## motion without making their input rectangles drift from their visuals.
+func _set_machine_motion_offset(offset: Vector2) -> void:
+	_machine_motion_offset = offset
+	position = CABINET_OFFSET + offset
+	for node in get_children():
+		if not (node is CanvasItem) or not MACHINE_MOTION_NODES.has(node.name):
+			continue
+		var item := node as CanvasItem
+		if not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - offset
+		_set_canvas_item_position(item, _fixed_canvas_node_positions[item] + offset)
+
+func _set_machine_motion_x(value: float) -> void:
+	var offset := _machine_motion_offset
+	offset.x = value
+	_set_machine_motion_offset(offset)
+
+func _set_machine_motion_y(value: float) -> void:
+	var offset := _machine_motion_offset
+	offset.y = value
+	_set_machine_motion_offset(offset)
+
+func _append_machine_motion_segment(tween: Tween, axis: String, target: float,
+		duration: float) -> void:
+	var root_target := CABINET_OFFSET.x + target if axis == "x" else CABINET_OFFSET.y + target
+	tween.tween_property(self, "position:" + axis, root_target, duration)
+	for node in get_children():
+		if not (node is CanvasItem) or not MACHINE_MOTION_NODES.has(node.name):
+			continue
+		var item := node as CanvasItem
+		if not _fixed_canvas_node_positions.has(item):
+			_fixed_canvas_node_positions[item] = _canvas_item_position(item) - _machine_motion_offset
+		var base: Vector2 = _fixed_canvas_node_positions[item]
+		var item_target := base.x + target if axis == "x" else base.y + target
+		tween.parallel().tween_property(item, "position:" + axis, item_target, duration)
+	# The next segment starts after the root and every shelf control finish this one.
+	tween.chain()
+
+## Whether a control the tutorial wants to point at is really on screen yet.
+## The dealer hides the stash while his offer is up and slides it back afterward.
 func tutorial_ready_for(id: String) -> bool:
 	match id:
 		"stash":
@@ -900,22 +940,17 @@ func tutorial_blocking_modal() -> bool:
 ## not know answers with an empty rect, which the overlay reads as "mask everything".
 func tutorial_anchor(id: String) -> Rect2:
 	match id:
-		"spin_lever":
-			return Rect2(LEVER_HIT["left"], LEVER_HIT["top"],
-				LEVER_HIT["width"], LEVER_HIT["height"])
+		"spin_button":
+			return Rect2(Vector2(SPIN_HIT["left"], SPIN_HIT["top"]) - global_position,
+				Vector2(SPIN_HIT["width"], SPIN_HIT["height"]))
 		"health":
-			# The spins tube down the cabinet's left flank. Measured off health_bar.png's
-			# tallest frame (x3..19, y44..120), not eyeballed: a highlight that misses the
-			# thing it is naming is worse than no highlight.
-			return Rect2(2.0, 43.0, 18.0, 78.0)
+			return Rect2(SPINS_LEFT_LABEL_RECT.position - global_position, SPINS_LEFT_LABEL_RECT.size)
 		"wealth":
-			return Rect2(39.0, 242.0, 97.0, 37.0) # the wealth plate
+			return Rect2(72.0, 59.0, 50.0, 18.0)
 		"target_bar":
-			# The bar itself (target_bar.png: x41..111, y94..99) plus the goal number above
-			# it (target_goals.png: y86..91) — the pair is what "the target" means.
-			return Rect2(40.0, 84.0, 72.0, 17.0)
+			return Rect2(72.0, 47.0, 50.0, 12.0)
 		"dealer_countdown":
-			return Rect2(DEALER_ICON_POS, DEALER_ICON_SIZE)
+			return Rect2(34.0, 47.0, 36.0, 51.0)
 		"reels":
 			return Rect2(REEL_HOLES[0]["left"], REEL_WINDOW["top"],
 				REEL_HOLES[2]["left"] + REEL_HOLES[2]["width"] - REEL_HOLES[0]["left"],
@@ -1004,23 +1039,27 @@ func _authored_control(name: String) -> Control:
 	return get_node_or_null(name) as Control
 
 func _full_canvas_name(rel: String) -> String:
-	if rel.ends_with("reel_final_machine.png"):
+	if rel == "machine_polished/cabinet-painted.png":
+		return "Cabinet"
+	if rel.ends_with("reel_drums.svg"):
 		return "ReelBacking"
+	if rel.ends_with("reel_housing.svg"):
+		return "ReelHousing"
 	if rel.ends_with("final_machine.png") or rel.ends_with("neon_machine.png") \
 			or rel.ends_with("machine_neon.png"):
 		return "Cabinet"
 	return ""
 
 func _full_canvas_sheet_name(rel: String, frame: int) -> String:
-	if rel.ends_with("health_bar.png"):
-		return "HealthBar"
-	if rel.ends_with("health_animation.png"):
-		return "HealthCoin"
-	if rel.ends_with("multiplier_final_machine.png"):
+	if rel == "machine_polished/reroll.svg":
+		return "RerollPower"
+	if rel == "machine_polished/shift.svg":
+		return "ShiftPower"
+	if rel == "machine_polished/memory.svg":
+		return "MemoryPower"
+	if rel.ends_with("multiplier.svg"):
 		return "Multiplier"
-	if rel.ends_with("lever_final_machine.png") or rel.ends_with("neon_machine_lever.png"):
-		return "Lever"
-	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png"):
+	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png") or rel.ends_with("jackpot_beacon.svg"):
 		return "Jackpot"
 	if rel.ends_with("lock_power.png"):
 		return "LockPower%d" % frame
@@ -1030,7 +1069,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "ShiftPower"
 	if rel.ends_with("lock.png") or rel.ends_with("lock_final_machine.png"):
 		return "MemoryPower"
-	if rel.to_lower().ends_with("free_spin.png"):
+	if rel.get_basename().ends_with("free_spin"):
 		return "FreeSpinOverlay"
 	if rel.ends_with("win_animation.png"):
 		return "WinCallout"
@@ -1038,17 +1077,17 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "PowerCallout"
 	if rel.ends_with("cheat_selection.png"):
 		return "CheatSelection"
-	if rel.ends_with("2_losing_animation.png"):
+	if rel.ends_with("loss_2.svg"):
 		return "ComboLoss2"
-	if rel.ends_with("3_losing_animation.png"):
+	if rel.ends_with("loss_3.svg"):
 		return "ComboLoss3"
-	if rel.ends_with("dealer_bar.png"):
+	if rel.get_basename().ends_with("dealer_bar"):
 		return "DealerBar"
-	if rel.ends_with("dealer_bar_overlay_1.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_1"):
 		return "DealerBarOverlay1"
-	if rel.ends_with("dealer_bar_overlay_2.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_2"):
 		return "DealerBarOverlay2"
-	if rel.ends_with("dealer_bar_overlay_3.png"):
+	if rel.get_basename().ends_with("dealer_bar_overlay_3"):
 		return "DealerBarOverlay3"
 	return ""
 
@@ -1057,7 +1096,7 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 ## patch, and an exact match would miss the scene node and build a loose sprite on top of
 ## everything instead of slotting in under the symbols.
 func _region_sprite_name(rel: String, rect: Dictionary) -> String:
-	if rel.ends_with("reel_final_machine.png"):
+	if rel.ends_with("reel_drums.svg"):
 		for i in REEL_HOLES.size():
 			if absf(float(rect["left"]) - float(REEL_HOLES[i]["left"])) <= 2.0 \
 					and absf(float(rect["top"]) - float(REEL_HOLES[i]["top"])) <= 4.0:
@@ -1076,6 +1115,8 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 		spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / float(tex.get_width()), SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	if tex.resource_path.ends_with("cabinet-painted.png") or tex.resource_path.ends_with("reel_housing.svg"):
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -1087,6 +1128,9 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
+	if tex.resource_path.contains("machine_polished/") and POWER_IDS.has(tex.resource_path.get_file().get_basename()):
+		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 # Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
 # hall reads as out-of-focus scenery so the cabinet pops in front of it.
@@ -1104,7 +1148,7 @@ void fragment() {
 			wsum += w;
 		}
 	}
-	COLOR = sum / wsum;
+	COLOR = (sum / wsum) * vec4(0.46, 0.43, 0.50, 1.0);
 }"
 
 ## The shared neon casino backdrop fills the canvas behind the cabinet (blurred,
@@ -1151,6 +1195,25 @@ func _build_full_canvas_sprite(rel: String) -> Sprite2D:
 		add_child(spr)
 	_configure_full_canvas_sprite(spr, tex, not authored)
 	return spr
+
+## A shared finish for the legacy moving hardware. Power icons and gameplay
+## overlays keep their own state colours; authored animation frames stay intact.
+func _finish_machine_materials(node: Node) -> void:
+	if node is Sprite2D:
+		var sprite := node as Sprite2D
+		if sprite.texture != null and sprite.texture.resource_path.get_file() in [
+				"neon_machine_jackpot.png",
+				"neon_machine_power_bar.png", "health_bar.png", "augments.png",
+				"wealth_bar.png", "wealth_cases.png", "target_goals.png"]:
+			var finish := ShaderMaterial.new()
+			finish.shader = MACHINE_MATERIALS
+			finish.set_shader_parameter("phosphor_text",
+				sprite.texture.resource_path.get_file() == "target_goals.png")
+			sprite.material = finish
+			if sprite.texture.resource_path.get_file() == "wealth_bar.png":
+				sprite.material = preload("res://assets/shaders/painted_odometer.tres")
+	for child in node.get_children():
+		_finish_machine_materials(child)
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
@@ -1200,9 +1263,8 @@ func _build_region_sprite(rel: String, rect: Dictionary) -> Sprite2D:
 	spr.texture = tex
 	spr.centered = false
 	# How many sheet pixels one source pixel is, measured from the sheet instead of assumed:
-	# ASSET_SCALE only ever described the legacy x8 exports, and a sheet that goes native
-	# (reel_final_machine.png did) would be cropped far outside its own bounds and draw
-	# nothing at all.
+	# Native and legacy sheets share this helper; crops follow the actual texture
+	# height so switching an asset to native resolution cannot crop beyond its bounds.
 	var art_scale := maxf(1.0, float(tex.get_height()) / SRC_H)
 	spr.position = Vector2(rect["left"], rect["top"])
 	spr.region_enabled = true
@@ -1257,21 +1319,15 @@ func _set_sheet_frame(spr: Sprite2D, frame: int) -> void:
 func _build_tv_indicators() -> void:
 	_wealth.build()
 	_refresh_target_readout()
-	_health_bar_sprite = _build_full_canvas_sheet(
-		"machine new view/health_bar.png", HEALTH_BAR_FRAME_COUNT)
 	_build_reserve_glow()
 	_build_spins_left_label()
-	_coin_insert_sprite = _build_full_canvas_sheet(
-		"machine new view/health_animation.png", COIN_INSERT_FRAME_COUNT)
-	if _coin_insert_sprite != null:
-		_coin_insert_sprite.visible = false
 	_boosts.build()
 	_build_power_bar()
 	_build_restore_cap()
 	_build_augment_emplacements()
 
-## Numeric spins-left readout under the neuron tube — tracks the same
-## _display_spins_left() budget the capped tube frames show.
+## Numeric spins-left readout in the left control-shelf well — tracks the same
+## _display_spins_left() budget, including any gain held until its fly-in lands.
 func _build_spins_left_label() -> void:
 	_spins_left_label = Label.new()
 	_spins_left_label.name = "SpinsLeftNumber"
@@ -1280,7 +1336,7 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_spins_left_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_spins_left_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_spins_left_label.add_theme_font_size_override("font_size", 7)
+	_spins_left_label.add_theme_font_size_override("font_size", 11)
 	if _font != null:
 		_spins_left_label.add_theme_font_override("font", _font)
 	_spins_left_label.add_theme_color_override("font_color", SPINS_LEFT_NORMAL_COLOR)
@@ -1288,8 +1344,22 @@ func _build_spins_left_label() -> void:
 	_spins_left_label.add_theme_constant_override("outline_size", 1)
 	_spins_left_label.text = ""
 	add_child(_spins_left_label)
+	_spins_left_label.size = SPINS_LEFT_LABEL_RECT.size
+	var legend := Label.new()
+	legend.name = "SpinsLegend"
+	legend.text = "SPINS"
+	legend.position = Vector2(43, 218)
+	legend.size = Vector2(11, 8)
+	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	legend.add_theme_font_override("font", _font)
+	legend.add_theme_font_size_override("font_size", 4)
+	legend.add_theme_color_override("font_color", Color("#9baa88"))
+	add_child(legend)
+	# Tree entry resolves the pixel font; clear the default theme's larger minimum.
+	legend.size = Vector2(11, 8)
 
-## The power-restore gauge (issue #76): a native full-canvas overlay sheet (6x1 = 6 frames).
+## The power-restore lamps: a native full-canvas overlay sheet (4x1 = 4 frames).
 ## It starts from the current power-point total so a resumed run does not replay old score.
 ## The authored augment sockets on the power bar — the divider after the third power
 ## emplacement plus one chip bed per held augment. Three frames: frame N shows N+1 sockets,
@@ -1302,6 +1372,7 @@ func _build_spins_left_label() -> void:
 func _build_augment_emplacements() -> void:
 	var plate := _build_full_canvas_sheet(AUGMENT_PLATE_SHEET, AugmentDisplay.AUGMENT_PLATE_FRAMES)
 	if plate != null:
+		plate.position = Vector2.ZERO
 		plate.z_index = AUGMENT_PLATE_Z_INDEX
 		plate.visible = false
 	_augments.attach_plate(plate)
@@ -1310,11 +1381,11 @@ func _build_power_bar() -> void:
 	var tex := _load_texture(POWER_BAR_SHEET, true)
 	if tex == null:
 		return
-	_power_bar_sprite = _authored_sprite("PowerBar")
+	_power_bar_sprite = _authored_sprite("PowerLamps")
 	var authored := _power_bar_sprite != null
 	if _power_bar_sprite == null:
 		_power_bar_sprite = Sprite2D.new()
-		_power_bar_sprite.name = "PowerBar"
+		_power_bar_sprite.name = "PowerLamps"
 		add_child(_power_bar_sprite)
 	_power_bar_sprite.texture = tex
 	_power_bar_sprite.hframes = POWER_BAR_HFRAMES
@@ -1336,27 +1407,20 @@ func _build_power_bar() -> void:
 	for power_id in RunStateStore.pendingPowerRestores.duplicate():
 		RunStateStore.commit_power_restore(String(power_id))
 
-## A soft pulse on the tube's bottom chip while the Emergency Reserve is armed (issue
-## #132). Rather than invent a badge, this re-draws the authored chip pixels themselves —
-## a region of frame 1 of the tube sheet, laid exactly over where that chip already sits —
-## so the glow can never drift out of register with the art it is highlighting.
+## Emergency Reserve outlines the shelf counter without adding another readout.
 func _build_reserve_glow() -> void:
-	var tex := _load_texture("machine new view/health_bar.png", true)
-	if tex == null:
-		return
-	_reserve_glow_sprite = Sprite2D.new()
+	_reserve_glow_sprite = Panel.new()
 	_reserve_glow_sprite.name = "ReserveGlow"
-	_reserve_glow_sprite.texture = tex
-	_reserve_glow_sprite.centered = false
-	_reserve_glow_sprite.region_enabled = true
-	# Frame 1 is "one spin left", so its copy of the chip is the lit one to borrow.
-	_reserve_glow_sprite.region_rect = Rect2(
-		HEALTH_BAR_FRAME_W + HEALTH_BOTTOM_CHIP_RECT.position.x,
-		HEALTH_BOTTOM_CHIP_RECT.position.y,
-		HEALTH_BOTTOM_CHIP_RECT.size.x, HEALTH_BOTTOM_CHIP_RECT.size.y)
-	_reserve_glow_sprite.position = HEALTH_BOTTOM_CHIP_RECT.position
-	_reserve_glow_sprite.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	_reserve_glow_sprite.z_index = 3 # over the tube, under the HUD overlays
+	_reserve_glow_sprite.position = Vector2(25, 213)
+	_reserve_glow_sprite.size = Vector2(31, 21)
+	_reserve_glow_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color.WHITE
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
+	_reserve_glow_sprite.add_theme_stylebox_override("panel", style)
+	_reserve_glow_sprite.z_index = 3
 	_reserve_glow_sprite.visible = false
 	add_child(_reserve_glow_sprite)
 
@@ -1387,7 +1451,7 @@ func _refresh_reserve_glow() -> void:
 ## reads as discharging into the power, without needing a second authored asset.
 func _build_restore_cap() -> void:
 	_restore_cap_sprite = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES)
-	_restore_cap_glow = _build_full_canvas_sheet(RESTORE_CAP_SHEET, RESTORE_CAP_FRAMES, 0)
+	_restore_cap_glow = _build_full_canvas_sheet("machine_polished/power_restore_flash.svg", 1)
 	if _restore_cap_glow != null:
 		_restore_cap_glow.visible = false
 		_restore_cap_glow.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -1618,12 +1682,15 @@ func _make_info_bubble(node_name: String, source: String, border: Color,
 	return popup
 
 func _build_machine_control_art() -> void:
-	_multiplier_sprite = _build_full_canvas_sheet("machine new view/multiplier_final_machine.png", MULTIPLIER_FRAME_COUNT)
+	_multiplier_sprite = _build_full_canvas_sheet("machine_polished/multiplier.svg", MULTIPLIER_FRAME_COUNT)
 	# Issue #155: gauge effect overlays draw above the badge strip; hidden until
 	# the frenzy reaches their state.
 	_mult_fx_2 = _build_full_canvas_sheet(MULT_FX_2_SHEET, MULT_FX_2_FRAMES)
 	_mult_fx_3 = _build_full_canvas_sheet(MULT_FX_3_SHEET, MULT_FX_3_FRAMES)
 	_mult_fx_fire = _build_full_canvas_sheet(MULT_FX_FIRE_SHEET, MULT_FX_3_FRAMES)
+	for sprite in [_multiplier_sprite, _mult_fx_2, _mult_fx_3, _mult_fx_fire]:
+		if sprite != null:
+			sprite.position = Vector2(-9, 30)
 	_dealer_bar.build()
 	_build_dealer_tip_steps()
 	_tv.build_banner()
@@ -1637,7 +1704,6 @@ func _build_machine_control_art() -> void:
 	for fx in [_mult_fx_2, _mult_fx_3, _mult_fx_fire]:
 		if fx != null:
 			(fx as Sprite2D).visible = false
-	_lever_sprite = _build_full_canvas_sheet("machine new view/neon_machine_lever.png", LEVER_FRAME_COUNT)
 	_bursts.build_jackpot_lamp()
 	for i in 3:
 		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
@@ -1727,7 +1793,7 @@ func _build_hud() -> void:
 ## Issue #155: the compact dealer portrait sits beside the authored countdown bar.
 ## The countdown is entirely visual now; no numeric badge is layered over the icon.
 func _build_dealer_icon() -> void:
-	var icon := TextureRect.new()
+	var icon := MachineDealerPortrait.new()
 	icon.name = "DealerIcon"
 	icon.position = DEALER_ICON_POS
 	icon.size = DEALER_ICON_SIZE
@@ -1742,6 +1808,12 @@ func _build_dealer_icon() -> void:
 	# Built in the HUD pass, long after the component block — so it is handed to the
 	# arbiter here rather than passed in at construction.
 	_tv.set_dealer_icon(icon)
+	icon.build_caption(_font)
+
+## Presentation only: a short response remains after the payout releases the CRT.
+func _react_dealer(win_type: String) -> void:
+	if _dealer_icon != null:
+		_dealer_icon.react(win_type)
 
 
 ## Rides as a CHILD of the bar rather than as a fourth sibling overlay: the bar's own
@@ -1816,7 +1888,7 @@ func _refresh_dealer_countdown() -> void:
 		show_overlay_2 = effective <= 2
 		show_overlay_3 = effective <= 1
 	# Warning lights are committed after the reveal/score result. Showing them as
-	# soon as the lever is pulled would leak the next gauge state into the spin.
+	# soon as the SPIN is pressed would leak the next gauge state into the spin.
 	var overlay_ready := not _spinning_anim and not _spin_launch_pending \
 		and not RunStateStore.isSpinning and not _hud_delta_hold
 	var dealer_info_allowed := not _tv_callout_active() \
@@ -1895,7 +1967,7 @@ func _restore_options_overlay_if_requested() -> void:
 		_options_overlay.call_deferred("show_overlay")
 
 ## Collects the notes the dealer left for this scene (issue #132): a chip bought at the
-## counter whose payoff lives on the machine — Extra Spins filling the tube, the Tip
+## counter whose payoff lives on the machine — Extra Spins raising the count, the Tip
 ## shortening the dealer's walk, the Reserve arming. Purely cosmetic: every target is
 ## checked and a missing one skips its effect, so feedback can never block a run.
 func _play_pending_scene_feedback() -> void:
@@ -1910,7 +1982,7 @@ func _play_pending_scene_feedback() -> void:
 			"dealer_bar":
 				_pulse_dealer_bar(label)
 
-## The spins tube/count flashes and the label pops beside it — what Extra Spins and the
+## The shelf counter/count flashes and the label pops beside it — what Extra Spins and the
 ## armed Reserve both pay out in.
 func _pulse_spins_readout(label: String) -> void:
 	var target: CanvasItem = _spins_left_label
@@ -2089,7 +2161,16 @@ func _build_hint_layer() -> void:
 	_hints.build(get_node_or_null("BottomHudLayer") as Control)
 
 func _build_spin_button() -> void:
-	_spin_button = _make_or_bind_hit_button("SpinButton", LEVER_HIT, _do_spin)
+	_spin_button = _make_or_bind_hit_button("SpinButton", SPIN_HIT, _do_spin)
+	_configure_hit_button(_spin_button, SPIN_HIT, _do_spin)
+	_spin_button.flat = false
+	_spin_button.focus_mode = Control.FOCUS_ALL
+	_spin_button.tooltip_text = "SPIN"
+	_spin_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
+		var style := StyleBoxTexture.new()
+		style.texture = load("res://assets/images/machine_polished/preview_spin_%s.png" % state)
+		_spin_button.add_theme_stylebox_override(state, style)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
 
@@ -2164,7 +2245,7 @@ func _sync_visuals() -> void:
 	_reel_blur.hide_spin_strips()
 	if _spin_sheet_sprite != null:
 		_spin_sheet_sprite.visible = false
-	_cancel_coin_insert()
+
 	_update_hud()
 	_refresh_lock_art()
 	_refresh_jackpot_lamp(false)
@@ -2262,6 +2343,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	var score := int(RunStateStore.scoreEarned)
 	var target := int(info.get("target", 0))
 	var overlay := TARGET_REACHED_SCENE.instantiate() as TargetReachedOverlay
+	overlay.set_as_top_level(true)
 	overlay.name = "WealthTargetTransition"
 	overlay.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	overlay.z_index = WEALTH_TARGET_FX_Z_INDEX
@@ -2273,6 +2355,7 @@ func _start_wealth_target_transition(info: Dictionary) -> bool:
 	_wealth.stop_roll()
 	if _wealth.odometer() != null:
 		snapshot = WealthOdometer.make_snapshot(score)
+		snapshot.snapshot_origin = _wealth.odometer().position + CABINET_OFFSET
 	_tv.begin_blackout(TargetReachedOverlay.PHASE_BLACKOUT)
 	overlay.digits_lifted.connect(_on_wealth_target_digits_lifted)
 	# The final target is not paid out of the score and banks nothing, so it shows no
@@ -2350,7 +2433,7 @@ func _do_spin(compulsive := false) -> void:
 	if _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active:
 		return
 	# A pending loss is confirmed by the next manual spin. Powers still have the
-	# current reveal's rescue window, but pulling the lever means the pair/triple
+	# current reveal's rescue window, but pressing SPIN means the pair/triple
 	# was not rescued and the gauge loses one level before the new spin starts.
 	if _sequence_lock_active and not RunStateStore.comboDefeatPending:
 		return
@@ -2385,7 +2468,7 @@ func _do_spin(compulsive := false) -> void:
 	var pill_guaranteed_spin := _pill_guaranteed_spin_pending()
 	# Hold HUD deltas from the commit until the score popup lands: spin() fires
 	# state_changed synchronously, which would otherwise pop the new multiplier /
-	# bars / lamp during the lever pull (issue #54). The SPINS LEFT counter is the
+	# bars / lamp during the SPIN press (issue #54). The SPINS LEFT counter is the
 	# exception — it must drop with the neuron cost right now (issue #80). Free
 	# spins never show in the counter (the FREE SPIN banner carries them), so a
 	# grant made by this spin needs no counter hold.
@@ -2422,21 +2505,13 @@ func _do_spin(compulsive := false) -> void:
 	if _reveal_reel_next_spin >= 0 and _reveal_reel_next_spin < 2:
 		_reel_stop_times[_reveal_reel_next_spin] = 0.2
 	_reveal_reel_next_spin = -1
-	# Launch beat: the coin drops into the machine first, THEN the lever pulls,
-	# THEN the reels start.
-	_start_coin_insert()
+	# Button depression precedes the existing reel/reward sequence.
 	_spin_launch_pending = true
 	_spin_button.disabled = true
 	_refresh_controls()
-	await get_tree().create_timer(
-		COIN_INSERT_FRAME_TIME * float(COIN_INSERT_FRAME_COUNT)).timeout
+	await get_tree().create_timer(SPIN_PRESS_TIME).timeout
 	if not is_inside_tree() or not _spin_launch_pending:
-		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
-		return
-	_start_lever_pull()
-	await get_tree().create_timer(LEVER_REEL_START_DELAY).timeout
-	if not is_inside_tree() or not _spin_launch_pending:
-		_hud_delta_hold = false # aborted launch: don't leave the HUD frozen
+		_hud_delta_hold = false
 		return
 	_spin_launch_pending = false
 	_start_reel_spin_animation(locked_before)
@@ -2445,10 +2520,6 @@ func _do_spin(compulsive := false) -> void:
 	_blur_accum = 0.0
 
 func _process(delta: float) -> void:
-	if _coin_anim_active:
-		_step_coin_insert(delta)
-	if _lever_anim_active:
-		_step_lever(delta)
 	if _reroll_anim_active:
 		_step_reroll(delta)
 	if _rewind_anim_active:
@@ -2508,51 +2579,6 @@ func _start_reel_spin_animation(locked_before: Array) -> void:
 		_reel_blur.set_cover(i, locked)
 		_reel_blur.set_spin_frame(i, _spin_frame)
 		_reel_blur.set_spin_visible(i, not locked)
-
-func _start_coin_insert() -> void:
-	if _coin_insert_sprite == null:
-		return
-	_coin_anim_active = true
-	_coin_anim_elapsed = 0.0
-	_coin_insert_sprite.visible = true
-	_set_sheet_frame(_coin_insert_sprite, 0)
-
-func _step_coin_insert(delta: float) -> void:
-	_coin_anim_elapsed += delta
-	var frame := int(_coin_anim_elapsed / COIN_INSERT_FRAME_TIME)
-	if frame >= COIN_INSERT_FRAME_COUNT:
-		_cancel_coin_insert()
-		return
-	_set_sheet_frame(_coin_insert_sprite, frame)
-
-func _cancel_coin_insert() -> void:
-	_coin_anim_active = false
-	if _coin_insert_sprite != null:
-		_coin_insert_sprite.visible = false
-
-func _start_lever_pull() -> void:
-	_play_sfx(&"lever")
-	_lever_anim_active = true
-	_lever_anim_elapsed = 0.0
-	_set_sheet_frame(_lever_sprite, 0)
-
-func _step_lever(delta: float) -> void:
-	_lever_anim_elapsed += delta
-	var pull_duration := LEVER_FRAME_TIME * float(LEVER_FRAME_COUNT - 1)
-	var return_start := pull_duration + LEVER_HOLD_TIME
-	var done_at := return_start + LEVER_RETURN_TIME
-	var frame := 0
-	if _lever_anim_elapsed <= pull_duration:
-		frame = clampi(int(round(_lever_anim_elapsed / LEVER_FRAME_TIME)), 0, LEVER_FRAME_COUNT - 1)
-	elif _lever_anim_elapsed <= return_start:
-		frame = LEVER_FRAME_COUNT - 1
-	elif _lever_anim_elapsed <= done_at:
-		var t := (_lever_anim_elapsed - return_start) / LEVER_RETURN_TIME
-		frame = clampi(int(round(lerpf(float(LEVER_FRAME_COUNT - 1), 0.0, t))), 0, LEVER_FRAME_COUNT - 1)
-	else:
-		_lever_anim_active = false
-		frame = 0
-	_set_sheet_frame(_lever_sprite, frame)
 
 func _on_reveal_complete() -> void:
 	_stop_sfx(&"reel_spin")
@@ -2618,7 +2644,7 @@ func _finish_post_spin_sequence() -> void:
 		# A wealth-target payout owns the screen AND the sequence lock until its CONTINUE
 		# resumes the run — _start_wealth_target_transition took that lock a moment ago and
 		# releasing it here would undo it. That mattered most on a losing spin whose passive
-		# gain beat the target: one lever press confirms the combo loss, procs the target,
+		# gain beat the target: one SPIN press confirms the combo loss, procs the target,
 		# and then — with the lock dropped — started a fresh spin straight under the
 		# overlay, so the payout screen never got to be read (issue #176).
 		if not _wealth_target_transition_active:
@@ -2658,7 +2684,7 @@ func _discard_moot_combo_defeat() -> bool:
 		return false
 	# Out of spins: the confirming spin can never come, so the rescue window is
 	# dead — resolve the loss now and let the ending check proc the flatline
-	# without the player having to touch the lever.
+	# without the player having to press SPIN.
 	var out_of_spins: bool = int(RunStateStore.neurons) < 1 \
 		and int(RunStateStore.freeSpinsRemaining) <= 0
 	if RunStateStore.compulsiveSpinSkips <= 0 and not out_of_spins:
@@ -2801,14 +2827,15 @@ func _play_compulsive_shake() -> void:
 		_cocktail_shake_tween.kill()
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position.x = 0.0
+	_set_machine_motion_x(0.0)
 	_cocktail_shake_tween = create_tween()
 	var swings := 14
 	var step := compulsive_shake_time / float(swings + 1)
 	for s in swings:
 		var dir := 1.0 if s % 2 == 0 else -1.0
-		_cocktail_shake_tween.tween_property(self, "position:x", compulsive_shake_strength * dir, step)
-	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x",
+			compulsive_shake_strength * dir, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x", 0.0, step)
 
 func _update_hud() -> void:
 	if _wealth_ending_is_visible():
@@ -2888,7 +2915,7 @@ func _release_hud_delta_hold() -> void:
 	_refresh_jackpot_lamp()
 
 # The authored spin_number Label stays as an anchor/editor placeholder and
-# renders no text; the live number is the SPINS LEFT readout under the tube.
+# renders no text; the live number is the SPINS LEFT readout on the shelf.
 func _refresh_spin_label() -> void:
 	if _spin_label != null:
 		_spin_label.text = ""
@@ -2950,23 +2977,15 @@ func _refresh_lock_art() -> void:
 
 func _refresh_tv_indicators() -> void:
 	# The FREE SPIN banner lights the TV while the next spin is free (banked free
-	# spins or an Energy Drink rush); the spins tube lives off-TV and stays put.
+	# spins or an Energy Drink rush); the shelf counter lives off-TV and stays put.
 	# It resolves FIRST because it is itself a TV owner (_tv_content_muted): every
 	# readout below reads the mute it just set, so the banner never shares the screen
 	# with the objective, the dealer countdown or the item icons for a frame.
 	_refresh_free_spin_banner()
 	_refresh_target_readout()
-	# The SPINS LEFT counter reflects the neuron cost the moment the lever is pulled,
+	# The SPINS LEFT counter reflects the neuron cost the moment the SPIN is pressed,
 	# so it always updates — it is NOT held with the reward deltas (issue #80).
 	var spins_left := _display_spins_left()
-	if _health_bar_sprite != null:
-		# A HUD refresh re-derives the tube from state (an ending that wants it
-		# hidden skips this refresh entirely, see _update_hud).
-		_health_bar_sprite.visible = true
-		_set_sheet_frame(_health_bar_sprite,
-			clampi(spins_left, 0, HEALTH_BAR_FRAME_COUNT - 1))
-	# The numeric readout under the tube follows the same budget (spends, gains,
-	# protections all land here via _update_hud), capped at MAX_NEURONS spins.
 	if _spins_left_label != null:
 		_spins_left_label.visible = true
 		_spins_left_label.text = str(spins_left)
@@ -2974,7 +2993,7 @@ func _refresh_tv_indicators() -> void:
 			"font_color",
 			SPINS_LEFT_MAX_COLOR if spins_left >= MAX_RUN_SPINS else SPINS_LEFT_NORMAL_COLOR)
 	# Issue #155: the dealer bar advances with the inverse multiplier step (not the
-	# reward hold), so its progress changes the moment the lever is pulled.
+	# reward hold), so its progress changes the moment the SPIN is pressed.
 	_refresh_dealer_countdown()
 	# Active-boost duration icons update with the spin cost, not the reward hold, so the
 	# count ticks down the moment the boost is spent on a spin (issue #76).
@@ -3048,11 +3067,11 @@ func _refresh_jackpot_lamp(use_result := true) -> void:
 func _nudge(strength: float) -> void:
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position = Vector2.ZERO
+	_set_machine_motion_offset(Vector2.ZERO)
 	_nudge_tween = create_tween()
-	_nudge_tween.tween_property(self, "position:x", strength, 0.04)
-	_nudge_tween.tween_property(self, "position:x", -strength * 0.6, 0.04)
-	_nudge_tween.tween_property(self, "position:x", 0.0, 0.05)
+	_append_machine_motion_segment(_nudge_tween, "x", strength, 0.04)
+	_append_machine_motion_segment(_nudge_tween, "x", -strength * 0.6, 0.04)
+	_append_machine_motion_segment(_nudge_tween, "x", 0.0, 0.05)
 
 # ── score bursts (visual only — score-burst presentation) ──────────────
 
@@ -3120,6 +3139,8 @@ func _emit_score_burst(source_reel) -> float:
 	_bursts.remember(spin_count, score)
 
 	var win_type := String(lr["winType"])
+	if is_new_spin or gain > 0:
+		_react_dealer(win_type)
 	var reels: Array = lr["reels"]
 	var combo_applied := bool(lr.get("winBoostApplied", false)) \
 		and win_type in SpinResult.PAYING_WIN_TYPES
@@ -3260,10 +3281,9 @@ func _try_start_power_coin_flow() -> void:
 		return
 	_advance_power_bar()
 
-## Pure: plan the coins for power points gained since the gauge last caught up. Each coin banks
-## Pending restore entries are prefixed so their reset happens before this point fill.
-## one step; a full gauge is only completed when a restore is available (else it caps at 4/5 and
-## the rest of the gain is discarded — never fake-fills or loops). Returns { steps:
+## Pure: plan lamp steps for power points gained since the display last caught up.
+## Pending restores consume their cycle before the remaining points fill the lamps.
+## A full bank waits for an eligible restore and discards excess gains. Returns { steps:
 ## [{frame, restore}], score: <final banked score>, seen: <power points now> }.
 func _compute_power_plan() -> Dictionary:
 	var power_points := _power_point_total()
@@ -3277,15 +3297,26 @@ func _compute_power_plan() -> Dictionary:
 	# the point fill from the reset gauge. They must not also count as bar-driven restores.
 	var pending_restores := RunStateStore.pendingPowerRestores.size()
 	for _restore_index in pending_restores:
+		for lamp in range(_bar_frame_for_score(score) + 1, POWER_BAR_FRAMES - 1):
+			out.append({ "frame": lamp, "restore": false })
 		out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
-	if pending_restores > 0:
+		# The queued restore already consumed this cycle's points in the store.
+		gain = maxi(0, score + gain - per)
 		score = 0
 	# Only powers still in abilitiesUsed are available for a later bar-completion restore,
 	# and only while a restore charge is banked (issue #181 soft cap). A spent charge
-	# reads exactly like an empty pool of powers: the gauge stops at 4/5 rather than
-	# completing into a restore it is not allowed to hand out.
+	# reads exactly like an empty pool of powers: the lamps hold full without
+	# handing out a restore until a charge returns.
 	var avail := mini(RunStateStore.abilitiesUsed.size(), RunStateStore.restore_budget_left())
 	var g := gain
+	# A completed bank waits for an eligible spent power without requiring more coins.
+	if score >= per:
+		if avail > 0:
+			out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": true })
+			avail -= 1
+			score = 0
+		else:
+			return { "steps": out, "score": per, "seen": power_points }
 	while g > 0:
 		var to_next := step - (score % step)
 		if g < to_next:
@@ -3300,7 +3331,8 @@ func _compute_power_plan() -> Dictionary:
 				avail -= 1
 				score = 0 # restore resets the gauge; no backlog carries over
 			else:
-				score = per - step # cap at 4/5
+				score = per # all lamps remain lit until a restore becomes available
+				out.append({ "frame": POWER_BAR_FRAMES - 1, "restore": false })
 				g = 0 # discard the rest of the gain
 				break
 		else:
@@ -3389,7 +3421,7 @@ func _on_power_coin_pop_finished(pop: Sprite2D, stepd: Dictionary) -> void:
 	_start_power_bank_coin_flight(stepd, 0.0)
 
 func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
-	var coin := _coins.make_power_coin(WEALTH_COIN_ORIGIN)
+	var coin := _coins.make_power_coin(POWER_COIN_ORIGIN)
 	if coin == null:
 		_apply_power_bank_step(stepd)
 		_on_power_coin_landed()
@@ -3398,7 +3430,8 @@ func _start_power_bank_coin_flight(stepd: Dictionary, delay: float) -> void:
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(
-			_coins.drive_power_coin.bind(coin, WEALTH_COIN_ORIGIN, POWER_BAR_CENTER),
+			_coins.drive_power_coin.bind(coin, POWER_COIN_ORIGIN,
+				POWER_LAMP_CENTERS[clampi(int(stepd["frame"]) - 1, 0, 2)]),
 			0.0, 1.0, CoinFlights.POWER_FLIGHT_TIME)
 	tw.tween_callback(_on_power_bank_coin_arrived.bind(coin, stepd))
 
@@ -3579,12 +3612,15 @@ func _refresh_multiplier_fx(effective: int) -> void:
 ## hidden and come back the moment the loss display closes.
 func _apply_multiplier_fx_visibility() -> void:
 	var loss_active := _callouts.loss_showing()
+	var muted := _tv != null and _tv.callout_active()
+	if _multiplier_sprite != null:
+		_multiplier_sprite.visible = not muted and not loss_active
 	if _mult_fx_2 != null:
-		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active
+		_mult_fx_2.visible = _gauge_shown == 2 and not loss_active and not muted
 	if _mult_fx_3 != null:
-		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active
+		_mult_fx_3.visible = _gauge_shown == 3 and not loss_active and not muted
 	if _mult_fx_fire != null:
-		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active
+		_mult_fx_fire.visible = _gauge_shown == 3 and not loss_active and not muted
 
 func _step_multiplier_fx(delta: float) -> void:
 	var loss_3_active := _callouts.loss_3_showing()
@@ -3628,6 +3664,8 @@ func _build_power_buttons() -> void:
 			"width": maxf(hit["width"], 11.0),
 			"height": hit["height"],
 		}, _on_power_pressed.bind(id))
+		b.position = Vector2(hit["left"], hit["top"])
+		b.size = Vector2(hit["width"], hit["height"])
 		_power_buttons[id] = b
 
 # Tap a filled stash slot to use it (drag isn't used here — that's the dealer/overlay
@@ -3677,6 +3715,7 @@ func _refresh_controls() -> void:
 	var can_use := RunStateStore._can_use_ability() and not _spinning_anim and not _spin_launch_pending and not _reroll_anim_active \
 		and not _rewind_anim_active and _dealer_offer_popup == null and sequence_allows_power
 	if _spin_button != null:
+		_spin_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if not _targeting_power_id.is_empty() else Control.MOUSE_FILTER_STOP
 		_spin_button.disabled = _dealer_offer_popup != null or not (RunStateStore._can_act() or can_confirm_combo_loss) \
 			or _spinning_anim or _spin_launch_pending or _reroll_anim_active or _rewind_anim_active \
 			or (_sequence_lock_active and not combo_pending)
@@ -3716,6 +3755,7 @@ func _refresh_controls() -> void:
 		var icon: TextureRect = stash_icons[i]
 		if i < slots.size():
 			icon.texture = _icon_for(slots[i])
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			icon.modulate = Color.WHITE if usable else Color(1.0, 1.0, 1.0, 0.4)
 		else:
 			icon.texture = null # empty slot draws nothing
@@ -3813,7 +3853,7 @@ func _use_rewind_power() -> void:
 	_start_rewind_restore()
 
 ## Rewind's restore beat: all three reels blur backwards while the previous state
-## rolls back in. The whole sequence runs under the sequence lock so the lever is
+## rolls back in. The whole sequence runs under the sequence lock so SPIN is
 ## dead until the restored reveal has landed; _finish_rewind_restore always runs
 ## (the step is driven from _process) and always releases the lock.
 func _start_rewind_restore() -> void:
@@ -3888,7 +3928,7 @@ func _use_heart_power() -> void:
 	_clear_targeting()
 	_refresh_reels_from_state()
 	_update_hud()
-	# Heart is a preparation action: the next lever pull renders and resolves the
+	# Heart is a preparation action: the next SPIN press renders and resolves the
 	# guaranteed heart triple as a free spin.
 	if was_pending and RunStateStore.comboDefeatPending:
 		_show_pending_combo_defeat()
@@ -4672,12 +4712,11 @@ func _on_serum_pick(symbol_id: String) -> void:
 func _close_serum_picker() -> void:
 	_choices.close_serum()
 
-# Centre of the spins tube on the canvas (the authored art spans x 3..18,
-# y 47..105 in its native full-canvas frame): spin-restore fly-ins land here.
-const HEALTH_TUBE_TARGET := Vector2(11.0, 76.0)
+# Fly-ins land over the shelf number; the count changes on the landing beat.
+const SPIN_COUNTER_TARGET := Vector2(34.0, 219.0)
 
 ## Tea (issue #53): the restored free spins fly from the used stash slot to the
-## spins tube, which pulses as the tea lands.
+## shelf counter, which pulses as the tea lands.
 func _play_tea_flight(slot_index: int) -> void:
 	if not consumable_fx_enabled:
 		return
@@ -4689,27 +4728,27 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.size = Vector2(12.0, 12.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 130
 	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)
 	icon.position = Assets.stash_slot_pos(slot_index, max_consumable_slots)
 	add_child(icon)
 	var tw := create_tween()
-	tw.tween_property(icon, "position", HEALTH_TUBE_TARGET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(icon, "position", SPIN_COUNTER_TARGET - CABINET_OFFSET, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(icon.queue_free)
 	# The counter pulse + tick now belongs to the "+N" fly-in (issue #66), which
 	# travels alongside this icon and lands on the same beat.
 
-## Issue #66: a "+N" popup pops in at `origin` and flies into the spins tube.
-## The tube's fill is held back (_pending_spin_gain) while the popup is in
+## Issue #66: a "+N" popup pops in at `origin` and flies into the shelf counter.
+## The counter's value is held back (_pending_spin_gain) while the popup is in
 ## flight, then ticks up with a flash exactly when it lands — reward visible,
 ## value in sync, ~0.7s total so gameplay is not delayed.
 func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
 		already_held := false) -> void:
 	if amount <= 0:
 		return
-	if not consumable_fx_enabled or _health_bar_sprite == null or not is_inside_tree():
+	if not consumable_fx_enabled or _spins_left_label == null or not is_inside_tree():
 		if already_held:
 			_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 		_update_hud()
@@ -4735,7 +4774,7 @@ func _play_spin_gain_fx(amount: int, origin: Vector2, flight_time := 0.55,
 	gain.scale = Vector2(0.4, 0.4)
 	var tw := create_tween()
 	tw.tween_property(gain, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(gain, "position", HEALTH_TUBE_TARGET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(gain, "position", SPIN_COUNTER_TARGET - CABINET_OFFSET, flight_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(_land_spin_gain.bind(amount, gain))
 
 func _land_spin_gain(amount: int, gain: Label) -> void:
@@ -4743,11 +4782,11 @@ func _land_spin_gain(amount: int, gain: Label) -> void:
 		gain.queue_free()
 	_pending_spin_gain = maxi(0, _pending_spin_gain - amount)
 	_update_hud()
-	if _health_bar_sprite != null and is_instance_valid(_health_bar_sprite):
+	if _spins_left_label != null and is_instance_valid(_spins_left_label):
 		var pulse := create_tween()
-		pulse.tween_property(_health_bar_sprite, "modulate",
+		pulse.tween_property(_spins_left_label, "modulate",
 			Color(1.6, 1.6, 1.6), 0.1)
-		pulse.tween_property(_health_bar_sprite, "modulate", Color.WHITE, 0.14)
+		pulse.tween_property(_spins_left_label, "modulate", Color.WHITE, 0.14)
 
 # White Powder: consume the charge, then pick a source reel and a target reel to
 # copy onto. Needs a spin result to copy from.
@@ -4817,6 +4856,7 @@ func _refresh_consumable_fx() -> void:
 		return
 	_refresh_tobacco_fx()
 	_refresh_energy_fx()
+	_consumable_fx.set_learning_attachment(Economy.compute_book_weight(RunStateStore.ownedUpgrades) > 0)
 
 ## Tobacco hides the LAST reels from scoring (reels.slice keeps the first ones),
 ## so smoke exactly those. Hallucination changes scoring/reward scale but leaves
@@ -4826,6 +4866,7 @@ func _refresh_tobacco_fx() -> void:
 		or _boosts.lingering("pairBoostSpins")
 	var smoking := consumable_fx_enabled and tobacco_fx_enabled and tobacco_active
 	_consumable_fx.set_tobacco(_blind_reel_count(), smoking)
+	_consumable_fx.set_tunnel_shutter(Economy.has_tunnel_vision(RunStateStore.ownedUpgrades))
 
 ## Reels currently out of the scoring, read from live state rather than the last result so a
 ## run that owns Tunnel Vision is blind from its first frame, before any spin has landed.
@@ -4842,10 +4883,10 @@ func _refresh_energy_fx() -> void:
 	var active := consumable_fx_enabled and energy_fx_enabled and RunStateStore.decaySkips > 0
 	if not _consumable_fx.set_energy(active, energy_pulse_time):
 		return
-	# The drink used to fade the spins tube out for its duration. It stays up now — the
-	# rush is told by the edges alone, and hiding the tube took away the one readout the
+	# The drink used to fade the shelf counter out for its duration. It stays up now — the
+	# rush is told by the edges alone, and hiding the count took away the one readout the
 	# player still needs while it runs. Any fade left mid-flight is returned here. The
-	# tube is the machine's, which is why this half did not move with the edges.
+	# counter is the machine's, which is why this half did not move with the edges.
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for node in _spins_bar_nodes():
@@ -4853,7 +4894,7 @@ func _refresh_energy_fx() -> void:
 
 func _spins_bar_nodes() -> Array:
 	var nodes: Array = []
-	for n in [_health_bar_sprite]:
+	for n in [_spins_left_label]:
 		if n != null and is_instance_valid(n):
 			nodes.append(n)
 	return nodes
@@ -4881,15 +4922,16 @@ func _play_cocktail_shake() -> void:
 		_cocktail_shake_tween.kill()
 	if _nudge_tween != null and _nudge_tween.is_valid():
 		_nudge_tween.kill()
-	position.x = 0.0
+	_set_machine_motion_x(0.0)
 	_cocktail_shake_tween = create_tween()
 	var swings := 6
 	var step := cocktail_shake_time / float(swings + 1)
 	for s in swings:
 		var dir := 1.0 if s % 2 == 0 else -1.0
 		var decay := 1.0 - float(s) / float(swings)
-		_cocktail_shake_tween.tween_property(self, "position:x", cocktail_shake_strength * dir * decay, step)
-	_cocktail_shake_tween.tween_property(self, "position:x", 0.0, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x",
+			cocktail_shake_strength * dir * decay, step)
+		_append_machine_motion_segment(_cocktail_shake_tween, "x", 0.0, step)
 
 func _play_potion_spin_fx() -> void:
 	if not (consumable_fx_enabled and potion_fx_enabled):
@@ -4903,11 +4945,10 @@ func _play_potion_spin_fx() -> void:
 func _play_potion_jump() -> void:
 	if _potion_jump_tween != null and _potion_jump_tween.is_valid():
 		_potion_jump_tween.kill()
-	position.y = 0.0
+	_set_machine_motion_y(0.0)
 	_potion_jump_tween = create_tween()
-	_potion_jump_tween.tween_property(self, "position:y", -potion_jump_height, 0.09)
-	_potion_jump_tween.tween_property(self, "position:y", 0.0, 0.14) \
-		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	_append_machine_motion_segment(_potion_jump_tween, "y", -potion_jump_height, 0.09)
+	_append_machine_motion_segment(_potion_jump_tween, "y", 0.0, 0.14)
 
 func _play_tea_sakura_fx() -> void:
 	_consumable_fx.tea_petals(tea_petal_count, tea_petal_time, tea_petal_color)
@@ -5187,7 +5228,7 @@ func _play_close_call_heartbeat() -> void:
 	_clear_close_call_heartbeat()
 	var center := Vector2(SRC_W * 0.5, SRC_H * 0.5)
 	var zoom := maxf(1.0, close_call_zoom_scale)
-	var zoom_pos := -center * (zoom - 1.0)
+	var zoom_pos := CABINET_OFFSET - center * (zoom - 1.0)
 	var half_time := close_call_zoom_time * 0.5
 	_close_call_heartbeat_tween = create_tween()
 	_close_call_heartbeat_tween.set_parallel(true)
@@ -5198,16 +5239,16 @@ func _play_close_call_heartbeat() -> void:
 	_close_call_heartbeat_tween.chain()
 	_close_call_heartbeat_tween.tween_property(self, "scale", Vector2.ONE, half_time) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	_close_call_heartbeat_tween.tween_property(self, "position", Vector2.ZERO, half_time) \
+	_close_call_heartbeat_tween.tween_property(self, "position", CABINET_OFFSET, half_time) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	_close_call_heartbeat_tween.chain().tween_callback(_clear_close_call_heartbeat)
 
 func _clear_close_call_heartbeat() -> void:
 	if _close_call_heartbeat_tween != null and _close_call_heartbeat_tween.is_valid():
 		_close_call_heartbeat_tween.kill()
-	_close_call_heartbeat_tween = null
+		_close_call_heartbeat_tween = null
 	scale = Vector2.ONE
-	position = Vector2.ZERO
+	_set_machine_motion_offset(Vector2.ZERO)
 
 func _spawn_reaction_flash(color: Color, text: String) -> void:
 	_reactions.play(color, text, reaction_flash_time)
@@ -5240,7 +5281,7 @@ func _wealth_target_due_now() -> bool:
 
 ## Claims a due target and puts its payout screen up. Called from every path that can
 ## move the score — the spin tail, a consumable, a power rescore — so the player never
-## has to pull the lever again just to be told the target was already beaten.
+## has to press SPIN again just to be told the target was already beaten.
 ## Returns true when the transition took the screen.
 ## A beaten target outranks a pending combo defeat. The rescue window exists to let the
 ## player buy their way out before the confirming spin, and beating the target IS the way
@@ -5335,6 +5376,7 @@ func _show_ending(ending: String, run: Dictionary) -> void:
 	# is what tells the unlock popup to wait rather than beat the ending screen onto
 	# the scene. The queue is drained once the player leaves it (issue #52).
 	_overlay = Control.new()
+	_overlay.set_as_top_level(true)
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
@@ -5479,7 +5521,7 @@ func _clear_wealth_presentation_fx() -> void:
 	if _reserve_glow_sprite != null and is_instance_valid(_reserve_glow_sprite):
 		_reserve_glow_sprite.visible = false
 	_clear_close_call_heartbeat()
-	position = Vector2.ZERO
+	_set_machine_motion_offset(Vector2.ZERO)
 
 	_wealth.stop_roll()
 	# A teardown mid-payout must not strand a black TV, a muted dealer bar, or blanked
@@ -5522,6 +5564,7 @@ func _show_campaign_failed() -> void:
 	if _overlay != null:
 		_overlay.queue_free()
 	_overlay = Control.new()
+	_overlay.set_as_top_level(true)
 	_overlay.position = Vector2.ZERO
 	_overlay.size = Vector2(SRC_W, SRC_H)
 	_overlay.z_index = ENDING_OVERLAY_Z_INDEX
@@ -5592,15 +5635,13 @@ func _set_tv_progress_bars_visible(visible: bool) -> void:
 	if not visible and _tv_content_muted():
 		_tv.forget_restore_state()
 	for node_name: String in [
-		"WealthOdometer", "HealthBar", "DealerBar", "DealerBarOverlay1",
+		"WealthOdometer", "SpinsLeftNumber", "SpinsLegend", "ReserveGlow", "DealerBar", "DealerBarOverlay1",
 		"DealerBarOverlay2", "DealerBarOverlay3", "DealerIcon"]:
 		var node := get_node_or_null(NodePath(node_name)) as CanvasItem
 		if node != null:
 			node.visible = visible
 	# The FREE SPINS banner re-derives from state on the next HUD refresh; a
-	# mid-flight coin drop never outlives the bars it belongs to.
 	if not visible:
-		_cancel_coin_insert()
 		_set_free_spin_display(false)
 	elif _tv.callout_active():
 		_tv.hide_layers()
@@ -5746,6 +5787,7 @@ func _show_dealer_offers() -> void:
 	_dealer_overlay = null
 	_dealer_offer_popup = null
 	_dealer_offer_popup = IN_RUN_DEALER_OFFER_SCENE.instantiate()
+	_dealer_offer_popup.set_as_top_level(true)
 	_dealer_overlay = _dealer_offer_popup
 	# The dealer draws above the loss overlays (97) but under the HUD (120); the
 	# machine stash rides above him while his offer is up so it stays draggable.

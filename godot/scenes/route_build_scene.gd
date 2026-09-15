@@ -8,10 +8,10 @@ extends Control
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
 const CARD_POSITIONS: Array[Vector2] = [
-	Vector2(10.0, 174.0), Vector2(61.0, 174.0), Vector2(112.0, 174.0),
+	Vector2(7.0, 148.0), Vector2(61.0, 148.0), Vector2(114.0, 148.0),
 ]
-const AUGMENT_DROP_RECT := Rect2(28.0, 256.0, 25.0, 36.0)
-const POWER_DROP_RECT := Rect2(107.0, 256.0, 25.0, 36.0)
+const AUGMENT_DROP_RECT := Rect2(25.0, 219.0, 25.0, 35.0)
+const POWER_DROP_RECT := Rect2(110.0, 219.0, 25.0, 35.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const SELECTION_PREVIEW_TIME := 0.24
 const SYMBOL_PICKER_RECT := Rect2(4.0, 100.0, 152.0, 102.0)
@@ -25,7 +25,7 @@ const DRAG_SLOP := 4.0
 const INSTRUCTION_RECT := Rect2(5.0, 247.0, 150.0, 9.0)
 const MESSAGE_RECT := Rect2(5.0, 247.0, 150.0, 9.0)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const CARD_COST_FONT_SIZE := 7
 const CARD_COST_COIN_SIZE := Vector2(8.0, 8.0)
@@ -94,7 +94,7 @@ func _center_native_canvas() -> void:
 	var viewport_size := get_viewport_rect().size
 	var extra_size := viewport_size - CANVAS_SIZE
 	position = Vector2(maxf(0.0, extra_size.x * 0.5),
-		maxf(0.0, extra_size.y * 0.5))
+		maxf(0.0, extra_size.y * 0.5)) - get_viewport().canvas_transform.origin
 
 func _configure_pacte_artwork() -> void:
 	if _pacte_artwork == null:

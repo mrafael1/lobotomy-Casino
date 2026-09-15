@@ -119,7 +119,7 @@ ADD 5% PER SUCCESSIVE WIN TO BASE REWARD.,ADD 5% PER SUCCESSIVE WIN TO BASE REWA
 THE DEALER ALWAYS MOVES 3 STEPS.,THE DEALER ALWAYS MOVES 3 STEPS.,LE CROUPIER AVANCE TOUJOURS DE 3.
 HIDE THE THIRD REEL. REWARDS +50%.,HIDE THE THIRD REEL. REWARDS +50%.,CACHE LE 3E ROULEAU. GAINS +50%.
 A SOLO SYMBOL COUNTS AS A PAIR. PAIRS PAY X0.6.,A SOLO SYMBOL COUNTS AS A PAIR. PAIRS PAY X0.6.,UN SYMBOLE SEUL VAUT UNE PAIRE. PAIRES X0.6.
-POWER RESTORE THRESHOLD: 30 LUCIDITY.,POWER RESTORE THRESHOLD: 30 LUCIDITY.,SEUIL DE RECHARGE : 30 LUCIDITÉ.
+POWER RESTORE THRESHOLD: 18 LUCIDITY.,POWER RESTORE THRESHOLD: 18 LUCIDITY.,SEUIL DE RECHARGE : 18 LUCIDITÉ.
 GAIN 10 LUCIDITY EVERY SPIN.,GAIN 10 LUCIDITY EVERY SPIN.,+10 LUCIDITÉ À CHAQUE TOUR.
 REROLL ONE REVEALED REEL.,REROLL ONE REVEALED REEL.,RELANCE UN ROULEAU RÉVÉLÉ.
 STEP ONE REVEALED REEL ALONG THE SYMBOL CYCLE.,STEP ONE REVEALED REEL ALONG THE SYMBOL CYCLE.,DÉCALE UN ROULEAU RÉVÉLÉ DANS LE CYCLE.
@@ -246,7 +246,7 @@ EN COÛTE UN. À ZÉRO, LA PARTIE FINIT."
 BEAT IT AND YOU BANK THE RUN.","THIS IS THE TARGET.
 BEAT IT AND YOU BANK THE RUN.","VOICI L'OBJECTIF.
 BATS-LE ET TU EMPOCHES LA PARTIE."
-PULL THE LEVER.,PULL THE LEVER.,TIRE LE LEVIER.
+PRESS SPIN.,PRESS SPIN.,APPUIE SUR SPIN.
 "TWO OF A KIND PAYS.
 IT LANDS ON YOUR WEALTH.","TWO OF A KIND PAYS.
 IT LANDS ON YOUR WEALTH.","DEUX SYMBOLES IDENTIQUES PAIENT.
@@ -342,7 +342,7 @@ game_over,game_over,fin de partie
 - You have 15 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the ""Reroll"" power.
-- 1 random power restores every 50 coins obtained.","[color=#d9f0ff][b]The Objective[/b][/color]
+- 1 random power restores every 30 coins obtained.","[color=#d9f0ff][b]The Objective[/b][/color]
 - Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
 
 [color=#f2d37c][b]Dealer Scene[/b][/color]
@@ -359,7 +359,7 @@ game_over,game_over,fin de partie
 - You have 15 spins with x1, x2, or x3 bets.
 - The Dealer can pop up mid-run with run-only items.
 - You always start with the ""Reroll"" power.
-- 1 random power restores every 50 coins obtained.","[color=#d9f0ff][b]L'Objectif[/b][/color]
+- 1 random power restores every 30 coins obtained.","[color=#d9f0ff][b]L'Objectif[/b][/color]
 - 3 points de santé de campagne -> atteins 5 000 de Fortune avant zéro.
 
 [color=#f2d37c][b]Scène du Croupier[/b][/color]
@@ -376,7 +376,7 @@ game_over,game_over,fin de partie
 - Tu as 15 tours avec des mises x1, x2 ou x3.
 - Le Croupier peut surgir en pleine partie avec des objets exclusifs.
 - Tu commences toujours avec le pouvoir ""Relance"".
-- 1 pouvoir au hasard se recharge tous les 50 jetons obtenus."
+- 1 pouvoir au hasard se recharge tous les 30 jetons obtenus."
 JACKPOT +%d SPIN,JACKPOT +%d SPIN,JACKPOT +%d TOUR
 REVEALS A REEL,REVEALS A REEL,RÉVÈLE UN ROULEAU
 ALL POWERS BACK,ALL POWERS BACK,TOUS LES POUVOIRS RENDUS

@@ -99,7 +99,9 @@ func _check_sacrifice_ritual_scene(run_store: Node, meta_store: Node,
 		if leave.text != "LEAVE":
 			failures.append("sacrifice: initial leave action has the wrong label")
 
-	scene.call("_on_option_pressed", SacrificeRules.OPTION_COINS)
+	# Exercise the real signal path: RitualToken emits while its input callback is
+	# still active, which previously made _refresh() free that locked token.
+	offerings.get_child(0).emit_signal("chosen", SacrificeRules.OPTION_COINS)
 	await process_frame
 	if String(scene.get("_selected_option_id")) != SacrificeRules.OPTION_COINS \
 			or confirm == null or confirm.disabled \
@@ -235,6 +237,14 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	var route := (load("res://scenes/dealer_choice_scene.tscn") as PackedScene).instantiate()
 	get_root().add_child(route)
 	await process_frame
+	var route_master := route.get_node_or_null("DealerSprite") as Sprite2D
+	if route_master == null or route_master.texture == null \
+			or not route_master.texture.resource_path.ends_with(
+				"dealer_choice_polished/choice_scene_painted.png") \
+			or route_master.position != Vector2.ZERO \
+			or route_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or not (route_master.scale * route_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
+		failures.append("route: painted choice master is not the active crisp base layer")
 	var route_cards: Array = run_store.current_route_offer()
 	if route.get_node_or_null("ContinueButton") != null:
 		failures.append("route: dealer offer still exposes the removed continue action")
@@ -261,11 +271,13 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if cards_layer == null or cards_layer.get_child_count() != RouteCards.OFFER_COUNT:
 		failures.append("route: dealer selection scene does not render exactly two doors")
 	var left_door_sprite := route.get_node_or_null("DoorChoices/DoorLeft/DoorSprite") as Sprite2D
-	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0):
-		failures.append("route: left door art is not offset by one pixel")
+	if left_door_sprite == null or left_door_sprite.position != Vector2(1.0, 1.0) \
+			or left_door_sprite.visible:
+		failures.append("route: left legacy door plate is still drawing over the master")
 	var right_door_sprite := route.get_node_or_null("DoorChoices/DoorRight/DoorSprite") as Sprite2D
-	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0):
-		failures.append("route: right door art is not offset by one pixel")
+	if right_door_sprite == null or right_door_sprite.position != Vector2(1.0, 1.0) \
+			or right_door_sprite.visible:
+		failures.append("route: right legacy door plate is still drawing over the master")
 	var authored_hover_index := -1
 	for index in mini(route_cards.size(), RouteCards.OFFER_COUNT):
 		var route_type := String(route_cards[index].get("routeType", ""))
@@ -287,10 +299,16 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		var door_title: Label = null
 		if door_button != null:
 			door_title = door_button.get_node_or_null("DoorTitle") as Label
-		if door_title == null or door_title.position != Vector2(2.0, 107.0) \
-				or door_title.size != Vector2(62.0, 9.0) \
-				or door_title.get_theme_font_size("font_size") < 5:
-			failures.append("route: %s title is not inside its blue name plate" % door)
+		var door_emblem: Control = null
+		if door_button != null:
+			door_emblem = door_button.get_node_or_null("RouteEmblem") as Control
+		if door_emblem == null or door_emblem.position != Vector2(18.0, -1.0) \
+				or door_emblem.size != Vector2(28.0, 32.0):
+			failures.append("route: %s emblem is not seated in its painted door inset" % door)
+		if door_title == null or door_title.position != Vector2(14.0, 34.0) \
+				or door_title.size != Vector2(36.0, 10.0) \
+				or door_title.get_theme_font_size("font_size") < 4:
+			failures.append("route: %s title is not inside its painted name plate" % door)
 		if door_title != null and door_button != null:
 			var title_route_type := String(route_cards[0 if door == "DoorLeft" else 1].get(
 				"routeType", ""))
@@ -553,6 +571,155 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 	if run_store.runPhase != "running":
 		failures.append("route: machine segment was not live after route loop")
 
+## The run Shop keeps its long catalog inside one native scroll region. This check
+## protects the authored panel geometry and prevents future rows from spilling over
+## the footer or silently losing their state styling.
+func _check_route_shop_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_gold := int(run_store.lucidityCoins)
+	var prev_upgrades: Array = (run_store.runShopUpgrades as Array).duplicate()
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_SHOP
+	run_store.lucidityCoins = 999
+	run_store.runShopUpgrades = []
+	var shop := (load("res://scenes/route_shop_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	await process_frame
+	var scroll := shop.get_node_or_null("ShopScroll") as ScrollContainer
+	var list := shop.get_node_or_null("ShopScroll/RunShopItems") as VBoxContainer
+	if scroll == null or scroll.position != Vector2(7.0, 45.0) \
+			or scroll.size != Vector2(146.0, 188.0):
+		failures.append("route shop: catalog is not inside the authored scroll frame")
+	if list == null:
+		failures.append("route shop: catalog list is missing from its scroll frame")
+	else:
+		var expected_count := ShopItems.ids().size()
+		if list.get_child_count() != expected_count:
+			failures.append("route shop: catalog row count changed (%d/%d)" % [
+				list.get_child_count(), expected_count])
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if not is_equal_approx(row.custom_minimum_size.y, 32.0):
+				failures.append("route shop: %s lost its compact row height" % row.name)
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("route shop: %s lost its state-specific plate" % row.name)
+	var return_button := shop.get_node_or_null("ReturnButton") as Button
+	if return_button == null or return_button.get_theme_stylebox("normal") == null:
+		failures.append("route shop: return control is missing its painted button style")
+	shop.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.lucidityCoins = prev_gold
+	run_store.runShopUpgrades = prev_upgrades
+
+## The bonus header has a translucent plate behind it. Keep the live title and
+## balance above that plate so the route never opens with unreadable dark text.
+func _check_route_bonus_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_claimed := bool(run_store.routeBonusClaimed)
+	var prev_reward := String(run_store.routeBonusRewardId)
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_BONUS
+	run_store.routeBonusClaimed = false
+	run_store.routeBonusRewardId = ""
+	var bonus := (load("res://scenes/route_bonus_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(bonus)
+	await process_frame
+	var header := bonus.get_node_or_null("BonusHeader") as Panel
+	var title := bonus.get_node_or_null("BonusTitle") as Label
+	var balance := bonus.get_node_or_null("BonusBalance") as Label
+	if header == null or title == null or balance == null:
+		failures.append("route bonus: header labels or plate are missing")
+	else:
+		if title.z_index <= header.z_index or balance.z_index <= header.z_index:
+			failures.append("route bonus: header plate is covering its live text")
+		if not title.visible or not balance.visible:
+			failures.append("route bonus: header text is hidden at idle")
+	bonus.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.routeBonusClaimed = prev_claimed
+	run_store.routeBonusRewardId = prev_reward
+
+## The persistent Lab uses a compact native UI instead of the dealer's stocked
+## counter art. Keep the catalog opaque, single-axis scrollable and separated from
+## the footer so upgrades remain readable at the 160x320 target resolution.
+func _check_meta_shop_layout(failures: Array) -> void:
+	var shop := (load("res://scenes/shop_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(shop)
+	await process_frame
+	for old_name in ["Background", "Portrait", "Counter", "Readability", "stash"]:
+		var old_art := shop.get_node_or_null(old_name) as CanvasItem
+		if old_art != null and old_art.visible:
+			failures.append("meta shop: obsolete %s art is still visible" % old_name)
+	for panel_name in ["LabBackdrop", "LabHeaderPanel", "LabCatalogPanel"]:
+		if shop.get_node_or_null(panel_name) == null:
+			failures.append("meta shop: %s panel is missing" % panel_name)
+	var scroll := shop.get_node_or_null("Root/Scroll") as ScrollContainer
+	var list := shop.get_node_or_null("Root/Scroll/List") as VBoxContainer
+	if scroll == null or scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		failures.append("meta shop: horizontal catalog scrolling is still enabled")
+	if list == null:
+		failures.append("meta shop: upgrade catalog is missing")
+	else:
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if not is_equal_approx(row.custom_minimum_size.y, 22.0):
+				failures.append("meta shop: %s lost its compact row height" % row.name)
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("meta shop: %s lost its state-specific plate" % row.name)
+	var meter := shop.get_node_or_null("Root/Header/NeuronMeter") as Control
+	if meter != null and meter.scale.x > 0.6:
+		failures.append("meta shop: campaign meter is crowding the header")
+	shop.queue_free()
+
+## The retained Dealer route shell still needs to be legible for older saves that
+## resolve into it. Keep its service list on the same dark/cyan plates as the
+## current route screens and preserve the authored neon return control.
+func _check_route_dealer_layout(run_store: Node, failures: Array) -> void:
+	var prev_phase := String(run_store.runPhase)
+	var prev_destination := String(run_store.routeDestination)
+	var prev_gold := int(run_store.lucidityCoins)
+	run_store.runPhase = "running"
+	run_store.routeDestination = RouteCards.ROUTE_DEALER
+	run_store.lucidityCoins = 999
+	var dealer := (load("res://scenes/route_dealer_scene.tscn") as PackedScene).instantiate()
+	get_root().add_child(dealer)
+	await process_frame
+	for panel_name in ["RouteDealerHeaderPanel", "RouteDealerCatalogPanel"]:
+		if dealer.get_node_or_null(panel_name) == null:
+			failures.append("route dealer: %s panel is missing" % panel_name)
+	var list := dealer.get_node_or_null("ServiceList") as VBoxContainer
+	if list == null:
+		# The list is intentionally named by the controller at runtime; keep this
+		# assertion tolerant of a scene-authored wrapper if that changes later.
+		list = dealer.get_node_or_null("VBoxContainer") as VBoxContainer
+	if list == null:
+		failures.append("route dealer: service list is missing")
+	else:
+		for child in list.get_children():
+			var row := child as Button
+			if row == null:
+				continue
+			if row.get_theme_stylebox("normal") == null \
+					or row.get_theme_stylebox("disabled") == null:
+				failures.append("route dealer: service row lost its state-specific plate")
+	var return_button := dealer.get_node_or_null("ReturnButton") as Button
+	if return_button == null or return_button.get_theme_stylebox("normal") == null:
+		failures.append("route dealer: return control is missing its painted button style")
+	dealer.queue_free()
+	run_store.runPhase = prev_phase
+	run_store.routeDestination = prev_destination
+	run_store.lucidityCoins = prev_gold
+
 func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> void:
 	for label_node in build.find_children("*", "Label", true, false):
 		var label := label_node as Label
@@ -607,8 +774,10 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing Pacte artwork" % kind)
 		return
 	var proposition := artwork.get_node_or_null("PacteProposition") as Sprite2D
-	if proposition == null or not proposition.visible:
-		failures.append("route: %s build scene is missing the table proposition placeholder" % kind)
+	if proposition == null:
+		failures.append("route: %s build scene is missing the table proposition node" % kind)
+	elif proposition.visible:
+		failures.append("route: %s build scene still shows the obsolete proposition overlay" % kind)
 	elif first_card != null and first_card.z_index <= proposition.z_index:
 		failures.append("route: %s proposition placeholder is not beneath the cards" % kind)
 	var augment_deck := artwork.get_node_or_null("AugmentDeck") as Sprite2D
@@ -619,9 +788,9 @@ func _check_route_build_artwork(build: Node, kind: String, failures: Array) -> v
 		failures.append("route: %s build scene is missing Pacte deck/emplacement art" % kind)
 		return
 	var show_augment := kind == "augment"
-	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible) != show_augment:
+	if bool(augment_deck.visible) != show_augment or bool(augment_slot.visible):
 		failures.append("route: %s build scene has the wrong augment art visibility" % kind)
-	if bool(power_deck.visible) == show_augment or bool(power_slot.visible) == show_augment:
+	if bool(power_deck.visible) == show_augment or bool(power_slot.visible):
 		failures.append("route: %s build scene has the wrong power art visibility" % kind)
 	if artwork.process_mode != Node.PROCESS_MODE_DISABLED:
 		failures.append("route: %s build scene left Pacte interaction processing" % kind)
@@ -791,21 +960,13 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("machine: bottom-left Lucidity display is missing its label or coin")
 	elif machine_credits_label.get_theme_font_size("font_size") < 7:
 		failures.append("machine: Lucidity number is too small")
-	# The spins readout left the TV: it is now the native 20-frame tube sheet
-	# (frame = spins remaining), plus a hidden 4-frame coin-drop sheet that only
-	# plays while a spin launches.
+	# The shelf number is the only remaining-spin readout.
 	if machine.get_node_or_null("HealthLabel") != null:
 		failures.append("machine: HealthLabel spins counter should be removed from the TV")
-	if health_bar == null or health_bar.hframes != 20:
-		failures.append("machine: HealthBar spins tube is not a 20-frame sheet")
-	# The tube must be able to draw every spin the economy can hand out: one frame per
-	# count from empty to the cap. A sheet that falls behind a raised cap silently
-	# clamps the top of the tube instead of failing.
-	if health_bar != null and health_bar.hframes != EconomyConst.MAX_NEURONS + 1:
-		failures.append("machine: the tube's %d frames cannot draw a %d-spin cap"
-			% [int(health_bar.hframes), EconomyConst.MAX_NEURONS])
-	if health_coin == null or health_coin.hframes != 4 or health_coin.visible:
-		failures.append("machine: HealthCoin drop sheet is missing or visible at rest")
+	if health_bar != null:
+		failures.append("machine: redundant side spin tube is still active")
+	if health_coin != null:
+		failures.append("machine: retired HealthCoin drop sheet is still active")
 	machine.queue_free()
 
 	var overlay := (load("res://scenes/options_overlay.tscn") as PackedScene).instantiate()
@@ -817,13 +978,17 @@ func _check_global_options_layout(failures: Array) -> void:
 	if dim == null or dim.mouse_filter != Control.MOUSE_FILTER_STOP:
 		failures.append("options: modal dimmer does not capture outside-panel input")
 	var options_panel := overlay.get_node_or_null("Panel") as PanelContainer
-	var options_contour := overlay.get_node_or_null("Contour") as Panel
-	if options_contour == null:
-		failures.append("options: overlay missing neon contour")
-	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxFlat \
+	var options_contour := overlay.get_node_or_null("Contour") as TextureRect
+	if options_contour == null or options_contour.texture == null:
+		failures.append("options: overlay missing painted frame")
+	elif options_contour.size != Vector2(144, 252) \
+			or options_contour.texture.get_width() <= 144 \
+			or options_contour.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("options: detailed frame must preserve the 144x252 layout footprint")
+	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if options_panel != null else null
-	if panel_style == null or panel_style.border_width_left != 1 or panel_style.shadow_size < 1:
-		failures.append("options: panel is missing the neon contour style")
+	if panel_style == null:
+		failures.append("options: panel obscures the painted glass")
 	# Issue #105: replaying the tutorial is an ACTION, so it belongs on this menu rather
 	# than buried in the audio settings screen behind it.
 	for path in ["Panel/Menu/ScoresButton", "Panel/Menu/SettingsButton", "Panel/Menu/CollectionButton", "Panel/Menu/TutorialButton", "Panel/Menu/MenuButton"]:
@@ -837,19 +1002,18 @@ func _check_global_options_layout(failures: Array) -> void:
 			if button_style == null or button_style.texture == null:
 				failures.append("options: %s is not using start-menu button art" % path)
 	var close_button := overlay.get_node_or_null("CloseButton") as Button
-	if close_button == null or close_button.text != "X":
-		failures.append("options: overlay close button is not the pixel X control")
+	if close_button == null or close_button.icon == null:
+		failures.append("options: overlay close button is missing its painted X")
 	elif close_button.mouse_filter != Control.MOUSE_FILTER_STOP:
 		failures.append("options: close button does not stop modal input")
 	elif options_panel != null and close_button.position.y >= options_panel.position.y + 16.0:
 		failures.append("options: close button is not in the panel's top-right corner")
-	# The panel grew to make room for the fifth row; the contour drawn behind it has to
-	# have grown with it, or the menu spills out of its own frame.
+	# All live menu rows must remain inside the painted frame.
 	var options_contour_rect := Rect2(options_contour.position, options_contour.size) \
 		if options_contour != null else Rect2()
 	if options_panel != null and not options_contour_rect.encloses(
 			Rect2(options_panel.position, options_panel.size)):
-		failures.append("options: the neon contour no longer contains the panel")
+		failures.append("options: the painted frame no longer contains the panel")
 	var options_rows := overlay.get_node("Panel/Menu") as Control
 	if options_panel != null \
 			and options_panel.size.y < options_rows.get_combined_minimum_size().y:
@@ -917,10 +1081,10 @@ func _check_scene_nav(failures: Array) -> void:
 	nav.clear()
 	var root_view := get_root()
 	if root_view.content_scale_mode != Window.CONTENT_SCALE_MODE_CANVAS_ITEMS \
-			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP \
-			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_INTEGER \
+			or root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND \
+			or root_view.content_scale_stretch != Window.CONTENT_SCALE_STRETCH_FRACTIONAL \
 			or root_view.content_scale_size != Vector2i(160, 320):
-		failures.append("scene nav: ordinary scenes are not using the centered 160x320 canvas")
+		failures.append("scene nav: display-resolution rendering and fractional overscan are not enabled")
 	nav.call("_configure_content_scale", "res://scenes/pacte_scene.tscn")
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: Pacte did not opt into the expanded artwork viewport")
@@ -931,8 +1095,8 @@ func _check_scene_nav(failures: Array) -> void:
 	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
 		failures.append("scene nav: dealer shop did not opt into the expanded artwork viewport")
 	nav.call("_configure_content_scale", "res://scenes/machine_scene.tscn")
-	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_KEEP:
-		failures.append("scene nav: machine scene kept the expanded artwork viewport")
+	if root_view.content_scale_aspect != Window.CONTENT_SCALE_ASPECT_EXPAND:
+		failures.append("scene nav: machine scene lost its decorative overscan")
 	var transition_overlay := nav.call("transition_overlay") as Control
 	if transition_overlay == null:
 		failures.append("scene nav: global transition overlay is missing")
@@ -1349,16 +1513,19 @@ func _check_base_scene_parity(failures: Array) -> void:
 		if stash == null:
 			failures.append("parity: %s missing authored stash tray" % scene_path)
 		else:
-			if stash.position != Vector2(106.0, 290.0) or stash.size != Vector2(48.0, 26.0):
-				failures.append("parity: %s stash tray does not match authored shared layout: %s %s" % [scene_path, stash.position, stash.size])
+			var machine_shelf: bool = scene_path == "res://scenes/machine_scene.tscn"
+			var expected_stash := Rect2(100, 211, 36, 24) if machine_shelf else Rect2(106, 290, 48, 26)
+			if stash.get_rect() != expected_stash:
+				failures.append("parity: %s stash tray does not match its authored layout: %s %s" % [scene_path, stash.position, stash.size])
 			if stash.z_index < 50:
 				failures.append("parity: %s stash tray can draw behind base art" % scene_path)
 			for i in range(1, 3):
 				var slot := stash.get_node_or_null("StashSlot%d" % i) as Control
+				var expected_slot := Vector2(16, 18) if machine_shelf else Vector2(16, 16)
 				if slot == null:
 					failures.append("parity: %s missing StashSlot%d" % [scene_path, i])
-				elif slot.size != Vector2(16.0, 16.0):
-					failures.append("parity: %s StashSlot%d is not 16x16: %s" % [scene_path, i, slot.size])
+				elif slot.size != expected_slot:
+					failures.append("parity: %s StashSlot%d has wrong touch size: %s, expected %s" % [scene_path, i, slot.size, expected_slot])
 		scene.queue_free()
 
 
@@ -1511,11 +1678,11 @@ func _check_upgrades_scene(failures: Array) -> void:
 		"upgrades: RETURN TO BAR", failures)
 	_check_start_menu_press_feedback(back_button, "upgrades: RETURN TO BAR", failures)
 	var power_style := power_name_box.get_theme_stylebox(&"panel") as StyleBoxFlat
-	if power_style == null or not power_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)):
-		failures.append("upgrades: power name box is missing its cyan neon contour")
+	if power_style == null or not power_style.border_color.is_equal_approx(ButtonKit.PANEL_BRASS.lerp(Color(0.42, 1.0, 0.95), 0.15)):
+		failures.append("upgrades: power name box is missing its brass name contour")
 	var description_style := description.get_theme_stylebox(&"panel") as StyleBoxFlat
-	if description_style == null or not description_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
-		failures.append("upgrades: description bubble is missing its pink neon contour")
+	if description_style == null or not description_style.border_color.is_equal_approx(ButtonKit.PANEL_BRASS.lerp(Color(1.0, 0.5, 0.7), 0.15)):
+		failures.append("upgrades: description bubble is missing its brass description contour")
 	if back_button.z_index <= description.z_index:
 		failures.append("upgrades: back button should render above description bubble")
 	scene._activate_memory()

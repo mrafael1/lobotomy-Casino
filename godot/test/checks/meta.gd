@@ -30,7 +30,7 @@ func _check_first_launch_tutorial(meta_store: Node, failures: Array) -> void:
 	else:
 		if not body.bbcode_enabled:
 			failures.append("tutorial: RichTextLabel BBCode is not enabled")
-		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "15 spins", "50 coins"]:
+		for phrase in ["The Objective", "Dealer Scene", "Upgrades Scene", "Machine Scene", "15 spins", "30 coins"]:
 			if not body.text.contains(phrase):
 				failures.append("tutorial: missing copy phrase '%s'" % phrase)
 				break
@@ -269,7 +269,7 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	else:
 		var art := unlocked_entry.get_node_or_null("CardArt") as TextureRect
 		var atlas := art.texture as AtlasTexture if art != null else null
-		if atlas == null or atlas.region != PacteCards.AUGMENT_FRONT_RECT:
+		if atlas == null or atlas.region != PacteCards.GENERATED_AUGMENT_FRONT_RECT:
 			failures.append("issue52: unlocked augment did not render the card front")
 		if unlocked_entry.get_node_or_null("CardIcon") == null:
 			failures.append("issue52: unlocked augment did not render its icon")
@@ -279,8 +279,8 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 
 	# A locked card keeps its slot but shows only the card back.
 	for locked in [
-		{ "id": locked_augment, "back": PacteCards.AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
-		{ "id": locked_power, "back": PacteCards.POWER_BACK_RECT, "name": "HEART" },
+		{ "id": locked_augment, "back": PacteCards.GENERATED_AUGMENT_BACK_RECT, "name": "HALLUCINATION" },
+		{ "id": locked_power, "back": PacteCards.GENERATED_POWER_BACK_RECT, "name": "HEART" },
 	]:
 		var locked_id := String(locked["id"])
 		var locked_entry := collection.card_entry(locked_id) as Button
@@ -347,10 +347,10 @@ func _check_card_collection_52(meta_store: Node, failures: Array) -> void:
 	if popup._name_label.text != String(PacteCards.card(locked_augment)["name"]).to_upper() \
 			or popup._description_label.text != String(PacteCards.card(locked_augment)["description"]):
 		failures.append("issue52: the popup did not show the card's authored name/description")
-	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.AUGMENT_FRONT_RECT:
+	if popup._front.texture == null or (popup._front.texture as AtlasTexture).region != PacteCards.GENERATED_AUGMENT_FRONT_RECT:
 		failures.append("issue52: the popup did not show the enlarged card front")
-	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("issue52: the popup card front is not nearest-filtered")
+	if popup._front.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("issue52: the painted popup card front is not mipmap-filtered")
 	if popup._heading.text != "CARD UNLOCKED":
 		failures.append("issue52: the popup is missing its CARD UNLOCKED heading")
 	if popup._dim == null or popup.mouse_filter != Control.MOUSE_FILTER_STOP:
@@ -482,7 +482,7 @@ func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failu
 		# The softlock shape: a beat that ends because the player DID something, while the
 		# mask covers the thing they have to do it with. A spin beat must open the lever;
 		# an action beat must open whatever it is waiting on.
-		if advance == "spin" and anchor != "spin_lever":
+		if advance == "spin" and anchor != "spin_button":
 			failures.append("issue105: beat '%s' waits for a spin but does not open the lever" \
 				% String(beat.get("id", i)))
 		if advance != "tap" and anchor == "":
@@ -882,7 +882,7 @@ func _check_tutorial_105(machine: Node, run_store: Node, meta_store: Node, failu
 			if sealed_in:
 				failures.append("issue105: the Pacte pick is masked — nothing can be chosen")
 			var hole: Rect2 = (anchor_hosts["pacte"] as Node).call("tutorial_anchor", "cards")
-			if not hole.has_point(Vector2(40.0, 274.0)):
+			if not hole.has_point(Vector2(40.0, 235.0)):
 				failures.append("issue105: the Pacte hole misses the card slots: %s" % hole)
 			break
 		tutorial._advance()

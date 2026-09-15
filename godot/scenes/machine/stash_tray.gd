@@ -1,7 +1,7 @@
 class_name StashTray
 extends RefCounted
 
-## The consumable stash in the machine's bottom-right corner: one icon per slot,
+## The consumable stash in the machine's right-hand control-shelf wells: one icon per slot,
 ## and where the tray sits in the layer stack.
 ##
 ## Seam 4.7a, and the leaf half of the stash. What a tap DOES — which item is
@@ -55,10 +55,13 @@ func build(slot_count: int) -> void:
 			_apply_icon_fit(icon)
 		elif icon.has_meta("_machine_generated_stash_icon"):
 			_apply_icon_fit(icon)
-		icon.mouse_filter = Control.MOUSE_FILTER_STOP
+		# Authored wells own the touch area; the inset artwork does not shrink it.
+		var hit: Control = slot if slot != null else icon
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE if hit != icon else Control.MOUSE_FILTER_STOP
+		hit.mouse_filter = Control.MOUSE_FILTER_STOP
 		var cb := _on_input.bind(icon, i)
-		if not icon.gui_input.is_connected(cb):
-			icon.gui_input.connect(cb)
+		if not hit.gui_input.is_connected(cb):
+			hit.gui_input.connect(cb)
 		_icons.append(icon)
 
 ## Keeps the icons crisp and the same size as the drag stashes in the other
@@ -67,7 +70,7 @@ func build(slot_count: int) -> void:
 func _apply_icon_fit(icon: TextureRect) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 ## The authored slot for one index, under any of the names the scene has used for
 ## it. The list is history rather than design: the tray has been re-parented and

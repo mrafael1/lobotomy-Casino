@@ -56,7 +56,7 @@ const PACTE_UPGRADES := [
 	{ "id": "pacte_how_to_cheat", "name": "How to Cheat", "category": "augment",
 	  "effect": { "type": "soloAsPair", "pairMultiplier": 0.60 } },
 	{ "id": "pacte_adrenaline", "name": "Adrenaline", "category": "augment",
-	  "effect": { "type": "powerRestoreThreshold", "amount": 30 } },
+	  "effect": { "type": "powerRestoreThreshold", "amount": 18 } },
 	{ "id": "pacte_passive_gain", "name": "Passive Gain", "category": "augment",
 	  "effect": { "type": "passiveLucidityPerSpin", "amount": 10 } },
 ]

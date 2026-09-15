@@ -3,37 +3,7 @@
 [ext_resource type="Script" path="res://scenes/options_overlay.gd" id="1_options"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_contour"]
-bg_color = Color(0.03, 0.01, 0.05, 0.45)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(1, 0.5, 0.7, 0.65)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-shadow_color = Color(1, 0.3, 0.65, 0.35)
-shadow_size = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-content_margin_left = 8.0
-content_margin_top = 8.0
-content_margin_right = 8.0
-content_margin_bottom = 8.0
-bg_color = Color(0.05, 0.04, 0.09, 0.97)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.42, 1, 0.95, 0.9)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
-shadow_color = Color(1, 0.5, 0.7, 0.42)
-shadow_size = 3
+[ext_resource type="Texture2D" path="res://assets/images/options_polished/menu_panel_painted.png" id="3_frame"]
 
 [node name="OptionsOverlay" type="Control"]
 z_index = 1000
@@ -51,23 +21,25 @@ offset_bottom = 320.0
 mouse_filter = 0
 color = Color(0, 0, 0, 0.68)
 
-[node name="Contour" type="Panel" parent="."]
+[node name="Contour" type="TextureRect" parent="."]
+texture_filter = 4
+expand_mode = 1
 layout_mode = 0
-offset_left = 18.0
-offset_top = 50.0
-offset_right = 142.0
-offset_bottom = 255.0
+offset_left = 8.0
+offset_top = 26.0
+offset_right = 152.0
+offset_bottom = 278.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_contour")
+texture = ExtResource("3_frame")
 
 [node name="Panel" type="PanelContainer" parent="."]
 layout_mode = 0
-offset_left = 20.0
-offset_top = 52.0
-offset_right = 140.0
-offset_bottom = 253.0
+offset_left = 30.0
+offset_top = 64.0
+offset_right = 130.0
+offset_bottom = 252.0
 mouse_filter = 0
-theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
 
 [node name="Menu" type="VBoxContainer" parent="Panel"]
 layout_mode = 2
@@ -83,42 +55,42 @@ text = "OPTIONS"
 horizontal_alignment = 1
 
 [node name="ScoresButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "SCORES"
 
 [node name="SettingsButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "SETTINGS"
 
 [node name="CollectionButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "COLLECTION"
 
 [node name="TutorialButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "TUTORIAL"
 
 [node name="LanguageButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "LANGUAGE"
 
 [node name="MenuButton" type="Button" parent="Panel/Menu"]
-custom_minimum_size = Vector2(104, 20)
+custom_minimum_size = Vector2(100, 20)
 layout_mode = 2
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
@@ -126,10 +98,10 @@ text = "RETURN TO MENU"
 
 [node name="CloseButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 124.0
-offset_top = 55.0
-offset_right = 136.0
-offset_bottom = 67.0
+offset_left = 118.0
+offset_top = 60.0
+offset_right = 130.0
+offset_bottom = 72.0
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 7
 text = "X"

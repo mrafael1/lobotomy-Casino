@@ -6,9 +6,9 @@
 [ext_resource type="Texture2D" path="res://assets/images/dealer_shop/counter.png" id="4_h5iqj"]
 [ext_resource type="Texture2D" path="res://assets/images/dealer.png" id="11_shop_dealer"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="5_0se43"]
-[ext_resource type="Texture2D" path="res://assets/images/ui/setting_icon.png" id="7_cijoo"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/premium/settings.png" id="7_cijoo"]
 [ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="8_stsde"]
-[ext_resource type="Texture2D" uid="uid://cln5cqx2bn0x4" path="res://assets/images/ui/coin.png" id="9_i73ov"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/premium/coin.png" id="9_i73ov"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="10_options"]
 
 [node name="DealerScene" type="Control" unique_id=413026863]
@@ -109,9 +109,9 @@ horizontal_alignment = 1
 [node name="OfferSlot1" type="Control" parent="." unique_id=1485579715]
 anchors_preset = 0
 offset_left = 7.0
-offset_top = 192.0
-offset_right = 23.0
-offset_bottom = 208.0
+offset_top = 151.0
+offset_right = 47.0
+offset_bottom = 185.0
 
 [node name="PriceTag" type="HBoxContainer" parent="OfferSlot1" unique_id=699596942]
 layout_mode = 0
@@ -144,10 +144,10 @@ stretch_mode = 5
 
 [node name="OfferSlot2" type="Control" parent="." unique_id=1346694783]
 anchors_preset = 0
-offset_left = 29.2
-offset_top = 192.2
-offset_right = 45.2
-offset_bottom = 208.2
+offset_left = 60.0
+offset_top = 151.0
+offset_right = 100.0
+offset_bottom = 185.0
 
 [node name="PriceTag" type="HBoxContainer" parent="OfferSlot2" unique_id=840594287]
 layout_mode = 0
@@ -180,10 +180,10 @@ stretch_mode = 5
 
 [node name="OfferSlot3" type="Control" parent="." unique_id=71486278]
 anchors_preset = 0
-offset_left = 51.0
-offset_top = 192.0
-offset_right = 67.0
-offset_bottom = 208.0
+offset_left = 113.0
+offset_top = 151.0
+offset_right = 153.0
+offset_bottom = 185.0
 
 [node name="PriceTag" type="HBoxContainer" parent="OfferSlot3" unique_id=817658061]
 layout_mode = 0
@@ -215,6 +215,7 @@ expand_mode = 1
 stretch_mode = 5
 
 [node name="OfferSlot4" type="Control" parent="." unique_id=2010575209]
+visible = false
 anchors_preset = 0
 offset_left = 73.2
 offset_top = 192.2
@@ -251,6 +252,7 @@ expand_mode = 1
 stretch_mode = 5
 
 [node name="OfferSlot5" type="Control" parent="." unique_id=1434386052]
+visible = false
 anchors_preset = 0
 offset_left = 94.2
 offset_top = 192.2

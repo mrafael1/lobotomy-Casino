@@ -9,7 +9,7 @@ func _init() -> void:
 func _run() -> void:
 	TranslationServer.set_locale("fr")
 	var keys := [
-		"PULL THE LEVER.",
+		"PRESS SPIN.",
 		"EVERY RUN OPENS WITH A PACTE.\nTHE HOUSE DEALS, YOU KEEP ONE.",
 		"SETTINGS",
 		"EACH RETURN COSTS YOU",

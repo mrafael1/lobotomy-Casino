@@ -70,14 +70,19 @@ func _ready() -> void:
 func _build() -> void:
 	var header := _panel(Rect2(3.0, 3.0, 154.0, 32.0),
 		Color(INK.r, INK.g, INK.b, 0.93), Color(CYAN.r, CYAN.g, CYAN.b, 0.62))
+	header.name = "BonusHeader"
 	header.z_index = 2
 	add_child(header)
 
 	var title := _label("FORTUNE // BONUS", Rect2(5.0, 6.0, 150.0, 10.0), 7, CYAN)
+	title.name = "BonusTitle"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.z_index = 3
 	add_child(title)
 	_balance = _label("", Rect2(5.0, 22.0, 150.0, 9.0), 5, GOLD)
+	_balance.name = "BonusBalance"
 	_balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_balance.z_index = 3
 	add_child(_balance)
 
 	_result_panel = _panel(RESULT_PANEL_RECT,

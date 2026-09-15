@@ -11,7 +11,7 @@ extends Control
 ## reads better than a dead-ended arrow.
 
 const START_MENU_SCENE := "res://scenes/start_menu_scene.tscn"
-const SETTINGS_ASSET := "ui/setting_icon.png"
+const SETTINGS_ASSET := "ui/premium/settings.png"
 const SMART_SAVE_UPGRADE_ID := "pos_smart_save"
 const REWARD_AMP_IDS: Array[String] = ["corr_reward_amp_1", "corr_reward_amp_2", "corr_reward_amp_3"]
 ## "" marks the locked/future-achievement slot baked into the new terminal art.
@@ -68,7 +68,7 @@ const TERMINAL_GLOW_PRESSED := Color(0.78, 0.78, 0.88)
 const NAV_FLASH_TIME := 0.12
 const LAB_SIZE := Vector2(160.0, 240.0)
 const DEFAULT_ANIMATION := &"default"
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
 const NEON_CYAN := Color(0.42, 1.0, 0.95)
 const NEON_PINK := Color(1.0, 0.5, 0.7)

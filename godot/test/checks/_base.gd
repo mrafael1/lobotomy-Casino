@@ -39,13 +39,13 @@ func create_timer(seconds: float) -> SceneTreeTimer:
 func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
 	if button == null:
 		return
-	const asset_path := "res://assets/images/ui/setting_icon.png"
+	const asset_path := "res://assets/images/ui/premium/settings.png"
 	if not ResourceLoader.exists(asset_path):
 		failures.append("options: %s is missing the new setting icon" % scene_name)
 		return
 	var icon := button.texture_normal
-	if icon == null or icon.get_width() != 69 or icon.get_height() != 66:
-		failures.append("options: %s is not using the 69x66 setting icon" % scene_name)
+	if icon == null or icon.get_width() != 16 or icon.get_height() != 16:
+		failures.append("options: %s is not using the 16x16 painted setting icon" % scene_name)
 	if button.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("options: %s setting icon is not nearest-neighbor filtered" % scene_name)
 
@@ -80,8 +80,8 @@ func _check_start_menu_button_style(button: Button, expected_color: Color, label
 		failures.append("%s: start-menu plate is not configured as a nine-slice" % label)
 	if expect_small:
 		var small_asset := String(button.get_meta(&"_small_neon_button_asset", ""))
-		if not small_asset.begins_with("ui/neon_small_"):
-			failures.append("%s: compact control is not using neon_small button art" % label)
+		if not small_asset.begins_with("ui/premium/"):
+			failures.append("%s: compact control is not using painted button art" % label)
 		# A Button centres its label in the CONTENT box, so the gap between the top and
 		# bottom margins IS the label's offset from the plate's middle. This used to demand
 		# bottom > top — pushing every compact label upward on the theory that the font
@@ -116,24 +116,23 @@ func _check_start_menu_press_feedback(button: Button, label: String, failures: A
 
 func _check_settings_neon(settings: Node, failures: Array) -> void:
 	var panel := settings.get_node_or_null("Panel") as PanelContainer
-	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat \
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if panel != null else null
-	if panel_style == null or not panel_style.border_color.is_equal_approx(Color(0.42, 1.0, 0.95)) \
-			or panel_style.shadow_size < 1:
-		failures.append("settings: panel is missing the neon contour style")
+	if panel_style == null:
+		failures.append("settings: runtime panel covers the painted console")
 	var slider := settings.get_node_or_null("Panel/Rows/VolumeRow/VolumeSlider") as HSlider
 	var slider_style := slider.get_theme_stylebox("slider") as StyleBoxFlat \
 		if slider != null else null
-	if slider_style == null or not slider_style.border_color.is_equal_approx(Color(1.0, 0.5, 0.7)):
-		failures.append("settings: volume slider is missing the neon track")
+	if slider_style == null or not slider_style.border_color.is_equal_approx(settings.NEON_PINK):
+		failures.append("settings: volume slider is missing the brass track")
 	# MUTE is a TOGGLE and must not wear the button art: with a plate it read as a second
 	# button stacked on BACK, one that mysteriously did not navigate. The box and its tick
-	# carry the state instead, so every stylebox on it has to draw nothing.
+	# carry the state instead; only keyboard focus may outline the row.
 	var mute := settings.get_node_or_null("Panel/Rows/MuteCheck") as CheckBox
 	if mute == null:
 		failures.append("settings: MUTE toggle is missing")
 	else:
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		for state in ["normal", "hover", "pressed", "disabled"]:
 			if not (mute.get_theme_stylebox(String(state)) is StyleBoxEmpty):
 				failures.append("settings: MUTE is wearing a %s button plate" % state)
 				break
@@ -145,8 +144,8 @@ func _check_settings_neon(settings: Node, failures: Array) -> void:
 			failures.append("settings: MUTE cannot show checked apart from unchecked")
 		if mute.custom_minimum_size.y < 20.0:
 			failures.append("settings: MUTE lost its tap target with its plate")
-	var back := settings.get_node_or_null("Panel/Rows/BackButton") as Button
-	_check_start_menu_button_style(back, ButtonKit.START_MENU_BUTTON_CYAN, "settings: BACK", failures)
+	var back := settings.get_node_or_null("BackButton") as Button
+	_check_start_menu_button_style(back, ButtonKit.START_MENU_BUTTON_YELLOW, "settings: BACK", failures, true)
 	_check_start_menu_press_feedback(back, "settings: BACK", failures)
 
 ## Issue #84: the machine button is misclick-guarded by a YES/CANCEL confirm modal.
@@ -195,15 +194,33 @@ func _check_start_confirm_and_lab_glow_84(dealer: Node, failures: Array) -> void
 
 func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	_check_dealer_shop_light_art(dealer, failures)
+	if bool(dealer._pre_run):
+		var painted_shop := dealer.get_node_or_null("Background") as Sprite2D
+		if painted_shop == null or painted_shop.texture == null \
+				or not painted_shop.texture.resource_path.ends_with(
+					"dealer_shop_polished/pre_dealer_shop_painted.png") \
+				or painted_shop.position != Vector2.ZERO \
+				or painted_shop.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+				or not (painted_shop.scale * painted_shop.texture.get_size()).is_equal_approx(Vector2(160, 320)):
+			failures.append("issue55: pre-run dealer shop is not using its painted native master")
 	if not dealer.has_method("_native_canvas_origin") \
 			or dealer.call("_native_canvas_origin", Vector2(180.0, 320.0)) != Vector2(10.0, 0.0):
 		failures.append("issue55: dealer native artwork canvas is not horizontally centred")
-	var expected_offer_tops := [192.0, 192.2, 192.0, 192.2, 192.2]
-	for index in expected_offer_tops.size():
+	var expected_offer_rects: Array = dealer.PRE_RUN_OFFER_SLOT_RECTS \
+			if bool(dealer._pre_run) else dealer.RUN_OFFER_SLOT_RECTS
+	for index in expected_offer_rects.size():
 		var slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
-		if slot == null or not is_equal_approx(slot.position.y, expected_offer_tops[index]):
-			failures.append("issue55: OfferSlot%d is not resting on the updated counter line" \
+		var expected_rect: Rect2 = expected_offer_rects[index]
+		if slot == null or slot.position != expected_rect.position \
+				or slot.size != expected_rect.size:
+			failures.append("issue55: OfferSlot%d is not aligned to its authored well" \
 				% (index + 1))
+	if bool(dealer._pre_run):
+		for index in range(expected_offer_rects.size(), 5):
+			var hidden_slot := dealer.get_node_or_null("OfferSlot%d" % (index + 1)) as Control
+			if hidden_slot != null and hidden_slot.visible:
+				failures.append("issue55: pre-run OfferSlot%d is outside the painted master" \
+					% (index + 1))
 	if not is_equal_approx(float(dealer.COUNTER_DOT_CY), 208.0):
 		failures.append("shop: counter contact row drifted from the authored dot line")
 	var checked_offer_frames := 0
@@ -215,12 +232,21 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 		var kind := "augment" if ChipAugments.map().has(offer_id) else "offer"
 		var parent := item_node.get_parent() as Control
 		var parent_y: float = dealer.call("_counter_parent_origin_y", parent)
-		var expected_top: float = dealer.call(
-			"_counter_item_top", offer_id, kind, item_node.size.y)
-		if not is_equal_approx(item_node.position.y + parent_y, expected_top):
-			failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
-		if item_node.size != Vector2(16.0, 16.0):
-			failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
+		if bool(dealer._pre_run) and parent != dealer:
+			var expected_pos := (parent.size - item_node.size) * 0.5
+			if not item_node.position.is_equal_approx(expected_pos):
+				failures.append("shop: %s is not centred in its painted item well" % offer_id)
+			if not item_node.size.is_equal_approx(Vector2(dealer.PRE_RUN_PAINTED_OFFER_ICON,
+					dealer.PRE_RUN_PAINTED_OFFER_ICON)):
+				failures.append("shop: %s lost its painted-well icon size" % offer_id)
+		else:
+			var expected_top: float = dealer.call(
+				"_counter_item_top", offer_id, kind, item_node.size.y)
+			if not is_equal_approx(item_node.position.y + parent_y, expected_top):
+				failures.append("shop: %s hitbox is not aligned to its counter contact point" % offer_id)
+			# Fractional counter placement can round the requested 16px to 15.999999px.
+			if not item_node.size.is_equal_approx(Vector2(16.0, 16.0)):
+				failures.append("shop: %s lost its authored 16px hitbox" % offer_id)
 		checked_offer_frames += 1
 	if checked_offer_frames == 0:
 		failures.append("shop: no counter offer hitboxes were built")
@@ -241,6 +267,8 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 	else:
 		if machine_art.hframes != 2:
 			failures.append("issue55: machine button art is not a 2-frame sheet")
+		if bool(dealer._pre_run) and machine_art.visible:
+			failures.append("issue55: pre-run machine button art should be hidden until its replacement is ready")
 		if machine_art.position != Vector2(-20.0, -30.0):
 			failures.append("issue55: machine art is not centred on the bleed-aware dealer canvas")
 		if machine_art.scale != Vector2.ONE:
@@ -295,13 +323,26 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 		if texture == null or Vector2i(texture.get_width(), texture.get_height()) != expected:
 			failures.append("dealer shop: %s is not a native sheet at %s" % [rel, expected])
 	var background := dealer.get_node_or_null("Background") as Sprite2D
-	if background == null or background.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("dealer shop: background is not nearest-neighbor filtered")
-	elif background.texture == null \
-			or not background.texture.resource_path.ends_with("dealer_shop/bg.png") \
-			or background.position != Vector2(-20.0, -30.0) \
-			or background.scale != Vector2.ONE:
-		failures.append("dealer shop: background is not the centred native sheet")
+	if background == null:
+		failures.append("dealer shop: background node is missing")
+	elif background.texture == null:
+		failures.append("dealer shop: background is missing its texture")
+	else:
+		var expected_background := "dealer_shop/bg.png"
+		var expected_position := Vector2(-20.0, -30.0)
+		var expected_scale := Vector2.ONE
+		var expected_filter := CanvasItem.TEXTURE_FILTER_NEAREST
+		if bool(dealer._pre_run) and background.texture.resource_path.ends_with(
+				"dealer_shop_polished/pre_dealer_shop_painted.png"):
+			expected_background = "dealer_shop_polished/pre_dealer_shop_painted.png"
+			expected_position = Vector2.ZERO
+			expected_scale = Vector2(160, 320) / background.texture.get_size()
+			expected_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		if not background.texture.resource_path.ends_with(expected_background) \
+				or background.position != expected_position \
+				or not background.scale.is_equal_approx(expected_scale) \
+				or background.texture_filter != expected_filter:
+			failures.append("dealer shop: background is not the centred native sheet")
 	var counter := dealer.get_node_or_null("Counter") as Sprite2D
 	if counter == null:
 		failures.append("dealer shop: counter node is missing")
@@ -317,12 +358,19 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 				or art.hframes != 2 or art.texture == null:
 			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
 			continue
-		if Vector2i(art.texture.get_width(), art.texture.get_height()) != Vector2i(400, 380) \
-				or art.position != Vector2(-20.0, -30.0) \
-				or art.scale != Vector2.ONE:
-			failures.append("dealer shop: %s is not centred at native source-pixel scale" % art_name)
+		var uses_full_canvas_export: bool = art_name == "RerollButtonArt" \
+				and art.texture.resource_path.ends_with("dealer_scene_reroll_BUTTON.png")
+		var expected_size := Vector2i(2560, 2560) if uses_full_canvas_export \
+				else Vector2i(400, 380)
+		var expected_position := Vector2.ZERO if uses_full_canvas_export \
+				else Vector2(-20.0, -30.0)
+		var expected_scale := Vector2(0.125, 0.125) if uses_full_canvas_export else Vector2.ONE
+		if Vector2i(art.texture.get_width(), art.texture.get_height()) != expected_size \
+				or art.position != expected_position \
+				or art.scale != expected_scale:
+			failures.append("dealer shop: %s is not centred at its authored source scale" % art_name)
 		var expected_asset := "dealer_shop/machine.png" if art_name == "MachineButtonArt" \
-				else "dealer_shop/reroll.png"
+				else ("dealer_scene_reroll_BUTTON.png" if uses_full_canvas_export else "dealer_shop/reroll.png")
 		if not art.texture.resource_path.ends_with(expected_asset):
 			failures.append("dealer shop: %s is using the wrong native asset" % art_name)
 

@@ -4,14 +4,72 @@ extends Control
 ## paid, and the selected door commits the route destination after confirmation.
 ## There is intentionally no back action once a door has been opened.
 
+## The polished choice master already supplies the two physical doors. Route
+## identity belongs in their upper inset, rather than on top as a second card
+## plate. This tiny native-resolution drawing keeps the route affordance crisp
+## while leaving the painted hardware visible around it.
+class RouteEmblem extends Control:
+	var route_type := ""
+	var accent := Color.WHITE
+	var hovered := false
+	var affordable := true
+
+	func configure(kind: String, color: Color, is_hovered: bool, is_affordable: bool) -> void:
+		route_type = kind
+		accent = color
+		hovered = is_hovered
+		affordable = is_affordable
+		modulate.a = 1.0 if affordable else 0.42
+		queue_redraw()
+
+	func _draw() -> void:
+		var color := accent.lightened(0.16) if hovered else accent
+		if not affordable:
+			color = color.darkened(0.25)
+		var center := size * 0.5
+		var glow := Color(color.r, color.g, color.b, 0.14 if hovered else 0.08)
+		draw_circle(center, 12.0 if hovered else 10.0, glow)
+		match route_type:
+			RouteCards.ROUTE_SHOP:
+				draw_rect(Rect2(center - Vector2(7.0, 5.0), Vector2(14.0, 10.0)), color, false, 1.0)
+				draw_line(center + Vector2(-4.0, -2.0), center + Vector2(4.0, -2.0), color, 1.0)
+				draw_line(center + Vector2(-4.0, 2.0), center + Vector2(4.0, 2.0), color, 1.0)
+				draw_line(center + Vector2(-3.0, -8.0), center + Vector2(3.0, -8.0), color, 1.0)
+			RouteCards.ROUTE_AUGMENT:
+				var diamond := PackedVector2Array([
+					center + Vector2(0.0, -9.0), center + Vector2(8.0, 0.0),
+					center + Vector2(0.0, 9.0), center + Vector2(-8.0, 0.0),
+				])
+				draw_polyline(diamond, color, 1.0, true)
+				draw_line(center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
+				draw_line(center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
+			RouteCards.ROUTE_POWER:
+				var bolt := PackedVector2Array([
+					center + Vector2(2.0, -10.0), center + Vector2(-6.0, 1.0),
+					center + Vector2(-1.0, 1.0), center + Vector2(-3.0, 10.0),
+					center + Vector2(7.0, -2.0), center + Vector2(2.0, -2.0),
+				])
+				draw_colored_polygon(bolt, color)
+			RouteCards.ROUTE_BONUS:
+				draw_circle(center, 8.0, color, false, 1.0)
+				draw_line(center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
+				draw_line(center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
+			RouteCards.ROUTE_SACRIFICE:
+				draw_line(center + Vector2(-9.0, -6.0), center + Vector2(9.0, -6.0), color, 1.0)
+				draw_line(center + Vector2(-7.0, -6.0), center + Vector2(-3.0, 6.0), color, 1.0)
+				draw_line(center + Vector2(7.0, -6.0), center + Vector2(3.0, 6.0), color, 1.0)
+				draw_line(center + Vector2(-3.0, 6.0), center + Vector2(3.0, 6.0), color, 1.0)
+				draw_circle(center + Vector2(0.0, 0.0), 2.0, color)
+
 const CANVAS_SIZE := Vector2(160.0, 320.0)
+const PAINTED_MASTER_ASSET := "dealer_choice_polished/choice_scene_painted.png"
 const DOOR_PATHS: Array[NodePath] = [
 	NodePath("DoorChoices/DoorLeft"),
 	NodePath("DoorChoices/DoorRight"),
 ]
 const TITLE_TEXT_COLOR := Color(0.13, 0.125, 0.204)
 const LUCIDITY_COLOR := Color(0.92, 0.86, 0.56)
-const COIN_ASSET := "ui/coin.png"
+const COIN_ASSET := "ui/premium/coin.png"
 const CREDITS_COIN_SIZE := Vector2(9.0, 9.0)
 const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7
@@ -36,7 +94,18 @@ const CYAN := Color(0.42, 1.0, 0.95)
 const ROSE := Color(1.0, 0.42, 0.88)
 const RED := Color(1.0, 0.35, 0.42)
 const BUBBLE_TEXT_COLOR := Color(0.96, 0.88, 0.77)
-const DOOR_TITLE_RECT := Rect2(2.0, 106.0, 62.0, 9.0)
+## The painted master reserves the small ivory name plaque immediately below
+## each door's inset. These coordinates are local to the 64x117 touch rect.
+const DOOR_TITLE_RECT := Rect2(14.0, 34.0, 36.0, 10.0)
+const DOOR_EMBLEM_RECT := Rect2(18.0, -1.0, 28.0, 32.0)
+const DOOR_TITLE_FONT_SIZE := 4
+const DOOR_TITLE_LABELS := {
+	RouteCards.ROUTE_SHOP: "SHOP",
+	RouteCards.ROUTE_AUGMENT: "AUG",
+	RouteCards.ROUTE_POWER: "PWR",
+	RouteCards.ROUTE_BONUS: "BONUS",
+	RouteCards.ROUTE_SACRIFICE: "SAC",
+}
 const DOOR_EXPLANATIONS := {
 	RouteCards.ROUTE_SHOP: "I CAN TUNE\nTHE MACHINE.",
 	RouteCards.ROUTE_AUGMENT: "PICK AN\nAUGMENT.",
@@ -82,6 +151,7 @@ var _credits_row: HBoxContainer = null
 var _credits_label: Label = null
 var _credits_coin: TextureRect = null
 var _door_buttons: Array[Button] = []
+var _door_emblems: Array[RouteEmblem] = []
 var _door_suction_fx: Control = null
 var _door_suction_line_start := Vector2.ZERO
 var _door_suction_line_end := Vector2.ZERO
@@ -98,6 +168,13 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_font = Assets.font()
 	_reroll_art = get_node_or_null("RerollArt") as Sprite2D
+	var painted_master := Assets.texture(PAINTED_MASTER_ASSET, true)
+	var scene_art := get_node_or_null("DealerSprite") as Sprite2D
+	if painted_master != null and scene_art != null:
+		scene_art.texture = painted_master
+		scene_art.position = Vector2.ZERO
+		scene_art.scale = Vector2(160, 320) / painted_master.get_size()
+		scene_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_bubble_sprite = get_node_or_null("BubbleText") as Sprite2D
 	_build_header()
 	_build_credits_display()
@@ -212,16 +289,28 @@ func _configure_doors() -> void:
 		var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 		if _default_doors_texture == null and sprite != null:
 			_default_doors_texture = sprite.texture
+		# Keep the legacy sprite as a state carrier for save/review compatibility,
+		# but do not draw its opaque card plate over the painted door.
+		if sprite != null:
+			sprite.visible = false
 		button.pressed.connect(_on_door_pressed.bind(index))
 		button.mouse_entered.connect(_on_door_mouse_entered.bind(index))
 		button.mouse_exited.connect(_on_door_mouse_exited.bind(index))
-		var title := _label("", DOOR_TITLE_RECT, 5,
+		var emblem := RouteEmblem.new()
+		emblem.name = "RouteEmblem"
+		emblem.position = DOOR_EMBLEM_RECT.position
+		emblem.size = DOOR_EMBLEM_RECT.size
+		emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		emblem.z_index = 1
+		button.add_child(emblem)
+		_door_emblems.append(emblem)
+		var title := _label("", DOOR_TITLE_RECT, DOOR_TITLE_FONT_SIZE,
 			TITLE_TEXT_COLOR, button)
 		title.name = "DoorTitle"
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.clip_text = true
-		title.position.y += Assets.centered_text_nudge(5)
+		title.position.y += Assets.centered_text_nudge(DOOR_TITLE_FONT_SIZE)
 		_door_buttons.append(button)
 
 func _configure_actions() -> void:
@@ -310,12 +399,18 @@ func _set_door_card(button: Button, card: Dictionary) -> void:
 	var index := _door_buttons.find(button)
 	_set_door_visual(index, route_type,
 		index == _hovered_door_index or index == _pending_door_index)
+	if index >= 0 and index < _door_emblems.size():
+		_door_emblems[index].configure(route_type,
+			DOOR_COLORS.get(route_type, CYAN) as Color,
+			index == _hovered_door_index or index == _pending_door_index,
+			affordable)
 	var sprite := button.get_node_or_null("DoorSprite") as Sprite2D
 	if sprite != null:
 		sprite.self_modulate = Color.WHITE if affordable else Color(0.55, 0.55, 0.64, 1.0)
 	var title := button.get_node_or_null("DoorTitle") as Label
 	if title != null:
-		title.text = String(card.get("displayName", "ROUTE"))
+		title.text = String(DOOR_TITLE_LABELS.get(route_type,
+			String(card.get("displayName", "ROUTE"))))
 		var title_color := DOOR_COLORS.get(route_type, CYAN) as Color
 		if not affordable:
 			title_color = title_color.darkened(0.45)
@@ -553,6 +648,12 @@ func _set_door_hovered(index: int, hovered: bool) -> void:
 	var route_type := ""
 	if index < cards.size():
 		route_type = String(cards[index].get("routeType", ""))
+	if index < _door_emblems.size():
+		var affordable := index < cards.size() and RunStateStore.route_card_affordable(
+			String(cards[index].get("id", "")))
+		_door_emblems[index].configure(route_type,
+			DOOR_COLORS.get(route_type, CYAN) as Color,
+			hovered or index == _pending_door_index, affordable)
 	_set_door_visual(index, route_type, hovered or index == _pending_door_index)
 
 func _set_door_visual(index: int, route_type: String, hovered: bool) -> void:

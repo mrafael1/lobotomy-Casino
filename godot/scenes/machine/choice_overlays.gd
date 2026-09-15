@@ -73,6 +73,7 @@ func serum_node() -> Control:
 ## spent on an actual pick.
 func open_serum(pool: Array[String], on_pick: Callable, on_cancel: Callable) -> void:
 	_serum = Control.new()
+	_serum.set_as_top_level(true)
 	_serum.name = "SerumPicker"
 	_serum.size = _canvas
 	_serum.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -100,6 +101,7 @@ func book_node() -> Control:
 func open_book(choices: Array, on_pick: Callable) -> void:
 	close_book()
 	_book = Control.new()
+	_book.set_as_top_level(true)
 	_book.name = "BookTripleChoice"
 	_book.size = _canvas
 	_book.mouse_filter = Control.MOUSE_FILTER_STOP

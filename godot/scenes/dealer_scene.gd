@@ -31,9 +31,26 @@ const CIRCLE_CX := [15.5, 37.5, 59.5, 81.5, 102.5, 124.5]
 # transparent pixels below the silhouette (the cigarette is intentionally the largest).
 # Stash icons reuse the shared Assets.STASH_ICON_SIZE so they match the machine scene stash.
 const PRE_RUN_OFFER_ICON := 16.0
+const PRE_RUN_PAINTED_OFFER_ICON := 28.0
 const RUN_OFFER_ICON := 16.0
 const COUNTER_DOT_CY := 208.0 # native contact row of the counter's white round dots
 const ITEM_TOP := COUNTER_DOT_CY - PRE_RUN_OFFER_ICON # full icon box top
+## The painted pre-run master has three inset item wells on the felt table. Keep
+## these rects in source pixels so the draggable controls follow the artwork at
+## native resolution instead of landing on the retired counter dots.
+const PRE_RUN_OFFER_SLOT_RECTS := [
+	Rect2(7.0, 151.0, 40.0, 34.0),
+	Rect2(60.0, 151.0, 40.0, 34.0),
+	Rect2(113.0, 151.0, 40.0, 34.0),
+]
+const RUN_OFFER_SLOT_RECTS := [
+	Rect2(7.0, 192.0, 16.0, 16.0),
+	Rect2(29.2, 192.2, 16.0, 16.0),
+	Rect2(51.0, 192.0, 16.0, 16.0),
+	Rect2(73.2, 192.2, 16.0, 16.0),
+	Rect2(94.2, 192.2, 16.0, 16.0),
+]
+const PRE_RUN_NAME_Y := 188.0
 const COUNTER_ITEM_Y_OFFSETS := {
 	"cons_focus": 1.0,
 	"cons_cigarette": 4.5,
@@ -73,14 +90,15 @@ const FALLBACK_HINT := { "pos": "ODD", "neg": "PRICE" }
 @export var name_color: Color = Color(0.0, 0.9, 1.0)
 
 # New UI assets (issue #25). The settings control uses one authored icon.
-const SETTINGS_ASSET := "ui/setting_icon.png"
-const COIN_ASSET := "ui/coin.png"
+const SETTINGS_ASSET := "ui/premium/settings.png"
+const COIN_ASSET := "ui/premium/coin.png"
 # The dealer room now uses the same bleed-aware 200x380 native exports as Pacte.
 # Their central 160x320 area stays at source-pixel scale; the expanded viewport
 # trims the decorative 20px horizontal / 30px vertical bleed on a narrow phone.
 const DEALER_SHOP_ASSET_DIR := "dealer_shop/"
 const DEALER_BACKGROUND_ASSET := DEALER_SHOP_ASSET_DIR + "bg.png"
 const DEALER_COUNTER_ASSET := DEALER_SHOP_ASSET_DIR + "counter.png"
+const PRE_RUN_PAINTED_MASTER_ASSET := "dealer_shop_polished/pre_dealer_shop_painted.png"
 # The between-run Dealer is a compact native sprite. Keep it separate from the
 # full-canvas portrait used by the active-run dealer so either presentation can
 # evolve without changing the other one.
@@ -106,7 +124,7 @@ const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "machine.png"
 const MACHINE_BUTTON_RECT := Rect2(120.0, 5.0, 36.0, 42.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same native 2-frame sheet pattern (0 default, 1 pressed).
-const REROLL_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "reroll.png"
+const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
 const PAINTING_BUTTON_RECT := Rect2(0.0, 64.0, 34.0, 42.0)
 const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"
@@ -115,8 +133,8 @@ const PAINTING_NO_CREDITS_MESSAGE := "NOT ENOUGH CREDITS"
 # Escalating reroll price tag, centred under the painting art (rect x 2..31).
 const REROLL_PRICE_TAG_POS := Vector2(0.0, 107.0)
 const PRICE_WARN_COLOR := Color(0.94, 0.27, 0.27)
-# Chip Augment offer: presented like a consumable on the counter's far-right
-# slot — icon on the dot, price tag above (both phases), name/rarity/stock/effect
+# Chip Augment offer: presented like a consumable in its dedicated counter
+# well — icon in the recess, price tag above (both phases), name/rarity/stock/effect
 # on select, drag onto the dealer to buy.
 const AUGMENT_RARITY_COLORS := {
 	"common": Color(0.0, 0.9, 1.0),
@@ -150,11 +168,11 @@ const PICKER_BUTTON_GAP := 4
 
 # Pre-run pool only (Consumables.LIST) — see item_hints note (issue #31).
 const ITEM_ICONS := {
-	"cons_focus": "items/focus_serum.png",
-	"cons_cigarette": "items/cigarette.png",
-	"cons_white_powder": "items/white_powder.png",
-	"cons_potion": "items/consumable_placeholder.png",
-	"cons_tea": "items/herbal_tea.png",
+	"cons_focus": "items/generated/serum.png",
+	"cons_cigarette": "items/generated/tobacco.png",
+	"cons_white_powder": "items/generated/white_powder.png",
+	"cons_potion": "items/generated/potion.png",
+	"cons_tea": "items/generated/tea.png",
 }
 
 var _font: FontFile = null
@@ -259,7 +277,7 @@ func _on_viewport_size_changed() -> void:
 	_center_native_canvas()
 
 func _center_native_canvas() -> void:
-	position = _native_canvas_origin(get_viewport_rect().size)
+	position = _native_canvas_origin(get_viewport_rect().size) - get_viewport().canvas_transform.origin
 
 func _native_canvas_origin(viewport_size: Vector2) -> Vector2:
 	var extra_size := viewport_size - Vector2(CANVAS_W, CANVAS_H)
@@ -399,6 +417,10 @@ func _configure_native_art_sprite(
 	spr.position = _native_art_position(tex, spr.hframes)
 	spr.scale = Vector2.ONE
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if rel == PRE_RUN_PAINTED_MASTER_ASSET:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(CANVAS_W, CANVAS_H) / tex.get_size()
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return spr
 
 func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
@@ -418,15 +440,18 @@ func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
 
 func _build_art() -> void:
 	if _background_sprite != null or _portrait_sprite != null or _counter_sprite != null:
-		_configure_native_art_sprite(_background_sprite, DEALER_BACKGROUND_ASSET)
+		_configure_native_art_sprite(_background_sprite,
+			PRE_RUN_PAINTED_MASTER_ASSET if _pre_run else DEALER_BACKGROUND_ASSET)
 		if _pre_run:
 			if _portrait_sprite != null:
 				_portrait_sprite.visible = false
+			if _counter_sprite != null:
+				_counter_sprite.visible = false
 			_dealer_shop_sprite = _configure_native_art_sprite(
 				_dealer_shop_sprite, DEALER_SHOP_DEALER_ASSET,
 				DEALER_SHOP_DEALER_FRAMES, 0)
 			if _dealer_shop_sprite != null and _dealer_shop_sprite.texture != null:
-				_dealer_shop_sprite.visible = true
+				_dealer_shop_sprite.visible = false
 				_dealer_visual_rest_position = _dealer_shop_sprite.position
 			else:
 				# Keep a usable editor/legacy fallback if the optional native export is
@@ -670,7 +695,7 @@ func _icon_tex(id: String) -> Texture2D:
 	return Assets.texture(ITEM_ICONS.get(id, "items/consumable_placeholder.png"))
 
 func _offer_icon_size() -> float:
-	return PRE_RUN_OFFER_ICON if _pre_run else RUN_OFFER_ICON
+	return PRE_RUN_PAINTED_OFFER_ICON if _pre_run else RUN_OFFER_ICON
 
 func _counter_item_y_offset(id: String, kind: String) -> float:
 	if kind == "augment":
@@ -693,7 +718,8 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	var size_px := Assets.STASH_ICON_SIZE if kind == "stash" else _offer_icon_size()
 	if icon_size > 0.0:
 		size_px = icon_size
-	if kind == "offer" or kind == "augment":
+	if (kind == "offer" or kind == "augment") \
+			and not (_pre_run and parent != self):
 		# Position the draggable frame and its child sprite from the same authored
 		# contact row. This keeps the mobile hitbox travelling with the art instead
 		# of correcting the visible sprite alone.
@@ -721,12 +747,7 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(size_px / frame_w, size_px / float(tex.get_height()))
-		if kind == "augment":
-			# The chip art spans columns 0..30 of its 32px frame (centre 15, not
-			# 15.5), so nudge half a source pixel right to sit centred on the dot
-			# — and under the name label.
-			spr.position.x += 0.5 * spr.scale.x
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	t.add_child(spr)
 	t.gui_input.connect(_on_item_input.bind(t, id, kind))
 	parent.add_child(t)
@@ -780,7 +801,10 @@ func _configure_offer_price_tag(row: HBoxContainer, id: String, pos: Vector2, wi
 func _make_offer_price_tag(id: String, pos: Vector2, parent: Control, width := 34.0) -> void:
 	var row := parent.get_node_or_null("PriceTag") as HBoxContainer
 	if row != null:
-		_configure_offer_price_tag(row, id, pos, width, false)
+		# Authored tags were originally sized around 16px counter dots. Reapply
+		# their layout when a painted pre-run well is wider so the price stays
+		# centred over the item instead of clinging to the slot's left edge.
+		_configure_offer_price_tag(row, id, pos, width, true)
 		return
 	row = HBoxContainer.new()
 	row.name = "PriceTag"
@@ -800,6 +824,7 @@ func _offer_ids() -> Array:
 
 func _build_offers() -> void:
 	if not _offer_slots.is_empty():
+		_configure_offer_slot_geometry()
 		_item_nodes.clear()
 		_offer_cx.clear()
 		_offer_slots_by_id.clear()
@@ -807,9 +832,12 @@ func _build_offers() -> void:
 			_clear_dynamic_children(slot)
 		var ids := _offer_ids()
 		var icon_size := _offer_icon_size()
-		# The Chip Augment stands on the far-right dot, like one more consumable.
+		# The Chip Augment gets the third painted well in the pre-run shop; in-run
+		# visits retain the fifth compact slot so their five-offer layout is unchanged.
 		var aug_id := _augment_offer_id()
-		var aug_slot: Control = _offer_slots[_offer_slots.size() - 1] if aug_id != "" else null
+		var aug_index := _augment_slot_index()
+		var aug_slot: Control = _offer_slots[aug_index] \
+				if aug_id != "" else null
 		for i in range(mini(ids.size(), _offer_slots.size())):
 			var id := String(ids[i])
 			var slot: Control = _offer_slots[i]
@@ -842,6 +870,33 @@ func _build_offers() -> void:
 		_make_offer_price_tag(offer_id, Vector2(cx - 17.0, ITEM_TOP - 10.0), self)
 		_make_drag_icon(offer_id, "offer", Vector2(cx - icon_size * 0.5, ITEM_TOP), self, icon_size)
 		idx += 1
+
+func _configure_offer_slot_geometry() -> void:
+	if _offer_slots.is_empty():
+		return
+	var rects: Array = PRE_RUN_OFFER_SLOT_RECTS if _pre_run else RUN_OFFER_SLOT_RECTS
+	for i in range(_offer_slots.size()):
+		var slot := _offer_slots[i] as Control
+		if slot == null:
+			continue
+		if i < rects.size():
+			var rect: Rect2 = rects[i]
+			slot.position = rect.position
+			slot.size = rect.size
+			slot.visible = true
+		else:
+			# The painted pre-run master only exposes three wells. Extra authored
+			# placeholders stay available for in-run offers. Keep the dedicated
+			# augment slot visible when a visit supplies one.
+			slot.visible = not _pre_run or (i == _augment_slot_index() \
+					and _augment_offer_id() != "")
+
+func _augment_slot_index() -> int:
+	if _offer_slots.is_empty():
+		return -1
+	if _pre_run and _offer_slots.size() > PRE_RUN_OFFER_SLOT_RECTS.size() - 1:
+		return PRE_RUN_OFFER_SLOT_RECTS.size() - 1
+	return _offer_slots.size() - 1
 
 func _build_stash() -> void:
 	if not _stash_slot_nodes.is_empty():
@@ -1001,6 +1056,11 @@ func _configure_machine_button() -> void:
 	if _machine_button_sprite == null:
 		_machine_button_sprite = _build_button_art(MACHINE_BUTTON_ASSET, "MachineButtonArt")
 	_wire_art_button(_start_button, _machine_button_sprite, Callable(self, "_on_machine_button_pressed"))
+	# The painted pre-run master has no machine control opening yet. Keep the
+	# transparent hit area and confirmation flow usable, but suppress the retired
+	# machine illustration until its replacement asset is ready.
+	if _pre_run and _machine_button_sprite != null:
+		_machine_button_sprite.visible = false
 
 ## Pre-run the machine button starts the run (behind the misclick confirm);
 ## during an in-run dealer visit it returns to the machine, declining the
@@ -1175,10 +1235,10 @@ func _on_painting_pressed() -> void:
 	_dealer_react()
 	_refresh_painting_state() # price + affordability update immediately
 
-# ── Chip Augment offer (far-right counter slot) ─────────────────────────────────────
+# ── Chip Augment offer (dedicated counter slot) ─────────────────────────────────────
 # One dedicated augment offer per dealer visit (both phases), separate from the
 # counter items and untouched by the painting reroll. It stands on the counter's
-# far-right dot like a consumable: price tag above (live discounted price, both
+# counter well like a consumable: price tag above (live discounted price, both
 # phases), tap to read name/rarity/stock/effect, drag onto the dealer to buy.
 # Symbol Level / Pair-Triple open a selector first — cancelling never charges
 # (the store is only called on commit).
@@ -1275,8 +1335,10 @@ func _pulse_offer_prices(label: String) -> void:
 func _pulse_augment_price(label: String) -> void:
 	var aug_id := _augment_offer_id()
 	var slot: Control = _offer_slots_by_id.get(aug_id) as Control if aug_id != "" else null
-	if slot == null and not _offer_slots.is_empty():
-		slot = _offer_slots[_offer_slots.size() - 1] as Control
+	if slot == null:
+		var aug_index := _augment_slot_index()
+		if aug_index >= 0:
+			slot = _offer_slots[aug_index] as Control
 	if slot == null:
 		return
 	var tag := slot.get_node_or_null("PriceTag") as Control
@@ -1429,11 +1491,30 @@ func _close_augment_picker() -> void:
 
 func _build_button_art(asset: String, node_name: String) -> Sprite2D:
 	var spr := get_node_or_null(node_name) as Sprite2D
-	if spr != null:
-		return _configure_native_art_sprite(spr, asset, 2, 0)
-	spr = _native_art_sprite(asset, 2, 0)
-	if spr != null:
+	var tex := Assets.texture(asset, true)
+	if tex == null:
+		return spr
+	var hframes := 2
+	if spr == null:
+		spr = Sprite2D.new()
 		spr.name = node_name
+		add_child(spr)
+	spr.texture = tex
+	spr.hframes = hframes
+	spr.vframes = 1
+	spr.frame = 0
+	spr.centered = false
+	# Older dealer controls are bleed-aware 200x380 sheets and stay at native
+	# source-pixel scale. The replacement scene-button exports are 8x full-canvas
+	# sheets; shrink those to the 160x320 viewport while preserving crisp pixels.
+	var frame_w := float(tex.get_width()) / float(hframes)
+	if frame_w >= CANVAS_W * 4.0 and float(tex.get_height()) >= CANVAS_H * 4.0:
+		spr.position = Vector2.ZERO
+		spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
+	else:
+		spr.position = _native_art_position(tex, hframes)
+		spr.scale = Vector2.ONE
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return spr
 
 func _wire_art_button(button: Button, spr: Sprite2D, cb: Callable) -> void:
@@ -1704,7 +1785,7 @@ func _select(id: String) -> void:
 		name_cx = slot.position.x + slot.size.x * 0.5
 	else:
 		name_cx = float(_offer_cx.get(id, 80.0))
-	_name_label.position.y = COUNTER_DOT_CY + 1.0
+	_name_label.position.y = PRE_RUN_NAME_Y if _pre_run else COUNTER_DOT_CY + 1.0
 	# Centre on the measured text width: the Label's own box centring rounds to
 	# whole pixels, which reads as a half-pixel drift at the x8 canvas scale.
 	var name_font := _name_label.get_theme_font("font")

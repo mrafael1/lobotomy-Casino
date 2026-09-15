@@ -24,12 +24,12 @@ const AUGMENTED_BADGE_SIZE := 14.0
 
 ## --- the Pacte augment chip row (issue #181) -----------------------------------
 const AUGMENT_PLATE_FRAMES := 3 # frame N = N+1 sockets
-const PACTE_AUGMENT_BADGE_POS := Vector2(64.0, 223.0)
-const PACTE_AUGMENT_BADGE_SIZE := Vector2(12.0, 15.0)
-const PACTE_AUGMENT_BADGE_PITCH := 14.0
+const PACTE_AUGMENT_BADGE_POS := Vector2(48.0, 260.0)
+const PACTE_AUGMENT_BADGE_SIZE := Vector2(20.0, 20.0)
+const PACTE_AUGMENT_BADGE_PITCH := 26.0
 const PACTE_AUGMENT_BADGE_MAX := 3
-const PACTE_AUGMENT_ICON_SIZE := 10.0
-const PACTE_AUGMENT_CONTOUR_COLOR := Color("#143464")
+const PACTE_AUGMENT_ICON_SIZE := 14.0
+const PACTE_AUGMENT_CONTOUR_COLOR := Color("#98876a")
 
 ## Card names and their descriptions run long; wrapping keeps the bubble on the canvas.
 const PACTE_AUGMENT_POPUP_MAX_WIDTH := 126.0
@@ -155,9 +155,9 @@ func build_pacte_badges() -> void:
 		badge.focus_mode = Control.FOCUS_NONE
 		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var badge_style := StyleBoxFlat.new()
-		badge_style.bg_color = Color(0.03, 0.02, 0.05, 0.9)
+		badge_style.bg_color = Color.TRANSPARENT
 		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
-		badge_style.set_border_width_all(1)
+		badge_style.set_border_width_all(0)
 		badge_style.set_corner_radius_all(1)
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			badge.add_theme_stylebox_override(state, badge_style)
@@ -171,6 +171,13 @@ func build_pacte_badges() -> void:
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		badge.add_child(icon)
+		var peel := ColorRect.new()
+		peel.name = "PaperCorner"
+		peel.position = Vector2(17, 17)
+		peel.size = Vector2(2, 2)
+		peel.color = Color("#f0e4c5")
+		peel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_child(peel)
 		# The overflow count replaces the last icon rather than sitting on top of one,
 		# so it can never obscure the art it is counting.
 		var count := Label.new()
@@ -224,7 +231,7 @@ func refresh_pacte_badges() -> void:
 	if _pacte_augment_badges.is_empty():
 		return
 	var ids := _active_pacte_augment_ids()
-	# The row lives on the power bar now, not on the TV, so a TV callout no longer
+	# The stickers live on the lower cabinet, so a TV callout no longer
 	# hides it — only the description popup steps aside for one.
 	if _view.tv_callout_open():
 		hide_pacte_popup()
@@ -261,6 +268,7 @@ func refresh_pacte_badges() -> void:
 				glitch.visible = false
 		else:
 			icon.texture = _pacte_augment_icon(ids[i])
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(ids[i]) else CanvasItem.TEXTURE_FILTER_NEAREST
 			if glitch != null:
 				glitch.visible = _augment_glitches(String(ids[i]))
 
@@ -359,14 +367,10 @@ func _scramble_augment_glitch(host: Control) -> void:
 
 func _pacte_augment_icon(card_id: String) -> Texture2D:
 	var entry := PacteCards.card(card_id)
-	var sheet := _view.texture(String(entry.get("sheet", "")), true)
-	var icon_rect := entry.get("icon_rect", Rect2()) as Rect2
-	if sheet == null or icon_rect.size == Vector2.ZERO:
+	var icon_rect := PacteCards.display_icon_rect(entry)
+	if icon_rect.size == Vector2.ZERO:
 		return null
-	var atlas := AtlasTexture.new()
-	atlas.atlas = sheet
-	atlas.region = icon_rect
-	return atlas
+	return PacteCards.icon_texture(entry)
 
 func _pacte_augment_popup_text() -> String:
 	var lines: Array[String] = []

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320" viewBox="0 0 160 320" shape-rendering="crispEdges">
+<defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121b18"/><stop offset="0.12" stop-color="#394538"/><stop offset="0.3" stop-color="#87917a"/><stop offset="0.44" stop-color="#cec8aa"/><stop offset="0.57" stop-color="#ded3b2"/><stop offset="0.72" stop-color="#8e957e"/><stop offset="0.9" stop-color="#303e33"/><stop offset="1" stop-color="#111b17"/></linearGradient></defs>
+<rect x="32" y="167" width="23" height="39" fill="url(#paper)"/>
+<path d="M32 167v39 M54 167v39" stroke="#0b1712" stroke-opacity=".6"/>
+<path d="M33 170v32 M53 170v32" stroke="#263828" stroke-opacity=".28"/>
+<rect x="64" y="167" width="23" height="39" fill="url(#paper)"/>
+<path d="M64 167v39 M86 167v39" stroke="#0b1712" stroke-opacity=".6"/>
+<path d="M65 170v32 M85 170v32" stroke="#263828" stroke-opacity=".28"/>
+<rect x="96" y="167" width="23" height="39" fill="url(#paper)"/>
+<path d="M96 167v39 M118 167v39" stroke="#0b1712" stroke-opacity=".6"/>
+<path d="M97 170v32 M117 170v32" stroke="#263828" stroke-opacity=".28"/>
+</svg>

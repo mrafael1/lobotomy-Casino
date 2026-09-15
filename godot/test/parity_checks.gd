@@ -214,9 +214,14 @@ static func check_lucidity(out: Array) -> void:
 	for c in data["cases"]:
 		var inp: Dictionary = c["input"]
 		var got := Lucidity.plan_gain(int(inp["prevCoins"]), int(inp["gain"]),
-			inp["abilitiesUsed"], int(inp["seed"]))
+			inp["abilitiesUsed"], int(inp["seed"]), int(data["coinsPerRestore"]))
 		if not deep_equal(got, c["expect"]):
 			_fail(out, "lucidity " + str(inp), got, c["expect"])
+
+	var before_restore := Lucidity.plan_gain(0, 29, ["reroll"], 42)
+	var at_restore := Lucidity.plan_gain(29, 1, ["reroll"], 42)
+	if not before_restore["restores"].is_empty() or at_restore["restores"] != ["reroll"]:
+		_fail(out, "three-lamp restore threshold", [before_restore, at_restore], "restore at 30, never at 29")
 
 static func check_endings(out: Array) -> void:
 	var data: Dictionary = _load("endings.json")
@@ -256,9 +261,9 @@ static func check_issue176(out: Array) -> void:
 		_fail(out, "issue176 solo-as-pair scoring", cheat, "pair / 12")
 	if Economy.compute_passive_lucidity(["pacte_passive_gain"]) != 10:
 		_fail(out, "issue176 passive gain", Economy.compute_passive_lucidity(["pacte_passive_gain"]), 10)
-	if Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50) != 30:
+	if Economy.compute_power_restore_threshold(["pacte_adrenaline"], 30) != 18:
 		_fail(out, "issue176 adrenaline threshold",
-			Economy.compute_power_restore_threshold(["pacte_adrenaline"], 50), 30)
+			Economy.compute_power_restore_threshold(["pacte_adrenaline"], 30), 18)
 	# Hallucination promotes a visible pair to a triple wherever it landed. The reels
 	# 2+3 pair used to stay a pair, so the card silently did nothing half the time.
 	for hallucinated_reels in [["eye", "eye", "brain"], ["brain", "eye", "eye"]]:

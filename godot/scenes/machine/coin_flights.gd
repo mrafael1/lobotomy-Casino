@@ -25,16 +25,17 @@ extends RefCounted
 ## emplacements are the machine's geometry.
 
 const COIN_SIZE := 8.0
-const LUCIDITY_ASSET := "ui/coin.png"
+const LUCIDITY_ASSET := "ui/premium/coin.png"
 
 ## The power chip: flies from the wealth odometer to the gauge when banked score
 ## buys a restore, or from the cash tray to a power's emplacement on a direct one.
-const POWER_ASSET := "ui/power_coin.png"
+const POWER_ASSET := "cards/painted/power_coin.png"
 const POWER_SIZE := 8.0
 const POWER_FLIGHT_TIME := 0.64
-## The authored pop that plays at the odometer before the chip sets off.
+## The authored pop that plays at the cash outlet before the chip sets off.
 const POP_SHEET := "machine new view/power coin animation.png"
 const POP_FRAMES := 4
+const POP_OFFSET := Vector2(2.0, 52.5) # cabinet-local x76; world cash outlet remains (80, 298)
 const POP_FRAME_TIME := 0.06
 
 ## Casino-TV payout spray (issue #181): lucidity coins erupt out of the cash tray
@@ -108,7 +109,7 @@ func make_power_coin(pos: Vector2) -> Sprite2D:
 
 ## The pop sheet, parented into the coin layer at the origin and starting
 ## invisible. Uncentered and unpositioned on purpose: it is full-canvas art whose
-## frames already sit where the odometer is.
+## frames are offset to meet the cash outlet.
 func make_power_pop() -> Sprite2D:
 	if _layer == null:
 		return null
@@ -121,7 +122,7 @@ func make_power_pop() -> Sprite2D:
 	pop.vframes = 1
 	pop.frame = 0
 	pop.centered = false
-	pop.position = Vector2.ZERO
+	pop.position = POP_OFFSET
 	pop.texture_filter = _art_filter
 	pop.modulate.a = 0.0
 	_layer.add_child(pop)

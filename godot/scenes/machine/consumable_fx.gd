@@ -56,6 +56,9 @@ var _distortion_shader: Shader = null
 var _layer: Control = null
 var _tobacco_covers: Array = []
 var _tobacco_smoke: Array = []
+var _tunnel_shutter: TextureRect = null
+var _learning_attachment: TextureRect = null
+var _tunnel_shutter_tween: Tween = null
 var _energy_edges: Control = null
 var _hidden_covers: Array = []
 
@@ -94,6 +97,8 @@ func build(style: Dictionary) -> void:
 	_build_tobacco(style["tobacco_cover"], style["tobacco_smoke"])
 	_build_energy_edges(style["energy_edge"], float(style["energy_thickness"]))
 	_build_hidden_covers(style["hidden_cover"], style["hidden_glyph"])
+	_build_tunnel_shutter()
+	_build_learning_attachment()
 
 func layer() -> Control:
 	return _layer
@@ -135,7 +140,52 @@ func persistent_nodes() -> Array:
 	if _energy_edges != null:
 		nodes.append(_energy_edges)
 	nodes.append_array(_hidden_covers)
+	if _tunnel_shutter != null:
+		nodes.append(_tunnel_shutter)
+	if _learning_attachment != null:
+		nodes.append(_learning_attachment)
 	return nodes
+
+func _build_learning_attachment() -> void:
+	_learning_attachment = TextureRect.new()
+	_learning_attachment.name = "LearningAttachment"
+	_learning_attachment.texture = preload("res://assets/images/machine_polished/learning_attachment.svg")
+	_learning_attachment.size = _canvas
+	_learning_attachment.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_learning_attachment.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_learning_attachment.visible = false
+	_layer.add_child(_learning_attachment)
+
+func set_learning_attachment(active: bool) -> void:
+	if _learning_attachment != null:
+		_learning_attachment.visible = active
+
+## A fitted mechanical attachment. The opaque scoring cover underneath remains
+## authoritative, including when Tobacco and Tunnel Vision coexist.
+func _build_tunnel_shutter() -> void:
+	_tunnel_shutter = TextureRect.new()
+	_tunnel_shutter.name = "TunnelVisionShutter"
+	_tunnel_shutter.texture = preload("res://assets/images/machine_polished/tunnel_shutter.svg")
+	var rect := cover_rect(_holes.back())
+	_tunnel_shutter.position = rect.position
+	_tunnel_shutter.size = rect.size
+	_tunnel_shutter.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_tunnel_shutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tunnel_shutter.visible = false
+	_layer.add_child(_tunnel_shutter)
+
+func set_tunnel_shutter(active: bool) -> void:
+	if _tunnel_shutter == null or _tunnel_shutter.visible == active:
+		return
+	if _tunnel_shutter_tween != null and _tunnel_shutter_tween.is_valid():
+		_tunnel_shutter_tween.kill()
+	_tunnel_shutter.visible = active
+	_tunnel_shutter.scale.y = 1.0
+	if active:
+		_tunnel_shutter.scale.y = 0.08
+		_tunnel_shutter_tween = _tunnel_shutter.create_tween()
+		_tunnel_shutter_tween.tween_property(_tunnel_shutter, "scale:y", 1.0, 0.28) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 # --- Tobacco / Tunnel Vision --------------------------------------------------
 
@@ -365,6 +415,8 @@ func hide_water() -> void:
 ## Everything off, every tween dead. The run reset's half — an ending or a new run
 ## must not inherit a smoked reel or a running pulse.
 func reset() -> void:
+	set_tunnel_shutter(false)
+	set_learning_attachment(false)
 	if _energy_pulse_tween != null and _energy_pulse_tween.is_valid():
 		_energy_pulse_tween.kill()
 	_energy_pulse_tween = null

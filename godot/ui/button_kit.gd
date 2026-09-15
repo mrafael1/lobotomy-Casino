@@ -17,22 +17,15 @@ const _RED_BUTTON_REL := "ui/red_button.png"
 const _CANCEL_BUTTON_REL := "ui/cancel_button.png"
 const _PRESS_DROP := 2.0 # px the label/icon sinks on press, for a tactile feel
 const _BUTTON_TEXT_BOTTOM_MARGIN := 2.0
-const NEON_PANEL_FILL := Color(0.05, 0.04, 0.09, 0.97)
+const NEON_PANEL_FILL := Color(0.055, 0.045, 0.037, 0.98)
+const PANEL_BRASS := Color(0.55, 0.43, 0.24)
 const START_MENU_BUTTON_CYAN := Color(0.42, 1.0, 0.95)
 const START_MENU_BUTTON_PINK := Color(1.0, 0.5, 0.7)
 const START_MENU_BUTTON_YELLOW := Color(1.0, 0.86, 0.36)
-const _START_MENU_START_BUTTON_REL := "start_menu/start_menu_start_button.png"
-const _START_MENU_SCORE_BUTTON_REL := "start_menu/start_menu_score_button.png"
-const _START_MENU_OPTIONS_BUTTON_REL := "start_menu/start_menu_options_button.png"
-const _START_MENU_START_BUTTON_REGION := Rect2(8.0, 142.0, 144.0, 28.0)
-const _START_MENU_SCORE_BUTTON_REGION := Rect2(26.0, 176.0, 108.0, 30.0)
-const _START_MENU_OPTIONS_BUTTON_REGION := Rect2(26.0, 211.0, 108.0, 30.0)
 const _START_MENU_BUTTON_TEXTURE_MARGIN := 2.0
-const _SMALL_NEON_BLUE_BUTTON_REL := "ui/neon_small_blue_button.png"
-const _SMALL_NEON_PINK_BUTTON_REL := "ui/neon_small_pink_button.png"
-const _SMALL_NEON_YELLOW_BUTTON_REL := "ui/neon_small_yellow_button.png"
-const _SMALL_NEON_BUTTON_REGION := Rect2(0.0, 0.0, 45.0, 22.0)
 const _SMALL_NEON_BUTTON_TEXTURE_MARGIN := 4.0
+const PREMIUM_BUTTON_ROOT := "ui/premium/"
+const PREMIUM_BUTTON_REGION := Rect2(0, 0, 96, 20)
 
 # Per-state -> frame index for a sheet of `frames` frames.
 static func _sheet_state_frames(frames: int) -> Dictionary:
@@ -56,6 +49,10 @@ static func sheet_frame(rel: String, frame: int, frames: int) -> AtlasTexture:
 # Skin a TEXT Button with a sheet: one StyleBoxTexture region per state. The pressed
 # state insets the top so the label visibly sinks a couple px. No-op if art missing.
 static func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
+	if rel in [_RED_BUTTON_REL, _CANCEL_BUTTON_REL, "ui/green_button.png", "ui/arrow_button.png"]:
+		var color := START_MENU_BUTTON_PINK if rel == _CANCEL_BUTTON_REL else START_MENU_BUTTON_YELLOW
+		start_menu_button_style(b, color, b.get_theme_font_size("font_size"))
+		return
 	var tex := UiKit.texture(rel)
 	if tex == null:
 		return
@@ -78,9 +75,8 @@ static func skin_sheet_button(b: Button, rel: String, frames: int) -> void:
 	b.add_theme_color_override("font_focus_color", Color.WHITE)
 	b.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
 
-## Reuses the authored cyan, pink, or yellow start-menu plate as a scalable
-## nine-slice skin. The nearest existing plate is selected for callers that pass
-## a slightly adjusted label color, keeping every button on the same pixel grid.
+## Shared brass-and-enamel nine-slice controls. Legacy color arguments select
+## the label ink; every state has its own painted cap.
 static func start_menu_button_style(button: Button, plate_color: Color, font_size: int = 6,
 		texture_margin: float = _START_MENU_BUTTON_TEXTURE_MARGIN) -> void:
 	if button == null:
@@ -89,8 +85,7 @@ static func start_menu_button_style(button: Button, plate_color: Color, font_siz
 	_apply_authored_button_style(button, plate, font_size, texture_margin)
 	button.set_meta(&"_start_menu_button_color", plate[&"color"])
 
-## Uses the dedicated 45x22 button art for compact controls. Callers with
-## sub-22px authored hit areas can lower the slice margin without changing size.
+## Fits the shared painted caps to compact controls without enlarging hit areas.
 static func small_neon_button_style(button: Button, plate_color: Color, font_size: int = 6,
 		texture_margin: float = _SMALL_NEON_BUTTON_TEXTURE_MARGIN) -> void:
 	if button == null:
@@ -102,100 +97,81 @@ static func small_neon_button_style(button: Button, plate_color: Color, font_siz
 	# copy in this font already sits high, so lifting it again put DONE, CANCEL and TABLES
 	# visibly above the middle of their own plates. The box is balanced now, and
 	# centered_text_nudge carries the only correction the font actually needs.
-	var nudge := UiKit.centered_text_nudge(font_size)
+	var nudge := UiKit.centered_text_nudge(font_size) if font_size < 6 else 0.0
+	var vertical_margin := 1.0 if font_size < 6 else 0.0
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var style := button.get_theme_stylebox(String(state))
-		style.content_margin_top = 1.0 + nudge + (_PRESS_DROP if state == "pressed" else 0.0)
-		style.content_margin_bottom = maxf(0.0, 1.0 - nudge)
+		style.content_margin_top = vertical_margin + nudge + (_PRESS_DROP if state == "pressed" else 0.0)
+		style.content_margin_bottom = maxf(0.0, vertical_margin - nudge)
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.set_meta(&"_start_menu_button_color", plate[&"color"])
 	button.set_meta(&"_small_neon_button_asset", plate[&"asset"])
 
 static func _apply_authored_button_style(button: Button, plate: Dictionary, font_size: int,
 		texture_margin: float) -> void:
-	var plate_texture := UiKit.texture(String(plate[&"asset"]))
+	var plate_texture := UiKit.texture(PREMIUM_BUTTON_ROOT + "normal.png")
 	if plate_texture == null:
 		return
-	var region: Rect2 = plate[&"region"]
 	var resolved_color: Color = plate[&"color"]
-	button.add_theme_font_size_override("font_size", font_size)
-	if UiKit.font() != null:
-		button.add_theme_font_override("font", UiKit.font())
+	var native_font := UiKit.control_font() if font_size >= 6 else UiKit.font()
+	button.add_theme_font_size_override("font_size", UiKit.control_font_size(font_size))
+	if native_font != null:
+		button.add_theme_font_override("font", native_font)
+	button.add_theme_constant_override("outline_size", 0)
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var style := StyleBoxTexture.new()
-		style.texture = plate_texture
-		style.region_rect = region
+		var texture_state: String = "hover" if state == "focus" else state
+		style.texture = UiKit.texture(PREMIUM_BUTTON_ROOT + texture_state + ".png")
+		style.region_rect = PREMIUM_BUTTON_REGION
 		var margin := maxf(texture_margin, 0.0)
-		style.texture_margin_left = margin
-		style.texture_margin_top = margin
-		style.texture_margin_right = margin
-		style.texture_margin_bottom = margin
+		style.texture_margin_left = 6.0
+		style.texture_margin_top = minf(margin, 3.0)
+		style.texture_margin_right = 6.0
+		style.texture_margin_bottom = minf(margin, 3.0)
 		# A Button centres its label in the CONTENT box, so the difference between the top
 		# and bottom margins is exactly how far off the plate's middle the label lands.
 		# These used to differ by a hand-tuned pixel, which put every label slightly high —
 		# on top of the font's own cap bias, which already sits the ink high. Balance the
 		# box and let centered_text_nudge (measured, see its own comment) do the correcting.
-		var nudge := UiKit.centered_text_nudge(font_size)
+		var nudge := UiKit.centered_text_nudge(font_size) if font_size < 6 else 0.0
+		var vertical_margin := 1.0 if font_size < 6 else 0.0
 		style.content_margin_left = 1.0
-		style.content_margin_top = 1.0 + nudge
+		style.content_margin_top = vertical_margin + nudge
 		style.content_margin_right = 1.0
-		style.content_margin_bottom = maxf(0.0, 1.0 - nudge)
+		style.content_margin_bottom = maxf(0.0, vertical_margin - nudge)
 		if state == "pressed":
-			style.content_margin_top = 1.0 + nudge + (0.0 if margin <= 1.0 else _PRESS_DROP)
-		elif state == "disabled":
-			style.modulate_color = Color(1.0, 1.0, 1.0, 0.45)
+			style.content_margin_top = vertical_margin + nudge + (0.0 if margin <= 1.0 else _PRESS_DROP)
 		button.add_theme_stylebox_override(String(state), style)
-	button.add_theme_color_override("font_color", resolved_color)
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	button.add_theme_color_override("font_focus_color", resolved_color)
-	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.5))
+	var ink := Color(0.20, 0.14, 0.07)
+	if resolved_color == START_MENU_BUTTON_CYAN:
+		ink = Color(0.07, 0.20, 0.17)
+	elif resolved_color == START_MENU_BUTTON_PINK:
+		ink = Color(0.28, 0.08, 0.11)
+	for color_state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		button.add_theme_color_override(color_state, ink)
+	button.add_theme_color_override("font_disabled_color", Color(0.62, 0.60, 0.52))
+	# Focus outlines the cap without covering the independent pressed-state artwork.
+	var focus := StyleBoxFlat.new()
+	focus.bg_color = Color.TRANSPARENT
+	focus.border_color = Color(0.72, 0.96, 0.85)
+	focus.set_border_width_all(1)
+	button.add_theme_stylebox_override("focus", focus)
 	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 static func _start_menu_button_plate(requested_color: Color) -> Dictionary:
+	var resolved := START_MENU_BUTTON_YELLOW
 	var cyan_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_CYAN)
 	var pink_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_PINK)
 	var yellow_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_YELLOW)
 	if cyan_distance <= pink_distance and cyan_distance <= yellow_distance:
-		return {
-			&"asset": _START_MENU_START_BUTTON_REL,
-			&"region": _START_MENU_START_BUTTON_REGION,
-			&"color": START_MENU_BUTTON_CYAN,
-		}
-	if pink_distance <= yellow_distance:
-		return {
-			&"asset": _START_MENU_SCORE_BUTTON_REL,
-			&"region": _START_MENU_SCORE_BUTTON_REGION,
-			&"color": START_MENU_BUTTON_PINK,
-		}
-	return {
-		&"asset": _START_MENU_OPTIONS_BUTTON_REL,
-		&"region": _START_MENU_OPTIONS_BUTTON_REGION,
-		&"color": START_MENU_BUTTON_YELLOW,
-	}
+		resolved = START_MENU_BUTTON_CYAN
+	elif pink_distance <= yellow_distance:
+		resolved = START_MENU_BUTTON_PINK
+	return {&"asset": PREMIUM_BUTTON_ROOT + "normal.png", &"color": resolved}
 
 static func _small_neon_button_plate(requested_color: Color) -> Dictionary:
-	var cyan_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_CYAN)
-	var pink_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_PINK)
-	var yellow_distance := _color_distance_squared(requested_color, START_MENU_BUTTON_YELLOW)
-	if cyan_distance <= pink_distance and cyan_distance <= yellow_distance:
-		return {
-			&"asset": _SMALL_NEON_BLUE_BUTTON_REL,
-			&"region": _SMALL_NEON_BUTTON_REGION,
-			&"color": START_MENU_BUTTON_CYAN,
-		}
-	if pink_distance <= yellow_distance:
-		return {
-			&"asset": _SMALL_NEON_PINK_BUTTON_REL,
-			&"region": _SMALL_NEON_BUTTON_REGION,
-			&"color": START_MENU_BUTTON_PINK,
-		}
-	return {
-		&"asset": _SMALL_NEON_YELLOW_BUTTON_REL,
-		&"region": _SMALL_NEON_BUTTON_REGION,
-		&"color": START_MENU_BUTTON_YELLOW,
-	}
+	return _start_menu_button_plate(requested_color)
 
 static func _color_distance_squared(first: Color, second: Color) -> float:
 	var red := first.r - second.r
@@ -233,14 +209,14 @@ static func _start_menu_button_up(button: Button) -> void:
 	tween.tween_property(button, "scale", Vector2.ONE, 0.1) \
 			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-## Shared dark panel with a small neon contour for overlays and modal surfaces.
+## Dark inset surface with a restrained brass edge; the requested hue tints it.
 static func neon_panel_style(border_color: Color, content_margin: float = 0.0) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = NEON_PANEL_FILL
-	style.border_color = border_color
+	style.border_color = PANEL_BRASS.lerp(border_color, 0.15)
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(3)
-	style.shadow_color = Color(border_color.r, border_color.g, border_color.b, 0.32)
+	style.set_corner_radius_all(1)
+	style.shadow_color = Color(0.01, 0.008, 0.006, 0.8)
 	style.shadow_size = 2
 	style.content_margin_left = content_margin
 	style.content_margin_top = content_margin

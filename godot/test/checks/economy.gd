@@ -621,7 +621,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 
 	# The FREE SPIN banner is state-driven: it shows while the next spin is free
 	# (banked credit or Energy Drink rush), holds until the credit is spent, and
-	# never blocks input. The off-TV spins tube stays visible alongside it. A grant
+	# never blocks input. The off-TV shelf counter stays visible alongside it. A grant
 	# that lands mid-spin stays hidden until the reels stop so the reveal is not
 	# spoiled.
 	run_store.abilitiesUsed = []
@@ -640,9 +640,9 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 		failures.append("free spin banner: banked free spin did not show the banner")
 	if int(machine._display_spins_left()) != spins_before_credit:
 		failures.append("free spin banner: free credit changed the SPINS LEFT counter")
-	var spins_tube := machine._health_bar_sprite as CanvasItem
+	var spins_tube := machine._spins_left_label as CanvasItem
 	if spins_tube == null or not spins_tube.visible:
-		failures.append("free spin banner: spins tube should stay visible beside the banner")
+		failures.append("free spin banner: shelf counter should stay visible beside the banner")
 	# The banner is not a modal: spin stays available while it blinks.
 	machine._refresh_controls()
 	if machine._spin_button != null and machine._spin_button.disabled:
@@ -676,7 +676,7 @@ func _check_pending_combo_and_free_spin_ui(machine: Node, run_store: Node, failu
 	machine._set_tv_progress_bars_visible(true)
 	machine._update_hud()
 	if spins_tube != null and not spins_tube.visible:
-		failures.append("free spin banner: spins tube did not restore")
+		failures.append("free spin banner: shelf counter did not restore")
 	machine._close_pending_combo_defeat()
 	machine._callouts.stop_win()
 	machine._power_callout.stop()
@@ -959,7 +959,7 @@ func _check_restore_cap_181(machine: Node, run_store: Node, failures: Array) -> 
 		if bool(stepd["restore"]):
 			failures.append("issue181: the gauge restored a power with no charge left")
 			break
-	if int(blocked["score"]) != EconomyConst.LUCIDITY_COINS_PER_RESTORE - machine._power_bar_step():
+	if int(blocked["score"]) != EconomyConst.LUCIDITY_COINS_PER_RESTORE:
 		failures.append("issue181: a capped gauge did not hold at 4/5 (score %d)"
 			% int(blocked["score"]))
 

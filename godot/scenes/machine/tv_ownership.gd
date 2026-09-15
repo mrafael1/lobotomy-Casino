@@ -42,7 +42,7 @@ extends RefCounted
 ## to y84..89 instead — into the band the goal number vacates while free spins are
 ## lit — so it now clears the fill bar at y94..98 outright and the bar can keep
 ## running underneath it.
-const BANNER_SHEET := "machine new view/free_spin.png"
+const BANNER_SHEET := "machine_polished/free_spin.svg"
 const BANNER_FRAMES := 1
 const BANNER_BLINK_PERIOD := 0.18
 ## Lit for the first 72% of each period: a duty cycle, not a square wave, so the
@@ -172,6 +172,7 @@ func apply_mute() -> void:
 		restore_layers()
 
 func hide_layers() -> void:
+	_view.apply_multiplier_fx_visibility()
 	# The banner is an owner in its own right, so it hides only for a callout —
 	# never for its own mute. The item badges follow the same rule (issue #185):
 	# a callout clears them, the banner beside them does not.
@@ -192,6 +193,7 @@ func hide_layers() -> void:
 			info.visible = false
 
 func restore_layers() -> void:
+	_view.apply_multiplier_fx_visibility()
 	refresh_banner()
 	if _banner_sprite != null:
 		_banner_sprite.visible = _banner_active \
@@ -264,6 +266,7 @@ func set_banner_display(active: bool) -> void:
 	# Lighting the banner takes the TV; letting it go out hands it back. Either way
 	# every other readout has to re-evaluate its mute right here.
 	apply_mute()
+	_refresh_target_readout.call()
 
 # --- the wealth-target blackout ----------------------------------------------
 

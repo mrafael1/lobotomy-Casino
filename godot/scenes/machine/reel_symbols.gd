@@ -24,7 +24,7 @@ extends RefCounted
 ## same symbols onto their own sprites, and they should not each re-derive the
 ## texture lookup and the downscale.
 
-## Symbols are authored large and drawn at 12-16px. The centre is full alpha and
+## Symbols retain 128px source detail and occupy 12-16 layout units. The centre is full alpha and
 ## its neighbours are dimmed, so the eye reads which one is the result.
 const STRIP_ADJ_ALPHA := 0.5
 const CENTER_H := 16.0
@@ -37,7 +37,6 @@ var _view: MachineView = null
 var _cell_centers: Array = []
 var _window: Dictionary = {}
 var _heart_assets: Dictionary = {}
-var _texture_filter := CanvasItem.TEXTURE_FILTER_NEAREST
 
 var _center: Array[Sprite2D] = []
 var _top: Array[Sprite2D] = []
@@ -47,12 +46,11 @@ var _bottom: Array[Sprite2D] = []
 var _adjacent_hidden := false
 
 func _init(view: MachineView, cell_centers: Array, window: Dictionary,
-		heart_assets: Dictionary, texture_filter: int) -> void:
+		heart_assets: Dictionary, _legacy_texture_filter: int) -> void:
 	_view = view
 	_cell_centers = cell_centers
 	_window = window
 	_heart_assets = heart_assets
-	_texture_filter = texture_filter
 
 ## --- construction ------------------------------------------------------------------
 
@@ -80,9 +78,8 @@ func _configure(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true)
 	if apply_position:
 		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
-	# Symbols are authored large and drawn at 12-16px, so keep their downscale
-	# pixel-perfect with the rest of the machine art.
-	s.texture_filter = _texture_filter
+	# Filter at final display resolution; never flatten detailed art to layout pixels.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 ## --- what a window shows -------------------------------------------------------------
 
@@ -111,6 +108,7 @@ func neighbours_of(sym: String) -> Dictionary:
 ## the art is authored large and this only ever shrinks it. Public because the
 ## cheat preview and the swap drag paint onto sprites this component does not own.
 func apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	var heart_asset := String(_heart_assets.get(symbol_id, ""))
 	if symbol_id == "heart" and heart_asset == "":
 		heart_asset = String(_heart_assets["heart_x1"])

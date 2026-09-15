@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320" shape-rendering="crispEdges">
+  <!-- Brass indexing strips stay outside the live reel apertures and charge lamps. -->
+  <g fill="#ad9864"><path d="M30 170h2v30h-2zM62 170h2v30h-2zM94 170h2v30h-2z"/></g>
+  <g fill="#e0cfa1"><path d="M30 174h2v1h-2zM30 182h2v1h-2zM30 190h2v1h-2zM62 174h2v1h-2zM62 182h2v1h-2zM62 190h2v1h-2zM94 174h2v1h-2zM94 182h2v1h-2zM94 190h2v1h-2z"/></g>
+  <!-- Bolted reading bracket and leather-bound field book. -->
+  <path fill="#252a27" d="M121 180h20v21h-20z"/>
+  <path fill="#687268" d="M122 180h18v3h-18zM122 197h18v3h-18z"/>
+  <path fill="#d0c69f" d="M123 181h1v1h-1zM138 198h1v1h-1z"/>
+  <path fill="#392e2b" d="M123 176h15v20h-15z"/>
+  <path fill="#795349" d="M124 177h13v17h-13z"/>
+  <path fill="#4f3932" d="M124 177h3v17h-3z"/>
+  <path fill="#ac9167" d="M127 178h9v1h-9zM127 190h9v1h-9z"/>
+  <path fill="#ddcfaa" d="M127 194h11v2h-11zM130 181h3v6h-3zM128 183h7v2h-7z"/>
+  <path fill="#a59a7f" d="M129 195h9v1h-9z"/>
+  <path fill="#982f32" d="M133 195h2v5h-2z"/>
+</svg>

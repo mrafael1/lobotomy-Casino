@@ -17,9 +17,8 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	# reel/HUD sheets remain legacy 8x art, so both scale conventions must coexist.
 	for rel in [
 		"machine new view/machine_neon.png",
-		"machine new view/neon_machine_lever.png",
-		"machine new view/neon_machine_jackpot.png",
-		"machine new view/neon_machine_power_bar.png",
+		"machine_polished/jackpot_beacon.svg",
+		"machine_polished/power_lamps.svg",
 	]:
 		if not ResourceLoader.exists("res://assets/images/" + rel):
 			failures.append("machine art: missing native asset %s" % rel)
@@ -28,20 +27,73 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	if cabinet == null:
 		failures.append("machine art: native cabinet node is missing")
 	elif cabinet.texture == null \
-			or Vector2i(cabinet.texture.get_width(), cabinet.texture.get_height()) != Vector2i(160, 320) \
-			or cabinet.scale != Vector2.ONE \
-			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: cabinet is not a 160x320 native sprite")
+			or cabinet.texture.get_width() < 640 \
+			or not (cabinet.scale * cabinet.texture.get_size()).is_equal_approx(Vector2(160, 320)) \
+			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		failures.append("machine art: cabinet lost source detail or changed its 160x320 layout footprint")
+	else:
+		var cabinet_material := cabinet.material as ShaderMaterial
+		var aperture_texture: Texture2D = cabinet_material.get_shader_parameter("aperture_mask") \
+			if cabinet_material != null else null
+		if aperture_texture == null:
+			failures.append("machine art: painted cabinet is missing its aperture mask")
+		else:
+			var cabinet_image := aperture_texture.get_image()
+			for x in [33, 65, 97]:
+				for y in range(169, 203):
+					for offset in range(21):
+						if cabinet_image.get_pixel(x + offset, y).a > 0.01:
+							failures.append("machine art: cabinet obscures a live reel aperture")
+							break
 
-	var lever := machine.get_node_or_null("Lever") as Sprite2D
-	if lever == null:
-		failures.append("machine art: native lever node is missing")
-	elif lever.texture == null \
-			or Vector2i(lever.texture.get_width(), lever.texture.get_height()) != Vector2i(960, 320) \
-			or lever.hframes != 6 \
-			or lever.scale != Vector2.ONE \
-			or lever.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: lever is not a 6-frame native sprite")
+	if machine.get_node_or_null("Lever") != null or machine.get_node_or_null("HealthCoin") != null:
+		failures.append("machine: retired lever/coin hardware is still active")
+	var spin := machine.get_node("SpinButton") as Button
+	var hit := spin.get_rect()
+	if hit != Rect2(57, 213, 46, 28) or not is_equal_approx(hit.get_center().x, 80.0):
+		failures.append("machine: SPIN must be centered on the shelf with its touch area")
+	if hit.intersects(Rect2(133, 160, 20, 40)):
+		failures.append("machine: old lever hitbox is still active")
+	var tutorial_hit: Rect2 = machine.tutorial_anchor("spin_button")
+	if tutorial_hit.position + machine.global_position != spin.global_position or tutorial_hit.size != hit.size:
+		failures.append("machine: tutorial does not expose the new SPIN control")
+	for power: Button in machine._power_buttons.values():
+		if hit.intersects(power.get_rect()):
+			failures.append("machine: SPIN overlaps a power socket")
+	if hit.end.y > 241 or hit.position.y < 203:
+		failures.append("machine: SPIN escapes the shelf into the reels or lower HUD")
+	for icon: Control in machine._stash.icons():
+		if hit.intersects(icon.get_global_rect()):
+			failures.append("machine: SPIN overlaps a stash slot")
+	if hit.intersects(machine.SPINS_LEFT_LABEL_RECT):
+		failures.append("machine: SPIN overlaps the remaining-spin counter")
+	for i in 3:
+		var socket: Dictionary = machine.POWER_HITS[machine.POWER_IDS[i]]
+		if socket["top"] != 114.0 or socket["width"] != 26.0 or socket["height"] != 26.0:
+			failures.append("machine: powers must occupy the large metal sockets below the CRT")
+	if machine.MULT_STRIP["top"] < 77.0 or machine.MULT_STRIP["top"] + machine.MULT_STRIP["height"] > 90.0:
+		failures.append("machine: multiplier must fit inside the CRT above dealer information")
+	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
+		var style := spin.get_theme_stylebox(state) as StyleBoxTexture
+		if style == null or style.texture == null:
+			failures.append("machine: missing SPIN %s asset" % state)
+	if spin.focus_mode != Control.FOCUS_ALL or not spin.pressed.is_connected(machine._do_spin):
+		failures.append("machine: SPIN lost focus activation or its gameplay action")
+
+	# The shelf controls are top-level so their authored four-pixel alignment is
+	# preserved. They must still follow the painted cabinet during a machine shake.
+	var shelf_base := spin.global_position
+	var stash := machine.get_node("stash") as Control
+	var stash_base := stash.global_position
+	var shelf_offset := Vector2(2.0, 1.0)
+	machine._set_machine_motion_offset(shelf_offset)
+	if not is_equal_approx(spin.global_position.x, shelf_base.x + shelf_offset.x) \
+			or not is_equal_approx(spin.global_position.y, shelf_base.y + shelf_offset.y):
+		failures.append("machine: SPIN does not follow the cabinet shake")
+	if not is_equal_approx(stash.global_position.x, stash_base.x + shelf_offset.x) \
+			or not is_equal_approx(stash.global_position.y, stash_base.y + shelf_offset.y):
+		failures.append("machine: stash shelf does not follow the cabinet shake")
+	machine._set_machine_motion_offset(Vector2.ZERO)
 
 	var jackpot := machine.get_node_or_null("Jackpot") as Sprite2D
 	if jackpot == null:
@@ -63,16 +115,16 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or multiplier.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: multiplier is not a 6-frame native nearest-neighbor sprite")
 
-	var power_bar := machine.get_node_or_null("PowerBar") as Sprite2D
+	var power_bar := machine.get_node_or_null("PowerLamps") as Sprite2D
 	if power_bar == null:
 		failures.append("machine art: native power bar node is missing")
 	elif power_bar.texture == null \
-			or Vector2i(power_bar.texture.get_width(), power_bar.texture.get_height()) != Vector2i(960, 320) \
-			or power_bar.hframes != 6 \
+			or Vector2i(power_bar.texture.get_width(), power_bar.texture.get_height()) != Vector2i(640, 320) \
+			or power_bar.hframes != 4 \
 			or power_bar.vframes != 1 \
 			or power_bar.scale != Vector2.ONE \
 			or power_bar.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-		failures.append("machine art: power bar is not a 6-frame native sprite")
+		failures.append("machine art: power bar is not a 4-frame native sprite")
 
 	var power_callout := machine.get_node_or_null("PowerCallout") as Sprite2D
 	if power_callout == null:
@@ -90,20 +142,26 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		failures.append("machine art: wealth odometer is missing")
 	else:
 		var wealth_art := wealth_odometer.get_node_or_null("WealthBarArt") as Sprite2D
+		var digits := wealth_odometer.visible_digit_bounds()
+		digits.position += wealth_odometer.position
+		if not Rect2(72, 63, 50, 17).encloses(digits):
+			failures.append("machine: wealth drums must fit below the CRT target")
+		if digits.intersects(Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)):
+			failures.append("machine: dealer portrait overlaps the wealth drums")
 		if wealth_art == null or wealth_art.texture == null \
 				or Vector2i(wealth_art.texture.get_width(), wealth_art.texture.get_height()) \
-					!= Vector2i(160, 320) \
-				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: wealth odometer bar is not native 160x320 art")
-		elif not String(wealth_art.texture.resource_path).ends_with("wealth_bar.png"):
-			failures.append("machine art: wealth odometer still uses the misspelled bar asset")
+					!= Vector2i(640, 1280) \
+				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("machine art: wealth odometer trim lost its detailed source")
+		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt_detail.svg"):
+			failures.append("machine art: wealth odometer uses the wrong trim asset")
 		var wealth_cases := wealth_odometer.get_node_or_null("WealthCasesArt") as Sprite2D
 		if wealth_cases == null or wealth_cases.texture == null \
 				or Vector2i(wealth_cases.texture.get_width(), wealth_cases.texture.get_height()) \
-					!= Vector2i(160, 320) \
-				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: wealth odometer cases are missing or not native art")
-		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases.png"):
+					!= Vector2i(640, 1280) \
+				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			failures.append("machine art: wealth odometer cases lost their detailed source")
+		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases_detail.svg"):
 			failures.append("machine art: wealth odometer cases use the wrong asset")
 		var wealth_numbers := wealth_odometer.get_node_or_null("Reel0") as Control
 		if wealth_art != null and wealth_cases != null and wealth_numbers != null \
@@ -118,24 +176,35 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 				failures.append("machine art: wealth odometer reel %d is not clipped" % reel_index)
 			elif current == null or next == null or current.texture == null \
 					or Vector2i(current.texture.get_width(), current.texture.get_height()) \
-						!= Vector2i(1760, 320) \
+						!= Vector2i(440, 56) \
 					or current.hframes != 11 or next.hframes != 11 \
-					or current.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
-					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-				failures.append("machine art: wealth odometer reel %d is not an 11-frame native sheet" % reel_index)
+					or current.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+					or next.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+				failures.append("machine art: wealth odometer reel %d is not the compact 11-frame detailed strip" % reel_index)
+
+	if machine.get_node_or_null("HealthBar") != null:
+		failures.append("machine: redundant side spin tube is still active")
+	if not machine.SPINS_LEFT_LABEL_RECT.has_point(machine.SPIN_COUNTER_TARGET):
+		failures.append("machine: spin recovery still flies toward the removed tube")
 
 	for node_name in [
-		"ReelBacking", "HealthBar", "HealthCoin",
+		"ReelBacking",
 		"Multiplier", "LockPower0", "LockPower1", "LockPower2", "RerollPower",
 		"ShiftPower", "MemoryPower", "Reel0Top", "Reel0Bottom", "Reel0Center",
 		"Reel1Top", "Reel1Bottom", "Reel1Center", "Reel2Top", "Reel2Bottom",
 		"Reel2Center",
 	]:
 		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
-		if machine_art == null or machine_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
-			failures.append("machine art: %s is not nearest-neighbor filtered" % node_name)
-	if float(machine.POWER_BAR_CENTER.x) < 80.0:
-		failures.append("machine art: power bar coin target is still on the left")
+		var detailed_symbol: bool = String(node_name).begins_with("Reel") and node_name != "ReelBacking"
+		var expected_filter := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			if detailed_symbol or node_name in ["RerollPower", "ShiftPower", "MemoryPower"] else CanvasItem.TEXTURE_FILTER_NEAREST
+		if machine_art == null or machine_art.texture_filter != expected_filter:
+			failures.append("machine art: %s has the wrong art sampling mode" % node_name)
+		elif detailed_symbol and machine_art.texture.resource_path.contains("symbols/premium/") \
+				and machine_art.texture.get_width() < 128:
+			failures.append("machine art: %s lost its high-resolution symbol source" % node_name)
+	if machine.get_node_or_null("PowerBar") != null:
+		failures.append("machine art: old side power gauge is still active")
 
 
 ## Issue #181: the TV's objective readout is two authored sheets — a goal frame per
@@ -149,7 +218,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 		failures.append("issue181: the TV is missing the TARGET bar/goal art")
 		return
 	if machine._wealth.bar_sprite().hframes != WealthReadout.BAR_FRAME_COUNT \
-			or machine._wealth.goals_sprite().hframes != WealthReadout.GOALS_FRAME_COUNT:
+			or machine._wealth.goals_sprite().get_theme_font_size("font_size") != 6:
 		failures.append("issue181: the TARGET sheets were sliced into the wrong frame count")
 	# The shimmer is re-authored from time to time; catch a sheet whose real frame count
 	# has drifted from the constant rather than letting it play sliced-up frames.
@@ -176,7 +245,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 		machine._wealth.step_bar_animation(WealthReadout.BAR_ANIM_FRAME_TIME)
 		if shimmer.frame == first_frame:
 			failures.append("issue181: the shimmer is not advancing")
-	if machine._wealth.goals_sprite().hframes != EconomyConst.WEALTH_TARGETS.size():
+	if machine._wealth.goals_sprite().get_theme_font("font") == null:
 		failures.append("issue181: the goal sheet does not carry one frame per wealth target")
 
 	run_store.runPhase = "running"
@@ -184,7 +253,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	run_store.wealthTargetIndex = 0
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._wealth.goals_sprite().frame != 0 or machine._wealth.bar_sprite().frame != 0:
+	if machine._wealth.goals_sprite().text != "100" or machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: a fresh run did not show goal 0 with an empty bar")
 	# Meeting the current target fills the bar completely.
 	run_store.scoreEarned = EconomyConst.WEALTH_TARGETS[0]
@@ -195,7 +264,7 @@ func _check_target_readout_181(machine: Node, run_store: Node, failures: Array) 
 	run_store.wealthTargetIndex = 3
 	run_store.scoreEarned = 0
 	machine._refresh_target_readout()
-	if machine._wealth.goals_sprite().frame != 3:
+	if machine._wealth.goals_sprite().text != "800":
 		failures.append("issue181: the goal frame does not follow the wealth target index")
 	if machine._wealth.bar_sprite().frame != 0:
 		failures.append("issue181: the TARGET bar did not refill from empty after a payout")
@@ -374,7 +443,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue92: Serum boost icon count wrong: '%s'" % (slots[0]["count"] as Label).text)
 	else:
 		var serum_icon := (slots[0]["icon"] as TextureRect).texture
-		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/vial.png"):
+		if serum_icon == null or not String(serum_icon.resource_path).ends_with("symbols/premium/vial.png"):
 			failures.append("issue92: Serum boost icon did not use the chosen symbol")
 	run_store.guaranteeSymbolSpins = 1
 	run_store.guaranteeSymbolId = "vial"
@@ -391,7 +460,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	else:
 		var serum_zero_icon := (slots[0]["icon"] as TextureRect).texture
 		var serum_zero_color := (slots[0]["count"] as Label).get_theme_color("font_color")
-		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/vial.png"):
+		if serum_zero_icon == null or not String(serum_zero_icon.resource_path).ends_with("symbols/premium/vial.png"):
 			failures.append("issue92: Serum zero-count handoff icon should keep the chosen symbol")
 		if serum_zero_color == Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum zero-count handoff should not be red yet")
@@ -405,7 +474,7 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	else:
 		var serum_neg_icon := (slots[0]["icon"] as TextureRect).texture
 		var serum_neg_color := (slots[0]["count"] as Label).get_theme_color("font_color")
-		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/focus_serum.png"):
+		if serum_neg_icon == null or not String(serum_neg_icon.resource_path).ends_with("items/generated/serum.png"):
 			failures.append("issue92: Serum negative boost icon did not use the serum bottle")
 		if serum_neg_color != Color(0.94, 0.27, 0.27):
 			failures.append("issue92: Serum negative boost count should be red")
@@ -449,9 +518,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 			% int(icon_size))
 	var dealer_rect := Rect2(machine.DEALER_ICON_POS, machine.DEALER_ICON_SIZE)
 	# Measured art extents of the TV's other occupants (see the constants' comment).
-	# The widest goal frame runs x66..83; the bar spans the TV at y94..98.
-	var goal_rect := Rect2(66.0, 86.0, 18.0, 5.0)
-	var fill_bar_rect := Rect2(41.0, 94.0, 70.0, 5.0)
+	var goal_rect := Rect2(72.0, 47.0, 50.0, 8.0)
+	var fill_bar_rect := Rect2(72.0, 56.0, 48.0, 5.0)
 	# The TV's own SCREEN below the fill bar, measured off the rendered cabinet as the
 	# near-black region rather than "anything dark" — the surrounding cabinet grey reads
 	# dark too, and counting it as screen is what let the row run past the bezel and off
@@ -543,6 +611,12 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 	var prev_upgrades: Array = (run_store.ownedUpgrades as Array).duplicate()
 	run_store.ownedUpgrades = ["pacte_tunnel_vision"]
 	machine._refresh_consumable_fx()
+	var shutter := machine._consumable_fx.layer().get_node_or_null("TunnelVisionShutter") as TextureRect
+	if shutter == null or not shutter.visible or shutter.position != Vector2(97, 169) \
+			or shutter.size != Vector2(21, 34):
+		failures.append("machine art: Tunnel Vision shutter must fit the entire third reel")
+	elif shutter.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		failures.append("machine art: shutter must not intercept power targeting")
 	if not (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue181: Tunnel Vision did not hide the third reel")
 	if machine._tobacco_smoke.size() > 2 \
@@ -550,6 +624,8 @@ func _check_boost_duration_icons_76(machine: Node, run_store: Node, failures: Ar
 		failures.append("issue181: Tunnel Vision should blind the reel without smoking it")
 	run_store.ownedUpgrades = prev_upgrades
 	machine._refresh_consumable_fx()
+	if shutter != null and shutter.visible:
+		failures.append("machine art: shutter remained attached without Tunnel Vision")
 	if (machine._tobacco_covers[2] as ColorRect).visible:
 		failures.append("issue181: the third reel stayed covered without Tunnel Vision")
 	machine._clear_boost_zero_linger()
@@ -653,8 +729,8 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			failures.append("issue76: the power-bar chip flies the wrong currency (%s)"
 				% String(chip.texture.resource_path).get_file())
 		chip.queue_free()
-	if machine.WEALTH_COIN_ORIGIN == machine._cash_tray_pos():
-		failures.append("issue76: wealth power coins still start in the cash tray")
+	if machine.POWER_COIN_ORIGIN != machine._cash_tray_pos():
+		failures.append("issue76: power coins must start at the cash outlet")
 	# The flight must begin where the pop's last frame leaves the coin, or the coin jumps at
 	# the hand-off. Measured off the sheet so a re-exported animation is caught here.
 	var pop_sheet := Image.load_from_file(
@@ -669,13 +745,13 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 					continue
 				lo.x = mini(lo.x, x); lo.y = mini(lo.y, y)
 				hi.x = maxi(hi.x, x); hi.y = maxi(hi.y, y)
-		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5)
-		if hi.x >= 0 and machine.WEALTH_COIN_ORIGIN.distance_to(pop_end) > 1.01:
+		var pop_end := Vector2(float(lo.x + hi.x + 1) * 0.5, float(lo.y + hi.y + 1) * 0.5) + CoinFlights.POP_OFFSET
+		if hi.x >= 0 and machine.POWER_COIN_ORIGIN.distance_to(pop_end) > 1.01:
 			failures.append("issue76: power coin flight starts at %s but the pop ends at %s"
-				% [str(machine.WEALTH_COIN_ORIGIN), str(pop_end)])
+				% [str(machine.POWER_COIN_ORIGIN), str(pop_end)])
 
 	# Frame for a banked-score value.
-	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 4, 50: 5 }
+	var expect := { 0: 0, 10: 1, 20: 2, 30: 3, 40: 3, 50: 3 }
 	for score in expect:
 		if machine._bar_frame_for_score(score) != expect[score]:
 			failures.append("issue76: frame for score %d = %d, expected %d" % [score, machine._bar_frame_for_score(score), expect[score]])
@@ -721,10 +797,9 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	run_store.abilitiesUsed = []
 	var restore_first: Dictionary = machine._compute_power_plan()
 	var restore_first_steps: Array = restore_first["steps"]
-	if restore_first_steps.size() != 2 \
+	if restore_first_steps.size() != 1 \
 			or not bool(restore_first_steps[0]["restore"]) \
-			or bool(restore_first_steps[1]["restore"]) \
-			or int(restore_first["score"]) != 10:
+			or int(restore_first["score"]) != 0:
 		failures.append("issue174: queued restore did not precede the point fill")
 
 	run_store.scoreEarned = 60
@@ -734,7 +809,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	for stepd in restore_no_double_steps:
 		if bool(stepd["restore"]):
 			restore_step_count += 1
-	if restore_step_count != 1 or int(restore_no_double["score"]) != 40:
+	if restore_step_count != 1 or int(restore_no_double["score"]) != 30:
 		failures.append("issue174: queued restore was counted again by the power bar")
 
 	# Cocktail can award points on a miss, which opens the combo-loss warning. The warning
@@ -792,25 +867,24 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 			cap_restores += 1
 	if cap_restores != 0:
 		failures.append("issue76: gauge planned a restore with no restorable power")
-	if int(cap["score"]) != 40:
+	if int(cap["score"]) != 30:
 		failures.append("issue76: no-restore gauge did not cap at 4/5 (score %d, expected 40)" % int(cap["score"]))
 
 	# A queued restore fires first, then the same gain starts filling the reset gauge.
-	machine._power_bar_score = 40
+	machine._power_bar_score = 20
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = ["reroll"]
 	run_store.lucidityCoins = 110
 	var atcap: Dictionary = machine._compute_power_plan()
-	if (atcap["steps"] as Array).size() != 2 \
-			or not bool((atcap["steps"] as Array)[0]["restore"]) \
-			or bool((atcap["steps"] as Array)[1]["restore"]):
+	if (atcap["steps"] as Array).size() != 1 \
+			or not bool((atcap["steps"] as Array)[0]["restore"]):
 		failures.append("issue174: 4/5 + 10 should restore before the new point coin")
-	if int(atcap["score"]) != 10:
+	if int(atcap["score"]) != 0:
 		failures.append("issue174: point fill after restore should leave 10 banked, got %d" % int(atcap["score"]))
 
 	# At 4/5 with NO pending but a SPENT ability, scoring 10 completes the fill and the
 	# gauge restores the spent power itself (e.g. Water at 4/5 with a used power).
-	machine._power_bar_score = 40
+	machine._power_bar_score = 20
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = ["reroll"]
@@ -820,25 +894,25 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 		failures.append("issue76: 4/5 + 10 with a spent power should restore it (bar-driven)")
 
 	# At 4/5, scoring 10 with NOTHING restorable => no coin, gauge stays 4/5, excess discarded.
-	machine._power_bar_score = 40
+	machine._power_bar_score = 30
 	machine._power_seen_lucidity = 100
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = []
 	run_store.lucidityCoins = 110
 	var stay: Dictionary = machine._compute_power_plan()
-	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 40:
+	if not (stay["steps"] as Array).is_empty() or int(stay["score"]) != 30:
 		failures.append("issue76: 4/5 with nothing restorable should stay at 4/5 (score %d)" % int(stay["score"]))
 
 	# A restore step consumes a pending restore first (front, once).
 	run_store.abilitiesUsed = []
 	run_store.pendingPowerRestores = ["reroll", "shift"]
-	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	machine._apply_power_bank_step({ "frame": 3, "restore": true })
 	if run_store.pendingPowerRestores != ["shift"]:
 		failures.append("issue76: restore step did not commit exactly the front restore (%s)" % str(run_store.pendingPowerRestores))
 	# With no pending but a spent ability, the restore step brings that ability back.
 	run_store.pendingPowerRestores = []
 	run_store.abilitiesUsed = ["shift"]
-	machine._apply_power_bank_step({ "frame": 5, "restore": true })
+	machine._apply_power_bank_step({ "frame": 3, "restore": true })
 	if run_store.abilitiesUsed.has("shift"):
 		failures.append("issue76: bar-driven restore did not bring the spent ability back")
 	machine._power_coins_in_flight = 0
@@ -860,12 +934,12 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 	machine._pending_spin_gain = 0
 	machine._set_sequence_lock(false)
 	machine._update_hud()
-	var tube := machine._health_bar_sprite as Sprite2D
+	var tube := machine._spins_left_label as Label
 	if tube == null:
-		failures.append("issue66: spins tube missing")
+		failures.append("issue66: shelf counter missing")
 		return
 	var before_n := int(machine._display_spins_left())
-	var before_frame := int(tube.frame)
+	var before_frame := int(tube.text)
 
 	# 3x vial restores +3 normal spins, spawns the fly-in, and holds the counter.
 	machine._apply_symbol_triple("vial", 0, false)
@@ -875,16 +949,16 @@ func _check_spin_gain_fx_66(machine: Node, run_store: Node, failures: Array) -> 
 		failures.append("issue66: vial grant did not spawn the +3 fly-in")
 	if int(machine._display_spins_left()) != before_n:
 		failures.append("issue66: counter ticked before the vial fly-in landed")
-	if int(tube.frame) != before_frame:
-		failures.append("issue66: spins tube filled before the vial fly-in landed")
+	if int(tube.text) != before_frame:
+		failures.append("issue66: shelf counter filled before the vial fly-in landed")
 	await create_timer(1.3).timeout
 	if int(machine._pending_spin_gain) != 0:
 		failures.append("issue66: pending spin gain never landed")
 	var after_n := int(machine._display_spins_left())
 	if after_n != before_n + 3:
 		failures.append("issue66: counter did not gain +3 in sync (was %d, now %d)" % [before_n, after_n])
-	if int(tube.frame) <= before_frame:
-		failures.append("issue66: spins tube did not refill with the +3 vial grant")
+	if int(tube.text) <= before_frame:
+		failures.append("issue66: shelf counter did not refill with the +3 vial grant")
 
 	# Tea with no used powers restores +3 spins through the same fly-in.
 	run_store.isSpinning = false
@@ -931,23 +1005,23 @@ func _check_spins_bar_lever_80(machine: Node, run_store: Node, failures: Array) 
 	machine._set_sequence_lock(false)
 	machine._update_hud()
 
-	var tube := machine._health_bar_sprite as Sprite2D
+	var tube := machine._spins_left_label as Label
 	if tube == null:
-		failures.append("issue80: spins tube missing")
+		failures.append("issue80: shelf counter missing")
 		run_store.reset_run_state()
 		return
 	var full_spins := int(machine._display_spins_left())
-	var full_frame := int(tube.frame)
+	var full_frame := int(tube.text)
 
-	# Lever pull: the reward-delta hold is on, and spin() has spent the neuron cost.
+	# SPIN press: the reward-delta hold is on, and spin() has spent the neuron cost.
 	machine._hud_delta_hold = true
 	run_store.neurons = 2
 	machine._update_hud()
 	var during_hold := int(machine._display_spins_left())
 	if during_hold >= full_spins:
-		failures.append("issue80: SPINS LEFT did not drop on lever pull while the HUD was held")
-	if int(tube.frame) >= full_frame:
-		failures.append("issue80: spins tube did not drain on lever pull while the HUD was held")
+		failures.append("issue80: SPINS LEFT did not drop on SPIN press while the HUD was held")
+	if int(tube.text) >= full_frame:
+		failures.append("issue80: shelf counter did not drain on SPIN press while the HUD was held")
 
 	# A free spin granted by the same spin never enters the counter, held or not.
 	run_store.freeSpinsRemaining = 1
@@ -987,12 +1061,11 @@ func _check_spins_counter_accuracy_80(machine: Node, run_store: Node, failures: 
 	if before != EconomyConst.MAX_NEURONS:
 		failures.append("issue85: SPINS LEFT should cap at %d, got %d"
 			% [EconomyConst.MAX_NEURONS, before])
-	# The tube and number both show their full state at the cap: the top frame of the
-	# sheet is the cap itself, so a raised cap must reach real authored art.
-	var tube := machine._health_bar_sprite as Sprite2D
-	if tube != null and int(tube.frame) != EconomyConst.MAX_NEURONS:
-		failures.append("issue85: spins tube showed frame %d at the %d-spin cap"
-			% [int(tube.frame), EconomyConst.MAX_NEURONS])
+	# The displayed number follows the current cap exactly.
+	var tube := machine._spins_left_label as Label
+	if tube != null and int(tube.text) != EconomyConst.MAX_NEURONS:
+		failures.append("issue85: shelf counter showed frame %d at the %d-spin cap"
+			% [int(tube.text), EconomyConst.MAX_NEURONS])
 	if machine._spins_left_label == null \
 			or machine._spins_left_label.get_theme_color("font_color") != machine.SPINS_LEFT_MAX_COLOR:
 		failures.append("issue85: max SPINS LEFT number did not turn dark red")
@@ -1599,6 +1672,12 @@ func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
 			# Pixel art that ends up LINEAR renders soft and passes everything else.
 			var wanted: int = ART_FILTER_EXCEPTIONS.get(String(child.name),
 				CanvasItem.TEXTURE_FILTER_NEAREST)
+			if tex.resource_path.begins_with("res://assets/images/symbols/"):
+				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			if tex.resource_path.contains("/machine_polished/") and tex.resource_path.get_file().get_basename() in [
+				"cabinet-painted", "reel_housing", "wealth_cases_detail", "wealth_crt_detail", "wealth_digits_detail",
+				"reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]:
+				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			if sprite.texture_filter != wanted:
 				failures.append("art identity: %s draws with filter %d, expected %d (%s)"
 					% [here, sprite.texture_filter, wanted, String(tex.resource_path).get_file()])
@@ -1667,8 +1746,32 @@ func _check_reel_strip_geometry(machine: Node, failures: Array) -> void:
 ## a version of this that stepped down the sheet instead of across it was written and
 ## caught by hand during #207 — it renders a plausible-looking wrong thing.
 func _check_spin_blur_region(machine: Node, failures: Array) -> void:
+	var housing := machine.get_node("ReelHousing") as Sprite2D
+	var backing := machine.get_node("ReelBacking") as Sprite2D
+	if housing.texture.get_size() != Vector2(640, 1280) \
+			or not (housing.texture.get_size() * housing.scale).is_equal_approx(Vector2(160, 320)) \
+			or backing.texture.get_size() != Vector2(160, 320):
+		failures.append("reel hardware: detailed frame and drum backing lost their shared layout footprint")
+	var housing_image := housing.texture.get_image()
+	var drum_image := backing.texture.get_image()
+	for hole: Dictionary in machine.REEL_HOLES:
+		var opening := Rect2i(int(hole["left"]) * 4, 169 * 4, int(hole["width"]) * 4, 34 * 4)
+		if housing_image.get_region(opening).get_used_rect().has_area():
+			failures.append("reel hardware: detailed metal frame covers a live aperture")
+		for y in range(169, 203):
+			for x in range(int(hole["left"]), int(hole["left"] + hole["width"])):
+				if drum_image.get_pixel(x, y).a < 0.99:
+					failures.append("reel hardware: transparent hole in the drum backing")
+					return
 	var rb = machine._reel_blur
-	var scale: float = float(machine.ASSET_SCALE)
+	var strip := machine.get_node("SpinReel0") as Sprite2D
+	var scale: float = float(strip.texture.get_height()) / 320.0
+	if strip.texture.get_size() != Vector2(640, 320) or strip.scale != Vector2.ONE:
+		failures.append("reel hardware: motion strip must use four native 160x320 frames")
+	for i in 3:
+		var cover: Sprite2D = rb.cover(i)
+		if cover.texture != backing.texture or cover.material != null:
+			failures.append("reel hardware: a landed reel must use the same unmodified drum backing")
 	for reel in 3:
 		var hole: Dictionary = machine.REEL_HOLES[reel]
 		rb.set_spin_frame(reel, 0)
