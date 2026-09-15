@@ -21,7 +21,7 @@ func _run() -> void:
 	run.reset_run_state()
 	for window_size in [Vector2i(400, 800), Vector2i(540, 960), Vector2i(450, 1000), Vector2i(800, 1000)]:
 		root.size = window_size
-		for scene_name in ["start_menu_scene", "machine_scene", "pacte_scene", "settings_scene", "collection_scene", "options_overlay", "dealer_choice_scene", "dealer_scene", "upgrades_scene"]:
+		for scene_name in ["start_menu_scene", "machine_scene", "pacte_scene", "settings_scene", "collection_scene", "scores_scene", "options_overlay", "dealer_choice_scene", "dealer_scene", "upgrades_scene"]:
 			if scene_name == "machine_scene":
 				run.reset_run_state()
 				run.start_new_run([], {}, false, 12345)

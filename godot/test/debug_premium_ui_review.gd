@@ -32,7 +32,7 @@ func _run() -> void:
 	root.add_child(_viewport)
 	for locale in ["en", "fr"]:
 		TranslationServer.set_locale(locale)
-		for scene_name in ["start_menu_scene", "options_overlay", "settings_scene", "collection_scene", "shop_scene"]:
+		for scene_name in ["start_menu_scene", "options_overlay", "settings_scene", "scores_scene", "collection_scene", "shop_scene"]:
 			var scene := (load("res://scenes/%s.tscn" % scene_name) as PackedScene).instantiate()
 			_viewport.add_child(scene)
 			if scene.has_method("show_overlay"):

@@ -22,6 +22,7 @@ art. Do not flatten all art to the 160x320 layout grid.
 | Power coin | Separate mint token for restoration flights, preserving existing flight geometry and timing |
 | Consumables | Nine 128px painted items with linear mipmaps in dealer offers, Shop, machine stash, active-item badges and Tea flight; existing layout footprints retained |
 | Dealer chip augments | Eight distinct 128px brass/enamel emblems, including Dealer's Tip and Emergency Reserve; shared sheet and existing offer footprints |
+| Scores ledger | Detailed brass/enamel frame, six suit emblems, live English/French labels, bounded statistics and ending dates, keyboard-focusable tier/close buttons |
 | Menu surfaces | Start buttons, settings labels, options heading, Collection names, Shop rows and footer controls |
 | Room surfaces | Full-resolution painted Pacte/build table, route lobby, dealer counter, settings console and options plaque with filtered sampling and fixed safe-area layouts |
 | Card faces and decks | Four-times-resolution painted fronts, backs and deck stacks; original 39x61 card and 28x32 deck footprints |
@@ -35,7 +36,7 @@ animation sequencing or saved data. Original card atlas coordinates remain valid
 
 The entire asset inventory is not yet replaced. Further passes must cover the
 animated Pattern Recognition and How to Cheat emblems, campaign-neuron animation,
-payout/ending animation families, and the remaining Lab/scores
+payout/ending animation families, and the remaining Lab
 surfaces. These need native-frame review, not a static substitution that removes
 their animation. The Shop campaign meter/header layout also needs a dedicated pass.
 

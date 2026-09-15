@@ -703,3 +703,8 @@ Dealer Chip Augments use an eight-frame detailed brass/enamel sheet, one 128px
 square per effect. Dealer's Tip has a clock and Emergency Reserve a heart shield;
 neither reuses the previous six-frame sheet's fallback. Dealer views use linear
 mipmaps and retain their existing offer geometry, prices and selection behavior.
+
+Scores presentation uses a brass/enamel ledger with live English/French labels,
+statistics and ending dates. Six detailed suit emblems identify the selected win
+counter. Visible tier and close buttons support keyboard focus; browsing remains
+read-only. Value boxes are applied after font setup to contain large statistics.
