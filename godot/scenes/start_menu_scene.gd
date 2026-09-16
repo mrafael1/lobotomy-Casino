@@ -29,8 +29,9 @@ const MENU_W := 148.0
 const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
 const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
-# The retired full-screen menu sheet is no longer loaded. The live menu uses the
-# scene's controls and these small overlays for the optional run selector.
+# The retired full-screen menu sheet is no longer loaded. The live menu uses
+# the title and button plates as separate overlays over the casino backdrop.
+const MENU_TITLE_ASSET := "start_menu/title.png"
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
 const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
 # Standalone button plates (full-canvas overlays): the plate squashes together
@@ -110,8 +111,7 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
 var _font: FontFile = null
-var _use_art := false
-var _menu_sprite: Sprite2D = null      # compatibility marker for menu checks
+var _menu_sprite: Sprite2D = null      # title overlay (MenuArt)
 var _bar_sprite: Sprite2D = null       # selector bar overlay, shown once unlocked
 var _symbols_sprite: Sprite2D = null   # suit overlay, frame per selection
 var _plate_sprites := {}               # Button -> full-canvas plate Sprite2D
@@ -374,16 +374,45 @@ func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT
 	return l
 
 func _build_menu() -> void:
-	# Keep a named marker for callers that used to inspect the authored sheet.
-	# It carries no texture: the retired full-screen asset is never loaded.
-	_menu_sprite = Sprite2D.new()
+	_menu_sprite = _frame_sprite(MENU_TITLE_ASSET, 1)
+	if _menu_sprite == null:
+		_menu_sprite = Sprite2D.new()
 	_menu_sprite.name = "MenuArt"
-	_menu_sprite.visible = false
-	add_child(_menu_sprite)
 	_build_campaign_labels()
-	UiKit.connect_button(_start_button, _start_run)
-	UiKit.connect_button(_scores_button, _open_scores)
+	var col := get_node_or_null("MenuColumn") as VBoxContainer
+	# The scene's legacy column remains as a compatibility shell; the live
+	# buttons are positioned over their authored plates below.
+	var start_plate := _frame_sprite(MENU_START_PLATE_ASSET, 1)
+	if start_plate != null:
+		_plate_sprites[_start_button] = start_plate
+	var scores_plate := _frame_sprite(MENU_SCORES_PLATE_ASSET, 2)
+	if scores_plate != null:
+		_plate_sprites[_scores_button] = scores_plate
+	var options_plate := _frame_sprite(MENU_OPTIONS_PLATE_ASSET, 2)
+	_options_button = Button.new()
+	_options_button.name = "OptionsButton"
+	_options_button.text = "OPTIONS"
+	add_child(_options_button)
+	if options_plate != null:
+		_plate_sprites[_options_button] = options_plate
+	_reparent_plate_button(_start_button, col, ART_START_RECT, ART_CYAN, 10, _start_run)
+	_reparent_plate_button(_scores_button, col, ART_SCORES_LOCKED_RECT, ART_PINK, 8, _open_scores)
+	_style_plate_button(_options_button, ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
+	_options_button.pressed.connect(_toggle_options_overlay)
+	for b in [_start_button, _scores_button, _options_button]:
+		if b != null:
+			move_child(b, get_child_count() - 1)
+	if col != null:
+		col.visible = false
+	_campaign_hint = _overlay_label("CampaignHint", ART_HINT_RECT, 5,
+		Color(0.9, 0.78, 0.64))
+	UiKit.style_display_label(_campaign_hint)
+	_campaign_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_build_live_selector()
+	if not Engine.is_editor_hint():
+		_options_overlay = OPTIONS_OVERLAY_SCENE.instantiate() as OptionsOverlay
+		_options_overlay.name = "OptionsOverlay"
+		add_child(_options_overlay)
 
 func _build_live_selector() -> void:
 	_bar_sprite = _frame_sprite(MENU_AUGMENTED_BAR_ASSET, 1)
@@ -464,10 +493,9 @@ func _refresh_augmented_selector() -> void:
 	var shown := _augmented_layout_active()
 	var run_held := not Engine.is_editor_hint() and RunStateStore.has_resume_state()
 	_augmented_row.visible = shown
-	if _bar_sprite != null and not _use_art:
+	if _bar_sprite != null:
 		_bar_sprite.visible = shown
-	if _use_art:
-		_layout_art_menu(shown)
+	_layout_art_menu(shown)
 	# While a run is held the row locks: arrows disabled (dimmed), and the suit
 	# shown is the ACTIVE run's tier, not the menu selection.
 	var displayed := _selected_augmented_tier
