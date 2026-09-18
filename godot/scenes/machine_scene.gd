@@ -4725,8 +4725,8 @@ func _play_tea_flight(slot_index: int) -> void:
 		return
 	var icon := TextureRect.new()
 	icon.texture = tex
-	icon.size = Vector2(12.0, 12.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.size = Vector2(12.0, 12.0)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE

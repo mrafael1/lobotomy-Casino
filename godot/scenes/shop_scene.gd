@@ -406,8 +406,8 @@ func _build_stash(pending: Dictionary) -> void:
 		var icon := TextureRect.new()
 		icon.texture = _load_texture(ITEM_ICONS.get(slots[i], "items/consumable_placeholder.png"))
 		icon.position = Assets.stash_slot_pos(i, Consumables.MAX_CONSUMABLE_SLOTS)
-		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		_stash_holder.add_child(icon)

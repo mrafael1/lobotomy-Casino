@@ -264,7 +264,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer offer is missing the hover explanation label")
 	elif not default_bubble.visible or not default_bubble_label.visible \
 			or default_bubble_label.text != "CHOOSE\nYOUR PATH" \
-			or default_bubble_label.position != Vector2(103.0, 173.0) \
+			or default_bubble_label.position != Vector2(103.0, 173.0 + Assets.centered_text_nudge(route.BUBBLE_TEXT_FONT_SIZE)) \
 			or default_bubble_label.size != Vector2(39.0, 21.0):
 		failures.append("route: dealer bubble is missing the default path prompt")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
