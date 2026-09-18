@@ -75,7 +75,7 @@ const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
 const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
-const BUBBLE_TEXT_FONT_SIZE := 4
+const BUBBLE_TEXT_FONT_SIZE := 5
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
 const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
@@ -199,7 +199,7 @@ func _process(delta: float) -> void:
 		DOOR_SUCTION_MIN_SPAWN_DELAY, DOOR_SUCTION_MAX_SPAWN_DELAY)
 
 func _build_header() -> void:
-	_message = _label("", MESSAGE_RECT, 4, RED)
+	_message = _label("", MESSAGE_RECT, 6, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

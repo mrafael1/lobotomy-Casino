@@ -237,7 +237,7 @@ func _build() -> void:
 	_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_preview)
-	_status = _label("", Rect2(6.0, 214.0, 148.0, 14.0), 4, MUTED)
+	_status = _label("", Rect2(6.0, 212.0, 148.0, 18.0), 6, MUTED)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
