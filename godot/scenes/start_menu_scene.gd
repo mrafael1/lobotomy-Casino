@@ -87,23 +87,22 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var tutorial_pauses_tree: bool = true
 @export var tutorial_title_text: String = "HOW TO PLAY"
 @export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
+- You have 3 campaign lives. Reach 5,000 Wealth.
 
-[color=#f2d37c][b]Dealer Scene[/b][/color]
-- Buy consumables for your run.
-- Effects are vague. Try them all to discover what they do.
-- Inventory limit: 2 consumables max.
+[color=#f2d37c][b]Pacte[/b][/color]
+- Begin each run by choosing one augment and one power.
+- Reroll is a choice, not a starting bonus.
 
-[color=#c6f08a][b]Upgrades Scene[/b][/color]
-- Purchase upgrades for your run.
-- Acquire powers that manipulate the machine.
-- Boost your overall gains.
+[color=#c6f08a][b]Routes and Items[/b][/color]
+- Between rounds, choose a route or continue for free.
+- Spend run coins on cards, Shop upgrades, and items.
+- The Dealer also visits during play. Take an item, then tap its stash slot to use it. Stash limit: 2.
 
-[color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 15 spins with x1, x2, or x3 bets.
-- The Dealer can pop up mid-run with run-only items.
-- You always start with the "Reroll" power.
-- 1 random power restores every 30 coins obtained."""
+[color=#ff9ca8][b]The Machine[/b][/color]
+- Start with 15 spins. Wins raise the frenzy multiplier.
+- A miss at x2 or x3 can be rescued with a power.
+- Every 30 run coins restores one random spent power.
+- Between runs, spend wallet credits on Lab upgrades."""
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")
@@ -581,7 +580,7 @@ func _configure_tutorial_modal() -> void:
 		_tutorial_body.bbcode_enabled = true
 		_tutorial_body.text = tutorial_bbcode
 		_tutorial_body.fit_content = false
-		_tutorial_body.scroll_active = false
+		_tutorial_body.scroll_active = true
 		_tutorial_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_tutorial_body.add_theme_font_size_override("normal_font_size", 5)
 		_tutorial_body.add_theme_font_size_override("bold_font_size", 5)
