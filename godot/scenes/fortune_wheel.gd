@@ -133,10 +133,12 @@ func _draw_segments() -> void:
 		if index == _result_index and not _spinning:
 			draw_arc(CENTER, WHEEL_RADIUS - 2.0, start_angle + 0.025,
 				end_angle - 0.025, 12, HOT_GOLD, 3.0, false)
-		_draw_segment_label(index, start_angle + slice * 0.5)
 
 	draw_circle(CENTER, WHEEL_RADIUS - 6.0, Color(INK.r, INK.g, INK.b, 0.56))
 	draw_arc(CENTER, WHEEL_RADIUS - 6.0, 0.0, TAU, 48, Color(HOT_CYAN.r, HOT_CYAN.g, HOT_CYAN.b, 0.64), 1.0, false)
+	# Print rewards after the inner tint so the face cannot dim their lettering.
+	for index in SEGMENT_COUNT:
+		_draw_segment_label(index, POINTER_ANGLE + _wheel_angle + (float(index) + 0.5) * slice)
 	# The hub is intentionally tiny and mechanical: a bright ring, a dark cap, and a
 	# four-pixel glint echo the machine's authored meter highlights.
 	draw_circle(CENTER, 10.0, Color(CYAN.r, CYAN.g, CYAN.b, 0.17))
@@ -154,7 +156,7 @@ func _draw_segment_label(index: int, angle: float) -> void:
 	var label_center := CENTER + Vector2.from_angle(angle) * label_radius
 	var label_color := HOT_GOLD if index == _result_index and not _spinning else Color(0.92, 0.92, 0.88)
 	draw_string(_font, Vector2(roundf(label_center.x - 17.0), roundf(label_center.y + 2.0)),
-		label, HORIZONTAL_ALIGNMENT_CENTER, 34.0, 4, label_color)
+		label, HORIZONTAL_ALIGNMENT_CENTER, 34.0, 5, label_color)
 
 func _draw_bulbs() -> void:
 	for index in 16:
