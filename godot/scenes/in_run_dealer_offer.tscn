@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://bjj4vrqact3d4" path="res://scenes/in_run_dealer_offer.gd" id="1_offer"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
-[ext_resource type="Texture2D" uid="uid://cpsspqyhnt8lr" path="res://assets/images/dealer_portrait.png" id="3_6x38b"]
-[ext_resource type="Texture2D" uid="uid://blcjuj1ssoo2q" path="res://assets/images/dealer_hands.png" id="4_fxop8"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_offer_polished/portrait.png" id="3_6x38b"]
+[ext_resource type="Texture2D" path="res://assets/images/dealer_offer_polished/hands.png" id="4_fxop8"]
 [ext_resource type="Texture2D" uid="uid://bdycexdh3bb6m" path="res://assets/images/ui/speech_bubble_normal.png" id="5_ifspb"]
 [ext_resource type="Script" uid="uid://svi836bkplk8" path="res://scenes/offer_slot_preview.gd" id="6_slot"]
 [ext_resource type="Texture2D" uid="uid://b3o4yi7e744vh" path="res://assets/images/ui/green_button.png" id="7_fxop8"]

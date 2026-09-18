@@ -1251,6 +1251,11 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 	var overlay := ps.instantiate()
 	get_root().add_child(overlay)
 
+	var offer_icon: TextureRect = overlay._make_item_icon_on(overlay, "item_water", "offer", Vector2.ZERO, 16.0)
+	if not offer_icon.size.is_equal_approx(Vector2(16.0, 16.0)):
+		failures.append("live dealer: high-resolution item exceeds its 16x16 offer bounds")
+	offer_icon.queue_free()
+
 	var tap := overlay.get_node("TapLabel") as Label
 	if tap.get_theme_font_size("font_size") < 12:
 		failures.append("issue27: tap warning font is not punchy")

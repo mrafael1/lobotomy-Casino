@@ -17,9 +17,6 @@ const DEALER_VISIBLE_CENTER_X := 78.0
 const DEALER_CENTER_Y := 160.0 # vertical centre of the rotated portrait
 const DEALER_FILL := 0.86      # cropped portrait width fills most of canvas height when rotated
 const HEAD_POKE := 118.0       # how far the head/upper body reaches in from the border
-const DEALER_FRAME_W := 1280.0
-const DEALER_CROP_X := 392.0
-const DEALER_CROP_Y := 1048.0
 const DEALER_CROP_W := 464.0
 const DEALER_CROP_H := 640.0
 const HANDS_SCALE := 1.0
@@ -309,9 +306,9 @@ func _build_base() -> void:
 	_dealer_root.add_child(_dealer_sprite)
 
 	_hands_sprite = Sprite2D.new()
-	_hands_sprite.texture = Assets.texture("dealer_hands.png", true)
+	_hands_sprite.texture = Assets.texture("dealer_offer_polished/hands.png", true)
 	_hands_sprite.centered = false
-	_hands_sprite.scale = Vector2(HANDS_SCALE, HANDS_SCALE)
+	_hands_sprite.scale = Vector2(128.0, 64.0) * HANDS_SCALE / _hands_sprite.texture.get_size()
 	_hands_sprite.position = _hands_position()
 	_hands_rest_position = _hands_sprite.position
 	_hands_entry_position = Vector2(_hands_rest_position.x, -_hands_size().y - 2.0)
@@ -447,7 +444,8 @@ func _bind_authored_base() -> bool:
 
 	if _hands_sprite != null:
 		if _hands_sprite.texture == null:
-			_hands_sprite.texture = Assets.texture("dealer_hands.png", true)
+			_hands_sprite.texture = Assets.texture("dealer_offer_polished/hands.png", true)
+		_hands_sprite.scale = Vector2(128.0, 64.0) * HANDS_SCALE / _hands_sprite.texture.get_size()
 		_hands_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_hands_rest_position = _hands_sprite.position
 		_hands_entry_position = Vector2(_hands_rest_position.x, -_hands_size().y - 2.0)
@@ -547,21 +545,17 @@ func _style_tap_label() -> void:
 func _configure_dealer_sprite(apply_default_transform := false) -> void:
 	if _dealer_sprite == null:
 		return
-	if _dealer_sprite.texture == null:
-		_dealer_sprite.texture = Assets.texture("dealer_portrait.png", true)
-	if apply_default_transform:
-		_dealer_sprite.hframes = 1
-		_dealer_sprite.frame = 0
-	if apply_default_transform or not _dealer_sprite.region_enabled:
-		_dealer_sprite.region_enabled = true
-		_dealer_sprite.region_rect = Rect2(DEALER_CROP_X, DEALER_CROP_Y, DEALER_CROP_W, DEALER_CROP_H)
-	elif _dealer_sprite.region_rect.size == Vector2.ZERO:
-		_dealer_sprite.region_rect = Rect2(DEALER_CROP_X, DEALER_CROP_Y, DEALER_CROP_W, DEALER_CROP_H)
+	_dealer_sprite.texture = Assets.texture("dealer_offer_polished/portrait.png", true)
+	_dealer_sprite.hframes = 1
+	_dealer_sprite.frame = 0
+	_dealer_sprite.region_enabled = false
+	# Preserve the authored encounter footprint with a standalone high-resolution sprite.
+	var display_size := Vector2(74.5552, 116.8493)
 	if apply_default_transform:
 		_dealer_sprite.position = Vector2.ZERO
 		_dealer_sprite.centered = true
-		var s := DEALER_FILL * SRC_H / DEALER_CROP_W
-		_dealer_sprite.scale = Vector2(s, s)
+		display_size = Vector2(DEALER_CROP_W, DEALER_CROP_H) * (DEALER_FILL * SRC_H / DEALER_CROP_W)
+	_dealer_sprite.scale = display_size / _dealer_sprite.texture.get_size()
 	_dealer_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _show_editor_preview() -> void:
@@ -608,7 +602,7 @@ func _apply_side(side: String) -> void:
 	# spin clockwise (head -> right/into screen); from the RIGHT, anti-clockwise. The
 	# head tip is half the portrait's (long) height from the centred sprite's middle, so
 	# we place the centre such that the tip pokes HEAD_POKE px in from the border.
-	var half_len := DEALER_CROP_H * absf(_dealer_sprite.scale.y) * 0.5
+	var half_len := _dealer_sprite.get_rect().size.y * absf(_dealer_sprite.scale.y) * 0.5
 	if _side == "left":
 		_dealer_sprite.rotation = PI / 2.0
 		_target_x = _dealer_target_left_x
@@ -731,11 +725,11 @@ func _make_item_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_S
 func _make_item_icon_on(parent: Control, id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
 	var icon := TextureRect.new()
 	icon.set_meta("_in_run_dealer_dynamic_icon", true)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.texture = _icon_for(id)
 	icon.position = pos
 	icon.size = Vector2(icon_size, icon_size)
 	icon.pivot_offset = Vector2(icon_size, icon_size) * 0.5
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if kind == "augment" or (icon.texture != null and icon.texture.resource_path.contains("/items/generated/")) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_STOP
