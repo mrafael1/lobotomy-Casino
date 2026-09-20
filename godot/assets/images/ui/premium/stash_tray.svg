@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="208" viewBox="0 0 48 26">
+<defs>
+<linearGradient id="rim" x2="0" y2="1"><stop stop-color="#e3c887"/><stop offset=".28" stop-color="#9c7644"/><stop offset=".7" stop-color="#49331e"/><stop offset="1" stop-color="#b89356"/></linearGradient>
+<linearGradient id="felt" x2="0" y2="1"><stop stop-color="#07120e"/><stop offset="1" stop-color="#1a3025"/></linearGradient>
+</defs>
+<path d="M3 1H45L47 3V23L45 25H3L1 23V3Z" fill="#17110b" stroke="#080a08" stroke-width="1"/>
+<path d="M3 2H45L46 3V23L45 24H3L2 23V3Z" fill="#263127" stroke="url(#rim)" stroke-width="1"/>
+<path d="M4 4H20L21 5V21L20 22H4L3 21V5Z M28 4H44L45 5V21L44 22H28L27 21V5Z" fill="url(#felt)" stroke="#6b5433" stroke-width=".6"/>
+<path d="M5 5H19 M29 5H43" stroke="#060907" stroke-width="1"/>
+<path d="M5 21H19 M29 21H43" stroke="#9b8556" stroke-width=".5"/>
+<path d="M24 4V22" stroke="#b09055" stroke-width=".5"/>
+<path d="M4 3h2 M42 3h2 M4 23h2 M42 23h2" stroke="#f0d79c" stroke-width=".5"/>
+</svg>

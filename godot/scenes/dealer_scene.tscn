@@ -7,7 +7,7 @@
 [ext_resource type="Texture2D" path="res://assets/images/dealer.png" id="11_shop_dealer"]
 [ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="5_0se43"]
 [ext_resource type="Texture2D" path="res://assets/images/ui/premium/settings.png" id="7_cijoo"]
-[ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="8_stsde"]
+[ext_resource type="Texture2D" path="res://assets/images/ui/premium/stash_tray.svg" id="8_stsde"]
 [ext_resource type="Texture2D" path="res://assets/images/ui/premium/coin.png" id="9_i73ov"]
 [ext_resource type="PackedScene" path="res://scenes/options_overlay.tscn" id="10_options"]
 
