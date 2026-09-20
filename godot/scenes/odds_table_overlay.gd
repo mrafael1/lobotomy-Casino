@@ -2,12 +2,10 @@ class_name OddsTableOverlay
 extends Control
 
 ## Dealer odds table (issues #36/#50/#130) — the post-run "what's next?" phase.
-## The screen is assembled from authored sheets, each a 120x240 document drawn 1:1 with
-## NEAREST and centred on the canvas: ODD-TABLE bakes the per-row symbol boxes, costs.png
-## the token price column, ODD-TABLE_tokens the wallet count in the header,
-## ODD-TABLE_level each row's 8-segment meter, ODD-TABLE_augment_level the 9th segment only
-## the Symbol Level augment can fill, and ODD-TABLE_buttons the per-row +/- with their
-## pressed frames.
+## Brass UI sheets share the original 120x240 document geometry. The frame,
+## +/- controls, and level meters use scalable artwork; costs and token counts
+## retain their authored sheets. Each sheet carries its own export scale, so
+## visual resolution never changes the input targets or staged-purchase rules.
 ## Tokens display via the sheet's 0..8 frames: the pool starts at the 4-token
 ## budget and is capped at 8 kept or used (RunStateStore.odds_max_tokens); the last frame
 ## is the golden augment token the picker shows instead of a wallet.
@@ -29,12 +27,12 @@ const SRC_H := 320.0
 # Authored sheets. Geometry constants are in document px and reach the canvas through
 # CANVAS_FIT (see ART_FRAME_SIZE below).
 const ART_DIR := "odd_tab/"
-const ART_TABLE := "ODD-TABLE.png"
-const ART_BUTTONS := "ODD-TABLE_buttons.png"
-const ART_LEVELS := "ODD-TABLE_level.png"
+const ART_TABLE := "table_brass.svg"
+const ART_BUTTONS := "buttons_brass.svg"
+const ART_LEVELS := "levels_brass.svg"
 # The 9th level segment, split out of the level meter: frame 0 while the symbol can still
 # be raised, frame 2 once it is maxed (frame 1 of the sheet is blank and unused).
-const ART_AUGMENT_LEVEL := "ODD-TABLE_augment_level.png"
+const ART_AUGMENT_LEVEL := "augment_level_brass.svg"
 # The token cost column, split out of the table so the augment picker can hide it: a
 # Symbol Level augment charges its own golden token, not the row's price.
 const ART_COSTS := "costs.png"
@@ -291,6 +289,18 @@ func _rebuild() -> void:
 	add_child(dim)
 
 	_sheet_sprite(ART_TABLE, 1, 0)
+	var heading := Label.new()
+	heading.name = "TokenHeading"
+	heading.text = "TOKENS :"
+	heading.add_theme_font_override("font", _font)
+	heading.add_theme_font_size_override("font_size", 6)
+	heading.add_theme_color_override("font_color", Color("#26382b"))
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(heading)
+	heading.position = _canvas_pos(Vector2(28.0, 24.0))
+	heading.size = Vector2(51.0, 11.0) * CANVAS_FIT
 	# The augment picker spends no tokens per row, so the cost column steps aside and the
 	# wallet shows the one golden token the augment itself is worth.
 	if not _augment_mode:
