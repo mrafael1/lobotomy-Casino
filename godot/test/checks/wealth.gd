@@ -236,8 +236,8 @@ func _check_wealth_screen(machine: Node, run_store: Node, failures: Array) -> vo
 	var first_coin := coin_field.get_child(0) as TextureRect \
 		if coin_field != null and coin_field.get_child_count() > 0 else null
 	if first_coin == null or first_coin.texture == null \
-			or not String(first_coin.texture.resource_path).ends_with("coin_cumulable.png"):
-		failures.append("wealth: coin flood is not using coin_cumulable.png")
+			or not String(first_coin.texture.resource_path).ends_with("ui/premium/coin.png"):
+		failures.append("wealth: coin flood is not using ui/premium/coin.png")
 	if wealth_screen != null and first_coin != null:
 		wealth_screen._drive_coin_to_pile(1.0, first_coin, first_coin.position,
 			first_coin.position, 0.0, 0.9)

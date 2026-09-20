@@ -150,8 +150,8 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 			failures.append("game over: machine_game_over asset is missing")
 		else:
 			if not String(machine_game_over.texture.resource_path).ends_with(
-					"machine_game_over.png"):
-				failures.append("game over: wrong machine_game_over texture is mounted")
+					"machine_polished/cabinet-game-over.png"):
+				failures.append("game over: wrong damaged cabinet texture is mounted")
 			if machine_game_over.size != Vector2(160.0, 320.0):
 				failures.append("game over: machine_game_over asset is not full-canvas")
 		if FileAccess.get_file_as_string("res://scenes/game_over_ending_overlay.gd").contains(

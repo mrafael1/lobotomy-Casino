@@ -196,7 +196,7 @@ func _play_reveal() -> void:
 
 
 func _prepare_coin_flood() -> void:
-	_coin_texture = Assets.texture("ui/coin_cumulable.png", true)
+	_coin_texture = Assets.texture("ui/premium/coin.png", true)
 	if _coin_texture == null:
 		return
 	_coin_rng.seed = COIN_FLOOD_SEED

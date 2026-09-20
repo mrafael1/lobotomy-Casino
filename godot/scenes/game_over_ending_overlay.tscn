@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scenes/game_over_ending_overlay.gd" id="1_script"]
 [ext_resource type="FontFile" path="res://assets/font/DTM-Sans.otf" id="2_font"]
 [ext_resource type="Script" path="res://scenes/broken_neon_frame.gd" id="3_frame"]
-[ext_resource type="Texture2D" uid="uid://c3xp5ybm4oppn" path="res://assets/images/machine new view/machine_game_over.png" id="4_machine_game_over"]
+[ext_resource type="Texture2D" path="res://assets/images/machine_polished/cabinet-game-over.png" id="4_machine_game_over"]
 
 [node name="GameOverEndingOverlay" type="Control"]
 layout_mode = 3
