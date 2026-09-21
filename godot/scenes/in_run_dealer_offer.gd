@@ -38,9 +38,9 @@ const ITEM_VISUAL_SIZE := Vector2(16.0, 16.0)
 const OFFER_SLOT_SIZE := Vector2(32.0, 32.0)
 const ACTION_BUTTON_SIZE := Vector2(52.0, 16.0) # look / ignore, both skinned sheets
 const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
-const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
-const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
-const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
+const TV_POSITIVE_COLOR := Color("226b3c")
+const TV_NEGATIVE_COLOR := Color("a02e34")
+const BUBBLE_TEXT_COLOR := Color("243b2d")
 ## The white BODY of speech_bubble_normal.png inside the 100x38 bubble control, measured
 ## off the art itself (test/debug_bubble_ink.gd reports it): x2..98, y3..31, with the tail
 ## spurring out below. The text used to be centred in the top 30px instead, which put every
@@ -344,7 +344,8 @@ func _build_base() -> void:
 	# Bubble GRAPHIC and Label are separate siblings: we flip only the graphic per side
 	# (_choose_side), so the text is never mirrored.
 	_bubble_graphic = TextureRect.new()
-	_bubble_graphic.texture = Assets.texture("ui/speech_bubble_normal.png", true)
+	_bubble_graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_bubble_graphic.texture = Assets.texture("ui/premium/dealer_speech.svg", true)
 	_bubble_graphic.size = _speech_bubble.size
 	_bubble_graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_bubble_graphic.stretch_mode = TextureRect.STRETCH_SCALE
@@ -470,7 +471,7 @@ func _bind_authored_base() -> bool:
 
 	if _bubble_graphic != null and _speech_bubble != null:
 		if _bubble_graphic.texture == null:
-			_bubble_graphic.texture = Assets.texture("ui/speech_bubble_normal.png", true)
+			_bubble_graphic.texture = Assets.texture("ui/premium/dealer_speech.svg", true)
 		if _bubble_graphic.size == Vector2.ZERO:
 			_bubble_graphic.size = _speech_bubble.size
 		_bubble_graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
