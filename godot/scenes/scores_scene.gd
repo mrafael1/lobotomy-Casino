@@ -93,6 +93,7 @@ func _button(node_name: String, text: String, rect: Rect2, callback: Callable) -
 	ButtonKit.start_menu_button_press_feedback(button)
 	button.pressed.connect(callback)
 	add_child(button)
+	button.set_deferred("size", rect.size)
 
 func _cycle_tier(step: int) -> void:
 	_tier_idx = posmod(_tier_idx + step, TIERS.size())
