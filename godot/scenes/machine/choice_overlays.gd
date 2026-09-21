@@ -36,7 +36,7 @@ const BOOK_TITLE_COLOR := Color(1.0, 0.82, 0.28)
 const BOOK_ICON := 16.0
 
 const EYE_POPUP_TIME := 1.1
-const EYE_FRAME_ASSET := "ui/vision.png"
+const EYE_FRAME_ASSET := "ui/premium/eye_reveal_frame.svg"
 const EYE_POPUP_SIZE := Vector2(32.0, 32.0)
 const EYE_POPUP_Z_INDEX := 40
 ## Clear of the cabinet edge, and high enough above the reel window that the
@@ -178,6 +178,7 @@ func show_eye_reveal(reel_index: int, symbol_id: String, pointer_color: Color,
 	var frame_tex := _view.texture(EYE_FRAME_ASSET, true)
 	if frame_tex != null:
 		var frame := TextureRect.new()
+		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		frame.texture = frame_tex
 		frame.size = popup.size
 		frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
