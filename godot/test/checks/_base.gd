@@ -595,11 +595,11 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if cancel != null or title != null:
 			failures.append("%s picker should not draw title/cancel chrome" % prefix)
 	var frame := panel.get_node_or_null("Frame") as TextureRect
-	var background := panel.get_node_or_null("Background") as ColorRect
+	var background := panel.get_node_or_null("Background") as Control
 	if expects_frame:
-		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_chosing.png":
+		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_picker_brass.svg":
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
-		if background == null or background.size != Vector2.ZERO:
+		if background == null or background.visible:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
 		if expects_header and (title == null or frame == null \
 				or title.position.y < frame.position.y - 6.0 \

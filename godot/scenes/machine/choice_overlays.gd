@@ -108,8 +108,8 @@ func open_book(choices: Array, on_pick: Callable) -> void:
 	_book.z_index = BOOK_Z_INDEX
 	_view.add_layer(_book)
 
-	var panel := ColorRect.new()
-	panel.color = BOOK_PANEL_COLOR
+	var panel := Panel.new()
+	panel.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(BOOK_TITLE_COLOR))
 	panel.position = BOOK_RECT.position
 	panel.size = BOOK_RECT.size
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -124,20 +124,23 @@ func open_book(choices: Array, on_pick: Callable) -> void:
 	for i in choices.size():
 		var sym := String(choices[i])
 		var b := Button.new()
-		b.flat = true
+		SymbolPicker._apply_symbol_picker_button_style(b)
+		b.add_theme_stylebox_override("normal", SymbolPicker._symbol_picker_style(
+			SymbolPicker.SYMBOL_PICKER_SLOT_COLOR, SymbolPicker.SYMBOL_PICKER_SLOT_BORDER))
 		b.focus_mode = Control.FOCUS_NONE
-		b.position = Vector2(BOOK_RECT.position.x + float(i) * cell_w,
+		b.position = Vector2(BOOK_RECT.position.x + float(i) * cell_w + 2.0,
 			BOOK_RECT.position.y + 17.0)
-		b.size = Vector2(cell_w, 30.0)
+		b.size = Vector2(cell_w - 4.0, 30.0)
 		b.pressed.connect(on_pick.bind(sym))
 		_book.add_child(b)
 		var tex := _view.texture("symbols/%s.png" % sym, true)
 		if tex == null:
 			continue
 		var icon := TextureRect.new()
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.texture = tex
 		icon.size = Vector2(BOOK_ICON, BOOK_ICON)
-		icon.position = Vector2((cell_w - BOOK_ICON) * 0.5, 3.0)
+		icon.position = Vector2((cell_w - 4.0 - BOOK_ICON) * 0.5, 6.0)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
