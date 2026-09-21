@@ -305,7 +305,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		if door_emblem == null or door_emblem.position != Vector2(18.0, -1.0) \
 				or door_emblem.size != Vector2(28.0, 32.0):
 			failures.append("route: %s emblem is not seated in its painted door inset" % door)
-		if door_title == null or door_title.position != Vector2(14.0, 34.0) \
+		if door_title == null or door_title.position != Vector2(14.0, 34.0 + Assets.centered_text_nudge(route.DOOR_TITLE_FONT_SIZE)) \
 				or door_title.size != Vector2(36.0, 10.0) \
 				or door_title.get_theme_font_size("font_size") < 4:
 			failures.append("route: %s title is not inside its painted name plate" % door)

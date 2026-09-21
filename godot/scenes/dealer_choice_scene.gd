@@ -98,13 +98,13 @@ const BUBBLE_TEXT_COLOR := Color(0.96, 0.88, 0.77)
 ## each door's inset. These coordinates are local to the 64x117 touch rect.
 const DOOR_TITLE_RECT := Rect2(14.0, 34.0, 36.0, 10.0)
 const DOOR_EMBLEM_RECT := Rect2(18.0, -1.0, 28.0, 32.0)
-const DOOR_TITLE_FONT_SIZE := 4
+const DOOR_TITLE_FONT_SIZE := 5
 const DOOR_TITLE_LABELS := {
 	RouteCards.ROUTE_SHOP: "SHOP",
-	RouteCards.ROUTE_AUGMENT: "AUG",
-	RouteCards.ROUTE_POWER: "PWR",
+	RouteCards.ROUTE_AUGMENT: "AUGMENT",
+	RouteCards.ROUTE_POWER: "POWER",
 	RouteCards.ROUTE_BONUS: "BONUS",
-	RouteCards.ROUTE_SACRIFICE: "SAC",
+	RouteCards.ROUTE_SACRIFICE: "SACRIFICE",
 }
 const DOOR_EXPLANATIONS := {
 	RouteCards.ROUTE_SHOP: "I CAN TUNE\nTHE MACHINE.",

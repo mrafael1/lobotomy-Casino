@@ -517,7 +517,7 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 	if flavor != null:
 		if not flavor._pos_label.visible or flavor._neg_label.visible:
 			failures.append("issue76: flavor item showed a negative line")
-		if flavor._pos_label.text != "+ +40 SCORE & LUCIDITY":
+		if flavor._pos_label.text != "+40 SCORE & LUCIDITY":
 			failures.append("issue76: water upside copy wrong: '%s'" % flavor._pos_label.text)
 		flavor.queue_free()
 	machine._pending_deferred_neg.clear()
