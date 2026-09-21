@@ -10,11 +10,11 @@ signal cancelled
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const PANEL_RECT := Rect2(12.0, 76.0, 136.0, 168.0)
-const GOLD := Color(1.0, 0.84, 0.38)
-const CYAN := Color(0.42, 1.0, 0.95)
+const GOLD := Color("dfc48a")
+const CYAN := Color("a9d7be")
 const RED := Color(1.0, 0.35, 0.42)
 const TEXT := Color(0.88, 0.98, 1.0)
-const MUTED := Color(0.62, 0.70, 0.78)
+const MUTED := Color("c0baa3")
 
 var _candidate_id := ""
 var _options: Array[String] = []
@@ -57,7 +57,7 @@ func _build() -> void:
 	var candidate_entry := PacteCards.card(_candidate_id)
 	var candidate_name := String(candidate_entry.get("name", _candidate_id)).to_upper()
 	_add_label(panel, "NEW: %s" % candidate_name, Rect2(5.0, 24.0, 126.0, 11.0), 5, CYAN)
-	_add_label(panel, "CHOOSE A POWER TO REMOVE", Rect2(5.0, 38.0, 126.0, 10.0), 4, MUTED)
+	_add_label(panel, "CHOOSE A POWER TO REMOVE", Rect2(5.0, 38.0, 126.0, 10.0), 5, MUTED)
 	var y := 52.0
 	for power_id in _options:
 		var entry := PacteCards.card(power_id)
@@ -69,17 +69,11 @@ func _build() -> void:
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
 		button.text = name
-		button.add_theme_font_size_override("font_size", 5)
-		button.add_theme_color_override("font_color", TEXT)
-		button.add_theme_color_override("font_hover_color", CYAN)
-		button.add_theme_color_override("font_pressed_color", GOLD)
-		if Assets.font() != null:
-			button.add_theme_font_override("font", Assets.font())
-		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-			button.add_theme_stylebox_override(state,
-				ButtonKit.neon_panel_style(CYAN if state == "hover" else MUTED, 2.0))
+		ButtonKit.start_menu_button_style(button, ButtonKit.START_MENU_BUTTON_CYAN, 7)
+		ButtonKit.start_menu_button_press_feedback(button)
 		button.pressed.connect(_on_power_pressed.bind(power_id))
 		panel.add_child(button)
+		button.set_deferred("size", Vector2(120.0, 19.0))
 		y += 22.0
 	var cancel := Button.new()
 	cancel.name = "Cancel"
@@ -87,15 +81,11 @@ func _build() -> void:
 	cancel.size = Vector2(62.0, 18.0)
 	cancel.focus_mode = Control.FOCUS_NONE
 	cancel.text = "CANCEL"
-	cancel.add_theme_font_size_override("font_size", 5)
-	cancel.add_theme_color_override("font_color", RED)
-	if Assets.font() != null:
-		cancel.add_theme_font_override("font", Assets.font())
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		cancel.add_theme_stylebox_override(state,
-			ButtonKit.neon_panel_style(RED if state != "disabled" else MUTED, 2.0))
+	ButtonKit.start_menu_button_style(cancel, ButtonKit.START_MENU_BUTTON_PINK, 7)
+	ButtonKit.start_menu_button_press_feedback(cancel)
 	cancel.pressed.connect(_on_cancel_pressed)
 	panel.add_child(cancel)
+	cancel.set_deferred("size", Vector2(62.0, 18.0))
 
 func _add_label(parent: Control, text: String, rect: Rect2, font_size: int,
 		color: Color) -> Label:
@@ -113,6 +103,7 @@ func _add_label(parent: Control, text: String, rect: Rect2, font_size: int,
 	if Assets.font() != null:
 		label.add_theme_font_override("font", Assets.font())
 	parent.add_child(label)
+	label.set_deferred("size", rect.size)
 	return label
 
 func _on_power_pressed(power_id: String) -> void:
