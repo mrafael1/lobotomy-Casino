@@ -32,7 +32,7 @@ const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right c
 # The retired full-screen menu sheet is no longer loaded. The live menu uses
 # the title and button plates as separate overlays over the casino backdrop.
 const MENU_TITLE_ASSET := "ui/premium/menu_title_plate.svg"
-const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
+const MENU_SYMBOLS_ASSET := "scores_polished/suits.svg" # 6 frames
 const MENU_AUGMENTED_BAR_ASSET := "ui/premium/menu_selector_brass.svg"
 # Standalone button plates (full-canvas overlays): the plate squashes together
 # with its label on press. START is one frame; SCORES/OPTIONS carry two frames
@@ -55,7 +55,8 @@ const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 # Centre of the selector bar — the pivot the suit bounces around when it changes.
 const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
-const ART_SYMBOL_OFFSET := Vector2(0.0, -4.0)
+const ART_SYMBOL_OFFSET := Vector2(68.5, 182.0)
+const ART_SYMBOL_SIZE := Vector2(23.04, 23.04)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -427,6 +428,8 @@ func _build_live_selector() -> void:
 	if _symbols_sprite != null:
 		_symbols_sprite.name = "AugmentedSymbols"
 		_symbols_sprite.position = ART_SYMBOL_OFFSET
+		_symbols_sprite.scale = ART_SYMBOL_SIZE / Vector2(128, 128)
+		_symbols_sprite.set_meta("base_scale", _symbols_sprite.scale)
 		_symbols_sprite.visible = false
 	_augmented_row = Control.new()
 	_augmented_row.name = "AugmentedSelector"
@@ -489,7 +492,7 @@ func _set_symbols_pop(f: float) -> void:
 		return
 	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
 	_symbols_sprite.scale = base * f
-	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SELECTOR_PIVOT * (1.0 - f)
+	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SYMBOL_SIZE * 0.5 * (1.0 - f)
 
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
