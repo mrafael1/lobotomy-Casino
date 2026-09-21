@@ -317,6 +317,21 @@ func _configure_actions() -> void:
 	_reroll_button = get_node_or_null("RerollButton") as Button
 	if _reroll_button != null:
 		_reroll_button.text = ""
+		var caption := Label.new()
+		caption.name = "RerollCaption"
+		caption.z_index = 4
+		caption.text = "REROLL"
+		caption.position = Vector2(4, 7)
+		caption.size = Vector2(33, 12)
+		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		caption.add_theme_font_override("font", _font)
+		caption.add_theme_font_size_override("font_size", 5)
+		caption.add_theme_color_override("font_color", GOLD)
+		caption.size = Vector2(33, 12)
+		_reroll_button.add_child(caption)
+		caption.set_deferred("size", Vector2(33, 12))
 		_reroll_button.flat = true
 		_reroll_button.focus_mode = Control.FOCUS_NONE
 		_reroll_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

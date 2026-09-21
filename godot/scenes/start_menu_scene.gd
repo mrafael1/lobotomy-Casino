@@ -31,9 +31,9 @@ const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right c
 
 # The retired full-screen menu sheet is no longer loaded. The live menu uses
 # the title and button plates as separate overlays over the casino backdrop.
-const MENU_TITLE_ASSET := "start_menu/title.png"
+const MENU_TITLE_ASSET := "ui/premium/menu_title_plate.svg"
 const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
-const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
+const MENU_AUGMENTED_BAR_ASSET := "ui/premium/menu_selector_brass.svg"
 # Standalone button plates (full-canvas overlays): the plate squashes together
 # with its label on press. START is one frame; SCORES/OPTIONS carry two frames
 # (locked | unlocked positions). The selector bar stays baked — no press art.
@@ -377,6 +377,11 @@ func _build_menu() -> void:
 	if _menu_sprite == null:
 		_menu_sprite = Sprite2D.new()
 	_menu_sprite.name = "MenuArt"
+	var title := _overlay_label("MenuTitle", Rect2(18, 59, 124, 40), 14, Color("ead4a6"))
+	title.text = "LOBOTOMY\nCASINO"
+	title.add_theme_constant_override("line_spacing", 1)
+	title.add_theme_color_override("font_shadow_color", Color("020604"))
+	title.add_theme_constant_override("shadow_offset_y", 1)
 	_build_campaign_labels()
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
 	# The scene's legacy column remains as a compatibility shell; the live
