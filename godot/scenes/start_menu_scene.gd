@@ -103,7 +103,7 @@ const AUGMENTED_DESCRIPTIONS := {
 - Start with 15 spins. Wins raise the frenzy multiplier.
 - A miss at x2 or x3 can be rescued with a power.
 - Every 30 run coins restores one random spent power.
-- Between runs, spend wallet credits on Lab upgrades."""
+- Reach each Wealth target to open the next route choice."""
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")
