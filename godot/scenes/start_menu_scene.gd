@@ -31,6 +31,8 @@ const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right c
 
 # The retired full-screen menu sheet is no longer loaded. The live menu uses
 # the title and button plates as separate overlays over the casino backdrop.
+const MENU_TITLE_RECT := Rect2(6, 48, 148, 66)
+const MENU_SELECTOR_ART_RECT := Rect2(8, 176, 144, 41)
 const MENU_TITLE_ASSET := "ui/premium/menu_title_plate.svg"
 const MENU_SYMBOLS_ASSET := "scores_polished/suits.svg" # 6 frames
 const MENU_AUGMENTED_BAR_ASSET := "ui/premium/menu_selector_brass.svg"
@@ -47,10 +49,7 @@ const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
 const ART_SCORES_LOCKED_RECT := Rect2(30.0, 178.0, 101.0, 25.0)
 const ART_OPTIONS_LOCKED_RECT := Rect2(30.0, 213.0, 101.0, 25.0)
 const ART_SELECTOR_RECT := Rect2(11.0, 178.0, 139.0, 37.0)
-# Live copies of the baked arrows sit over the frame art so pressing can squash
-# them. Boxes are CENTERED on the measured glyphs (8x15 at 15,190 / 137,190) —
-# an off-centre box squashes the copy sideways and un-covers the baked glyph —
-# and sized so the 0.8 squash still covers it, staying inside the bar interior.
+# Transparent arrow sprites pivot within these measured selector rectangles.
 const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 # Centre of the selector bar — the pivot the suit bounces around when it changes.
@@ -185,6 +184,10 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
+	if rel == MENU_TITLE_ASSET or rel == MENU_AUGMENTED_BAR_ASSET:
+		var bounds := MENU_TITLE_RECT if rel == MENU_TITLE_ASSET else MENU_SELECTOR_ART_RECT
+		spr.position = bounds.position
+		spr.scale = bounds.size / tex.get_size()
 	spr.set_meta("base_scale", spr.scale) # suit-bounce anchor (_bounce_symbols)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
@@ -273,27 +276,23 @@ func _set_plate_pop(f: float, plate: Sprite2D, pivot: Vector2) -> void:
 	plate.position = pivot * (1.0 - f)
 	plate.set_meta("pop_f", f)
 
-## Live copy of one baked arrow, cropped from the bar overlay asset so it can
-## squash on press (the bar art underneath can't move). Centered on the arrow
-## so the scale pivots in place; NEAREST like the art it copies.
+## Independent transparent arrow: dimming and squashing never tint the felt.
 func _arrow_art(rect: Rect2) -> Sprite2D:
-	var tex := Assets.texture(MENU_AUGMENTED_BAR_ASSET)
+	var tex := Assets.texture("ui/premium/menu_selector_arrow.svg")
 	if tex == null:
 		return null
-	var s := float(tex.get_width()) / CANVAS_W # export scale of the overlay
 	var spr := Sprite2D.new()
 	spr.texture = tex
-	spr.region_enabled = true
-	spr.region_rect = Rect2(rect.position * s, rect.size * s)
 	spr.centered = true
+	spr.flip_h = rect.position.x > CANVAS_W * 0.5
 	spr.position = rect.position + rect.size * 0.5 - ART_SELECTOR_RECT.position
-	spr.scale = Vector2.ONE / s
+	spr.scale = rect.size / tex.get_size()
 	spr.set_meta("rest_scale", spr.scale)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_augmented_row.add_child(spr)
 	return spr
 
-## Invisible hit area over a baked arrow third of the selector bar; pressing
+## Invisible hit area over an outer third of the selector bar; pressing
 ## squashes the arrow's live copy, release springs it back as the suit changes.
 func _augmented_arrow_button(step: int, bar_size: Vector2, art: Sprite2D) -> Button:
 	var b := Button.new()
