@@ -24,7 +24,7 @@ const GENERATED_AUGMENT_BACK_RECT := Rect2(156.0, 0.0, 156.0, 244.0)
 const GENERATED_POWER_FRONT_RECT := Rect2(312.0, 0.0, 156.0, 244.0)
 const GENERATED_POWER_BACK_RECT := Rect2(468.0, 0.0, 156.0, 244.0)
 const CARD_SIZE := Vector2(39.0, 61.0)
-const PAINTED_ICON_IDS := ["augment_smart_saving", "augment_hallucination", "augment_reward_1", "augment_reward_2", "augment_reward_3", "augment_joker", "augment_win_boost", "augment_tunnel_vision", "augment_adrenaline", "augment_passive_gain", "reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
+const PAINTED_ICON_IDS := ["augment_book", "augment_smart_saving", "augment_hallucination", "augment_reward_1", "augment_reward_2", "augment_reward_3", "augment_joker", "augment_win_boost", "augment_tunnel_vision", "augment_adrenaline", "augment_passive_gain", "reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]
 const POOLS: Array[String] = ["augment", "power"]
 
 # Route Pacte prices are kept here with the authored card identity. The initial
@@ -65,7 +65,7 @@ const AUGMENTS: Array[Dictionary] = [
 	},
 	{
 		"id": "augment_book", "name": "BOOK",
-		"icon_asset": "cards/painted/book.png",
+		"icon_asset": "cards/painted/augment_book.png",
 		"description": "LEARNING ADDS BOOKS TO THE REELS; BOOK WINS -30%.", "pool": "augment",
 		"sheet": CARD_SHEET, "sheet_rect": AUGMENT_FRONT_RECT,
 		"icon_rect": Rect2(9.0, 201.0, 22.0, 27.0),

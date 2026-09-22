@@ -15,11 +15,11 @@ const POWER_DROP_RECT := Rect2(110.0, 219.0, 25.0, 35.0)
 const CHOSEN_CARD_SIZE := Vector2(21.0, 33.0)
 const SELECTION_PREVIEW_TIME := 0.24
 const SYMBOL_PICKER_RECT := Rect2(4.0, 100.0, 152.0, 102.0)
-const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
-const DESCRIPTION_TITLE_RECT := Rect2(2.0, 3.0, 46.0, 7.0)
-const DESCRIPTION_TEXT_RECT := Rect2(3.0, 10.0, 44.0, 16.0)
-const DESCRIPTION_TITLE_FONT_SIZE := 4
-const DESCRIPTION_FONT_SIZE := 3
+const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 94.0, 100.0, 50.0)
+const DESCRIPTION_TITLE_RECT := Rect2(4.0, 3.0, 92.0, 10.0)
+const DESCRIPTION_TEXT_RECT := Rect2(4.0, 14.0, 92.0, 32.0)
+const DESCRIPTION_TITLE_FONT_SIZE := 6
+const DESCRIPTION_FONT_SIZE := 5
 const DESCRIPTION_BUBBLE_GAP := 1.0
 const DRAG_SLOP := 4.0
 const INSTRUCTION_RECT := Rect2(5.0, 247.0, 150.0, 9.0)
@@ -144,6 +144,7 @@ func _build() -> void:
 	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_description_text.clip_text = true
+	_description_text.add_theme_constant_override("line_spacing", 0)
 	_description_bubble.visible = false
 
 	_instruction = _label("TAP TO INSPECT  /  DRAG TO THE SLOT",
@@ -246,6 +247,7 @@ func _build_card_cost(button: Button, cost: int, affordable: bool) -> void:
 	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	coin.set_meta("skip_drag_shadow", true)
 	row.add_child(coin)
+	row.set_deferred("size", Vector2(CARD_SIZE.x, 10.0))
 
 func _start_card_glint_cycle() -> void:
 	_stop_card_glint_cycle()
@@ -446,7 +448,7 @@ func _preview_card(card_id: String) -> void:
 
 func _layout_description() -> void:
 	var title_h := DESCRIPTION_TITLE_RECT.size.y
-	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - title_h - 2.0
+	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - DESCRIPTION_TEXT_RECT.position.y - 3.0
 	_description_title.size = DESCRIPTION_TITLE_RECT.size
 	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, max_body_h)
 	var font := _description_text.get_theme_font(&"font")

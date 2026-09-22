@@ -18,3 +18,16 @@ Seventeen additional static icons and the power coin export at 128x128 from
 the painted masters using tools/prepare_premium_card_icons.gd. Static card
 icons keep 24x24 layout footprints with linear mipmap filtering. Book and the
 authored animated icons retain their existing presentation in this pass.
+
+## High-resolution Book replacement
+
+`augment_book.png` replaces the reduced `book.png` in all live card views.
+Generated with the built-in image tool on 2026-09-22; the transparent master is
+kept at its generated resolution and uses mipmaps at the shared 24x24 layout size.
+The original tiny file remains for older references.
+
+Prompt: One closed sinister antique medical book, three-quarter view, worn
+oxblood leather, embossed ivory brain emblem, brass corners and clasp, yellowed
+page edges. Chunky hand-painted pixel-art matching the Hallucination icon, dark
+outlines and restrained highlights. Transparent background, no text, no card,
+no ground shadow. High-resolution export; do not reduce to 22x27 pixels.

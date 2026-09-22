@@ -29,10 +29,12 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+visible = false
 color = Color(0.055, 0.03, 0.11, 1)
 
 [node name="Background" type="Sprite2D" parent="." unique_id=868830290]
 texture_filter = 4
+visible = false
 scale = Vector2(0.25, 0.2)
 texture = ExtResource("2_5hlty")
 centered = false
@@ -45,6 +47,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+visible = false
 color = Color(0.17346174, 3.85046e-07, 0.10095719, 1)
 
 [node name="MenuColumn" type="VBoxContainer" parent="." unique_id=1415123311]

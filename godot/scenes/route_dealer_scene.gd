@@ -58,6 +58,9 @@ func _build() -> void:
 	var leave := _button("RETURN TO MACHINE", Rect2(20.0, 274.0, 120.0, 25.0), 7)
 	leave.name = "ReturnButton"
 	ButtonKit.small_neon_button_style(leave, CYAN, 6, 2.0)
+	# Apply final bounds after the skin changes font and style minimums.
+	leave.clip_text = true
+	leave.set_deferred("size", Vector2(120.0, 25.0))
 	leave.pressed.connect(_on_return_pressed)
 	add_child(leave)
 
@@ -105,11 +108,11 @@ func _button(text_value: String, rect: Rect2, size: int) -> Button:
 	var button := Button.new()
 	button.text = text_value
 	button.position = rect.position
-	button.size = rect.size
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", size)
 	if _font != null:
 		button.add_theme_font_override("font", _font)
+	button.size = rect.size
 	return button
 
 func _panel(rect: Rect2, border_color: Color, alpha: float) -> Panel:

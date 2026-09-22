@@ -21,14 +21,10 @@ const FALLBACK := "en"
 ## never leaves the row blank before its flag is drawn.
 const LABELS := { "en": "EN", "fr": "FR" }
 
-## Flag art per language, under assets/images/. Authored pixel art, drawn at scale 1.0 with
-## NEAREST filtering like everything else in the game — at whatever size the PNG itself is.
-## The row does NOT force them to a common size: these two are authored 16x10 and 12x8, and
-## squeezing one into the other's box would resample pixel art, which is the one thing this
-## project never does to it.
+## Compact flags in the shared muted UI palette. Both keep a 16x10 layout footprint.
 const FLAGS := {
-	"en": "ui/EN.png",
-	"fr": "ui/FR.png",
+	"en": "ui/premium/flag_en.svg",
+	"fr": "ui/premium/flag_fr.svg",
 }
 ## Ceiling for a flag inside the 20px OPTIONS row. Art taller than this would crowd the
 ## row's border; it is a guard on the authoring, not a size anything is scaled to.

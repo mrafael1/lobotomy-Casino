@@ -8,11 +8,11 @@ const CANVAS_SIZE := Vector2(160.0, 320.0)
 const WHEEL_SCRIPT := preload("res://scenes/fortune_wheel.gd")
 const ROUND_WALL_BUTTON_SCRIPT := preload("res://ui/round_wall_button.gd")
 const ODDS_OVERLAY_SCENE := preload("res://scenes/odds_table_overlay.tscn")
-const CYAN := Color(0.42, 1.0, 0.95)
+const CYAN := Color(0.73, 0.88, 0.79)
 const GOLD := Color(1.0, 0.84, 0.38)
 const HOT_GOLD := Color(1.0, 0.95, 0.62)
 const MUTED := Color(0.62, 0.70, 0.78)
-const INK := Color(0.055, 0.035, 0.105)
+const INK := Color(0.035, 0.055, 0.047)
 const AMBIENT_CYAN := Color(0.42, 1.0, 0.95, 0.08)
 const AMBIENT_GOLD := Color(1.0, 0.84, 0.38, 0.06)
 const AMBIENT_LIGHT_FIRST_DELAY := 1.9
@@ -101,7 +101,7 @@ func _build() -> void:
 	_message.z_index = 20
 	add_child(_message)
 
-	_hint = _label("PRESS TO SPIN", HINT_RECT, 4, MUTED)
+	_hint = _label("PRESS TO SPIN", HINT_RECT, 6, MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hint.clip_text = true
@@ -380,8 +380,11 @@ func _panel(rect: Rect2, background: Color, border: Color) -> Panel:
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
 	style.bg_color = background
-	style.border_color = border
+	style.border_color = Color(0.64, 0.49, 0.25, maxf(border.a, 0.8))
 	style.set_border_width_all(1)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.65)
+	style.shadow_size = 2
+	style.shadow_offset = Vector2(0, 2)
 	style.corner_radius_top_left = 2
 	style.corner_radius_top_right = 2
 	style.corner_radius_bottom_left = 2

@@ -150,8 +150,8 @@ func _check_flatline_overlay_meter(machine: Node, failures: Array) -> void:
 			failures.append("game over: machine_game_over asset is missing")
 		else:
 			if not String(machine_game_over.texture.resource_path).ends_with(
-					"machine_game_over.png"):
-				failures.append("game over: wrong machine_game_over texture is mounted")
+					"machine_polished/cabinet-game-over.png"):
+				failures.append("game over: wrong damaged cabinet texture is mounted")
 			if machine_game_over.size != Vector2(160.0, 320.0):
 				failures.append("game over: machine_game_over asset is not full-canvas")
 		if FileAccess.get_file_as_string("res://scenes/game_over_ending_overlay.gd").contains(
@@ -517,7 +517,7 @@ func _check_deferred_negative_76(machine: Node, failures: Array) -> void:
 	if flavor != null:
 		if not flavor._pos_label.visible or flavor._neg_label.visible:
 			failures.append("issue76: flavor item showed a negative line")
-		if flavor._pos_label.text != "+ +40 SCORE & LUCIDITY":
+		if flavor._pos_label.text != "+40 SCORE & LUCIDITY":
 			failures.append("issue76: water upside copy wrong: '%s'" % flavor._pos_label.text)
 		flavor.queue_free()
 	machine._pending_deferred_neg.clear()

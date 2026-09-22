@@ -192,18 +192,8 @@ func _style_text() -> void:
 
 
 func _style_button() -> void:
-	var font := Assets.font()
-	if font != null:
-		action_button.add_theme_font_override(&"font", font)
-	action_button.add_theme_color_override(&"font_color", PALE_RED)
-	action_button.add_theme_color_override(&"font_hover_color", Color.WHITE)
-	action_button.add_theme_color_override(&"font_pressed_color", Color.WHITE)
-	action_button.add_theme_color_override(&"font_focus_color", PALE_RED)
-	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("#21070c") if state != &"hover" else Color("#380a12")
-		style.set_content_margin_all(2.0)
-		action_button.add_theme_stylebox_override(state, style)
+	ButtonKit.small_neon_button_style(action_button, ButtonKit.START_MENU_BUTTON_PINK, 9, 2.0)
+	button_host.pivot_offset = button_host.size * 0.5
 
 
 func _connect_button() -> void:

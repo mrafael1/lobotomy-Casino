@@ -13,6 +13,9 @@ extends Control
 ## that is now two free spins and nothing else read as a warning with nothing behind it.
 ## A joker Augmented run turns all four in-run items purple, but that is the RUN talking,
 ## not the item — the machine adds it at the call site (issue #111).
+const LINE_WIDTH := 140.0
+const MIN_FONT_SIZE := 5
+
 const CORRUPTED_ITEM_IDS: Array[String] = [
 	"cons_cigarette", "cons_white_powder", "item_pill",
 ]
@@ -54,8 +57,10 @@ func play(pos_text: String, neg_text: String, item_name: String = "", corrupted:
 	_pos_label.visible = not pos_text.is_empty()
 	_neg_label.visible = not neg_text.is_empty()
 	# The hint is translated before the sign goes on; "+ EASY" as a whole is not a key.
-	_pos_label.text = "+ %s" % tr(pos_text)
-	_neg_label.text = "- %s" % tr(neg_text)
+	var positive := tr(pos_text)
+	_pos_label.text = positive if positive.begins_with("+") else "+ %s" % positive
+	var negative := tr(neg_text)
+	_neg_label.text = negative if negative.begins_with("-") else "- %s" % negative
 	_pos_label.add_theme_color_override(&"font_color", positive_color)
 	_neg_label.add_theme_color_override(&"font_color", negative_color)
 	if item_name.is_empty():
@@ -64,6 +69,8 @@ func play(pos_text: String, neg_text: String, item_name: String = "", corrupted:
 		_name_label.visible = true
 		_name_label.text = item_name
 		_name_label.add_theme_color_override(&"font_color", corrupt_color if corrupted else name_color)
+	for label in [_name_label, _pos_label, _neg_label]:
+		_fit_line(label)
 	# Children straddle the origin, so scaling around pivot (0,0) keeps the hint
 	# visually centred on wherever the caller placed this node.
 	scale = Vector2(start_scale, start_scale)
@@ -87,8 +94,8 @@ func _ensure_labels() -> void:
 
 func _make_line(y: float, color: Color) -> Label:
 	var line := Label.new()
-	line.position = Vector2(-40.0, y)
-	line.size = Vector2(80.0, 10.0)
+	line.position = Vector2(-LINE_WIDTH * 0.5, y)
+	line.size = Vector2(LINE_WIDTH, 10.0)
 	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	line.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -100,3 +107,15 @@ func _make_line(y: float, color: Color) -> Label:
 		line.add_theme_font_override(&"font", _font)
 	add_child(line)
 	return line
+
+## Keep long translated hints inside the safe area, including the existing pop overshoot.
+func _fit_line(line: Label) -> void:
+	var fitted := font_size
+	var font := line.get_theme_font("font")
+	var display_text := tr(line.text)
+	while fitted > MIN_FONT_SIZE and font.get_string_size(display_text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > LINE_WIDTH:
+		fitted -= 1
+	line.add_theme_font_size_override("font_size", fitted)
+	line.size = Vector2(LINE_WIDTH, 10.0)
+	line.set_deferred("size", Vector2(LINE_WIDTH, 10.0))

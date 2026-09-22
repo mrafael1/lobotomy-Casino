@@ -1,9 +1,8 @@
 class_name FortuneWheelDisplay
 extends Control
 
-## Native-resolution wheel art for the Bonus route.  The glow is built from
-## layered pixel-sized rings and bulbs instead of a blurred texture, so it stays
-## sharp at the game's integer-scaled 160x320 viewport.
+## Code-drawn enamel and brass wheel for the Bonus route. Layout geometry stays
+## in safe-area units while Canvas Items renders at the display's resolution.
 
 signal spin_finished(reward_id: String)
 
@@ -14,19 +13,19 @@ const BULB_RADIUS := 49.0
 const POINTER_ANGLE := -PI * 0.5
 const SEGMENT_COUNT: int = 5
 
-const CYAN := Color(0.42, 1.0, 0.95)
-const HOT_CYAN := Color(0.72, 1.0, 0.98)
-const GOLD := Color(1.0, 0.84, 0.38)
-const HOT_GOLD := Color(1.0, 0.95, 0.62)
-const ROSE := Color(1.0, 0.35, 0.66)
-const INK := Color(0.055, 0.035, 0.105)
-const HUB := Color(0.10, 0.055, 0.17)
+const CYAN := Color("88b49b")
+const HOT_CYAN := Color("d6e3bc")
+const GOLD := Color("c6a66b")
+const HOT_GOLD := Color("f4dfab")
+const ROSE := Color("be7470")
+const INK := Color("0b1611")
+const HUB := Color("293729")
 const SEGMENT_COLORS: Array[Color] = [
-	Color(0.16, 0.08, 0.25),
-	Color(0.11, 0.16, 0.27),
-	Color(0.24, 0.08, 0.24),
-	Color(0.11, 0.21, 0.25),
-	Color(0.28, 0.14, 0.12),
+	Color("2c4734"),
+	Color("233f3c"),
+	Color("4b2729"),
+	Color("31483c"),
+	Color("54412a"),
 ]
 
 var _font: Font = null
@@ -110,7 +109,10 @@ func _draw() -> void:
 
 func _draw_wheel_shadow() -> void:
 	draw_circle(CENTER + Vector2(1.0, 2.0), WHEEL_RADIUS + 7.0, Color(0.0, 0.0, 0.0, 0.72))
-	# Layered rings read as neon glow at native resolution while retaining hard edges.
+	# A fixed brass bezel encloses the rotating enamel face.
+	draw_arc(CENTER, WHEEL_RADIUS + 1.0, 0.0, TAU, 96, Color("5a432c"), 4.0, false)
+	draw_arc(CENTER, WHEEL_RADIUS + 3.0, 0.0, TAU, 96, GOLD, 1.0, false)
+	draw_arc(CENTER, WHEEL_RADIUS, -PI * .85, -PI * .15, 32, HOT_GOLD, .6, false)
 	draw_arc(CENTER, WHEEL_RADIUS + 6.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.10), 4.0, false)
 	draw_arc(CENTER, WHEEL_RADIUS + 4.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.22), 2.0, false)
 	draw_arc(CENTER, WHEEL_RADIUS + 2.0, 0.0, TAU, 64, CYAN, 1.0, false)
@@ -133,10 +135,12 @@ func _draw_segments() -> void:
 		if index == _result_index and not _spinning:
 			draw_arc(CENTER, WHEEL_RADIUS - 2.0, start_angle + 0.025,
 				end_angle - 0.025, 12, HOT_GOLD, 3.0, false)
-		_draw_segment_label(index, start_angle + slice * 0.5)
 
 	draw_circle(CENTER, WHEEL_RADIUS - 6.0, Color(INK.r, INK.g, INK.b, 0.56))
 	draw_arc(CENTER, WHEEL_RADIUS - 6.0, 0.0, TAU, 48, Color(HOT_CYAN.r, HOT_CYAN.g, HOT_CYAN.b, 0.64), 1.0, false)
+	# Print rewards after the inner tint so the face cannot dim their lettering.
+	for index in SEGMENT_COUNT:
+		_draw_segment_label(index, POINTER_ANGLE + _wheel_angle + (float(index) + 0.5) * slice)
 	# The hub is intentionally tiny and mechanical: a bright ring, a dark cap, and a
 	# four-pixel glint echo the machine's authored meter highlights.
 	draw_circle(CENTER, 10.0, Color(CYAN.r, CYAN.g, CYAN.b, 0.17))
@@ -154,7 +158,7 @@ func _draw_segment_label(index: int, angle: float) -> void:
 	var label_center := CENTER + Vector2.from_angle(angle) * label_radius
 	var label_color := HOT_GOLD if index == _result_index and not _spinning else Color(0.92, 0.92, 0.88)
 	draw_string(_font, Vector2(roundf(label_center.x - 17.0), roundf(label_center.y + 2.0)),
-		label, HORIZONTAL_ALIGNMENT_CENTER, 34.0, 4, label_color)
+		label, HORIZONTAL_ALIGNMENT_CENTER, 34.0, 5, label_color)
 
 func _draw_bulbs() -> void:
 	for index in 16:

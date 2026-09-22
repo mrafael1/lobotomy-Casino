@@ -50,7 +50,7 @@ func _style_controls() -> void:
 		_volume_slider.step = 1.0
 		_volume_slider.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var track_style := StyleBoxFlat.new()
-		track_style.bg_color = Color(0.03, 0.01, 0.05, 0.95)
+		track_style.bg_color = Color("101c15")
 		track_style.border_color = NEON_PINK
 		track_style.set_border_width_all(1)
 		track_style.set_corner_radius_all(1)
@@ -68,7 +68,7 @@ func _style_controls() -> void:
 		_volume_slider.add_theme_stylebox_override("grabber_area_highlight", fill_style)
 		var grabber := _make_slider_grabber()
 		_volume_slider.add_theme_icon_override("grabber", grabber)
-		_volume_slider.add_theme_icon_override("grabber_highlight", grabber)
+		_volume_slider.add_theme_icon_override("grabber_highlight", UiKit.texture("ui/premium/audio_slider_hover.svg"))
 		_volume_slider.add_theme_icon_override("grabber_disabled", grabber)
 	if _mute_check != null:
 		# Keep the toggle visually distinct from BACK; only keyboard focus outlines it.
@@ -111,25 +111,12 @@ func _style_label(label: Label, color: Color, font_size: int) -> void:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 0)
 
-func _make_slider_grabber() -> ImageTexture:
-	var image := Image.create(7, 9, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0.13, 0.10, 0.07))
-	image.fill_rect(Rect2i(1, 1, 5, 7), NEON_PINK)
-	image.fill_rect(Rect2i(1, 1, 5, 1), Color(1.0, 0.89, 0.62))
-	image.fill_rect(Rect2i(3, 3, 1, 3), Color(0.28, 0.21, 0.12))
-	return ImageTexture.create_from_image(image)
+func _make_slider_grabber() -> Texture2D:
+	return UiKit.texture("ui/premium/audio_slider_normal.svg")
 
 func _make_checkbox_icon(checked: bool) -> Texture2D:
-	if checked:
-		return UiKit.texture("ui/premium/confirm.png")
-	var image := Image.create(9, 9, false, Image.FORMAT_RGBA8)
-	for x in range(9):
-		image.set_pixel(x, 0, NEON_PINK)
-		image.set_pixel(x, 8, NEON_PINK)
-	for y in range(9):
-		image.set_pixel(0, y, NEON_PINK)
-		image.set_pixel(8, y, NEON_PINK)
-	return ImageTexture.create_from_image(image)
+	return UiKit.texture("ui/premium/audio_mute_on.svg" if checked
+		else "ui/premium/audio_mute_off.svg")
 
 
 func _bus_index() -> int:

@@ -11,12 +11,8 @@ extends Control
 ## If RunStateStore still has a resumable session, START RUN becomes CONTINUE and
 ## routes back to Pacte, the dealer, or the machine with the current session intact.
 ##
-## Rendering (issue #111): the whole menu is the authored start_menu.png sheet —
-## frame 0 before the Augmented Run unlock (three empty button plates), frame 1
-## after (start plate, suit selector bar with baked arrows, two plates). Button
-## labels are live text drawn over the empty plates. The selected suit renders
-## through start_menu_augmented symbols.png, a full-canvas 6-frame sheet
-## (no augment, heart, diamond, spade, club, joker) aligned with the bar.
+## Rendering: the menu uses the scene's live controls and simple fallback
+## background. The authored full-screen start_menu sheet is no longer loaded.
 
 const DEALER_SCENE := "res://scenes/dealer_scene.tscn"
 const PACTE_SCENE := "res://scenes/pacte_scene.tscn"
@@ -33,11 +29,13 @@ const MENU_W := 148.0
 const CLOSE_BUTTON_SIZE := Vector2(12.0, 12.0)
 const CLOSE_BUTTON_INSET := Vector2(16.0, 3.0) # in from the modal's top-right corner
 
-# Authored menu art (issue #111). Legacy fallback background if missing.
-const MENU_FRAMES_ASSET := "start_menu/start_menu.png"                    # bg + title
-const MENU_SYMBOLS_ASSET := "start_menu/start_menu_augmented symbols.png" # 6 frames
-const MENU_AUGMENTED_BAR_ASSET := "start_menu/start_menu_augmented_button.png"
-const MENU_BG_ASSET := "start_menu/neon_casino_background.png"
+# The retired full-screen menu sheet is no longer loaded. The live menu uses
+# the title and button plates as separate overlays over the casino backdrop.
+const MENU_TITLE_RECT := Rect2(6, 48, 148, 66)
+const MENU_SELECTOR_ART_RECT := Rect2(8, 176, 144, 41)
+const MENU_TITLE_ASSET := "ui/premium/menu_title_plate.svg"
+const MENU_SYMBOLS_ASSET := "scores_polished/suits.svg" # 6 frames
+const MENU_AUGMENTED_BAR_ASSET := "ui/premium/menu_selector_brass.svg"
 # Standalone button plates (full-canvas overlays): the plate squashes together
 # with its label on press. START is one frame; SCORES/OPTIONS carry two frames
 # (locked | unlocked positions). The selector bar stays baked — no press art.
@@ -45,20 +43,19 @@ const MENU_START_PLATE_ASSET := "start_menu/start_menu_start_button.png"
 const MENU_SCORES_PLATE_ASSET := "start_menu/start_menu_score_button.png"
 const MENU_OPTIONS_PLATE_ASSET := "start_menu/start_menu_options_button.png"
 
-# Baked plate rects (canvas px, frame-relative), measured on start_menu.png.
+# Baked plate rects (canvas px, frame-relative), retained for compatibility
+# with the live selector layout.
 const ART_START_RECT := Rect2(10.0, 143.0, 140.0, 25.0)
 const ART_SCORES_LOCKED_RECT := Rect2(30.0, 178.0, 101.0, 25.0)
 const ART_OPTIONS_LOCKED_RECT := Rect2(30.0, 213.0, 101.0, 25.0)
 const ART_SELECTOR_RECT := Rect2(11.0, 178.0, 139.0, 37.0)
-# Live copies of the baked arrows sit over the frame art so pressing can squash
-# them. Boxes are CENTERED on the measured glyphs (8x15 at 15,190 / 137,190) —
-# an off-centre box squashes the copy sideways and un-covers the baked glyph —
-# and sized so the 0.8 squash still covers it, staying inside the bar interior.
+# Transparent arrow sprites pivot within these measured selector rectangles.
 const ART_ARROW_LEFT_RECT := Rect2(13.0, 187.0, 12.0, 21.0)
 const ART_ARROW_RIGHT_RECT := Rect2(135.0, 187.0, 12.0, 21.0)
 # Centre of the selector bar — the pivot the suit bounces around when it changes.
 const ART_SELECTOR_PIVOT := Vector2(80.5, 196.5)
-const ART_SYMBOL_OFFSET := Vector2(0.0, -4.0)
+const ART_SYMBOL_OFFSET := Vector2(68.5, 182.0)
+const ART_SYMBOL_SIZE := Vector2(23.04, 23.04)
 const ART_SCORES_UNLOCKED_RECT := Rect2(29.0, 226.0, 103.0, 24.0)
 const ART_OPTIONS_UNLOCKED_RECT := Rect2(29.0, 262.0, 103.0, 24.0)
 # Free strips around the baked plates: hint under the title, meter at the bottom.
@@ -90,23 +87,22 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var tutorial_pauses_tree: bool = true
 @export var tutorial_title_text: String = "HOW TO PLAY"
 @export_multiline var tutorial_bbcode: String = """[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
+- You have 3 campaign lives. Reach 5,000 Wealth.
 
-[color=#f2d37c][b]Dealer Scene[/b][/color]
-- Buy consumables for your run.
-- Effects are vague. Try them all to discover what they do.
-- Inventory limit: 2 consumables max.
+[color=#f2d37c][b]Pacte[/b][/color]
+- Begin each run by choosing one augment and one power.
+- Reroll is a choice, not a starting bonus.
 
-[color=#c6f08a][b]Upgrades Scene[/b][/color]
-- Purchase upgrades for your run.
-- Acquire powers that manipulate the machine.
-- Boost your overall gains.
+[color=#c6f08a][b]Routes and Items[/b][/color]
+- Between rounds, choose a route or continue for free.
+- Spend run coins on cards, Shop upgrades, and items.
+- The Dealer also visits during play. Take an item, then tap its stash slot to use it. Stash limit: 2.
 
-[color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 15 spins with x1, x2, or x3 bets.
-- The Dealer can pop up mid-run with run-only items.
-- You always start with the "Reroll" power.
-- 1 random power restores every 30 coins obtained."""
+[color=#ff9ca8][b]The Machine[/b][/color]
+- Start with 15 spins. Wins raise the frenzy multiplier.
+- A miss at x2 or x3 can be rescued with a power.
+- Every 30 run coins restores one random spent power.
+- Reach each Wealth target to open the next route choice."""
 
 # ── campaign rebalance (issue #38) ────────────────────────────────────────────────
 @export_group("Campaign")
@@ -114,8 +110,7 @@ const AUGMENTED_DESCRIPTIONS := {
 @export var fatal_flatline_text: String = "this time, it's fatal. No coming back"
 
 var _font: FontFile = null
-var _use_art := false
-var _menu_sprite: Sprite2D = null      # start_menu.png (background + title)
+var _menu_sprite: Sprite2D = null      # title overlay (MenuArt)
 var _bar_sprite: Sprite2D = null       # selector bar overlay, shown once unlocked
 var _symbols_sprite: Sprite2D = null   # suit overlay, frame per selection
 var _plate_sprites := {}               # Button -> full-canvas plate Sprite2D
@@ -142,12 +137,8 @@ func _ready() -> void:
 	_font = Assets.font()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bind_scene_nodes()
-	_use_art = Assets.texture(MENU_FRAMES_ASSET, true) != null
-	if _use_art:
-		_build_art_menu()
-	else:
-		_build_background()
-		_build_menu()
+	_build_background()
+	_build_menu()
 	if not Engine.is_editor_hint() and not RunStateStore.state_changed.is_connected(_refresh_start_button):
 		RunStateStore.state_changed.connect(_refresh_start_button)
 	if not Engine.is_editor_hint() and not MetaStateStore.meta_changed.is_connected(_refresh_campaign_ui):
@@ -193,73 +184,14 @@ func _frame_sprite(rel: String, hframes: int) -> Sprite2D:
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
+	if rel == MENU_TITLE_ASSET or rel == MENU_AUGMENTED_BAR_ASSET:
+		var bounds := MENU_TITLE_RECT if rel == MENU_TITLE_ASSET else MENU_SELECTOR_ART_RECT
+		spr.position = bounds.position
+		spr.scale = bounds.size / tex.get_size()
 	spr.set_meta("base_scale", spr.scale) # suit-bounce anchor (_bounce_symbols)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
-
-func _build_art_menu() -> void:
-	# The frames bake the full screen (background, title, plates); the legacy
-	# scenery nodes stay hidden underneath.
-	for node_name in ["Background", "Dim"]:
-		var n := get_node_or_null(String(node_name)) as CanvasItem
-		if n != null:
-			n.visible = false
-	var col := get_node_or_null("MenuColumn") as VBoxContainer
-	_menu_sprite = _frame_sprite(MENU_FRAMES_ASSET, 1)
-	_menu_sprite.name = "MenuArt"
-	_bar_sprite = _frame_sprite(MENU_AUGMENTED_BAR_ASSET, 1)
-	if _bar_sprite != null:
-		_bar_sprite.name = "AugmentedBar"
-		_bar_sprite.visible = false
-	_symbols_sprite = _frame_sprite(MENU_SYMBOLS_ASSET, 6)
-	if _symbols_sprite != null:
-		_symbols_sprite.name = "AugmentedSymbols"
-		_symbols_sprite.position = ART_SYMBOL_OFFSET
-		_symbols_sprite.visible = false
-
-	# The scene's buttons move out of the VBox onto their standalone plates.
-	_reparent_plate_button(_start_button, col, ART_START_RECT, ART_CYAN, 10, _start_run)
-	_reparent_plate_button(_scores_button, col, ART_SCORES_LOCKED_RECT, ART_PINK, 8, _open_scores)
-	_options_button = Button.new()
-	_options_button.name = "OptionsButton"
-	_options_button.text = "OPTIONS"
-	add_child(_options_button)
-	_style_plate_button(_options_button, ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
-	_options_button.pressed.connect(_toggle_options_overlay)
-	# ButtonKit supplies the same painted physical cap as the in-game controls.
-	for b in [_start_button, _scores_button, _options_button]:
-		if b != null:
-			move_child(b, get_child_count() - 1)
-	if col != null:
-		col.visible = false
-
-	# Suit selector: invisible hit areas over the bar's baked arrows; the suit
-	# itself comes from the symbols sheet overlay.
-	_augmented_row = Control.new()
-	_augmented_row.name = "AugmentedSelector"
-	_augmented_row.position = ART_SELECTOR_RECT.position
-	_augmented_row.size = ART_SELECTOR_RECT.size
-	add_child(_augmented_row)
-	for arrow in [[-1, ART_ARROW_LEFT_RECT], [1, ART_ARROW_RIGHT_RECT]]:
-		var art := _arrow_art(arrow[1] as Rect2)
-		var btn := _augmented_arrow_button(int(arrow[0]), ART_SELECTOR_RECT.size, art)
-		_augmented_row.add_child(btn)
-		_arrow_buttons.append(btn)
-		if art != null:
-			_arrow_arts.append(art)
-	_augmented_desc = _overlay_label("AugmentedDescription", ART_DESC_RECT, 5, ART_YELLOW)
-
-	# Campaign meter + hint live in the frame's free strips (issue #38).
-	_campaign_hint = _overlay_label("CampaignHint", ART_HINT_RECT, 5, Color(0.9, 0.78, 0.64))
-	UiKit.style_display_label(_campaign_hint)
-	_campaign_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-
-	# Options overlay (shared component; same one the machine/dealer scenes use).
-	if not Engine.is_editor_hint():
-		_options_overlay = OPTIONS_OVERLAY_SCENE.instantiate() as OptionsOverlay
-		_options_overlay.name = "OptionsOverlay"
-		add_child(_options_overlay)
 
 func _overlay_label(label_name: String, rect: Rect2, font_size: int, color: Color,
 		parent: Control = null) -> Label:
@@ -344,27 +276,23 @@ func _set_plate_pop(f: float, plate: Sprite2D, pivot: Vector2) -> void:
 	plate.position = pivot * (1.0 - f)
 	plate.set_meta("pop_f", f)
 
-## Live copy of one baked arrow, cropped from the bar overlay asset so it can
-## squash on press (the bar art underneath can't move). Centered on the arrow
-## so the scale pivots in place; NEAREST like the art it copies.
+## Independent transparent arrow: dimming and squashing never tint the felt.
 func _arrow_art(rect: Rect2) -> Sprite2D:
-	var tex := Assets.texture(MENU_AUGMENTED_BAR_ASSET)
+	var tex := Assets.texture("ui/premium/menu_selector_arrow.svg")
 	if tex == null:
 		return null
-	var s := float(tex.get_width()) / CANVAS_W # export scale of the overlay
 	var spr := Sprite2D.new()
 	spr.texture = tex
-	spr.region_enabled = true
-	spr.region_rect = Rect2(rect.position * s, rect.size * s)
 	spr.centered = true
+	spr.flip_h = rect.position.x > CANVAS_W * 0.5
 	spr.position = rect.position + rect.size * 0.5 - ART_SELECTOR_RECT.position
-	spr.scale = Vector2.ONE / s
+	spr.scale = rect.size / tex.get_size()
 	spr.set_meta("rest_scale", spr.scale)
 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_augmented_row.add_child(spr)
 	return spr
 
-## Invisible hit area over a baked arrow third of the selector bar; pressing
+## Invisible hit area over an outer third of the selector bar; pressing
 ## squashes the arrow's live copy, release springs it back as the suit changes.
 func _augmented_arrow_button(step: int, bar_size: Vector2, art: Sprite2D) -> Button:
 	var b := Button.new()
@@ -429,15 +357,6 @@ func _layout_art_menu(augmented: bool) -> void:
 
 func _build_background() -> void:
 	if _background != null:
-		var neon := Assets.texture(MENU_BG_ASSET, true)
-		if neon != null:
-			_background.texture = neon
-			_background.centered = false
-			_background.position = Vector2.ZERO
-			_background.scale = Vector2(CANVAS_W / neon.get_width(), CANVAS_H / neon.get_height())
-			var dim := get_node_or_null("Dim") as ColorRect
-			if dim != null:
-				dim.color = Color(0.02, 0.01, 0.04, 0.42)
 		_background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_CENTER) -> Label:
@@ -454,9 +373,76 @@ func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT
 	return l
 
 func _build_menu() -> void:
+	_menu_sprite = _frame_sprite(MENU_TITLE_ASSET, 1)
+	if _menu_sprite == null:
+		_menu_sprite = Sprite2D.new()
+	_menu_sprite.name = "MenuArt"
+	var title := _overlay_label("MenuTitle", Rect2(18, 59, 124, 40), 14, Color("ead4a6"))
+	title.text = "LOBOTOMY\nCASINO"
+	title.add_theme_constant_override("line_spacing", 1)
+	title.add_theme_color_override("font_shadow_color", Color("020604"))
+	title.add_theme_constant_override("shadow_offset_y", 1)
 	_build_campaign_labels()
-	UiKit.connect_button(_start_button, _start_run)
-	UiKit.connect_button(_scores_button, _open_scores)
+	var col := get_node_or_null("MenuColumn") as VBoxContainer
+	# The scene's legacy column remains as a compatibility shell; the live
+	# buttons are positioned over their authored plates below.
+	var start_plate := _frame_sprite(MENU_START_PLATE_ASSET, 1)
+	if start_plate != null:
+		_plate_sprites[_start_button] = start_plate
+	var scores_plate := _frame_sprite(MENU_SCORES_PLATE_ASSET, 2)
+	if scores_plate != null:
+		_plate_sprites[_scores_button] = scores_plate
+	var options_plate := _frame_sprite(MENU_OPTIONS_PLATE_ASSET, 2)
+	_options_button = Button.new()
+	_options_button.name = "OptionsButton"
+	_options_button.text = "OPTIONS"
+	add_child(_options_button)
+	if options_plate != null:
+		_plate_sprites[_options_button] = options_plate
+	_reparent_plate_button(_start_button, col, ART_START_RECT, ART_CYAN, 10, _start_run)
+	_reparent_plate_button(_scores_button, col, ART_SCORES_LOCKED_RECT, ART_PINK, 8, _open_scores)
+	_style_plate_button(_options_button, ART_OPTIONS_LOCKED_RECT, ART_YELLOW, 8)
+	_options_button.pressed.connect(_toggle_options_overlay)
+	for b in [_start_button, _scores_button, _options_button]:
+		if b != null:
+			move_child(b, get_child_count() - 1)
+	if col != null:
+		col.visible = false
+	_campaign_hint = _overlay_label("CampaignHint", ART_HINT_RECT, 5,
+		Color(0.9, 0.78, 0.64))
+	UiKit.style_display_label(_campaign_hint)
+	_campaign_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_build_live_selector()
+	if not Engine.is_editor_hint():
+		_options_overlay = OPTIONS_OVERLAY_SCENE.instantiate() as OptionsOverlay
+		_options_overlay.name = "OptionsOverlay"
+		add_child(_options_overlay)
+
+func _build_live_selector() -> void:
+	_bar_sprite = _frame_sprite(MENU_AUGMENTED_BAR_ASSET, 1)
+	if _bar_sprite != null:
+		_bar_sprite.name = "AugmentedBar"
+		_bar_sprite.visible = false
+	_symbols_sprite = _frame_sprite(MENU_SYMBOLS_ASSET, 6)
+	if _symbols_sprite != null:
+		_symbols_sprite.name = "AugmentedSymbols"
+		_symbols_sprite.position = ART_SYMBOL_OFFSET
+		_symbols_sprite.scale = ART_SYMBOL_SIZE / Vector2(128, 128)
+		_symbols_sprite.set_meta("base_scale", _symbols_sprite.scale)
+		_symbols_sprite.visible = false
+	_augmented_row = Control.new()
+	_augmented_row.name = "AugmentedSelector"
+	_augmented_row.position = ART_SELECTOR_RECT.position
+	_augmented_row.size = ART_SELECTOR_RECT.size
+	add_child(_augmented_row)
+	for arrow in [[-1, ART_ARROW_LEFT_RECT], [1, ART_ARROW_RIGHT_RECT]]:
+		var art := _arrow_art(arrow[1] as Rect2)
+		var btn := _augmented_arrow_button(int(arrow[0]), ART_SELECTOR_RECT.size, art)
+		_augmented_row.add_child(btn)
+		_arrow_buttons.append(btn)
+		if art != null:
+			_arrow_arts.append(art)
+	_augmented_desc = _overlay_label("AugmentedDescription", ART_DESC_RECT, 5, ART_YELLOW)
 
 func _build_campaign_labels() -> void:
 	var col := get_node_or_null("MenuColumn") as VBoxContainer
@@ -505,7 +491,7 @@ func _set_symbols_pop(f: float) -> void:
 		return
 	var base: Vector2 = _symbols_sprite.get_meta("base_scale", Vector2.ONE)
 	_symbols_sprite.scale = base * f
-	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SELECTOR_PIVOT * (1.0 - f)
+	_symbols_sprite.position = ART_SYMBOL_OFFSET + ART_SYMBOL_SIZE * 0.5 * (1.0 - f)
 
 func _refresh_augmented_selector() -> void:
 	if _augmented_row == null:
@@ -513,8 +499,9 @@ func _refresh_augmented_selector() -> void:
 	var shown := _augmented_layout_active()
 	var run_held := not Engine.is_editor_hint() and RunStateStore.has_resume_state()
 	_augmented_row.visible = shown
-	if _use_art:
-		_layout_art_menu(shown)
+	if _bar_sprite != null:
+		_bar_sprite.visible = shown
+	_layout_art_menu(shown)
 	# While a run is held the row locks: arrows disabled (dimmed), and the suit
 	# shown is the ACTIVE run's tier, not the menu selection.
 	var displayed := _selected_augmented_tier
@@ -537,6 +524,9 @@ func _refresh_augmented_selector() -> void:
 func _refresh_start_button() -> void:
 	if _start_button == null:
 		return
+	# Keep the live fallback button's press animation centered just like the
+	# retired authored plate path.
+	_start_button.pivot_offset = _start_button.size * 0.5
 	# Run-phase changes also gate the selector (hidden while a run is held).
 	_refresh_augmented_selector()
 	var continuing := not Engine.is_editor_hint() and RunStateStore.has_resume_state()
@@ -597,7 +587,7 @@ func _configure_tutorial_modal() -> void:
 		_tutorial_body.bbcode_enabled = true
 		_tutorial_body.text = tutorial_bbcode
 		_tutorial_body.fit_content = false
-		_tutorial_body.scroll_active = false
+		_tutorial_body.scroll_active = true
 		_tutorial_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_tutorial_body.add_theme_font_size_override("normal_font_size", 5)
 		_tutorial_body.add_theme_font_size_override("bold_font_size", 5)

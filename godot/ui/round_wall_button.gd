@@ -6,11 +6,11 @@ extends Button
 ## while drawing the face itself in hard-edged rings so it feels mounted in the
 ## Bonus room instead of looking like a generic rectangular UI widget.
 
-const CYAN := Color(0.42, 1.0, 0.95)
-const HOT_CYAN := Color(0.72, 1.0, 0.98)
-const GOLD := Color(1.0, 0.84, 0.38)
-const HOT_GOLD := Color(1.0, 0.95, 0.62)
-const WALL := Color(0.10, 0.065, 0.16)
+const CYAN := Color("ac9161")
+const HOT_CYAN := Color("fff0c4")
+const GOLD := Color("c5a66d")
+const HOT_GOLD := Color("f0d9a0")
+const WALL := Color("151b15")
 
 var _hovered := false
 var _pressed := false
@@ -38,16 +38,16 @@ func _draw() -> void:
 	var radius := floorf(minf(size.x, size.y) * 0.5) - 2.0
 	var sink := Vector2(0.0, 1.0) if _pressed else Vector2.ZERO
 	var outer := GOLD
-	var face := Color(0.15, 0.25, 0.29)
+	var face := Color("233b2e")
 	if disabled:
 		outer = Color(0.38, 0.43, 0.49, 0.8)
-		face = Color(0.12, 0.13, 0.18)
+		face = Color("18231e")
 	elif _pressed:
 		outer = HOT_CYAN
-		face = Color(0.08, 0.22, 0.25)
+		face = Color("10261c")
 	elif _hovered:
 		outer = HOT_GOLD
-		face = Color(0.20, 0.35, 0.36)
+		face = Color("34523e")
 
 	# Wall mount shadow and a dark outer plate keep the control legible against the
 	# authored wall without adding a soft, non-pixel blur.
@@ -61,6 +61,12 @@ func _draw() -> void:
 	draw_rect(Rect2(centre + Vector2(-1.0, -radius + 5.0), Vector2(2.0, 2.0)),
 		Color.WHITE if not disabled else Color(0.62, 0.65, 0.70, 0.65))
 
+	# Recessed bezel and four slotted brass screws match the cabinet controls.
+	draw_arc(centre + sink, radius - 3.0, 0.0, TAU, 48, Color("57482e"), 0.6, false)
+	for direction in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+		var screw: Vector2 = centre + direction * (radius - 0.5)
+		draw_circle(screw, 1.2, Color("967d50"))
+		draw_line(screw - Vector2(.6, 0), screw + Vector2(.6, 0), Color("302a1d"), .5)
 	_draw_label(centre, sink)
 
 func _draw_label(centre: Vector2, sink: Vector2) -> void:

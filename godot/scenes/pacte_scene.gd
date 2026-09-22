@@ -81,13 +81,13 @@ const CARD_GLINT_END_X := 42.0
 # Compact speech bubble sits between the dealer prompt and the card row, like a
 # small information bubble attached to the inspected card. Keep enough height
 # for wrapped descriptions while leaving the drag prompt and cards unobstructed.
-const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 145.0, 50.0, 28.0)
+const DESCRIPTION_BUBBLE_RECT := Rect2(5.0, 94.0, 100.0, 50.0)
 # Title over body. The y here is only a starting point: _preview_card centres the pair as
 # one block once it knows how many rows the blurb wrapped to (see _layout_description).
-const DESCRIPTION_TITLE_RECT := Rect2(2.0, 3.0, 46.0, 7.0)
-const DESCRIPTION_TEXT_RECT := Rect2(3.0, 10.0, 44.0, 16.0)
-const DESCRIPTION_TITLE_FONT_SIZE := 4
-const DESCRIPTION_FONT_SIZE := 3
+const DESCRIPTION_TITLE_RECT := Rect2(4.0, 3.0, 92.0, 10.0)
+const DESCRIPTION_TEXT_RECT := Rect2(4.0, 14.0, 92.0, 32.0)
+const DESCRIPTION_TITLE_FONT_SIZE := 6
+const DESCRIPTION_FONT_SIZE := 5
 const DESCRIPTION_BUBBLE_GAP := 1.0
 const DEALER_BUBBLE_RECT := Rect2(92.0, 21.0, 48.0, 30.0)
 const PHASE_LABEL_RECT := Rect2(61.0, 79.0, 36.0, 34.0)
@@ -439,11 +439,12 @@ func _build_overlay_ui() -> void:
 		DESCRIPTION_FONT_SIZE, TEXT_COLOR, _description_bubble)
 	_description_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# Centred in the space UNDER the title, not pinned to the top of it. The bubble is a
-	# fixed 50x28 box but the blurbs run one to three lines, so a top-pinned body left the
+	# fixed preview box has variable-length blurbs, so a top-pinned body left the
 	# short ones floating above eight px of empty panel.
 	_description_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_description_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_description_text.clip_text = true
+	_description_text.add_theme_constant_override("line_spacing", 0)
 	_description_bubble.visible = false
 
 	# The hint belongs to the emplacement itself. At native resolution the slot is
@@ -1098,7 +1099,7 @@ func _preview_card(card_id: String) -> void:
 ## nothing else knows, since word wrapping breaks where the words allow.
 func _layout_description() -> void:
 	var title_h := DESCRIPTION_TITLE_RECT.size.y
-	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - title_h - 2.0 # 1px border either side
+	var max_body_h := DESCRIPTION_BUBBLE_RECT.size.y - DESCRIPTION_TEXT_RECT.position.y - 3.0
 	# Width first: a Label cannot report its wrap until it knows how wide it is.
 	_description_title.size = DESCRIPTION_TITLE_RECT.size
 	_description_text.size = Vector2(DESCRIPTION_TEXT_RECT.size.x, max_body_h)

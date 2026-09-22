@@ -326,57 +326,54 @@ game_over,game_over,fin de partie
 "time  %s","time  %s","durée  %s"
 "date  %s","date  %s","date  %s"
 "[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
+- You have 3 campaign lives. Reach 5,000 Wealth.
 
-[color=#f2d37c][b]Dealer Scene[/b][/color]
-- Buy consumables for your run.
-- Effects are vague. Try them all to discover what they do.
-- Inventory limit: 2 consumables max.
+[color=#f2d37c][b]Pacte[/b][/color]
+- Begin each run by choosing one augment and one power.
+- Reroll is a choice, not a starting bonus.
 
-[color=#c6f08a][b]Upgrades Scene[/b][/color]
-- Purchase upgrades for your run.
-- Acquire powers that manipulate the machine.
-- Boost your overall gains.
+[color=#c6f08a][b]Routes and Items[/b][/color]
+- Between rounds, choose a route or continue for free.
+- Spend run coins on cards, Shop upgrades, and items.
+- The Dealer also visits during play. Take an item, then tap its stash slot to use it. Stash limit: 2.
 
-[color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 15 spins with x1, x2, or x3 bets.
-- The Dealer can pop up mid-run with run-only items.
-- You always start with the ""Reroll"" power.
-- 1 random power restores every 30 coins obtained.","[color=#d9f0ff][b]The Objective[/b][/color]
-- Run 3 campaign health -> attain 5,000 Wealth before hitting 0.
+[color=#ff9ca8][b]The Machine[/b][/color]
+- Start with 15 spins. Wins raise the frenzy multiplier.
+- A miss at x2 or x3 can be rescued with a power.
+- Every 30 run coins restores one random spent power.
+- Reach each Wealth target to open the next route choice.","[color=#d9f0ff][b]The Objective[/b][/color]
+- You have 3 campaign lives. Reach 5,000 Wealth.
 
-[color=#f2d37c][b]Dealer Scene[/b][/color]
-- Buy consumables for your run.
-- Effects are vague. Try them all to discover what they do.
-- Inventory limit: 2 consumables max.
+[color=#f2d37c][b]Pacte[/b][/color]
+- Begin each run by choosing one augment and one power.
+- Reroll is a choice, not a starting bonus.
 
-[color=#c6f08a][b]Upgrades Scene[/b][/color]
-- Purchase upgrades for your run.
-- Acquire powers that manipulate the machine.
-- Boost your overall gains.
+[color=#c6f08a][b]Routes and Items[/b][/color]
+- Between rounds, choose a route or continue for free.
+- Spend run coins on cards, Shop upgrades, and items.
+- The Dealer also visits during play. Take an item, then tap its stash slot to use it. Stash limit: 2.
 
-[color=#ff9ca8][b]Machine Scene[/b][/color]
-- You have 15 spins with x1, x2, or x3 bets.
-- The Dealer can pop up mid-run with run-only items.
-- You always start with the ""Reroll"" power.
-- 1 random power restores every 30 coins obtained.","[color=#d9f0ff][b]L'Objectif[/b][/color]
-- 3 points de santé de campagne -> atteins 5 000 de Fortune avant zéro.
+[color=#ff9ca8][b]The Machine[/b][/color]
+- Start with 15 spins. Wins raise the frenzy multiplier.
+- A miss at x2 or x3 can be rescued with a power.
+- Every 30 run coins restores one random spent power.
+- Reach each Wealth target to open the next route choice.","[color=#d9f0ff][b]Objectif[/b][/color]
+- Vous avez 3 vies de campagne. Atteignez 5 000 de richesse.
 
-[color=#f2d37c][b]Scène du Croupier[/b][/color]
-- Achète des consommables pour ta partie.
-- Les effets sont vagues. Essaie-les tous pour les découvrir.
-- Limite d'inventaire : 2 consommables.
+[color=#f2d37c][b]Pacte[/b][/color]
+- Au début de chaque run, choisissez une augmentation et un pouvoir.
+- Relance est un choix, pas un bonus de départ.
 
-[color=#c6f08a][b]Scène des Améliorations[/b][/color]
-- Achète des améliorations pour ta partie.
-- Acquiers des pouvoirs qui manipulent la machine.
-- Augmente tes gains globaux.
+[color=#c6f08a][b]Routes et objets[/b][/color]
+- Entre les manches, choisissez une route ou continuez gratuitement.
+- Dépensez les pièces du run en cartes, améliorations et objets.
+- Le Dealer intervient aussi pendant le jeu. Prenez un objet, puis touchez sa case de réserve pour l'utiliser. Limite : 2 objets.
 
-[color=#ff9ca8][b]Scène de la Machine[/b][/color]
-- Tu as 15 tours avec des mises x1, x2 ou x3.
-- Le Croupier peut surgir en pleine partie avec des objets exclusifs.
-- Tu commences toujours avec le pouvoir ""Relance"".
-- 1 pouvoir au hasard se recharge tous les 30 jetons obtenus."
+[color=#ff9ca8][b]La machine[/b][/color]
+- Commencez avec 15 tours. Les gains augmentent la frénésie.
+- Un échec à x2 ou x3 peut être sauvé avec un pouvoir.
+- Chaque tranche de 30 pièces restaure un pouvoir dépensé au hasard.
+- Entre les runs, dépensez les crédits du portefeuille au Labo."
 JACKPOT +%d SPIN,JACKPOT +%d SPIN,JACKPOT +%d TOUR
 REVEALS A REEL,REVEALS A REEL,RÉVÈLE UN ROULEAU
 ALL POWERS BACK,ALL POWERS BACK,TOUS LES POUVOIRS RENDUS
@@ -386,3 +383,34 @@ LAST ITEM BACK,LAST ITEM BACK,DERNIER OBJET RENDU
 2X REWARDS NEXT SPIN","CLOSE CALL %d/%d,
 2X REWARDS NEXT SPIN","DE JUSTESSE %d/%d,
 GAINS X2 AU PROCHAIN TOUR"
+TOKENS :,TOKENS :,JETONS :
+NO AUGMENT,NO AUGMENT,SANS AUGMENT
+"MAX 2 POWERS, NO 2ND AUGMENT","MAX 2 POWERS, NO 2ND AUGMENT","2 POUVOIRS MAX, PAS DE 2E AUGMENT"
+"+50% PRICES, -1 OFFER, +15% TAX","+50% PRICES, -1 OFFER, +15% TAX","+50% PRIX, -1 OFFRE, +15% TAXE"
+ALL FOUR MODIFIERS,ALL FOUR MODIFIERS,LES QUATRE MODIFICATEURS
+"CHOOSE
+YOUR PATH","CHOOSE
+YOUR PATH","CHOISIS
+TA VOIE"
+"I CAN TUNE
+THE MACHINE.","I CAN TUNE
+THE MACHINE.","AMÉLIORE
+LA MACHINE."
+"PICK AN
+AUGMENT.","PICK AN
+AUGMENT.","CHOISIS UN
+AUGMENT."
+"PICK A
+POWER.","PICK A
+POWER.","CHOISIS UN
+POUVOIR."
+"SPIN THE
+WHEEL.","SPIN THE
+WHEEL.","TOURNE
+LA ROUE."
+"TRADE ONE.
+TAKE A BOON.","TRADE ONE.
+TAKE A BOON.","SACRIFIE.
+REÇOIS UN DON."
+REPLACE POWER,REPLACE POWER,REMPLACER UN POUVOIR
+CHOOSE A POWER TO REMOVE,CHOOSE A POWER TO REMOVE,CHOISIS LE POUVOIR À RETIRER

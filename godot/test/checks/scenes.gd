@@ -264,7 +264,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		failures.append("route: dealer offer is missing the hover explanation label")
 	elif not default_bubble.visible or not default_bubble_label.visible \
 			or default_bubble_label.text != "CHOOSE\nYOUR PATH" \
-			or default_bubble_label.position != Vector2(103.0, 173.0) \
+			or default_bubble_label.position != Vector2(103.0, 173.0 + Assets.centered_text_nudge(route.BUBBLE_TEXT_FONT_SIZE)) \
 			or default_bubble_label.size != Vector2(39.0, 21.0):
 		failures.append("route: dealer bubble is missing the default path prompt")
 	var cards_layer := route.get_node_or_null("DoorChoices") as Control
@@ -305,7 +305,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 		if door_emblem == null or door_emblem.position != Vector2(18.0, -1.0) \
 				or door_emblem.size != Vector2(28.0, 32.0):
 			failures.append("route: %s emblem is not seated in its painted door inset" % door)
-		if door_title == null or door_title.position != Vector2(14.0, 34.0) \
+		if door_title == null or door_title.position != Vector2(14.0, 34.0 + Assets.centered_text_nudge(route.DOOR_TITLE_FONT_SIZE)) \
 				or door_title.size != Vector2(36.0, 10.0) \
 				or door_title.get_theme_font_size("font_size") < 4:
 			failures.append("route: %s title is not inside its painted name plate" % door)
@@ -1250,6 +1250,11 @@ func _check_issue27_overlay_layout(failures: Array) -> void:
 		return
 	var overlay := ps.instantiate()
 	get_root().add_child(overlay)
+
+	var offer_icon: TextureRect = overlay._make_item_icon_on(overlay, "item_water", "offer", Vector2.ZERO, 16.0)
+	if not offer_icon.size.is_equal_approx(Vector2(16.0, 16.0)):
+		failures.append("live dealer: high-resolution item exceeds its 16x16 offer bounds")
+	offer_icon.queue_free()
 
 	var tap := overlay.get_node("TapLabel") as Label
 	if tap.get_theme_font_size("font_size") < 12:

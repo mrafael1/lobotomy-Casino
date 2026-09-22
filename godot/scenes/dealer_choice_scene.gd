@@ -75,7 +75,7 @@ const REROLL_PRICE_RECT := Rect2(7.0, 216.0, 38.0, 12.0)
 const REROLL_PRICE_FONT_SIZE := 7
 const MESSAGE_RECT := Rect2(4.0, 272.0, 152.0, 16.0)
 const BUBBLE_TEXT_RECT := Rect2(103.0, 173.0, 39.0, 21.0)
-const BUBBLE_TEXT_FONT_SIZE := 4
+const BUBBLE_TEXT_FONT_SIZE := 5
 const DEFAULT_BUBBLE_TEXT := "CHOOSE\nYOUR PATH"
 const DOOR_CONFIRMATION_TEXT := "TAKING THE\n%s DOOR?"
 const DOOR_GAP_CENTER := Vector2(80.0, 90.0)
@@ -98,13 +98,13 @@ const BUBBLE_TEXT_COLOR := Color(0.96, 0.88, 0.77)
 ## each door's inset. These coordinates are local to the 64x117 touch rect.
 const DOOR_TITLE_RECT := Rect2(14.0, 34.0, 36.0, 10.0)
 const DOOR_EMBLEM_RECT := Rect2(18.0, -1.0, 28.0, 32.0)
-const DOOR_TITLE_FONT_SIZE := 4
+const DOOR_TITLE_FONT_SIZE := 5
 const DOOR_TITLE_LABELS := {
 	RouteCards.ROUTE_SHOP: "SHOP",
-	RouteCards.ROUTE_AUGMENT: "AUG",
-	RouteCards.ROUTE_POWER: "PWR",
+	RouteCards.ROUTE_AUGMENT: "AUGMENT",
+	RouteCards.ROUTE_POWER: "POWER",
 	RouteCards.ROUTE_BONUS: "BONUS",
-	RouteCards.ROUTE_SACRIFICE: "SAC",
+	RouteCards.ROUTE_SACRIFICE: "SACRIFICE",
 }
 const DOOR_EXPLANATIONS := {
 	RouteCards.ROUTE_SHOP: "I CAN TUNE\nTHE MACHINE.",
@@ -199,7 +199,7 @@ func _process(delta: float) -> void:
 		DOOR_SUCTION_MIN_SPAWN_DELAY, DOOR_SUCTION_MAX_SPAWN_DELAY)
 
 func _build_header() -> void:
-	_message = _label("", MESSAGE_RECT, 4, RED)
+	_message = _label("", MESSAGE_RECT, 6, RED)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -317,6 +317,21 @@ func _configure_actions() -> void:
 	_reroll_button = get_node_or_null("RerollButton") as Button
 	if _reroll_button != null:
 		_reroll_button.text = ""
+		var caption := Label.new()
+		caption.name = "RerollCaption"
+		caption.z_index = 4
+		caption.text = "REROLL"
+		caption.position = Vector2(4, 7)
+		caption.size = Vector2(33, 12)
+		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		caption.add_theme_font_override("font", _font)
+		caption.add_theme_font_size_override("font_size", 5)
+		caption.add_theme_color_override("font_color", GOLD)
+		caption.size = Vector2(33, 12)
+		_reroll_button.add_child(caption)
+		caption.set_deferred("size", Vector2(33, 12))
 		_reroll_button.flat = true
 		_reroll_button.focus_mode = Control.FOCUS_NONE
 		_reroll_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

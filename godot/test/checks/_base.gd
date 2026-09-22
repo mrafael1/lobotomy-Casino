@@ -358,19 +358,19 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 				or art.hframes != 2 or art.texture == null:
 			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
 			continue
-		var uses_full_canvas_export: bool = art_name == "RerollButtonArt" \
-				and art.texture.resource_path.ends_with("dealer_scene_reroll_BUTTON.png")
-		var expected_size := Vector2i(2560, 2560) if uses_full_canvas_export \
+		var uses_compact_reroll: bool = art_name == "RerollButtonArt" \
+				and art.texture.resource_path.ends_with("ui/premium/shop_reroll_brass.svg")
+		var expected_size := Vector2i(248, 108) if uses_compact_reroll \
 				else Vector2i(400, 380)
-		var expected_position := Vector2.ZERO if uses_full_canvas_export \
+		var expected_position := Vector2(1, 77) if uses_compact_reroll \
 				else Vector2(-20.0, -30.0)
-		var expected_scale := Vector2(0.125, 0.125) if uses_full_canvas_export else Vector2.ONE
+		var expected_scale := Vector2(0.25, 0.25) if uses_compact_reroll else Vector2.ONE
 		if Vector2i(art.texture.get_width(), art.texture.get_height()) != expected_size \
 				or art.position != expected_position \
 				or art.scale != expected_scale:
 			failures.append("dealer shop: %s is not centred at its authored source scale" % art_name)
 		var expected_asset := "dealer_shop/machine.png" if art_name == "MachineButtonArt" \
-				else ("dealer_scene_reroll_BUTTON.png" if uses_full_canvas_export else "dealer_shop/reroll.png")
+				else ("ui/premium/shop_reroll_brass.svg" if uses_compact_reroll else "dealer_shop/reroll.png")
 		if not art.texture.resource_path.ends_with(expected_asset):
 			failures.append("dealer shop: %s is using the wrong native asset" % art_name)
 
@@ -595,11 +595,11 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if cancel != null or title != null:
 			failures.append("%s picker should not draw title/cancel chrome" % prefix)
 	var frame := panel.get_node_or_null("Frame") as TextureRect
-	var background := panel.get_node_or_null("Background") as ColorRect
+	var background := panel.get_node_or_null("Background") as Control
 	if expects_frame:
-		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_chosing.png":
+		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_picker_brass.svg":
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
-		if background == null or background.size != Vector2.ZERO:
+		if background == null or background.visible:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
 		if expects_header and (title == null or frame == null \
 				or title.position.y < frame.position.y - 6.0 \

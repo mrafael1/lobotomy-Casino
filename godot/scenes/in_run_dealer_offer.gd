@@ -17,9 +17,6 @@ const DEALER_VISIBLE_CENTER_X := 78.0
 const DEALER_CENTER_Y := 160.0 # vertical centre of the rotated portrait
 const DEALER_FILL := 0.86      # cropped portrait width fills most of canvas height when rotated
 const HEAD_POKE := 118.0       # how far the head/upper body reaches in from the border
-const DEALER_FRAME_W := 1280.0
-const DEALER_CROP_X := 392.0
-const DEALER_CROP_Y := 1048.0
 const DEALER_CROP_W := 464.0
 const DEALER_CROP_H := 640.0
 const HANDS_SCALE := 1.0
@@ -41,9 +38,9 @@ const ITEM_VISUAL_SIZE := Vector2(16.0, 16.0)
 const OFFER_SLOT_SIZE := Vector2(32.0, 32.0)
 const ACTION_BUTTON_SIZE := Vector2(52.0, 16.0) # look / ignore, both skinned sheets
 const FULL_POCKETS_MESSAGE := "YOUR POCKETS ARE FULL,\nWANNA THROW SOMETHING ?"
-const TV_POSITIVE_COLOR := Color(0.13, 0.77, 0.37)
-const TV_NEGATIVE_COLOR := Color(0.94, 0.27, 0.27)
-const BUBBLE_TEXT_COLOR := Color(0.12, 0.06, 0.16)
+const TV_POSITIVE_COLOR := Color("226b3c")
+const TV_NEGATIVE_COLOR := Color("a02e34")
+const BUBBLE_TEXT_COLOR := Color("243b2d")
 ## The white BODY of speech_bubble_normal.png inside the 100x38 bubble control, measured
 ## off the art itself (test/debug_bubble_ink.gd reports it): x2..98, y3..31, with the tail
 ## spurring out below. The text used to be centred in the top 30px instead, which put every
@@ -309,9 +306,9 @@ func _build_base() -> void:
 	_dealer_root.add_child(_dealer_sprite)
 
 	_hands_sprite = Sprite2D.new()
-	_hands_sprite.texture = Assets.texture("dealer_hands.png", true)
+	_hands_sprite.texture = Assets.texture("dealer_offer_polished/hands.png", true)
 	_hands_sprite.centered = false
-	_hands_sprite.scale = Vector2(HANDS_SCALE, HANDS_SCALE)
+	_hands_sprite.scale = Vector2(128.0, 64.0) * HANDS_SCALE / _hands_sprite.texture.get_size()
 	_hands_sprite.position = _hands_position()
 	_hands_rest_position = _hands_sprite.position
 	_hands_entry_position = Vector2(_hands_rest_position.x, -_hands_size().y - 2.0)
@@ -347,7 +344,8 @@ func _build_base() -> void:
 	# Bubble GRAPHIC and Label are separate siblings: we flip only the graphic per side
 	# (_choose_side), so the text is never mirrored.
 	_bubble_graphic = TextureRect.new()
-	_bubble_graphic.texture = Assets.texture("ui/speech_bubble_normal.png", true)
+	_bubble_graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_bubble_graphic.texture = Assets.texture("ui/premium/dealer_speech.svg", true)
 	_bubble_graphic.size = _speech_bubble.size
 	_bubble_graphic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_bubble_graphic.stretch_mode = TextureRect.STRETCH_SCALE
@@ -447,7 +445,8 @@ func _bind_authored_base() -> bool:
 
 	if _hands_sprite != null:
 		if _hands_sprite.texture == null:
-			_hands_sprite.texture = Assets.texture("dealer_hands.png", true)
+			_hands_sprite.texture = Assets.texture("dealer_offer_polished/hands.png", true)
+		_hands_sprite.scale = Vector2(128.0, 64.0) * HANDS_SCALE / _hands_sprite.texture.get_size()
 		_hands_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_hands_rest_position = _hands_sprite.position
 		_hands_entry_position = Vector2(_hands_rest_position.x, -_hands_size().y - 2.0)
@@ -472,7 +471,7 @@ func _bind_authored_base() -> bool:
 
 	if _bubble_graphic != null and _speech_bubble != null:
 		if _bubble_graphic.texture == null:
-			_bubble_graphic.texture = Assets.texture("ui/speech_bubble_normal.png", true)
+			_bubble_graphic.texture = Assets.texture("ui/premium/dealer_speech.svg", true)
 		if _bubble_graphic.size == Vector2.ZERO:
 			_bubble_graphic.size = _speech_bubble.size
 		_bubble_graphic.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -547,21 +546,17 @@ func _style_tap_label() -> void:
 func _configure_dealer_sprite(apply_default_transform := false) -> void:
 	if _dealer_sprite == null:
 		return
-	if _dealer_sprite.texture == null:
-		_dealer_sprite.texture = Assets.texture("dealer_portrait.png", true)
-	if apply_default_transform:
-		_dealer_sprite.hframes = 1
-		_dealer_sprite.frame = 0
-	if apply_default_transform or not _dealer_sprite.region_enabled:
-		_dealer_sprite.region_enabled = true
-		_dealer_sprite.region_rect = Rect2(DEALER_CROP_X, DEALER_CROP_Y, DEALER_CROP_W, DEALER_CROP_H)
-	elif _dealer_sprite.region_rect.size == Vector2.ZERO:
-		_dealer_sprite.region_rect = Rect2(DEALER_CROP_X, DEALER_CROP_Y, DEALER_CROP_W, DEALER_CROP_H)
+	_dealer_sprite.texture = Assets.texture("dealer_offer_polished/portrait.png", true)
+	_dealer_sprite.hframes = 1
+	_dealer_sprite.frame = 0
+	_dealer_sprite.region_enabled = false
+	# Preserve the authored encounter footprint with a standalone high-resolution sprite.
+	var display_size := Vector2(74.5552, 116.8493)
 	if apply_default_transform:
 		_dealer_sprite.position = Vector2.ZERO
 		_dealer_sprite.centered = true
-		var s := DEALER_FILL * SRC_H / DEALER_CROP_W
-		_dealer_sprite.scale = Vector2(s, s)
+		display_size = Vector2(DEALER_CROP_W, DEALER_CROP_H) * (DEALER_FILL * SRC_H / DEALER_CROP_W)
+	_dealer_sprite.scale = display_size / _dealer_sprite.texture.get_size()
 	_dealer_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _show_editor_preview() -> void:
@@ -608,7 +603,7 @@ func _apply_side(side: String) -> void:
 	# spin clockwise (head -> right/into screen); from the RIGHT, anti-clockwise. The
 	# head tip is half the portrait's (long) height from the centred sprite's middle, so
 	# we place the centre such that the tip pokes HEAD_POKE px in from the border.
-	var half_len := DEALER_CROP_H * absf(_dealer_sprite.scale.y) * 0.5
+	var half_len := _dealer_sprite.get_rect().size.y * absf(_dealer_sprite.scale.y) * 0.5
 	if _side == "left":
 		_dealer_sprite.rotation = PI / 2.0
 		_target_x = _dealer_target_left_x
@@ -731,11 +726,11 @@ func _make_item_icon(id: String, kind: String, pos: Vector2, icon_size := ICON_S
 func _make_item_icon_on(parent: Control, id: String, kind: String, pos: Vector2, icon_size := ICON_SIZE) -> TextureRect:
 	var icon := TextureRect.new()
 	icon.set_meta("_in_run_dealer_dynamic_icon", true)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.texture = _icon_for(id)
 	icon.position = pos
 	icon.size = Vector2(icon_size, icon_size)
 	icon.pivot_offset = Vector2(icon_size, icon_size) * 0.5
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if kind == "augment" or (icon.texture != null and icon.texture.resource_path.contains("/items/generated/")) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_STOP

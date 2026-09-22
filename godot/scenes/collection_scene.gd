@@ -10,7 +10,7 @@ extends Control
 
 const MENU_SCENE := "res://scenes/start_menu_scene.tscn"
 const CARD_SIZE := Vector2(39.0, 61.0)
-const CARD_NAME_HEIGHT := 10.0
+const CARD_NAME_HEIGHT := 22.0
 # Native 160x320 leaves 128px of catalog width: three 39px cards plus two 3px
 # gaps, with the slimmed scrollbar taking the remainder.
 const CARD_H_SEPARATION := 3
@@ -55,6 +55,9 @@ var _highlighted_card_id := ""
 
 func _ready() -> void:
 	UiKit.apply_font(self)
+	$Background.hide()
+	$Panel.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(NEON_GOLD, 8.0))
+	_modal.add_theme_stylebox_override("panel", ButtonKit.neon_panel_style(NEON_GOLD, 8.0))
 	for path in ["Panel/Rows/Title", "Panel/Rows/Scroll/Catalog/AugmentsHeader", "Panel/Rows/Scroll/Catalog/PowersHeader"]:
 		var heading := get_node(path) as Label
 		heading.add_theme_font_override("font", UiKit.control_font())
@@ -157,6 +160,8 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	# card-width size below is not widened back out by a long card name. Wrapping
 	# is deliberately off — it would restore a minimum width of the longest word.
 	label.clip_text = true
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.max_lines_visible = 3
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.text = String(entry.get("name", "")).to_upper() if unlocked else ""
 	label.custom_minimum_size = Vector2(CARD_SIZE.x, CARD_NAME_HEIGHT)
@@ -165,10 +170,10 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 8)
+	label.add_theme_font_size_override("font_size", 6)
 	label.add_theme_constant_override("line_spacing", 0)
 	label.add_theme_color_override("font_color", NEON_GOLD)
-	var font := UiKit.control_font()
+	var font := UiKit.font()
 	if font != null:
 		label.add_theme_font_override("font", font)
 	button.add_child(label)

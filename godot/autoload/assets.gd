@@ -31,10 +31,6 @@ func stash_slot_pos(index: int, total: int) -> Vector2:
 	var y := CANVAS_H - STASH_EDGE_MARGIN - STASH_ICON_SIZE
 	return Vector2(x0 + float(index) * (STASH_ICON_SIZE + STASH_SLOT_GAP), y)
 
-func _ready() -> void:
-	if OS.has_feature("android"):
-		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
-
 static func _res_image(rel: String) -> String:
 	return "res://assets/images/" + rel
 

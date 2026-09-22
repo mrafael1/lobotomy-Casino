@@ -12,7 +12,8 @@ const MUTED := Color(0.62, 0.70, 0.78)
 const ROSE := Color(1.0, 0.35, 0.66)
 const RED := Color(1.0, 0.35, 0.42)
 const INK := Color(0.055, 0.035, 0.105)
-const DEEP_INK := Color(0.025, 0.02, 0.06)
+const DEEP_INK := Color(0.025, 0.055, 0.045)
+const BRASS := Color(0.64, 0.49, 0.28)
 
 const OFFERING_SLOTS := [
 	Vector2(5.0, 230.0), Vector2(82.0, 230.0),
@@ -38,6 +39,7 @@ class RitualToken extends Control:
 	var enabled := true
 	var _hovered := false
 	var _pressed := false
+	var _plate := ButtonKit.neon_panel_style(BRASS, 2.0)
 
 	func configure(id: String, kind: String, title: String, subtitle: String,
 			font: Font, color: Color) -> void:
@@ -93,7 +95,7 @@ class RitualToken extends Control:
 			queue_redraw()
 
 	func _draw() -> void:
-		var border := accent
+		var border := BRASS.lerp(accent, 0.18)
 		var fill := Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.92)
 		var text_color := HOT_GOLD
 		if dimmed:
@@ -108,10 +110,13 @@ class RitualToken extends Control:
 			border = HOT_GOLD
 		elif _hovered or selected:
 			fill = Color(accent.r, accent.g, accent.b, 0.18)
-			border = HOT_GOLD if selected else accent.lightened(0.18)
+			border = HOT_GOLD if selected else BRASS.lightened(0.25)
 
-		draw_rect(Rect2(0.0, 0.0, size.x, size.y), fill)
-		draw_rect(Rect2(0.5, 0.5, size.x - 1.0, size.y - 1.0), border, false, 1.0)
+		_plate.bg_color = fill
+		_plate.border_color = border
+		_plate.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
+		_plate.shadow_size = 2
+		draw_style_box(_plate, Rect2(Vector2.ZERO, size))
 		if selected:
 			draw_line(Vector2(2.0, 3.0), Vector2(2.0, 8.0), HOT_GOLD, 1.0)
 			draw_line(Vector2(2.0, 3.0), Vector2(7.0, 3.0), HOT_GOLD, 1.0)
@@ -120,12 +125,12 @@ class RitualToken extends Control:
 			draw_line(Vector2(size.x - 2.0, size.y - 3.0),
 				Vector2(size.x - 2.0, size.y - 8.0), HOT_GOLD, 1.0)
 
-		_draw_symbol(Vector2(9.0, size.y * 0.5), border)
+		_draw_symbol(Vector2(9.0, size.y * 0.5), accent.darkened(0.45) if dimmed else accent)
 		if token_font != null:
 			draw_string(token_font, Vector2(19.0, 10.0), caption,
 				HORIZONTAL_ALIGNMENT_LEFT, size.x - 21.0, 5, text_color)
 			draw_string(token_font, Vector2(19.0, 19.0), detail,
-				HORIZONTAL_ALIGNMENT_LEFT, size.x - 21.0, 4, border)
+				HORIZONTAL_ALIGNMENT_LEFT, size.x - 21.0, 5, text_color)
 
 	func _draw_symbol(center: Vector2, color: Color) -> void:
 		match option_kind:
@@ -237,7 +242,7 @@ func _build() -> void:
 	_preview.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_preview)
-	_status = _label("", Rect2(6.0, 214.0, 148.0, 14.0), 4, MUTED)
+	_status = _label("", Rect2(6.0, 212.0, 148.0, 18.0), 6, MUTED)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -612,9 +617,9 @@ func _draw() -> void:
 	# Small framing plates keep the code-driven text readable while leaving the
 	# generated scale, pans, and altar fully visible between them.
 	draw_rect(Rect2(3.0, 3.0, 154.0, 34.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.62))
-	draw_rect(Rect2(3.5, 3.5, 153.0, 33.0), Color(ROSE.r, ROSE.g, ROSE.b, 0.64), false, 1.0)
+	draw_rect(Rect2(3.5, 3.5, 153.0, 33.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.85), false, 1.0)
 	draw_rect(Rect2(4.0, 41.0, 152.0, 24.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.36))
-	draw_rect(Rect2(5.0, 42.0, 150.0, 22.0), Color(CYAN.r, CYAN.g, CYAN.b, 0.20), false, 1.0)
+	draw_rect(Rect2(5.0, 42.0, 150.0, 22.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.45), false, 1.0)
 	draw_rect(Rect2(4.0, 212.0, 152.0, 17.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.46))
 	draw_rect(Rect2(5.0, 213.0, 150.0, 15.0), Color(GOLD.r, GOLD.g, GOLD.b, 0.18), false, 1.0)
 
@@ -661,45 +666,9 @@ func _action_button(text_value: String, rect: Rect2, font_size: int, accent: Col
 	var button := Button.new()
 	button.text = text_value
 	button.position = rect.position
-	button.size = rect.size
 	button.focus_mode = Control.FOCUS_NONE
-	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.clip_text = true
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", accent)
-	button.add_theme_color_override("font_hover_color", HOT_GOLD)
-	button.add_theme_color_override("font_pressed_color", HOT_GOLD)
-	button.add_theme_color_override("font_disabled_color", MUTED)
-	button.add_theme_color_override("font_outline_color", Color.BLACK)
-	button.add_theme_constant_override("outline_size", 1)
-	if _font != null:
-		button.add_theme_font_override("font", _font)
-	button.add_theme_stylebox_override("normal", _style(Color(DEEP_INK.r,
-		DEEP_INK.g, DEEP_INK.b, 0.88), Color(accent.r, accent.g, accent.b, 0.72)))
-	button.add_theme_stylebox_override("hover", _style(Color(accent.r, accent.g,
-		accent.b, 0.20), HOT_GOLD))
-	button.add_theme_stylebox_override("pressed", _style(Color(ROSE.r, ROSE.g,
-		ROSE.b, 0.36), HOT_GOLD))
-	button.add_theme_stylebox_override("disabled", _style(Color(DEEP_INK.r,
-		DEEP_INK.g, DEEP_INK.b, 0.62), MUTED.darkened(0.35)))
+	ButtonKit.small_neon_button_style(button, accent, font_size, 2.0)
+	button.set_deferred("size", rect.size)
 	return button
-
-
-func _style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 1
-	style.corner_radius_top_right = 1
-	style.corner_radius_bottom_left = 1
-	style.corner_radius_bottom_right = 1
-	style.content_margin_left = 2.0
-	style.content_margin_right = 2.0
-	style.content_margin_top = 1.0
-	style.content_margin_bottom = 1.0
-	style.shadow_color = Color(border.r, border.g, border.b, 0.22)
-	style.shadow_size = 2
-	style.shadow_offset = Vector2(0.0, 1.0)
-	return style

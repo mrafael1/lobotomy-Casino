@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bh51ld14lf007"
-path="res://.godot/imported/start_menu.png-ba05ca185f6ac0fc1a8c25aedbd094e0.ctex"
+uid="uid://cdbpunjpramxp"
+path="res://.godot/imported/audio_mute_on.svg-741bd66714bba9252d66226370fb557a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/start_menu/start_menu.png"
-dest_files=["res://.godot/imported/start_menu.png-ba05ca185f6ac0fc1a8c25aedbd094e0.ctex"]
+source_file="res://assets/images/ui/premium/audio_mute_on.svg"
+dest_files=["res://.godot/imported/audio_mute_on.svg-741bd66714bba9252d66226370fb557a.ctex"]
 
 [params]
 
@@ -38,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false
