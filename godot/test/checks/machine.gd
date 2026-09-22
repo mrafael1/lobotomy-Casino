@@ -203,6 +203,15 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		elif detailed_symbol and machine_art.texture.resource_path.contains("symbols/premium/") \
 				and machine_art.texture.get_width() < 128:
 			failures.append("machine art: %s lost its high-resolution symbol source" % node_name)
+	# The lock frame is shared compact art, never a multi-megabyte full-canvas sheet.
+	for index in 3:
+		var lock := machine.get_node_or_null("LockPower%d" % index) as Sprite2D
+		if lock == null or lock.texture == null or lock.texture.get_width() > 256 \
+				or lock.texture.get_height() > 256 or lock.hframes != 1:
+			failures.append("machine art: reel lock lost its compact shared texture")
+		elif lock.position != Vector2(32 + index * 32, 168) \
+				or lock.texture.get_size() * lock.scale != Vector2(23, 36):
+			failures.append("machine art: reel lock no longer fits its reel window")
 	if machine.get_node_or_null("PowerBar") != null:
 		failures.append("machine art: old side power gauge is still active")
 

@@ -75,3 +75,7 @@ The review exercises SPIN mouse/keyboard input, targeting, disabled controls,
 coin charging, rolling digits, dealer interruption/reactions, payout, multiplier
 warnings, Learning/Tunnel Vision and stickers. Scene smoke additionally checks
 wealth carry, power behavior, geometry, item durations and persistence.
+
+`reel_lock.svg` is a compact 92x144 shared brass frame, rendered at 23x36
+layout units over each reel. It replaces the three full-canvas lock overlays
+without changing their positions or remaining-spin labels.

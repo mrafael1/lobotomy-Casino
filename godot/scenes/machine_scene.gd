@@ -133,7 +133,8 @@ const DEALER_ICON_SIZE := Vector2(30.0, 43.0)
 # The bar ends at x101; the compact portrait sits two source pixels beside it,
 # fully inside the pink TV border.
 const DEALER_ICON_POS := Vector2(36.0, 51.0)
-const LOCK_POWER_FRAME_COUNT := 3
+const LOCK_FRAME_ASSET := "machine_polished/reel_lock.svg"
+const LOCK_FRAME_SIZE := Vector2(23.0, 36.0)
 const POWER_FRAME_AVAILABLE := 0
 const POWER_FRAME_SELECTED := 1
 const POWER_FRAME_DISABLED := 2
@@ -1061,8 +1062,6 @@ func _full_canvas_sheet_name(rel: String, frame: int) -> String:
 		return "Multiplier"
 	if rel.ends_with("jackpot_final_machine.png") or rel.ends_with("neon_machine_jackpot.png") or rel.ends_with("jackpot_beacon.svg"):
 		return "Jackpot"
-	if rel.ends_with("lock_power.png"):
-		return "LockPower%d" % frame
 	if rel.ends_with("reroll.png") or rel.ends_with("reroll_final_machine.png"):
 		return "RerollPower"
 	if rel.ends_with("shift.png") or rel.ends_with("shift_final_machine.png"):
@@ -1706,9 +1705,18 @@ func _build_machine_control_art() -> void:
 			(fx as Sprite2D).visible = false
 	_bursts.build_jackpot_lamp()
 	for i in 3:
-		var lock := _build_full_canvas_sheet("machine new view/lock_power.png", LOCK_POWER_FRAME_COUNT, i)
-		if lock != null:
-			lock.visible = false
+		var lock := _authored_sprite("LockPower%d" % i)
+		if lock == null:
+			lock = Sprite2D.new()
+			lock.name = "LockPower%d" % i
+			add_child(lock)
+		lock.texture = _load_texture(LOCK_FRAME_ASSET)
+		lock.hframes = 1
+		lock.centered = false
+		lock.position = Vector2(REEL_CELL_CENTERS[i] - LOCK_FRAME_SIZE.x * 0.5, 168.0)
+		lock.scale = LOCK_FRAME_SIZE / lock.texture.get_size()
+		lock.texture_filter = MACHINE_ART_TEXTURE_FILTER
+		lock.visible = false
 		_lock_sprites.append(lock)
 		var count := get_node_or_null("LockCount%d" % i) as Label
 		var authored_count := count != null

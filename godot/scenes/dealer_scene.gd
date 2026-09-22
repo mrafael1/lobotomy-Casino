@@ -1508,7 +1508,10 @@ func _build_button_art(asset: String, node_name: String) -> Sprite2D:
 	# source-pixel scale. The replacement scene-button exports are 8x full-canvas
 	# sheets; shrink those to the 160x320 viewport while preserving crisp pixels.
 	var frame_w := float(tex.get_width()) / float(hframes)
-	if frame_w >= CANVAS_W * 4.0 and float(tex.get_height()) >= CANVAS_H * 4.0:
+	if asset == REROLL_BUTTON_ASSET:
+		spr.position = Vector2(1, 77)
+		spr.scale = Vector2(0.25, 0.25)
+	elif frame_w >= CANVAS_W * 4.0 and float(tex.get_height()) >= CANVAS_H * 4.0:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(CANVAS_W / frame_w, CANVAS_H / float(tex.get_height()))
 	else:
