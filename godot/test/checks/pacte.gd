@@ -84,7 +84,7 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 func _check_painting_reroll_117(failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
-	if not ResourceLoader.exists("res://assets/images/dealer_scene_reroll_BUTTON.png"):
+	if not ResourceLoader.exists("res://assets/images/ui/premium/shop_reroll_brass.svg"):
 		failures.append("issue117: reroll painting art not in godot/assets/images — missing from exported builds (APK)")
 
 	var prev_phase := String(run_store.runPhase)

@@ -124,7 +124,7 @@ const MACHINE_BUTTON_ASSET := DEALER_SHOP_ASSET_DIR + "machine.png"
 const MACHINE_BUTTON_RECT := Rect2(120.0, 5.0, 36.0, 42.0)
 # Issue #117: the wall painting is an illuminated reroll control during an in-run
 # dealer visit. Same native 2-frame sheet pattern (0 default, 1 pressed).
-const REROLL_BUTTON_ASSET := "dealer_scene_reroll_BUTTON.png"
+const REROLL_BUTTON_ASSET := "ui/premium/shop_reroll_brass.svg"
 const PAINTING_BUTTON_RECT := Rect2(0.0, 64.0, 34.0, 42.0)
 const PAINTING_USED_TINT := Color(0.5, 0.5, 0.62) # unaffordable painting: lab light off
 const PAINTING_REROLL_MESSAGE := "THE PAINTING RESHUFFLES THE DEAL"

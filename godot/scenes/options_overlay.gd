@@ -134,9 +134,7 @@ func _refresh_language_button() -> void:
 		_language_button.add_child(icon)
 	icon.visible = true
 	icon.texture = flag
-	# The flag's OWN size, 1:1. The two flags are authored at different sizes, and forcing
-	# them to a shared box would resample one of them — pixel art in this project is always
-	# blitted at native resolution, never scaled to fit.
+	# Flag assets declare their compact layout size; preserve it inside the row.
 	var flag_size := flag.get_size()
 	icon.size = flag_size
 	# Right edge, on the button's middle line. Rounded: a fractional offset lands the art
