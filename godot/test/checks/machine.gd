@@ -32,19 +32,23 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
 		failures.append("machine art: cabinet lost source detail or changed its 160x320 layout footprint")
 	else:
-		var cabinet_material := cabinet.material as ShaderMaterial
-		var aperture_texture: Texture2D = cabinet_material.get_shader_parameter("aperture_mask") \
-			if cabinet_material != null else null
-		if aperture_texture == null:
-			failures.append("machine art: painted cabinet is missing its aperture mask")
-		else:
-			var cabinet_image := aperture_texture.get_image()
-			for x in [33, 65, 97]:
-				for y in range(169, 203):
-					for offset in range(21):
-						if cabinet_image.get_pixel(x + offset, y).a > 0.01:
-							failures.append("machine art: cabinet obscures a live reel aperture")
-							break
+		# The apertures are cut into the baked cabinet itself (tools/refine_machine_materials.py): no
+		# runtime mask, and the shelf is part of the same texture.
+		if cabinet.material != null:
+			failures.append("machine art: the baked cabinet should draw without a registration shader")
+		var cabinet_image := cabinet.texture.get_image()
+		var per_unit := float(cabinet_image.get_width()) / 160.0
+		for x in [33, 65, 97]:
+			for y in range(169, 203):
+				for offset in range(21):
+					var px := Vector2i(int((x + offset + 0.5) * per_unit), int((y + 0.5) * per_unit))
+					if cabinet_image.get_pixelv(px).a > 0.01:
+						failures.append("machine art: cabinet obscures a live reel aperture")
+						break
+		# Around the windows the cabinet stays opaque, shelf included.
+		for probe: Vector2 in [Vector2(80, 214), Vector2(30, 225), Vector2(60, 150), Vector2(80, 128)]:
+			if cabinet_image.get_pixelv(Vector2i(probe * per_unit)).a < 0.99:
+				failures.append("machine art: baked cabinet is transparent at %s" % probe)
 
 	if machine.get_node_or_null("Lever") != null or machine.get_node_or_null("HealthCoin") != null:
 		failures.append("machine: retired lever/coin hardware is still active")
@@ -1684,7 +1688,7 @@ func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
 			if tex.resource_path.begins_with("res://assets/images/symbols/"):
 				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			if tex.resource_path.contains("/machine_polished/") and tex.resource_path.get_file().get_basename() in [
-				"cabinet-painted", "reel_housing", "wealth_cases_detail", "wealth_crt_detail", "wealth_digits_detail",
+				"cabinet_material_pass", "reel_housing", "wealth_cases_detail", "wealth_crt_detail", "wealth_digits_detail",
 				"reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]:
 				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			if sprite.texture_filter != wanted:

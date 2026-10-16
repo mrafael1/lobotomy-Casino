@@ -812,8 +812,8 @@ func _ready() -> void:
 	_reel_blur.build_spin_strips("machine_polished/reel_motion.svg")
 	_reel_blur.build_covers("machine_polished/reel_drums.svg")
 	_reel_symbols.build()
-	var cabinet := _build_full_canvas_sprite("machine_polished/cabinet-painted.png")
-	cabinet.material = preload("res://assets/shaders/painted_cabinet.tres")
+	# Registered material pass; controls and moving layers remain separate.
+	_build_full_canvas_sprite("machine_polished/cabinet_material_pass.png")
 	_build_full_canvas_sprite("machine_polished/reel_housing.svg")
 	_build_tv_indicators()
 	_build_machine_control_art()
@@ -1040,7 +1040,7 @@ func _authored_control(name: String) -> Control:
 	return get_node_or_null(name) as Control
 
 func _full_canvas_name(rel: String) -> String:
-	if rel == "machine_polished/cabinet-painted.png":
+	if rel == "machine_polished/cabinet_material_pass.png":
 		return "Cabinet"
 	if rel.ends_with("reel_drums.svg"):
 		return "ReelBacking"
@@ -1114,7 +1114,7 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 		spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / float(tex.get_width()), SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	if tex.resource_path.ends_with("cabinet-painted.png") or tex.resource_path.ends_with("reel_housing.svg"):
+	if tex.resource_path.ends_with("cabinet_material_pass.png") or tex.resource_path.ends_with("reel_housing.svg"):
 		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
