@@ -79,7 +79,7 @@ func _configure(s: Sprite2D, pos: Vector2, alpha: float, apply_position := true)
 		s.position = pos
 	s.modulate = Color(1, 1, 1, alpha)
 	# Filter at final display resolution; never flatten detailed art to layout pixels.
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 ## --- what a window shows -------------------------------------------------------------
 
@@ -108,7 +108,7 @@ func neighbours_of(sym: String) -> Dictionary:
 ## the art is authored large and this only ever shrinks it. Public because the
 ## cheat preview and the swap drag paint onto sprites this component does not own.
 func apply_symbol(s: Sprite2D, symbol_id: String, target_h: float) -> void:
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var heart_asset := String(_heart_assets.get(symbol_id, ""))
 	if symbol_id == "heart" and heart_asset == "":
 		heart_asset = String(_heart_assets["heart_x1"])

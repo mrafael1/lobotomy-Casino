@@ -43,8 +43,8 @@ func _draw() -> void:
 	if texture != null:
 		draw_texture_rect(texture, rect, false, PLACEHOLDER_TINT)
 	else:
-		draw_rect(rect.grow(-1.0), Color(0.13, 0.77, 0.37, 0.28), true)
-	draw_rect(rect, OUTLINE_COLOR, false, 1.0)
+		PixelDraw.rect(self, rect.grow(-1.0), Color(0.13, 0.77, 0.37, 0.28), true)
+	PixelDraw.rect(self, rect, OUTLINE_COLOR, false, 1.0)
 
 func _placeholder_texture() -> Texture2D:
 	var rel := String(ITEM_ICONS.get(placeholder_item_id, FALLBACK_ICON))

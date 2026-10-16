@@ -439,12 +439,12 @@ Resources and currencies:
   power offers, previews, drag-to-emplacement selection, and resumable
   partial choices. Its authored table, dealer-bubble, and card interaction assets
   remain composed at native resolution; the legacy room/deck/emplacement sprites
-  are retained only as compatibility nodes. A high-resolution painted master supplies
+  are retained only as compatibility nodes. A code-generated pixel master supplies
   the room, dealer and felt
   base while all cards, prompts and descriptions remain live layers. New compact
-  cyan and rose deck stacks sit in the painted upper recesses at (13,109) and
+  cyan and rose deck stacks sit in the pixel upper recesses at (13,109) and
   (118,109); they remain visible at those positions during both draw phases. The
-  painted table already supplies the three card recesses and two lower placement
+  pixel table already supplies the three card recesses and two lower placement
   wells, so the legacy proposition and emplacement overlays stay hidden while
   drag hitboxes and DROP-HERE frames remain runtime state. Both proposition card
   types use the same authored 39x61 front size, including the power card's left edge. A dragged card
@@ -462,7 +462,7 @@ Resources and currencies:
   single-deck build scenes and save their selected card before returning to the
   next machine.
 - `dealer_choice_scene` — the persisted dealer presentation of exactly two changing
-  doors for Shop/Augment/Power/Bonus/Sacrifice. Its high-resolution painted master
+  doors for Shop/Augment/Power/Bonus/Sacrifice. Its code-generated pixel master
   supplies the lobby, doors and dealer; route titles, prices, hover/open frames,
   reroll and confirmation remain runtime layers.
   Each door switches its authored
@@ -493,7 +493,7 @@ Resources and currencies:
   new end-of-segment offers use the live Dealer only through its interruption flow.
 - `shop_scene` — wallet/meta progression hub.
 - `dealer_scene` — live in-run dealer visits and the post-run odds phase (gateway to the Lab).
-  Its pre-run branch uses the high-resolution painted stocked-counter master while offers,
+  Its pre-run branch uses the code-generated pixel stocked-counter master while offers,
   prices, stash and wallet remain runtime elements; active-run visits retain their
   dedicated dealer art.
 - `upgrades_scene` — the Lab: permanent upgrades.
@@ -529,12 +529,8 @@ Resources and currencies:
   viewport UI remain fixed. Cabinet shakes return to this offset; the shelf
   texture samples canvas coordinates so it does not drift with those effects.
   The cash outlet remains at world (80,298), or machine-local (76,298).
-  The lower shelf is copied directly from the approved preview by
-  `tools/extract_preview_shelf.gd`, reduced once to native resolution with nearest
-  sampling so extraction cannot blur the pixel edges. Its original
-  plate, corners, wells, wear and red fascia remain intact. The changing count and
-  items are cleared; the original SPIN cap is extracted into five separate PNG
-  states. Do not replace this artwork with procedural approximations.
+  The lower shelf, its wells and independent SPIN states are code-authored
+  integer shapes using the same material palette as the cabinet.
   A four-pixel dark recess separates the reel frames ending at y206 from the
   preview shelf beginning at y210. The complete shelf assembly sits three pixels
   lower, retaining its proportions and horizontal centering.
@@ -576,10 +572,10 @@ Resources and currencies:
   layer appears only while Book is enabled, coexists with the Tunnel Vision shutter,
   and disappears when Learning is removed; it never changes scoring or input.
 - `scores_scene` / `settings_scene` / `options_overlay` — meta screens.
-  Audio settings use a high-resolution painted scarlet-and-brass speaker console, with live
+  Audio settings use a code-generated pixel scarlet-and-brass speaker console, with live
   volume and mute controls inset in its dark faceplate and BACK on the lower shelf.
   The mute row keeps its checkmark and has a visible keyboard-focus outline.
-  The shared options modal uses a transparent painted scarlet-and-brass plaque
+  The shared options modal uses a transparent pixel scarlet-and-brass plaque
   over the dimmed scene, with six live menu rows and a keyboard-focusable close X.
 - `collection_scene` — the complete Pacte card catalog, in two scrollable
   sections (AUGMENTS, then POWERS) that follow the authored card order, so a card
@@ -615,33 +611,25 @@ Resources and currencies:
 
 ### Shared presentation assets
 
-- Machine hardware retains source detail: the cabinet import has no 320px cap,
-  its registration shader samples continuously, and the original painted rail
-  supplies the sockets at x46/77/108. The shelf exports at 640x1280 and SPIN states
-  at 184x112, retaining painted lettering and a two-layout-unit depression.
-  Seven power controls have detailed normal/selected/spent caps; their order and
-  hit regions are unchanged. Detailed reel frames keep all three apertures clear.
-- Wealth drums use shaded enamel cases and one shared compact 440x56 eleven-frame
-  digit strip. Four independent clipped reels preserve carry, reverse drains,
-  snapshot bounds and units-slot alignment. Source texture sizes do not set layout.
-
-- Shared buttons use the brass-and-ivory enamel caps in `ui/premium`, with
-  separate normal, hover, pressed and disabled art plus a keyboard-focus outline.
-  The existing ButtonKit color APIs select dark green, burgundy or brown label ink.
-- Tiny5 supplies crisp control and heading typography at native 8px or 16px.
-  Localized start labels fit the available width; dense microcopy retains DTM Sans.
-  Collection names use 8px type with ellipsis and their full text in the detail view.
-- Settings, navigation, close, confirmation and Lucidity icons share the painted
-  hardware family. Power-restoration flights use a distinct mint power coin.
-- The nine non-Book reel symbols resolve through Assets to 128px painted sprites
-  with mipmaps and linear filtering on the reels. Their 16-unit center/12-unit
-  neighbor geometry is independent of source resolution. Book keeps its existing
-  painted asset. Symbol IDs and scoring are unchanged.
-- Seventeen static Pacte card icons use individual 128px painted assets in 24-unit display footprints throughout
-  Pacte, Collection, unlock popups and machine augment stickers. Renderers use
-  `PacteCards.display_icon_rect`; original atlas metadata remains intact.
-  Pattern Recognition and How to Cheat retain their authored animation sequences.
-- `ART_REWORK.md` records asset coverage and the reproducible visual review.
+- All 429 logical image assets resolve through the generated manifest to
+  `godot/assets/images/pixel`. `tools/generate_pixel_art.py` draws them from integer
+  recipes in `tools/pixel_art`; it never reads or quantizes source paintings.
+  Preserved originals are excluded from exports. `tools/verify_pixel_art.py`
+  validates coverage, palette, alpha, integer export blocks and aperture clearance.
+- Cabinet, rooms, hardware, symbols, card faces and emblems, consumables, chip
+  augments, suits, ledgers, Lab frames and animation sheets share material ramps.
+  Use nearest filtering with no mipmaps. Keep gameplay controls and moving layers
+  separate; preserve hitboxes, safe-area layout and animation handoffs.
+- The cabinet source grid is 160x320, exported at 8x. Apertures remain
+  (33/65/97,169,21,34), with runtime clips at y170..199. The source geometry is
+  documented in `docs/pixel-art/README.md`; re-measure it after shape changes.
+- Typography uses the code-authored bitmap font in `godot/assets/font/pixel`,
+  including French accents. Runtime shapes use `PixelDraw` integer spans and
+  stepped light textures. The local CRT segment readout uses those spans too.
+- Card and deck footprints remain 39x61 and 28x32. Static card icons use their
+  shared display rectangles; Pattern Recognition, How to Cheat, neuron deaths,
+  Lab boot sequences and other stateful sheets retain separate frames/drivers.
+- `ART_REWORK.md` links the current pipeline and actual-display-size review.
 
 Every change that adds, removes, renames, rebalances, or behaviorally modifies a
 player-visible mechanic MUST update the Game Reference above in the same branch
@@ -689,22 +677,7 @@ or save/runtime integration.
 - Use `CONSTANT_CASE` for constants.
 - Add brief docstrings only for complex functions and classes.
 
-Painted Pacte card fronts/backs and deck stacks use 4x source exports with linear
-mipmap filtering. Their 39x61 and 28x32 layout footprints stay fixed; source atlas
-coordinates are independent of card interaction geometry. Room painted masters
-render at display resolution inside the centered safe area.
-
-Consumable presentation uses nine 128x128 painted item exports from the shared
-item master. Dealer offers, Shop and machine stash icons use linear mipmaps
-inside their existing layout footprints; active-item badges remain 8 units and
-preserve phase-coloured turn counts. Tea flights use the same detailed item art.
-
-Dealer Chip Augments use an eight-frame detailed brass/enamel sheet, one 128px
-square per effect. Dealer's Tip has a clock and Emergency Reserve a heart shield;
-neither reuses the previous six-frame sheet's fallback. Dealer views use linear
-mipmaps and retain their existing offer geometry, prices and selection behavior.
-
-Scores presentation uses a brass/enamel ledger with live English/French labels,
-statistics and ending dates. Six detailed suit emblems identify the selected win
-counter. Visible tier and close buttons support keyboard focus; browsing remains
-read-only. Value boxes are applied after font setup to contain large statistics.
+Pixel card fronts, backs, decks, consumables, chip augments and scores artwork
+use the generated palette and nearest sampling. Their interaction footprints,
+prices, selection behavior, localized labels and phase-coloured counters remain
+unchanged. See `docs/pixel-art/README.md` for regeneration and review commands.

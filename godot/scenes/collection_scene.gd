@@ -88,6 +88,7 @@ func _slim_scrollbar() -> void:
 	if bar != null:
 		bar.custom_minimum_size.x = SCROLLBAR_WIDTH
 		var track := StyleBoxFlat.new()
+		track.anti_aliasing = false
 		track.bg_color = Color(0.08, 0.10, 0.10)
 		track.content_margin_left = 2.0
 		track.content_margin_right = 2.0
@@ -144,7 +145,7 @@ func _make_card_entry(card_id: String, pool: String) -> Button:
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.size = CARD_SIZE
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	button.add_child(art)
 
 	if unlocked:
@@ -209,7 +210,7 @@ func _make_icon(entry: Dictionary, pool: String) -> TextureRect:
 	var icon := TextureRect.new()
 	icon.name = "CardIcon"
 	icon.texture = PacteCards.icon_texture(entry)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
@@ -256,7 +257,7 @@ func _build_modal_card_art() -> void:
 	_modal_card_art.stretch_mode = TextureRect.STRETCH_SCALE
 	_modal_card_art.size = CARD_SIZE
 	_modal_card_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_modal_card_art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_modal_card_holder.add_child(_modal_card_art)
 
 	_modal_card_icon = TextureRect.new()
@@ -307,7 +308,7 @@ func _apply_modal_icon(entry: Dictionary, pool: String, unlocked: bool) -> void:
 		_modal_card_icon.visible = false
 		return
 	_modal_card_icon.texture = PacteCards.icon_texture(entry)
-	_modal_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
+	_modal_card_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	var scale := minf(1.0, minf((CARD_SIZE.x - 6.0) / icon_rect.size.x,
 		(CARD_SIZE.y - 6.0) / icon_rect.size.y))
 	_modal_card_icon.size = icon_rect.size * scale

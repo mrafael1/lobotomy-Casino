@@ -149,7 +149,7 @@ func persistent_nodes() -> Array:
 func _build_learning_attachment() -> void:
 	_learning_attachment = TextureRect.new()
 	_learning_attachment.name = "LearningAttachment"
-	_learning_attachment.texture = preload("res://assets/images/machine_polished/learning_attachment.svg")
+	_learning_attachment.texture = preload("res://assets/images/pixel/machine_polished/learning_attachment.png")
 	_learning_attachment.size = _canvas
 	_learning_attachment.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_learning_attachment.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -165,7 +165,7 @@ func set_learning_attachment(active: bool) -> void:
 func _build_tunnel_shutter() -> void:
 	_tunnel_shutter = TextureRect.new()
 	_tunnel_shutter.name = "TunnelVisionShutter"
-	_tunnel_shutter.texture = preload("res://assets/images/machine_polished/tunnel_shutter.svg")
+	_tunnel_shutter.texture = preload("res://assets/images/pixel/machine_polished/tunnel_shutter.png")
 	var rect := cover_rect(_holes.back())
 	_tunnel_shutter.position = rect.position
 	_tunnel_shutter.size = rect.size

@@ -237,7 +237,7 @@ func _make_card_texture(node_name: String, texture_size: Vector2) -> TextureRect
 	rect.size = texture_size
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Painted fronts retain detail during the enlarged reveal.
-	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return rect
 
 func _make_action_button(node_name: String, text: String, color: Color) -> Button:
@@ -292,7 +292,7 @@ func _apply_icon(entry: Dictionary) -> void:
 		_icon.visible = false
 		return
 	_icon.texture = PacteCards.icon_texture(entry)
-	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
+	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if PacteCards.PAINTED_ICON_IDS.has(str(entry.get("id", ""))) else CanvasItem.TEXTURE_FILTER_NEAREST
 	_icon.size = icon_rect.size * CARD_SCALE
 	_icon.position = (_card_holder.size - _icon.size) * 0.5
 	_icon.visible = false # revealed together with the front, mid-flip

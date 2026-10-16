@@ -107,6 +107,7 @@ func build_augmented_badge() -> void:
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = Color(0.03, 0.02, 0.05, 0.85)
 	style.border_color = AUGMENTED_BADGE_BORDER
 	style.set_border_width_all(1)
@@ -121,7 +122,7 @@ func build_augmented_badge() -> void:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.position = Vector2.ONE * 2.0
 	icon.size = Vector2.ONE * (AUGMENTED_BADGE_SIZE - 4.0)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(icon)
 	b.button_down.connect(_show_augmented_popup.bind(b))
@@ -155,6 +156,7 @@ func build_pacte_badges() -> void:
 		badge.focus_mode = Control.FOCUS_NONE
 		badge.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var badge_style := StyleBoxFlat.new()
+		badge_style.anti_aliasing = false
 		badge_style.bg_color = Color.TRANSPARENT
 		badge_style.border_color = PACTE_AUGMENT_CONTOUR_COLOR
 		badge_style.set_border_width_all(0)
@@ -268,7 +270,7 @@ func refresh_pacte_badges() -> void:
 				glitch.visible = false
 		else:
 			icon.texture = _pacte_augment_icon(ids[i])
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if PacteCards.PAINTED_ICON_IDS.has(ids[i]) else CanvasItem.TEXTURE_FILTER_NEAREST
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if PacteCards.PAINTED_ICON_IDS.has(ids[i]) else CanvasItem.TEXTURE_FILTER_NEAREST
 			if glitch != null:
 				glitch.visible = _augment_glitches(String(ids[i]))
 

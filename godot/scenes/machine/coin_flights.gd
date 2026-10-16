@@ -97,7 +97,7 @@ func make_coin(pos: Vector2, asset: String) -> Sprite2D:
 	coin.position = pos
 	var coin_scale := COIN_SIZE / float(maxi(1, tex.get_width()))
 	coin.scale = Vector2(coin_scale, coin_scale)
-	coin.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	coin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	coin.modulate.a = 0.0
 	_layer.add_child(coin)
 	return coin

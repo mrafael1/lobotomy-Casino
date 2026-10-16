@@ -78,6 +78,7 @@ func build_slot_hint(layer: Control, reel_index: int) -> void:
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.z_index = -1
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = SLOT_FRAME_FILL
 	style.border_color = SLOT_FRAME_BORDER
 	style.set_border_width_all(1)
@@ -132,6 +133,7 @@ func _make_panel(layer: Control, node_name: String, reel_index: int, fill: Color
 	overlay.z_index = 1
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = fill
 	style.border_color = border
 	style.set_border_width_all(1)

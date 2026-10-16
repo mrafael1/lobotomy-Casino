@@ -3,7 +3,7 @@ extends Node
 ## Layout units remain stable while canvas_items renders art at display resolution.
 ## The centered safe area owns gameplay; the decorative backdrop covers all overscan.
 const SAFE_SIZE := Vector2(160.0, 320.0)
-const BACKDROP := "res://assets/images/presentation/casino_overscan.png"
+const BACKDROP := "res://assets/images/pixel/presentation/casino_overscan.png"
 var _backdrop: TextureRect
 
 func _ready() -> void:
@@ -15,7 +15,7 @@ func _ready() -> void:
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	if ResourceLoader.exists(BACKDROP):
 		_backdrop.texture = load(BACKDROP)
 	layer.add_child(_backdrop)

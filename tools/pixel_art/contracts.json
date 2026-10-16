@@ -1,0 +1,1718 @@
+{
+  "1st_neuron_death.png": [
+    192,
+    64
+  ],
+  "2nd_neuron_death.png": [
+    192,
+    64
+  ],
+  "3rd_neuron_death.png": [
+    192,
+    64
+  ],
+  "bg_black.png": [
+    640,
+    960
+  ],
+  "cards/augment_cards.png": [
+    273,
+    915
+  ],
+  "cards/painted/augment_adrenaline.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_book.png": [
+    1254,
+    1254
+  ],
+  "cards/painted/augment_hallucination.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_joker.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_passive_gain.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_reward_1.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_reward_2.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_reward_3.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_smart_saving.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_tunnel_vision.png": [
+    128,
+    128
+  ],
+  "cards/painted/augment_win_boost.png": [
+    128,
+    128
+  ],
+  "cards/painted/augments_painted.png": [
+    1086,
+    1448
+  ],
+  "cards/painted/book.png": [
+    22,
+    27
+  ],
+  "cards/painted/cheat.png": [
+    128,
+    128
+  ],
+  "cards/painted/heart.png": [
+    128,
+    128
+  ],
+  "cards/painted/memory.png": [
+    128,
+    128
+  ],
+  "cards/painted/power_coin.png": [
+    128,
+    128
+  ],
+  "cards/painted/powers_painted.png": [
+    1536,
+    1024
+  ],
+  "cards/painted/reroll.png": [
+    128,
+    128
+  ],
+  "cards/painted/rewind.png": [
+    128,
+    128
+  ],
+  "cards/painted/shift.png": [
+    128,
+    128
+  ],
+  "cards/painted/swap.png": [
+    128,
+    128
+  ],
+  "cards/power_cards.png": [
+    351,
+    61
+  ],
+  "dealer.png": [
+    400,
+    380
+  ],
+  "dealer_choice/bg.png": [
+    160,
+    320
+  ],
+  "dealer_choice/bubble_text.png": [
+    160,
+    320
+  ],
+  "dealer_choice/choice_scene.png": [
+    160,
+    320
+  ],
+  "dealer_choice/dealer_choice_doors.svg": [
+    320,
+    96
+  ],
+  "dealer_choice/doors.png": [
+    124,
+    470
+  ],
+  "dealer_choice/reroll.png": [
+    320,
+    320
+  ],
+  "dealer_choice_polished/choice_scene_native.png": [
+    160,
+    320
+  ],
+  "dealer_choice_polished/choice_scene_painted.png": [
+    887,
+    1774
+  ],
+  "dealer_hands.png": [
+    128,
+    64
+  ],
+  "dealer_offer_polished/hands.png": [
+    1774,
+    887
+  ],
+  "dealer_offer_polished/portrait.png": [
+    1086,
+    1448
+  ],
+  "dealer_portrait.png": [
+    2560,
+    2560
+  ],
+  "dealer_scene_LAB_BUTTON.png": [
+    2560,
+    2560
+  ],
+  "dealer_scene_machine_BUTTON.png": [
+    2560,
+    2560
+  ],
+  "dealer_scene_reroll_BUTTON.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/bg.png": [
+    200,
+    380
+  ],
+  "dealer_shop/counter.png": [
+    200,
+    380
+  ],
+  "dealer_shop/dealer_shop_bg.png": [
+    160,
+    320
+  ],
+  "dealer_shop/dealer_shop_bg_x8.png": [
+    1280,
+    2560
+  ],
+  "dealer_shop/dealer_shop_counter.png": [
+    320,
+    320
+  ],
+  "dealer_shop/dealer_shop_counter_base.png": [
+    320,
+    320
+  ],
+  "dealer_shop/dealer_shop_counter_base_x8.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/dealer_shop_counter_x8.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/dealer_shop_LAB_BUTTON.png": [
+    320,
+    320
+  ],
+  "dealer_shop/dealer_shop_LAB_BUTTON_x8.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/dealer_shop_machine_BUTTON.png": [
+    320,
+    320
+  ],
+  "dealer_shop/dealer_shop_machine_BUTTON_x8.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/dealer_shop_reroll_BUTTON.png": [
+    320,
+    320
+  ],
+  "dealer_shop/dealer_shop_reroll_BUTTON_x8.png": [
+    2560,
+    2560
+  ],
+  "dealer_shop/machine.png": [
+    400,
+    380
+  ],
+  "dealer_shop/reroll.png": [
+    400,
+    380
+  ],
+  "dealer_shop_bg.png": [
+    1280,
+    2560
+  ],
+  "dealer_shop_counter.png": [
+    1280,
+    2560
+  ],
+  "dealer_shop_polished/pre_dealer_shop_native.png": [
+    160,
+    320
+  ],
+  "dealer_shop_polished/pre_dealer_shop_painted.png": [
+    887,
+    1774
+  ],
+  "items/chips_detail.svg": [
+    1024,
+    128
+  ],
+  "items/chips_upgrade.png": [
+    192,
+    32
+  ],
+  "items/cigarette.png": [
+    32,
+    32
+  ],
+  "items/cocktail.png": [
+    32,
+    32
+  ],
+  "items/consumable_placeholder.png": [
+    48,
+    48
+  ],
+  "items/energy_drink.png": [
+    32,
+    32
+  ],
+  "items/focus_serum.png": [
+    32,
+    32
+  ],
+  "items/generated/cocktail.png": [
+    128,
+    128
+  ],
+  "items/generated/energy_drink.png": [
+    128,
+    128
+  ],
+  "items/generated/potion.png": [
+    128,
+    128
+  ],
+  "items/generated/red_pill.png": [
+    128,
+    128
+  ],
+  "items/generated/serum.png": [
+    128,
+    128
+  ],
+  "items/generated/tea.png": [
+    128,
+    128
+  ],
+  "items/generated/tobacco.png": [
+    128,
+    128
+  ],
+  "items/generated/water.png": [
+    128,
+    128
+  ],
+  "items/generated/white_powder.png": [
+    128,
+    128
+  ],
+  "items/herbal_tea.png": [
+    32,
+    32
+  ],
+  "items/pill.png": [
+    32,
+    32
+  ],
+  "items/water.png": [
+    32,
+    32
+  ],
+  "items/white_powder.png": [
+    32,
+    32
+  ],
+  "machine new view/2_losing_animation.png": [
+    160,
+    320
+  ],
+  "machine new view/3_losing_animation.png": [
+    1440,
+    320
+  ],
+  "machine new view/augments.png": [
+    480,
+    320
+  ],
+  "machine new view/cheat_power.png": [
+    480,
+    320
+  ],
+  "machine new view/cheat_selection.png": [
+    1440,
+    320
+  ],
+  "machine new view/chip_power.png": [
+    480,
+    320
+  ],
+  "machine new view/COMBO_effect.png": [
+    960,
+    320
+  ],
+  "machine new view/dealer_bar.png": [
+    2080,
+    320
+  ],
+  "machine new view/dealer_bar_overlay_1.png": [
+    1920,
+    320
+  ],
+  "machine new view/dealer_bar_overlay_2.png": [
+    1760,
+    320
+  ],
+  "machine new view/dealer_bar_overlay_3.png": [
+    1600,
+    320
+  ],
+  "machine new view/dealer_tips.png": [
+    160,
+    320
+  ],
+  "machine new view/final_machine.png": [
+    1280,
+    2560
+  ],
+  "machine new view/free_spin.png": [
+    160,
+    320
+  ],
+  "machine new view/health_animation.png": [
+    640,
+    320
+  ],
+  "machine new view/health_bar.png": [
+    3200,
+    320
+  ],
+  "machine new view/health_chip_pile_prototype.png": [
+    64,
+    16
+  ],
+  "machine new view/health_fill_final_machine.png": [
+    1280,
+    2560
+  ],
+  "machine new view/health_track_final_machine.png": [
+    1280,
+    2560
+  ],
+  "machine new view/jackpot_final_machine.png": [
+    2560,
+    2560
+  ],
+  "machine new view/lever_final_machine.png": [
+    7680,
+    2560
+  ],
+  "machine new view/lock.png": [
+    480,
+    320
+  ],
+  "machine new view/lock_final_machine.png": [
+    3840,
+    2560
+  ],
+  "machine new view/lock_power.png": [
+    3840,
+    2560
+  ],
+  "machine new view/machine_game_over.png": [
+    160,
+    320
+  ],
+  "machine new view/machine_neon.png": [
+    160,
+    320
+  ],
+  "machine new view/move_power.png": [
+    480,
+    320
+  ],
+  "machine new view/multiplier_2_effect.png": [
+    1120,
+    320
+  ],
+  "machine new view/multiplier_3_effect.png": [
+    1440,
+    320
+  ],
+  "machine new view/multiplier_3_fire.png": [
+    1440,
+    320
+  ],
+  "machine new view/multiplier_final_machine.png": [
+    960,
+    320
+  ],
+  "machine new view/neon_machine_jackpot.png": [
+    480,
+    320
+  ],
+  "machine new view/neon_machine_lever.png": [
+    960,
+    320
+  ],
+  "machine new view/neon_machine_power_bar.png": [
+    960,
+    320
+  ],
+  "machine new view/power coin animation.png": [
+    640,
+    320
+  ],
+  "machine new view/power_animation.png": [
+    1120,
+    320
+  ],
+  "machine new view/power_bar.png": [
+    3840,
+    5120
+  ],
+  "machine new view/reel_final_machine.png": [
+    160,
+    320
+  ],
+  "machine new view/reel_selection.png": [
+    2560,
+    5120
+  ],
+  "machine new view/reroll.png": [
+    480,
+    320
+  ],
+  "machine new view/reroll_final_machine.png": [
+    3840,
+    2560
+  ],
+  "machine new view/restore_cap.png": [
+    320,
+    320
+  ],
+  "machine new view/rewind_power.png": [
+    480,
+    320
+  ],
+  "machine new view/shift.png": [
+    480,
+    320
+  ],
+  "machine new view/shift_final_machine.png": [
+    3840,
+    2560
+  ],
+  "machine new view/shift_power.png": [
+    3840,
+    7680
+  ],
+  "machine new view/spin_final_machine.png": [
+    5120,
+    2560
+  ],
+  "machine new view/target_bar.png": [
+    1920,
+    320
+  ],
+  "machine new view/target_bar_animation.png": [
+    960,
+    320
+  ],
+  "machine new view/target_goals.png": [
+    1280,
+    320
+  ],
+  "machine new view/water.png": [
+    480,
+    320
+  ],
+  "machine new view/wealth_1st_reel.png": [
+    1760,
+    320
+  ],
+  "machine new view/wealth_2nd_reel.png": [
+    1760,
+    320
+  ],
+  "machine new view/wealth_3rd_reel.png": [
+    1760,
+    320
+  ],
+  "machine new view/wealth_4th_reel.png": [
+    1760,
+    320
+  ],
+  "machine new view/wealth_bar.png": [
+    160,
+    320
+  ],
+  "machine new view/wealth_cases.png": [
+    160,
+    320
+  ],
+  "machine new view/wealth_fill_final_machine.png": [
+    1280,
+    2560
+  ],
+  "machine new view/wealth_track_final_machine.png": [
+    1280,
+    2560
+  ],
+  "machine new view/win_animation.png": [
+    320,
+    320
+  ],
+  "machine_normal.png": [
+    72,
+    72
+  ],
+  "machine_polished/apertures.svg": [
+    160,
+    320
+  ],
+  "machine_polished/augments.svg": [
+    480,
+    320
+  ],
+  "machine_polished/cabinet-game-over.png": [
+    887,
+    1774
+  ],
+  "machine_polished/cabinet-painted.png": [
+    887,
+    1774
+  ],
+  "machine_polished/cabinet.svg": [
+    160,
+    320
+  ],
+  "machine_polished/cabinet_baked.png": [
+    1280,
+    2560
+  ],
+  "machine_polished/cabinet_controls.svg": [
+    160,
+    320
+  ],
+  "machine_polished/cabinet_material_pass.png": [
+    1280,
+    2560
+  ],
+  "machine_polished/cheat.svg": [
+    960,
+    640
+  ],
+  "machine_polished/combo.svg": [
+    1440,
+    320
+  ],
+  "machine_polished/dealer-painted.png": [
+    1024,
+    1536
+  ],
+  "machine_polished/dealer_bar.svg": [
+    1760,
+    320
+  ],
+  "machine_polished/dealer_bar_overlay_1.svg": [
+    1600,
+    320
+  ],
+  "machine_polished/dealer_bar_overlay_2.svg": [
+    1440,
+    320
+  ],
+  "machine_polished/dealer_bar_overlay_3.svg": [
+    1280,
+    320
+  ],
+  "machine_polished/dealer_tips.svg": [
+    160,
+    320
+  ],
+  "machine_polished/free_spin.svg": [
+    160,
+    320
+  ],
+  "machine_polished/heart.svg": [
+    960,
+    640
+  ],
+  "machine_polished/heat_core.png": [
+    640,
+    1280
+  ],
+  "machine_polished/heat_glow.png": [
+    640,
+    1280
+  ],
+  "machine_polished/heat_lamp.png": [
+    280,
+    152
+  ],
+  "machine_polished/jackpot_beacon.svg": [
+    960,
+    640
+  ],
+  "machine_polished/learning_attachment.svg": [
+    160,
+    320
+  ],
+  "machine_polished/loss_2.svg": [
+    160,
+    320
+  ],
+  "machine_polished/loss_3.svg": [
+    1440,
+    320
+  ],
+  "machine_polished/memory.svg": [
+    960,
+    640
+  ],
+  "machine_polished/multiplier.svg": [
+    960,
+    320
+  ],
+  "machine_polished/multiplier_2_effect.svg": [
+    1120,
+    320
+  ],
+  "machine_polished/multiplier_3_effect.svg": [
+    1440,
+    320
+  ],
+  "machine_polished/multiplier_3_fire.svg": [
+    1440,
+    320
+  ],
+  "machine_polished/power_lamps.svg": [
+    640,
+    320
+  ],
+  "machine_polished/power_restore_flash.svg": [
+    160,
+    320
+  ],
+  "machine_polished/preview_shelf.png": [
+    640,
+    1280
+  ],
+  "machine_polished/preview_spin_disabled.png": [
+    184,
+    112
+  ],
+  "machine_polished/preview_spin_focus.png": [
+    184,
+    112
+  ],
+  "machine_polished/preview_spin_hover.png": [
+    184,
+    112
+  ],
+  "machine_polished/preview_spin_latched.png": [
+    184,
+    112
+  ],
+  "machine_polished/preview_spin_normal.png": [
+    184,
+    112
+  ],
+  "machine_polished/preview_spin_pressed.png": [
+    184,
+    112
+  ],
+  "machine_polished/reel_drums.svg": [
+    1280,
+    2560
+  ],
+  "machine_polished/reel_housing.svg": [
+    640,
+    1280
+  ],
+  "machine_polished/reel_lock.svg": [
+    92,
+    144
+  ],
+  "machine_polished/reel_motion.svg": [
+    640,
+    320
+  ],
+  "machine_polished/reroll.svg": [
+    960,
+    640
+  ],
+  "machine_polished/restore_ready.svg": [
+    320,
+    320
+  ],
+  "machine_polished/rewind.svg": [
+    960,
+    640
+  ],
+  "machine_polished/shelf_labels.svg": [
+    160,
+    320
+  ],
+  "machine_polished/shift.svg": [
+    960,
+    640
+  ],
+  "machine_polished/stash.svg": [
+    36,
+    24
+  ],
+  "machine_polished/swap.svg": [
+    960,
+    640
+  ],
+  "machine_polished/target_progress.svg": [
+    1920,
+    320
+  ],
+  "machine_polished/target_shimmer.svg": [
+    960,
+    320
+  ],
+  "machine_polished/tunnel_shutter.svg": [
+    21,
+    34
+  ],
+  "machine_polished/wealth_cases.svg": [
+    160,
+    320
+  ],
+  "machine_polished/wealth_cases_detail.svg": [
+    640,
+    1280
+  ],
+  "machine_polished/wealth_crt.svg": [
+    160,
+    320
+  ],
+  "machine_polished/wealth_crt_detail.svg": [
+    640,
+    1280
+  ],
+  "machine_polished/wealth_digit_0.svg": [
+    1760,
+    320
+  ],
+  "machine_polished/wealth_digit_1.svg": [
+    1760,
+    320
+  ],
+  "machine_polished/wealth_digit_2.svg": [
+    1760,
+    320
+  ],
+  "machine_polished/wealth_digit_3.svg": [
+    1760,
+    320
+  ],
+  "machine_polished/wealth_digits_detail.svg": [
+    440,
+    56
+  ],
+  "neurons_animation.png": [
+    2176,
+    64
+  ],
+  "neurons_meter.png": [
+    649,
+    59
+  ],
+  "odd_tab/augment_level_brass.svg": [
+    1440,
+    960
+  ],
+  "odd_tab/buttons_brass.svg": [
+    2880,
+    1920
+  ],
+  "odd_tab/costs.png": [
+    120,
+    240
+  ],
+  "odd_tab/levels_brass.svg": [
+    4320,
+    960
+  ],
+  "odd_tab/ODD-TABLE.png": [
+    120,
+    240
+  ],
+  "odd_tab/ODD-TABLE_augment_level.png": [
+    360,
+    240
+  ],
+  "odd_tab/ODD-TABLE_buttons.png": [
+    360,
+    240
+  ],
+  "odd_tab/ODD-TABLE_level.png": [
+    1080,
+    240
+  ],
+  "odd_tab/ODD-TABLE_levels.png": [
+    9600,
+    1920
+  ],
+  "odd_tab/ODD-TABLE_tokens.png": [
+    1200,
+    240
+  ],
+  "odd_tab/table_brass.svg": [
+    960,
+    1920
+  ],
+  "options_polished/menu_panel_native.png": [
+    144,
+    252
+  ],
+  "options_polished/menu_panel_painted.png": [
+    948,
+    1659
+  ],
+  "pacte_polished/augment_deck_native.svg": [
+    28,
+    32
+  ],
+  "pacte_polished/generated_set/augment_deck_detail.png": [
+    112,
+    128
+  ],
+  "pacte_polished/generated_set/augment_deck_native.png": [
+    28,
+    32
+  ],
+  "pacte_polished/generated_set/cards_detail.png": [
+    624,
+    244
+  ],
+  "pacte_polished/generated_set/cards_native.png": [
+    156,
+    61
+  ],
+  "pacte_polished/generated_set/cards_painted.png": [
+    1993,
+    789
+  ],
+  "pacte_polished/generated_set/decks_painted.png": [
+    1659,
+    948
+  ],
+  "pacte_polished/generated_set/items_painted.png": [
+    1223,
+    1286
+  ],
+  "pacte_polished/generated_set/power_deck_detail.png": [
+    112,
+    128
+  ],
+  "pacte_polished/generated_set/power_deck_native.png": [
+    28,
+    32
+  ],
+  "pacte_polished/pacte_scene_native.png": [
+    160,
+    320
+  ],
+  "pacte_polished/pacte_scene_painted.png": [
+    887,
+    1774
+  ],
+  "pacte_polished/power_deck_native.svg": [
+    28,
+    32
+  ],
+  "pacte_scene/augment_card.png": [
+    400,
+    380
+  ],
+  "pacte_scene/augment_deck.png": [
+    200,
+    380
+  ],
+  "pacte_scene/bg.png": [
+    200,
+    380
+  ],
+  "pacte_scene/dealer.png": [
+    200,
+    380
+  ],
+  "pacte_scene/dealer_bubble.png": [
+    320,
+    320
+  ],
+  "pacte_scene/pacte_scene.png": [
+    160,
+    320
+  ],
+  "pacte_scene/pacte_scene_augment_card.png": [
+    320,
+    320
+  ],
+  "pacte_scene/pacte_scene_power_card.png": [
+    320,
+    320
+  ],
+  "pacte_scene/pacte_scene_selected_card.png": [
+    480,
+    320
+  ],
+  "pacte_scene/power_card.png": [
+    400,
+    380
+  ],
+  "pacte_scene/power_deck.png": [
+    200,
+    380
+  ],
+  "pacte_scene/proposition.png": [
+    200,
+    380
+  ],
+  "pacte_scene/table.png": [
+    200,
+    380
+  ],
+  "powers/power_memory.png": [
+    32,
+    32
+  ],
+  "powers/power_reroll.png": [
+    32,
+    32
+  ],
+  "powers/power_shift.png": [
+    32,
+    32
+  ],
+  "presentation/casino_overscan.png": [
+    1254,
+    1254
+  ],
+  "sacrifice_ritual.png": [
+    887,
+    1774
+  ],
+  "SCORES/SCORES.png": [
+    160,
+    320
+  ],
+  "SCORES/SCORES_arrows.png": [
+    160,
+    320
+  ],
+  "SCORES/SCORES_symbols.png": [
+    960,
+    320
+  ],
+  "scores_polished/ledger.svg": [
+    640,
+    1280
+  ],
+  "scores_polished/suits.svg": [
+    768,
+    128
+  ],
+  "settings_polished/audio_console_native.png": [
+    160,
+    320
+  ],
+  "settings_polished/audio_console_painted.png": [
+    887,
+    1774
+  ],
+  "start_menu/neon_casino_background.png": [
+    160,
+    320
+  ],
+  "start_menu/start_menu_augmented symbols.png": [
+    960,
+    320
+  ],
+  "start_menu/start_menu_augmented_button.png": [
+    160,
+    320
+  ],
+  "start_menu/start_menu_options_button.png": [
+    320,
+    320
+  ],
+  "start_menu/start_menu_score_button.png": [
+    320,
+    320
+  ],
+  "start_menu/start_menu_start_button.png": [
+    160,
+    320
+  ],
+  "start_menu/start_menu_states_sheet.png": [
+    1280,
+    5120
+  ],
+  "start_menu/title.png": [
+    160,
+    320
+  ],
+  "stash_tray.png": [
+    66,
+    34
+  ],
+  "symbols/book.png": [
+    32,
+    32
+  ],
+  "symbols/book_32.png": [
+    32,
+    32
+  ],
+  "symbols/brain.png": [
+    32,
+    32
+  ],
+  "symbols/eye.png": [
+    32,
+    32
+  ],
+  "symbols/flatline.png": [
+    32,
+    32
+  ],
+  "symbols/heart x1.png": [
+    31,
+    32
+  ],
+  "symbols/heart x2.png": [
+    31,
+    32
+  ],
+  "symbols/heart x3.png": [
+    31,
+    32
+  ],
+  "symbols/pill.png": [
+    32,
+    32
+  ],
+  "symbols/premium/brain.png": [
+    128,
+    128
+  ],
+  "symbols/premium/eye.png": [
+    128,
+    128
+  ],
+  "symbols/premium/flatline.png": [
+    128,
+    128
+  ],
+  "symbols/premium/heart x1.png": [
+    128,
+    128
+  ],
+  "symbols/premium/heart x2.png": [
+    128,
+    128
+  ],
+  "symbols/premium/heart x3.png": [
+    128,
+    128
+  ],
+  "symbols/premium/pill.png": [
+    128,
+    128
+  ],
+  "symbols/premium/symbols_painted.png": [
+    1295,
+    1214
+  ],
+  "symbols/premium/syringe.png": [
+    128,
+    128
+  ],
+  "symbols/premium/vial.png": [
+    128,
+    128
+  ],
+  "symbols/scalpel_32.png": [
+    32,
+    32
+  ],
+  "symbols/syringe.png": [
+    32,
+    32
+  ],
+  "symbols/vial.png": [
+    32,
+    32
+  ],
+  "TABLE/TABLES SCORE.png": [
+    1280,
+    2240
+  ],
+  "TABLE/TABLES SCORE_information.png": [
+    1280,
+    2240
+  ],
+  "ui/arrow_button.png": [
+    39,
+    24
+  ],
+  "ui/cancel_button.png": [
+    46,
+    23
+  ],
+  "ui/coin.png": [
+    32,
+    32
+  ],
+  "ui/coin_cumulable.png": [
+    32,
+    26
+  ],
+  "ui/consumable_placeholder.png": [
+    72,
+    72
+  ],
+  "ui/dealer_portrait.png": [
+    192,
+    288
+  ],
+  "ui/EN.png": [
+    16,
+    10
+  ],
+  "ui/FR.png": [
+    16,
+    10
+  ],
+  "ui/green_button.png": [
+    96,
+    12
+  ],
+  "ui/neon_small_blue_button.png": [
+    45,
+    22
+  ],
+  "ui/neon_small_pink_button.png": [
+    45,
+    22
+  ],
+  "ui/neon_small_yellow_button.png": [
+    45,
+    22
+  ],
+  "ui/power_coin.png": [
+    32,
+    32
+  ],
+  "ui/premium/audio_mute_off.svg": [
+    48,
+    48
+  ],
+  "ui/premium/audio_mute_on.svg": [
+    48,
+    48
+  ],
+  "ui/premium/audio_slider_hover.svg": [
+    9,
+    13
+  ],
+  "ui/premium/audio_slider_normal.svg": [
+    9,
+    13
+  ],
+  "ui/premium/buttons_painted.png": [
+    1223,
+    1286
+  ],
+  "ui/premium/close.png": [
+    16,
+    16
+  ],
+  "ui/premium/coin.png": [
+    16,
+    16
+  ],
+  "ui/premium/confirm.png": [
+    16,
+    16
+  ],
+  "ui/premium/dealer_speech.svg": [
+    400,
+    152
+  ],
+  "ui/premium/disabled.png": [
+    96,
+    20
+  ],
+  "ui/premium/eye_reveal_frame.svg": [
+    128,
+    128
+  ],
+  "ui/premium/flag_en.svg": [
+    16,
+    10
+  ],
+  "ui/premium/flag_fr.svg": [
+    16,
+    10
+  ],
+  "ui/premium/hover.png": [
+    96,
+    20
+  ],
+  "ui/premium/icons_painted.png": [
+    1536,
+    1024
+  ],
+  "ui/premium/left.png": [
+    16,
+    16
+  ],
+  "ui/premium/menu_selector_arrow.svg": [
+    48,
+    84
+  ],
+  "ui/premium/menu_selector_brass.svg": [
+    576,
+    164
+  ],
+  "ui/premium/menu_title_plate.svg": [
+    592,
+    264
+  ],
+  "ui/premium/normal.png": [
+    96,
+    20
+  ],
+  "ui/premium/pressed.png": [
+    96,
+    20
+  ],
+  "ui/premium/right.png": [
+    16,
+    16
+  ],
+  "ui/premium/route_reroll_brass.svg": [
+    1280,
+    1280
+  ],
+  "ui/premium/settings.png": [
+    16,
+    16
+  ],
+  "ui/premium/shop_reroll_brass.svg": [
+    248,
+    108
+  ],
+  "ui/premium/stash_tray.svg": [
+    384,
+    208
+  ],
+  "ui/premium/symbol_picker_brass.svg": [
+    616,
+    208
+  ],
+  "ui/red_button.png": [
+    96,
+    12
+  ],
+  "ui/sakura_petal.png": [
+    16,
+    16
+  ],
+  "ui/setting_icon.png": [
+    69,
+    66
+  ],
+  "ui/settings.png": [
+    50,
+    23
+  ],
+  "ui/speech_bubble_normal.png": [
+    96,
+    40
+  ],
+  "ui/standard_bubble_text.png": [
+    80,
+    30
+  ],
+  "ui/stash_tray.png": [
+    198,
+    102
+  ],
+  "ui/symbol_chosing.png": [
+    616,
+    208
+  ],
+  "ui/symbol_chosing_unsclaed.png": [
+    616,
+    208
+  ],
+  "ui/valid_button.png": [
+    44,
+    19
+  ],
+  "ui/vision.png": [
+    32,
+    32
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_00.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_01.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_02.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_03.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_04.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_05.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_06.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_07.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_08.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_09.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_10.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_11.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_12.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_13.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_brain_14.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_00.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_01.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_02.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_03.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_04.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_05.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_06.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_07.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_08.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_09.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_10.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_11.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_bubbles_12.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_00.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_01.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_02.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_03.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_04.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_05.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_06.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_07.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_08.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_09.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_10.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_11.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_12.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_13.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_14.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_00.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_01.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_02.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_03.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_04.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_05.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_06.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_07.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_08.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_09.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_10.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_11.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_12.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_00.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_01.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_02.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_03.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_04.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_05.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_06.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_07.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_08.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_09.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_10.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_11.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_12.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_13.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_14.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_bg.png": [
+    5120,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_brain.png": [
+    19200,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_bubbles.png": [
+    16640,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_buy_stele.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_cables.png": [
+    14080,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_eye_brain_overlay.png": [
+    19200,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_eye_buttons.png": [
+    3840,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_eye_upgrades.png": [
+    16640,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_LAB_SIGN.png": [
+    2560,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_layer.png": [
+    1280,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_leak.png": [
+    14080,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_memory_brain_overlay.png": [
+    19200,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_memory_buttons.png": [
+    3840,
+    1920
+  ],
+  "upgrade_scene/upgrades_scene_memory_upgrades.png": [
+    14080,
+    1920
+  ]
+}

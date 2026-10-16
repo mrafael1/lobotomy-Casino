@@ -20,13 +20,13 @@ extends RefCounted
 ## no readers outside the three functions that move them.
 
 const SHEET := "machine_polished/dealer_bar.svg"
-const FRAME_COUNT := 13
+const FRAME_COUNT := 11
 const OVERLAY_1_SHEET := "machine_polished/dealer_bar_overlay_1.svg"
 const OVERLAY_2_SHEET := "machine_polished/dealer_bar_overlay_2.svg"
 const OVERLAY_3_SHEET := "machine_polished/dealer_bar_overlay_3.svg"
-const OVERLAY_1_FRAMES := 12
-const OVERLAY_2_FRAMES := 11
-const OVERLAY_3_FRAMES := 10
+const OVERLAY_1_FRAMES := 10
+const OVERLAY_2_FRAMES := 9
+const OVERLAY_3_FRAMES := 8
 
 ## The bar walks one frame per tick rather than jumping, so a Dealer's Tip's head
 ## start is visible as movement instead of appearing as a different bar.

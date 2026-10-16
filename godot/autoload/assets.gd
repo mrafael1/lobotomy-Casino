@@ -9,6 +9,7 @@ extends Node
 
 var _tex := {}
 var _fonts := {}
+const PIXEL_MANIFEST := preload("res://art/generated_pixel_manifest.gd")
 const PAINTED_SYMBOLS := ["brain.png", "eye.png", "pill.png", "syringe.png", "vial.png", "flatline.png", "heart x1.png", "heart x2.png", "heart x3.png"]
 
 ## Shared stash consumable icon size (virtual px). Single source of truth so the
@@ -32,9 +33,14 @@ func stash_slot_pos(index: int, total: int) -> Vector2:
 	return Vector2(x0 + float(index) * (STASH_ICON_SIZE + STASH_SLOT_GAP), y)
 
 static func _res_image(rel: String) -> String:
-	return "res://assets/images/" + rel
+	return "res://assets/images/" + String(PIXEL_MANIFEST.TEXTURES.get(rel, rel))
+
+static func image_path(rel: String) -> String:
+	return _res_image(rel)
 
 static func _res_asset(rel: String) -> String:
+	if rel.begins_with("font/"):
+		return "res://assets/font/pixel/casino.fnt"
 	return "res://assets/" + rel
 
 # Texture under assets/images/<rel>. Cached by (rel, mipmaps). Returns null if missing.

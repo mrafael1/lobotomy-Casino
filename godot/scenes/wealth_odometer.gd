@@ -23,17 +23,17 @@ const MAX_ROLL_TIME := 0.9
 # payout) is allowed past MAX_ROLL_TIME, but not indefinitely.
 const OVERRIDE_MAX_ROLL_TIME := 2.4
 const VALUE_MODULUS := 10_000
-const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
 
 const BAR_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine_polished/wealth_crt_detail.svg")
+	"res://assets/images/pixel/machine_polished/wealth_crt_detail.png")
 const CASES_TEXTURE: Texture2D = preload(
-	"res://assets/images/machine_polished/wealth_cases_detail.svg")
+	"res://assets/images/pixel/machine_polished/wealth_cases_detail.png")
 const REEL_TEXTURES: Array[Texture2D] = [
-	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
-	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
-	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
-	preload("res://assets/images/machine_polished/wealth_digits_detail.svg"),
+	preload("res://assets/images/pixel/machine_polished/wealth_digits_detail.png"),
+	preload("res://assets/images/pixel/machine_polished/wealth_digits_detail.png"),
+	preload("res://assets/images/pixel/machine_polished/wealth_digits_detail.png"),
+	preload("res://assets/images/pixel/machine_polished/wealth_digits_detail.png"),
 ]
 
 var _reels: Array[Dictionary] = []

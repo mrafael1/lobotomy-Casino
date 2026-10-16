@@ -1,11 +1,11 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scenes/shop_scene.gd" id="1_shop"]
-[ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_shop_bg.png" id="3_bg"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_portrait.png" id="4_portrait"]
-[ext_resource type="Texture2D" path="res://assets/images/dealer_shop_counter.png" id="5_counter"]
-[ext_resource type="Texture2D" uid="uid://b6m1exrod3cf5" path="res://assets/images/stash_tray.png" id="6_stash"]
+[ext_resource type="FontFile" path="res://assets/font/pixel/casino.fnt" id="2_font"]
+[ext_resource type="Texture2D" path="res://assets/images/pixel/dealer_shop_bg.png" id="3_bg"]
+[ext_resource type="Texture2D" path="res://assets/images/pixel/dealer_portrait.png" id="4_portrait"]
+[ext_resource type="Texture2D" path="res://assets/images/pixel/dealer_shop_counter.png" id="5_counter"]
+[ext_resource type="Texture2D" path="res://assets/images/pixel/stash_tray.png" id="6_stash"]
 
 [node name="ShopScene" type="Control"]
 layout_mode = 3

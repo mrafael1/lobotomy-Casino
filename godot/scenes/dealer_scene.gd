@@ -420,7 +420,7 @@ func _configure_native_art_sprite(
 	if rel == PRE_RUN_PAINTED_MASTER_ASSET:
 		spr.position = Vector2.ZERO
 		spr.scale = Vector2(CANVAS_W, CANVAS_H) / tex.get_size()
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return spr
 
 func _native_art_sprite(rel: String, hframes := 1, frame := 0) -> Sprite2D:
@@ -747,7 +747,7 @@ func _make_drag_icon(id: String, kind: String, pos: Vector2, parent: Control, ic
 	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(size_px / frame_w, size_px / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	t.add_child(spr)
 	t.gui_input.connect(_on_item_input.bind(t, id, kind))
 	parent.add_child(t)

@@ -20,7 +20,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		"machine_polished/jackpot_beacon.svg",
 		"machine_polished/power_lamps.svg",
 	]:
-		if not ResourceLoader.exists("res://assets/images/" + rel):
+		if Assets.texture(rel) == null:
 			failures.append("machine art: missing native asset %s" % rel)
 
 	var cabinet := machine.get_node_or_null("Cabinet") as Sprite2D
@@ -29,7 +29,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	elif cabinet.texture == null \
 			or cabinet.texture.get_width() < 640 \
 			or not (cabinet.scale * cabinet.texture.get_size()).is_equal_approx(Vector2(160, 320)) \
-			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			or cabinet.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: cabinet lost source detail or changed its 160x320 layout footprint")
 	else:
 		# The apertures are cut into the baked cabinet itself (tools/refine_machine_materials.py): no
@@ -103,9 +103,9 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	if jackpot == null:
 		failures.append("machine art: native jackpot node is missing")
 	elif jackpot.texture == null \
-			or Vector2i(jackpot.texture.get_width(), jackpot.texture.get_height()) != Vector2i(480, 320) \
+			or Vector2i(jackpot.texture.get_width(), jackpot.texture.get_height()) != Vector2i(960, 640) \
 			or jackpot.hframes != 3 \
-			or jackpot.scale != Vector2.ONE \
+			or not jackpot.scale.is_equal_approx(Vector2(0.5, 0.5)) \
 			or jackpot.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("machine art: jackpot is not a 3-frame native sprite")
 
@@ -155,17 +155,17 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 		if wealth_art == null or wealth_art.texture == null \
 				or Vector2i(wealth_art.texture.get_width(), wealth_art.texture.get_height()) \
 					!= Vector2i(640, 1280) \
-				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+				or wealth_art.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: wealth odometer trim lost its detailed source")
-		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt_detail.svg"):
+		elif not String(wealth_art.texture.resource_path).ends_with("wealth_crt_detail.png"):
 			failures.append("machine art: wealth odometer uses the wrong trim asset")
 		var wealth_cases := wealth_odometer.get_node_or_null("WealthCasesArt") as Sprite2D
 		if wealth_cases == null or wealth_cases.texture == null \
 				or Vector2i(wealth_cases.texture.get_width(), wealth_cases.texture.get_height()) \
 					!= Vector2i(640, 1280) \
-				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+				or wealth_cases.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("machine art: wealth odometer cases lost their detailed source")
-		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases_detail.svg"):
+		elif not String(wealth_cases.texture.resource_path).ends_with("wealth_cases_detail.png"):
 			failures.append("machine art: wealth odometer cases use the wrong asset")
 		var wealth_numbers := wealth_odometer.get_node_or_null("Reel0") as Control
 		if wealth_art != null and wealth_cases != null and wealth_numbers != null \
@@ -182,8 +182,8 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 					or Vector2i(current.texture.get_width(), current.texture.get_height()) \
 						!= Vector2i(440, 56) \
 					or current.hframes != 11 or next.hframes != 11 \
-					or current.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
-					or next.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+					or current.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
+					or next.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 				failures.append("machine art: wealth odometer reel %d is not the compact 11-frame detailed strip" % reel_index)
 
 	if machine.get_node_or_null("HealthBar") != null:
@@ -200,7 +200,7 @@ func _check_machine_art_mix(machine: Node, failures: Array) -> void:
 	]:
 		var machine_art := machine.get_node_or_null(node_name) as Sprite2D
 		var detailed_symbol: bool = String(node_name).begins_with("Reel") and node_name != "ReelBacking"
-		var expected_filter := CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+		var expected_filter := CanvasItem.TEXTURE_FILTER_NEAREST \
 			if detailed_symbol or node_name in ["RerollPower", "ShiftPower", "MemoryPower"] else CanvasItem.TEXTURE_FILTER_NEAREST
 		if machine_art == null or machine_art.texture_filter != expected_filter:
 			failures.append("machine art: %s has the wrong art sampling mode" % node_name)
@@ -747,7 +747,7 @@ func _check_power_bar_76(machine: Node, run_store: Node, failures: Array) -> voi
 	# The flight must begin where the pop's last frame leaves the coin, or the coin jumps at
 	# the hand-off. Measured off the sheet so a re-exported animation is caught here.
 	var pop_sheet := Image.load_from_file(
-		"res://assets/images/machine new view/power coin animation.png")
+		"res://assets/images/pixel/machine new view/power coin animation.png")
 	if pop_sheet != null:
 		var pop_frame_w: int = pop_sheet.get_width() / 4
 		var lo := Vector2i(999999, 999999)
@@ -1653,7 +1653,7 @@ func _check_loss_visuals_161(machine: Node, run_store: Node, failures: Array) ->
 const ART_FILTER_EXCEPTIONS := {
 	# The casino backdrop is the one non-pixel surface the machine draws: a large
 	# smooth image behind the cabinet, downscaled, where NEAREST would alias badly.
-	"NeonBackground": CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+	"NeonBackground": CanvasItem.TEXTURE_FILTER_NEAREST,
 }
 
 func _check_sheet_frame_integrity(machine: Node, failures: Array) -> void:
@@ -1686,11 +1686,11 @@ func _walk_machine_sprites(node: Node, path: String, failures: Array) -> int:
 			var wanted: int = ART_FILTER_EXCEPTIONS.get(String(child.name),
 				CanvasItem.TEXTURE_FILTER_NEAREST)
 			if tex.resource_path.begins_with("res://assets/images/symbols/"):
-				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+				wanted = CanvasItem.TEXTURE_FILTER_NEAREST
 			if tex.resource_path.contains("/machine_polished/") and tex.resource_path.get_file().get_basename() in [
 				"cabinet_material_pass", "reel_housing", "wealth_cases_detail", "wealth_crt_detail", "wealth_digits_detail",
 				"reroll", "shift", "memory", "rewind", "heart", "cheat", "swap"]:
-				wanted = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+				wanted = CanvasItem.TEXTURE_FILTER_NEAREST
 			if sprite.texture_filter != wanted:
 				failures.append("art identity: %s draws with filter %d, expected %d (%s)"
 					% [here, sprite.texture_filter, wanted, String(tex.resource_path).get_file()])
@@ -1763,7 +1763,7 @@ func _check_spin_blur_region(machine: Node, failures: Array) -> void:
 	var backing := machine.get_node("ReelBacking") as Sprite2D
 	if housing.texture.get_size() != Vector2(640, 1280) \
 			or not (housing.texture.get_size() * housing.scale).is_equal_approx(Vector2(160, 320)) \
-			or backing.texture.get_size() != Vector2(160, 320):
+			or not (backing.texture.get_size() * backing.scale).is_equal_approx(Vector2(160, 320)):
 		failures.append("reel hardware: detailed frame and drum backing lost their shared layout footprint")
 	var housing_image := housing.texture.get_image()
 	var drum_image := backing.texture.get_image()
@@ -1773,7 +1773,8 @@ func _check_spin_blur_region(machine: Node, failures: Array) -> void:
 			failures.append("reel hardware: detailed metal frame covers a live aperture")
 		for y in range(169, 203):
 			for x in range(int(hole["left"]), int(hole["left"] + hole["width"])):
-				if drum_image.get_pixel(x, y).a < 0.99:
+				var drum_unit := float(drum_image.get_width()) / 160.0
+				if drum_image.get_pixel(int((x + 0.5) * drum_unit), int((y + 0.5) * drum_unit)).a < 0.99:
 					failures.append("reel hardware: transparent hole in the drum backing")
 					return
 	var rb = machine._reel_blur

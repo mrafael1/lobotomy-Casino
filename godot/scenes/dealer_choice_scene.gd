@@ -28,38 +28,38 @@ class RouteEmblem extends Control:
 			color = color.darkened(0.25)
 		var center := size * 0.5
 		var glow := Color(color.r, color.g, color.b, 0.14 if hovered else 0.08)
-		draw_circle(center, 12.0 if hovered else 10.0, glow)
+		PixelDraw.circle(self, center, 12.0 if hovered else 10.0, glow)
 		match route_type:
 			RouteCards.ROUTE_SHOP:
-				draw_rect(Rect2(center - Vector2(7.0, 5.0), Vector2(14.0, 10.0)), color, false, 1.0)
-				draw_line(center + Vector2(-4.0, -2.0), center + Vector2(4.0, -2.0), color, 1.0)
-				draw_line(center + Vector2(-4.0, 2.0), center + Vector2(4.0, 2.0), color, 1.0)
-				draw_line(center + Vector2(-3.0, -8.0), center + Vector2(3.0, -8.0), color, 1.0)
+				PixelDraw.rect(self, Rect2(center - Vector2(7.0, 5.0), Vector2(14.0, 10.0)), color, false, 1.0)
+				PixelDraw.line(self, center + Vector2(-4.0, -2.0), center + Vector2(4.0, -2.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(-4.0, 2.0), center + Vector2(4.0, 2.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(-3.0, -8.0), center + Vector2(3.0, -8.0), color, 1.0)
 			RouteCards.ROUTE_AUGMENT:
 				var diamond := PackedVector2Array([
 					center + Vector2(0.0, -9.0), center + Vector2(8.0, 0.0),
 					center + Vector2(0.0, 9.0), center + Vector2(-8.0, 0.0),
 				])
-				draw_polyline(diamond, color, 1.0, true)
-				draw_line(center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
-				draw_line(center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
+				PixelDraw.polyline(self, diamond, color, 1.0, true)
+				PixelDraw.line(self, center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
 			RouteCards.ROUTE_POWER:
 				var bolt := PackedVector2Array([
 					center + Vector2(2.0, -10.0), center + Vector2(-6.0, 1.0),
 					center + Vector2(-1.0, 1.0), center + Vector2(-3.0, 10.0),
 					center + Vector2(7.0, -2.0), center + Vector2(2.0, -2.0),
 				])
-				draw_colored_polygon(bolt, color)
+				PixelDraw.colored_polygon(self, bolt, color)
 			RouteCards.ROUTE_BONUS:
-				draw_circle(center, 8.0, color, false, 1.0)
-				draw_line(center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
-				draw_line(center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
+				PixelDraw.circle(self, center, 8.0, color, false, 1.0)
+				PixelDraw.line(self, center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), color, 1.0)
 			RouteCards.ROUTE_SACRIFICE:
-				draw_line(center + Vector2(-9.0, -6.0), center + Vector2(9.0, -6.0), color, 1.0)
-				draw_line(center + Vector2(-7.0, -6.0), center + Vector2(-3.0, 6.0), color, 1.0)
-				draw_line(center + Vector2(7.0, -6.0), center + Vector2(3.0, 6.0), color, 1.0)
-				draw_line(center + Vector2(-3.0, 6.0), center + Vector2(3.0, 6.0), color, 1.0)
-				draw_circle(center + Vector2(0.0, 0.0), 2.0, color)
+				PixelDraw.line(self, center + Vector2(-9.0, -6.0), center + Vector2(9.0, -6.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(-7.0, -6.0), center + Vector2(-3.0, 6.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(7.0, -6.0), center + Vector2(3.0, 6.0), color, 1.0)
+				PixelDraw.line(self, center + Vector2(-3.0, 6.0), center + Vector2(3.0, 6.0), color, 1.0)
+				PixelDraw.circle(self, center + Vector2(0.0, 0.0), 2.0, color)
 
 const CANVAS_SIZE := Vector2(160.0, 320.0)
 const PAINTED_MASTER_ASSET := "dealer_choice_polished/choice_scene_painted.png"
@@ -174,7 +174,7 @@ func _ready() -> void:
 		scene_art.texture = painted_master
 		scene_art.position = Vector2.ZERO
 		scene_art.scale = Vector2(160, 320) / painted_master.get_size()
-		scene_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		scene_art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_bubble_sprite = get_node_or_null("BubbleText") as Sprite2D
 	_build_header()
 	_build_credits_display()

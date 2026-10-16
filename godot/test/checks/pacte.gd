@@ -84,7 +84,7 @@ func _check_augment_level_readouts(machine: Node, run_store: Node, failures: Arr
 func _check_painting_reroll_117(failures: Array) -> void:
 	var run_store: Node = get_root().get_node("RunStateStore")
 	var meta_store: Node = get_root().get_node("MetaStateStore")
-	if not ResourceLoader.exists("res://assets/images/ui/premium/shop_reroll_brass.svg"):
+	if not ResourceLoader.exists("res://assets/images/pixel/ui/premium/shop_reroll_brass.png"):
 		failures.append("issue117: reroll painting art not in godot/assets/images — missing from exported builds (APK)")
 
 	var prev_phase := String(run_store.runPhase)
@@ -873,7 +873,7 @@ func _check_pacte_flow(machine: Node, run_store: Node, meta_store: Node, failure
 			or not painted_master.texture.resource_path.ends_with(
 				"pacte_polished/pacte_scene_painted.png") \
 			or painted_master.position != Vector2.ZERO \
-			or painted_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or painted_master.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 			or not (painted_master.scale * painted_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 		failures.append("pacte: painted native scene master is not the active crisp base layer")
 	var deck_specs: Array[Dictionary] = [

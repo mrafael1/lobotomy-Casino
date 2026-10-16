@@ -19,6 +19,7 @@ func build_caption(pixel_font: Font) -> void:
 	_caption.add_theme_font_size_override("font_size", 5)
 	_caption.add_theme_color_override("font_color", Color("dce3b7"))
 	var backing := StyleBoxFlat.new()
+	backing.anti_aliasing = false
 	backing.bg_color = Color("081712")
 	backing.border_color = Color("526e58")
 	backing.border_width_top = 1

@@ -51,22 +51,22 @@ func _draw() -> void:
 
 	# Wall mount shadow and a dark outer plate keep the control legible against the
 	# authored wall without adding a soft, non-pixel blur.
-	draw_circle(centre + Vector2(1.0, 2.0), radius + 1.0, Color(0.0, 0.0, 0.0, 0.72))
-	draw_circle(centre, radius + 1.0, WALL)
-	draw_arc(centre, radius + 1.0, 0.0, TAU, 32, Color(CYAN.r, CYAN.g, CYAN.b, 0.42), 1.0, false)
-	draw_circle(centre + sink, radius - 1.0, face)
-	draw_arc(centre + sink, radius - 1.0, 0.0, TAU, 32, outer, 2.0, false)
-	draw_arc(centre + sink, radius - 4.0, -PI * 0.82, -PI * 0.18, 12,
+	PixelDraw.circle(self, centre + Vector2(1.0, 2.0), radius + 1.0, Color(0.0, 0.0, 0.0, 0.72))
+	PixelDraw.circle(self, centre, radius + 1.0, WALL)
+	PixelDraw.arc(self, centre, radius + 1.0, 0.0, TAU, 32, Color(CYAN.r, CYAN.g, CYAN.b, 0.42), 1.0, false)
+	PixelDraw.circle(self, centre + sink, radius - 1.0, face)
+	PixelDraw.arc(self, centre + sink, radius - 1.0, 0.0, TAU, 32, outer, 2.0, false)
+	PixelDraw.arc(self, centre + sink, radius - 4.0, -PI * 0.82, -PI * 0.18, 12,
 		Color(HOT_GOLD.r, HOT_GOLD.g, HOT_GOLD.b, 0.72), 1.0, false)
-	draw_rect(Rect2(centre + Vector2(-1.0, -radius + 5.0), Vector2(2.0, 2.0)),
+	PixelDraw.rect(self, Rect2(centre + Vector2(-1.0, -radius + 5.0), Vector2(2.0, 2.0)),
 		Color.WHITE if not disabled else Color(0.62, 0.65, 0.70, 0.65))
 
 	# Recessed bezel and four slotted brass screws match the cabinet controls.
-	draw_arc(centre + sink, radius - 3.0, 0.0, TAU, 48, Color("57482e"), 0.6, false)
+	PixelDraw.arc(self, centre + sink, radius - 3.0, 0.0, TAU, 48, Color("57482e"), 0.6, false)
 	for direction in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
 		var screw: Vector2 = centre + direction * (radius - 0.5)
-		draw_circle(screw, 1.2, Color("967d50"))
-		draw_line(screw - Vector2(.6, 0), screw + Vector2(.6, 0), Color("302a1d"), .5)
+		PixelDraw.circle(self, screw, 1.2, Color("967d50"))
+		PixelDraw.line(self, screw - Vector2(.6, 0), screw + Vector2(.6, 0), Color("302a1d"), .5)
 	_draw_label(centre, sink)
 
 func _draw_label(centre: Vector2, sink: Vector2) -> void:

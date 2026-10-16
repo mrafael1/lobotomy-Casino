@@ -34,5 +34,5 @@ func _draw() -> void:
 
 
 func _draw_neon_segment(from: Vector2, to: Vector2) -> void:
-	draw_line(from, to, Color(neon_color, 0.2), 5.0, false)
-	draw_line(from, to, neon_color, 1.0, false)
+	PixelDraw.line(self, from, to, Color(neon_color, 0.2), 5.0, false)
+	PixelDraw.line(self, from, to, neon_color, 1.0, false)

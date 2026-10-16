@@ -50,6 +50,7 @@ func _style_controls() -> void:
 		_volume_slider.step = 1.0
 		_volume_slider.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var track_style := StyleBoxFlat.new()
+		track_style.anti_aliasing = false
 		track_style.bg_color = Color("101c15")
 		track_style.border_color = NEON_PINK
 		track_style.set_border_width_all(1)
@@ -58,6 +59,7 @@ func _style_controls() -> void:
 		track_style.content_margin_bottom = 2.0
 		_volume_slider.add_theme_stylebox_override("slider", track_style)
 		var fill_style := StyleBoxFlat.new()
+		fill_style.anti_aliasing = false
 		fill_style.bg_color = Color(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, 0.72)
 		fill_style.border_color = NEON_CYAN
 		fill_style.set_border_width_all(1)
@@ -87,6 +89,7 @@ func _style_controls() -> void:
 			_mute_check.add_theme_color_override(color_state, NEON_PINK)
 		_mute_check.focus_mode = Control.FOCUS_ALL
 		var focus_style := StyleBoxFlat.new()
+		focus_style.anti_aliasing = false
 		focus_style.bg_color = Color.TRANSPARENT
 		focus_style.border_color = NEON_CYAN
 		focus_style.set_border_width_all(1)

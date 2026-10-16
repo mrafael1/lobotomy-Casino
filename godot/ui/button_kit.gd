@@ -153,6 +153,7 @@ static func _apply_authored_button_style(button: Button, plate: Dictionary, font
 	button.add_theme_color_override("font_disabled_color", Color(0.62, 0.60, 0.52))
 	# Focus outlines the cap without covering the independent pressed-state artwork.
 	var focus := StyleBoxFlat.new()
+	focus.anti_aliasing = false
 	focus.bg_color = Color.TRANSPARENT
 	focus.border_color = Color(0.72, 0.96, 0.85)
 	focus.set_border_width_all(1)
@@ -212,6 +213,7 @@ static func _start_menu_button_up(button: Button) -> void:
 ## Dark inset surface with a restrained brass edge; the requested hue tints it.
 static func neon_panel_style(border_color: Color, content_margin: float = 0.0) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = NEON_PANEL_FILL
 	style.border_color = PANEL_BRASS.lerp(border_color, 0.15)
 	style.set_border_width_all(1)

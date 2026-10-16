@@ -315,7 +315,7 @@ func _configure_split_animated_sprite(sprite: AnimatedSprite2D, texture_path: St
 	var base_name := texture_path.get_file().get_basename()
 	var split_prefix := "upgrade_scene/split/%s_" % base_name
 	var first_frame_path := "%s%02d.png" % [split_prefix, 0]
-	if not FileAccess.file_exists(ProjectSettings.globalize_path("res://assets/images/" + first_frame_path)):
+	if not ResourceLoader.exists(Assets.image_path(first_frame_path)):
 		return false
 	if _has_valid_sprite_frames(sprite, frames):
 		sprite.animation = DEFAULT_ANIMATION
@@ -911,22 +911,12 @@ func _refresh_memory_frame() -> void:
 	_memory_terminal.frame = int(MEMORY_ITEM_STATIC_FRAME.get(_memory_index, 0))
 	_set_reward_amp_glow_tier(0)
 
-## Builds a small radial-gradient glow sprite per reward-amp pip (no new art
-## needed — procedural GradientTexture2D), parented under _memory_terminal so
+## Builds a stepped pixel glow per reward-amp pip, parented under _memory_terminal so
 ## it inherits the terminal's 0.125 scale and lines up with the baked pips.
 func _build_reward_amp_glows() -> void:
 	if _memory_terminal == null or not _reward_amp_glows.is_empty():
 		return
-	var gradient := Gradient.new()
-	gradient.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
-	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
-	var glow_texture := GradientTexture2D.new()
-	glow_texture.gradient = gradient
-	glow_texture.fill = GradientTexture2D.FILL_RADIAL
-	glow_texture.fill_from = Vector2(0.5, 0.5)
-	glow_texture.fill_to = Vector2(1.0, 0.5)
-	glow_texture.width = int(REWARD_AMP_GLOW_DIAMETER)
-	glow_texture.height = int(REWARD_AMP_GLOW_DIAMETER)
+	var glow_texture := PixelDraw.radial_texture(int(REWARD_AMP_GLOW_DIAMETER))
 	var material := CanvasItemMaterial.new()
 	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	for center in REWARD_AMP_PIP_CENTERS:

@@ -1,10 +1,11 @@
 [gd_scene format=3 uid="uid://c77yejy46llpc"]
 
 [ext_resource type="Script" uid="uid://bglrba8s6805g" path="res://scenes/start_menu_scene.gd" id="1_startmenu"]
-[ext_resource type="Texture2D" uid="uid://btpc4mpvtumn8" path="res://assets/images/bg_black.png" id="2_5hlty"]
-[ext_resource type="FontFile" uid="uid://diltc5oxp7v5y" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+[ext_resource type="Texture2D" path="res://assets/images/pixel/bg_black.png" id="2_5hlty"]
+[ext_resource type="FontFile" path="res://assets/font/pixel/casino.fnt" id="2_font"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tutorial_panel"]
+anti_aliasing = false
 bg_color = Color(0.105882, 0.0705882, 0.160784, 0.96)
 border_width_left = 1
 border_width_top = 1
@@ -33,7 +34,7 @@ visible = false
 color = Color(0.055, 0.03, 0.11, 1)
 
 [node name="Background" type="Sprite2D" parent="." unique_id=868830290]
-texture_filter = 4
+texture_filter = 1
 visible = false
 scale = Vector2(0.25, 0.2)
 texture = ExtResource("2_5hlty")

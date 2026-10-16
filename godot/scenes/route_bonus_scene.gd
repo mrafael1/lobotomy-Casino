@@ -379,6 +379,7 @@ func _panel(rect: Rect2, background: Color, border: Color) -> Panel:
 	panel.size = rect.size
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = background
 	style.border_color = Color(0.64, 0.49, 0.25, maxf(border.a, 0.8))
 	style.set_border_width_all(1)

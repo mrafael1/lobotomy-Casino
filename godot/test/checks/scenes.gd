@@ -77,7 +77,7 @@ func _check_sacrifice_ritual_scene(run_store: Node, meta_store: Node,
 	await process_frame
 	var backdrop := scene.get_node_or_null("SacrificeBackdrop") as Sprite2D
 	if backdrop == null or backdrop.texture == null \
-			or backdrop.texture.resource_path != "res://assets/images/sacrifice_ritual.png":
+			or backdrop.texture.resource_path != "res://assets/images/pixel/sacrifice_ritual.png":
 		failures.append("sacrifice: scene is not using the authored ritual backdrop")
 	if backdrop != null and backdrop.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("sacrifice: ritual backdrop is not nearest-neighbor filtered")
@@ -164,7 +164,7 @@ func _check_authored_door_sprite(button: Button, route_type: String,
 		failures.append("route: %s door is missing its authored hover sprite" % route_type)
 		return
 	if sprite.texture == null or sprite.texture.resource_path != \
-			"res://assets/images/dealer_choice/doors.png":
+			"res://assets/images/pixel/dealer_choice/doors.png":
 		failures.append("route: %s door is not using the authored hover sheet" % route_type)
 	if sprite.hframes != 2 or sprite.vframes != 5:
 		failures.append("route: %s door has the wrong hover-sheet grid" % route_type)
@@ -242,7 +242,7 @@ func _check_route_loop(run_store: Node, meta_store: Node, failures: Array) -> vo
 			or not route_master.texture.resource_path.ends_with(
 				"dealer_choice_polished/choice_scene_painted.png") \
 			or route_master.position != Vector2.ZERO \
-			or route_master.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or route_master.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 			or not (route_master.scale * route_master.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 		failures.append("route: painted choice master is not the active crisp base layer")
 	var route_cards: Array = run_store.current_route_offer()
@@ -983,7 +983,7 @@ func _check_global_options_layout(failures: Array) -> void:
 		failures.append("options: overlay missing painted frame")
 	elif options_contour.size != Vector2(144, 252) \
 			or options_contour.texture.get_width() <= 144 \
-			or options_contour.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+			or options_contour.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 		failures.append("options: detailed frame must preserve the 144x252 layout footprint")
 	var panel_style := options_panel.get_theme_stylebox("panel") as StyleBoxEmpty \
 		if options_panel != null else null

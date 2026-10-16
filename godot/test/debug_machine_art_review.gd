@@ -55,7 +55,7 @@ func _run() -> void:
 		var face := _scene._spin_button.get_theme_stylebox(state) as StyleBoxTexture
 		assert(face.texture.resource_path.ends_with("preview_spin_%s.png" % state), "SPIN must use extracted preview art")
 	var beacon := _scene.get_node("Jackpot") as Sprite2D
-	assert(beacon.texture.resource_path.ends_with("jackpot_beacon.svg"), "Jackpot must use the cabinet beacon")
+	assert(beacon.texture.resource_path.ends_with("jackpot_beacon.png"), "Jackpot must use the cabinet beacon")
 	_scene._bursts.refresh_jackpot_lamp(true, true)
 	assert(beacon.frame == 0, "Held payout must not light the beacon early")
 	_scene._bursts.refresh_jackpot_lamp(true, false)

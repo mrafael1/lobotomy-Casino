@@ -375,7 +375,7 @@ func _full_canvas_sprite(asset: String, z: int) -> Sprite2D:
 	if asset == PAINTED_MASTER_ASSET and sprite.texture != null:
 		sprite.position = Vector2.ZERO
 		sprite.scale = CANVAS_SIZE / sprite.texture.get_size()
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return sprite
 
 func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
@@ -393,7 +393,7 @@ func _configure_native_sheet(sprite: Sprite2D, frame_count: int) -> void:
 	sprite.position = _native_art_position(sprite.texture, safe_frame_count)
 	if sprite.texture.resource_path.ends_with("deck_detail.png"):
 		sprite.scale = Vector2(28, 32) / sprite.texture.get_size()
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _native_art_position(texture: Texture2D, frame_count: int) -> Vector2:
 	if texture == null:
@@ -526,7 +526,7 @@ func _make_minimized_card_view(card_id: String, kind: String) -> Control:
 	front.name = "Front"
 	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
-	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.stretch_mode = TextureRect.STRETCH_SCALE
 	front.position = Vector2.ZERO
@@ -602,7 +602,7 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	back.name = "Back"
 	back.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_BACK_RECT if kind == "augment" else PacteCards.GENERATED_POWER_BACK_RECT)
-	back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	back.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	back.size = CARD_SIZE
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -612,7 +612,7 @@ func _make_card_view(card_id: String, kind: String, face_up := false) -> Control
 	front.name = "Front"
 	front.texture = UiKit.atlas(PacteCards.GENERATED_CARD_SHEET,
 		PacteCards.GENERATED_AUGMENT_FRONT_RECT if kind == "augment" else PacteCards.GENERATED_POWER_FRONT_RECT)
-	front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	front.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	front.size = CARD_SIZE
 	front.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -705,7 +705,7 @@ func _make_card_icon(card_id: String, entry: Dictionary, source_rect: Rect2,
 		var icon := TextureRect.new()
 		icon.name = "Icon"
 		icon.texture = PacteCards.icon_texture(entry)
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST \
 			if PacteCards.PAINTED_ICON_IDS.has(card_id) else CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_SCALE

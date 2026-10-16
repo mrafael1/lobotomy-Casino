@@ -1,3 +1,16 @@
+# Current art direction: code-generated pixel art
+
+The active pipeline now replaces all 429 image contracts, including animation
+sheets, plus typography. See [the pipeline and gameplay-size comparisons](docs/pixel-art/README.md).
+Rebuild with `py tools/generate_pixel_art.py`, import Godot resources, then run
+`py tools/verify_pixel_art.py`. Original artwork and existing local work remain
+preserved; exported builds use the generated resource tree.
+
+The earlier painted notes below are retained as source history. Their generation
+commands and remaining-coverage list are superseded by the current pipeline.
+
+---
+
 # Premium art rework
 
 The game keeps 160x320 layout units as its gameplay safe area, but renders Canvas

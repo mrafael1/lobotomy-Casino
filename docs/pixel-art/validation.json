@@ -1,0 +1,27 @@
+{
+  "engine": "Godot 4.7 stable",
+  "image_contracts": 429,
+  "integer_repeat_checks": 429,
+  "visual_set_sha256": "c5e0e6ab0ffd217b08f4588633949064b3518df6c535133b82abeedee50e23a0",
+  "rebuild_identical_in_isolated_project": true,
+  "working_tree_scene_checks": 111,
+  "isolated_pr_scene_checks": 106,
+  "unexpected_engine_errors": 0,
+  "rules_parity": "passed",
+  "machine_input_and_state_review": "passed",
+  "display_review": [
+    "400x800",
+    "540x960",
+    "450x1000",
+    "800x1000"
+  ],
+  "bilingual_pack_scene_count": 13,
+  "bilingual_pack_texture_bindings": 1081,
+  "languages": [
+    "en",
+    "fr"
+  ],
+  "generated_pack_resources": 429,
+  "original_images_present_in_pack": 0,
+  "motion_frames_per_side": 240
+}

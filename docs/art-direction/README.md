@@ -1,5 +1,8 @@
 # Machine art-direction reference
 
+Historical painted material study. The active art direction and rebuild pipeline
+are now [code-generated pixel art](../pixel-art/README.md).
+
 The machine now has quieter enamel faces and warmer satin-steel rails. Its red
 stepped silhouette, CRT, sockets, controls and reel composition remain the same.
 This is a machine-only material pilot. Other families were inspected and ranked
