@@ -118,11 +118,11 @@ class RitualToken extends Control:
 		_plate.shadow_size = 2
 		draw_style_box(_plate, Rect2(Vector2.ZERO, size))
 		if selected:
-			draw_line(Vector2(2.0, 3.0), Vector2(2.0, 8.0), HOT_GOLD, 1.0)
-			draw_line(Vector2(2.0, 3.0), Vector2(7.0, 3.0), HOT_GOLD, 1.0)
-			draw_line(Vector2(size.x - 2.0, size.y - 3.0),
+			PixelDraw.line(self, Vector2(2.0, 3.0), Vector2(2.0, 8.0), HOT_GOLD, 1.0)
+			PixelDraw.line(self, Vector2(2.0, 3.0), Vector2(7.0, 3.0), HOT_GOLD, 1.0)
+			PixelDraw.line(self, Vector2(size.x - 2.0, size.y - 3.0),
 				Vector2(size.x - 7.0, size.y - 3.0), HOT_GOLD, 1.0)
-			draw_line(Vector2(size.x - 2.0, size.y - 3.0),
+			PixelDraw.line(self, Vector2(size.x - 2.0, size.y - 3.0),
 				Vector2(size.x - 2.0, size.y - 8.0), HOT_GOLD, 1.0)
 
 		_draw_symbol(Vector2(9.0, size.y * 0.5), accent.darkened(0.45) if dimmed else accent)
@@ -135,30 +135,30 @@ class RitualToken extends Control:
 	func _draw_symbol(center: Vector2, color: Color) -> void:
 		match option_kind:
 			"coins":
-				draw_circle(center + Vector2(-2.0, -1.0), 4.0, color)
-				draw_circle(center + Vector2(2.0, 2.0), 4.0, color.darkened(0.3))
-				draw_line(center + Vector2(-4.0, -1.0), center + Vector2(0.0, -1.0),
+				PixelDraw.circle(self, center + Vector2(-2.0, -1.0), 4.0, color)
+				PixelDraw.circle(self, center + Vector2(2.0, 2.0), 4.0, color.darkened(0.3))
+				PixelDraw.line(self, center + Vector2(-4.0, -1.0), center + Vector2(0.0, -1.0),
 					DEEP_INK, 1.0)
 			"neuron":
-				draw_circle(center + Vector2(-3.0, -2.0), 2.5, color)
-				draw_circle(center + Vector2(3.0, 2.0), 2.5, color)
-				draw_line(center + Vector2(-1.0, -1.0), center + Vector2(1.0, 1.0), color, 1.0)
+				PixelDraw.circle(self, center + Vector2(-3.0, -2.0), 2.5, color)
+				PixelDraw.circle(self, center + Vector2(3.0, 2.0), 2.5, color)
+				PixelDraw.line(self, center + Vector2(-1.0, -1.0), center + Vector2(1.0, 1.0), color, 1.0)
 			"augment":
 				var diamond := PackedVector2Array([
 					center + Vector2(0.0, -6.0), center + Vector2(4.0, 0.0),
 					center + Vector2(0.0, 6.0), center + Vector2(-4.0, 0.0),
 				])
-				draw_colored_polygon(diamond, color)
-				draw_line(center + Vector2(-2.0, 0.0), center + Vector2(2.0, 0.0), DEEP_INK, 1.0)
+				PixelDraw.colored_polygon(self, diamond, color)
+				PixelDraw.line(self, center + Vector2(-2.0, 0.0), center + Vector2(2.0, 0.0), DEEP_INK, 1.0)
 			"power":
 				var bolt := PackedVector2Array([
 					center + Vector2(1.0, -7.0), center + Vector2(-4.0, 0.0),
 					center + Vector2(-1.0, 0.0), center + Vector2(-3.0, 7.0),
 					center + Vector2(4.0, -1.0), center + Vector2(1.0, -1.0),
 				])
-				draw_colored_polygon(bolt, color)
+				PixelDraw.colored_polygon(self, bolt, color)
 			_:
-				draw_circle(center, 4.0, color)
+				PixelDraw.circle(self, center, 4.0, color)
 
 
 var _font: Font = null
@@ -616,34 +616,34 @@ func _draw() -> void:
 	var light_alpha := 0.04 + _light_pulse * 0.12 + shimmer * 0.025
 	# Small framing plates keep the code-driven text readable while leaving the
 	# generated scale, pans, and altar fully visible between them.
-	draw_rect(Rect2(3.0, 3.0, 154.0, 34.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.62))
-	draw_rect(Rect2(3.5, 3.5, 153.0, 33.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.85), false, 1.0)
-	draw_rect(Rect2(4.0, 41.0, 152.0, 24.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.36))
-	draw_rect(Rect2(5.0, 42.0, 150.0, 22.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.45), false, 1.0)
-	draw_rect(Rect2(4.0, 212.0, 152.0, 17.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.46))
-	draw_rect(Rect2(5.0, 213.0, 150.0, 15.0), Color(GOLD.r, GOLD.g, GOLD.b, 0.18), false, 1.0)
+	PixelDraw.rect(self, Rect2(3.0, 3.0, 154.0, 34.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.62))
+	PixelDraw.rect(self, Rect2(3.5, 3.5, 153.0, 33.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.85), false, 1.0)
+	PixelDraw.rect(self, Rect2(4.0, 41.0, 152.0, 24.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.36))
+	PixelDraw.rect(self, Rect2(5.0, 42.0, 150.0, 22.0), Color(BRASS.r, BRASS.g, BRASS.b, 0.45), false, 1.0)
+	PixelDraw.rect(self, Rect2(4.0, 212.0, 152.0, 17.0), Color(DEEP_INK.r, DEEP_INK.g, DEEP_INK.b, 0.46))
+	PixelDraw.rect(self, Rect2(5.0, 213.0, 150.0, 15.0), Color(GOLD.r, GOLD.g, GOLD.b, 0.18), false, 1.0)
 
 	# Asynchronous reflected light reads as a living room without making the
 	# selection objects pulse in lockstep with it.
-	draw_circle(Vector2(20.0, 221.0), 8.0, Color(CYAN.r, CYAN.g, CYAN.b, light_alpha))
-	draw_circle(Vector2(140.0, 221.0), 8.0, Color(ROSE.r, ROSE.g, ROSE.b, light_alpha))
-	draw_rect(Rect2(18.0, 224.0, 5.0, 1.0), Color(CYAN.r, CYAN.g, CYAN.b, light_alpha + 0.08))
-	draw_rect(Rect2(137.0, 224.0, 5.0, 1.0), Color(ROSE.r, ROSE.g, ROSE.b, light_alpha + 0.08))
+	PixelDraw.circle(self, Vector2(20.0, 221.0), 8.0, Color(CYAN.r, CYAN.g, CYAN.b, light_alpha))
+	PixelDraw.circle(self, Vector2(140.0, 221.0), 8.0, Color(ROSE.r, ROSE.g, ROSE.b, light_alpha))
+	PixelDraw.rect(self, Rect2(18.0, 224.0, 5.0, 1.0), Color(CYAN.r, CYAN.g, CYAN.b, light_alpha + 0.08))
+	PixelDraw.rect(self, Rect2(137.0, 224.0, 5.0, 1.0), Color(ROSE.r, ROSE.g, ROSE.b, light_alpha + 0.08))
 
 	var pan_y := 168.0 + _scale_settle * 1.5 + sin(_ambient_phase * 0.7) * 0.25
 	var idle_reflection_x := 80.0 + _idle_sway * 0.7
-	draw_circle(Vector2(idle_reflection_x, 128.0), 2.0,
+	PixelDraw.circle(self, Vector2(idle_reflection_x, 128.0), 2.0,
 		Color(GOLD.r, GOLD.g, GOLD.b, 0.08 + shimmer * 0.04))
 	if not _selected_option_id.is_empty() or _balance_token != null:
-		draw_circle(Vector2(48.0, pan_y + 8.0), 13.0,
+		PixelDraw.circle(self, Vector2(48.0, pan_y + 8.0), 13.0,
 			Color(ROSE.r, ROSE.g, ROSE.b, 0.04 + _scale_settle * 0.035))
-		draw_arc(Vector2(48.0, pan_y + 8.0), 14.0, 0.15, PI - 0.15, 10,
+		PixelDraw.arc(self, Vector2(48.0, pan_y + 8.0), 14.0, 0.15, PI - 0.15, 10,
 			Color(HOT_GOLD.r, HOT_GOLD.g, HOT_GOLD.b, 0.30), 1.0)
 
 	# The right pan begins unknown and becomes a tiny illuminated reward window.
 	if _roulette_label != null and not _resolving and _selected_option_id.is_empty() \
 			and int(RunStateStore.sacrificesUsedThisVisit) <= 0:
-		draw_circle(Vector2(120.0, 166.0), 10.0,
+		PixelDraw.circle(self, Vector2(120.0, 166.0), 10.0,
 			Color(CYAN.r, CYAN.g, CYAN.b, 0.025 + shimmer * 0.02))
 
 

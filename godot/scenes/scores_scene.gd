@@ -19,7 +19,7 @@ func _ready() -> void:
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	bg.size = Vector2(160, 320)
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 	_line("SCORES", Rect2(24, 33, 112, 16), 16, GOLD, HORIZONTAL_ALIGNMENT_CENTER)
@@ -39,7 +39,7 @@ func _ready() -> void:
 	_symbol_rect.size = Vector2(24, 24)
 	_symbol_rect.position = Vector2(68, 125)
 	_symbol_rect.pivot_offset = Vector2(12, 12)
-	_symbol_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_symbol_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_symbol_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_symbol_rect)
 	_tier_label = _line("", Rect2(48, 150, 64, 8), 8, GOLD, HORIZONTAL_ALIGNMENT_CENTER)

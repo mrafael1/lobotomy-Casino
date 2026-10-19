@@ -119,7 +119,7 @@ static func build_symbol_picker_panel(parent: Control, symbols: Array[String], t
 			var texture_max_side := float(maxi(symbol_texture.get_width(), symbol_texture.get_height()))
 			var icon_scale := icon_size / texture_max_side
 			icon.scale = Vector2(icon_scale, icon_scale)
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			button.add_child(icon)
 
 	return panel
@@ -171,6 +171,7 @@ static func _apply_symbol_picker_button_style(button: Button) -> void:
 
 static func _symbol_picker_style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = fill
 	style.border_color = border
 	style.border_width_left = 1

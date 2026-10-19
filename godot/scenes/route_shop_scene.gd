@@ -129,6 +129,7 @@ func _panel(rect: Rect2, border_color: Color, alpha: float) -> Panel:
 
 func _style_shop_row(row: Button, purchased: bool) -> void:
 	var normal := StyleBoxFlat.new()
+	normal.anti_aliasing = false
 	normal.bg_color = Color(0.07, 0.11, 0.14, 0.96)
 	normal.border_color = Color(CYAN.r, CYAN.g, CYAN.b, 0.32)
 	normal.set_border_width_all(1)

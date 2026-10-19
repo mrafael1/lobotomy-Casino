@@ -338,7 +338,7 @@ func _build_wallet_display() -> void:
 	if assets != null:
 		_wallet_coin.texture = assets.call("texture", WALLET_COIN_ASSET, true) as Texture2D
 	else:
-		_wallet_coin.texture = load("res://assets/images/ui/premium/coin.png") as Texture2D
+		_wallet_coin.texture = load("res://assets/images/pixel/ui/premium/coin.png") as Texture2D
 	_wallet_coin.custom_minimum_size = WALLET_COIN_SIZE
 	_wallet_coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_wallet_coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -440,7 +440,7 @@ func _draw_single_pass(progress: float) -> void:
 		accent = DOOR_ROSE
 	elif _kind == 2:
 		accent = FLATLINE_RED
-	draw_rect(curtain_rect, Color(DARK, 0.99))
+	PixelDraw.rect(self, curtain_rect, Color(DARK, 0.99))
 
 	# Sparse pixel bands keep the transition readable without adding a shader or a
 	# second animated object. The two edges are intentionally asymmetric: one is the
@@ -450,49 +450,49 @@ func _draw_single_pass(progress: float) -> void:
 	var leading_alpha := 0.5 + 0.45 * absf(sin(travel * PI))
 	var trailing_alpha := 0.25 + 0.25 * absf(sin(travel * PI))
 	if leading_x > -2.0 and leading_x < CANVAS_SIZE.x + 2.0:
-		draw_line(Vector2(leading_x, 0.0), Vector2(leading_x, CANVAS_SIZE.y),
+		PixelDraw.line(self, Vector2(leading_x, 0.0), Vector2(leading_x, CANVAS_SIZE.y),
 			Color(accent, leading_alpha), 2.0)
 	if trailing_x > -2.0 and trailing_x < CANVAS_SIZE.x + 2.0:
-		draw_line(Vector2(trailing_x, 0.0), Vector2(trailing_x, CANVAS_SIZE.y),
+		PixelDraw.line(self, Vector2(trailing_x, 0.0), Vector2(trailing_x, CANVAS_SIZE.y),
 			Color(DEEP_BLUE, trailing_alpha), 1.0)
 	var stripe_left := maxf(curtain_rect.position.x, 0.0)
 	var stripe_right := minf(curtain_rect.end.x, CANVAS_SIZE.x)
 	if stripe_right > stripe_left:
 		for y in [72.0, 160.0, 248.0]:
-			draw_line(Vector2(stripe_left, y), Vector2(stripe_right, y),
+			PixelDraw.line(self, Vector2(stripe_left, y), Vector2(stripe_right, y),
 				Color(DEEP_BLUE, 0.55), 1.0)
 		if _kind == 2:
-			draw_line(Vector2(stripe_left, 160.0), Vector2(stripe_right, 160.0),
+			PixelDraw.line(self, Vector2(stripe_left, 160.0), Vector2(stripe_right, 160.0),
 				Color(accent, 0.8), 1.0)
 
 
 func _draw_wallet(cover: float) -> void:
 	if cover > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, CANVAS_SIZE), Color.BLACK)
+		PixelDraw.rect(self, Rect2(Vector2.ZERO, CANVAS_SIZE), Color.BLACK)
 
 
 func _draw_normal(cover: float) -> void:
 	var dark_alpha := lerpf(0.0, 0.97, cover)
-	draw_rect(Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
+	PixelDraw.rect(self, Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
 	# A narrow shutter rolls down over the cabinet before the destination is loaded.
 	var shutter_y := lerpf(-24.0, CANVAS_SIZE.y + 24.0, cover)
 	for index in range(7):
 		var y := shutter_y - float(index) * 11.0
 		var alpha := clampf(0.20 + cover * 0.60 - float(index) * 0.05, 0.0, 0.82)
-		draw_rect(Rect2(0.0, y, CANVAS_SIZE.x, 2.0), Color(DEEP_BLUE, alpha))
+		PixelDraw.rect(self, Rect2(0.0, y, CANVAS_SIZE.x, 2.0), Color(DEEP_BLUE, alpha))
 	# These small lamps fade with the machine power-down and relight on entry.
 	var lamp_alpha := clampf(1.0 - cover * 1.25, 0.0, 1.0)
 	for x in [22.0, 45.0, 80.0, 115.0, 138.0]:
-		draw_circle(Vector2(x, 160.0), 1.0, Color(MACHINE_BLUE, lamp_alpha))
+		PixelDraw.circle(self, Vector2(x, 160.0), 1.0, Color(MACHINE_BLUE, lamp_alpha))
 	if cover > 0.02:
-		draw_line(Vector2(14.0, 160.0), Vector2(146.0, 160.0),
+		PixelDraw.line(self, Vector2(14.0, 160.0), Vector2(146.0, 160.0),
 			Color(MACHINE_BLUE, (1.0 - cover) * 0.55), 1.0)
 
 
 func _draw_door(cover: float) -> void:
 	var accent := DOOR_ROSE
 	var dark_alpha := lerpf(0.03, 0.98, cover)
-	draw_rect(Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
+	PixelDraw.rect(self, Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
 	var opening_width := lerpf(0.0, CANVAS_SIZE.x, cover)
 	var opening_rect := Rect2(Vector2.ZERO, Vector2.ZERO)
 	if _door_side < 0:
@@ -500,37 +500,37 @@ func _draw_door(cover: float) -> void:
 	else:
 		opening_rect = Rect2(CANVAS_SIZE.x - opening_width, 0.0,
 			opening_width, CANVAS_SIZE.y)
-	draw_rect(opening_rect, Color(DEEP_BLUE, 0.38 + cover * 0.55))
+	PixelDraw.rect(self, opening_rect, Color(DEEP_BLUE, 0.38 + cover * 0.55))
 	var edge_x := lerpf(0.0 if _door_side < 0 else CANVAS_SIZE.x,
 		CANVAS_SIZE.x * 0.5, cover)
 	var edge_alpha := clampf(0.92 - cover * 0.35, 0.0, 1.0)
-	draw_line(Vector2(edge_x, 0.0), Vector2(edge_x, CANVAS_SIZE.y),
+	PixelDraw.line(self, Vector2(edge_x, 0.0), Vector2(edge_x, CANVAS_SIZE.y),
 		Color(accent, edge_alpha), 2.0)
 	var door_x := 12.0 if _door_side < 0 else CANVAS_SIZE.x - 12.0
-	draw_line(Vector2(door_x, 64.0), Vector2(door_x, 256.0),
+	PixelDraw.line(self, Vector2(door_x, 64.0), Vector2(door_x, 256.0),
 		Color(accent, clampf(0.35 + cover * 0.65, 0.0, 1.0)), 1.0)
-	draw_line(Vector2(door_x, 64.0), Vector2(80.0, 160.0),
+	PixelDraw.line(self, Vector2(door_x, 64.0), Vector2(80.0, 160.0),
 		Color(accent, (1.0 - cover) * 0.7), 1.0)
-	draw_line(Vector2(door_x, 256.0), Vector2(80.0, 160.0),
+	PixelDraw.line(self, Vector2(door_x, 256.0), Vector2(80.0, 160.0),
 		Color(accent, (1.0 - cover) * 0.7), 1.0)
-	draw_circle(Vector2(80.0, 160.0), 2.0, Color(accent, (1.0 - cover) * 0.8))
+	PixelDraw.circle(self, Vector2(80.0, 160.0), 2.0, Color(accent, (1.0 - cover) * 0.8))
 
 
 func _draw_flatline(cover: float) -> void:
 	var pulse := 0.5 + 0.5 * sin(_progress * PI * 7.0)
 	var dark_alpha := lerpf(0.04, 0.99, cover)
-	draw_rect(Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
+	PixelDraw.rect(self, Rect2(Vector2.ZERO, CANVAS_SIZE), Color(DARK, dark_alpha))
 	var line_alpha := clampf(0.35 + pulse * 0.65, 0.0, 1.0) * (0.3 + cover * 0.7)
 	var points := PackedVector2Array([
 		Vector2(12.0, 160.0), Vector2(47.0, 160.0), Vector2(52.0, 151.0),
 		Vector2(57.0, 174.0), Vector2(63.0, 160.0), Vector2(148.0, 160.0),
 	])
-	draw_polyline(points, Color(FLATLINE_RED, line_alpha), 2.0)
-	draw_line(Vector2(12.0, 160.0), Vector2(148.0, 160.0),
+	PixelDraw.polyline(self, points, Color(FLATLINE_RED, line_alpha), 2.0)
+	PixelDraw.line(self, Vector2(12.0, 160.0), Vector2(148.0, 160.0),
 		Color(FLATLINE_RED, line_alpha * 0.25), 1.0)
 	# A slower red ring gives the failure path its own cadence without adding a
 	# heavyweight fullscreen effect.
-	draw_circle(Vector2(80.0, 160.0), 12.0 + pulse * 5.0,
+	PixelDraw.circle(self, Vector2(80.0, 160.0), 12.0 + pulse * 5.0,
 		Color(FLATLINE_RED, line_alpha * 0.18), false, 1.0)
 
 

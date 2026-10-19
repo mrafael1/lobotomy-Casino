@@ -108,14 +108,14 @@ func _draw() -> void:
 	_draw_sparks()
 
 func _draw_wheel_shadow() -> void:
-	draw_circle(CENTER + Vector2(1.0, 2.0), WHEEL_RADIUS + 7.0, Color(0.0, 0.0, 0.0, 0.72))
+	PixelDraw.circle(self, CENTER + Vector2(1.0, 2.0), WHEEL_RADIUS + 7.0, Color(0.0, 0.0, 0.0, 0.72))
 	# A fixed brass bezel encloses the rotating enamel face.
-	draw_arc(CENTER, WHEEL_RADIUS + 1.0, 0.0, TAU, 96, Color("5a432c"), 4.0, false)
-	draw_arc(CENTER, WHEEL_RADIUS + 3.0, 0.0, TAU, 96, GOLD, 1.0, false)
-	draw_arc(CENTER, WHEEL_RADIUS, -PI * .85, -PI * .15, 32, HOT_GOLD, .6, false)
-	draw_arc(CENTER, WHEEL_RADIUS + 6.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.10), 4.0, false)
-	draw_arc(CENTER, WHEEL_RADIUS + 4.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.22), 2.0, false)
-	draw_arc(CENTER, WHEEL_RADIUS + 2.0, 0.0, TAU, 64, CYAN, 1.0, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS + 1.0, 0.0, TAU, 96, Color("5a432c"), 4.0, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS + 3.0, 0.0, TAU, 96, GOLD, 1.0, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS, -PI * .85, -PI * .15, 32, HOT_GOLD, .6, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS + 6.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.10), 4.0, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS + 4.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, 0.22), 2.0, false)
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS + 2.0, 0.0, TAU, 64, CYAN, 1.0, false)
 
 func _draw_segments() -> void:
 	var slice := TAU / SEGMENT_COUNT
@@ -128,26 +128,26 @@ func _draw_segments() -> void:
 			var angle := lerpf(start_angle, end_angle, float(step) / 8.0)
 			points.append(_point_on_ring(angle, WHEEL_RADIUS))
 		var segment_color: Color = SEGMENT_COLORS[index]
-		draw_colored_polygon(points, segment_color)
+		PixelDraw.colored_polygon(self, points, segment_color)
 		var edge_color := Color(GOLD.r, GOLD.g, GOLD.b, 0.52) if index % 2 == 0 \
 			else Color(CYAN.r, CYAN.g, CYAN.b, 0.46)
-		draw_line(CENTER, _point_on_ring(start_angle, WHEEL_RADIUS), edge_color, 1.0, false)
+		PixelDraw.line(self, CENTER, _point_on_ring(start_angle, WHEEL_RADIUS), edge_color, 1.0, false)
 		if index == _result_index and not _spinning:
-			draw_arc(CENTER, WHEEL_RADIUS - 2.0, start_angle + 0.025,
+			PixelDraw.arc(self, CENTER, WHEEL_RADIUS - 2.0, start_angle + 0.025,
 				end_angle - 0.025, 12, HOT_GOLD, 3.0, false)
 
-	draw_circle(CENTER, WHEEL_RADIUS - 6.0, Color(INK.r, INK.g, INK.b, 0.56))
-	draw_arc(CENTER, WHEEL_RADIUS - 6.0, 0.0, TAU, 48, Color(HOT_CYAN.r, HOT_CYAN.g, HOT_CYAN.b, 0.64), 1.0, false)
+	PixelDraw.circle(self, CENTER, WHEEL_RADIUS - 6.0, Color(INK.r, INK.g, INK.b, 0.56))
+	PixelDraw.arc(self, CENTER, WHEEL_RADIUS - 6.0, 0.0, TAU, 48, Color(HOT_CYAN.r, HOT_CYAN.g, HOT_CYAN.b, 0.64), 1.0, false)
 	# Print rewards after the inner tint so the face cannot dim their lettering.
 	for index in SEGMENT_COUNT:
 		_draw_segment_label(index, POINTER_ANGLE + _wheel_angle + (float(index) + 0.5) * slice)
 	# The hub is intentionally tiny and mechanical: a bright ring, a dark cap, and a
 	# four-pixel glint echo the machine's authored meter highlights.
-	draw_circle(CENTER, 10.0, Color(CYAN.r, CYAN.g, CYAN.b, 0.17))
-	draw_circle(CENTER, 8.0, HUB)
-	draw_arc(CENTER, 8.0, 0.0, TAU, 32, GOLD, 1.0, false)
-	draw_rect(Rect2(CENTER - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), HOT_GOLD)
-	draw_line(CENTER + Vector2(-4.0, 0.0), CENTER + Vector2(4.0, 0.0), Color(ROSE.r, ROSE.g, ROSE.b, 0.75), 1.0, false)
+	PixelDraw.circle(self, CENTER, 10.0, Color(CYAN.r, CYAN.g, CYAN.b, 0.17))
+	PixelDraw.circle(self, CENTER, 8.0, HUB)
+	PixelDraw.arc(self, CENTER, 8.0, 0.0, TAU, 32, GOLD, 1.0, false)
+	PixelDraw.rect(self, Rect2(CENTER - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), HOT_GOLD)
+	PixelDraw.line(self, CENTER + Vector2(-4.0, 0.0), CENTER + Vector2(4.0, 0.0), Color(ROSE.r, ROSE.g, ROSE.b, 0.75), 1.0, false)
 
 func _draw_segment_label(index: int, angle: float) -> void:
 	if _font == null:
@@ -167,10 +167,10 @@ func _draw_bulbs() -> void:
 		var base_color := CYAN if index % 2 == 0 else GOLD
 		var wave := (sin(_pulse_time * 7.0 + float(index) * 0.85) + 1.0) * 0.5
 		var alpha := 0.23 + wave * 0.42
-		draw_circle(position, 3.2, _with_alpha(base_color, alpha * 0.24))
-		draw_rect(Rect2(Vector2(floorf(position.x), floorf(position.y)), Vector2(2.0, 2.0)),
+		PixelDraw.circle(self, position, 3.2, _with_alpha(base_color, alpha * 0.24))
+		PixelDraw.rect(self, Rect2(Vector2(floorf(position.x), floorf(position.y)), Vector2(2.0, 2.0)),
 			_with_alpha(base_color, alpha))
-		draw_rect(Rect2(Vector2(floorf(position.x), floorf(position.y)), Vector2(1.0, 1.0)),
+		PixelDraw.rect(self, Rect2(Vector2(floorf(position.x), floorf(position.y)), Vector2(1.0, 1.0)),
 			_with_alpha(HOT_CYAN if base_color == CYAN else HOT_GOLD, minf(1.0, alpha + 0.25)))
 
 func _draw_pointer() -> void:
@@ -178,11 +178,11 @@ func _draw_pointer() -> void:
 	var left := tip + Vector2(-5.0, 9.0)
 	var right := tip + Vector2(5.0, 9.0)
 	var triangle := PackedVector2Array([tip, left, right])
-	draw_colored_polygon(triangle, Color(ROSE.r, ROSE.g, ROSE.b, 0.20))
-	draw_colored_polygon(PackedVector2Array([tip, left + Vector2(1.0, -1.0), right + Vector2(-1.0, -1.0)]), GOLD)
-	draw_line(tip, left, HOT_GOLD, 1.0, false)
-	draw_line(tip, right, HOT_GOLD, 1.0, false)
-	draw_rect(Rect2(tip - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), HOT_CYAN)
+	PixelDraw.colored_polygon(self, triangle, Color(ROSE.r, ROSE.g, ROSE.b, 0.20))
+	PixelDraw.colored_polygon(self, PackedVector2Array([tip, left + Vector2(1.0, -1.0), right + Vector2(-1.0, -1.0)]), GOLD)
+	PixelDraw.line(self, tip, left, HOT_GOLD, 1.0, false)
+	PixelDraw.line(self, tip, right, HOT_GOLD, 1.0, false)
+	PixelDraw.rect(self, Rect2(tip - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), HOT_CYAN)
 
 func _draw_sparks() -> void:
 	if _flash_time <= 0.0 or _spinning:
@@ -193,7 +193,7 @@ func _draw_sparks() -> void:
 		var start := _point_on_ring(angle, WHEEL_RADIUS + 9.0)
 		var length := 5.0 + float((index * 3) % 5)
 		var end := _point_on_ring(angle, WHEEL_RADIUS + 9.0 + length * strength)
-		draw_line(start, end, _with_alpha(HOT_GOLD if index % 2 == 0 else HOT_CYAN, strength), 1.0, false)
+		PixelDraw.line(self, start, end, _with_alpha(HOT_GOLD if index % 2 == 0 else HOT_CYAN, strength), 1.0, false)
 
 func _point_on_ring(angle: float, radius: float) -> Vector2:
 	return CENTER + Vector2.from_angle(angle) * radius

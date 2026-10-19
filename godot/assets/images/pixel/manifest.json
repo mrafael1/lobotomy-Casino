@@ -1,0 +1,4721 @@
+{
+  "1st_neuron_death.png": {
+    "path": "pixel/1st_neuron_death.png",
+    "source_grid": [
+      192,
+      64
+    ],
+    "export_size": [
+      192,
+      64
+    ]
+  },
+  "2nd_neuron_death.png": {
+    "path": "pixel/2nd_neuron_death.png",
+    "source_grid": [
+      192,
+      64
+    ],
+    "export_size": [
+      192,
+      64
+    ]
+  },
+  "3rd_neuron_death.png": {
+    "path": "pixel/3rd_neuron_death.png",
+    "source_grid": [
+      192,
+      64
+    ],
+    "export_size": [
+      192,
+      64
+    ]
+  },
+  "bg_black.png": {
+    "path": "pixel/bg_black.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      640,
+      960
+    ]
+  },
+  "cards/augment_cards.png": {
+    "path": "pixel/cards/augment_cards.png",
+    "source_grid": [
+      273,
+      915
+    ],
+    "export_size": [
+      273,
+      915
+    ]
+  },
+  "cards/painted/augment_adrenaline.png": {
+    "path": "pixel/cards/painted/augment_adrenaline.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_book.png": {
+    "path": "pixel/cards/painted/augment_book.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      192,
+      192
+    ]
+  },
+  "cards/painted/augment_hallucination.png": {
+    "path": "pixel/cards/painted/augment_hallucination.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_joker.png": {
+    "path": "pixel/cards/painted/augment_joker.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_passive_gain.png": {
+    "path": "pixel/cards/painted/augment_passive_gain.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_reward_1.png": {
+    "path": "pixel/cards/painted/augment_reward_1.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_reward_2.png": {
+    "path": "pixel/cards/painted/augment_reward_2.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_reward_3.png": {
+    "path": "pixel/cards/painted/augment_reward_3.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_smart_saving.png": {
+    "path": "pixel/cards/painted/augment_smart_saving.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_tunnel_vision.png": {
+    "path": "pixel/cards/painted/augment_tunnel_vision.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augment_win_boost.png": {
+    "path": "pixel/cards/painted/augment_win_boost.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/augments_painted.png": {
+    "path": "pixel/cards/painted/augments_painted.png",
+    "source_grid": [
+      96,
+      72
+    ],
+    "export_size": [
+      768,
+      576
+    ]
+  },
+  "cards/painted/book.png": {
+    "path": "pixel/cards/painted/book.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "cards/painted/cheat.png": {
+    "path": "pixel/cards/painted/cheat.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/heart.png": {
+    "path": "pixel/cards/painted/heart.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/memory.png": {
+    "path": "pixel/cards/painted/memory.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/power_coin.png": {
+    "path": "pixel/cards/painted/power_coin.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/powers_painted.png": {
+    "path": "pixel/cards/painted/powers_painted.png",
+    "source_grid": [
+      96,
+      72
+    ],
+    "export_size": [
+      768,
+      576
+    ]
+  },
+  "cards/painted/reroll.png": {
+    "path": "pixel/cards/painted/reroll.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/rewind.png": {
+    "path": "pixel/cards/painted/rewind.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/shift.png": {
+    "path": "pixel/cards/painted/shift.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/painted/swap.png": {
+    "path": "pixel/cards/painted/swap.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "cards/power_cards.png": {
+    "path": "pixel/cards/power_cards.png",
+    "source_grid": [
+      351,
+      61
+    ],
+    "export_size": [
+      351,
+      61
+    ]
+  },
+  "dealer.png": {
+    "path": "pixel/dealer.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_choice/bg.png": {
+    "path": "pixel/dealer_choice/bg.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "dealer_choice/bubble_text.png": {
+    "path": "pixel/dealer_choice/bubble_text.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "dealer_choice/choice_scene.png": {
+    "path": "pixel/dealer_choice/choice_scene.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "dealer_choice/dealer_choice_doors.svg": {
+    "path": "pixel/dealer_choice/dealer_choice_doors.png",
+    "source_grid": [
+      320,
+      96
+    ],
+    "export_size": [
+      320,
+      96
+    ]
+  },
+  "dealer_choice/doors.png": {
+    "path": "pixel/dealer_choice/doors.png",
+    "source_grid": [
+      124,
+      470
+    ],
+    "export_size": [
+      124,
+      470
+    ]
+  },
+  "dealer_choice/reroll.png": {
+    "path": "pixel/dealer_choice/reroll.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "dealer_choice_polished/choice_scene_native.png": {
+    "path": "pixel/dealer_choice_polished/choice_scene_native.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "dealer_choice_polished/choice_scene_painted.png": {
+    "path": "pixel/dealer_choice_polished/choice_scene_painted.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "dealer_hands.png": {
+    "path": "pixel/dealer_hands.png",
+    "source_grid": [
+      128,
+      64
+    ],
+    "export_size": [
+      128,
+      64
+    ]
+  },
+  "dealer_offer_polished/hands.png": {
+    "path": "pixel/dealer_offer_polished/hands.png",
+    "source_grid": [
+      96,
+      48
+    ],
+    "export_size": [
+      768,
+      384
+    ]
+  },
+  "dealer_offer_polished/portrait.png": {
+    "path": "pixel/dealer_offer_polished/portrait.png",
+    "source_grid": [
+      64,
+      96
+    ],
+    "export_size": [
+      512,
+      768
+    ]
+  },
+  "dealer_portrait.png": {
+    "path": "pixel/dealer_portrait.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      2560,
+      2560
+    ]
+  },
+  "dealer_scene_LAB_BUTTON.png": {
+    "path": "pixel/dealer_scene_LAB_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_scene_machine_BUTTON.png": {
+    "path": "pixel/dealer_scene_machine_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_scene_reroll_BUTTON.png": {
+    "path": "pixel/dealer_scene_reroll_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/bg.png": {
+    "path": "pixel/dealer_shop/bg.png",
+    "source_grid": [
+      200,
+      380
+    ],
+    "export_size": [
+      200,
+      380
+    ]
+  },
+  "dealer_shop/counter.png": {
+    "path": "pixel/dealer_shop/counter.png",
+    "source_grid": [
+      200,
+      380
+    ],
+    "export_size": [
+      200,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_bg.png": {
+    "path": "pixel/dealer_shop/dealer_shop_bg.png",
+    "source_grid": [
+      200,
+      380
+    ],
+    "export_size": [
+      200,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_bg_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_bg_x8.png",
+    "source_grid": [
+      200,
+      380
+    ],
+    "export_size": [
+      1200,
+      2280
+    ]
+  },
+  "dealer_shop/dealer_shop_counter.png": {
+    "path": "pixel/dealer_shop/dealer_shop_counter.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_counter_base.png": {
+    "path": "pixel/dealer_shop/dealer_shop_counter_base.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_counter_base_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_counter_base_x8.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/dealer_shop_counter_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_counter_x8.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/dealer_shop_LAB_BUTTON.png": {
+    "path": "pixel/dealer_shop/dealer_shop_LAB_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_LAB_BUTTON_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_LAB_BUTTON_x8.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/dealer_shop_machine_BUTTON.png": {
+    "path": "pixel/dealer_shop/dealer_shop_machine_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_machine_BUTTON_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_machine_BUTTON_x8.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/dealer_shop_reroll_BUTTON.png": {
+    "path": "pixel/dealer_shop/dealer_shop_reroll_BUTTON.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/dealer_shop_reroll_BUTTON_x8.png": {
+    "path": "pixel/dealer_shop/dealer_shop_reroll_BUTTON_x8.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      2400,
+      2280
+    ]
+  },
+  "dealer_shop/machine.png": {
+    "path": "pixel/dealer_shop/machine.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop/reroll.png": {
+    "path": "pixel/dealer_shop/reroll.png",
+    "source_grid": [
+      400,
+      380
+    ],
+    "export_size": [
+      400,
+      380
+    ]
+  },
+  "dealer_shop_bg.png": {
+    "path": "pixel/dealer_shop_bg.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "dealer_shop_counter.png": {
+    "path": "pixel/dealer_shop_counter.png",
+    "source_grid": [
+      200,
+      380
+    ],
+    "export_size": [
+      1200,
+      2280
+    ]
+  },
+  "dealer_shop_polished/pre_dealer_shop_native.png": {
+    "path": "pixel/dealer_shop_polished/pre_dealer_shop_native.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "dealer_shop_polished/pre_dealer_shop_painted.png": {
+    "path": "pixel/dealer_shop_polished/pre_dealer_shop_painted.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "items/chips_detail.svg": {
+    "path": "pixel/items/chips_detail.png",
+    "source_grid": [
+      256,
+      32
+    ],
+    "export_size": [
+      1024,
+      128
+    ]
+  },
+  "items/chips_upgrade.png": {
+    "path": "pixel/items/chips_upgrade.png",
+    "source_grid": [
+      192,
+      32
+    ],
+    "export_size": [
+      192,
+      32
+    ]
+  },
+  "items/cigarette.png": {
+    "path": "pixel/items/cigarette.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/cocktail.png": {
+    "path": "pixel/items/cocktail.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/consumable_placeholder.png": {
+    "path": "pixel/items/consumable_placeholder.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      48,
+      48
+    ]
+  },
+  "items/energy_drink.png": {
+    "path": "pixel/items/energy_drink.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/focus_serum.png": {
+    "path": "pixel/items/focus_serum.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/generated/cocktail.png": {
+    "path": "pixel/items/generated/cocktail.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/energy_drink.png": {
+    "path": "pixel/items/generated/energy_drink.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/potion.png": {
+    "path": "pixel/items/generated/potion.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/red_pill.png": {
+    "path": "pixel/items/generated/red_pill.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/serum.png": {
+    "path": "pixel/items/generated/serum.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/tea.png": {
+    "path": "pixel/items/generated/tea.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/tobacco.png": {
+    "path": "pixel/items/generated/tobacco.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/water.png": {
+    "path": "pixel/items/generated/water.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/generated/white_powder.png": {
+    "path": "pixel/items/generated/white_powder.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      120,
+      120
+    ]
+  },
+  "items/herbal_tea.png": {
+    "path": "pixel/items/herbal_tea.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/pill.png": {
+    "path": "pixel/items/pill.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/water.png": {
+    "path": "pixel/items/water.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "items/white_powder.png": {
+    "path": "pixel/items/white_powder.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "machine new view/2_losing_animation.png": {
+    "path": "pixel/machine new view/2_losing_animation.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/3_losing_animation.png": {
+    "path": "pixel/machine new view/3_losing_animation.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine new view/augments.png": {
+    "path": "pixel/machine new view/augments.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/cheat_power.png": {
+    "path": "pixel/machine new view/cheat_power.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/cheat_selection.png": {
+    "path": "pixel/machine new view/cheat_selection.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine new view/chip_power.png": {
+    "path": "pixel/machine new view/chip_power.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/COMBO_effect.png": {
+    "path": "pixel/machine new view/COMBO_effect.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine new view/dealer_bar.png": {
+    "path": "pixel/machine new view/dealer_bar.png",
+    "source_grid": [
+      2080,
+      320
+    ],
+    "export_size": [
+      2080,
+      320
+    ]
+  },
+  "machine new view/dealer_bar_overlay_1.png": {
+    "path": "pixel/machine new view/dealer_bar_overlay_1.png",
+    "source_grid": [
+      1920,
+      320
+    ],
+    "export_size": [
+      1920,
+      320
+    ]
+  },
+  "machine new view/dealer_bar_overlay_2.png": {
+    "path": "pixel/machine new view/dealer_bar_overlay_2.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine new view/dealer_bar_overlay_3.png": {
+    "path": "pixel/machine new view/dealer_bar_overlay_3.png",
+    "source_grid": [
+      1600,
+      320
+    ],
+    "export_size": [
+      1600,
+      320
+    ]
+  },
+  "machine new view/dealer_tips.png": {
+    "path": "pixel/machine new view/dealer_tips.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/final_machine.png": {
+    "path": "pixel/machine new view/final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine new view/free_spin.png": {
+    "path": "pixel/machine new view/free_spin.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/health_animation.png": {
+    "path": "pixel/machine new view/health_animation.png",
+    "source_grid": [
+      640,
+      320
+    ],
+    "export_size": [
+      640,
+      320
+    ]
+  },
+  "machine new view/health_bar.png": {
+    "path": "pixel/machine new view/health_bar.png",
+    "source_grid": [
+      3200,
+      320
+    ],
+    "export_size": [
+      3200,
+      320
+    ]
+  },
+  "machine new view/health_chip_pile_prototype.png": {
+    "path": "pixel/machine new view/health_chip_pile_prototype.png",
+    "source_grid": [
+      64,
+      16
+    ],
+    "export_size": [
+      64,
+      16
+    ]
+  },
+  "machine new view/health_fill_final_machine.png": {
+    "path": "pixel/machine new view/health_fill_final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine new view/health_track_final_machine.png": {
+    "path": "pixel/machine new view/health_track_final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine new view/jackpot_final_machine.png": {
+    "path": "pixel/machine new view/jackpot_final_machine.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      2560,
+      2560
+    ]
+  },
+  "machine new view/lever_final_machine.png": {
+    "path": "pixel/machine new view/lever_final_machine.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      7680,
+      2560
+    ]
+  },
+  "machine new view/lock.png": {
+    "path": "pixel/machine new view/lock.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/lock_final_machine.png": {
+    "path": "pixel/machine new view/lock_final_machine.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      3840,
+      2560
+    ]
+  },
+  "machine new view/lock_power.png": {
+    "path": "pixel/machine new view/lock_power.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      3840,
+      2560
+    ]
+  },
+  "machine new view/machine_game_over.png": {
+    "path": "pixel/machine new view/machine_game_over.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/machine_neon.png": {
+    "path": "pixel/machine new view/machine_neon.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/move_power.png": {
+    "path": "pixel/machine new view/move_power.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/multiplier_2_effect.png": {
+    "path": "pixel/machine new view/multiplier_2_effect.png",
+    "source_grid": [
+      1120,
+      320
+    ],
+    "export_size": [
+      1120,
+      320
+    ]
+  },
+  "machine new view/multiplier_3_effect.png": {
+    "path": "pixel/machine new view/multiplier_3_effect.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine new view/multiplier_3_fire.png": {
+    "path": "pixel/machine new view/multiplier_3_fire.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine new view/multiplier_final_machine.png": {
+    "path": "pixel/machine new view/multiplier_final_machine.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine new view/neon_machine_jackpot.png": {
+    "path": "pixel/machine new view/neon_machine_jackpot.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/neon_machine_lever.png": {
+    "path": "pixel/machine new view/neon_machine_lever.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine new view/neon_machine_power_bar.png": {
+    "path": "pixel/machine new view/neon_machine_power_bar.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine new view/power coin animation.png": {
+    "path": "pixel/machine new view/power coin animation.png",
+    "source_grid": [
+      640,
+      320
+    ],
+    "export_size": [
+      640,
+      320
+    ]
+  },
+  "machine new view/power_animation.png": {
+    "path": "pixel/machine new view/power_animation.png",
+    "source_grid": [
+      1120,
+      320
+    ],
+    "export_size": [
+      1120,
+      320
+    ]
+  },
+  "machine new view/power_bar.png": {
+    "path": "pixel/machine new view/power_bar.png",
+    "source_grid": [
+      480,
+      640
+    ],
+    "export_size": [
+      3840,
+      5120
+    ]
+  },
+  "machine new view/reel_final_machine.png": {
+    "path": "pixel/machine new view/reel_final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/reel_selection.png": {
+    "path": "pixel/machine new view/reel_selection.png",
+    "source_grid": [
+      320,
+      640
+    ],
+    "export_size": [
+      2560,
+      5120
+    ]
+  },
+  "machine new view/reroll.png": {
+    "path": "pixel/machine new view/reroll.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/reroll_final_machine.png": {
+    "path": "pixel/machine new view/reroll_final_machine.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      3840,
+      2560
+    ]
+  },
+  "machine new view/restore_cap.png": {
+    "path": "pixel/machine new view/restore_cap.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "machine new view/rewind_power.png": {
+    "path": "pixel/machine new view/rewind_power.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/shift.png": {
+    "path": "pixel/machine new view/shift.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/shift_final_machine.png": {
+    "path": "pixel/machine new view/shift_final_machine.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      3840,
+      2560
+    ]
+  },
+  "machine new view/shift_power.png": {
+    "path": "pixel/machine new view/shift_power.png",
+    "source_grid": [
+      480,
+      960
+    ],
+    "export_size": [
+      3840,
+      7680
+    ]
+  },
+  "machine new view/spin_final_machine.png": {
+    "path": "pixel/machine new view/spin_final_machine.png",
+    "source_grid": [
+      640,
+      320
+    ],
+    "export_size": [
+      5120,
+      2560
+    ]
+  },
+  "machine new view/target_bar.png": {
+    "path": "pixel/machine new view/target_bar.png",
+    "source_grid": [
+      1920,
+      320
+    ],
+    "export_size": [
+      1920,
+      320
+    ]
+  },
+  "machine new view/target_bar_animation.png": {
+    "path": "pixel/machine new view/target_bar_animation.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine new view/target_goals.png": {
+    "path": "pixel/machine new view/target_goals.png",
+    "source_grid": [
+      1280,
+      320
+    ],
+    "export_size": [
+      1280,
+      320
+    ]
+  },
+  "machine new view/water.png": {
+    "path": "pixel/machine new view/water.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine new view/wealth_1st_reel.png": {
+    "path": "pixel/machine new view/wealth_1st_reel.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine new view/wealth_2nd_reel.png": {
+    "path": "pixel/machine new view/wealth_2nd_reel.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine new view/wealth_3rd_reel.png": {
+    "path": "pixel/machine new view/wealth_3rd_reel.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine new view/wealth_4th_reel.png": {
+    "path": "pixel/machine new view/wealth_4th_reel.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine new view/wealth_bar.png": {
+    "path": "pixel/machine new view/wealth_bar.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/wealth_cases.png": {
+    "path": "pixel/machine new view/wealth_cases.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine new view/wealth_fill_final_machine.png": {
+    "path": "pixel/machine new view/wealth_fill_final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine new view/wealth_track_final_machine.png": {
+    "path": "pixel/machine new view/wealth_track_final_machine.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine new view/win_animation.png": {
+    "path": "pixel/machine new view/win_animation.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "machine_normal.png": {
+    "path": "pixel/machine_normal.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/apertures.svg": {
+    "path": "pixel/machine_polished/apertures.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/augments.svg": {
+    "path": "pixel/machine_polished/augments.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "machine_polished/cabinet-game-over.png": {
+    "path": "pixel/machine_polished/cabinet-game-over.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "machine_polished/cabinet-painted.png": {
+    "path": "pixel/machine_polished/cabinet-painted.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "machine_polished/cabinet.svg": {
+    "path": "pixel/machine_polished/cabinet.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/cabinet_baked.png": {
+    "path": "pixel/machine_polished/cabinet_baked.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine_polished/cabinet_controls.svg": {
+    "path": "pixel/machine_polished/cabinet_controls.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/cabinet_material_pass.png": {
+    "path": "pixel/machine_polished/cabinet_material_pass.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine_polished/cheat.svg": {
+    "path": "pixel/machine_polished/cheat.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/combo.svg": {
+    "path": "pixel/machine_polished/combo.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine_polished/dealer-painted.png": {
+    "path": "pixel/machine_polished/dealer-painted.png",
+    "source_grid": [
+      40,
+      60
+    ],
+    "export_size": [
+      320,
+      480
+    ]
+  },
+  "machine_polished/dealer_bar.svg": {
+    "path": "pixel/machine_polished/dealer_bar.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine_polished/dealer_bar_overlay_1.svg": {
+    "path": "pixel/machine_polished/dealer_bar_overlay_1.png",
+    "source_grid": [
+      1600,
+      320
+    ],
+    "export_size": [
+      1600,
+      320
+    ]
+  },
+  "machine_polished/dealer_bar_overlay_2.svg": {
+    "path": "pixel/machine_polished/dealer_bar_overlay_2.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine_polished/dealer_bar_overlay_3.svg": {
+    "path": "pixel/machine_polished/dealer_bar_overlay_3.png",
+    "source_grid": [
+      1280,
+      320
+    ],
+    "export_size": [
+      1280,
+      320
+    ]
+  },
+  "machine_polished/dealer_tips.svg": {
+    "path": "pixel/machine_polished/dealer_tips.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/free_spin.svg": {
+    "path": "pixel/machine_polished/free_spin.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/heart.svg": {
+    "path": "pixel/machine_polished/heart.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/heat_core.png": {
+    "path": "pixel/machine_polished/heat_core.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/heat_glow.png": {
+    "path": "pixel/machine_polished/heat_glow.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/heat_lamp.png": {
+    "path": "pixel/machine_polished/heat_lamp.png",
+    "source_grid": [
+      35,
+      19
+    ],
+    "export_size": [
+      280,
+      152
+    ]
+  },
+  "machine_polished/jackpot_beacon.svg": {
+    "path": "pixel/machine_polished/jackpot_beacon.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/learning_attachment.svg": {
+    "path": "pixel/machine_polished/learning_attachment.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/loss_2.svg": {
+    "path": "pixel/machine_polished/loss_2.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/loss_3.svg": {
+    "path": "pixel/machine_polished/loss_3.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine_polished/memory.svg": {
+    "path": "pixel/machine_polished/memory.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/multiplier.svg": {
+    "path": "pixel/machine_polished/multiplier.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine_polished/multiplier_2_effect.svg": {
+    "path": "pixel/machine_polished/multiplier_2_effect.png",
+    "source_grid": [
+      1120,
+      320
+    ],
+    "export_size": [
+      1120,
+      320
+    ]
+  },
+  "machine_polished/multiplier_3_effect.svg": {
+    "path": "pixel/machine_polished/multiplier_3_effect.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine_polished/multiplier_3_fire.svg": {
+    "path": "pixel/machine_polished/multiplier_3_fire.png",
+    "source_grid": [
+      1440,
+      320
+    ],
+    "export_size": [
+      1440,
+      320
+    ]
+  },
+  "machine_polished/power_lamps.svg": {
+    "path": "pixel/machine_polished/power_lamps.png",
+    "source_grid": [
+      640,
+      320
+    ],
+    "export_size": [
+      640,
+      320
+    ]
+  },
+  "machine_polished/power_restore_flash.svg": {
+    "path": "pixel/machine_polished/power_restore_flash.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/preview_shelf.png": {
+    "path": "pixel/machine_polished/preview_shelf.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/preview_spin_disabled.png": {
+    "path": "pixel/machine_polished/preview_spin_disabled.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/preview_spin_focus.png": {
+    "path": "pixel/machine_polished/preview_spin_focus.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/preview_spin_hover.png": {
+    "path": "pixel/machine_polished/preview_spin_hover.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/preview_spin_latched.png": {
+    "path": "pixel/machine_polished/preview_spin_latched.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/preview_spin_normal.png": {
+    "path": "pixel/machine_polished/preview_spin_normal.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/preview_spin_pressed.png": {
+    "path": "pixel/machine_polished/preview_spin_pressed.png",
+    "source_grid": [
+      46,
+      28
+    ],
+    "export_size": [
+      184,
+      112
+    ]
+  },
+  "machine_polished/reel_drums.svg": {
+    "path": "pixel/machine_polished/reel_drums.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      1280,
+      2560
+    ]
+  },
+  "machine_polished/reel_housing.svg": {
+    "path": "pixel/machine_polished/reel_housing.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/reel_lock.svg": {
+    "path": "pixel/machine_polished/reel_lock.png",
+    "source_grid": [
+      23,
+      36
+    ],
+    "export_size": [
+      92,
+      144
+    ]
+  },
+  "machine_polished/reel_motion.svg": {
+    "path": "pixel/machine_polished/reel_motion.png",
+    "source_grid": [
+      640,
+      320
+    ],
+    "export_size": [
+      640,
+      320
+    ]
+  },
+  "machine_polished/reroll.svg": {
+    "path": "pixel/machine_polished/reroll.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/restore_ready.svg": {
+    "path": "pixel/machine_polished/restore_ready.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "machine_polished/rewind.svg": {
+    "path": "pixel/machine_polished/rewind.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/shelf_labels.svg": {
+    "path": "pixel/machine_polished/shelf_labels.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/shift.svg": {
+    "path": "pixel/machine_polished/shift.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/stash.svg": {
+    "path": "pixel/machine_polished/stash.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/swap.svg": {
+    "path": "pixel/machine_polished/swap.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      960,
+      640
+    ]
+  },
+  "machine_polished/target_progress.svg": {
+    "path": "pixel/machine_polished/target_progress.png",
+    "source_grid": [
+      1920,
+      320
+    ],
+    "export_size": [
+      1920,
+      320
+    ]
+  },
+  "machine_polished/target_shimmer.svg": {
+    "path": "pixel/machine_polished/target_shimmer.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "machine_polished/tunnel_shutter.svg": {
+    "path": "pixel/machine_polished/tunnel_shutter.png",
+    "source_grid": [
+      21,
+      34
+    ],
+    "export_size": [
+      21,
+      34
+    ]
+  },
+  "machine_polished/wealth_cases.svg": {
+    "path": "pixel/machine_polished/wealth_cases.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/wealth_cases_detail.svg": {
+    "path": "pixel/machine_polished/wealth_cases_detail.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/wealth_crt.svg": {
+    "path": "pixel/machine_polished/wealth_crt.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "machine_polished/wealth_crt_detail.svg": {
+    "path": "pixel/machine_polished/wealth_crt_detail.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "machine_polished/wealth_digit_0.svg": {
+    "path": "pixel/machine_polished/wealth_digit_0.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine_polished/wealth_digit_1.svg": {
+    "path": "pixel/machine_polished/wealth_digit_1.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine_polished/wealth_digit_2.svg": {
+    "path": "pixel/machine_polished/wealth_digit_2.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine_polished/wealth_digit_3.svg": {
+    "path": "pixel/machine_polished/wealth_digit_3.png",
+    "source_grid": [
+      1760,
+      320
+    ],
+    "export_size": [
+      1760,
+      320
+    ]
+  },
+  "machine_polished/wealth_digits_detail.svg": {
+    "path": "pixel/machine_polished/wealth_digits_detail.png",
+    "source_grid": [
+      110,
+      14
+    ],
+    "export_size": [
+      440,
+      56
+    ]
+  },
+  "neurons_animation.png": {
+    "path": "pixel/neurons_animation.png",
+    "source_grid": [
+      2176,
+      64
+    ],
+    "export_size": [
+      2176,
+      64
+    ]
+  },
+  "neurons_meter.png": {
+    "path": "pixel/neurons_meter.png",
+    "source_grid": [
+      64,
+      64
+    ],
+    "export_size": [
+      64,
+      64
+    ]
+  },
+  "odd_tab/augment_level_brass.svg": {
+    "path": "pixel/odd_tab/augment_level_brass.png",
+    "source_grid": [
+      360,
+      240
+    ],
+    "export_size": [
+      1440,
+      960
+    ]
+  },
+  "odd_tab/buttons_brass.svg": {
+    "path": "pixel/odd_tab/buttons_brass.png",
+    "source_grid": [
+      360,
+      240
+    ],
+    "export_size": [
+      2880,
+      1920
+    ]
+  },
+  "odd_tab/costs.png": {
+    "path": "pixel/odd_tab/costs.png",
+    "source_grid": [
+      120,
+      240
+    ],
+    "export_size": [
+      120,
+      240
+    ]
+  },
+  "odd_tab/levels_brass.svg": {
+    "path": "pixel/odd_tab/levels_brass.png",
+    "source_grid": [
+      1200,
+      240
+    ],
+    "export_size": [
+      4800,
+      960
+    ]
+  },
+  "odd_tab/ODD-TABLE.png": {
+    "path": "pixel/odd_tab/ODD-TABLE.png",
+    "source_grid": [
+      120,
+      240
+    ],
+    "export_size": [
+      120,
+      240
+    ]
+  },
+  "odd_tab/ODD-TABLE_augment_level.png": {
+    "path": "pixel/odd_tab/ODD-TABLE_augment_level.png",
+    "source_grid": [
+      360,
+      240
+    ],
+    "export_size": [
+      360,
+      240
+    ]
+  },
+  "odd_tab/ODD-TABLE_buttons.png": {
+    "path": "pixel/odd_tab/ODD-TABLE_buttons.png",
+    "source_grid": [
+      360,
+      240
+    ],
+    "export_size": [
+      360,
+      240
+    ]
+  },
+  "odd_tab/ODD-TABLE_level.png": {
+    "path": "pixel/odd_tab/ODD-TABLE_level.png",
+    "source_grid": [
+      1080,
+      240
+    ],
+    "export_size": [
+      1080,
+      240
+    ]
+  },
+  "odd_tab/ODD-TABLE_levels.png": {
+    "path": "pixel/odd_tab/ODD-TABLE_levels.png",
+    "source_grid": [
+      1200,
+      240
+    ],
+    "export_size": [
+      9600,
+      1920
+    ]
+  },
+  "odd_tab/ODD-TABLE_tokens.png": {
+    "path": "pixel/odd_tab/ODD-TABLE_tokens.png",
+    "source_grid": [
+      1200,
+      240
+    ],
+    "export_size": [
+      1200,
+      240
+    ]
+  },
+  "odd_tab/table_brass.svg": {
+    "path": "pixel/odd_tab/table_brass.png",
+    "source_grid": [
+      120,
+      240
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "options_polished/menu_panel_native.png": {
+    "path": "pixel/options_polished/menu_panel_native.png",
+    "source_grid": [
+      144,
+      252
+    ],
+    "export_size": [
+      144,
+      252
+    ]
+  },
+  "options_polished/menu_panel_painted.png": {
+    "path": "pixel/options_polished/menu_panel_painted.png",
+    "source_grid": [
+      144,
+      252
+    ],
+    "export_size": [
+      1008,
+      1764
+    ]
+  },
+  "pacte_polished/augment_deck_native.svg": {
+    "path": "pixel/pacte_polished/augment_deck_native.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      28,
+      32
+    ]
+  },
+  "pacte_polished/generated_set/augment_deck_detail.png": {
+    "path": "pixel/pacte_polished/generated_set/augment_deck_detail.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      112,
+      128
+    ]
+  },
+  "pacte_polished/generated_set/augment_deck_native.png": {
+    "path": "pixel/pacte_polished/generated_set/augment_deck_native.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      28,
+      32
+    ]
+  },
+  "pacte_polished/generated_set/cards_detail.png": {
+    "path": "pixel/pacte_polished/generated_set/cards_detail.png",
+    "source_grid": [
+      156,
+      61
+    ],
+    "export_size": [
+      624,
+      244
+    ]
+  },
+  "pacte_polished/generated_set/cards_native.png": {
+    "path": "pixel/pacte_polished/generated_set/cards_native.png",
+    "source_grid": [
+      156,
+      61
+    ],
+    "export_size": [
+      156,
+      61
+    ]
+  },
+  "pacte_polished/generated_set/cards_painted.png": {
+    "path": "pixel/pacte_polished/generated_set/cards_painted.png",
+    "source_grid": [
+      156,
+      61
+    ],
+    "export_size": [
+      1248,
+      488
+    ]
+  },
+  "pacte_polished/generated_set/decks_painted.png": {
+    "path": "pixel/pacte_polished/generated_set/decks_painted.png",
+    "source_grid": [
+      56,
+      32
+    ],
+    "export_size": [
+      448,
+      256
+    ]
+  },
+  "pacte_polished/generated_set/items_painted.png": {
+    "path": "pixel/pacte_polished/generated_set/items_painted.png",
+    "source_grid": [
+      72,
+      72
+    ],
+    "export_size": [
+      576,
+      576
+    ]
+  },
+  "pacte_polished/generated_set/power_deck_detail.png": {
+    "path": "pixel/pacte_polished/generated_set/power_deck_detail.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      112,
+      128
+    ]
+  },
+  "pacte_polished/generated_set/power_deck_native.png": {
+    "path": "pixel/pacte_polished/generated_set/power_deck_native.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      28,
+      32
+    ]
+  },
+  "pacte_polished/pacte_scene_native.png": {
+    "path": "pixel/pacte_polished/pacte_scene_native.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "pacte_polished/pacte_scene_painted.png": {
+    "path": "pixel/pacte_polished/pacte_scene_painted.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "pacte_polished/power_deck_native.svg": {
+    "path": "pixel/pacte_polished/power_deck_native.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      28,
+      32
+    ]
+  },
+  "pacte_scene/augment_card.png": {
+    "path": "pixel/pacte_scene/augment_card.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "pacte_scene/augment_deck.png": {
+    "path": "pixel/pacte_scene/augment_deck.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      196,
+      224
+    ]
+  },
+  "pacte_scene/bg.png": {
+    "path": "pixel/pacte_scene/bg.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "pacte_scene/dealer.png": {
+    "path": "pixel/pacte_scene/dealer.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "pacte_scene/dealer_bubble.png": {
+    "path": "pixel/pacte_scene/dealer_bubble.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "pacte_scene/pacte_scene.png": {
+    "path": "pixel/pacte_scene/pacte_scene.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "pacte_scene/pacte_scene_augment_card.png": {
+    "path": "pixel/pacte_scene/pacte_scene_augment_card.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "pacte_scene/pacte_scene_power_card.png": {
+    "path": "pixel/pacte_scene/pacte_scene_power_card.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "pacte_scene/pacte_scene_selected_card.png": {
+    "path": "pixel/pacte_scene/pacte_scene_selected_card.png",
+    "source_grid": [
+      480,
+      320
+    ],
+    "export_size": [
+      480,
+      320
+    ]
+  },
+  "pacte_scene/power_card.png": {
+    "path": "pixel/pacte_scene/power_card.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "pacte_scene/power_deck.png": {
+    "path": "pixel/pacte_scene/power_deck.png",
+    "source_grid": [
+      28,
+      32
+    ],
+    "export_size": [
+      196,
+      224
+    ]
+  },
+  "pacte_scene/proposition.png": {
+    "path": "pixel/pacte_scene/proposition.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "pacte_scene/table.png": {
+    "path": "pixel/pacte_scene/table.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "powers/power_memory.png": {
+    "path": "pixel/powers/power_memory.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "powers/power_reroll.png": {
+    "path": "pixel/powers/power_reroll.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "powers/power_shift.png": {
+    "path": "pixel/powers/power_shift.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "presentation/casino_overscan.png": {
+    "path": "pixel/presentation/casino_overscan.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "sacrifice_ritual.png": {
+    "path": "pixel/sacrifice_ritual.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "SCORES/SCORES.png": {
+    "path": "pixel/SCORES/SCORES.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "SCORES/SCORES_arrows.png": {
+    "path": "pixel/SCORES/SCORES_arrows.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "SCORES/SCORES_symbols.png": {
+    "path": "pixel/SCORES/SCORES_symbols.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "scores_polished/ledger.svg": {
+    "path": "pixel/scores_polished/ledger.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      640,
+      1280
+    ]
+  },
+  "scores_polished/suits.svg": {
+    "path": "pixel/scores_polished/suits.png",
+    "source_grid": [
+      192,
+      32
+    ],
+    "export_size": [
+      768,
+      128
+    ]
+  },
+  "settings_polished/audio_console_native.png": {
+    "path": "pixel/settings_polished/audio_console_native.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "settings_polished/audio_console_painted.png": {
+    "path": "pixel/settings_polished/audio_console_painted.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      960,
+      1920
+    ]
+  },
+  "start_menu/neon_casino_background.png": {
+    "path": "pixel/start_menu/neon_casino_background.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "start_menu/start_menu_augmented symbols.png": {
+    "path": "pixel/start_menu/start_menu_augmented symbols.png",
+    "source_grid": [
+      960,
+      320
+    ],
+    "export_size": [
+      960,
+      320
+    ]
+  },
+  "start_menu/start_menu_augmented_button.png": {
+    "path": "pixel/start_menu/start_menu_augmented_button.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "start_menu/start_menu_options_button.png": {
+    "path": "pixel/start_menu/start_menu_options_button.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "start_menu/start_menu_score_button.png": {
+    "path": "pixel/start_menu/start_menu_score_button.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      320,
+      320
+    ]
+  },
+  "start_menu/start_menu_start_button.png": {
+    "path": "pixel/start_menu/start_menu_start_button.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "start_menu/start_menu_states_sheet.png": {
+    "path": "pixel/start_menu/start_menu_states_sheet.png",
+    "source_grid": [
+      160,
+      640
+    ],
+    "export_size": [
+      1280,
+      5120
+    ]
+  },
+  "start_menu/title.png": {
+    "path": "pixel/start_menu/title.png",
+    "source_grid": [
+      160,
+      320
+    ],
+    "export_size": [
+      160,
+      320
+    ]
+  },
+  "stash_tray.png": {
+    "path": "pixel/stash_tray.png",
+    "source_grid": [
+      48,
+      26
+    ],
+    "export_size": [
+      48,
+      26
+    ]
+  },
+  "symbols/book.png": {
+    "path": "pixel/symbols/book.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/book_32.png": {
+    "path": "pixel/symbols/book_32.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/brain.png": {
+    "path": "pixel/symbols/brain.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/eye.png": {
+    "path": "pixel/symbols/eye.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/flatline.png": {
+    "path": "pixel/symbols/flatline.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/heart x1.png": {
+    "path": "pixel/symbols/heart x1.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/heart x2.png": {
+    "path": "pixel/symbols/heart x2.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/heart x3.png": {
+    "path": "pixel/symbols/heart x3.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/pill.png": {
+    "path": "pixel/symbols/pill.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/premium/brain.png": {
+    "path": "pixel/symbols/premium/brain.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/eye.png": {
+    "path": "pixel/symbols/premium/eye.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/flatline.png": {
+    "path": "pixel/symbols/premium/flatline.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/heart x1.png": {
+    "path": "pixel/symbols/premium/heart x1.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/heart x2.png": {
+    "path": "pixel/symbols/premium/heart x2.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/heart x3.png": {
+    "path": "pixel/symbols/premium/heart x3.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/pill.png": {
+    "path": "pixel/symbols/premium/pill.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/symbols_painted.png": {
+    "path": "pixel/symbols/premium/symbols_painted.png",
+    "source_grid": [
+      72,
+      72
+    ],
+    "export_size": [
+      576,
+      576
+    ]
+  },
+  "symbols/premium/syringe.png": {
+    "path": "pixel/symbols/premium/syringe.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/premium/vial.png": {
+    "path": "pixel/symbols/premium/vial.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "symbols/scalpel_32.png": {
+    "path": "pixel/symbols/scalpel_32.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/syringe.png": {
+    "path": "pixel/symbols/syringe.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "symbols/vial.png": {
+    "path": "pixel/symbols/vial.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "TABLE/TABLES SCORE.png": {
+    "path": "pixel/TABLE/TABLES SCORE.png",
+    "source_grid": [
+      160,
+      280
+    ],
+    "export_size": [
+      1280,
+      2240
+    ]
+  },
+  "TABLE/TABLES SCORE_information.png": {
+    "path": "pixel/TABLE/TABLES SCORE_information.png",
+    "source_grid": [
+      160,
+      280
+    ],
+    "export_size": [
+      1280,
+      2240
+    ]
+  },
+  "ui/arrow_button.png": {
+    "path": "pixel/ui/arrow_button.png",
+    "source_grid": [
+      39,
+      24
+    ],
+    "export_size": [
+      39,
+      24
+    ]
+  },
+  "ui/cancel_button.png": {
+    "path": "pixel/ui/cancel_button.png",
+    "source_grid": [
+      46,
+      23
+    ],
+    "export_size": [
+      46,
+      23
+    ]
+  },
+  "ui/coin.png": {
+    "path": "pixel/ui/coin.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "ui/coin_cumulable.png": {
+    "path": "pixel/ui/coin_cumulable.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "ui/consumable_placeholder.png": {
+    "path": "pixel/ui/consumable_placeholder.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      72,
+      72
+    ]
+  },
+  "ui/dealer_portrait.png": {
+    "path": "pixel/ui/dealer_portrait.png",
+    "source_grid": [
+      32,
+      48
+    ],
+    "export_size": [
+      192,
+      288
+    ]
+  },
+  "ui/EN.png": {
+    "path": "pixel/ui/EN.png",
+    "source_grid": [
+      16,
+      10
+    ],
+    "export_size": [
+      16,
+      10
+    ]
+  },
+  "ui/FR.png": {
+    "path": "pixel/ui/FR.png",
+    "source_grid": [
+      16,
+      10
+    ],
+    "export_size": [
+      16,
+      10
+    ]
+  },
+  "ui/green_button.png": {
+    "path": "pixel/ui/green_button.png",
+    "source_grid": [
+      96,
+      12
+    ],
+    "export_size": [
+      96,
+      12
+    ]
+  },
+  "ui/neon_small_blue_button.png": {
+    "path": "pixel/ui/neon_small_blue_button.png",
+    "source_grid": [
+      45,
+      22
+    ],
+    "export_size": [
+      45,
+      22
+    ]
+  },
+  "ui/neon_small_pink_button.png": {
+    "path": "pixel/ui/neon_small_pink_button.png",
+    "source_grid": [
+      45,
+      22
+    ],
+    "export_size": [
+      45,
+      22
+    ]
+  },
+  "ui/neon_small_yellow_button.png": {
+    "path": "pixel/ui/neon_small_yellow_button.png",
+    "source_grid": [
+      45,
+      22
+    ],
+    "export_size": [
+      45,
+      22
+    ]
+  },
+  "ui/power_coin.png": {
+    "path": "pixel/ui/power_coin.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      32,
+      32
+    ]
+  },
+  "ui/premium/audio_mute_off.svg": {
+    "path": "pixel/ui/premium/audio_mute_off.png",
+    "source_grid": [
+      12,
+      12
+    ],
+    "export_size": [
+      48,
+      48
+    ]
+  },
+  "ui/premium/audio_mute_on.svg": {
+    "path": "pixel/ui/premium/audio_mute_on.png",
+    "source_grid": [
+      12,
+      12
+    ],
+    "export_size": [
+      48,
+      48
+    ]
+  },
+  "ui/premium/audio_slider_hover.svg": {
+    "path": "pixel/ui/premium/audio_slider_hover.png",
+    "source_grid": [
+      9,
+      13
+    ],
+    "export_size": [
+      9,
+      13
+    ]
+  },
+  "ui/premium/audio_slider_normal.svg": {
+    "path": "pixel/ui/premium/audio_slider_normal.png",
+    "source_grid": [
+      9,
+      13
+    ],
+    "export_size": [
+      9,
+      13
+    ]
+  },
+  "ui/premium/buttons_painted.png": {
+    "path": "pixel/ui/premium/buttons_painted.png",
+    "source_grid": [
+      96,
+      60
+    ],
+    "export_size": [
+      768,
+      480
+    ]
+  },
+  "ui/premium/close.png": {
+    "path": "pixel/ui/premium/close.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/coin.png": {
+    "path": "pixel/ui/premium/coin.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/confirm.png": {
+    "path": "pixel/ui/premium/confirm.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/dealer_speech.svg": {
+    "path": "pixel/ui/premium/dealer_speech.png",
+    "source_grid": [
+      100,
+      38
+    ],
+    "export_size": [
+      400,
+      152
+    ]
+  },
+  "ui/premium/disabled.png": {
+    "path": "pixel/ui/premium/disabled.png",
+    "source_grid": [
+      96,
+      20
+    ],
+    "export_size": [
+      96,
+      20
+    ]
+  },
+  "ui/premium/eye_reveal_frame.svg": {
+    "path": "pixel/ui/premium/eye_reveal_frame.png",
+    "source_grid": [
+      32,
+      32
+    ],
+    "export_size": [
+      128,
+      128
+    ]
+  },
+  "ui/premium/flag_en.svg": {
+    "path": "pixel/ui/premium/flag_en.png",
+    "source_grid": [
+      16,
+      10
+    ],
+    "export_size": [
+      16,
+      10
+    ]
+  },
+  "ui/premium/flag_fr.svg": {
+    "path": "pixel/ui/premium/flag_fr.png",
+    "source_grid": [
+      16,
+      10
+    ],
+    "export_size": [
+      16,
+      10
+    ]
+  },
+  "ui/premium/hover.png": {
+    "path": "pixel/ui/premium/hover.png",
+    "source_grid": [
+      96,
+      20
+    ],
+    "export_size": [
+      96,
+      20
+    ]
+  },
+  "ui/premium/icons_painted.png": {
+    "path": "pixel/ui/premium/icons_painted.png",
+    "source_grid": [
+      96,
+      60
+    ],
+    "export_size": [
+      768,
+      480
+    ]
+  },
+  "ui/premium/left.png": {
+    "path": "pixel/ui/premium/left.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/menu_selector_arrow.svg": {
+    "path": "pixel/ui/premium/menu_selector_arrow.png",
+    "source_grid": [
+      12,
+      21
+    ],
+    "export_size": [
+      48,
+      84
+    ]
+  },
+  "ui/premium/menu_selector_brass.svg": {
+    "path": "pixel/ui/premium/menu_selector_brass.png",
+    "source_grid": [
+      144,
+      41
+    ],
+    "export_size": [
+      576,
+      164
+    ]
+  },
+  "ui/premium/menu_title_plate.svg": {
+    "path": "pixel/ui/premium/menu_title_plate.png",
+    "source_grid": [
+      148,
+      66
+    ],
+    "export_size": [
+      592,
+      264
+    ]
+  },
+  "ui/premium/normal.png": {
+    "path": "pixel/ui/premium/normal.png",
+    "source_grid": [
+      96,
+      20
+    ],
+    "export_size": [
+      96,
+      20
+    ]
+  },
+  "ui/premium/pressed.png": {
+    "path": "pixel/ui/premium/pressed.png",
+    "source_grid": [
+      96,
+      20
+    ],
+    "export_size": [
+      96,
+      20
+    ]
+  },
+  "ui/premium/right.png": {
+    "path": "pixel/ui/premium/right.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/route_reroll_brass.svg": {
+    "path": "pixel/ui/premium/route_reroll_brass.png",
+    "source_grid": [
+      320,
+      320
+    ],
+    "export_size": [
+      1280,
+      1280
+    ]
+  },
+  "ui/premium/settings.png": {
+    "path": "pixel/ui/premium/settings.png",
+    "source_grid": [
+      16,
+      16
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/premium/shop_reroll_brass.svg": {
+    "path": "pixel/ui/premium/shop_reroll_brass.png",
+    "source_grid": [
+      62,
+      27
+    ],
+    "export_size": [
+      248,
+      108
+    ]
+  },
+  "ui/premium/stash_tray.svg": {
+    "path": "pixel/ui/premium/stash_tray.png",
+    "source_grid": [
+      48,
+      26
+    ],
+    "export_size": [
+      384,
+      208
+    ]
+  },
+  "ui/premium/symbol_picker_brass.svg": {
+    "path": "pixel/ui/premium/symbol_picker_brass.png",
+    "source_grid": [
+      154,
+      52
+    ],
+    "export_size": [
+      616,
+      208
+    ]
+  },
+  "ui/red_button.png": {
+    "path": "pixel/ui/red_button.png",
+    "source_grid": [
+      96,
+      12
+    ],
+    "export_size": [
+      96,
+      12
+    ]
+  },
+  "ui/sakura_petal.png": {
+    "path": "pixel/ui/sakura_petal.png",
+    "source_grid": [
+      8,
+      8
+    ],
+    "export_size": [
+      16,
+      16
+    ]
+  },
+  "ui/setting_icon.png": {
+    "path": "pixel/ui/setting_icon.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      72,
+      72
+    ]
+  },
+  "ui/settings.png": {
+    "path": "pixel/ui/settings.png",
+    "source_grid": [
+      50,
+      23
+    ],
+    "export_size": [
+      50,
+      23
+    ]
+  },
+  "ui/speech_bubble_normal.png": {
+    "path": "pixel/ui/speech_bubble_normal.png",
+    "source_grid": [
+      100,
+      38
+    ],
+    "export_size": [
+      100,
+      38
+    ]
+  },
+  "ui/standard_bubble_text.png": {
+    "path": "pixel/ui/standard_bubble_text.png",
+    "source_grid": [
+      100,
+      38
+    ],
+    "export_size": [
+      100,
+      38
+    ]
+  },
+  "ui/stash_tray.png": {
+    "path": "pixel/ui/stash_tray.png",
+    "source_grid": [
+      48,
+      26
+    ],
+    "export_size": [
+      192,
+      104
+    ]
+  },
+  "ui/symbol_chosing.png": {
+    "path": "pixel/ui/symbol_chosing.png",
+    "source_grid": [
+      154,
+      52
+    ],
+    "export_size": [
+      616,
+      208
+    ]
+  },
+  "ui/symbol_chosing_unsclaed.png": {
+    "path": "pixel/ui/symbol_chosing_unsclaed.png",
+    "source_grid": [
+      154,
+      52
+    ],
+    "export_size": [
+      616,
+      208
+    ]
+  },
+  "ui/valid_button.png": {
+    "path": "pixel/ui/valid_button.png",
+    "source_grid": [
+      44,
+      19
+    ],
+    "export_size": [
+      44,
+      19
+    ]
+  },
+  "ui/vision.png": {
+    "path": "pixel/ui/vision.png",
+    "source_grid": [
+      24,
+      24
+    ],
+    "export_size": [
+      24,
+      24
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_00.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_00.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_01.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_01.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_02.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_02.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_03.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_03.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_04.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_04.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_05.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_05.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_06.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_06.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_07.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_07.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_08.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_08.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_09.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_09.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_10.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_10.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_11.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_11.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_12.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_12.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_13.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_13.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_brain_14.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_brain_14.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_00.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_00.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_01.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_01.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_02.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_02.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_03.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_03.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_04.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_04.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_05.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_05.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_06.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_06.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_07.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_07.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_08.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_08.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_09.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_09.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_10.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_10.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_11.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_11.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_bubbles_12.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_bubbles_12.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_00.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_00.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_01.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_01.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_02.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_02.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_03.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_03.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_04.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_04.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_05.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_05.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_06.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_06.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_07.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_07.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_08.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_08.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_09.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_09.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_10.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_10.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_11.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_11.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_12.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_12.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_13.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_13.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_brain_overlay_14.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_brain_overlay_14.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_00.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_00.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_01.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_01.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_02.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_02.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_03.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_03.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_04.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_04.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_05.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_05.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_06.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_06.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_07.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_07.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_08.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_08.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_09.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_09.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_10.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_10.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_11.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_11.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_eye_upgrades_12.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_eye_upgrades_12.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_00.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_00.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_01.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_01.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_02.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_02.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_03.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_03.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_04.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_04.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_05.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_05.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_06.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_06.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_07.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_07.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_08.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_08.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_09.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_09.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_10.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_10.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_11.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_11.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_12.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_12.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_13.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_13.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/split/upgrades_scene_memory_brain_overlay_14.png": {
+    "path": "pixel/upgrade_scene/split/upgrades_scene_memory_brain_overlay_14.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_bg.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_bg.png",
+    "source_grid": [
+      640,
+      240
+    ],
+    "export_size": [
+      5120,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_brain.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_brain.png",
+    "source_grid": [
+      2400,
+      240
+    ],
+    "export_size": [
+      19200,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_bubbles.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_bubbles.png",
+    "source_grid": [
+      2080,
+      240
+    ],
+    "export_size": [
+      16640,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_buy_stele.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_buy_stele.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_cables.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_cables.png",
+    "source_grid": [
+      1760,
+      240
+    ],
+    "export_size": [
+      14080,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_eye_brain_overlay.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_eye_brain_overlay.png",
+    "source_grid": [
+      2400,
+      240
+    ],
+    "export_size": [
+      19200,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_eye_buttons.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_eye_buttons.png",
+    "source_grid": [
+      480,
+      240
+    ],
+    "export_size": [
+      3840,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_eye_upgrades.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_eye_upgrades.png",
+    "source_grid": [
+      2080,
+      240
+    ],
+    "export_size": [
+      16640,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_LAB_SIGN.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_LAB_SIGN.png",
+    "source_grid": [
+      320,
+      240
+    ],
+    "export_size": [
+      2560,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_layer.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_layer.png",
+    "source_grid": [
+      160,
+      240
+    ],
+    "export_size": [
+      1280,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_leak.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_leak.png",
+    "source_grid": [
+      1760,
+      240
+    ],
+    "export_size": [
+      14080,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_memory_brain_overlay.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_memory_brain_overlay.png",
+    "source_grid": [
+      2400,
+      240
+    ],
+    "export_size": [
+      19200,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_memory_buttons.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_memory_buttons.png",
+    "source_grid": [
+      480,
+      240
+    ],
+    "export_size": [
+      3840,
+      1920
+    ]
+  },
+  "upgrade_scene/upgrades_scene_memory_upgrades.png": {
+    "path": "pixel/upgrade_scene/upgrades_scene_memory_upgrades.png",
+    "source_grid": [
+      1760,
+      240
+    ],
+    "export_size": [
+      14080,
+      1920
+    ]
+  }
+}

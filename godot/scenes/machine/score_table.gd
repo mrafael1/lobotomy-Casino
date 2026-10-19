@@ -136,7 +136,7 @@ func open() -> void:
 	var art := TextureRect.new()
 	art.name = "TableArt"
 	art.texture = _view.texture(ART, true)
-	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.size = Vector2(SRC_W, SRC_H)
@@ -271,16 +271,7 @@ func close_table() -> void:
 ## phases like a casino sign (issue #119 feedback). Drawn between the art and
 ## the value labels; the looping tween is killed on close.
 func _spawn_bulb_glows() -> void:
-	var grad := Gradient.new()
-	grad.set_color(0, Color(1.0, 0.92, 0.45, 0.85))
-	grad.set_color(1, Color(1.0, 0.82, 0.25, 0.0))
-	var glow_tex := GradientTexture2D.new()
-	glow_tex.gradient = grad
-	glow_tex.fill = GradientTexture2D.FILL_RADIAL
-	glow_tex.fill_from = Vector2(0.5, 0.5)
-	glow_tex.fill_to = Vector2(0.5, 0.0)
-	glow_tex.width = 32
-	glow_tex.height = 32
+	var glow_tex := PixelDraw.radial_texture(32, Color(1.0, 0.92, 0.45, 0.85))
 	var add_material := CanvasItemMaterial.new()
 	add_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 
@@ -329,6 +320,7 @@ func _make_i_button(node_name: String, icon_top_left: Vector2) -> Button:
 	b.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
 	b.add_theme_stylebox_override("disabled", StyleBoxEmpty.new())
 	var focus := StyleBoxFlat.new()
+	focus.anti_aliasing = false
 	focus.draw_center = false
 	focus.border_color = Color(0.0, 0.9, 1.0)
 	focus.set_border_width_all(1)
@@ -340,7 +332,7 @@ func _make_i_button(node_name: String, icon_top_left: Vector2) -> Button:
 	var icon := TextureRect.new()
 	icon.name = "InfoIcon"
 	icon.texture = atlas
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_SCALE
 	icon.position = Vector2(3.0, 3.0)
@@ -410,6 +402,7 @@ func show_pct_popup(symbol_id: String, button: Button) -> void:
 	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x
 	var popup_size := Vector2(maxf(text_width + 8.0, 24.0), 14.0)
 	var bg_style := StyleBoxFlat.new()
+	bg_style.anti_aliasing = false
 	# Deep black body for flatline (same as the odds table's bubble) so the
 	# dark-red contour and text stay legible.
 	bg_style.bg_color = Color(0.0, 0.0, 0.0, 0.97) if symbol_id == "flatline" \
@@ -493,6 +486,7 @@ func show_info_popup(symbol_id: String, button: Button) -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 5).x)
 	# Rounded box: dark panel with a thin gold outline and soft corners.
 	var bg_style := StyleBoxFlat.new()
+	bg_style.anti_aliasing = false
 	bg_style.bg_color = Color(0.045, 0.035, 0.075, 0.97)
 	bg_style.border_color = Color(1.0, 0.82, 0.28)
 	bg_style.set_border_width_all(1)

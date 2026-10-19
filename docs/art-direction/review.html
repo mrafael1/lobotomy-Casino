@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lobotomy Casino — machine material review</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #101416; color: #eadfc6; font: 15px/1.5 system-ui, sans-serif; }
+  header { padding: 20px 24px; position: sticky; top: 0; background: #101416f5; z-index: 1; border-bottom: 1px solid #38423e; }
+  h1 { margin: 0 0 6px; font-size: 20px; }
+  p { margin: 6px 0; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  button, a { color: #eadfc6; }
+  button { padding: 7px 12px; border: 1px solid #52675e; border-radius: 4px; background: #222b27; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: #a4dfbd; background: #34483d; }
+  main { padding: 20px 24px; overflow-x: auto; }
+  img { display: block; max-width: none; }
+  .labels { display: flex; margin-bottom: 8px; font-weight: 600; }
+  .labels span { width: 50%; }
+  video { display: block; width: 800px; height: 800px; }
+  [hidden] { display: none !important; }
+</style>
+<header>
+  <h1>Machine material pass</h1>
+  <p>Left: preserved working-tree baseline. Right: selective material repaint in the same game.</p>
+  <p>Images display at one CSS pixel per framebuffer pixel. Scroll horizontally to compare large displays. No layout-grid upscaling.</p>
+  <nav aria-label="Comparison state">
+    <button data-shot="400x800" aria-pressed="true">400 × 800</button>
+    <button data-shot="540x960" aria-pressed="false">540 × 960</button>
+    <button data-shot="450x1000" aria-pressed="false">450 × 1000</button>
+    <button data-shot="800x1000" aria-pressed="false">800 × 1000</button>
+    <button data-shot="heat-x2" aria-pressed="false">Heat x2</button>
+    <button data-shot="heat-x3" aria-pressed="false">Heat x3</button>
+    <button data-shot="loss-x3" aria-pressed="false">Loss warning</button>
+    <button data-shot="targeting" aria-pressed="false">Power targeting</button>
+    <button data-shot="motion" aria-pressed="false">Motion</button>
+  </nav>
+</header>
+<main>
+  <div class="labels" style="width:800px"><span>BEFORE</span><span>AFTER</span></div>
+  <img id="comparison" src="machine-before-after-400x800.png" width="800" height="800" alt="Before and after machine at 400 by 800 display pixels each">
+  <video hidden controls loop preload="metadata" aria-label="Synchronized baseline and material pass in motion">
+    <source src="machine-motion-before-after.mp4" type="video/mp4">
+  </video>
+  <p id="note">Seed 170316. Original hitboxes, source aperture alpha, animation layers and timing retained.</p>
+  <p><a href="README.md">Read the art-direction findings, source measurements and validation.</a></p>
+</main>
+<script>
+  const img = document.querySelector('#comparison');
+  const video = document.querySelector('video');
+  const labels = document.querySelector('.labels');
+  const note = document.querySelector('#note');
+  document.querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+    document.querySelectorAll('button').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    const state = button.dataset.shot;
+    const motion = state === 'motion';
+    img.hidden = motion;
+    video.hidden = !motion;
+    video.pause();
+    if (motion) {
+      labels.style.width = '800px';
+      note.textContent = '8 seconds at 30 fps: idle, a real paid spin, x2, x3, then loss warning. Controls and item layers stay live.';
+    } else {
+      const sized = state.includes('x') && /^\d/.test(state);
+      const [width, height] = sized ? state.split('x').map(Number) : [400, 800];
+      img.src = sized ? `machine-before-after-${state}.png` : `machine-${state}.png`;
+      img.width = width * 2;
+      img.height = height;
+      img.alt = `Baseline left and material pass right, ${state}, ${width} by ${height} pixels each`;
+      labels.style.width = `${width * 2}px`;
+      note.textContent = 'Seed 170316. Original hitboxes, source aperture alpha, animation layers and timing retained.';
+    }
+  }));
+</script>
+</html>

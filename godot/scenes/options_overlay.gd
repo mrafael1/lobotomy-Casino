@@ -196,6 +196,7 @@ func _style_close_button(button: Button) -> void:
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		button.add_theme_stylebox_override(String(state), StyleBoxEmpty.new())
 	var focus_style := StyleBoxFlat.new()
+	focus_style.anti_aliasing = false
 	focus_style.bg_color = Color.TRANSPARENT
 	focus_style.border_color = NEON_CYAN
 	focus_style.set_border_width_all(1)

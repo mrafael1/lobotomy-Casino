@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scenes/wealth_ending_overlay.gd" id="1_script"]
-[ext_resource type="FontFile" path="res://assets/font/DTM-Sans.otf" id="2_font"]
+[ext_resource type="FontFile" path="res://assets/font/pixel/casino.fnt" id="2_font"]
 
 [node name="WealthEndingOverlay" type="Control"]
 layout_mode = 3

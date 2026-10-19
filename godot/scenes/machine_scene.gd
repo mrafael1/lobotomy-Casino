@@ -25,7 +25,6 @@ const MACHINE_MOTION_NODES := [
 ]
 const HUD_CORNER_INSET := 9.0 # top-corner buttons are pulled this far off both edges
 const MACHINE_ART_TEXTURE_FILTER := CanvasItem.TEXTURE_FILTER_NEAREST
-const MACHINE_MATERIALS := preload("res://assets/shaders/machine_materials.gdshader")
 
 # Geometry measured from the authored machine art (source px).
 const REEL_CELL_CENTERS := [43.5, 75.5, 107.5]
@@ -812,8 +811,8 @@ func _ready() -> void:
 	_reel_blur.build_spin_strips("machine_polished/reel_motion.svg")
 	_reel_blur.build_covers("machine_polished/reel_drums.svg")
 	_reel_symbols.build()
-	var cabinet := _build_full_canvas_sprite("machine_polished/cabinet-painted.png")
-	cabinet.material = preload("res://assets/shaders/painted_cabinet.tres")
+	# Code-authored cabinet; controls and moving layers remain separate.
+	_build_full_canvas_sprite("machine_polished/cabinet_material_pass.png")
 	_build_full_canvas_sprite("machine_polished/reel_housing.svg")
 	_build_tv_indicators()
 	_build_machine_control_art()
@@ -832,7 +831,6 @@ func _ready() -> void:
 	RunStateStore.state_changed.connect(_update_hud)
 	_enter_run()
 	_augments.build_pacte_badges()
-	_finish_machine_materials(self)
 	_init_burst_tracking()
 	# A card unlocked during the run interrupts play until it is acknowledged
 	# (issue #52); the popup blocks the machine behind its dimmed background. It
@@ -1040,7 +1038,7 @@ func _authored_control(name: String) -> Control:
 	return get_node_or_null(name) as Control
 
 func _full_canvas_name(rel: String) -> String:
-	if rel == "machine_polished/cabinet-painted.png":
+	if rel == "machine_polished/cabinet_material_pass.png":
 		return "Cabinet"
 	if rel.ends_with("reel_drums.svg"):
 		return "ReelBacking"
@@ -1114,8 +1112,8 @@ func _configure_full_canvas_sprite(spr: Sprite2D, tex: Texture2D, apply_transfor
 		spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / float(tex.get_width()), SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
-	if tex.resource_path.ends_with("cabinet-painted.png") or tex.resource_path.ends_with("reel_housing.svg"):
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if tex.resource_path.ends_with("cabinet_material_pass.png") or tex.resource_path.ends_with("reel_housing.svg"):
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, frame: int, apply_transform := true) -> void:
 	spr.texture = tex
@@ -1125,33 +1123,13 @@ func _configure_full_canvas_sheet(spr: Sprite2D, tex: Texture2D, hframes: int, f
 	var frame_w := float(tex.get_width()) / float(hframes)
 	if apply_transform:
 		spr.position = Vector2.ZERO
-		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
+	spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
 	spr.texture_filter = MACHINE_ART_TEXTURE_FILTER
 	if tex.resource_path.contains("machine_polished/") and POWER_IDS.has(tex.resource_path.get_file().get_basename()):
 		spr.scale = Vector2(SRC_W / frame_w, SRC_H / float(tex.get_height()))
-		spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-# Gaussian blur for the backdrop (5x5 taps spread by blur_size source px): the
-# hall reads as out-of-focus scenery so the cabinet pops in front of it.
-const NEON_BG_BLUR_SHADER := "
-shader_type canvas_item;
-uniform float blur_size : hint_range(0.0, 16.0) = 6.0;
-void fragment() {
-	vec2 px = TEXTURE_PIXEL_SIZE * blur_size;
-	vec4 sum = vec4(0.0);
-	float wsum = 0.0;
-	for (int x = -2; x <= 2; x++) {
-		for (int y = -2; y <= 2; y++) {
-			float w = exp(-float(x * x + y * y) / 4.0);
-			sum += texture(TEXTURE, UV + vec2(float(x), float(y)) * px) * w;
-			wsum += w;
-		}
-	}
-	COLOR = (sum / wsum) * vec4(0.46, 0.43, 0.50, 1.0);
-}"
-
-## The shared neon casino backdrop fills the canvas behind the cabinet (blurred,
-## so the machine sits in focus inside the same hall as the start menu).
+## Quiet pixel backdrop behind the cabinet.
 func _build_neon_background() -> void:
 	var tex := _load_texture("start_menu/neon_casino_background.png", true)
 	if tex == null:
@@ -1162,12 +1140,8 @@ func _build_neon_background() -> void:
 	spr.centered = false
 	spr.position = Vector2.ZERO
 	spr.scale = Vector2(SRC_W / tex.get_width(), SRC_H / tex.get_height())
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	var shader := Shader.new()
-	shader.code = NEON_BG_BLUR_SHADER
-	var mat := ShaderMaterial.new()
-	mat.shader = shader
-	spr.material = mat
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spr.modulate = Color(0.46, 0.43, 0.50, 1.0)
 	add_child(spr)
 	# The cabinet sprites are authored scene children, so a code-added node lands
 	# after (= above) them; force the backdrop to the very back of the tree.
@@ -1194,25 +1168,6 @@ func _build_full_canvas_sprite(rel: String) -> Sprite2D:
 		add_child(spr)
 	_configure_full_canvas_sprite(spr, tex, not authored)
 	return spr
-
-## A shared finish for the legacy moving hardware. Power icons and gameplay
-## overlays keep their own state colours; authored animation frames stay intact.
-func _finish_machine_materials(node: Node) -> void:
-	if node is Sprite2D:
-		var sprite := node as Sprite2D
-		if sprite.texture != null and sprite.texture.resource_path.get_file() in [
-				"neon_machine_jackpot.png",
-				"neon_machine_power_bar.png", "health_bar.png", "augments.png",
-				"wealth_bar.png", "wealth_cases.png", "target_goals.png"]:
-			var finish := ShaderMaterial.new()
-			finish.shader = MACHINE_MATERIALS
-			finish.set_shader_parameter("phosphor_text",
-				sprite.texture.resource_path.get_file() == "target_goals.png")
-			sprite.material = finish
-			if sprite.texture.resource_path.get_file() == "wealth_bar.png":
-				sprite.material = preload("res://assets/shaders/painted_odometer.tres")
-	for child in node.get_children():
-		_finish_machine_materials(child)
 
 func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Sprite2D:
 	var tex := _load_texture(rel, true)
@@ -1414,6 +1369,7 @@ func _build_reserve_glow() -> void:
 	_reserve_glow_sprite.size = Vector2(31, 21)
 	_reserve_glow_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
 	style.bg_color = Color.TRANSPARENT
 	style.border_color = Color.WHITE
 	style.set_border_width_all(1)
@@ -1637,6 +1593,7 @@ func _make_info_bubble(node_name: String, source: String, border: Color,
 	# Purely informational, and it sits over live controls — it must never eat a tap.
 	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bg_style := StyleBoxFlat.new()
+	bg_style.anti_aliasing = false
 	bg_style.bg_color = INFO_BUBBLE_BG
 	bg_style.border_color = border
 	bg_style.set_border_width_all(1)
@@ -2174,10 +2131,10 @@ func _build_spin_button() -> void:
 	_spin_button.flat = false
 	_spin_button.focus_mode = Control.FOCUS_ALL
 	_spin_button.tooltip_text = "SPIN"
-	_spin_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_spin_button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	for state in ["normal", "pressed", "disabled", "hover", "focus"]:
 		var style := StyleBoxTexture.new()
-		style.texture = load("res://assets/images/machine_polished/preview_spin_%s.png" % state)
+		style.texture = Assets.texture("machine_polished/preview_spin_%s.png" % state)
 		_spin_button.add_theme_stylebox_override(state, style)
 
 # ── run loop ──────────────────────────────────────────────────────────────────────
@@ -3763,7 +3720,7 @@ func _refresh_controls() -> void:
 		var icon: TextureRect = stash_icons[i]
 		if i < slots.size():
 			icon.texture = _icon_for(slots[i])
-			icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			icon.modulate = Color.WHITE if usable else Color(1.0, 1.0, 1.0, 0.4)
 		else:
 			icon.texture = null # empty slot draws nothing
@@ -4736,7 +4693,7 @@ func _play_tea_flight(slot_index: int) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.size = Vector2(12.0, 12.0)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.z_index = 130
 	icon.add_to_group(WEALTH_TRANSIENT_FX_GROUP)

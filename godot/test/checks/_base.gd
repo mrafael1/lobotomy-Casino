@@ -39,7 +39,7 @@ func create_timer(seconds: float) -> SceneTreeTimer:
 func _check_settings_icon(button: TextureButton, scene_name: String, failures: Array) -> void:
 	if button == null:
 		return
-	const asset_path := "res://assets/images/ui/premium/settings.png"
+	const asset_path := "res://assets/images/pixel/ui/premium/settings.png"
 	if not ResourceLoader.exists(asset_path):
 		failures.append("options: %s is missing the new setting icon" % scene_name)
 		return
@@ -200,7 +200,7 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 				or not painted_shop.texture.resource_path.ends_with(
 					"dealer_shop_polished/pre_dealer_shop_painted.png") \
 				or painted_shop.position != Vector2.ZERO \
-				or painted_shop.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+				or painted_shop.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST \
 				or not (painted_shop.scale * painted_shop.texture.get_size()).is_equal_approx(Vector2(160, 320)):
 			failures.append("issue55: pre-run dealer shop is not using its painted native master")
 	if not dealer.has_method("_native_canvas_origin") \
@@ -258,7 +258,7 @@ func _check_dealer_scene_revamp_55(dealer: Node, failures: Array) -> void:
 		"dealer_shop/machine.png",
 		"dealer_shop/reroll.png",
 	]:
-		if not ResourceLoader.exists("res://assets/images/" + String(rel)):
+		if not ResourceLoader.exists(Assets.image_path(String(rel))):
 			failures.append("issue55: %s not in godot/assets/images — missing from exported builds (APK)" % rel)
 	var start_button := dealer.get_node_or_null("StartButton") as Button
 	var machine_art := dealer.get_node_or_null("MachineButtonArt") as Sprite2D
@@ -314,7 +314,7 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 		"dealer_shop/reroll.png": Vector2i(400, 380),
 	}
 	for rel in expected_sizes:
-		var path := "res://assets/images/" + String(rel)
+		var path := Assets.image_path(String(rel))
 		if not ResourceLoader.exists(path):
 			failures.append("dealer shop: missing native art %s" % rel)
 			continue
@@ -337,7 +337,7 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 			expected_background = "dealer_shop_polished/pre_dealer_shop_painted.png"
 			expected_position = Vector2.ZERO
 			expected_scale = Vector2(160, 320) / background.texture.get_size()
-			expected_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			expected_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		if not background.texture.resource_path.ends_with(expected_background) \
 				or background.position != expected_position \
 				or not background.scale.is_equal_approx(expected_scale) \
@@ -359,7 +359,7 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 			failures.append("dealer shop: %s is not a nearest-neighbor 2-frame sheet" % art_name)
 			continue
 		var uses_compact_reroll: bool = art_name == "RerollButtonArt" \
-				and art.texture.resource_path.ends_with("ui/premium/shop_reroll_brass.svg")
+				and art.texture.resource_path.ends_with("ui/premium/shop_reroll_brass.png")
 		var expected_size := Vector2i(248, 108) if uses_compact_reroll \
 				else Vector2i(400, 380)
 		var expected_position := Vector2(1, 77) if uses_compact_reroll \
@@ -370,7 +370,7 @@ func _check_dealer_shop_light_art(dealer: Node, failures: Array) -> void:
 				or art.scale != expected_scale:
 			failures.append("dealer shop: %s is not centred at its authored source scale" % art_name)
 		var expected_asset := "dealer_shop/machine.png" if art_name == "MachineButtonArt" \
-				else ("ui/premium/shop_reroll_brass.svg" if uses_compact_reroll else "dealer_shop/reroll.png")
+				else ("ui/premium/shop_reroll_brass.png" if uses_compact_reroll else "dealer_shop/reroll.png")
 		if not art.texture.resource_path.ends_with(expected_asset):
 			failures.append("dealer shop: %s is using the wrong native asset" % art_name)
 
@@ -597,7 +597,7 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 	var frame := panel.get_node_or_null("Frame") as TextureRect
 	var background := panel.get_node_or_null("Background") as Control
 	if expects_frame:
-		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_picker_brass.svg":
+		if frame == null or frame.texture == null or frame.texture.resource_path.get_file() != "symbol_picker_brass.png":
 			failures.append("%s picker did not use the symbol choosing art" % prefix)
 		if background == null or background.visible:
 			failures.append("%s picker should not draw a generated fill behind the symbol choosing art" % prefix)
@@ -635,7 +635,7 @@ func _check_symbol_picker_panel_63(picker: Control, expected_symbols: int, expec
 		if maxf(rendered_size.x, rendered_size.y) < 15.5:
 			failures.append("%s picker icon is too small: %s" % [prefix, rendered_size])
 			break
-		if icon.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		if icon.texture_filter != CanvasItem.TEXTURE_FILTER_NEAREST:
 			failures.append("%s picker icon should use reel-style mipmapped filtering" % prefix)
 			break
 

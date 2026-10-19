@@ -723,7 +723,8 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 	for expected_progress in [3, 8, 12]:
 		run_store.dealerCountdown = 12 - int(expected_progress)
 		machine._refresh_dealer_countdown()
-		for intermediate_frame in range(previous_progress + 1, int(expected_progress) + 1):
+		var expected_frame := roundi(float(expected_progress) / 12.0 * float(DealerBar.FRAME_COUNT - 1))
+		for intermediate_frame in range(previous_progress + 1, expected_frame + 1):
 			machine._dealer_bar.step_progress(
 				float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 			if dealer_bar == null or dealer_bar.frame != intermediate_frame:
@@ -733,7 +734,7 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 					or dealer_overlay_2 == null or dealer_overlay_2.frame != mini(intermediate_frame, dealer_overlay_2.hframes - 1) \
 					or dealer_overlay_3 == null or dealer_overlay_3.frame != mini(intermediate_frame, dealer_overlay_3.hframes - 1):
 				failures.append("issue155: dealer overlays did not follow intermediate frame %d" % intermediate_frame)
-		previous_progress = int(expected_progress)
+		previous_progress = expected_frame
 	# A two-step spin follows the same path instead of jumping directly to frame 2.
 	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
@@ -744,7 +745,7 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
 		if dealer_bar == null or dealer_bar.frame != int(intermediate_frame):
 			failures.append("issue155: two-step dealer bar transition skipped frame %d" % int(intermediate_frame))
-	# PR #169: the authored bar spans all 13 frames across the COMPLETE cycle, whatever
+	# PR #169: the authored bar spans all 11 frames across the COMPLETE cycle, whatever
 	# its length. Club used to be what made the cycle longer (issue #111 redesign moved
 	# it onto prices), so the coverage now drives dealer_countdown_start directly — the
 	# one knob that still changes the cycle the bar has to scale itself against.
@@ -756,21 +757,21 @@ func _check_compulsion_multiplier_76(machine: Node, run_store: Node, failures: A
 		failures.append("pr169: dealer bar did not reset to frame 0 at a 24-step countdown")
 	run_store.dealerCountdown = 12
 	machine._refresh_dealer_countdown()
-	if machine._dealer_bar.target_frame() != 6:
-		failures.append("pr169: 24-step dealer bar midpoint was not frame 6")
-	for _step in 6:
+	if machine._dealer_bar.target_frame() != 5:
+		failures.append("pr169: 24-step dealer bar midpoint was not frame 5")
+	for _step in 5:
 		machine._dealer_bar.step_progress(
 			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
-	if dealer_bar == null or dealer_bar.frame != 6:
-		failures.append("pr169: 24-step dealer bar did not reach frame 6 at countdown 12")
+	if dealer_bar == null or dealer_bar.frame != 5:
+		failures.append("pr169: 24-step dealer bar did not reach frame 5 at countdown 12")
 	run_store.dealerCountdown = 0
 	machine._refresh_dealer_countdown()
-	if machine._dealer_bar.target_frame() != 12:
-		failures.append("pr169: 24-step dealer bar did not target frame 12 at countdown 0")
-	for _step in 6:
+	if machine._dealer_bar.target_frame() != 10:
+		failures.append("pr169: 24-step dealer bar did not target frame 10 at countdown 0")
+	for _step in 5:
 		machine._dealer_bar.step_progress(
 			float(DealerBar.PROGRESS_FRAME_TIME) + 0.001)
-	if dealer_bar == null or dealer_bar.frame != 12:
+	if dealer_bar == null or dealer_bar.frame != 10:
 		failures.append("pr169: 24-step dealer bar did not reach its final frame")
 	run_store.dealer_countdown_start = previous_countdown_start
 	run_store.dealerCountdown = 12

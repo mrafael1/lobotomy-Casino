@@ -173,8 +173,8 @@ func _draw() -> void:
 	if not Engine.is_editor_hint() or not show_drop_hitbox_in_editor:
 		return
 	var rect := _dealer_hit_rect()
-	draw_rect(rect, Color(0.13, 0.77, 0.37, 0.18), true)
-	draw_rect(rect, Color(0.13, 0.77, 0.37, 0.85), false, 1.0)
+	PixelDraw.rect(self, rect, Color(0.13, 0.77, 0.37, 0.18), true)
+	PixelDraw.rect(self, rect, Color(0.13, 0.77, 0.37, 0.85), false, 1.0)
 
 ## `forced_id` (joker runs, issue #111) turns the visit into a delivery instead of an
 ## offer: the buttons never appear and the dealer buys and uses the item himself.
@@ -732,7 +732,7 @@ func _make_item_icon_on(parent: Control, id: String, kind: String, pos: Vector2,
 	icon.size = Vector2(icon_size, icon_size)
 	icon.pivot_offset = Vector2(icon_size, icon_size) * 0.5
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if kind == "augment" or (icon.texture != null and icon.texture.resource_path.contains("/items/generated/")) else CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if kind == "augment" or (icon.texture != null and icon.texture.resource_path.contains("/items/generated/")) else CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.mouse_filter = Control.MOUSE_FILTER_STOP
 	icon.gui_input.connect(_on_offer_icon_input.bind(id, kind))
 	parent.add_child(icon)

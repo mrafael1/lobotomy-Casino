@@ -262,7 +262,7 @@ func refresh(callout_active: bool) -> void:
 		s["boost"] = boost
 		slot.position = SLOT_POSITIONS[col]
 		(s["icon"] as TextureRect).texture = tex
-		(s["icon"] as TextureRect).texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+		(s["icon"] as TextureRect).texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST \
 			if tex.resource_path.contains("/items/generated/") else CanvasItem.TEXTURE_FILTER_NEAREST
 		var cn: Label = s["count"]
 		# Just the number of turns left, coloured by what the item is doing right now:

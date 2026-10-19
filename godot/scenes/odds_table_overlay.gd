@@ -368,7 +368,7 @@ func _add_symbol_icon(symbol_id: String, center: Vector2) -> Sprite2D:
 	icon.scale = Vector2.ONE \
 		* (ODD_ICON_SIZE * CANVAS_FIT / float(maxi(tex.get_width(), tex.get_height())))
 	icon.set_meta("rest_scale", icon.scale)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.z_index = 2
 	add_child(icon)
 	return icon
@@ -409,7 +409,7 @@ func _build_info_button(symbol_id: String, level_rect: Rect2) -> Button:
 		icon.position = center
 		icon.scale = Vector2.ONE * (INFO_ICON_SIZE * CANVAS_FIT / INFO_ICON_SRC.size.x)
 		icon.set_meta("rest_scale", icon.scale)
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon.z_index = 2
 		add_child(icon)
 	var b := Button.new()
@@ -516,6 +516,7 @@ func _make_pct_bubble(text: String, symbol_id: String) -> Control:
 	var popup_size := Vector2(maxf(text_width + 8.0, 24.0), 14.0)
 
 	var bg_style := StyleBoxFlat.new()
+	bg_style.anti_aliasing = false
 	# Flatline's bubble goes deep black so its dark-red contour and text pop;
 	# the other symbols keep the shared dark-violet panel.
 	bg_style.bg_color = Color(0.0, 0.0, 0.0, 0.97) if symbol_id == "flatline" \

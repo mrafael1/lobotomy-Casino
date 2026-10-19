@@ -343,4 +343,4 @@ func _draw() -> void:
 	# move is easy to miss against the neon behind it.
 	var phase := sin(_ring_time / RING_PULSE_TIME * TAU) * 0.5 + 0.5
 	var ring := _ring_rect.grow(phase * 1.5)
-	draw_rect(ring, Color(RING_COLOR, 0.35 + 0.45 * phase), false, RING_WIDTH)
+	PixelDraw.rect(self, ring, Color(RING_COLOR, 0.35 + 0.45 * phase), false, RING_WIDTH)

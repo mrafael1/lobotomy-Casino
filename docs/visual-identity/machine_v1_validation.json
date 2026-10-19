@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "selected": "v1",
+  "assembled_states": 23,
+  "cropped_sprites_and_masks": 345,
+  "apertures": "transparent in cabinet/housing/frame passes",
+  "assembly": "all exported state stacks match direct recipe rendering; fixtures restore the exact approved v1",
+  "components": {
+    "powers": 7,
+    "power_states_per_tier": 5,
+    "tiers": 3,
+    "symbols": 10,
+    "items": 9,
+    "augments": 14
+  },
+  "pixel_grid": "640x1280 source / 160x320 safe layout; fixed palette, binary alpha",
+  "touch_geometry": "within safe area",
+  "deterministic_rebuild": "byte-identical",
+  "gameplay_or_live_scene_changes": false
+}

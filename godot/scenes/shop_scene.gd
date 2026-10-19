@@ -103,7 +103,7 @@ func _build_full_canvas_sheet(rel: String, hframes: int, frame: int = 0) -> Spri
 	spr.position = Vector2.ZERO
 	var frame_w := float(tex.get_width()) / float(hframes)
 	spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_child(spr)
 	return spr
 
@@ -120,7 +120,7 @@ func _configure_full_canvas_sheet(spr: Sprite2D, rel: String, hframes: int, fram
 		spr.centered = false
 		var frame_w := float(tex.get_width()) / float(hframes)
 		spr.scale = Vector2(160.0 / frame_w, 320.0 / float(tex.get_height()))
-	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _build_shop_art_background() -> void:
 	# The Lab is a progression terminal, not the stocked dealer counter. The old
@@ -286,6 +286,7 @@ func _style_shop_row(button: Button) -> void:
 	button.add_theme_font_override("font", UiKit.control_font())
 	button.add_theme_font_size_override("font_size", 8)
 	var normal := StyleBoxFlat.new()
+	normal.anti_aliasing = false
 	normal.bg_color = Color(0.085, 0.072, 0.055, 0.98)
 	normal.border_color = Color(0.40, 0.32, 0.20)
 	normal.set_border_width_all(1)
@@ -409,7 +410,7 @@ func _build_stash(pending: Dictionary) -> void:
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.size = Vector2(Assets.STASH_ICON_SIZE, Assets.STASH_ICON_SIZE)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		_stash_holder.add_child(icon)
 
 func _pending_stash_slots(pending: Dictionary) -> Array:
@@ -433,7 +434,7 @@ func _stash_icon_for_slot(slot: Control) -> TextureRect:
 		icon.size = slot.size
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		slot.add_child(icon)
 	return icon
 

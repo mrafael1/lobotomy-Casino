@@ -27,8 +27,8 @@ func _check_generated_item_icons(failures: Array) -> void:
 		if texture == null:
 			failures.append("generated item art: missing texture for %s" % item_id)
 			continue
-		if texture.get_width() != 128 or texture.get_height() != 128:
-			failures.append("generated item art: %s should be 128x128, got %dx%d"
+		if texture.get_width() < 24 or texture.get_width() % 24 != 0 or texture.get_height() != texture.get_width():
+			failures.append("generated item art: %s must export its 24px grid at an integer scale, got %dx%d"
 				% [item_id, texture.get_width(), texture.get_height()])
 
 

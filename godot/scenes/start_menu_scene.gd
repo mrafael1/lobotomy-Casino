@@ -357,7 +357,7 @@ func _layout_art_menu(augmented: bool) -> void:
 
 func _build_background() -> void:
 	if _background != null:
-		_background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_background.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _label(text: String, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_CENTER) -> Label:
 	var l := Label.new()
