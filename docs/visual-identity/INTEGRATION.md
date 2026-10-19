@@ -90,3 +90,7 @@ The ten motion/state studies are delivered as fixed-palette GIFs plus atlases an
 Phase one: inspect masters, card sheet, dealer close-up, native layout reductions and 390×844 phone study; validate palette, binary alpha, exact card coverage, atlas dimensions, frame durations, relative gallery resources and deterministic rebuild. Current phase-one validation is recorded in `validation.json`. There are no phase-one edits to existing rules/controllers and no claim that the concept is a running game skin.
 
 Phase two: run editor import, `run_parity_headless.gd`, scene smoke, saved-run resume and tutorial checks. Compare parity outputs before/after. Exercise EN/FR with 5,000 targets, five active items and long card names on multiple viewport shapes. Test fractional scaling for shimmer, real phone touch targets, keyboard focus and safe-area overscan. Check texture memory and export-pack resources. Do not declare a scene integrated until the new art layers, aperture masks, live values and all required state variants pass together.
+
+## Optional machine v2
+
+[Revision 05](REVISION_05.md) adds a separate 320 ? 640 machine source treatment and five animation studies. It is an alternative, with no live binding. Keep each complete machine variant on its own coherent pixel grid; measure source-pixel bounds against the chosen master, use nearest texture filtering, and do not assume v1 source coordinates. Both variants read the same displayed frenzy tier and share the existing heat/rescue semantics.

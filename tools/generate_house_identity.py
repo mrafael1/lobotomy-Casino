@@ -13,6 +13,7 @@ from house_identity.pixels import Pixel, P, rgba, write_image, write_bytes_atomi
 from house_identity.dealer import portrait, dealer_sheet, STATES
 from house_identity.cards import CARDS, card, card_sheet
 from house_identity.scenes import SCENES, machine
+from house_identity.console_v2 import machine as machine_v2
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'godot/assets/art_direction/house_remembers'
@@ -21,7 +22,7 @@ DOC=ROOT/'docs/visual-identity'
 
 def atlas(frames):
     w,h=frames[0].w,frames[0].h
-    p=Pixel(w*len(frames),h)
+    p=Pixel(w*len(frames),h,density=frames[0].density)
     for i,f in enumerate(frames):p.paste(f,i*w,0)
     return p
 
@@ -110,10 +111,52 @@ def main():
     ladder=[machine(tier=tier,frame=i) for tier in (1,2,3) for i in range(6)]
     ladder_ms=[180]*6+[140]*6+[110]*5+[1000]
     atlas(ladder).save(anim/'multiplier_heat.png');gif(ladder,anim/'multiplier_heat.gif',ladder_ms)
+    # An additional directly rasterised machine treatment; canonical scenes
+    # and their finer-grid exports stay byte-for-byte unchanged.
+    variants={f'x{tier}':machine_v2(tier=tier,frame=2) for tier in (1,2,3)}
+    variants['rescue']=machine_v2(tier=3,warning=True)
+    for name,p in variants.items():
+        p.save(OUT/'machine_v2'/f'{name}.png')
+        write_image(p.im.resize((160,320),Image.Resampling.NEAREST),OUT/'machine_v2'/f'{name}_160.png')
+    v2_board=Pixel(1032,708,'void',density=1)
+    v2_board.text('MACHINE V2 / CLUSTERED PIXELS / SAME OUTPUT LADDER',20,16,'gold3',2)
+    for i,(key,label) in enumerate((('x1','X1 / READY'),('x2','X2 / HOT'),('x3','X3 / MAXIMUM OUTPUT'))):
+        v2_board.text(label,16+i*344,46,'paper2');v2_board.paste(variants[key],16+i*344,63)
+    v2_board.save(OUT/'machine_v2/benchmark.png')
+    comparison=Pixel(688,744,'void',density=1)
+    comparison.text('V1 / FINE GRID',16,16,'gold3',2)
+    comparison.text('V2 / PIXEL CLUSTERS',360,16,'gold3',2)
+    comparison.paste(machine().im.resize((320,640),Image.Resampling.NEAREST),16,48)
+    comparison.paste(variants['x1'],360,48)
+    comparison.text('640 X 1280 SOURCE',16,708,'paper2')
+    comparison.text('320 X 640 DIRECT SOURCE',360,708,'paper2')
+    comparison.save(OUT/'machine_v2/comparison.png')
+    detail=Pixel(976,356,'void',density=1)
+    for i,(p,label) in enumerate(((machine(),'V1 / FINE GRID'),(variants['x1'],'V2 / STEPPED CLUSTERS'))):
+        detail.text(label,16+i*488,12,'gold3',2)
+        detail.paste(p.crop((49,242,115,308)).resize((396,396),Image.Resampling.NEAREST).crop((0,0,396,312)),32+i*488,40)
+    detail.save(OUT/'machine_v2/detail.png')
+    v2_phone=Pixel(798,910,'void',density=1)
+    v2_phone.text('V2 / PHONE STUDY / READY AND MAXIMUM OUTPUT',12,16,'gold3',2)
+    for i,key in enumerate(('x1','x3')):
+        xx=3+i*399
+        v2_phone.box(xx,50,390,844,'slate');v2_phone.box(xx+8,58,374,828,'ink')
+        v2_phone.paste(variants[key].im.resize((374,748),Image.Resampling.NEAREST),xx+8,98)
+    v2_phone.save(OUT/'machine_v2/phone.png')
+    for tier,ms in ((1,180),(2,140),(3,110)):
+        frames=[machine_v2(tier=tier,frame=i) for i in range(6)]
+        atlas(frames).save(anim/f'v2_x{tier}.png');gif(frames,anim/f'v2_x{tier}.gif',[ms]*6)
+    v2_reward=[machine_v2(payout=i,frame=i) for i in range(1,7)]
+    atlas(v2_reward).save(anim/'v2_reward.png');gif(v2_reward,anim/'v2_reward.gif',[280,340,200,260,260,1300])
+    v2_ladder=[machine_v2(tier=tier,frame=i) for tier in (1,2,3) for i in range(6)]
+    atlas(v2_ladder).save(anim/'v2_heat.png');gif(v2_ladder,anim/'v2_heat.gif',ladder_ms)
     manifest={
         'title':'The House Remembers','phase':'visual direction proposal; no runtime integration',
-        'revision':4,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
+        'revision':5,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
         'card_source_size':[156,244],'recipe_unit_source_pixels':2,
+        'machine_alternative':{'name':'v2 clustered pixels','source_size':[320,640],
+            'source_pixels_per_layout_unit':2,'curve_cluster_pixels':2,
+            'states':list(variants),'construction':'direct integer raster; no source-image resampling'},
         'palette':P,'cards':[dict(zip(('id','name','family','inspection'),c)) for c in CARDS],
         'scenes':list(SCENES),'animations':{
             'vey_gaze':{'size':[368,496],'ms':[1000,140,650,70,70,1300]},
@@ -126,6 +169,11 @@ def main():
             'heat_x2':{'size':[640,1280],'ms':[140]*6},
             'heat_x3':{'size':[640,1280],'ms':[110]*6},
             'multiplier_heat':{'size':[640,1280],'ms':ladder_ms},
+            'v2_x1':{'size':[320,640],'ms':[180]*6},
+            'v2_x2':{'size':[320,640],'ms':[140]*6},
+            'v2_x3':{'size':[320,640],'ms':[110]*6},
+            'v2_reward':{'size':[320,640],'ms':[280,340,200,260,260,1300]},
+            'v2_heat':{'size':[320,640],'ms':ladder_ms},
         },
     }
     manifest['files']={str(f.relative_to(OUT)).replace('\\','/'):hashlib.sha256(f.read_bytes()).hexdigest()
@@ -134,7 +182,7 @@ def main():
     # Review HTML is generated from the same manifest, no asset copies to go stale.
     from house_identity.review import gallery
     (DOC/'review.html').write_text(gallery(manifest),encoding='utf8')
-    print(f'Built {len(SCENES)} compositions, {len(CARDS)} card faces, 4 dealer states, 10 motion studies; multiplier output benchmark.')
+    print(f'Built {len(SCENES)} compositions, {len(CARDS)} card faces, 4 dealer states, 15 motion studies; additional pixel-cluster machine v2.')
     print(f'Review: {DOC / "review.html"}')
 
 

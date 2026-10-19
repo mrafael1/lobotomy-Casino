@@ -48,6 +48,21 @@ def verify():
         assert im.getextrema()[3]==(255,255),f'Incomplete scene: {s}'
         reduction=Image.open(ART/'scenes'/f'{s}_160.png').convert('RGBA')
         assert reduction.tobytes()==im.resize((160,320),Image.Resampling.NEAREST).tobytes(),s
+    alternative=m['machine_alternative']
+    from house_identity.console_v2 import machine as machine_v2
+    for state in alternative['states']:
+        with Image.open(ART/'machine_v2'/f'{state}.png') as im:
+            assert im.size==tuple(alternative['source_size']),state
+            assert im.convert('RGBA').getextrema()[3]==(255,255),state
+            with Image.open(ART/'machine_v2'/f'{state}_160.png') as small:
+                assert small.tobytes()==im.resize((160,320),Image.Resampling.NEAREST).tobytes(),state
+    # V2 is rerasterised construction, not a nearest reduction of v1.
+    with Image.open(ART/'scenes/04_machine_early.png') as fine:
+        assert machine_v2().im.tobytes()!=fine.resize((320,640),Image.Resampling.NEAREST).tobytes()
+    for tier in (1,2,3):
+        frames=[machine_v2(tier=tier,frame=i).im for i in range(6)]
+        for box in ((46,357,274,422),(52,217,266,327),(34,504,286,550)):
+            assert all(f.crop(box).tobytes()==frames[0].crop(box).tobytes() for f in frames),f'V2 UI drift x{tier}'
     source=(ROOT/'godot/rules/pacte_cards.gd').read_text(encoding='utf8')
     authored=set(re.findall(r'"id":\s*"([^"]+)"\s*,\s*"name":',source))
     assert authored=={c[0] for c in CARDS},f'Card coverage differs: {authored ^ {c[0] for c in CARDS}}'
@@ -106,7 +121,8 @@ def verify():
         'source_size':m['source_size'],'native_fine_grid_construction':'verified; not repeated 2x raster blocks',
         'healthy_idle_ui_regions':'pixel-identical across all six chase frames',
         'heated_ui_regions':'pixel-identical within each x2/x3 six-frame loop',
-        'visual_review':['benchmark','multiplier heat benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail'],
+        'machine_v2':'direct 320x640 construction; four opaque states, exact gameplay-size views; stable UI at every tier',
+        'visual_review':['benchmark','multiplier heat benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail','machine v2 comparison','machine v2 output ladder','machine v2 reel detail','machine v2 phone study'],
         'interactive_browser_review':'not run; browser inventory had no enabled browser',
         'runtime_godot_checks':'see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings',
     }

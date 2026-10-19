@@ -4,8 +4,9 @@ from .pixels import Pixel, symbol, item_badge, chip
 from . import heat
 
 
-def reel_symbol(kind):
-    p=Pixel(58,66)
+def reel_symbol(kind,canvas=Pixel):
+    p=canvas(58,66)
+    if hasattr(p,'illustrate_reel') and p.illustrate_reel(kind):return p
     if kind=='eye':
         p.contour((3,31),[((15,12),(40,11),(55,31)),((40,51),(15,51),(3,31))],'ruby0')
         p.contour((5,30),[((19,17),(39,18),(52,31)),((37,42),(20,42),(5,30))],'cream2')
@@ -42,11 +43,11 @@ def reel_symbol(kind):
         p.fine_line([(65,95),(70,102),(74,108)],'ruby4')
     else:
         # Secondary strip symbols retain the shared family's original geometry.
-        p.paste(symbol_tile(kind),10,11)
+        p.paste(symbol_tile(kind,canvas),10,11)
     return p
 
-def symbol_tile(kind):
-    p=Pixel(38,44);symbol(p,kind,0,0);return p
+def symbol_tile(kind,canvas=Pixel):
+    p=canvas(38,44);symbol(p,kind,0,0);return p
 
 
 def gold_frame(p,x,y,w,h,cut=4,tier=1):
@@ -99,7 +100,7 @@ def gem_socket(p,x,y,kind,tier=1):
     p.text(kind,x,y+43,'cream2',align='center')
 
 
-def machine(tier=1,frame=0,warning=False,payout=0):
+def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     """Healthy ready/hot/maximum-output art. Heat follows the frenzy tier, not age.
 
     Payout is a fixed visual study, not a game result or a rule implementation.
@@ -107,7 +108,7 @@ def machine(tier=1,frame=0,warning=False,payout=0):
     """
     material_tier=1 if warning else tier
     coat,metal,glass=heat.ramps(material_tier)
-    p=Pixel(bg='void');peak=payout in (2,3,4)
+    p=canvas(bg='void');peak=payout in (2,3,4)
     heat.backdrop(p,material_tier,frame)
     p.text('CAMPAIGN',21,17,'paper1')
     for i in range(3):
@@ -182,8 +183,8 @@ def machine(tier=1,frame=0,warning=False,payout=0):
         p.fine_line([((x+7)*2,448),((x+7)*2,628)],'cream3')
         p.box(x+58,225,3,91,'cream0')
         p.contour((x+57,226),[((x+60,250),(x+60,292),(x+56,315))],'cream3',stroke=1)
-        p.paste(reel_symbol(('eye','eye','brain')[i]),x+4,242)
-        top=reel_symbol(('pill','vial','eye')[i]);bottom=reel_symbol(('brain','syringe','pill')[i])
+        p.paste(reel_symbol(('eye','eye','brain')[i],canvas),x+4,242)
+        top=reel_symbol(('pill','vial','eye')[i],canvas);bottom=reel_symbol(('brain','syringe','pill')[i],canvas)
         p.paste(top.crop((0,49,58,66)),x+4,224);p.paste(bottom.crop((0,0,58,14)),x+4,305)
         p.line([(x+5,241),(x+60,241)],'cream0');p.line([(x+5,304),(x+60,304)],'cream0')
         p.oval(x+27,208,12,3,'membrane0' if warning else (glass[3] if tier==1 else ('heat4' if tier==2 else 'heat_white')))

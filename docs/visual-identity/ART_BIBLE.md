@@ -72,3 +72,7 @@ The healthy machine has a more eager rhythm: **invitation → anticipation → r
 Heat adds a second rhythm owned by the existing frenzy tier: x1's warm chase, x2's quicker hardware rhythm, and x3's sustained white-hot output with exhaust and embers. The x3 plateau should feel like the machine is giving everything. Avoid repeated full-screen on/off flashing; protect controls and symbols from particle cover. The output-ladder GIF is a comparison study, not a rule that tiers advance on a timer.
 
 See the review gallery for constructed scene mockups, all card faces, dealer states and timing prototypes. These establish composition and material direction. They are proposal assets, **not integrated gameplay screens**; remaining production layering and acceptance checks are in [INTEGRATION.md](INTEGRATION.md).
+
+## Machine v2 alternative
+
+The optional [clustered-pixel machine](REVISION_05.md) uses a separate 320 ? 640 direct source grid for the same 160 ? 320 layout. Larger curves use two-pixel steps; lamps, lettering and engraving use one-pixel precision on that grid. Its complete cabinet, symbols, controls and effects share that density. V1 and the rest of the casino retain their existing finer source grid. This alternative is for visual comparison before integration.

@@ -1,7 +1,7 @@
 {
   "title": "The House Remembers",
   "phase": "visual direction proposal; no runtime integration",
-  "revision": 4,
+  "revision": 5,
   "source_size": [
     640,
     1280
@@ -16,6 +16,22 @@
     244
   ],
   "recipe_unit_source_pixels": 2,
+  "machine_alternative": {
+    "name": "v2 clustered pixels",
+    "source_size": [
+      320,
+      640
+    ],
+    "source_pixels_per_layout_unit": 2,
+    "curve_cluster_pixels": 2,
+    "states": [
+      "x1",
+      "x2",
+      "x3",
+      "rescue"
+    ],
+    "construction": "direct integer raster; no source-image resampling"
+  },
   "palette": {
     "void": "090c0e",
     "ink": "101719",
@@ -425,6 +441,88 @@
         110,
         1000
       ]
+    },
+    "v2_x1": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        180,
+        180,
+        180,
+        180,
+        180,
+        180
+      ]
+    },
+    "v2_x2": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ]
+    },
+    "v2_x3": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ]
+    },
+    "v2_reward": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        280,
+        340,
+        200,
+        260,
+        260,
+        1300
+      ]
+    },
+    "v2_heat": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        180,
+        180,
+        180,
+        180,
+        180,
+        180,
+        140,
+        140,
+        140,
+        140,
+        140,
+        140,
+        110,
+        110,
+        110,
+        110,
+        110,
+        1000
+      ]
     }
   },
   "files": {
@@ -444,6 +542,16 @@
     "animation/multiplier_heat.png": "6a1f464abbaf469a44821b80cf19ade2a532d85cfa31a8b0ef2cea31de21911f",
     "animation/pattern_recognition.gif": "c3d4c4944a13ec32cdb6e020ffd1dbb81ec482bce8c254faac4365a2069adc80",
     "animation/pattern_recognition.png": "7784eaf8ca326a2923bcdb59b08f7f4d3180fa7229b30b9a6f7c0b0f0363e158",
+    "animation/v2_heat.gif": "36d756fbd7cf1263bd4bc77cfce6c2bf489804d3b7f7582feb03d7c6a33be136",
+    "animation/v2_heat.png": "5665a40e02877b57d5aef9a696999f06bd00ce7ecbb217a6fd6b8de3f73013c4",
+    "animation/v2_reward.gif": "27b953b48cd9c14bbec02ae2020579371c8f4d7d1bfc0b706c91275ec9867808",
+    "animation/v2_reward.png": "76d862f3cfb06ff734efca65b57b5eab26b5a3969eed8816af0d6048238041ba",
+    "animation/v2_x1.gif": "fd48929ece0ced8f7fb1c08674e298d1bc405feb9fa05189f334994d336200a6",
+    "animation/v2_x1.png": "3c1d1ea0413f6e0f1819cd187bdd5913ba9cbf282cfde1fc7ff444205fbd3424",
+    "animation/v2_x2.gif": "fd15843d8a69c6396e5f2e6124a77696adc711abd3a86bbfbb4187ff643cd768",
+    "animation/v2_x2.png": "dc376ab7e89b6bd48a40fe6e5f6e9fb669d2f4672aa94a423e1a6a67846dc034",
+    "animation/v2_x3.gif": "44852d52f61dc7e78c03d2151a206a3b79db6be8ad1e9120016fe9ea7f7b83a9",
+    "animation/v2_x3.png": "9fc760af4f6c7c8104538e41bb6030d5cf4531d407bad1d4765b9399b2838fc1",
     "animation/vey_gaze.gif": "6234e102892b0efed7c1b0006e35a092e6b627aec67c561d72850194ace46852",
     "animation/vey_gaze.png": "81800ea131567bc4b3f6a4a028da177112d9c953e739243066ed38ce624ef3ab",
     "animation/vey_progression.gif": "f33dfe4d9d09749857f74dc11ecf96f444aa8653fe9970f89fd7b56916b346aa",
@@ -480,6 +588,18 @@
     "dealer_detail.png": "9ef8577f70e14ed5dfb7ee5f6e949005f306821c259c8646359afec672b89628",
     "dealer_states.png": "c6e5913f23bf6abe4a27723984503fe95d3ab6dbf8598f853f55aea71c3773b1",
     "machine_reward_benchmark.png": "01ac0761360e3879be97dcdeb6f3300b00ea39d9e6685b00b5a64cddf7116de8",
+    "machine_v2/benchmark.png": "791fcc185c2a8ffe7dc3ede0082f877cfb1d24c5755fce64504c0259e458411a",
+    "machine_v2/comparison.png": "94aa461d1218b6ca6ac8a7a0bd41e30efe6c7eb030f91eb7fd622dfd484a63fd",
+    "machine_v2/detail.png": "0a137ac44a71812a9b02c459f270d318fd2ef59071dd016fcbfc12b92f2e2944",
+    "machine_v2/phone.png": "852e1d9af802840e7ba1fa10553096686e3f579b4c47e9118cdc4fb1b821e0ae",
+    "machine_v2/rescue.png": "fbed007439c6aed497e21fa4aab0378489d6275d52af4b6528d9b4f3d46070eb",
+    "machine_v2/rescue_160.png": "78a10f05132c3ec0bd6b0baf5f2b290e72e405ec3f4c87797d4021e6bbfc6559",
+    "machine_v2/x1.png": "b7e59a531605ea489100ef394ed89e32b744b18d991bdc19459cd55fa1aaca4e",
+    "machine_v2/x1_160.png": "6f690cfe7621e626bb2670c9db9919fb75d7180e9e8d4a504ad97d9b906aad49",
+    "machine_v2/x2.png": "3adb1efaae1fd2dee1c64092df6a3accb0e55292b22d61b3da2aad2c27c69eae",
+    "machine_v2/x2_160.png": "50f0b60309e82dae58ac0e0938648afbf1823f55e5abe3a9727634a15479aa88",
+    "machine_v2/x3.png": "d737391767c48838d7f0463cc092e739809626a0d97f3cdd234061f8924d7d3f",
+    "machine_v2/x3_160.png": "b9bf2360d37d1444545b5156fc9b9dd719d35a5a0f477b9af569be76e66ad9db",
     "multiplier_heat_benchmark.png": "b6ad2cd22529a027521fd96db6a4f400146d4555011c8313380ae4b75b270b6b",
     "phone_study.png": "db31dd76a743f8262f645f60d1960b333ebc14df7262971e15456a5475305502",
     "reel_detail.png": "4afc2d976dc1e9009166773acb5c291144cae8b2dd48ac0900c35bcc1c3858c3",

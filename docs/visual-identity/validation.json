@@ -1,13 +1,13 @@
 {
   "status": "passed",
   "palette_colours": 106,
-  "palette_and_alpha_pngs": 100,
+  "palette_and_alpha_pngs": 117,
   "full_scene_masters": 27,
   "layout_size_reductions": 27,
   "unique_card_faces": 21,
   "card_coverage": "exact match to current PacteCards IDs",
-  "animation_atlases_and_gif_timing": 10,
-  "review_resources_checked": 78,
+  "animation_atlases_and_gif_timing": 15,
+  "review_resources_checked": 91,
   "generated_javascript_syntax": "passed (node --check)",
   "deterministic_image_rebuild": "byte-identical",
   "source_size": [
@@ -17,6 +17,7 @@
   "native_fine_grid_construction": "verified; not repeated 2x raster blocks",
   "healthy_idle_ui_regions": "pixel-identical across all six chase frames",
   "heated_ui_regions": "pixel-identical within each x2/x3 six-frame loop",
+  "machine_v2": "direct 320x640 construction; four opaque states, exact gameplay-size views; stable UI at every tier",
   "visual_review": [
     "benchmark",
     "multiplier heat benchmark",
@@ -25,7 +26,11 @@
     "scene overview",
     "phone study",
     "dealer detail",
-    "reel detail"
+    "reel detail",
+    "machine v2 comparison",
+    "machine v2 output ladder",
+    "machine v2 reel detail",
+    "machine v2 phone study"
   ],
   "interactive_browser_review": "not run; browser inventory had no enabled browser",
   "runtime_godot_checks": "see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings"
