@@ -1,0 +1,1694 @@
+{
+  "x1_0": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "jade1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "jade4",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X1",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "jade4",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "cream3",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    }
+  ],
+  "x2_0": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "heat3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "hot_glass1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "heat5",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X2",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "heat4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "heat5",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "cream3",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "heat4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    }
+  ],
+  "x3_0": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "heat4",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "hot_glass1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "heat_white",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X3",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "heat_white",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "heat_white",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "heat0",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "heat_white",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    }
+  ],
+  "rescue_x2": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "jade1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "jade4",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X2",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "HOLD",
+      "position_source": [
+        142,
+        740
+      ],
+      "colour": "red",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "X2",
+      "position_source": [
+        506,
+        738
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "RESCUE OR SPIN",
+      "position_source": [
+        504,
+        784
+      ],
+      "colour": "cream3",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "jade4",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "cream3",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    }
+  ],
+  "rescue_x3": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "jade1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "jade4",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X3",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "HOLD",
+      "position_source": [
+        142,
+        740
+      ],
+      "colour": "red",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "X3",
+      "position_source": [
+        506,
+        738
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "RESCUE OR SPIN",
+      "position_source": [
+        504,
+        784
+      ],
+      "colour": "cream3",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "rescue_surface"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "jade4",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "heat0",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    }
+  ],
+  "win_x1": [
+    {
+      "sample": "CAMPAIGN",
+      "position_source": [
+        42,
+        34
+      ],
+      "colour": "paper1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "MENU",
+      "position_source": [
+        598,
+        34
+      ],
+      "colour": "paper2",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "campaign_example"
+    },
+    {
+      "sample": "HOUSE",
+      "position_source": [
+        92,
+        380
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "rails"
+    },
+    {
+      "sample": "WEALTH",
+      "position_source": [
+        112,
+        734
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "TARGET",
+      "position_source": [
+        522,
+        734
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "00",
+      "position_source": [
+        110,
+        764
+      ],
+      "colour": "jade1",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "40",
+      "position_source": [
+        182,
+        764
+      ],
+      "colour": "jade4",
+      "scale_source": 6,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "100",
+      "position_source": [
+        522,
+        764
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "account_glass"
+    },
+    {
+      "sample": "X1",
+      "position_source": [
+        522,
+        810
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "progress_example"
+    },
+    {
+      "sample": "REROLL",
+      "position_source": [
+        152,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "SHIFT",
+      "position_source": [
+        320,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "LOCK",
+      "position_source": [
+        488,
+        968
+      ],
+      "colour": "cream2",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "power_examples"
+    },
+    {
+      "sample": "15",
+      "position_source": [
+        118,
+        1034
+      ],
+      "colour": "jade4",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPINS",
+      "position_source": [
+        118,
+        1110
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "shelf"
+    },
+    {
+      "sample": "SPIN",
+      "position_source": [
+        308,
+        1028
+      ],
+      "colour": "cream3",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "spin_cap"
+    },
+    {
+      "sample": "3",
+      "position_source": [
+        138,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        228,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        318,
+        1152
+      ],
+      "colour": "red",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "2",
+      "position_source": [
+        408,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "1",
+      "position_source": [
+        498,
+        1152
+      ],
+      "colour": "jade3",
+      "scale_source": 2,
+      "align": "left",
+      "tracking_source": 2,
+      "owner": "item_examples"
+    },
+    {
+      "sample": "LUCIDITY",
+      "position_source": [
+        554,
+        1188
+      ],
+      "colour": "cream1",
+      "scale_source": 2,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "045 G",
+      "position_source": [
+        554,
+        1212
+      ],
+      "colour": "gold4",
+      "scale_source": 4,
+      "align": "right",
+      "tracking_source": 2,
+      "owner": "cash_tray"
+    },
+    {
+      "sample": "PAIR",
+      "position_source": [
+        320,
+        232
+      ],
+      "colour": "cream3",
+      "scale_source": 6,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "callout_surface"
+    },
+    {
+      "sample": "+10",
+      "position_source": [
+        320,
+        286
+      ],
+      "colour": "jade4",
+      "scale_source": 4,
+      "align": "center",
+      "tracking_source": 2,
+      "owner": "callout_surface"
+    }
+  ]
+}

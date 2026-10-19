@@ -42,6 +42,8 @@ def gif(frames, path, durations):
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True);DOC.mkdir(parents=True,exist_ok=True)
+    from house_identity.machine_production import build
+    production=build(OUT/'machine_v1')
     for name,draw in SCENES.items():
         p=draw();p.save(OUT/'scenes'/f'{name}.png')
         # Deliberate actual-layout-size review, not used as a production texture.
@@ -154,6 +156,7 @@ def main():
         'title':'The House Remembers','phase':'visual direction proposal; no runtime integration',
         'revision':5,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
         'card_source_size':[156,244],'recipe_unit_source_pixels':2,
+        'selected_variant':'v1','production_package':'machine_v1/manifest.json',
         'machine_alternative':{'name':'v2 clustered pixels','source_size':[320,640],
             'source_pixels_per_layout_unit':2,'curve_cluster_pixels':2,
             'states':list(variants),'construction':'direct integer raster; no source-image resampling'},

@@ -28,14 +28,14 @@ All decorative layers ignore input. Buttons own complete logical hit areas, incl
 
 ## Proposed geometry: re-measure before changing the machine
 
-The proposal's source measurements are deliberately different from the current cabinet. Authoritative current constants in `machine_scene.gd` must be updated together, after splitting the new cabinet. Do not swap a texture against old apertures.
+The selected v1 now has [generated geometry and separated assets](MACHINE_V1_PACKAGE.md). Use `machine_v1/geometry.json` as the measurement contract. The selected source measurements are deliberately different from the current cabinet. Authoritative current constants in `machine_scene.gd` must be updated together, after splitting the new cabinet. Do not swap a texture against old apertures.
 
 | Element | Source pixels (x, y, w, h) | Layout units |
 |---|---|---|
 | Account content | 92, 714, 456, 130 | 23, 178.5, 114, 32.5 |
-| Reel 1 content | 104, 434, 120, 220 | 26, 108.5, 30, 55 |
-| Reel 2 content | 258, 434, 120, 220 | 64.5, 108.5, 30, 55 |
-| Reel 3 content | 412, 434, 120, 220 | 103, 108.5, 30, 55 |
+| Reel 1 aperture | 106, 436, 116, 216 | 26.5, 109, 29, 54 |
+| Reel 2 aperture | 260, 436, 116, 216 | 65, 109, 29, 54 |
+| Reel 3 aperture | 414, 436, 116, 216 | 103.5, 109, 29, 54 |
 | First power touch | 102, 878, 100, 110 | 25.5, 219.5, 25, 27.5 |
 | Second power touch | 270, 878, 100, 110 | 67.5, 219.5, 25, 27.5 |
 | Third power touch | 438, 878, 100, 110 | 109.5, 219.5, 25, 27.5 |

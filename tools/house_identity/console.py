@@ -2,10 +2,16 @@
 from math import sin, cos, pi
 from .pixels import Pixel, symbol, item_badge, chip
 from . import heat
+from .machine_geometry import REEL_X, POWER_SOCKETS, STASH_X, REEL_TOP, REEL_W, REEL_H, SYMBOL_TOP, SYMBOL_H
+
+
+def layer(p,name,live=False):
+    """Optional production separation; the compositional renderer stays unchanged."""
+    if hasattr(p,'layer'):p.layer(name,live)
 
 
 def reel_symbol(kind,canvas=Pixel):
-    p=canvas(58,66)
+    p=canvas(REEL_W,SYMBOL_H)
     if hasattr(p,'illustrate_reel') and p.illustrate_reel(kind):return p
     if kind=='eye':
         p.contour((3,31),[((15,12),(40,11),(55,31)),((40,51),(15,51),(3,31))],'ruby0')
@@ -76,7 +82,7 @@ def bulb(p,x,y,on=True,peak=False,tier=1):
         p.fine_line([(x*2-2,y*2-3),(x*2+1,y*2-3)],'gold3')
 
 
-def gem_socket(p,x,y,kind,tier=1):
+def gem_socket(p,x,y,kind,tier=1,label=True):
     _,metal,glass=heat.ramps(tier)
     p.oval(x-26,y,52,39,'ruby0');p.oval(x-24,y,48,35,'gold1')
     p.oval(x-22,y,44,31,metal[3]);p.oval(x-19,y+2,38,27,glass[0])
@@ -90,14 +96,26 @@ def gem_socket(p,x,y,kind,tier=1):
         p.poly([(x+3,y+7),(x+10,y+8),(x+5,y+13)],ink)
     elif kind=='SHIFT':
         p.line([(x,y+8),(x,y+22),(x-5,y+17)],ink,2);p.line([(x,y+22),(x+5,y+17)],ink,2)
-    else:
+    elif kind=='LOCK':
         p.arc((x-5,y+7,x+5,y+19),180,360,ink,2);p.box(x-7,y+15,15,10,ink)
         p.box(x-1,y+18,2,4,'jade0')
+    elif kind=='REWIND':
+        for dx in (-6,3):p.poly([(x+dx+5,y+8),(x+dx-3,y+16),(x+dx+5,y+24)],ink)
+    elif kind=='HEART':
+        p.poly([(x,y+24),(x-9,y+15),(x-9,y+10),(x-5,y+8),(x,y+12),
+                (x+5,y+8),(x+9,y+10),(x+9,y+15)],ink)
+        p.line([(x-6,y+14),(x-2,y+14),(x,y+18),(x+3,y+13),(x+6,y+13)],glass[0])
+    elif kind=='CHEAT':
+        p.poly([(x-7,y+7),(x+6,y+9),(x+8,y+24),(x-5,y+23)],ink)
+        p.poly([(x,y+11),(x+4,y+16),(x+1,y+20),(x-3,y+16)],glass[0])
+    elif kind=='SWAP':
+        p.line([(x-9,y+12),(x+8,y+12),(x+4,y+8)],ink,2)
+        p.line([(x+9,y+21),(x-8,y+21),(x-4,y+25)],ink,2)
     for i in range(15):
         a=(i*20+20)*pi/180
         xx=x*2+round(cos(a)*47);yy=y*2+35+round(sin(a)*31)
         p.fine_line([(xx,yy),(xx+1,yy-2)],'gold4')
-    p.text(kind,x,y+43,'cream2',align='center')
+    if label:p.text(kind,x,y+43,'cream2',align='center')
 
 
 def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
@@ -109,7 +127,9 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     material_tier=1 if warning else tier
     coat,metal,glass=heat.ramps(material_tier)
     p=canvas(bg='void');peak=payout in (2,3,4)
+    layer(p,'background')
     heat.backdrop(p,material_tier,frame)
+    layer(p,'campaign_example',True)
     p.text('CAMPAIGN',21,17,'paper1')
     for i in range(3):
         p.oval(83+i*14,14,9,12,'paper1' if i<2 else 'wine1')
@@ -117,10 +137,12 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     p.text('MENU',299,17,'paper2',align='right')
     # The casino stays dark. Small physical pools of reflected gold and jade
     # surround the machine, which is deliberately the room's most tempting object.
+    layer(p,'floor')
     p.oval(7,581,306,43,'glass1' if tier==1 else 'heat_floor1');p.oval(27,587,266,31,glass[0])
     p.oval(54,592,211,20,metal[0])
     # A stepped, broad-shouldered silhouette with marquetry wings, fluted brass
     # uprights and lacquered sides. This is working casino luxury in good repair.
+    layer(p,'cabinet')
     p.poly([(22,155),(22,87),(42,87),(42,67),(78,67),(78,55),(242,55),(242,67),
             (278,67),(278,87),(298,87),(298,155),(307,179),(307,534),(297,593),
             (281,615),(39,615),(23,593),(13,534),(13,179)],metal[0])
@@ -155,9 +177,11 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     p.text('LOBOTOMY',161,120,metal[1],3,'center')
     p.text('LOBOTOMY',160,119,'cream3',3,'center')
     p.text('C A S I N O',160,146,metal[3],align='center')
+    layer(p,'marquee_lamps')
     lamps=[(x,95) for x in range(44,281,15)]+[(x,176) for x in range(44,281,15)]
     for i,(x,y) in enumerate(lamps):bulb(p,x,y,on=not warning and (tier==3 or peak or (i+frame*tier)%6!=0),peak=peak,tier=tier)
     # Fluted side rails are bright beside the glass and darker toward the room.
+    layer(p,'rails')
     for x,side in ((20,1),(300,-1)):
         p.box(x-3,188,7,301,metal[1])
         p.line([(x,190),(x,483)],metal[3],2)
@@ -167,51 +191,66 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     # Countdown remains the same ten-step house approach, separated from the
     # decorative lamps by position, rectangular shape and an explicit label.
     p.box(39,185,242,16,coat[0]);p.text('HOUSE',46,190,'cream1')
+    layer(p,'countdown_example',True)
     for i in range(10):p.box(86+i*14,191,9,3,metal[3] if i<3 else coat[1])
     warning_stack=(2 if tier==3 else 3) if warning else 4-tier
     for i in range(3):p.oval(244+i*9,190,5,5,'amber' if i < warning_stack else metal[0])
     # Jewel-like reel cradle. The bright parchment is graduated over a cylinder,
     # with a clean payline and small curved-glass reflections at the edges.
+    layer(p,'reel_housing')
     p.box(34,205,252,137,metal[0]);gold_frame(p,37,207,246,133,6,tier)
     p.box(42,212,236,123,glass[0])
-    for i in range(3):
-        x=49+i*77
+    for i,x in enumerate(REEL_X):
+        layer(p,f'reel_frame_{i}')
         p.box(x,214,66,116,metal[2]);p.box(x+2,216,62,112,metal[4])
-        p.box(x+4,218,58,108,'cream0');p.box(x+5,223,56,99,'cream1')
+        layer(p,f'drum_{i}')
+        p.box(x+4,REEL_TOP,REEL_W,REEL_H,'cream0');p.box(x+5,223,56,99,'cream1')
         p.box(x+5,237,56,69,'cream2');p.box(x+5,250,56,46,'cream3')
         p.box(x+5,218,56,5,metal[1]);p.box(x+5,319,56,5,metal[1])
         p.fine_line([((x+7)*2,448),((x+7)*2,628)],'cream3')
         p.box(x+58,225,3,91,'cream0')
         p.contour((x+57,226),[((x+60,250),(x+60,292),(x+56,315))],'cream3',stroke=1)
-        p.paste(reel_symbol(('eye','eye','brain')[i],canvas),x+4,242)
+        layer(p,f'reel_example_{i}',True)
+        p.paste(reel_symbol(('eye','eye','brain')[i],canvas),x+4,SYMBOL_TOP)
         top=reel_symbol(('pill','vial','eye')[i],canvas);bottom=reel_symbol(('brain','syringe','pill')[i],canvas)
         p.paste(top.crop((0,49,58,66)),x+4,224);p.paste(bottom.crop((0,0,58,14)),x+4,305)
+        layer(p,f'reel_edges_{i}')
         p.line([(x+5,241),(x+60,241)],'cream0');p.line([(x+5,304),(x+60,304)],'cream0')
+        layer(p,f'restore_lamp_{i}',True)
         p.oval(x+27,208,12,3,'membrane0' if warning else (glass[3] if tier==1 else ('heat4' if tier==2 else 'heat_white')))
         # Payline catches, without drawing a stripe across the symbol artwork.
+        layer(p,f'payline_{i}')
         for yy in (261,277):p.box(x+2,yy,2,3,metal[4])
+    layer(p,'payline_catches')
     for x,d in ((31,1),(289,-1)):
         p.poly([(x,270),(x+d*7,265),(x+d*7,275)],'bulb3')
     # Extra lamp banks flank the drums. Their chasing reflection is where the
     # healthy machine's restless energy lives, leaving the gameplay art stable.
+    layer(p,'reel_lamps')
     for i,yy in enumerate(range(223,333,18)):
         for x in (29,291):bulb(p,x,yy,on=not warning and (tier==3 or peak or (i+frame*tier)%6!=0),peak=peak,tier=tier)
     # One account glass: clean typography and a continuous progress line.
+    layer(p,'account_glass')
     gold_frame(p,42,353,236,73,5,tier);p.box(46,357,228,65,glass[0])
     p.box(48,359,224,2,glass[1])
     p.text('WEALTH',56,367,glass[3]);p.text('TARGET',261,367,'cream1',align='right')
     amount=f'{40+(10*tier if payout>=4 else 0):04d}'
     p.text(amount[:2],55,382,glass[1],3);p.text(amount[2:],91,382,glass[4],3)
     p.text('100',261,382,'cream3',3,'right')
-    p.box(56,411,166,3,glass[1]);p.box(56,411,83 if payout>=4 else 66,2,glass[3])
+    p.box(56,411,166,3,glass[1])
+    layer(p,'progress_example',True)
+    p.box(56,411,83 if payout>=4 else 66,2,glass[3])
     p.text(f'X{tier}',261,405,metal[4],2,'right')
     if warning:
+        layer(p,'rescue_surface')
         p.box(49,361,222,59,coat[0]);p.text('HOLD',71,370,'red',3)
         p.text(f'X{tier}',253,369,'gold4',2,'right')
         p.text('RESCUE OR SPIN',252,392,'cream3',align='right')
-    for x,kind in ((76,'REROLL'),(160,'SHIFT'),(244,'LOCK')):gem_socket(p,x,441,kind,tier)
+    layer(p,'power_examples',True)
+    for x,kind in POWER_SOCKETS:gem_socket(p,x,441,kind,tier)
     # The large cherry-red SPIN cap is the single strongest action. A raised,
     # polished enamel dome sits in a deep fitted ring, rather than a paper oval.
+    layer(p,'shelf')
     p.contour((29,502),[((67,491),(255,491),(290,502)),((300,514),(300,543),(286,553)),
                            ((249,564),(70,564),(32,553)),((20,543),(20,516),(29,502))],metal[1])
     p.contour((32,504),[((73,496),(248,496),(287,504)),((293,516),(295,538),(282,545)),
@@ -219,13 +258,17 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
     p.contour((33,504),[((84,496),(240,496),(284,504))],metal[4],stroke=1)
     gold_frame(p,34,510,51,32,4,tier);p.box(38,514,43,24,glass[0])
     p.text('15',59,517,glass[4],2,'center');p.text('SPINS',59,555,'cream1',align='center')
+    layer(p,'spin_cap')
     p.oval(97,506,114,43,metal[0]);p.oval(100,506,108,37,metal[3])
     p.oval(104,506,100,31,coat[1]);p.oval(107,506,94,25,coat[3])
     p.arc((108,506,200,530),190,335,coat[4],2)
     p.contour((119,510),[((139,506),(173,507),(188,511))],'cream2',stroke=1)
     p.text('SPIN',154,514,'cream3' if tier<3 else 'heat0',2,'center')
-    for x,kind in ((229,'vial'),(267,'pill')):
+    layer(p,'stash_wells')
+    for x,kind in zip(STASH_X,('vial','pill')):
+        layer(p,f'stash_well_{x}')
         p.oval(x-15,510,32,34,metal[2]);p.oval(x-12,511,26,28,glass[0])
+        layer(p,f'stash_example_{x}',True)
         if kind=='vial':
             p.box(x-3,515,9,4,metal[2]);p.box(x-4,519,11,16,'cold1')
             p.box(x-2,525,7,8,glass[2]);p.box(x-3,520,1,9,glass[4])
@@ -234,29 +277,38 @@ def machine(tier=1,frame=0,warning=False,payout=0,canvas=Pixel):
                                 ((x+6,531),(x+9,528),(x+5,524)),
                                 ((x,518),(x-3,518),(x-6,522))],'cream3')
             p.poly([(x-6,526),(x,520),(x+6,525),(x+1,532)],coat[3])
+    layer(p,'item_examples',True)
     for i,(kind,n) in enumerate((('T',3),('P',2),('E',1),('S',2),('C',1))):
         x=48+i*45;item_badge(p,kind,x,573);p.text(str(n),x+21,576,'red' if kind=='E' else 'jade3')
     # The coin return is a real polished tray, with a highlight on the rolled lip.
+    layer(p,'cash_tray')
     gold_frame(p,117,596,86,23,3,tier);p.box(122,600,76,11,metal[0])
     p.line([(123,615),(197,615)],metal[4],2)
     p.text('LUCIDITY',277,594,'cream1',align='right');p.text('045 G',277,606,metal[4],2,'right')
+    layer(p,'augment_paper')
     for xx in (47,72,97):
         p.poly([(xx,598),(xx+19,599),(xx+20,612),(xx+1,611)],'paper1')
+    layer(p,'augment_examples',True)
     p.oval(52,601,9,7,coat[0]);p.oval(54,602,5,4,metal[2]);p.line([(59,607),(63,610)],coat[0])
     p.line([(77,602),(82,604),(88,602),(88,609),(82,611),(77,609),(77,602)],coat[0])
     p.line([(82,604),(82,611)],'paper2');p.box(102,604,12,5,coat[0]);p.box(106,602,4,3,metal[1])
+    layer(p,'heat_hardware')
     heat.hardware(p,tier,frame,warning)
     if payout:
+        layer(p,'reward_example',True)
         # Authored reward choreography: pair → tangible coins → wealth tick.
         # It does not award a result or consume any gameplay random stream.
         if payout<6:
+            layer(p,'callout_surface')
             p.box(56,113,208,48,coat[0])
             p.text('PAIR',160,116,'cream3',3,'center')
             p.text(f'+{10*tier}',160,143,glass[4],2,'center')
         if payout in (2,3):
+            layer(p,'reward_sparks')
             for xx,yy,r in ((57,346,4),(264,345,3),(39,432,3),(281,431,4)):
                 p.line([(xx-r,yy),(xx+r,yy)],metal[4]);p.line([(xx,yy-r),(xx,yy+r)],metal[4])
         if payout in (3,4,5):
+            layer(p,'payout_example',True)
             step=payout-3
             for i in range(3):
                 xx=145+14*i;yy=578+step*11-4*i

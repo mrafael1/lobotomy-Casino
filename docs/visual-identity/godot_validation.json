@@ -1,6 +1,6 @@
 {
-  "scope": "revision 04 multiplier heat art import; current workspace including pre-existing uncommitted presentation work",
-  "proposal_runtime_bindings": "none; all new scene images remain phase-one concepts",
+  "scope": "v1 production layer package and export manifests; current workspace including pre-existing uncommitted work",
+  "proposal_runtime_bindings": "none; selected v1 layers and components are exported but not yet bound to the live machine",
   "editor_import": {
     "command": "godot --headless --editor --quit --path godot",
     "exit_code": 0,
@@ -15,10 +15,47 @@
   "environment": "Godot 4.7; APPDATA isolated to tmp/house-identity-review/appdata",
   "sandbox_retry": "Initial smoke failed its engine-error gate because the sandbox denied reading the system root certificate store. Repeated with normal certificate-store access and passed; no test suppression or gameplay change.",
   "existing_diagnostics": "The smoke output includes its intentional malformed-save diagnostic and shutdown RID/ObjectDB/resource leak messages. The project's smoke gate reports no unexpected engine errors. These are not claimed fixed by the art proposal.",
-  "rules_parity": "not rerun; this change adds no rules, content data, save logic or live presentation integration",
+  "rules_parity": "not rerun; no rules, economy, save logic, gameplay content data or live scene bindings changed",
   "interactive_browser": "not executed; browser inventory had no enabled browser",
   "art_checks": "validation.json",
-  "revision_02_logs": ["tmp/house-identity-review/editor-revision02.log", "tmp/house-identity-review/smoke-revision02.log"],
-  "revision_03_logs": ["tmp/house-identity-review/editor-revision03.log", "tmp/house-identity-review/smoke-revision03.log"],
-  "revision_04_logs": ["tmp/house-identity-review/editor-revision04.log", "tmp/house-identity-review/smoke-revision04.log"]
+  "revision_02_logs": [
+    "tmp/house-identity-review/editor-revision02.log",
+    "tmp/house-identity-review/smoke-revision02.log"
+  ],
+  "revision_03_logs": [
+    "tmp/house-identity-review/editor-revision03.log",
+    "tmp/house-identity-review/smoke-revision03.log"
+  ],
+  "revision_04_logs": [
+    "tmp/house-identity-review/editor-revision04.log",
+    "tmp/house-identity-review/smoke-revision04.log"
+  ],
+  "machine_v1_assets": {
+    "command": "godot --headless --path godot -s res://test/check_machine_v1_assets.gd",
+    "exit_code": 0,
+    "imported_textures": 345,
+    "exact_registered_assemblies": 6,
+    "result": "passed; imports inspected as Texture2D resources, no run mutations"
+  },
+  "export_pack": {
+    "command": "godot --headless --path godot --export-pack Android <temporary-pack.pck>",
+    "exit_code": 0,
+    "result": "resource pack created; this is not an Android APK/device build"
+  },
+  "packaged_machine_v1_assets": {
+    "command": "godot --headless --main-pack <temporary-pack.pck> --script res://test/check_machine_v1_assets.gd",
+    "working_directory": "tmp/house-identity-review, outside source Godot project",
+    "exit_code": 0,
+    "imported_textures": 345,
+    "exact_registered_assemblies": 6,
+    "result": "passed; manifests and textures resolve from exported resources"
+  },
+  "v1_package_logs": [
+    "tmp/house-identity-review/editor-v1-package.log",
+    "tmp/house-identity-review/godot-v1-assets.log",
+    "tmp/house-identity-review/export-v1-package.log",
+    "tmp/house-identity-review/godot-v1-packaged-assets.log",
+    "tmp/house-identity-review/smoke-v1-package.log"
+  ],
+  "production_art_checks": "machine_v1_validation.json"
 }

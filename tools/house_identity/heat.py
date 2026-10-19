@@ -2,6 +2,10 @@
 from .pixels import Pixel
 
 
+def layer(p,name):
+    if hasattr(p,'layer'):p.layer(name)
+
+
 def ramps(tier):
     assert tier in (1,2,3)
     if tier==1:
@@ -36,15 +40,20 @@ def exhaust(p,x,y,side,frame,large=False):
 
 def backdrop(p,tier,frame):
     if tier==1:return
+    layer(p,'floor_reflection')
     p.oval(1,571,318,63,'heat_floor0')
     p.oval(13,582,294,43,'heat_floor1')
     p.oval(43,592,234,26,'heat1' if tier==3 else 'hot_metal0')
     # Emission belongs to powered upper vents and the cabinet edges. It is
     # behind the cabinet, away from every live field and header control.
+    layer(p,'shoulder_glow')
     for x,side in ((36,-1),(284,1)):
         p.contour((x,190),[((x+side*12,147),(x+side*15,110),(x+side*2,82))],
                   'heat_floor1',stroke=6 if tier==3 else 3)
-        if tier==3:exhaust(p,x,105,side,frame,True)
+        if tier==3:
+            layer(p,'exhaust')
+            exhaust(p,x,105,side,frame,True)
+            layer(p,'shoulder_glow')
         else:
             p.contour((x+side*3,103),[((x+side*8,87),(x+side*3,75),(x+side*8,60))],
                       'heat_air',stroke=1)
@@ -52,6 +61,7 @@ def backdrop(p,tier,frame):
 
 def hardware(p,tier,frame,warning=False):
     if tier==1 or warning:return
+    layer(p,'incandescence')
     core='heat5' if tier==2 else 'heat_white'
     rim='hot_metal2' if tier==2 else 'heat4'
     # Continuous incandescence lives in metal lips, not a flat screen tint.
@@ -63,6 +73,7 @@ def hardware(p,tier,frame,warning=False):
         p.fine_line([(90,yy*2-1),(548,yy*2-1)],core)
     # A fitted pair of exhaust banks outside the glass explain where the
     # sustained output escapes. No cracks, missing parts or end-run decay.
+    layer(p,'vent_hardware')
     for xx,side in ((29,-1),(286,1)):
         p.box(xx,350,6,76,'hot_metal0')
         for i in range(8):
@@ -73,9 +84,12 @@ def hardware(p,tier,frame,warning=False):
             root=xx+(0 if side<0 else 5)
             p.poly([(root,406),(root+side*7,401),(root+side*7,394),(root,399)],'hot_metal0')
             p.line([(root,400),(root+side*6,396)],'heat5')
+            layer(p,'exhaust')
             exhaust(p,xx+(0 if side<0 else 5),402,side,frame)
+            layer(p,'vent_hardware')
     # Contact highlights from the hot body seat the controls in the same
     # machine. All cap faces/glyphs remain legible and static during a loop.
+    layer(p,'control_incandescence')
     if tier==3:
         # Moving hot air above powered shoulders leaves the header and text clear.
         for x,side in ((40,-1),(280,1)):
@@ -87,6 +101,7 @@ def hardware(p,tier,frame,warning=False):
     if warning:return
     # Discrete reel-lip sparks and a rising ember stream. Formulae describe
     # authored frame positions; they do not read any random number generator.
+    layer(p,'sparks')
     count=3 if tier==2 else 13
     for i in range(count):
         side=-1 if i%2==0 else 1
@@ -95,6 +110,7 @@ def hardware(p,tier,frame,warning=False):
         p.line([(xx,yy),(xx+side*2,yy-3)],'heat4' if i%3 else core)
         if tier==3 and i%3==0:p.fine_line([(xx*2+side*3,yy*2-6),(xx*2+side*5,yy*2-9)],'heat2')
     if tier==3:
+        layer(p,'embers')
         for i in range(5):
             xx=38+i*61+(frame%3-1)*3
             yy=90-((i*11+frame*7)%48)

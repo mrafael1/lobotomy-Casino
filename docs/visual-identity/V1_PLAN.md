@@ -67,6 +67,10 @@ Review EN/FR, long card names, 5,000 targets, narrow/tall/wide viewports, mouse,
 
 Finish with restrained late-run cabinet decay and dealer/casino progression after the healthy machine and its maximum-output state are convincing. Decay must not reduce control readability or introduce mechanics. Keep each implementation increment reviewable on the existing dedicated branch while its PR remains open; never merge without the owner's consent.
 
+## Current implementation status
+
+The first increment now supplies the [v1 layer package](MACHINE_V1_PACKAGE.md): registered cabinet/hardware/effect layers, shared geometry, individual symbols, control states and current inventory/augment indicators. All 23 reference state assemblies are checked against the original recipes, with runtime samples excluded from exported layers. The next increment is stable live-scene binding in stage 2. Production polish, touch review and complete playable-state acceptance remain open until integration.
+
 ## First implementation increment
 
 Begin with **stage 1: the v1 machine layer package and shared geometry**, followed by the stable live cabinet in stage 2. This is the smallest useful increment that makes the chosen direction concrete in-game and exposes compositing/input issues before the rest of the casino depends on it.

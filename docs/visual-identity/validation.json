@@ -1,13 +1,13 @@
 {
   "status": "passed",
   "palette_colours": 106,
-  "palette_and_alpha_pngs": 117,
+  "palette_and_alpha_pngs": 482,
   "full_scene_masters": 27,
   "layout_size_reductions": 27,
   "unique_card_faces": 21,
   "card_coverage": "exact match to current PacteCards IDs",
   "animation_atlases_and_gif_timing": 15,
-  "review_resources_checked": 91,
+  "review_resources_checked": 98,
   "generated_javascript_syntax": "passed (node --check)",
   "deterministic_image_rebuild": "byte-identical",
   "source_size": [
