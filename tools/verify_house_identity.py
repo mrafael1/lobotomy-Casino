@@ -67,9 +67,9 @@ def verify():
         for i,t in enumerate(timing):
             im.seek(i);assert im.info['duration']==t,f'{key} frame {i}'
         im.close()
-    # Breathing is presentation-only: no numerical, reel or control region
-    # may shift or change contrast while the physical cabinet takes a breath.
-    with Image.open(ART/'animation/cabinet_breath.png') as im:
+    # Decorative chase is presentation-only: no numerical, reel or control
+    # region may shift or change contrast while perimeter lamps animate.
+    with Image.open(ART/'animation/healthy_idle.png') as im:
         for box in ((92,714,548,844),(104,434,532,654),(68,1008,572,1100)):
             expected=im.crop(box).tobytes()
             for i in range(1,6):
@@ -103,7 +103,7 @@ def verify():
         'review_resources_checked':len(parsed.resources),'generated_javascript_syntax':'passed (node --check)',
         'deterministic_image_rebuild':'byte-identical',
         'source_size':m['source_size'],'native_fine_grid_construction':'verified; not repeated 2x raster blocks',
-        'breathing_ui_regions':'pixel-identical across all six frames',
+        'healthy_idle_ui_regions':'pixel-identical across all six chase frames',
         'visual_review':['benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail'],
         'interactive_browser_review':'not run; browser inventory had no enabled browser',
         'runtime_godot_checks':'see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings',

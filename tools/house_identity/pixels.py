@@ -23,6 +23,13 @@ P = {
     'enamel0':'251a20', 'enamel1':'39212b', 'enamel2':'492933', 'enamel3':'65343c',
     'membrane0':'292125', 'membrane1':'473039', 'membrane2':'725047',
     'cloth_mid':'b5aa8e', 'skin_mid':'a2765d', 'skin_light':'c09d79',
+    # The healthy machine is the house's lure. This dedicated material ramp
+    # leaves the deliberately subdued tables, folios and casino rooms intact.
+    'ruby0':'351622', 'ruby1':'6b1f37', 'ruby2':'a8324b', 'ruby3':'d75262', 'ruby4':'f58b80',
+    'gold0':'493025', 'gold1':'946039', 'gold2':'c48b4a', 'gold3':'ebbb6d', 'gold4':'ffe2a1',
+    'jade0':'103b3e', 'jade1':'176465', 'jade2':'29998d', 'jade3':'65d5b3', 'jade4':'b9f4ce',
+    'cream0':'a28a67', 'cream1':'d1ba8e', 'cream2':'eddbaf', 'cream3':'fff0ce',
+    'bulb0':'88613a', 'bulb1':'e6a55c', 'bulb2':'ffd89a', 'bulb3':'fff5cf',
 }
 
 # Explicit 5x7 alphabet: titles, live-label mockups and card text share a grid.

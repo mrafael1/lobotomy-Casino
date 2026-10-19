@@ -53,7 +53,7 @@ Derive Mr. Vey's state from the **existing saved `wealthTargetIndex`**, clamped 
 
 Run progression and frenzy heat are independent: Vey's accumulated unease follows the index, cabinet heat still follows the **displayed existing x1/x2/x3 tier and pending-loss state**. The paired early/advanced machine illustrations deliberately combine two example conditions; they must not imply that late-run machines are forced to x3.
 
-Blink, breathing, gaze and card handling use local presentation timing. They never consume `LobRNG` or alter offers/results. Resuming a scene may restart an idle blink; it may not restart a saved transaction. Caption hold/fade pauses while covered by a callout, preserving the current response behaviour.
+Blink, decorative lamp chase, gaze and card handling use local presentation timing. They never consume `LobRNG` or alter offers/results. Resuming a scene may restart an idle blink; it may not restart a saved transaction. Caption hold/fade pauses while covered by a callout, preserving the current response behaviour. The healthy cabinet uses anticipation and reward; the anatomical grille/bellows treatment is removed. End-of-run decay remains a separate future presentation state, not the current x3 example.
 
 ## Required state coverage before a scene is migrated
 
@@ -73,11 +73,12 @@ The mockup sample text and prices are illustrative typesetting. Production effec
 | Pattern Recognition | Five authored registration frames, 210ms each. | Preserve five-frame animation on live cards, inspection and collection where currently animated. |
 | Is It Cheating | 1000/120/520/120ms false-face slide. | Preserve animated emblem; same card/effect ID. |
 | Machine state study | Early, advanced, rescue keyframes at 2000/2000/1600ms. | State reference only; never cycle gameplay warnings because a GIF loops. |
-| Cabinet breathing | Six frames at 520/220/160/240/300/1100ms. Diaphragm rises, bellows follow, a small reflection catches the exhale. | Local presentation clock only. Reel apertures, labels, controls and input rectangles do not move. Respect existing effect preferences. |
+| Healthy idle | Six 180ms frames of warm tungsten chase around marquee and reels. | Local presentation clock only. Account/reel/control regions remain pixel-identical; actual approach/warning lamps do not join the decorative chase. |
+| Healthy reward | Six frames at 280/340/200/260/260/1300ms: pair callout, answering lamps, direct score pop, separate coins at tray, settle. | Fixed illustrative +10 eye-pair sample, not game logic. Bind real payout/Lucidity values and current sequence timing during integration; coins never drive wealth. |
 | Deal and settle | Proposed: 180ms glide from shoe, 90ms contact, 350ms stillness; shadow tightens on contact. | Existing selection/phase handoff owns completion. No new drag restriction. |
 | Reel/coin/target | Existing timing retained initially; restyle mechanical clacks and phosphor ghosts to new surfaces. | Animation may defer the next permitted sequence exactly as current controller does; cannot award results. |
 
-The six studies through cabinet breathing are delivered as fixed-palette GIFs plus atlases and manifest durations. Deal/settle is an animation direction for phase two, not a delivered prototype. Reduced-motion review switches to static frames; runtime must respect the existing effect preferences.
+The seven studies through healthy reward are delivered as fixed-palette GIFs plus atlases and manifest durations. Deal/settle is an animation direction for phase two, not a delivered prototype. Reduced-motion review switches to static frames; runtime must respect the existing effect preferences. The historical breathing atlas is removed from current outputs.
 
 ## Validation and acceptance
 

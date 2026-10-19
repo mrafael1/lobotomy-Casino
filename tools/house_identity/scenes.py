@@ -500,4 +500,5 @@ SCENES = {
     '23_unlock':unlock,
     '24_inspection':inspection,
     '25_machine_rescue':lambda:machine(True,warning=True),
+    '26_machine_win':lambda:machine(payout=2),
 }

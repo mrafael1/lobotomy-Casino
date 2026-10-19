@@ -52,10 +52,16 @@ def main():
     face=portrait('late').crop((53,18,128,131));write_image(face.resize((300,452),Image.Resampling.NEAREST),OUT/'dealer_detail.png')
     scene=machine().crop((39,206,281,338));write_image(scene.resize((968,528),Image.Resampling.NEAREST),OUT/'reel_detail.png')
     # Full scene benchmark: a second-phase layout comparison is easy to read offline.
-    board=Pixel(1032,708,'void',density=1);board.text('THE HOUSE REMEMBERS / REFINEMENT 02',20,16,'brass3',2)
-    for i,(name,label) in enumerate((('02_pacte_augment','PACTE / PLAYER SEATED'),('04_machine_early','CONSOLE / EARLY'),('05_machine_advanced','CONSOLE / ADVANCED'))):
+    board=Pixel(1032,708,'void',density=1);board.text('THE HOUSE REMEMBERS / THE HEALTHY MACHINE',20,16,'brass3',2)
+    for i,(name,label) in enumerate((('02_pacte_augment','THE ROOM / QUIET'),('04_machine_early','THE MACHINE / INVITATION'),('26_machine_win','THE MACHINE / SMALL WIN'))):
         board.text(label,16+i*344,46,'paper2');board.paste(Image.open(OUT/'scenes'/f'{name}.png').resize((320,640),Image.Resampling.NEAREST),16+i*344,63)
     board.save(OUT/'benchmark.png')
+    reward_board=Pixel(1032,708,'void',density=1)
+    reward_board.text('HEALTHY MACHINE / INVITATION TO REWARD',20,16,'gold3',2)
+    for i,(phase,label) in enumerate(((0,'READY / WARM TUNGSTEN CHASE'),(2,'PAIR / THE LIGHTS ANSWER'),(6,'SETTLE / SCORE AND CASH SEPARATE'))):
+        reward_board.text(label,16+i*344,46,'paper2')
+        reward_board.paste(machine(payout=phase).im.resize((320,640),Image.Resampling.NEAREST),16+i*344,63)
+    reward_board.save(OUT/'machine_reward_benchmark.png')
     # Every remaining active presentation gets its own complete scene, not a label tile.
     names=[n for n in SCENES if n not in ('02_pacte_augment','04_machine_early','05_machine_advanced')]
     overview=Pixel(932,((len(names)+4)//5)*356+55,'void',density=1)
@@ -68,7 +74,7 @@ def main():
     # Physical display study with safe content centred inside a 390x844 phone.
     phones=Pixel(1198,910,'void',density=1)
     phones.text('PHONE STUDY / 390 X 844 / NEAREST DISPLAY / SAFE CONTENT CENTRED',12,16,'brass3',2)
-    for i,name in enumerate(('02_pacte_augment','04_machine_early','05_machine_advanced')):
+    for i,name in enumerate(('02_pacte_augment','04_machine_early','26_machine_win')):
         xx=3+i*399
         phones.box(xx,50,390,844,'slate');phones.box(xx+8,58,374,828,'ink')
         im=Image.open(OUT/'scenes'/f'{name}.png').resize((374,748),Image.Resampling.NEAREST)
@@ -85,11 +91,13 @@ def main():
     atlas(cheating).save(anim/'is_it_cheating.png');gif(cheating,anim/'is_it_cheating.gif',[1000,120,520,120])
     heat=[machine(False),machine(True),machine(True,warning=True)]
     atlas(heat).save(anim/'machine_states.png');gif(heat,anim/'machine_states.gif',[2000,2000,1600])
-    breathing=[machine(False,i) for i in range(6)]
-    atlas(breathing).save(anim/'cabinet_breath.png');gif(breathing,anim/'cabinet_breath.gif',[520,220,160,240,300,1100])
+    idle=[machine(False,i) for i in range(6)]
+    atlas(idle).save(anim/'healthy_idle.png');gif(idle,anim/'healthy_idle.gif',[180]*6)
+    reward=[machine(payout=i,frame=i) for i in range(1,7)]
+    atlas(reward).save(anim/'healthy_reward.png');gif(reward,anim/'healthy_reward.gif',[280,340,200,260,260,1300])
     manifest={
         'title':'The House Remembers','phase':'visual direction proposal; no runtime integration',
-        'revision':2,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
+        'revision':3,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
         'card_source_size':[156,244],'recipe_unit_source_pixels':2,
         'palette':P,'cards':[dict(zip(('id','name','family','inspection'),c)) for c in CARDS],
         'scenes':list(SCENES),'animations':{
@@ -98,7 +106,8 @@ def main():
             'pattern_recognition':{'size':[156,244],'ms':[210]*5},
             'is_it_cheating':{'size':[156,244],'ms':[1000,120,520,120]},
             'machine_states':{'size':[640,1280],'ms':[2000,2000,1600]},
-            'cabinet_breath':{'size':[640,1280],'ms':[520,220,160,240,300,1100]},
+            'healthy_idle':{'size':[640,1280],'ms':[180]*6},
+            'healthy_reward':{'size':[640,1280],'ms':[280,340,200,260,260,1300]},
         },
     }
     manifest['files']={str(f.relative_to(OUT)).replace('\\','/'):hashlib.sha256(f.read_bytes()).hexdigest()
@@ -107,7 +116,7 @@ def main():
     # Review HTML is generated from the same manifest, no asset copies to go stale.
     from house_identity.review import gallery
     (DOC/'review.html').write_text(gallery(manifest),encoding='utf8')
-    print(f'Built {len(SCENES)} full compositions, {len(CARDS)} card faces, 4 dealer states, 6 motion studies at the refined source density.')
+    print(f'Built {len(SCENES)} compositions, {len(CARDS)} card faces, 4 dealer states, 7 motion studies; healthy machine benchmark.')
     print(f'Review: {DOC / "review.html"}')
 
 

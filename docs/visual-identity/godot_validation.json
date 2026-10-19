@@ -1,5 +1,5 @@
 {
-  "scope": "revision 02 art import; current workspace including pre-existing uncommitted presentation work",
+  "scope": "revision 03 healthy-machine art import; current workspace including pre-existing uncommitted presentation work",
   "proposal_runtime_bindings": "none; all new scene images remain phase-one concepts",
   "editor_import": {
     "command": "godot --headless --editor --quit --path godot",
@@ -18,5 +18,6 @@
   "rules_parity": "not rerun; this change adds no rules, content data, save logic or live presentation integration",
   "interactive_browser": "not executed; browser inventory had no enabled browser",
   "art_checks": "validation.json",
-  "revision_02_logs": ["tmp/house-identity-review/editor-revision02.log", "tmp/house-identity-review/smoke-revision02.log"]
+  "revision_02_logs": ["tmp/house-identity-review/editor-revision02.log", "tmp/house-identity-review/smoke-revision02.log"],
+  "revision_03_logs": ["tmp/house-identity-review/editor-revision03.log", "tmp/house-identity-review/smoke-revision03.log"]
 }

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cc1sejxnt2fh5"
-path="res://.godot/imported/cabinet_breath.png-bacf80f16de207e083ce4d4c4a722b7f.ctex"
+uid="uid://bwyuyqof6o831"
+path="res://.godot/imported/healthy_idle.png-c752a51b0b96d0dfc1861ae7abe4ac18.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art_direction/house_remembers/animation/cabinet_breath.png"
-dest_files=["res://.godot/imported/cabinet_breath.png-bacf80f16de207e083ce4d4c4a722b7f.ctex"]
+source_file="res://assets/art_direction/house_remembers/animation/healthy_idle.png"
+dest_files=["res://.godot/imported/healthy_idle.png-c752a51b0b96d0dfc1861ae7abe4ac18.ctex"]
 
 [params]
 

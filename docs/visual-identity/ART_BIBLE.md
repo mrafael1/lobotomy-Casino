@@ -1,17 +1,17 @@
 # The House Remembers
 
-Phase-one visual direction for **Lobotomy Casino**, revision 02, 19 October 2026. The house is an intimate, disreputable working casino. Its courtesy is the mechanism of its menace. You are a customer before you are a patient. [Revision notes](REVISION_02.md) explain the darker materials, finer raster construction and rebuilt living console.
+Phase-one visual direction for **Lobotomy Casino**, revision 03, 19 October 2026. The house is an intimate, disreputable working casino. Its courtesy is the mechanism of its menace. The healthy machine is its brightest lure: the main source of anticipation and reward. [Current revision](REVISION_03.md) establishes the healthy machine; [revision 02](REVISION_02.md) records the earlier density/material work.
 
 ## The visual promise
 
 The player sits down at a baize table, accepts a house favour, and turns to an antique gaming console. The same employee keeps finding them. Every transaction feels professionally administered; only gradually does the precision become possessive. No haunted-hotel corridors, reception desk, scattered brain wallpaper, or decorative gore.
 
-**Signature shapes:** a shallow horseshoe gaming rail; a bowed oxblood cabinet with a tensioned grille; tall, divided reel drums; a continuous recessed account window; a croupier's long, hooked dealing fingers; the small paired cuts of a registration mark. The casino's LC monogram is a printer's seal, not a medical logo. Restrained clinical motifs live in calibration ticks, pressure equipment, employee number 00, a collar seam, and the house's memory of each account.
+**Signature shapes:** a shallow horseshoe gaming rail; a stepped ruby-and-gold slot cabinet with a radiant crown; tall, divided reel drums; a continuous recessed account window; a croupier's long, hooked dealing fingers; the small paired cuts of a registration mark. The casino's LC monogram is a printer's seal, not a medical logo. Restrained clinical motifs live in calibration ticks, pressure equipment, employee number 00, a collar seam, and the house's memory of each account. The healthy cabinet itself sells delight before deterioration.
 
 ## Grid and scale
 
 - All scene masters are **640×1280 source pixels**, mapped to **160×320 layout units**, so one source pixel is 0.25 layout units. Card fronts are 156×244 source pixels, equivalent to 39×61 layout units. Character construction uses this same source grid. Stable recipe coordinates map to two source pixels; native one-pixel detail uses the finer grid directly.
-- Every contour, ellipse raster, line, highlight and shade is rasterised directly onto integer source pixels. Cubic contours are sampled to that grid without antialiasing. No painted inputs, enlargement of old raster art, image quantization or noise fields generate the source illustrations. The 66-colour palette is defined in `tools/house_identity/pixels.py`.
+- Every contour, ellipse raster, line, highlight and shade is rasterised directly onto integer source pixels. Cubic contours are sampled to that grid without antialiasing. No painted inputs, enlargement of old raster art, image quantization or noise fields generate the source illustrations. The 89-colour palette is defined in `tools/house_identity/pixels.py`: the subdued house materials plus a dedicated healthy-machine ramp.
 - Enlarged inspection repeats the same original pixels with nearest sampling, an intentional magnification of a physical card. It never introduces a second illustration density. Close-ups in the review are also exact nearest magnifications.
 - Keep Canvas Items, expanded aspect, fractional scaling and the existing centred safe area. The source grid is an **art convention**, not a new render resolution. Essential text and touch targets remain in the safe area; overscan is expendable casino floor and shadow.
 - Inspect both 160×320 reductions and a phone presentation. Source pixels cannot stay integer-sized at every fractional display scale; use nearest texture filtering without mipmaps, and test shimmer at the actual viewport before integration acceptance.
@@ -32,11 +32,13 @@ The player sits down at a baize table, accepts a house favour, and turns to an a
 
 Use connected shade clusters. Wood grain follows the length of a structural member. Leather stitching follows the padded curve. Metal highlights sit on chamfers. Paper damage lives at handled corners; baize fades inside repeated betting arcs. Reserve isolated pixels for screws, stitches, iris reflections and tiny calibration marks.
 
+**Healthy-machine exception:** keep the room, tables and meta interfaces dark, but make the machine an enticing object in good repair. Ruby lacquer (`#a8324b` → `#f58b80`), polished gold (`#c48b4a` → `#ffe2a1`), jade glass (`#176465` → `#b9f4ce`) and bright cream drum stock (`#d1ba8e` → `#fff0ce`) give it a separate reward hierarchy. Warm tungsten bulbs surround the marquee and drums. Do not apply the room's gloom to the primary play object. End-of-run decay is a later, separate treatment.
+
 ## Light and hierarchy
 
-Warm pendant light makes the offer attractive and locates the table in the casino. Faces catch a narrow top-left key; eyes stay recessed. Brass reflects that key rather than emitting a universal outline. The console's phosphor provides a local cool counterlight. Advanced heat is emitted by lamps and reel apertures, leaving the deck readable. Roughly half a scene should remain low-value and quiet; never fill every recess with texture.
+Warm pendant light makes the offer attractive and locates the table in the casino. Faces catch a narrow top-left key; eyes stay recessed. Brass reflects that key rather than emitting a universal outline. The healthy console is visibly brighter: its own tungsten lamps, cream drums and jade glass establish its attraction. Advanced engagement intensifies the lights while keeping the machine healthy. Quiet dark areas frame that focus rather than darkening the whole cabinet.
 
-In Pacte: **three offered faces → selected card → dealer response → table apparatus**. In the machine: **reel result → score versus target → SPIN/resources → powers/items → dealer approach**. Wealth and target occupy one continuous window below the reels. The dealer no longer appears inside the console. The body feels alive through a tensioned diaphragm, bellows and restrained breathing reflections; UI and input geometry stay fixed. The background may lose contrast at phone size; the reels and control deck may not.
+In Pacte: **three offered faces → selected card → dealer response → table apparatus**. In the machine: **reel result → score versus target → SPIN/resources → powers/items → dealer approach**. Wealth and target occupy one continuous window below the reels. The dealer does not appear inside the console. A warm lamp chase creates anticipation; a win synchronises the lamps, delivers the score pop and settles separate Lucidity coins in the tray. UI and input geometry stay fixed. The background may lose contrast at phone size; the reels and control deck may not.
 
 Large source titles use a deliberate 5×7 bitmap alphabet at integer scales. Offer names are smaller and gain readable live text in inspection. All production names, descriptions, prices and numbers must become live localized text. Raster labels in these compositions describe typesetting, not a replacement for data bindings.
 
@@ -62,5 +64,7 @@ Each of the 21 current card IDs has its own constructed scene. Reward I is a lou
 ## Motion
 
 The recurring rhythm is **courteous action → precise settle → uncomfortable hold**. No universal bounce tween. A card glides, touches the felt, then stops. Vey's eyes move before his head; breathing stays nearly invisible. A power coin clicks into a fitted socket. Reel deceleration is mechanical, not gelatinous. Gains count with phosphor persistence; a target payment drains right-aligned digits before the route transition. Warnings pulse only their dedicated light and leave controls legible.
+
+The healthy machine has a more eager rhythm: **invitation → anticipation → reward → satisfying settle**. Keep the chase on decorative lamp banks, so it cannot be confused with the actual approach/countdown. A fixed pair study demonstrates +10 score travelling directly to wealth while distinct Lucidity coins remain at the tray. Production amounts always come from existing game events. Decay is deferred until this healthy reward benchmark is established.
 
 See the review gallery for constructed scene mockups, all card faces, dealer states and timing prototypes. These establish composition and material direction. They are proposal assets, **not integrated gameplay screens**; remaining production layering and acceptance checks are in [INTEGRATION.md](INTEGRATION.md).

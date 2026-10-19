@@ -18,6 +18,6 @@ Pacte, the single-deck build scenes, Collection's folio, House Records' tally re
 
 ## Review
 
-[Updated gallery](review.html), [phone-size study](../../godot/assets/art_direction/house_remembers/phone_study.png), [console source master](../../godot/assets/art_direction/house_remembers/scenes/04_machine_early.png), [breathing prototype](../../godot/assets/art_direction/house_remembers/animation/cabinet_breath.gif).
+[Current gallery](review.html), [phone-size study](../../godot/assets/art_direction/house_remembers/phone_study.png), [current console source master](../../godot/assets/art_direction/house_remembers/scenes/04_machine_early.png). This revision is historical: [revision 03](REVISION_03.md) supersedes the bowed/breathing cabinet with a healthy reward-focused machine; the old breathing exports have been removed.
 
 The finer source grid is a new art benchmark, not a claim that every illustration has received final production polish. Long localized text, full input behaviour, masking, actual mobile readability and all gameplay-state transitions still need the phase-two integration review. The existing mechanics/controllers have not been changed.

@@ -1,7 +1,7 @@
 {
   "title": "The House Remembers",
   "phase": "visual direction proposal; no runtime integration",
-  "revision": 2,
+  "revision": 3,
   "source_size": [
     640,
     1280
@@ -82,7 +82,30 @@
     "membrane2": "725047",
     "cloth_mid": "b5aa8e",
     "skin_mid": "a2765d",
-    "skin_light": "c09d79"
+    "skin_light": "c09d79",
+    "ruby0": "351622",
+    "ruby1": "6b1f37",
+    "ruby2": "a8324b",
+    "ruby3": "d75262",
+    "ruby4": "f58b80",
+    "gold0": "493025",
+    "gold1": "946039",
+    "gold2": "c48b4a",
+    "gold3": "ebbb6d",
+    "gold4": "ffe2a1",
+    "jade0": "103b3e",
+    "jade1": "176465",
+    "jade2": "29998d",
+    "jade3": "65d5b3",
+    "jade4": "b9f4ce",
+    "cream0": "a28a67",
+    "cream1": "d1ba8e",
+    "cream2": "eddbaf",
+    "cream3": "fff0ce",
+    "bulb0": "88613a",
+    "bulb1": "e6a55c",
+    "bulb2": "ffd89a",
+    "bulb3": "fff5cf"
   },
   "cards": [
     {
@@ -237,7 +260,8 @@
     "22_game_over",
     "23_unlock",
     "24_inspection",
-    "25_machine_rescue"
+    "25_machine_rescue",
+    "26_machine_win"
   ],
   "animations": {
     "vey_gaze": {
@@ -302,35 +326,51 @@
         1600
       ]
     },
-    "cabinet_breath": {
+    "healthy_idle": {
       "size": [
         640,
         1280
       ],
       "ms": [
-        520,
-        220,
-        160,
-        240,
-        300,
-        1100
+        180,
+        180,
+        180,
+        180,
+        180,
+        180
+      ]
+    },
+    "healthy_reward": {
+      "size": [
+        640,
+        1280
+      ],
+      "ms": [
+        280,
+        340,
+        200,
+        260,
+        260,
+        1300
       ]
     }
   },
   "files": {
-    "animation/cabinet_breath.gif": "f47f4ec4c6b492a376e8d8e0558fb61a59afd14242f2b808d0b736249b0af290",
-    "animation/cabinet_breath.png": "980a22c332f2500c18d3fe11d0a282998e2fed55b0a059d5f9af76f39a7b6544",
-    "animation/is_it_cheating.gif": "d27db3dbe1a18d3396d3761c3f39633c9cd3f12eb792934819bf8667e4313d1c",
+    "animation/healthy_idle.gif": "cad293129537ccfe56878428aef58a7af1d3763d24f256ecf94f2b9462b072d5",
+    "animation/healthy_idle.png": "0864a0f849322b182dd8c4f1c3d00e008ceebfa0368d4feae05aa111585758ab",
+    "animation/healthy_reward.gif": "dc78ba13ae7a633473fb9c533a4a877801ccedac85728f1844d9843de3db3dac",
+    "animation/healthy_reward.png": "f6c1d192691ea0fb1c2070b908a3b2c726b4416018ddad90d4c520caccc124b7",
+    "animation/is_it_cheating.gif": "a1f3f8a90b7cea3fc855057a52a3dee1d9f797e2d782754856590a163f4546a4",
     "animation/is_it_cheating.png": "9a55bb72ed1f2c8e81d31fb8df54c40b0ef07dbadd3d5db27ab2e7935d40c586",
-    "animation/machine_states.gif": "ac1bdfe57175f778c88f122ceea6956232ef32305b704317359db20550e46170",
-    "animation/machine_states.png": "70367f7e8efcfb24265d8d65eac31587362f68855b23f45ca7bb7764c20a8e63",
-    "animation/pattern_recognition.gif": "d26f4b0c0820ff529b5e643c0aebe66a10c637db596d06d28212415d7d6ea585",
+    "animation/machine_states.gif": "a687c8157df3c39b535b01aea8a009a88264c1e0247d67773bb6f9711cc699f9",
+    "animation/machine_states.png": "b74d36242189063823d83951281e5f4d389ca8d03293db20080937a6e4f54a3a",
+    "animation/pattern_recognition.gif": "d1d909d2449fee65d36babf712b1c22282ad46e5cfa4d43bd45f7c399a018024",
     "animation/pattern_recognition.png": "7784eaf8ca326a2923bcdb59b08f7f4d3180fa7229b30b9a6f7c0b0f0363e158",
-    "animation/vey_gaze.gif": "ee7b7a1410df2dba1c119ae5baf01038e85523d9357fab429dd415b06534040c",
+    "animation/vey_gaze.gif": "7704ddc93d2db0334a31fc72ee0c4bf9efabe45203474b021c534a5e777a4e2e",
     "animation/vey_gaze.png": "81800ea131567bc4b3f6a4a028da177112d9c953e739243066ed38ce624ef3ab",
-    "animation/vey_progression.gif": "b1527af7a2af6c55f0be0e289280e708d4a5d757b3ee1f15aed7c8f38f2dad49",
+    "animation/vey_progression.gif": "ec427c49fec8cbf71ed44e436b4d20921091049e430fae9129837a32d8c5de6b",
     "animation/vey_progression.png": "d7f6f1b2bb60adb0742face0ddf7c963dd1c20f986d3bc912b40c4d50b9bb91a",
-    "benchmark.png": "5dc1f296f6a21c44a8f9af38f6b1184ceff21e2487be53c2cbec6126b6feaf0a",
+    "benchmark.png": "2553863287a6a4792cae52e2c6f3a8beafd3c7a9e07350e3a60daa6f9299f22e",
     "card_sheet.png": "7d18a58f12481478b9d459506d3ef6e2098c24f7c00c7a9b03e09b37c534bba8",
     "cards/augment_adrenaline.png": "99f1bbadd3947f6b96773abcbc04bab54c0f390dbb4ff90d2b692cfa3ef3c84c",
     "cards/augment_back.png": "f27c0033e2a45e159d987a5806c3e7196a799c9200c388bd404837ad2acb9d7d",
@@ -361,19 +401,20 @@
     "dealer/welcome.png": "8e01fafa227ecd798ce48e7b0b5718c96f5ff6c96be81dd498f11456b771972d",
     "dealer_detail.png": "9ef8577f70e14ed5dfb7ee5f6e949005f306821c259c8646359afec672b89628",
     "dealer_states.png": "c6e5913f23bf6abe4a27723984503fe95d3ab6dbf8598f853f55aea71c3773b1",
-    "phone_study.png": "2f0f49cad650b179f3699943b8ddcfbe31d189149ac4c27eb22449b86f880bcf",
-    "reel_detail.png": "4b0174171ab8f21464cee12638259cdb3f7e056df5af3f5ab30a728b926bdaed",
-    "scene_overview.png": "093575e05e559c49255db66ce4b957583dcc91cdedc6d51c0855c85a63098f4b",
+    "machine_reward_benchmark.png": "ee9dcaa120cd783a3558a320f9b19255d65d6fc328307cb6d0db51542260d227",
+    "phone_study.png": "194c13efb4955b9cc1542bf670e87282b53bfdf22dc93e9676e02febef628456",
+    "reel_detail.png": "4afc2d976dc1e9009166773acb5c291144cae8b2dd48ac0900c35bcc1c3858c3",
+    "scene_overview.png": "4c82b6ee2ecbd704d9d765e17820533987a986840b294bb80ed1f0276cd9731b",
     "scenes/01_start.png": "f8c86127712bc0787965895849345ec44ca7b42ba5a39a962ccc5e3791011862",
     "scenes/01_start_160.png": "90265ad232ba04dbb22189df57ca378aaf56cf9f176e3e16e6e37473f5408588",
     "scenes/02_pacte_augment.png": "c1375ccd30692255407d3f3a524a098694f3ece68eb8159c9af023d7d91b44ec",
     "scenes/02_pacte_augment_160.png": "67f92c52060b367b079f2ca34ca3dbde48060d1d1f25a0266be7052ce1d36ca4",
     "scenes/03_pacte_power.png": "8631b886d176cc44f4797894170f622485412f4469e99bdb75caaeb97c1bddb9",
     "scenes/03_pacte_power_160.png": "d724fe6ea3c28c9187a0a2448f3bc1d8e532bc43afa4eea45ec47aa6e2800e93",
-    "scenes/04_machine_early.png": "d4d310f30517fce7637f6c77aa53236bceb7f64709d44b3af2d130156e759a14",
-    "scenes/04_machine_early_160.png": "451782b3819d52a51349078868a34df893a08314942d1d7970fff95f6cf4c7ea",
-    "scenes/05_machine_advanced.png": "e344c129e3c2fae95a1d80c516b3142bc150cd3bdf4a1eb7c679f5d44412f350",
-    "scenes/05_machine_advanced_160.png": "d23faeffd05c814f45294d8d65d95f4b6982bbc70cf3129fc0fe1baf3d81b631",
+    "scenes/04_machine_early.png": "845840efeda15876f556c599c285ba05d17e58cf93cb7482c071a02cf6f3a5fd",
+    "scenes/04_machine_early_160.png": "c15352c9a8526d290442fca4782b56d8e55fecfa13c752ae11cb37e1dacf5d52",
+    "scenes/05_machine_advanced.png": "77507258d218c9069daea0031fcb3c1b28e7ce1c8bfb983b1df65c3ce6e82b62",
+    "scenes/05_machine_advanced_160.png": "469475928b2d940e82ef8c0dd15598ab19ac1bfabffa6f0e7e61783b700fb751",
     "scenes/06_dealer_visit.png": "c8437b427cc6b111aba22fb58276c43814afd8d3f4c386b5a3fe7a378618beeb",
     "scenes/06_dealer_visit_160.png": "a303e3dcce59a2149fac0e99ec6bf4214dee27f26e6ddfe1ea92bee5cb7ba13d",
     "scenes/07_routes.png": "2180421d96422589a1b95cf0d3603622686d532b609276116720b0414e6631ec",
@@ -412,7 +453,9 @@
     "scenes/23_unlock_160.png": "0bea2d32820a899eb9d8415119a00b6b09aa5b1e2f042ebe8a601de015b58c4b",
     "scenes/24_inspection.png": "71fdb173c1023085f3a2c13690e54848fb2617ef3b0865366c8bf1cd0885180b",
     "scenes/24_inspection_160.png": "2a817ecb290ca57489487616d3352f8be859b13c88dcc77d30e4f575b29edcad",
-    "scenes/25_machine_rescue.png": "541fea86a6ab4b8cb72227b11056dd0511fd63523e9393dc22124e96e6db0742",
-    "scenes/25_machine_rescue_160.png": "76b8d50c9b27804c57207e28780f3ff5376113e4c2e02af6b5d9a42ac44c8927"
+    "scenes/25_machine_rescue.png": "556d8d8f590674d0b89c4ca81d71ac771775ded31bb967e7efd2c7732eea6a97",
+    "scenes/25_machine_rescue_160.png": "2a369373fce32794f781246419eb2c4470c80e03fcd1d811379052240de22846",
+    "scenes/26_machine_win.png": "e646cc567db536aad64ba21bb7eee5bffe355971220f12f41f889faa116bfc74",
+    "scenes/26_machine_win_160.png": "421971405bd69b7cedf4e96bfa1ece3ea1afbe3f49fd86d4c3e835cdb207cb1e"
   }
 }
