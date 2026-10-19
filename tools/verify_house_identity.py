@@ -44,7 +44,7 @@ def verify():
         im.close()
     for s in m['scenes']:
         im=Image.open(ART/'scenes'/f'{s}.png').convert('RGBA')
-        assert im.size==(320,640),s
+        assert im.size==tuple(m['source_size']),s
         assert im.getextrema()[3]==(255,255),f'Incomplete scene: {s}'
         reduction=Image.open(ART/'scenes'/f'{s}_160.png').convert('RGBA')
         assert reduction.tobytes()==im.resize((160,320),Image.Resampling.NEAREST).tobytes(),s
@@ -52,7 +52,13 @@ def verify():
     authored=set(re.findall(r'"id":\s*"([^"]+)"\s*,\s*"name":',source))
     assert authored=={c[0] for c in CARDS},f'Card coverage differs: {authored ^ {c[0] for c in CARDS}}'
     assert len({hashlib.sha256(Image.open(ART/'cards'/f'{c[0]}.png').tobytes()).hexdigest() for c in CARDS})==len(CARDS),'Duplicate card faces'
-    for c in CARDS:assert Image.open(ART/'cards'/f'{c[0]}.png').size==(78,122),c[0]
+    for c in CARDS:assert Image.open(ART/'cards'/f'{c[0]}.png').size==tuple(m['card_source_size']),c[0]
+    # Higher resolution must contain native-grid construction, not repeated
+    # blocks from the previous masters under a larger export size.
+    for rel in ('scenes/02_pacte_augment.png','scenes/04_machine_early.png','cards/augment_book.png','dealer/welcome.png'):
+        with Image.open(ART/rel) as im:
+            coarse=im.resize((im.width//2,im.height//2),Image.Resampling.NEAREST)
+            assert coarse.resize(im.size,Image.Resampling.NEAREST).tobytes()!=im.tobytes(),f'Only doubled pixels: {rel}'
     for key,meta in m['animations'].items():
         size=meta['size'];timing=meta['ms']
         assert Image.open(ART/'animation'/f'{key}.png').size==(size[0]*len(timing),size[1]),key
@@ -61,6 +67,14 @@ def verify():
         for i,t in enumerate(timing):
             im.seek(i);assert im.info['duration']==t,f'{key} frame {i}'
         im.close()
+    # Breathing is presentation-only: no numerical, reel or control region
+    # may shift or change contrast while the physical cabinet takes a breath.
+    with Image.open(ART/'animation/cabinet_breath.png') as im:
+        for box in ((92,714,548,844),(104,434,532,654),(68,1008,572,1100)):
+            expected=im.crop(box).tobytes()
+            for i in range(1,6):
+                shifted=(box[0]+i*640,box[1],box[2]+i*640,box[3])
+                assert im.crop(shifted).tobytes()==expected,f'Cabinet idle changes UI: {box}, frame {i}'
     html=(DOC/'review.html').read_text(encoding='utf8')
     parsed=Resources();parsed.feed(html)
     assert len(parsed.ids)==len(set(parsed.ids)),'Duplicate HTML IDs'
@@ -88,6 +102,8 @@ def verify():
         'animation_atlases_and_gif_timing':len(m['animations']),
         'review_resources_checked':len(parsed.resources),'generated_javascript_syntax':'passed (node --check)',
         'deterministic_image_rebuild':'byte-identical',
+        'source_size':m['source_size'],'native_fine_grid_construction':'verified; not repeated 2x raster blocks',
+        'breathing_ui_regions':'pixel-identical across all six frames',
         'visual_review':['benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail'],
         'interactive_browser_review':'not run; browser inventory had no enabled browser',
         'runtime_godot_checks':'see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings',

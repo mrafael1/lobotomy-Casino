@@ -8,7 +8,7 @@ from PIL import Image
 import hashlib
 import json
 
-from house_identity.pixels import Pixel, P, rgba
+from house_identity.pixels import Pixel, P, rgba, write_image
 from house_identity.dealer import portrait, dealer_sheet, STATES
 from house_identity.cards import CARDS, card, card_sheet
 from house_identity.scenes import SCENES, machine
@@ -19,7 +19,7 @@ DOC=ROOT/'docs/visual-identity'
 
 
 def atlas(frames):
-    w,h=frames[0].im.size
+    w,h=frames[0].w,frames[0].h
     p=Pixel(w*len(frames),h)
     for i,f in enumerate(frames):p.paste(f,i*w,0)
     return p
@@ -41,7 +41,7 @@ def main():
     for name,draw in SCENES.items():
         p=draw();p.save(OUT/'scenes'/f'{name}.png')
         # Deliberate actual-layout-size review, not used as a production texture.
-        p.im.resize((160,320),Image.Resampling.NEAREST).save(OUT/'scenes'/f'{name}_160.png')
+        write_image(p.im.resize((160,320),Image.Resampling.NEAREST),OUT/'scenes'/f'{name}_160.png')
     dealer_sheet().save(OUT/'dealer_states.png')
     for state in STATES:portrait(state).save(OUT/'dealer'/f'{state}.png')
     for key,name,family,effect in CARDS:card(key).save(OUT/'cards'/f'{key}.png')
@@ -49,16 +49,16 @@ def main():
     card('augment_book',back=True).save(OUT/'cards/augment_back.png')
     card_sheet().save(OUT/'card_sheet.png')
     # Two useful texture/facial close-ups, exact repeated source pixels.
-    face=portrait('late').im.crop((53,18,128,131));face.resize((300,452),Image.Resampling.NEAREST).save(OUT/'dealer_detail.png')
-    scene=machine().im.crop((34,302,284,419));scene.resize((750,351),Image.Resampling.NEAREST).save(OUT/'reel_detail.png')
+    face=portrait('late').crop((53,18,128,131));write_image(face.resize((300,452),Image.Resampling.NEAREST),OUT/'dealer_detail.png')
+    scene=machine().crop((39,206,281,338));write_image(scene.resize((968,528),Image.Resampling.NEAREST),OUT/'reel_detail.png')
     # Full scene benchmark: a second-phase layout comparison is easy to read offline.
-    board=Pixel(1032,708,'void');board.text('THE HOUSE REMEMBERS / COMPOSITION BENCHMARK',20,16,'brass3',2)
+    board=Pixel(1032,708,'void',density=1);board.text('THE HOUSE REMEMBERS / REFINEMENT 02',20,16,'brass3',2)
     for i,(name,label) in enumerate((('02_pacte_augment','PACTE / PLAYER SEATED'),('04_machine_early','CONSOLE / EARLY'),('05_machine_advanced','CONSOLE / ADVANCED'))):
-        board.text(label,16+i*344,46,'paper2');board.paste(Image.open(OUT/'scenes'/f'{name}.png'),16+i*344,63)
+        board.text(label,16+i*344,46,'paper2');board.paste(Image.open(OUT/'scenes'/f'{name}.png').resize((320,640),Image.Resampling.NEAREST),16+i*344,63)
     board.save(OUT/'benchmark.png')
     # Every remaining active presentation gets its own complete scene, not a label tile.
     names=[n for n in SCENES if n not in ('02_pacte_augment','04_machine_early','05_machine_advanced')]
-    overview=Pixel(932,((len(names)+4)//5)*356+55,'void')
+    overview=Pixel(932,((len(names)+4)//5)*356+55,'void',density=1)
     overview.text('CASINO FLOOR / ACTIVE PRESENTATIONS AT 160 X 320',18,17,'brass3',2)
     for i,n in enumerate(names):
         x=18+i%5*184;y=58+i//5*356
@@ -66,7 +66,7 @@ def main():
         overview.paste(Image.open(OUT/'scenes'/f'{n}_160.png'),x,y)
     overview.save(OUT/'scene_overview.png')
     # Physical display study with safe content centred inside a 390x844 phone.
-    phones=Pixel(1198,910,'void')
+    phones=Pixel(1198,910,'void',density=1)
     phones.text('PHONE STUDY / 390 X 844 / NEAREST DISPLAY / SAFE CONTENT CENTRED',12,16,'brass3',2)
     for i,name in enumerate(('02_pacte_augment','04_machine_early','05_machine_advanced')):
         xx=3+i*399
@@ -85,16 +85,20 @@ def main():
     atlas(cheating).save(anim/'is_it_cheating.png');gif(cheating,anim/'is_it_cheating.gif',[1000,120,520,120])
     heat=[machine(False),machine(True),machine(True,warning=True)]
     atlas(heat).save(anim/'machine_states.png');gif(heat,anim/'machine_states.gif',[2000,2000,1600])
+    breathing=[machine(False,i) for i in range(6)]
+    atlas(breathing).save(anim/'cabinet_breath.png');gif(breathing,anim/'cabinet_breath.gif',[520,220,160,240,300,1100])
     manifest={
         'title':'The House Remembers','phase':'visual direction proposal; no runtime integration',
-        'source_size':[320,640],'layout_size':[160,320],'source_pixels_per_layout_unit':2,
+        'revision':2,'source_size':[640,1280],'layout_size':[160,320],'source_pixels_per_layout_unit':4,
+        'card_source_size':[156,244],'recipe_unit_source_pixels':2,
         'palette':P,'cards':[dict(zip(('id','name','family','inspection'),c)) for c in CARDS],
         'scenes':list(SCENES),'animations':{
-            'vey_gaze':{'size':[184,248],'ms':[1000,140,650,70,70,1300]},
-            'vey_progression':{'size':[184,248],'ms':[1700,1700,1700,2200]},
-            'pattern_recognition':{'size':[78,122],'ms':[210]*5},
-            'is_it_cheating':{'size':[78,122],'ms':[1000,120,520,120]},
-            'machine_states':{'size':[320,640],'ms':[2000,2000,1600]},
+            'vey_gaze':{'size':[368,496],'ms':[1000,140,650,70,70,1300]},
+            'vey_progression':{'size':[368,496],'ms':[1700,1700,1700,2200]},
+            'pattern_recognition':{'size':[156,244],'ms':[210]*5},
+            'is_it_cheating':{'size':[156,244],'ms':[1000,120,520,120]},
+            'machine_states':{'size':[640,1280],'ms':[2000,2000,1600]},
+            'cabinet_breath':{'size':[640,1280],'ms':[520,220,160,240,300,1100]},
         },
     }
     manifest['files']={str(f.relative_to(OUT)).replace('\\','/'):hashlib.sha256(f.read_bytes()).hexdigest()
@@ -103,7 +107,7 @@ def main():
     # Review HTML is generated from the same manifest, no asset copies to go stale.
     from house_identity.review import gallery
     (DOC/'review.html').write_text(gallery(manifest),encoding='utf8')
-    print(f'Built {len(SCENES)} full compositions, {len(CARDS)} card faces, 4 dealer states, 5 motion studies.')
+    print(f'Built {len(SCENES)} full compositions, {len(CARDS)} card faces, 4 dealer states, 6 motion studies at the refined source density.')
     print(f'Review: {DOC / "review.html"}')
 
 

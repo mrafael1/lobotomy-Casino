@@ -244,6 +244,13 @@ def card(key,frame=0,back=False):
     p.oval(36,106,6,6,border)
     # A few deliberate nicks at the handled corners, not image-wide random wear.
     p.box(2,115,2,2,'paper0');p.box(73,4,2,3,'paper3');p.box(9,119,9,1,'paper1')
+    # Engraved edge work at the refined common source grid. Both decks retain
+    # their distinct print families and the same individual illustrations.
+    for yy in (27,53,79,105,131,157):
+        p.fine_line([(12,yy),(14,yy+3),(12,yy+6)],border)
+        p.fine_line([(143,yy),(141,yy+3),(143,yy+6)],border)
+    p.fine_line([(19,9),(135,9)],'paper3' if family=='augment' else 'brass_dull')
+    p.fine_line([(21,232),(134,232)],'paper0' if family=='augment' else 'wine2')
     return p
 
 

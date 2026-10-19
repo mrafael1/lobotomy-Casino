@@ -4,7 +4,7 @@ Phase one changes **no gameplay or presentation bindings**. New art is a reviewa
 
 ## Layer architecture
 
-Use the current `Presentation` safe origin and `SceneNav` transition cover. New art lives under `res://assets/art_direction/house_remembers`. Source scene dimensions are 320×640, mapped at **0.5** layout units per pixel. Keep the old manifest active until each migrated scene is visually and functionally verified. The new generator writes only its own asset subtree.
+Use the current `Presentation` safe origin and `SceneNav` transition cover. New art lives under `res://assets/art_direction/house_remembers`. Revision-two source scene dimensions are 640×1280, mapped at **0.25** layout units per pixel. Recipe coordinates remain 320×640 and each recipe unit maps to two native source pixels. Keep the old manifest active until each migrated scene is visually and functionally verified. The new generator writes only its own asset subtree.
 
 For each migrated scene export separate room, furnishing, interactive object, cast shadow, local light, character, and foreground layers from the same source recipes. Flattened scene PNGs are compositional masters, not opaque overlays to put above controls. Masks must be generated from actual shapes, not guessed old coordinates.
 
@@ -30,23 +30,22 @@ The proposal's source measurements are deliberately different from the current c
 
 | Element | Source pixels (x, y, w, h) | Layout units |
 |---|---|---|
-| Account content | 48, 155, 146, 97 | 24, 77.5, 73, 48.5 |
-| Dealer glass | 212, 155, 55, 76 | 106, 77.5, 27.5, 38 |
-| Reel 1 content | 53, 317, 59, 88 | 26.5, 158.5, 29.5, 44 |
-| Reel 2 content | 129, 317, 59, 88 | 64.5, 158.5, 29.5, 44 |
-| Reel 3 content | 205, 317, 59, 88 | 102.5, 158.5, 29.5, 44 |
-| First power touch | 53, 425, 50, 52 | 26.5, 212.5, 25, 26 |
-| Second power touch | 134, 425, 50, 52 | 67, 212.5, 25, 26 |
-| Third power touch | 215, 425, 50, 52 | 107.5, 212.5, 25, 26 |
-| SPIN touch | 96, 494, 99, 51 | 48, 247, 49.5, 25.5 |
-| Spin count field | 39, 502, 43, 30 | 19.5, 251, 21.5, 15 |
-| Stash 1 touch | 202, 493, 43, 52 | 101, 246.5, 21.5, 26 |
-| Stash 2 touch | 245, 493, 43, 52 | 122.5, 246.5, 21.5, 26 |
-| Pacte offer 1 | 24, 365, 78, 122 | 12, 182.5, 39, 61 |
-| Pacte offer 2 | 121, 365, 78, 122 | 60.5, 182.5, 39, 61 |
-| Pacte offer 3 | 218, 365, 78, 122 | 109, 182.5, 39, 61 |
+| Account content | 92, 714, 456, 130 | 23, 178.5, 114, 32.5 |
+| Reel 1 content | 104, 434, 120, 220 | 26, 108.5, 30, 55 |
+| Reel 2 content | 258, 434, 120, 220 | 64.5, 108.5, 30, 55 |
+| Reel 3 content | 412, 434, 120, 220 | 103, 108.5, 30, 55 |
+| First power touch | 102, 878, 100, 110 | 25.5, 219.5, 25, 27.5 |
+| Second power touch | 270, 878, 100, 110 | 67.5, 219.5, 25, 27.5 |
+| Third power touch | 438, 878, 100, 110 | 109.5, 219.5, 25, 27.5 |
+| SPIN touch | 198, 1006, 220, 98 | 49.5, 251.5, 55, 24.5 |
+| Spin count field | 76, 1028, 86, 48 | 19, 257, 21.5, 12 |
+| Stash 1 touch | 428, 1014, 68, 84 | 107, 253.5, 17, 21 |
+| Stash 2 touch | 504, 1014, 68, 84 | 126, 253.5, 17, 21 |
+| Pacte offer 1 | 48, 730, 156, 244 | 12, 182.5, 39, 61 |
+| Pacte offer 2 | 242, 730, 156, 244 | 60.5, 182.5, 39, 61 |
+| Pacte offer 3 | 436, 730, 156, 244 | 109, 182.5, 39, 61 |
 
-Five item durations occupy their own 16-source-pixel badge row, with individually drawn cigarette, potion, drink can, serum ampoule and cocktail silhouettes, two-scale digits and separate helpful/costly colours. Extend that silhouette family to the remaining items and bind each actual effect phase. The first three power sockets preserve acquisition order; preserve the current behaviour for any additional owned powers. The lower paper tabs remain inspectable augment indicators.
+Five item durations occupy their own 32-source-pixel badge row, with individually drawn cigarette, potion, drink can, serum ampoule and cocktail silhouettes and separate helpful/costly colours. Extend that silhouette family to the remaining items and bind each actual effect phase. The first three power sockets preserve acquisition order; preserve the current behaviour for any additional owned powers. The lower paper tabs remain inspectable augment indicators. The console contains no dealer portrait; existing reactions can use the transient account callout without a portrait. Keep caption priority/hold behaviour even when a face is absent.
 
 ## Presentation progression, with no new save fields
 
@@ -69,15 +68,16 @@ The mockup sample text and prices are illustrative typesetting. Production effec
 
 | Motion | Intended timing / construction | Integration gate |
 |---|---|---|
-| Vey gaze / blink | 1000ms neutral, 140ms gaze shift, 650ms hold, 70+70ms lids, 1300ms return. Six authored frames; card slips six source pixels as a secondary action. | Independent presentation clock, no input locks. |
+| Vey gaze / blink | 1000ms neutral, 140ms gaze shift, 650ms hold, 70+70ms lids, 1300ms return. Six authored frames; card slips twelve native source pixels as a secondary action. | Independent presentation clock, no input locks. |
 | Dealer progression | Four state frames, identity retained; GIF is a comparison study, not an in-game cyclic transformation. | Snap state on resume; short local reveal only at an existing safe transition. |
 | Pattern Recognition | Five authored registration frames, 210ms each. | Preserve five-frame animation on live cards, inspection and collection where currently animated. |
 | Is It Cheating | 1000/120/520/120ms false-face slide. | Preserve animated emblem; same card/effect ID. |
 | Machine state study | Early, advanced, rescue keyframes at 2000/2000/1600ms. | State reference only; never cycle gameplay warnings because a GIF loops. |
+| Cabinet breathing | Six frames at 520/220/160/240/300/1100ms. Diaphragm rises, bellows follow, a small reflection catches the exhale. | Local presentation clock only. Reel apertures, labels, controls and input rectangles do not move. Respect existing effect preferences. |
 | Deal and settle | Proposed: 180ms glide from shoe, 90ms contact, 350ms stillness; shadow tightens on contact. | Existing selection/phase handoff owns completion. No new drag restriction. |
 | Reel/coin/target | Existing timing retained initially; restyle mechanical clacks and phosphor ghosts to new surfaces. | Animation may defer the next permitted sequence exactly as current controller does; cannot award results. |
 
-The first five are delivered as fixed-palette GIFs plus atlases and manifest durations. Deal/settle is an animation direction for phase two, not a delivered prototype. Reduced-motion review switches to static frames; runtime must respect the existing effect preferences.
+The six studies through cabinet breathing are delivered as fixed-palette GIFs plus atlases and manifest durations. Deal/settle is an animation direction for phase two, not a delivered prototype. Reduced-motion review switches to static frames; runtime must respect the existing effect preferences.
 
 ## Validation and acceptance
 

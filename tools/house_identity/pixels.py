@@ -1,17 +1,28 @@
 """House Remembers: integer-only raster construction, no source images or filters."""
 from PIL import Image, ImageDraw
+from pathlib import Path
+import io
+import os
+import tempfile
+import time
 
 P = {
     'void':'090c0e', 'ink':'101719', 'slate':'202b2c', 'smoke':'384344',
-    'wood0':'201718', 'wood1':'392424', 'wood2':'58382d', 'wood3':'81533a', 'wood4':'ac7950',
-    'wine0':'28151d', 'wine1':'491f2a', 'wine2':'74303b', 'wine3':'a14c50', 'wine4':'cd7160',
-    'felt0':'102a27', 'felt1':'194039', 'felt2':'29594a', 'felt3':'42715a', 'felt4':'749477',
-    'brass0':'3c3127', 'brass1':'6c5438', 'brass2':'a5814c', 'brass3':'d1b06c', 'brass4':'f2d697',
-    'paper0':'716758', 'paper1':'a99c7c', 'paper2':'d4c6a0', 'paper3':'eee0b8', 'ivory':'fff0ce',
-    'skin0':'3d2b2c', 'skin1':'6f4840', 'skin2':'9e6b53', 'skin3':'c79570', 'skin4':'e0b88a',
+    'wood0':'171315', 'wood1':'2b1e20', 'wood2':'432c27', 'wood3':'63452f', 'wood4':'886342',
+    'wine0':'1d131a', 'wine1':'351d25', 'wine2':'542833', 'wine3':'803e49', 'wine4':'b06459',
+    'felt0':'0d211f', 'felt1':'14332e', 'felt2':'23483d', 'felt3':'3b614f', 'felt4':'68836b',
+    'brass0':'2b2722', 'brass1':'514431', 'brass2':'81683e', 'brass3':'b69764', 'brass4':'ddbf88',
+    'paper0':'655e51', 'paper1':'938974', 'paper2':'b7ac91', 'paper3':'ded2b2', 'ivory':'f4e3bf',
+    'skin0':'302328', 'skin1':'583e39', 'skin2':'8d604e', 'skin3':'b58b6e', 'skin4':'c9aa86',
     'cold0':'263a3d', 'cold1':'496265', 'cold2':'78928d', 'cold3':'b2c1ab',
     'mint0':'234d46', 'mint1':'4a9b7b', 'mint2':'8edbb0', 'mint3':'d8f2c0',
     'red':'dc705b', 'amber':'e5a95e', 'blue':'687f9b', 'lilac':'a08a9e',
+    'wood_edge':'755638', 'wood_warm':'51382d', 'wood_glaze':'362823',
+    'brass_dull':'655439', 'brass_polish':'c3a674', 'brass_cool':'686c5e',
+    'glass0':'101c1d', 'glass1':'1b2c2d', 'glass2':'2b3e3b', 'glass3':'3e5148',
+    'enamel0':'251a20', 'enamel1':'39212b', 'enamel2':'492933', 'enamel3':'65343c',
+    'membrane0':'292125', 'membrane1':'473039', 'membrane2':'725047',
+    'cloth_mid':'b5aa8e', 'skin_mid':'a2765d', 'skin_light':'c09d79',
 }
 
 # Explicit 5x7 alphabet: titles, live-label mockups and card text share a grid.
@@ -76,32 +87,79 @@ def text_width(s, scale=1, tracking=1):
     return max(0, sum((len(ROWS.get(ch, ROWS['?'])[0])+tracking)*scale for ch in s.upper())-tracking*scale)
 
 
+def write_image(im,path):
+    """Atomic image replacement so the open Godot editor never reads half a PNG."""
+    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+    buf=io.BytesIO();im.save(buf,format='PNG',optimize=True);payload=buf.getvalue()
+    if path.exists() and path.read_bytes()==payload:return
+    with tempfile.NamedTemporaryFile(dir=path.parent,suffix='.tmp',delete=False) as f:
+        f.write(payload);temp=Path(f.name)
+    try:
+        for attempt in range(10):
+            try:
+                os.replace(temp,path);break
+            except OSError:
+                if attempt==9:raise
+                time.sleep(.1)
+    finally:
+        if temp.exists():temp.unlink()
+
+
 class Pixel:
-    def __init__(self, w=320, h=640, bg=None):
-        self.im = Image.new('RGBA', (w, h), rgba(bg))
+    def __init__(self, w=320, h=640, bg=None, density=2):
+        # Recipe units stay stable; primitive rasterisation happens directly on
+        # the finer source grid. No old raster is enlarged to make new masters.
+        self.w,self.h,self.density=w,h,density
+        self.im = Image.new('RGBA', (w*density, h*density), rgba(bg))
         self.d = ImageDraw.Draw(self.im)
 
     def box(self, x, y, w, h, c):
         assert all(isinstance(v, int) for v in (x, y, w, h))
         if w > 0 and h > 0:
-            self.d.rectangle((x, y, x+w-1, y+h-1), fill=rgba(c))
+            d=self.density
+            self.d.rectangle((x*d, y*d, (x+w)*d-1, (y+h)*d-1), fill=rgba(c))
 
     def poly(self, pts, c):
         assert all(isinstance(v, int) for p in pts for v in p)
-        self.d.polygon(pts, fill=rgba(c))
+        self.d.polygon([(x*self.density,y*self.density) for x,y in pts], fill=rgba(c))
 
     def line(self, pts, c, width=1):
         assert all(isinstance(v, int) for p in pts for v in p)
-        self.d.line(pts, fill=rgba(c), width=width)
+        self.d.line([(x*self.density,y*self.density) for x,y in pts], fill=rgba(c), width=width*self.density)
 
     def oval(self, x, y, w, h, c):
-        self.d.ellipse((x,y,x+w-1,y+h-1), fill=rgba(c))
+        d=self.density
+        self.d.ellipse((x*d,y*d,(x+w)*d-1,(y+h)*d-1), fill=rgba(c))
 
     def arc(self, box, start, end, c, width=1):
-        self.d.arc(box, start, end, fill=rgba(c), width=width)
+        d=self.density
+        self.d.arc(tuple(v*d for v in box), start, end, fill=rgba(c), width=width*d)
 
     def paste(self, p, x, y):
-        self.im.alpha_composite(p.im if isinstance(p, Pixel) else p, (x,y))
+        self.im.alpha_composite(p.im if isinstance(p, Pixel) else p, (x*self.density,y*self.density))
+
+    def crop(self,box):
+        return self.im.crop(tuple(v*self.density for v in box))
+
+    def fine_line(self,pts,c,width=1):
+        """Native source-pixel strokes for engraving, seams and small highlights."""
+        assert all(isinstance(v,int) for pt in pts for v in pt)
+        self.d.line(pts,fill=rgba(c),width=width)
+
+    def contour(self,start,segments,c,stroke=0):
+        """Cubic contours sampled onto integer source pixels, without smoothing."""
+        d=self.density
+        current=(start[0]*d,start[1]*d);points=[current]
+        for a,b,end in segments:
+            ax,ay=a[0]*d,a[1]*d;bx,by=b[0]*d,b[1]*d;ex,ey=end[0]*d,end[1]*d
+            sx,sy=current
+            for i in range(1,49):
+                t=i/48;u=1-t
+                points.append((round(u*u*u*sx+3*u*u*t*ax+3*u*t*t*bx+t*t*t*ex),
+                               round(u*u*u*sy+3*u*u*t*ay+3*u*t*t*by+t*t*t*ey)))
+            current=(ex,ey)
+        if stroke:self.d.line(points,fill=rgba(c),width=stroke)
+        else:self.d.polygon(points,fill=rgba(c))
 
     def text(self, s, x, y, c='paper3', scale=1, align='left', tracking=1):
         if align == 'center':
@@ -144,8 +202,7 @@ class Pixel:
         self.line([(x-1,y+1),(x+1,y-1)],'ink')
 
     def save(self,path):
-        path.parent.mkdir(parents=True,exist_ok=True)
-        self.im.save(path,optimize=True)
+        write_image(self.im,path)
 
 
 def chip(p,x,y,r=10,c='wine2',height=0):

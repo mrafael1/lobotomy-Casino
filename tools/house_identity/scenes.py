@@ -3,6 +3,7 @@ from math import cos, sin, pi
 from .pixels import Pixel, chip, button, eye, symbol, text_width, item_badge
 from .dealer import portrait
 from .cards import card, CARDS
+from .console import machine
 
 
 def filigree(p,x,y,w,h,c='brass1'):
@@ -98,7 +99,7 @@ def shoe(p,x,y):
     p.poly([(x+3,y+15),(x+17,y+4),(x+36,y+10),(x+21,y+24)],'wood2')
     p.poly([(x+4,y+19),(x+19,y+28),(x+19,y+42),(x+4,y+35)],'wood1')
     p.poly([(x+22,y+27),(x+36,y+15),(x+36,y+33),(x+22,y+43)],'wood3')
-    for yy in range(13,23,2):p.line([(x+9,y+yy-13),(x+23,y+yy-21)],'paper2')
+    for yy in range(4,16,2):p.line([(x+12,y+yy),(x+27,y+yy-5)],'paper1')
     p.poly([(x+15,y+28),(x+30,y+24),(x+39,y+40),(x+22,y+44)],'paper2')
     p.line([(x+20,y+31),(x+29,y+29),(x+34,y+38),(x+24,y+40),(x+20,y+31)],'wine2')
 
@@ -150,136 +151,6 @@ def pacte(power=False,late=False):
     return p
 
 
-def machine(late=False,frame=0,warning=False):
-    p=Pixel();wall(p)
-    # Angled mahogany console: offset clerestory display, broad live reels below.
-    p.oval(5,583,310,43,'ink')
-    p.poly([(25,154),(43,129),(264,129),(294,156),(305,558),(287,592),(31,592),(12,561)],'ink')
-    p.poly([(28,156),(44,133),(262,133),(289,157),(299,556),(283,584),(35,584),(18,556)],'wood2')
-    p.poly([(31,159),(48,140),(259,140),(283,160),(289,266),(25,266)],'wood0')
-    # Carved side cheeks with actual bevels and longitudinal grain.
-    for x,side in ((21,1),(281,-1)):
-        p.poly([(x,267),(x+side*15,259),(x+side*14,515),(x+side*5,544),(x-3,534)],'wood3')
-        for j in (2,6,10):
-            p.line([(x+side*j,279),(x+side*(j+1),345),(x+side*j,411),(x+side*(j-1),503)],'wood2')
-        p.line([(x+side*2,277),(x+side*2,518)],'brass2')
-    # Upper room signage is an illuminated scalloped marquee, not a hotel plaque.
-    p.poly([(47,77),(66,59),(112,53),(127,45),(193,45),(207,53),(252,59),(273,77),
-            (264,116),(56,116)],'wood0')
-    p.line([(49,78),(67,62),(114,57),(128,49),(192,49),(207,57),(251,62),(270,78)],'brass2',2)
-    p.text('LOBOTOMY',160,69,'paper3',3,'center');p.text('CASINO / ACCOUNT No. 000',160,99,'brass2',align='center')
-    for x in range(62,260,14):p.oval(x,119,4,4,'amber' if late else 'brass1')
-    filigree(p,57,61,207,52,'brass1')
-    # Long account register on left; dealer appears through a live glass porthole right.
-    p.metal(43,150,156,107,'brass',7);p.box(48,155,146,97,'felt0')
-    p.line([(52,158),(187,158)],'felt2')
-    p.text('WEALTH',59,165,'mint1')
-    p.text('2780' if late else '0040',119,182,'mint3',3,'center')
-    p.text('TARGET',59,217,'paper3')
-    p.text('3500' if late else '100',183,212,'paper3',2,'right')
-    p.box(58,233,124,5,'ink');p.box(58,233,98 if late else 49,4,'mint1')
-    p.line([(58,232),(182,232)],'brass0')
-    p.metal(207,150,65,107,'brass',8);p.box(212,155,55,97,'ink')
-    # Native pixel crop, not a separately scaled mini-character.
-    face=portrait('late' if late else 'welcome',frame).im.crop((64,27,119,103))
-    p.paste(face,212,155)
-    p.text('VEY',239,237,'paper2',align='center')
-    # Countdown separates from score, and never implies a new duration.
-    for i in range(10):p.box(49+i*22,269,17,4,'amber' if i<(8 if late else 3) else 'brass0')
-    p.text('HOUSE APPROACH',47,259,'paper1');p.text('X3' if late else 'X1',279,282,'amber' if late else 'mint2',2,'right')
-    # The broad horizontal reel cradle is the visual and interaction centre.
-    p.metal(35,302,248,117,'brass',8);p.box(41,309,236,103,'wood0')
-    for i in range(3):
-        x=49+i*76
-        p.metal(x,313,67,96,'brass',3);p.box(x+4,317,59,88,'paper0')
-        p.box(x+5,326,57,70,'paper2');p.box(x+5,340,57,42,'paper3')
-        p.box(x+7,321,2,77,'ivory');p.box(x+57,320,4,81,'paper1')
-        # Different adjacent symbol hints maintain visible strip semantics.
-        p.line([(x+24,321),(x+41,321)],'paper0',2);p.line([(x+24,398),(x+41,398)],'paper0',2)
-        symbol(p,('eye','eye','brain')[i],x+14,339)
-        upper=Pixel(38,44);symbol(upper,('pill','vial','eye')[i],0,0)
-        lower=Pixel(38,44);symbol(lower,('brain','syringe','pill')[i],0,0)
-        p.paste(upper.im.crop((0,25,38,44)),x+14,318)
-        p.paste(lower.im.crop((0,0,38,17)),x+14,388)
-        p.line([(x+6,337),(x+58,337)],'paper1');p.line([(x+6,387),(x+58,387)],'paper1')
-        p.oval(x+25,304,16,5,'amber' if late else 'mint1')
-    for x in (30,288):p.poly([(x,358),(x+(-7 if x>160 else 7),353),(x+(-7 if x>160 else 7),363)],'red')
-    # Hinged reel cradle, screwed access plates, turned spindles, and worn
-    # window corners. Everything serves the hardware's construction.
-    for xx in (39,274):
-        for yy in (315,403):p.screw(xx,yy)
-    for xx in (45,121,197):
-        p.box(xx,348,3,26,'brass0');p.box(xx,349,1,24,'brass3')
-        for yy in (352,361,370):p.line([(xx,yy),(xx+3,yy)],'brass1')
-    for xx in (75,151,227):
-        p.metal(xx,414,22,5,'brass',1)
-    # Power coins live on a felt service strip below reels, preserved acquisition order.
-    p.box(39,426,239,53,'felt0')
-    for i,name in enumerate(('REROLL','SHIFT','LOCK')):
-        x=78+i*81
-        p.oval(x-23,429,46,36,'brass0');p.oval(x-21,429,42,32,'brass2')
-        p.oval(x-18,431,36,26,'paper2' if i!=1 else 'felt2')
-        if i==0:
-            p.arc((x-10,434,x+9,453),30,325,'wine1',2);p.poly([(x+5,433),(x+12,435),(x+7,440)],'wine1')
-        elif i==1:p.line([(x,435),(x,451),(x-5,446)],'mint2',2);p.line([(x,451),(x+5,446)],'mint2',2)
-        else:
-            p.arc((x-6,434,x+6,448),180,360,'wine1',2);p.box(x-8,442,17,10,'wine1')
-        p.text(name,x,467,'paper2',align='center')
-    # A sloped control deck with large SPIN and two real stash cup wells.
-    p.poly([(31,486),(284,486),(300,548),(285,563),(32,563),(18,549)],'brass0')
-    p.poly([(34,488),(282,488),(294,545),(26,545)],'brass2')
-    p.line([(36,489),(281,489)],'brass4')
-    p.metal(35,498,51,39,'brass',4);p.box(39,502,43,30,'ink')
-    p.text('15' if not late else '08',60,507,'paper3',2,'center');p.text('SPINS',60,540,'wood0',align='center')
-    p.oval(96,497,99,48,'wood0');p.oval(99,497,93,42,'paper0');p.oval(102,497,87,35,'paper3')
-    p.text('SPIN',145,508,'wine1',2,'center')
-    for x,k in ((209,'vial'),(251,'pill')):
-        p.oval(x-4,497,39,43,'brass1');p.oval(x-2,498,35,38,'ink');symbol(p,k,x-3,498)
-    # Lower fittings explain what the physical machine does.
-    p.metal(83,565,150,25,'brass',3);p.box(89,570,138,14,'ink');p.line([(94,581),(221,581)],'brass1')
-    p.text('LUCIDITY 045 G',160,605,'brass3',align='center')
-    for xx in (37,278):
-        p.screw(xx,550)
-    # Lower service grille flanks the coin return; small paper tabs are real augments.
-    for xx in (35,256):
-        for yy in range(565,586,4):p.line([(xx,yy),(xx+25,yy)],'wood0')
-    for xx,k in ((102,'I'),(146,'B'),(190,'S')):
-        p.poly([(xx,615),(xx+25,615),(xx+27,629),(xx+1,630)],'paper1')
-        p.line([(xx+2,617),(xx+23,617)],'paper2');p.text(k,xx+12,619,'wine1',align='center')
-    # Knurled rail follows the control plane, leaving the glyph faces uncluttered.
-    for xx in range(40,279,6):p.line([(xx,481),(xx+2,483)],'brass1')
-    for xx,yy in ((39,144),(274,144),(32,263),(284,263)):
-        p.screw(xx,yy)
-    p.text('CAMPAIGN',28,22,'paper1')
-    for i in range(3):
-        p.oval(97+i*14,20,10,11,'paper2' if i<2 else 'wine1')
-        p.line([(100+i*14,23),(102+i*14,25),(100+i*14,28)],'skin1')
-    p.text('MENU',286,22,'paper2',align='right')
-    # Five active durations and worn augment tabs remain outside the result face.
-    for i,(short,dur) in enumerate((('T',3),('P',2),('E',1),('S',2),('C',1))):
-        x=46+i*41;item_badge(p,short,x,281)
-        p.text(str(dur),x+20,282,'red' if i==2 else 'mint2',2)
-    if late:
-        # Light evolves from actual apertures, controls and labels keep their contrast.
-        for x in (39,277):
-            p.line([(x,319),(x,397)],'wine3');p.line([(x+1,329),(x+1,386)],'amber')
-        for x,y in ((43,293),(279,420),(35,411)):
-            p.line([(x,y),(x+3,y-6),(x+2,y-11)],'amber')
-        p.line([(256,556),(266,551),(275,554),(282,549)],'wood0')
-        # A hot perimeter lights the construction; quiet surfaces stay dark.
-        p.line([(43,305),(274,305)],'amber')
-        p.line([(38,316),(38,402),(44,410)],'wine4')
-        p.line([(281,316),(281,402),(275,410)],'wine3')
-        p.line([(52,141),(258,141)],'wine3')
-        for xx in (83,159,235):p.oval(xx-7,304,14,4,'ivory')
-        # A delicate pressure leak is stepped in the same source grid.
-        for xx,yy in ((33,299),(283,299),(36,285),(280,277)):
-            p.line([(xx,yy),(xx+2,yy-7),(xx-1,yy-13)],'smoke')
-    if warning:
-        p.box(47,162,144,84,'wine0');p.text('HOLD',119,178,'red',3,'center')
-        p.text('RESCUE OR SPIN',119,213,'paper3',align='center')
-    return p
-
 
 def start():
     p=Pixel();wall(p);roulette(p,-59,271);roulette(p,221,300)
@@ -293,7 +164,7 @@ def start():
     p.text('C A S I N O',160,181,'brass3',2,'center')
     p.text('THE HOUSE REMEMBERS',160,215,'paper1',align='center')
     # Croupier's welcome is part of the floor, not an oversized menu portrait.
-    face=portrait().im.crop((44,16,138,153));p.paste(face,113,246)
+    face=portrait().crop((44,16,138,153));p.paste(face,113,246)
     chip_rack(p,114,371)
     button(p,58,420,204,'TAKE A SEAT')
     p.text('AUGMENTED RUN',160,477,'brass2',align='center')
@@ -587,7 +458,7 @@ def unlock():
     pendant(p,160,121,62)
     # Enlarged inspection is a nearest-neighbour display of the same 2x source card.
     face=card('heart').im
-    p.paste(face.resize((156,244),resample=0),82,208)
+    p.paste(face.resize((312,488),resample=0),82,208)
     p.text('HEART',160,480,'paper3',2,'center')
     p.wrap('Guaranteed heart triple. Recover 1, 2 or 3 spins. Advances the gauge.',40,510,240,'paper2',13)
     button(p,24,583,142,'COLLECTION');button(p,177,583,119,'CONTINUE')
@@ -596,7 +467,7 @@ def unlock():
 
 def inspection():
     p=Pixel();wall(p);heading(p,'CARD INSPECTION','SAME ART IN THE OFFER, INSPECTION AND COLLECTION')
-    p.paste(card('augment_hallucination').im.resize((156,244),resample=0),82,112)
+    p.paste(card('augment_hallucination').im.resize((312,488),resample=0),82,112)
     p.text('HALLUCINATION',160,393,'paper3',2,'center')
     p.wrap('A visible pair becomes a triple at 30% of that payout. Natural triples and Book wins pay in full.',34,437,252,'paper2',16)
     button(p,65,576,190,'RETURN TO HAND')

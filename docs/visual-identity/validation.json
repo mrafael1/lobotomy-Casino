@@ -1,15 +1,21 @@
 {
   "status": "passed",
-  "palette_colours": 46,
-  "palette_and_alpha_pngs": 89,
+  "palette_colours": 66,
+  "palette_and_alpha_pngs": 90,
   "full_scene_masters": 25,
   "layout_size_reductions": 25,
   "unique_card_faces": 21,
   "card_coverage": "exact match to current PacteCards IDs",
-  "animation_atlases_and_gif_timing": 5,
-  "review_resources_checked": 67,
+  "animation_atlases_and_gif_timing": 6,
+  "review_resources_checked": 68,
   "generated_javascript_syntax": "passed (node --check)",
   "deterministic_image_rebuild": "byte-identical",
+  "source_size": [
+    640,
+    1280
+  ],
+  "native_fine_grid_construction": "verified; not repeated 2x raster blocks",
+  "breathing_ui_regions": "pixel-identical across all six frames",
   "visual_review": [
     "benchmark",
     "dealer states",

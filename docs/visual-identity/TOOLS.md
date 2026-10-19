@@ -24,4 +24,6 @@ python tools/verify_house_identity.py
 
 `docs/visual-identity/review.html` works offline; all image references are relative. Scripts read only metadata in the existing game during verification, and do not alter existing runtime recipes, scenes, rules, saves or bindings. New proposal images live under `godot/assets/art_direction/house_remembers`, so an eventual export never depends on art outside `godot/`.
 
+Revision 02 uses a common 640×1280 source grid. Stable recipe coordinates are converted to the finer source grid **before** primitive rasterisation; cubic contours are integer-sampled, and native one-pixel strokes refine material/anatomy detail. The verifier rejects simple repeated 2× raster blocks in the benchmark assets. Image writes use atomic replacement to avoid partial imports by an open editor.
+
 The manifest includes source sizes, all card IDs, explicit atlas frame sizes/timing, palette values and SHA-256 image hashes. Rebuilding twice must reproduce the same image bytes on the pinned Pillow version. Integer rasterization and fixed-palette GIF encoding are independent of seeded game randomness.
