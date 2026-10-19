@@ -1,5 +1,7 @@
 # Phase-two presentation integration contract
 
+**Selected direction: v1.** Follow the [v1 production plan](V1_PLAN.md) for implementation order and completion gates. V2 remains a comparison reference.
+
 Phase one changes **no gameplay or presentation bindings**. New art is a reviewable proposal alongside the current game. The existing user work in rules/controllers/art generators is preserved. Do not infer that the flattened mockups are ready to replace live cabinet textures.
 
 ## Layer architecture

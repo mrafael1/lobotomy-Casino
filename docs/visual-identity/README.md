@@ -1,6 +1,6 @@
 # Lobotomy Casino — The House Remembers
 
-[Open the offline visual review](review.html). **New: [more pixelated machine v2](review.html#machine-v2)** alongside v1, with a [comparison board](../../godot/assets/art_direction/house_remembers/machine_v2/comparison.png) and [v2 output ladder](../../godot/assets/art_direction/house_remembers/machine_v2/benchmark.png). [Construction notes](REVISION_05.md). Revision 04 makes the existing multiplier a whole-machine output state: **x1 ready, x2 running hot, x3 maximum output**. The healthy reward focus remains; end-of-run decay is separate. The common source grid remains 640×1280. [Multiplier heat revision](REVISION_04.md).
+**Selected direction: v1.** [Production and integration plan](V1_PLAN.md). [Open the offline visual review](review.html). The [more pixelated v2](review.html#machine-v2) is retained as a comparison reference. Revision 04 makes the existing multiplier a whole-machine output state: **x1 ready, x2 running hot, x3 maximum output**. The healthy reward focus remains; end-of-run decay is separate. The common source grid remains 640×1280. [Multiplier heat revision](REVISION_04.md).
 
 ![Pacte, early console and advanced console](../../godot/assets/art_direction/house_remembers/benchmark.png)
 
