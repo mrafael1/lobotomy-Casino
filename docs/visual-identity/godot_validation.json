@@ -1,0 +1,21 @@
+{
+  "scope": "current workspace, including pre-existing uncommitted presentation work",
+  "proposal_runtime_bindings": "none; all new scene images remain phase-one concepts",
+  "editor_import": {
+    "command": "godot --headless --editor --quit --path godot",
+    "exit_code": 0,
+    "result": "passed"
+  },
+  "scene_smoke": {
+    "command": "godot --headless --path godot -s res://test/scene_smoke.gd",
+    "exit_code": 0,
+    "checks": 111,
+    "result": "passed; no unexpected engine errors"
+  },
+  "environment": "Godot 4.7; APPDATA isolated to tmp/house-identity-review/appdata",
+  "sandbox_retry": "Initial smoke failed its engine-error gate because the sandbox denied reading the system root certificate store. Repeated with normal certificate-store access and passed; no test suppression or gameplay change.",
+  "existing_diagnostics": "The smoke output includes its intentional malformed-save diagnostic and shutdown RID/ObjectDB/resource leak messages. The project's smoke gate reports no unexpected engine errors. These are not claimed fixed by the art proposal.",
+  "rules_parity": "not rerun; this change adds no rules, content data, save logic or live presentation integration",
+  "interactive_browser": "not executed; browser inventory had no enabled browser",
+  "art_checks": "validation.json"
+}

@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "palette_colours": 46,
+  "palette_and_alpha_pngs": 89,
+  "full_scene_masters": 25,
+  "layout_size_reductions": 25,
+  "unique_card_faces": 21,
+  "card_coverage": "exact match to current PacteCards IDs",
+  "animation_atlases_and_gif_timing": 5,
+  "review_resources_checked": 67,
+  "generated_javascript_syntax": "passed (node --check)",
+  "deterministic_image_rebuild": "byte-identical",
+  "visual_review": [
+    "benchmark",
+    "dealer states",
+    "card sheet",
+    "scene overview",
+    "phone study",
+    "dealer detail",
+    "reel detail"
+  ],
+  "interactive_browser_review": "not run; browser inventory had no enabled browser",
+  "runtime_godot_checks": "see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings"
+}

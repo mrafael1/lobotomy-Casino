@@ -1,0 +1,376 @@
+{
+  "title": "The House Remembers",
+  "phase": "visual direction proposal; no runtime integration",
+  "source_size": [
+    320,
+    640
+  ],
+  "layout_size": [
+    160,
+    320
+  ],
+  "source_pixels_per_layout_unit": 2,
+  "palette": {
+    "void": "090c0e",
+    "ink": "101719",
+    "slate": "202b2c",
+    "smoke": "384344",
+    "wood0": "201718",
+    "wood1": "392424",
+    "wood2": "58382d",
+    "wood3": "81533a",
+    "wood4": "ac7950",
+    "wine0": "28151d",
+    "wine1": "491f2a",
+    "wine2": "74303b",
+    "wine3": "a14c50",
+    "wine4": "cd7160",
+    "felt0": "102a27",
+    "felt1": "194039",
+    "felt2": "29594a",
+    "felt3": "42715a",
+    "felt4": "749477",
+    "brass0": "3c3127",
+    "brass1": "6c5438",
+    "brass2": "a5814c",
+    "brass3": "d1b06c",
+    "brass4": "f2d697",
+    "paper0": "716758",
+    "paper1": "a99c7c",
+    "paper2": "d4c6a0",
+    "paper3": "eee0b8",
+    "ivory": "fff0ce",
+    "skin0": "3d2b2c",
+    "skin1": "6f4840",
+    "skin2": "9e6b53",
+    "skin3": "c79570",
+    "skin4": "e0b88a",
+    "cold0": "263a3d",
+    "cold1": "496265",
+    "cold2": "78928d",
+    "cold3": "b2c1ab",
+    "mint0": "234d46",
+    "mint1": "4a9b7b",
+    "mint2": "8edbb0",
+    "mint3": "d8f2c0",
+    "red": "dc705b",
+    "amber": "e5a95e",
+    "blue": "687f9b",
+    "lilac": "a08a9e"
+  },
+  "cards": [
+    {
+      "id": "augment_pattern_recognition",
+      "name": "PATTERN RECOGNITION",
+      "family": "augment",
+      "inspection": "Separated matching symbols count as a pair."
+    },
+    {
+      "id": "augment_book",
+      "name": "BOOK",
+      "family": "augment",
+      "inspection": "Adds the Book joker to the reels; the existing Book payout cut remains."
+    },
+    {
+      "id": "augment_hallucination",
+      "name": "HALLUCINATION",
+      "family": "augment",
+      "inspection": "Promotes visible pairs to triples at 30% of that payout. Natural triples and Book wins keep their existing payouts."
+    },
+    {
+      "id": "augment_smart_saving",
+      "name": "SMART SAVING",
+      "family": "augment",
+      "inspection": "Keeps the existing increased share of run Lucidity on flatline."
+    },
+    {
+      "id": "augment_reward_1",
+      "name": "REWARD + I",
+      "family": "augment",
+      "inspection": "Choose one symbol for the existing tier I reward amplification."
+    },
+    {
+      "id": "augment_reward_2",
+      "name": "REWARD + II",
+      "family": "augment",
+      "inspection": "Choose one symbol for the existing tier II reward amplification."
+    },
+    {
+      "id": "augment_reward_3",
+      "name": "REWARD + III",
+      "family": "augment",
+      "inspection": "Choose one symbol for the existing tier III reward amplification."
+    },
+    {
+      "id": "augment_joker",
+      "name": "JOKER",
+      "family": "augment",
+      "inspection": "After the first three-flatline strike, the dealer can provide the existing helpful power assists."
+    },
+    {
+      "id": "augment_win_boost",
+      "name": "COMBO",
+      "family": "augment",
+      "inspection": "Successive paying results add 5% per streak step, up to 45%. A miss opens the existing rescue window."
+    },
+    {
+      "id": "augment_glitch_2",
+      "name": "GLITCH",
+      "family": "augment",
+      "inspection": "Dealer countdown advances three steps per spin at every gauge tier."
+    },
+    {
+      "id": "augment_tunnel_vision",
+      "name": "TUNNEL VISION",
+      "family": "augment",
+      "inspection": "Hides the third reel and increases rewards by 50%."
+    },
+    {
+      "id": "augment_how_to_cheat",
+      "name": "IS IT CHEATING?",
+      "family": "augment",
+      "inspection": "A solo visible symbol counts as a pair; all pair payouts use x0.6."
+    },
+    {
+      "id": "augment_adrenaline",
+      "name": "ADRENALINE",
+      "family": "augment",
+      "inspection": "Power restore threshold is 18 Lucidity, with lamps at 6, 12, and 18."
+    },
+    {
+      "id": "augment_passive_gain",
+      "name": "PASSIVE GAIN",
+      "family": "augment",
+      "inspection": "Gains 10 run Lucidity on every spin, including misses."
+    },
+    {
+      "id": "reroll",
+      "name": "REROLL",
+      "family": "power",
+      "inspection": "Reroll one revealed reel."
+    },
+    {
+      "id": "shift",
+      "name": "SHIFT",
+      "family": "power",
+      "inspection": "Step one revealed reel along the symbol cycle."
+    },
+    {
+      "id": "memory",
+      "name": "LOCK",
+      "family": "power",
+      "inspection": "Lock one reel through upcoming spins."
+    },
+    {
+      "id": "rewind",
+      "name": "REWIND",
+      "family": "power",
+      "inspection": "Restore the previous spin state and recover 1-3 eligible other power chips. Earned score and Lucidity remain."
+    },
+    {
+      "id": "heart",
+      "name": "HEART",
+      "family": "power",
+      "inspection": "A free matching heart triple restores 1, 2, or 3 spins with equal odds and advances the gauge."
+    },
+    {
+      "id": "cheat",
+      "name": "CHEAT",
+      "family": "power",
+      "inspection": "Replace one selected revealed reel with a symbol from the existing chooser."
+    },
+    {
+      "id": "swap",
+      "name": "SWAP",
+      "family": "power",
+      "inspection": "Drag a visible symbol to another reel and swap it with that reel centre."
+    }
+  ],
+  "scenes": [
+    "01_start",
+    "02_pacte_augment",
+    "03_pacte_power",
+    "04_machine_early",
+    "05_machine_advanced",
+    "06_dealer_visit",
+    "07_routes",
+    "08_augment_selection",
+    "09_power_selection",
+    "10_shop",
+    "11_bonus",
+    "12_sacrifice",
+    "13_lab",
+    "14_odds",
+    "15_collection",
+    "16_statistics",
+    "17_tutorial",
+    "18_settings",
+    "19_options",
+    "20_wealth",
+    "21_flatline",
+    "22_game_over",
+    "23_unlock",
+    "24_inspection",
+    "25_machine_rescue"
+  ],
+  "animations": {
+    "vey_gaze": {
+      "size": [
+        184,
+        248
+      ],
+      "ms": [
+        1000,
+        140,
+        650,
+        70,
+        70,
+        1300
+      ]
+    },
+    "vey_progression": {
+      "size": [
+        184,
+        248
+      ],
+      "ms": [
+        1700,
+        1700,
+        1700,
+        2200
+      ]
+    },
+    "pattern_recognition": {
+      "size": [
+        78,
+        122
+      ],
+      "ms": [
+        210,
+        210,
+        210,
+        210,
+        210
+      ]
+    },
+    "is_it_cheating": {
+      "size": [
+        78,
+        122
+      ],
+      "ms": [
+        1000,
+        120,
+        520,
+        120
+      ]
+    },
+    "machine_states": {
+      "size": [
+        320,
+        640
+      ],
+      "ms": [
+        2000,
+        2000,
+        1600
+      ]
+    }
+  },
+  "files": {
+    "animation/is_it_cheating.gif": "17579f626aecb81df9b2e53449f5897645407f84fa4c6840ec16e5bf2516e808",
+    "animation/is_it_cheating.png": "f89202e71c1b55c5e61cf9fb20637101a93554facb2c37f9290886001e7a895b",
+    "animation/machine_states.gif": "b0a18e078d5d664b179611eadea89897e04cdb143e773bee9d1469fda53cb082",
+    "animation/machine_states.png": "4671d6ef3b8f8deafc6b7f18ebf5dd3caec48fb56506aeb57f4c5a5ba00d90f8",
+    "animation/pattern_recognition.gif": "2ac3e3048e97924a98286b530f6e82825a2fee77b830de4f3ef3c4e502d9d3ca",
+    "animation/pattern_recognition.png": "f92c73f078ea2603d4d670a4a59c40173fe1ee51f88ee6475b9e9d51882a6732",
+    "animation/vey_gaze.gif": "9b690587f0b4ab945fbb8244bd16cbf7fabfe0536acb2e437d90aa2dc25da1c7",
+    "animation/vey_gaze.png": "5adabf1db522687d3c38a2bddf95483552ad956143db682dcd1df0e4081f3dbb",
+    "animation/vey_progression.gif": "4d6b75c4433ee96192519ebe46b674d4c1785d69528bf0879536c59b48ee5a79",
+    "animation/vey_progression.png": "b01992e6bfdf62ffc27d6497f30963af09ef1704f53d4d14197daa31da0ba71d",
+    "benchmark.png": "ac5dd732b5d5b66f99f7d895524ada3dee90b24f28dd00d85a445ff37024888e",
+    "card_sheet.png": "c1846b52e8f74ceaca5d49eda03a084ea9c498853760fcc0c82af7c83751e504",
+    "cards/augment_adrenaline.png": "c966a1b3b603b6353cde3e83ab497534f33b9a584d4f647812b2304c8a3869f5",
+    "cards/augment_back.png": "3a9b72e97eb81b22b15257c368dbf3d8f229a72ab4ee6f5bacf0d000c4ce50f9",
+    "cards/augment_book.png": "e1297b429ee8a42847a9b693f457014149a798e27c3319cc8a16e35857388a02",
+    "cards/augment_glitch_2.png": "ba6cc6ac698a675feb9a704eea79ecfe2b0be69807a91dde3b223854124c8257",
+    "cards/augment_hallucination.png": "47e1a3043e09f63dbf5b4e477217015259d2aba801c505398c9f5b341fbb608c",
+    "cards/augment_how_to_cheat.png": "5eb2f0f54f7edf34a68d32eec4e636506d7140dbf924d36a41168589b22ae065",
+    "cards/augment_joker.png": "a37fe34a684395b5c72c7afbf6f07178bdbafef35605e28d37a7e00b282adf17",
+    "cards/augment_passive_gain.png": "db9e7a22f961a6da6849137e7ba34e33cb192db8f461916d07f28c9e8f0969f3",
+    "cards/augment_pattern_recognition.png": "83effe0a663f5bd430e675c859ebfaf8227dd14c7ecb8a2ca0ce18d489194d56",
+    "cards/augment_reward_1.png": "e2eba9ee12e3e84126532d38ef17d4d89172cf0116517cf1d6f46c8ef897dd90",
+    "cards/augment_reward_2.png": "bb61a21b29a7111ce957963bf603a7ff44d6c0dac947ce75ce5df685e5c9bced",
+    "cards/augment_reward_3.png": "51b11d6ad3e30b034fa723f7a3a4e0f0dec3d19dd268cef861697411542c300a",
+    "cards/augment_smart_saving.png": "a51c0caf92c7de18872390038edaeb610bfbee996b594c001cd99656254de9de",
+    "cards/augment_tunnel_vision.png": "a7b5f29e55280566c92fd7095f5e68e5db6d7a863ad12c2df2dca836299f7f18",
+    "cards/augment_win_boost.png": "305a5220eaaa8abae399c66bce7df9bcfc7d3675d4b57e56a0fbb192c785bb70",
+    "cards/cheat.png": "87ae14c02a18a796482622a23b0c419b04698fb792c1c92a1693f4ca7ad2fe49",
+    "cards/heart.png": "949d0b4a30baeed9bb8dbb139081c952faef1cc9e710448ad43c2e6fc2347acc",
+    "cards/memory.png": "751e4be05e13dbc716fe89d09e4b0f89c2c1febb47e13885dc6b99318f1176ad",
+    "cards/power_back.png": "4208cac3b88dc20f8e43eb8c1245cbc584fd719e87bbd9c1bc630bbc130c8e03",
+    "cards/reroll.png": "146d30390e88681bd60e45080515e5dba6267420a7812aeb3de999e6f6ec35a6",
+    "cards/rewind.png": "a8ff5682340358cb7d158094e6cd457852a7e94689eb5b7366c78ad2dbfed82b",
+    "cards/shift.png": "6469aaee84445e0555ccea8c34eab47dfc24af794ba0b5e7caf0fec559938a2c",
+    "cards/swap.png": "85645b65cbf8e363f1673dacceb00e93bb31a9d01764297a5ded1134cbddad30",
+    "dealer/doubt.png": "e7a757d47d2f66bc7564e162d4be1de75633bbe3d40eca9208effd53c25b8179",
+    "dealer/late.png": "5537ee521c1298353982a08ce43b87b369327e7714e344f1a673fbed305ed0fa",
+    "dealer/pressure.png": "161b87d49bb2c88125d00e815a7daa3c27215416174c389f69f4a5682a2b0bf5",
+    "dealer/welcome.png": "bf4a4d3d5945f3c399a95cc8b405f4ed880d76d49d993129bb8d87d12f915649",
+    "dealer_detail.png": "ca05613b7e33c59e27fae86add54d802445283af9fd2111752fea2acdfb628c5",
+    "dealer_states.png": "bf2d4a366ce095574417fd2eb7aa94e4da77f8295af47c038ef7e76cbccc2e12",
+    "phone_study.png": "f8b2c08b06796f7e0352688d136d43a2ddd795f606c5f755362b6c564491c06f",
+    "reel_detail.png": "37f9335047712faa02377a7c06d9ce72a251cf3013f940aca97361c41de79438",
+    "scene_overview.png": "ca0d243b423683cf83af1fc13a002115cabe5ab0f6ff5e7168c4a71f52776375",
+    "scenes/01_start.png": "c795420f9715e8cbfe48cab347698cfb77b66dc189859cf84013dc830dfa004b",
+    "scenes/01_start_160.png": "ee03012ec1e3b3b9c9a76f340fa60b9aa7cddac062062d0f36f28d967bc1939f",
+    "scenes/02_pacte_augment.png": "7513f951d4d3f53fb88538e9ffb58abe8ba19855c56ba674739f2a8876ee0252",
+    "scenes/02_pacte_augment_160.png": "886eb62f15bd3c006b812bd4cf98e5a647f4c75a2fd2f6746c78f3189f63fdf7",
+    "scenes/03_pacte_power.png": "da190d8dbbe67bcd5e7d3ec851ef4fb249bad503ae26592c873bff7c623b5b9e",
+    "scenes/03_pacte_power_160.png": "7bd027d4d996b7b7ea037abfa5d63eb97e2151d49abe66e014a76f2acc756186",
+    "scenes/04_machine_early.png": "ff6858c2b7c6a7df427d900b23452831da60c3a047127caf21fb7e279cb9c0dd",
+    "scenes/04_machine_early_160.png": "236874a22a0c137699ebf7ff36df243eeaae2212274e67533408e5fe61836123",
+    "scenes/05_machine_advanced.png": "190880bfc364c123cf66fa224089a0ca3b3ab5c241bb775b95291c912be5b0f8",
+    "scenes/05_machine_advanced_160.png": "975c59739cd299e90bdadadc85f624991fc29cb0c707179de67a81b0d889c4b4",
+    "scenes/06_dealer_visit.png": "6f0572f5c679e17c75c3a1e1dac31482f390c0e1a24c3f1bce74d83df383073e",
+    "scenes/06_dealer_visit_160.png": "df2181479587253d8a76f51e11e5a98dc9bd619fe04eca1cb375355bc8d57674",
+    "scenes/07_routes.png": "b12bc385648547e37ccde99608fb490dcad783fff34bbb46073bd46ebe58df0e",
+    "scenes/07_routes_160.png": "2753a69c0232ffe416278463e4d47e2808e5a8b247c7f0ffac46bbd08959e76d",
+    "scenes/08_augment_selection.png": "274e3357c544529f20971d499785380de1662aa0f88b24afb2d2435486a067d4",
+    "scenes/08_augment_selection_160.png": "e67d33ff089742ea960629f2c957312f08cf68513018ebd0dee8d5f54ce97b68",
+    "scenes/09_power_selection.png": "baad9267913b87ff1bb967f208c9f3b5029724172ae6a6b4855d9fa4e635caf5",
+    "scenes/09_power_selection_160.png": "64dddcd487574c6e7fee74d1ec57b334bc9b0182e60a081cef11ae3bc825d3c2",
+    "scenes/10_shop.png": "defd7e754c1abceb6208e7cdf4374abb79a0ce68ccd45c28fe26f533e0e60457",
+    "scenes/10_shop_160.png": "8b838f91c8669b0e519ad1a20f780b05c3c9ca0b4120cd051ffdcf417843b861",
+    "scenes/11_bonus.png": "c4552bfb763185c15b1b58723205bf0757be427b515eabe8008f544670ed5653",
+    "scenes/11_bonus_160.png": "1d92bd9b9e2434971fcd70bd19b63e30f7f3d10a4f1153127d8ba4aaf72c3781",
+    "scenes/12_sacrifice.png": "3e886b42150a0e5585d04b537c871b504ab5a762359e5d1fabc2d72033a80202",
+    "scenes/12_sacrifice_160.png": "a60e2e608d6e33ecf41a458115b940fe4b1c9ba885f71cb296ea89314dd45213",
+    "scenes/13_lab.png": "cddceb1f8ca2d1e112666724dcfaf73ad9ebbd946517a0e9918e2d99a18711a9",
+    "scenes/13_lab_160.png": "33075fe2d397de4dc08a93d220ebb2aca062bafcf83c1e541d158df67791e5c8",
+    "scenes/14_odds.png": "ae24f9bacfea82cee5a3c3737d87ea374159d01e4a32200e3c1109b751ec390b",
+    "scenes/14_odds_160.png": "c97bf0941d84e0dc73e1bcc4e74a1a92a788e66ef78a085b5be774367cde2498",
+    "scenes/15_collection.png": "4b4e8e2bc627b6092483d089bdaa0676fec2e977b42a1e5d58d14f610c5e2386",
+    "scenes/15_collection_160.png": "aa979c1185d8d6fd5ea0e04c5572d702f853a5a813bb837a19402727d448b648",
+    "scenes/16_statistics.png": "3615f9a1d6b5850276747f5dd8c84923be4b0490d3307aeb9624241dbf54841c",
+    "scenes/16_statistics_160.png": "c9214538a93bfef2d7e56b1af32c25cedff74a6500ba59c453bafa25224229ee",
+    "scenes/17_tutorial.png": "eaa596c0da0e405d4151f5025b1f5c6d37a961583b56375c5bed3fd389479035",
+    "scenes/17_tutorial_160.png": "2d1a53cca845ad8a5db2c5fd2ed5fd478442867e62a1782cab39949cb34c5460",
+    "scenes/18_settings.png": "038207c5e4709bfc89ae3fc796a878275f6a3c39e0f36502579cb97b4f56a8a6",
+    "scenes/18_settings_160.png": "6c3e8aacabbfd4e142078b2ef25b1fff1705d8ce736648854f765bf337f12b53",
+    "scenes/19_options.png": "4b1ff26c6a3b138d4626f25abd00c80921a1cd06ca02317aad59574f6138327b",
+    "scenes/19_options_160.png": "56630700c2920a66784b858ed3ca833ed458398ff45bd773f5602015c283f16f",
+    "scenes/20_wealth.png": "e8f2ff3dae71208d1befa08bef7540c8bc84b106ff80af49381aee46fed8f50d",
+    "scenes/20_wealth_160.png": "30d695f37da165af64cdc5f340d29ac660c5720607282dc4d6a033d3e6d7116b",
+    "scenes/21_flatline.png": "df406b4e241198a1c1a4e69bd3f6c4dfd591f53918f12742b1a2064d998b8ba5",
+    "scenes/21_flatline_160.png": "4cbf2eb9779c0ca59a2c8ef38f3b9c29c35b77627d7bde93b79797a95ce89383",
+    "scenes/22_game_over.png": "73879414f8dae6a5aeec1b6b70fe1308db960d34f219118146bf54a6d665c986",
+    "scenes/22_game_over_160.png": "8d7a40ba94f9e13ba36fc2571a2b1b4b5c42df1b4c143fbdbca98551b161380a",
+    "scenes/23_unlock.png": "c5c22a225f6d9a4c293ea7ac6b2a7ea15e8be566f354c9c4a73b46636186d86d",
+    "scenes/23_unlock_160.png": "d23bac1a5a98b55a8bcdbb705660455c8f770040578c543e75140cc9353c6c1b",
+    "scenes/24_inspection.png": "37dc1ec5e3a0c9a7e0e7de45b19f6bb27e134e8b517e21edebc800d4951014a2",
+    "scenes/24_inspection_160.png": "7b7eb1b703b8ffbc3ba539abee9f26f7d6fa9990accfc78fed0238c511a5744a",
+    "scenes/25_machine_rescue.png": "f0a0c3ab31df1e29bdf7295c5ef9b0460a25000d61fd9bde5bd08bd8dbd1224f",
+    "scenes/25_machine_rescue_160.png": "8e47e87c162b7c9d0e4cfb089eec2d034f09caa86d7137fe8651425c6690dc65"
+  }
+}
