@@ -17,7 +17,7 @@ def gallery(data):
 </style><main>
 <div class="eyebrow">Lobotomy Casino / phase one / art direction</div>
 <h1>The House<br>Remembers.</h1>
-<p>A working casino whose professional courtesy conceals ownership. Revision 03 focuses on the healthy machine: the brightest, most tempting object in a darker house. Ruby lacquer, tungsten chase lights, jewel controls and a tangible reward sequence. Gameplay remains unchanged.</p>
+<p>A working casino whose professional courtesy conceals ownership. Revision 04 makes the multiplier a whole-machine output state: ready at x1, running hot at x2, burning at maximum output at x3. The healthy reward focus remains. Gameplay is unchanged.</p>
 <nav><a href="#bible">Art bible</a><a href="#dealer">Mr. Vey</a><a href="#benchmark">Benchmark</a><a href="#floor">Casino floor</a><a href="#cards">Cards</a><a href="#motion">Motion</a><a href="#size">Size review</a><a href="INTEGRATION.md">Integration brief</a></nav>
 <section id="bible"><div class="eyebrow">01 / material language</div><h2>Warm invitation. Cold accounting.</h2>
 <p>Worn green baize, burgundy elbow rails, carved walnut and aged brass establish the casino through useful objects. Card shoes sit at the dealer's hand. Chip racks serve bets. Light isolates the game from the gaming floor beyond. Clinical unease enters through calibrated instruments, registration cuts and the same employee's increasingly precise attention.</p>
@@ -30,7 +30,9 @@ def gallery(data):
 <section id="benchmark"><div class="eyebrow">03 / composition benchmark</div><h2>Take a seat. Open an account.</h2>
 <p>The table stays intimate and subdued. The healthy machine offers the opposite invitation: stepped casino signage, ruby lacquer, polished gold, bright parchment drums, jade-glass powers and a raised cherry-red SPIN cap. Wealth and target share one window; each control keeps a stable home. There is no dealer portrait or anatomical vent in the cabinet.</p>
 <a href="''' + base + '''benchmark.png"><img class="wide" src="''' + base + '''benchmark.png" width="1032" height="708" alt="Finished Pacte, early machine, advanced machine benchmark"></a>
-<p>The healthy machine is restless with anticipation: tungsten bulbs chase around the marquee and reels, then answer a win together. The engaged x3 example remains healthy and brighter. End-of-run decay is reserved for a later pass.</p>
+<p>The multiplier is the whole machine. At x2, enamel, metal, glass, controls and the floor catch heat. At x3, the lamp banks burn white-hot, the reel lips become incandescent, exhaust escapes from fitted vents and embers stream off the working hardware. This is maximum output, with the same intact machine and readable controls. Decay is reserved for a later pass.</p>
+<a href="''' + base + '''multiplier_heat_benchmark.png"><img class="wide" src="''' + base + '''multiplier_heat_benchmark.png" width="1032" height="708" alt="Same machine and values at x1 ready, x2 running hot, x3 maximum output"></a>
+<p><a href="''' + base + '''animation/multiplier_heat.gif">Watch the whole output ladder.</a> The comparison holds reels, wealth, target and spins fixed so the material response carries the escalation.</p>
 <a href="''' + base + '''machine_reward_benchmark.png"><img class="wide" src="''' + base + '''machine_reward_benchmark.png" width="1032" height="708" alt="Healthy machine ready, pair celebration and payout settlement"></a></section>
 <section id="floor"><div class="eyebrow">04 / the casino floor</div><h2>A place for every transaction.</h2>
 <p>Every active scene and meaningful overlay has its own staging. The shop is a machine-service presentation, the Lab a disconnected instrument bench, odds a marked betting register, and records a mechanical tally receipt. Compatibility-only rooms are excluded. Click any scene to inspect the source master.</p>
@@ -39,13 +41,15 @@ def gallery(data):
 <p>A loupe, an optical bench and a crown press distinguish the three Reward cards. A deposit box, a dripping tap and a stair of stacked chips express three different economies. Powers show hands and hardware performing an action. Glitch has no central emblem: the printing itself fails. Click a face for inspection.</p>
 <div class="cards">''' + cards + '''</div></section>
 <section id="motion"><div class="eyebrow">06 / timing prototypes</div><h2>Courtesy, precision, then a hold.</h2>
-<p>Healthy idle is a six-frame tungsten chase. A separate six-frame reward study shows the lamps answering a pair, the +10 score travelling directly toward wealth, and separate Lucidity coins settling into the cash tray. It is a fixed art study; no results are rolled or awarded. Atlas PNGs and durations accompany all seven motion/state studies.</p>
+<p>The healthy reward studies remain. Three new heat studies demonstrate x2, sustained x3, and the x1-to-x3 output ladder. Their sparks and exhaust use authored frame positions, not game randomness. Account text, revealed symbols and controls stay fixed throughout each tier's loop. Atlas PNGs and durations accompany all ten motion/state studies.</p>
 <div class="motions"><figure><img src="''' + base + '''animation/vey_gaze.gif" width="184" height="248" alt="Dealer gaze precedes a delayed blink"><figcaption>Eyes first / delayed blink</figcaption></figure>
 <figure><img src="''' + base + '''animation/vey_progression.gif" width="184" height="248" alt="Four phases of dealer progression"><figcaption>Same man / accumulating signs</figcaption></figure>
 <figure><img src="''' + base + '''animation/pattern_recognition.gif" width="78" height="122" alt="Five-frame pattern recognition card"><figcaption>Pattern / 5 authored frames</figcaption></figure>
 <figure><img src="''' + base + '''animation/is_it_cheating.gif" width="78" height="122" alt="Cheating card with sliding face and shadow"><figcaption>False face / a precise slip</figcaption></figure>
 <figure><img src="''' + base + '''animation/healthy_idle.gif" width="320" height="640" alt="Warm tungsten chase around a healthy machine with stable controls"><figcaption>Ready / the invitation to spin</figcaption></figure>
-<figure><img src="''' + base + '''animation/healthy_reward.gif" width="320" height="640" alt="Pair payout, answering lamps, score pop and separate coins in the tray"><figcaption>Reward / lights, score, then settle</figcaption></figure></div>
+<figure><img src="''' + base + '''animation/healthy_reward.gif" width="320" height="640" alt="Pair payout, answering lamps, score pop and separate coins in the tray"><figcaption>Reward / lights, score, then settle</figcaption></figure>
+<figure><img src="''' + base + '''animation/heat_x2.gif" width="320" height="640" alt="Hot machine at x2, heated glass and trim with reel-lip sparks"><figcaption>X2 / running hot</figcaption></figure>
+<figure><img src="''' + base + '''animation/heat_x3.gif" width="320" height="640" alt="Maximum-output machine at x3, white-hot lamps, radiant metal, exhaust and embers"><figcaption>X3 / maximum output</figcaption></figure></div>
 <p><a href="''' + base + '''animation/machine_states.gif">Open the full machine state study.</a> Motion may be stopped with the control below; later integration must respect existing effect settings.</p><button id="motion-toggle">Pause motion studies</button></section>
 <section id="size"><div class="eyebrow">07 / size and hierarchy review</div><h2>At the seat, and on a phone.</h2>
 <p>Left: source artwork displayed inside a 390 × 844 CSS-pixel phone frame. Right: the 160 × 320 layout-size reduction. These are art scale studies, not Godot runtime screenshots. All artwork is inside the safe area; the guide marks its boundary, not new viewport geometry.</p>
@@ -65,7 +69,7 @@ const notes={welcome:'An open palm, a small smile, and a delayed glance. He offe
 document.querySelectorAll('[data-state]').forEach(b=>b.onclick=()=>{document.querySelector('#dealer-view').src=base+'dealer/'+b.dataset.state+'.png';document.querySelector('#state-note').textContent=notes[b.dataset.state]});
 const select=document.querySelector('#scene-select');select.value='02_pacte_augment';select.onchange=()=>{document.querySelector('#phone-img').src=base+'scenes/'+select.value+'.png';document.querySelector('#actual-img').src=base+'scenes/'+select.value+'_160.png'};
 document.querySelector('#safe-toggle').onclick=()=>document.querySelector('#phone').classList.toggle('mark');
-const stills=['dealer/welcome.png','dealer/late.png','cards/augment_pattern_recognition.png','cards/augment_how_to_cheat.png','scenes/04_machine_early.png','scenes/26_machine_win.png'];
+const stills=['dealer/welcome.png','dealer/late.png','cards/augment_pattern_recognition.png','cards/augment_how_to_cheat.png','scenes/04_machine_early.png','scenes/26_machine_win.png','scenes/27_machine_hot.png','scenes/05_machine_advanced.png'];
 const motionImages=[...document.querySelectorAll('.motions img')];motionImages.forEach((im,i)=>{im.dataset.motion=im.src;im.dataset.still=base+stills[i]});
 let playing=true;function setMotion(value){playing=value;motionImages.forEach(im=>im.src=playing?im.dataset.motion:im.dataset.still);document.querySelector('#motion-toggle').textContent=playing?'Pause motion studies':'Play motion studies'};
 document.querySelector('#motion-toggle').onclick=()=>setMotion(!playing);if(matchMedia('(prefers-reduced-motion: reduce)').matches)setMotion(false);

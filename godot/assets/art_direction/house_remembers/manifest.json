@@ -1,7 +1,7 @@
 {
   "title": "The House Remembers",
   "phase": "visual direction proposal; no runtime integration",
-  "revision": 3,
+  "revision": 4,
   "source_size": [
     640,
     1280
@@ -105,7 +105,24 @@
     "bulb0": "88613a",
     "bulb1": "e6a55c",
     "bulb2": "ffd89a",
-    "bulb3": "fff5cf"
+    "bulb3": "fff5cf",
+    "heat0": "55232a",
+    "heat1": "9d3431",
+    "heat2": "db5738",
+    "heat3": "ff9450",
+    "heat4": "ffd18a",
+    "heat5": "fff4cd",
+    "heat_white": "ffffe7",
+    "hot_metal0": "6e3827",
+    "hot_metal1": "ba6033",
+    "hot_metal2": "f3974d",
+    "hot_metal3": "ffd28c",
+    "hot_glass0": "3e2427",
+    "hot_glass1": "713c31",
+    "hot_glass2": "b96c41",
+    "heat_air": "733e31",
+    "heat_floor0": "352022",
+    "heat_floor1": "623329"
   },
   "cards": [
     {
@@ -261,7 +278,8 @@
     "23_unlock",
     "24_inspection",
     "25_machine_rescue",
-    "26_machine_win"
+    "26_machine_win",
+    "27_machine_hot"
   ],
   "animations": {
     "vey_gaze": {
@@ -353,24 +371,84 @@
         260,
         1300
       ]
+    },
+    "heat_x2": {
+      "size": [
+        640,
+        1280
+      ],
+      "ms": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ]
+    },
+    "heat_x3": {
+      "size": [
+        640,
+        1280
+      ],
+      "ms": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ]
+    },
+    "multiplier_heat": {
+      "size": [
+        640,
+        1280
+      ],
+      "ms": [
+        180,
+        180,
+        180,
+        180,
+        180,
+        180,
+        140,
+        140,
+        140,
+        140,
+        140,
+        140,
+        110,
+        110,
+        110,
+        110,
+        110,
+        1000
+      ]
     }
   },
   "files": {
-    "animation/healthy_idle.gif": "cad293129537ccfe56878428aef58a7af1d3763d24f256ecf94f2b9462b072d5",
-    "animation/healthy_idle.png": "0864a0f849322b182dd8c4f1c3d00e008ceebfa0368d4feae05aa111585758ab",
-    "animation/healthy_reward.gif": "dc78ba13ae7a633473fb9c533a4a877801ccedac85728f1844d9843de3db3dac",
-    "animation/healthy_reward.png": "f6c1d192691ea0fb1c2070b908a3b2c726b4416018ddad90d4c520caccc124b7",
-    "animation/is_it_cheating.gif": "a1f3f8a90b7cea3fc855057a52a3dee1d9f797e2d782754856590a163f4546a4",
+    "animation/healthy_idle.gif": "f4d88fc22d2633e05907809bdb468fb6426e2a4dc691cad835af4a620849b407",
+    "animation/healthy_idle.png": "291ca490993a58696acb4247d11052ce91899c692c16483aecccf967d37b6fa6",
+    "animation/healthy_reward.gif": "e23c4539e6fcbcba6ac2303d005710b044c662ecfea09dbbfbc2f0342202ea42",
+    "animation/healthy_reward.png": "a3d5097b51c44d1a09be23520a722b8e24a419e357d9f1357e949935d321c996",
+    "animation/heat_x2.gif": "da8dab5038d4434c5468dbfca6788abd59ed95ff3057874a87b4e5a49e6311a2",
+    "animation/heat_x2.png": "82ec37081b7c17da69f79d574dca30898cf685534ef468d87b8f93698bbc875a",
+    "animation/heat_x3.gif": "9f37861e8b9dc8a0d3e42a9d0efeda5780d19e31cab81ad0e5a7f6cdaa46441e",
+    "animation/heat_x3.png": "f5a66f94bca2d46faaf93c403abe1145bde60b6902139d1c04e842beab4e7168",
+    "animation/is_it_cheating.gif": "50f4251b5ed31f2b5e218fb07be259b9342a8ab41102e112986b95e8dd2079e2",
     "animation/is_it_cheating.png": "9a55bb72ed1f2c8e81d31fb8df54c40b0ef07dbadd3d5db27ab2e7935d40c586",
-    "animation/machine_states.gif": "a687c8157df3c39b535b01aea8a009a88264c1e0247d67773bb6f9711cc699f9",
-    "animation/machine_states.png": "b74d36242189063823d83951281e5f4d389ca8d03293db20080937a6e4f54a3a",
-    "animation/pattern_recognition.gif": "d1d909d2449fee65d36babf712b1c22282ad46e5cfa4d43bd45f7c399a018024",
+    "animation/machine_states.gif": "544597070301d71310ecd658503785845ea2d81f2d6afe7e5c5540ebe0709c6e",
+    "animation/machine_states.png": "70e029fef1b178f7675c7aa3a6ae4b68f53382e09a1987a44df865e34e010825",
+    "animation/multiplier_heat.gif": "f4eb8f7f66484189763ec79c75cc71372ce10245e8ae4161fa3874337dc5dde9",
+    "animation/multiplier_heat.png": "6a1f464abbaf469a44821b80cf19ade2a532d85cfa31a8b0ef2cea31de21911f",
+    "animation/pattern_recognition.gif": "c3d4c4944a13ec32cdb6e020ffd1dbb81ec482bce8c254faac4365a2069adc80",
     "animation/pattern_recognition.png": "7784eaf8ca326a2923bcdb59b08f7f4d3180fa7229b30b9a6f7c0b0f0363e158",
-    "animation/vey_gaze.gif": "7704ddc93d2db0334a31fc72ee0c4bf9efabe45203474b021c534a5e777a4e2e",
+    "animation/vey_gaze.gif": "6234e102892b0efed7c1b0006e35a092e6b627aec67c561d72850194ace46852",
     "animation/vey_gaze.png": "81800ea131567bc4b3f6a4a028da177112d9c953e739243066ed38ce624ef3ab",
-    "animation/vey_progression.gif": "ec427c49fec8cbf71ed44e436b4d20921091049e430fae9129837a32d8c5de6b",
+    "animation/vey_progression.gif": "f33dfe4d9d09749857f74dc11ecf96f444aa8653fe9970f89fd7b56916b346aa",
     "animation/vey_progression.png": "d7f6f1b2bb60adb0742face0ddf7c963dd1c20f986d3bc912b40c4d50b9bb91a",
-    "benchmark.png": "2553863287a6a4792cae52e2c6f3a8beafd3c7a9e07350e3a60daa6f9299f22e",
+    "benchmark.png": "9463f01e126c54fdc647d477e1bd267fee9ebba30005056c7cfaf46b2bf36ad7",
     "card_sheet.png": "7d18a58f12481478b9d459506d3ef6e2098c24f7c00c7a9b03e09b37c534bba8",
     "cards/augment_adrenaline.png": "99f1bbadd3947f6b96773abcbc04bab54c0f390dbb4ff90d2b692cfa3ef3c84c",
     "cards/augment_back.png": "f27c0033e2a45e159d987a5806c3e7196a799c9200c388bd404837ad2acb9d7d",
@@ -401,20 +479,21 @@
     "dealer/welcome.png": "8e01fafa227ecd798ce48e7b0b5718c96f5ff6c96be81dd498f11456b771972d",
     "dealer_detail.png": "9ef8577f70e14ed5dfb7ee5f6e949005f306821c259c8646359afec672b89628",
     "dealer_states.png": "c6e5913f23bf6abe4a27723984503fe95d3ab6dbf8598f853f55aea71c3773b1",
-    "machine_reward_benchmark.png": "ee9dcaa120cd783a3558a320f9b19255d65d6fc328307cb6d0db51542260d227",
-    "phone_study.png": "194c13efb4955b9cc1542bf670e87282b53bfdf22dc93e9676e02febef628456",
+    "machine_reward_benchmark.png": "01ac0761360e3879be97dcdeb6f3300b00ea39d9e6685b00b5a64cddf7116de8",
+    "multiplier_heat_benchmark.png": "b6ad2cd22529a027521fd96db6a4f400146d4555011c8313380ae4b75b270b6b",
+    "phone_study.png": "db31dd76a743f8262f645f60d1960b333ebc14df7262971e15456a5475305502",
     "reel_detail.png": "4afc2d976dc1e9009166773acb5c291144cae8b2dd48ac0900c35bcc1c3858c3",
-    "scene_overview.png": "4c82b6ee2ecbd704d9d765e17820533987a986840b294bb80ed1f0276cd9731b",
+    "scene_overview.png": "033b0298c78b377126ebdca85b85c5d998d4fccb0ef130a14bb93b7666f379ef",
     "scenes/01_start.png": "f8c86127712bc0787965895849345ec44ca7b42ba5a39a962ccc5e3791011862",
     "scenes/01_start_160.png": "90265ad232ba04dbb22189df57ca378aaf56cf9f176e3e16e6e37473f5408588",
     "scenes/02_pacte_augment.png": "c1375ccd30692255407d3f3a524a098694f3ece68eb8159c9af023d7d91b44ec",
     "scenes/02_pacte_augment_160.png": "67f92c52060b367b079f2ca34ca3dbde48060d1d1f25a0266be7052ce1d36ca4",
     "scenes/03_pacte_power.png": "8631b886d176cc44f4797894170f622485412f4469e99bdb75caaeb97c1bddb9",
     "scenes/03_pacte_power_160.png": "d724fe6ea3c28c9187a0a2448f3bc1d8e532bc43afa4eea45ec47aa6e2800e93",
-    "scenes/04_machine_early.png": "845840efeda15876f556c599c285ba05d17e58cf93cb7482c071a02cf6f3a5fd",
-    "scenes/04_machine_early_160.png": "c15352c9a8526d290442fca4782b56d8e55fecfa13c752ae11cb37e1dacf5d52",
-    "scenes/05_machine_advanced.png": "77507258d218c9069daea0031fcb3c1b28e7ce1c8bfb983b1df65c3ce6e82b62",
-    "scenes/05_machine_advanced_160.png": "469475928b2d940e82ef8c0dd15598ab19ac1bfabffa6f0e7e61783b700fb751",
+    "scenes/04_machine_early.png": "31cd508110da330fdc2e774d1768b3dd23cccb470140b8bd9e80869893ed75ef",
+    "scenes/04_machine_early_160.png": "9219aebf071708f15b07885a88dee70ba28deb4addf8875784ffb10bde3b0562",
+    "scenes/05_machine_advanced.png": "00c5d3874bea32b8f6b3a8dabb5e87930540dc96ff6dd8463f6b2d200f197cfa",
+    "scenes/05_machine_advanced_160.png": "c45ebace3e88aefd708adb882f54071062239171438667d6cb614328a3ac3f4f",
     "scenes/06_dealer_visit.png": "c8437b427cc6b111aba22fb58276c43814afd8d3f4c386b5a3fe7a378618beeb",
     "scenes/06_dealer_visit_160.png": "a303e3dcce59a2149fac0e99ec6bf4214dee27f26e6ddfe1ea92bee5cb7ba13d",
     "scenes/07_routes.png": "2180421d96422589a1b95cf0d3603622686d532b609276116720b0414e6631ec",
@@ -453,9 +532,11 @@
     "scenes/23_unlock_160.png": "0bea2d32820a899eb9d8415119a00b6b09aa5b1e2f042ebe8a601de015b58c4b",
     "scenes/24_inspection.png": "71fdb173c1023085f3a2c13690e54848fb2617ef3b0865366c8bf1cd0885180b",
     "scenes/24_inspection_160.png": "2a817ecb290ca57489487616d3352f8be859b13c88dcc77d30e4f575b29edcad",
-    "scenes/25_machine_rescue.png": "556d8d8f590674d0b89c4ca81d71ac771775ded31bb967e7efd2c7732eea6a97",
-    "scenes/25_machine_rescue_160.png": "2a369373fce32794f781246419eb2c4470c80e03fcd1d811379052240de22846",
-    "scenes/26_machine_win.png": "e646cc567db536aad64ba21bb7eee5bffe355971220f12f41f889faa116bfc74",
-    "scenes/26_machine_win_160.png": "421971405bd69b7cedf4e96bfa1ece3ea1afbe3f49fd86d4c3e835cdb207cb1e"
+    "scenes/25_machine_rescue.png": "e6163f110263d1fef598b9680fc95ebe45a2de0376b114fc2cae3aac2895ddf4",
+    "scenes/25_machine_rescue_160.png": "b9381070aa18df7400f29cfc8e6a384daaef5a1f08b9006ca41f2c9d5b93466a",
+    "scenes/26_machine_win.png": "e00e732b781f20e87914a78173b81b1dea30f37a8c8eec426b406876736150c1",
+    "scenes/26_machine_win_160.png": "26990f197f439dd27c8337b77b3fede76552fd5dae31d54b0a11fdd338f82cb4",
+    "scenes/27_machine_hot.png": "c68da27a54f6ab5f9dfadd748421cd61c346a77e16d0d6b07be7239a1a710932",
+    "scenes/27_machine_hot_160.png": "d4c33608ee81779561be68bf7bc7d2b4a6df9916c17402fafc042d99803d3115"
   }
 }

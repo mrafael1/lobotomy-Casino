@@ -30,6 +30,11 @@ P = {
     'jade0':'103b3e', 'jade1':'176465', 'jade2':'29998d', 'jade3':'65d5b3', 'jade4':'b9f4ce',
     'cream0':'a28a67', 'cream1':'d1ba8e', 'cream2':'eddbaf', 'cream3':'fff0ce',
     'bulb0':'88613a', 'bulb1':'e6a55c', 'bulb2':'ffd89a', 'bulb3':'fff5cf',
+    'heat0':'55232a', 'heat1':'9d3431', 'heat2':'db5738', 'heat3':'ff9450',
+    'heat4':'ffd18a', 'heat5':'fff4cd', 'heat_white':'ffffe7',
+    'hot_metal0':'6e3827', 'hot_metal1':'ba6033', 'hot_metal2':'f3974d',
+    'hot_metal3':'ffd28c', 'hot_glass0':'3e2427', 'hot_glass1':'713c31',
+    'hot_glass2':'b96c41', 'heat_air':'733e31', 'heat_floor0':'352022', 'heat_floor1':'623329',
 }
 
 # Explicit 5x7 alphabet: titles, live-label mockups and card text share a grid.
@@ -96,8 +101,13 @@ def text_width(s, scale=1, tracking=1):
 
 def write_image(im,path):
     """Atomic image replacement so the open Godot editor never reads half a PNG."""
+    buf=io.BytesIO();im.save(buf,format='PNG',optimize=True)
+    write_bytes_atomic(path,buf.getvalue())
+
+
+def write_bytes_atomic(path,payload):
+    """Keep image/GIF readers on complete old or new bytes during regeneration."""
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
-    buf=io.BytesIO();im.save(buf,format='PNG',optimize=True);payload=buf.getvalue()
     if path.exists() and path.read_bytes()==payload:return
     with tempfile.NamedTemporaryFile(dir=path.parent,suffix='.tmp',delete=False) as f:
         f.write(payload);temp=Path(f.name)

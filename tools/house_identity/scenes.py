@@ -479,7 +479,7 @@ SCENES = {
     '02_pacte_augment':pacte,
     '03_pacte_power':lambda:pacte(True),
     '04_machine_early':machine,
-    '05_machine_advanced':lambda:machine(True),
+    '05_machine_advanced':lambda:machine(tier=3),
     '06_dealer_visit':dealer_visit,
     '07_routes':routes,
     '08_augment_selection':build,
@@ -499,6 +499,7 @@ SCENES = {
     '22_game_over':lambda:ending('game_over'),
     '23_unlock':unlock,
     '24_inspection':inspection,
-    '25_machine_rescue':lambda:machine(True,warning=True),
+    '25_machine_rescue':lambda:machine(tier=3,warning=True),
     '26_machine_win':lambda:machine(payout=2),
+    '27_machine_hot':lambda:machine(tier=2),
 }

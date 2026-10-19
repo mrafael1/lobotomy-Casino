@@ -69,12 +69,13 @@ def verify():
         im.close()
     # Decorative chase is presentation-only: no numerical, reel or control
     # region may shift or change contrast while perimeter lamps animate.
-    with Image.open(ART/'animation/healthy_idle.png') as im:
-        for box in ((92,714,548,844),(104,434,532,654),(68,1008,572,1100)):
-            expected=im.crop(box).tobytes()
-            for i in range(1,6):
-                shifted=(box[0]+i*640,box[1],box[2]+i*640,box[3])
-                assert im.crop(shifted).tobytes()==expected,f'Cabinet idle changes UI: {box}, frame {i}'
+    for animation in ('healthy_idle','heat_x2','heat_x3'):
+        with Image.open(ART/'animation'/f'{animation}.png') as im:
+            for box in ((92,714,548,844),(104,434,532,654),(68,1008,572,1100)):
+                expected=im.crop(box).tobytes()
+                for i in range(1,6):
+                    shifted=(box[0]+i*640,box[1],box[2]+i*640,box[3])
+                    assert im.crop(shifted).tobytes()==expected,f'{animation} changes UI: {box}, frame {i}'
     html=(DOC/'review.html').read_text(encoding='utf8')
     parsed=Resources();parsed.feed(html)
     assert len(parsed.ids)==len(set(parsed.ids)),'Duplicate HTML IDs'
@@ -104,7 +105,8 @@ def verify():
         'deterministic_image_rebuild':'byte-identical',
         'source_size':m['source_size'],'native_fine_grid_construction':'verified; not repeated 2x raster blocks',
         'healthy_idle_ui_regions':'pixel-identical across all six chase frames',
-        'visual_review':['benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail'],
+        'heated_ui_regions':'pixel-identical within each x2/x3 six-frame loop',
+        'visual_review':['benchmark','multiplier heat benchmark','dealer states','card sheet','scene overview','phone study','dealer detail','reel detail'],
         'interactive_browser_review':'not run; browser inventory had no enabled browser',
         'runtime_godot_checks':'see godot_validation.json for current-workspace import/smoke; proposal images have no live bindings',
     }
